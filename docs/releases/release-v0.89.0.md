@@ -68,6 +68,29 @@ structure — including `auth_content`, `billing_content`, `blog_content`, `list
 `crm_content` where applicable — and compare each override with the current module template. An
 override left on the wrong block can parse without error and render no page content.
 
+The generated `<package>/settings/base.py` import of `MODULE_SETTINGS_SCHEMA` is annotated
+`# noqa: F401`: Django settings expose every uppercase global in the module and the generic
+startup check validates against `settings.MODULE_SETTINGS_SCHEMA`, so the import is intentional
+and the project's own ruff check no longer reports it unused. An existing project adds the same
+annotation to the name.
+
+The React shell seam is now rendered from the shipped module inventory. `templates/index.html`
+carries a key for every shipped module (present as `false` when the module is absent), and its
+`modulePaths` entries reverse named routes with `{% url %}` instead of literal paths: `crm`
+through the `crm-shell` route the generated `<package>/urls.py` names, `social` through
+`social-link-tree` or `social-embeds`, and `analytics` through `quickscale_analytics:dashboard`.
+Existing projects compare and manually adopt the current `templates/index.html` and
+`<package>/urls.py` together, because a seam path reverses a route the urls.py names.
+
+Billing's Stripe credentials now reach module code as the projected
+`QUICKSCALE_BILLING_PUBLISHABLE_KEY`, `QUICKSCALE_BILLING_SECRET_KEY`, and
+`QUICKSCALE_BILLING_WEBHOOK_SECRET` settings that `quickscale apply` renders from the environment
+variables the `*_env_var` options name. Apply renders them from the embedded billing adapter, so
+update the embedded billing module to this release first: `quickscale update` followed by
+`quickscale apply`, or `quickscale update --confirm-contract-adoption` in one step. Until then an
+enabled billing module refuses startup with `quickscale_billing.E001` naming the missing projected
+settings, and the credential values stay in the deployment environment under the same names.
+
 ## Compatibility
 
 The validation-source changes affect repository tests only. The tenant-enrollment capability keeps
@@ -220,10 +243,12 @@ The exact-emission hashes below apply identically to `react_default`, `react_emp
 | `frontend/src/test/viteAssetRouting.test.ts` | `c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016` |
 | `frontend/vite.config.ts` | `f658677187822a51078f405f690a313a83900ffc654ad062e2be1763e176c82e` |
 | `templates/base.html` | `dbc8e9669c906fab12f46cdc572e7e1bb0f6ec80ec040b22bba6ddcfcb7e2668` |
-| `templates/index.html` | `c1023de5db28e87a76cb48635f4f03a05332f946e5541a785134fb24a33a34f0` |
+| `templates/index.html` | `143967305c394178a6283ee75ac723f46f8e024e87d7ea525c0b01da2a3e1cf3` |
 | `templates/social/embeds.html` | `72c05317c6a7c507412b7a942ecc19abc1a0ae5272952aba0a4d03fe99e71f82` |
 | `templates/social/link_tree.html` | `2c716821493cf08bf136438475979a0b1b122b340a67ecc7870b899df02577cb` |
+| `testproject/settings/base.py` | `63366e3ee9f038aeeb807c1ed80afda5c253d90c406ceb3d9ffb244f95740e99` |
 | `testproject/settings/local.py` | `cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9` |
+| `testproject/urls.py` | `3b8239c90c47b3c74f9440222ea8626501e815b0d04db02df4789f45f09fe622` |
 
 `.env` is excluded from the hash table: it embeds the invoking host's `DOCKER_UID`/`DOCKER_GID`,
 so the emission fixture pins only its presence and mode.

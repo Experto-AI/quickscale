@@ -570,8 +570,11 @@ def test_generated_urls_template_places_react_shell_reservations_before_modules(
     assert content.index(react_shell_marker) < content.index(pre_home_marker)
 
     # CR-T120-002: Prove the final route-ownership contract.
-    # React shell owns /crm (and /crm/ via the /?$ anchor in the regex).
-    assert r"^(profile|blog|listings|crm|settings)/?$" in content
+    # React shell owns /crm (and /crm/ via the /?$ anchor), through the named
+    # crm-shell route the React seam reverses (Module Conventions rule 31).
+    assert r"^crm/?$" in content
+    assert 'name="crm-shell"' in content
+    assert r"^(profile|blog|listings|settings)/?$" in content
     # The shell reservation uses /?$ which does NOT claim /crm/dashboard/.
     assert r"^crm/dashboard" not in content
 
@@ -593,8 +596,10 @@ def test_crm_module_dashboard_route_moved_to_crm_dashboard() -> None:
     )
     template_content = crm_urls_path.read_text()
 
-    # The template's React shell owns /crm (flat, not nested under orgs).
-    assert r"^(profile|blog|listings|crm|settings)/?$" in template_content
+    # The template's React shell owns /crm (flat, not nested under orgs),
+    # through the named crm-shell route the React seam reverses (rule 31).
+    assert r"^crm/?$" in template_content
+    assert 'name="crm-shell"' in template_content
     assert r"^orgs/[^/]+/crm" not in template_content
     assert r"/crm/dashboard" not in template_content
 

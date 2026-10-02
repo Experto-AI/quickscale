@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from django.conf import settings
 import stripe
 from django.test import Client
 from django.urls import reverse
@@ -469,7 +470,8 @@ def test_response_lost_purchase_checkout_reaches_terminal_state_from_webhook(
         metadata=created_payload["session_metadata"],
     )
     fake_client.event["type"] = event_type
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         f"whsec_response_lost_{suffix}",
     )
@@ -854,7 +856,7 @@ def test_handle_stripe_event_credits_purchase_from_checkout_session_metadata(
             },
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase")
     reservation = PurchaseCheckout.all_objects.create(
         user=user,
         organization=organization,
@@ -933,7 +935,8 @@ def test_purchase_checkout_completion_rejects_conflicting_organizations(
             },
         )
     )
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_cross_org_purchase",
     )
@@ -981,7 +984,9 @@ def test_handle_stripe_event_suppresses_second_checkout_session_business_object(
             },
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_duplicate")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_duplicate"
+    )
 
     first_result = handle_stripe_event(
         body=b'{"id":"evt_checkout_first"}',
@@ -1051,7 +1056,9 @@ def test_handle_stripe_event_uses_payment_intent_metadata_fallback_for_purchase(
             }
         },
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_fallback")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_fallback"
+    )
 
     result = handle_stripe_event(
         body=b'{"id":"evt_checkout_fallback"}',
@@ -1096,7 +1103,9 @@ def test_handle_stripe_event_credits_purchase_from_purchase_time_metadata_when_p
             },
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_time")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_time"
+    )
 
     plan.slug = "purchase-time-plan-renamed"
     plan.credits_per_period = 500
@@ -1155,7 +1164,9 @@ def test_handle_stripe_event_rejects_unpaid_checkout_session(
             payment_status="unpaid",
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_unpaid")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_unpaid"
+    )
 
     with pytest.raises(BillingWebhookError, match="not settled"):
         handle_stripe_event(

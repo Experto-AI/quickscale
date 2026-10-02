@@ -167,3 +167,21 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current templates/index.html, templates/social/link_tree.html, templates/social/embeds.html, and templates/base.html: the auth, storage, backups, notifications, analytics, billing, and social entries in window.__QUICKSCALE__.modules are true only while the module is installed and its QUICKSCALE_<MODULE>_ENABLED setting is on (social no longer keys off its link-tree/embeds feature pair), both public social pages hydrate only while the social module is installed and enabled, and the shared navigation hides its Social and Embeds links in the same state, so a module switched off in quickscale.yml leaves the shell navigation instead of linking to URLs apply no longer mounts."
       - "Run `quickscale apply` for a project whose settings/modules.py predates the enabled option: the managed file then carries QUICKSCALE_AUTH_ENABLED, QUICKSCALE_BACKUPS_ENABLED, QUICKSCALE_ORGS_ENABLED, QUICKSCALE_SOCIAL_ENABLED, and QUICKSCALE_STORAGE_ENABLED, its urls.py drops the mounts of any switched-off module (auth's accounts/ mounts, orgs' orgs/ mount in either mode, social's managed /social mount), the backups scheduled create/prune runs refuse while off, and apply refuses to switch off a module another installed module requires."
+  - id: sa217-schema-import-exposure
+    minimum: "0.89.0"
+    title: "Adopt the schema exposure annotation in the generated base settings"
+    adoption_steps:
+      - "Compare and manually adopt the current <package>/settings/base.py import of MODULE_SETTINGS_SCHEMA: annotate that name with `# noqa: F401` and a comment, as the generated file does, because Django exposes every uppercase global in the settings module and the generic startup check validates against settings.MODULE_SETTINGS_SCHEMA. Without the annotation the project's own ruff check reports the import as unused."
+      - "A project generated at this version or later already carries the annotation; no other change is needed."
+  - id: sa219-discovery-seam-producer
+    minimum: "0.89.0"
+    title: "Adopt the discovery-rendered React seam and its {% url %}-based module paths"
+    adoption_steps:
+      - "Compare and manually adopt the current templates/index.html: window.__QUICKSCALE__.modules carries a key for every shipped module (present as false when the module is absent) and its modulePaths entries reverse named routes with {% url %} instead of literal paths — crm through the crm-shell route, social through social-link-tree or social-embeds, and analytics through quickscale_analytics:dashboard. A project that keeps a literal path can link to a route apply no longer mounts."
+      - "Compare and manually adopt the current <package>/urls.py: the /crm/ React shell route is named crm-shell so the seam's crm path reverses it; a project that moved that route updates the name instead of editing the seam."
+  - id: sa219-billing-projected-secrets
+    minimum: "0.89.0"
+    title: "Adopt the projected Stripe secret settings billing reads at runtime"
+    adoption_steps:
+      - "Update the embedded billing module to this release before applying: `quickscale apply` renders settings/modules.py from the embedded module's adapter, so an apply against a project whose `modules/billing` predates this release still writes no QUICKSCALE_BILLING_PUBLISHABLE_KEY, QUICKSCALE_BILLING_SECRET_KEY, or QUICKSCALE_BILLING_WEBHOOK_SECRET, and an enabled billing module refuses startup with quickscale_billing.E001 naming them. Run `quickscale update` and then `quickscale apply`, or run `quickscale update --confirm-contract-adoption`, which updates the embedded modules through their configured branches and regenerates the managed wiring in one step."
+      - "Keep the credential values in the deployment environment under the same `*_env_var` names; only the resolution path changes, so no secret value is copied into quickscale.yml or state."

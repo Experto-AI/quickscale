@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from django.conf import settings
 import quickscale_modules_billing.services as billing_services
 import stripe
 from django.db import IntegrityError
@@ -547,7 +548,8 @@ def test_response_lost_subscription_checkout_reconciles_exact_reservation(
         metadata=created_payload["session_metadata"],
     )
     fake_client.event["type"] = event_type
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         f"whsec_response_lost_subscription_{suffix}",
     )
@@ -1063,8 +1065,10 @@ def test_handle_stripe_event_updates_pending_row_on_subscription_created(
     fake_client = FakeSubscriptionStripeClient(
         event=sub_created_event,
     )
-    monkeypatch.setenv(
-        "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_subscription_created"
+    monkeypatch.setattr(
+        settings,
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_subscription_created",
     )
 
     result = handle_stripe_event(
@@ -1121,7 +1125,8 @@ def test_delayed_subscription_event_preserves_authoritative_customer_identity(
         _organization_reference(organization)
     )
     fake_client = FakeSubscriptionStripeClient(event=event)
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_delayed_historical_subscription",
     )
@@ -1175,7 +1180,8 @@ def test_handle_stripe_event_reconciles_incomplete_reservation_before_crediting(
     fake_client = FakeSubscriptionStripeClient(
         event=reconcile_event,
     )
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_invoice_first_incomplete",
     )
@@ -1262,7 +1268,9 @@ def test_handle_stripe_event_marks_subscription_past_due_on_payment_failed(
     fake_client = FakeSubscriptionStripeClient(
         event=past_due_event,
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_payment_failed")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_payment_failed"
+    )
 
     result = handle_stripe_event(
         body=b'{"id":"evt_payment_failed"}',
@@ -1306,7 +1314,8 @@ def test_invoice_payment_failed_rejects_conflicting_provider_identity(
         _organization_reference(organization)
     )
     fake_client = FakeSubscriptionStripeClient(event=event)
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_failed_identity_conflict",
     )
@@ -1346,7 +1355,7 @@ def test_handle_stripe_event_recovers_after_payment_failed_and_resync(
         stripe_subscription_id="sub_recovery",
         status=Subscription.Status.ACTIVE,
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_recovery")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_recovery")
     fake_client = FakeSubscriptionStripeClient(
         event=_invoice_event(
             event_id="evt_failed_recovery",
@@ -1423,7 +1432,8 @@ def test_handle_stripe_event_recovers_after_payment_failed_on_later_invoice_paid
         stripe_subscription_id="sub_recovery_invoice_paid",
         status=Subscription.Status.ACTIVE,
     )
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_recovery_invoice_paid",
     )
@@ -1497,7 +1507,9 @@ def test_handle_stripe_event_rejects_unsupported_subscription_status(
             status="future_state",
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_future_status")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_future_status"
+    )
 
     with pytest.raises(BillingWebhookError, match="not supported"):
         handle_stripe_event(
@@ -1523,7 +1535,8 @@ def test_handle_stripe_event_does_not_credit_subscription_checkout_completion(
             customer_id="cus_subscription_completed",
         )
     )
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_subscription_checkout_completed",
     )
@@ -1565,7 +1578,8 @@ def test_subscription_checkout_completion_binds_provider_identity_before_webhook
             subscription_id="sub_checkout_completion_identity",
         )
     )
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_checkout_completion_identity",
     )
@@ -1610,7 +1624,8 @@ def test_subscription_checkout_completion_rejects_customer_identity_conflict(
         "quickscale_org_reference": _organization_reference(organization)
     }
     fake_client = FakeSubscriptionStripeClient(event=event)
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_checkout_customer_conflict",
     )
@@ -1666,7 +1681,8 @@ def test_subscription_checkout_completion_rejects_conflicting_organizations(
         "quickscale_org_reference": _organization_reference(organization)
     }
     fake_client = FakeSubscriptionStripeClient(event=event)
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_cross_org_subscription",
     )
@@ -1731,7 +1747,9 @@ def test_handle_stripe_event_ignores_non_creditable_invoice_paid_reason(
             billing_reason=billing_reason,
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_manual_invoice")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_manual_invoice"
+    )
 
     result = handle_stripe_event(
         body=f'{{"id":"{event_id}"}}'.encode("utf-8"),

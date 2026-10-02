@@ -469,7 +469,12 @@ class TestReactThemeGeneration:
             'r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$"'
             not in react_shell_prelude
         )
-        assert 'r"^(profile|blog|listings|crm|settings)/?$"' in react_shell_prelude
+        # The named crm-shell route lets the React seam reverse modulePaths.crm
+        # (Module Conventions rule 31).
+        assert 're_path(r"^crm/?$", react_shell_view, name="crm-shell")' in (
+            react_shell_prelude
+        )
+        assert 'r"^(profile|blog|listings|settings)/?$"' in react_shell_prelude
         assert 'r"^forms/[^/]+/?$"' in react_shell_prelude
         # T1.7: forms routes are flat — no org-scoped forms patterns.
         assert 'r"^orgs/[^/]+/forms/?$"' not in react_shell_prelude
@@ -1039,14 +1044,49 @@ class TestReactThemeModuleActivationMatrix:
             r"and settings\.QUICKSCALE_SOCIAL_ENABLED %\}true"
             r"\{% else %\}false\{% endif %\}"
         )
+        # Rule 31: the path reverses the project's named social routes instead
+        # of writing the mount literals that used to live here.
         path_pattern = re.compile(
-            r'social:\s*"\{% if settings\.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %\}'
-            r"/social\{% elif settings\.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %\}"
-            r'/social/embeds\{% else %\}/social\{% endif %\}"'
+            r'social:\s*"\{% if \'quickscale_modules_social\' in '
+            r"settings\.INSTALLED_APPS and settings\.QUICKSCALE_SOCIAL_ENABLED %\}"
+            r"\{% if settings\.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %\}"
+            r"\{% url 'social-link-tree' %\}"
+            r"\{% elif settings\.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %\}"
+            r"\{% url 'social-embeds' %\}"
+            r"\{% else %\}\{% url 'social-link-tree' %\}\{% endif %\}"
+            r'\{% else %\}\{% url \'home\' %\}\{% endif %\}"'
         )
 
         assert activation_pattern.search(index_html) is not None
         assert path_pattern.search(index_html) is not None
+
+    def test_index_template_module_paths_reverse_named_routes(self, tmp_path):
+        """Rule 31: every modulePaths entry is a {% url %}, never a mount literal."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_seam_paths"
+        generator.generate("react_seam_paths", output_path)
+
+        index_html = (output_path / "templates" / "index.html").read_text()
+        module_paths_section = index_html.split("modulePaths: {", 1)[1].split(
+            "\n        }", 1
+        )[0]
+
+        assert "{% url 'crm-shell' %}" in module_paths_section
+        assert "{% url 'quickscale_analytics:dashboard' %}" in module_paths_section
+        assert "{% url 'social-link-tree' %}" in module_paths_section
+        assert "{% url 'social-embeds' %}" in module_paths_section
+        for mount_literal in (
+            '"/crm/"',
+            '"/analytics/"',
+            '"/social"',
+            '"/social/embeds"',
+        ):
+            assert mount_literal not in module_paths_section, (
+                f"modulePaths must not carry the mount literal {mount_literal}"
+            )
+
+        urls_py = (output_path / "react_seam_paths" / "urls.py").read_text()
+        assert 'name="crm-shell"' in urls_py
 
     def test_react_theme_billing_window_config_flag(self, tmp_path):
         """Generated React index template should expose billing as a module flag only, not as a module path."""

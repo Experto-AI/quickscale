@@ -95,6 +95,66 @@ class TestBillingPostHook:
         assert result.settings["QUICKSCALE_BILLING_ENABLED"] is True
 
 
+class TestBillingSecretProjection:
+    """Rule 35: the adapter projects each Stripe secret through `__QS_ENV__`."""
+
+    def test_projects_default_env_var_names(self) -> None:
+        """Manifest defaults project the three Stripe secrets."""
+        spec = _billing_manifest_adapter({})
+
+        assert spec.settings["QUICKSCALE_BILLING_PUBLISHABLE_KEY"] == (
+            "__QS_ENV__:STRIPE_PUBLISHABLE_KEY"
+        )
+        assert spec.settings["QUICKSCALE_BILLING_SECRET_KEY"] == (
+            "__QS_ENV__:STRIPE_SECRET_KEY"
+        )
+        assert spec.settings["QUICKSCALE_BILLING_WEBHOOK_SECRET"] == (
+            "__QS_ENV__:QUICKSCALE_BILLING_WEBHOOK_SECRET"
+        )
+
+    def test_projects_configured_env_var_names(self) -> None:
+        """A configured `_ENV_VAR` option name is the projected reference."""
+        spec = _billing_manifest_adapter(
+            {
+                "publishable_key_env_var": "OPS_PUBLISHABLE_KEY",
+                "secret_key_env_var": "OPS_SECRET_KEY",
+                "webhook_secret_env_var": "OPS_WEBHOOK_SECRET",
+            }
+        )
+
+        assert spec.settings["QUICKSCALE_BILLING_PUBLISHABLE_KEY"] == (
+            "__QS_ENV__:OPS_PUBLISHABLE_KEY"
+        )
+        assert spec.settings["QUICKSCALE_BILLING_SECRET_KEY"] == (
+            "__QS_ENV__:OPS_SECRET_KEY"
+        )
+        assert spec.settings["QUICKSCALE_BILLING_WEBHOOK_SECRET"] == (
+            "__QS_ENV__:OPS_WEBHOOK_SECRET"
+        )
+
+    def test_blank_env_var_name_projects_empty_value(self) -> None:
+        """A blank option name projects an empty value, never a dangling reference."""
+        spec = _billing_post_hook(
+            ModuleWiringSpec(
+                settings={
+                    "QUICKSCALE_BILLING_ENABLED": True,
+                    "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR": "   ",
+                    "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR": "",
+                    "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR": "OPS_WEBHOOK_SECRET",
+                    "QUICKSCALE_BILLING_CURRENCY": "usd",
+                    "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
+                },
+            ),
+            {},
+        )
+
+        assert spec.settings["QUICKSCALE_BILLING_PUBLISHABLE_KEY"] == ""
+        assert spec.settings["QUICKSCALE_BILLING_SECRET_KEY"] == ""
+        assert spec.settings["QUICKSCALE_BILLING_WEBHOOK_SECRET"] == (
+            "__QS_ENV__:OPS_WEBHOOK_SECRET"
+        )
+
+
 class TestBillingManifestAdapter:
     """_billing_manifest_adapter delegation."""
 

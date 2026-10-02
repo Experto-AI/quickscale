@@ -602,10 +602,10 @@ def test_billing_config_view_returns_publishable_key_without_secret_key(
     monkeypatch: pytest.MonkeyPatch,
     settings,
 ) -> None:
-    settings.QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR = "PHASE_6A_PUBLISHABLE_KEY"
-    settings.QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR = "PHASE_6A_SECRET_KEY"
-    monkeypatch.setenv("PHASE_6A_PUBLISHABLE_KEY", "pk_test_phase_6a")
-    monkeypatch.setenv("PHASE_6A_SECRET_KEY", "sk_test_phase_6a")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_PUBLISHABLE_KEY", "pk_test_phase_6a"
+    )
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_SECRET_KEY", "sk_test_phase_6a")
 
     request = RequestFactory().get("/billing/api/config/")
     request.user = user
@@ -632,13 +632,13 @@ def test_billing_config_view_returns_500_for_missing_or_blank_publishable_key(
     publishable_key_value: str | None,
     organization,
 ) -> None:
-    settings.QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR = "PHASE_6A_PUBLISHABLE_KEY"
-    settings.QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR = "PHASE_6A_SECRET_KEY"
-    monkeypatch.setenv("PHASE_6A_SECRET_KEY", "sk_test_phase_6a")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_SECRET_KEY", "sk_test_phase_6a")
     if publishable_key_value is None:
-        monkeypatch.delenv("PHASE_6A_PUBLISHABLE_KEY", raising=False)
+        monkeypatch.setattr(settings, "QUICKSCALE_BILLING_PUBLISHABLE_KEY", "")
     else:
-        monkeypatch.setenv("PHASE_6A_PUBLISHABLE_KEY", publishable_key_value)
+        monkeypatch.setattr(
+            settings, "QUICKSCALE_BILLING_PUBLISHABLE_KEY", publishable_key_value
+        )
 
     request = RequestFactory().get("/billing/api/config/")
     request.user = user
@@ -651,7 +651,7 @@ def test_billing_config_view_returns_500_for_missing_or_blank_publishable_key(
         "error": {
             "code": "configuration_error",
             "message": (
-                "Stripe publishable key is not configured in the runtime environment."
+                "Stripe publishable key is not configured in the runtime settings."
             ),
         }
     }

@@ -60,7 +60,7 @@ def test_billing_settings_check_reports_missing_secret_key(
     """An enabled billing runtime needs its Stripe secret key."""
     from quickscale_modules_billing.checks import check_billing_settings
 
-    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_SECRET_KEY", "")
 
     messages = check_billing_settings()
 
@@ -74,8 +74,8 @@ def test_billing_settings_check_reports_missing_webhook_secret(
     """An enabled billing runtime needs its Stripe webhook signing secret."""
     from quickscale_modules_billing.checks import check_billing_settings
 
-    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_dummy")
-    monkeypatch.delenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", raising=False)
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_SECRET_KEY", "sk_test_dummy")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "")
 
     messages = check_billing_settings()
 
@@ -88,10 +88,26 @@ def test_billing_settings_check_passes_when_disabled(settings, monkeypatch) -> N
     from quickscale_modules_billing.checks import check_billing_settings
 
     settings.QUICKSCALE_BILLING_ENABLED = False
-    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
-    monkeypatch.delenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", raising=False)
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_SECRET_KEY", "")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "")
 
     assert check_billing_settings() == []
+
+
+def test_billing_settings_check_reports_missing_projected_settings(settings) -> None:
+    """An enabled billing runtime needs the apply-rendered secret settings (rule 35)."""
+    from quickscale_modules_billing.checks import check_billing_settings
+
+    del settings.QUICKSCALE_BILLING_SECRET_KEY
+    del settings.QUICKSCALE_BILLING_WEBHOOK_SECRET
+
+    messages = check_billing_settings()
+
+    assert len(messages) == 1
+    assert messages[0].id == "quickscale_billing.E001"
+    assert "QUICKSCALE_BILLING_SECRET_KEY" in messages[0].msg
+    assert "QUICKSCALE_BILLING_WEBHOOK_SECRET" in messages[0].msg
+    assert "quickscale apply" in messages[0].msg
 
 
 @pytest.mark.django_db

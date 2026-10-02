@@ -949,37 +949,25 @@ class TestFullE2EWorkflow:
         generator.generate(project_name, project_path)
         self._install_project_dependencies(project_path)
 
-        # ── Embed the auth and orgs modules as path dependencies ────────
-        # orgs depends on auth, so both must be available at lock time.
-        for module_name in ("auth", "orgs"):
-            _copytree_for_generated_project_smoke(
-                REPO_ROOT / "quickscale_modules" / module_name,
-                project_path / "modules" / module_name,
-            )
+        # ── Embed auth and orgs through the managed wiring path ─────────
+        # orgs depends on auth, so both must be available at lock time.  The
+        # module set is declared and the managed wiring regenerated so
+        # settings/modules.py carries each installed module's compiled schema:
+        # the stray-manager check under test must not be preempted by the
+        # generic settings-schema startup check.
+        from quickscale_cli.commands.module_config import (
+            default_module_config_from_manifest,
+        )
 
-        pyproject_path = project_path / "pyproject.toml"
-        pyproject_content = pyproject_path.read_text()
+        auth_options = default_module_config_from_manifest("auth")
+        self._embed_auth_and_orgs_via_subtree(project_path)
+        self._write_quickscale_yml_with_auth(
+            project_path, project_name, "showcase_react", auth_options
+        )
+        self._sync_module_dependencies(project_path, auth_options)
+        self._regenerate_wiring(project_path)
 
-        if "quickscale-module-auth" not in pyproject_content:
-            path_deps = (
-                'quickscale-module-auth = {path = "./modules/auth", develop = true}\n'
-                'quickscale-module-orgs = {path = "./modules/orgs", develop = true}\n'
-            )
-            # Anchor on the section boundary rather than a specific
-            # dependency pin so routine version bumps don't silently
-            # break this insertion point.
-            anchor = "\n[tool.poetry.group.dev.dependencies]"
-            assert anchor in pyproject_content, (
-                "Generated pyproject.toml is missing the dev-dependencies "
-                "section used as the path-dependency insertion anchor"
-            )
-            pyproject_content = pyproject_content.replace(
-                anchor,
-                f"{path_deps}{anchor}",
-            )
-            pyproject_path.write_text(pyproject_content)
-
-        # Regenerate lock and install with the new path dependency
+        # Regenerate lock and install with the new path dependencies
         poetry_env = build_isolated_poetry_env()
         lock_result = subprocess.run(
             ["poetry", "lock"],
@@ -1039,8 +1027,9 @@ class TestFullE2EWorkflow:
             f"\n"
             f"QUICKSCALE_ORGS_MODE = 'solo'\n"
             f"\n"
+            # The managed wiring already installs quickscale_modules_orgs;
+            # only the stray-manager test app is added here.
             f"INSTALLED_APPS += [\n"
-            f'    "quickscale_modules_orgs",\n'
             f'    "{project_name}.test_unprotected",\n'
             f"]\n"
             f"\n"
@@ -1965,47 +1954,6 @@ def test_repo_poetry_command_remains_ambient() -> None:
 
     assert mock_run.call_args.kwargs["env"] is None
 
-
-@pytest.mark.e2e
-class TestModuleEmbedE2E(TestFullE2EWorkflow):
-    """End-to-end coverage for the full module embed workflow.
-
-    Validates: generate -> real git subtree embed -> wiring regeneration ->
-    Django boots -> module URL responds, for the auth module in both the
-    HTML and React starter themes.
-
-    The auth module's wiring spec (see manifest adapter for auth)
-    mounts allauth and the module's own URLs at the ``accounts/`` prefix,
-    so the login URL served by the module is ``/accounts/login/``.
-    """
-
-    def _get_local_repo_branch(self) -> str:
-        """Return the current branch of the local maintainer repo."""
-        result = subprocess.run(
-            ["git", "branch", "--show-current"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        branch = result.stdout.strip()
-        if not branch:
-            # Detached HEAD fallback - subtree add accepts a commit-ish.
-            return "HEAD"
-        return branch
-
-    def _run_git(
-        self, project_path: Path, *args: str
-    ) -> subprocess.CompletedProcess[str]:
-        """Run a git command inside the generated project directory."""
-        return subprocess.run(
-            ["git", *args],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-
     def _embed_auth_and_orgs_via_subtree(self, project_path: Path) -> str:
         """Copy auth + orgs module content into the generated project.
 
@@ -2125,6 +2073,47 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
 
         success, message = regenerate_managed_wiring(project_path)
         assert success, f"regenerate_managed_wiring failed: {message}"
+
+
+@pytest.mark.e2e
+class TestModuleEmbedE2E(TestFullE2EWorkflow):
+    """End-to-end coverage for the full module embed workflow.
+
+    Validates: generate -> real git subtree embed -> wiring regeneration ->
+    Django boots -> module URL responds, for the auth module in both the
+    HTML and React starter themes.
+
+    The auth module's wiring spec (see manifest adapter for auth)
+    mounts allauth and the module's own URLs at the ``accounts/`` prefix,
+    so the login URL served by the module is ``/accounts/login/``.
+    """
+
+    def _get_local_repo_branch(self) -> str:
+        """Return the current branch of the local maintainer repo."""
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        branch = result.stdout.strip()
+        if not branch:
+            # Detached HEAD fallback - subtree add accepts a commit-ish.
+            return "HEAD"
+        return branch
+
+    def _run_git(
+        self, project_path: Path, *args: str
+    ) -> subprocess.CompletedProcess[str]:
+        """Run a git command inside the generated project directory."""
+        return subprocess.run(
+            ["git", *args],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
 
     def _assert_auth_url_responds(
         self, server_process, port: int, timeout: int = 20

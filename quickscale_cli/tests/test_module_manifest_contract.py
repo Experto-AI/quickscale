@@ -11,6 +11,7 @@ from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
 )
 from quickscale_core.contracts.module_catalog import get_discovered_module_entries
+from quickscale_core.generator.seam import render_module_flags, seam_modules
 from quickscale_core.manifest.entry_point import (
     MANIFEST_ADAPTER_REGISTRY,
     refresh_managed_adapters,
@@ -374,30 +375,34 @@ _REACT_UI_EXCLUDED_MODULES: frozenset[str] = frozenset(
 
 
 def test_all_catalog_modules_in_react_index_html_modules_block() -> None:
-    """Every UI-visible catalog module must appear in window.__QUICKSCALE__.modules
-    in the React theme's index.html.j2.
+    """Every shipped module must appear in the rendered window.__QUICKSCALE__.modules.
 
-    Without this entry the module's presence flag is never set in the React
-    runtime config, so every React component that gates on modules.{name} will
-    silently never activate.
+    The generator renders the seam flags from the shipped module inventory
+    (Module Conventions rule 31) and ``index.html.j2`` injects them through
+    ``seam_module_flags``.  Without a key the module's presence flag is never
+    set in the React runtime config, so every React component that gates on
+    modules.{name} silently never activates.
 
-    When adding a new module: add a line to the modules: { } block in
-    index.html.j2, or add the name to _REACT_UI_EXCLUDED_MODULES if the module
-    is intentionally infrastructure-only with no UI card.
+    When adding a new module: it joins the catalog and the seam renders its
+    key; also add it to the QuickScaleModules interface and the seam validator.
     """
     index_html = (REACT_TEMPLATES_DIR / "templates" / "index.html.j2").read_text()
-    # Extract just the modules: { ... } object (terminates before owner: {)
     modules_block = index_html.split("modules: {")[1].split("owner: {")[0]
+    assert "{{ seam_module_flags }}" in modules_block, (
+        "index.html.j2 must inject the generator-rendered seam flags."
+    )
 
+    rendered_flags = render_module_flags()
     missing = [
         entry.name
         for entry in get_discovered_module_entries()
-        if entry.name not in _REACT_UI_EXCLUDED_MODULES
-        and f"{entry.name}:" not in modules_block
+        # orgs carries no modules flag: the theme reports its deployment mode
+        # through owner.mode instead (rule 31).
+        if entry.name != "orgs" and f"{entry.name}:" not in rendered_flags
     ]
     assert not missing, (
-        f"Modules missing from window.__QUICKSCALE__.modules in index.html.j2: {missing!r}. "
-        "Add the module entry or add the name to _REACT_UI_EXCLUDED_MODULES."
+        f"Modules missing from window.__QUICKSCALE__.modules: {missing!r}. "
+        "The seam renders one key per shipped module."
     )
 
 
@@ -430,27 +435,25 @@ def test_all_catalog_modules_in_react_typescript_interface() -> None:
 
 
 def test_react_index_html_and_typescript_interface_module_sets_are_symmetric() -> None:
-    """The module keys in index.html.j2 and useModules.ts must be identical.
+    """The seam's module keys and useModules.ts must be identical.
 
-    Asymmetry means the React runtime config and the TypeScript type declarations
-    disagree: either a runtime key has no matching type or a typed field is never
-    set at runtime.
+    Asymmetry means the rendered React runtime config and the TypeScript type
+    declarations disagree: either a runtime key has no matching type or a typed
+    field is never set at runtime.
     """
-    index_html = (REACT_TEMPLATES_DIR / "templates" / "index.html.j2").read_text()
     use_modules = (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts").read_text()
 
-    modules_block = index_html.split("modules: {")[1].split("owner: {")[0]
-    html_modules = set(re.findall(r"\b(\w+):\s+\{%", modules_block))
+    seam_module_names = {module.name for module in seam_modules()}
 
     interface_block = use_modules.split("interface QuickScaleModules {")[1].split("}")[
         0
     ]
     ts_modules = set(re.findall(r"^\s+(\w+):\s+boolean", interface_block, re.MULTILINE))
 
-    assert html_modules == ts_modules, (
-        "index.html.j2 and useModules.ts module sets diverge.\n"
-        f"  In index.html.j2 only: {sorted(html_modules - ts_modules)}\n"
-        f"  In useModules.ts only: {sorted(ts_modules - html_modules)}"
+    assert seam_module_names == ts_modules, (
+        "The rendered seam module set and useModules.ts diverge.\n"
+        f"  In the seam only: {sorted(seam_module_names - ts_modules)}\n"
+        f"  In useModules.ts only: {sorted(ts_modules - seam_module_names)}"
     )
 
 

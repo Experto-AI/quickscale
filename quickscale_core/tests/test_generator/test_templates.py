@@ -19,6 +19,7 @@ from quickscale_core.generator.runtime_database import (
     render_runtime_db_grant_statements,
     runtime_db_template_context,
 )
+from quickscale_core.generator.seam import render_module_flags, render_module_paths
 from quickscale_core.generator.runtime_pins import (
     DJANGO_CI_MATRIX_VERSION,
     DJANGO_CONSTRAINT,
@@ -78,6 +79,10 @@ def test_context() -> dict[str, object]:
         "quickscale_core_pin": QUICKSCALE_CORE_PIN,
         **runtime_db_template_context("testproject"),
         "selected_modules": None,
+        # Rule 31: the generator renders the React seam's module flags and
+        # paths from the shipped module inventory and injects them here.
+        "seam_module_flags": render_module_flags(),
+        "seam_module_paths": render_module_paths(),
     }
 
 

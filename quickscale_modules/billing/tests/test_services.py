@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from django.conf import settings
 import stripe
 from django.db import IntegrityError, connection, transaction
 from django.test import override_settings
@@ -292,27 +293,22 @@ class FakeStripeClient:
         )
 
 
-def test_billing_settings_snapshot_reads_defaults_and_environment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("BILLING_PUBLISHABLE", "pk_test_123")
-    monkeypatch.setenv("BILLING_SECRET", "sk_test_123")
-    monkeypatch.setenv("BILLING_WEBHOOK_SECRET", "whsec_123")
-
+def test_billing_settings_snapshot_reads_applied_secrets() -> None:
+    """The snapshot resolves the applied secret settings, never the OS env (rule 35)."""
     with override_settings(
         QUICKSCALE_BILLING_ENABLED=False,
-        QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR="BILLING_PUBLISHABLE",
-        QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR="BILLING_SECRET",
-        QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR="BILLING_WEBHOOK_SECRET",
+        QUICKSCALE_BILLING_PUBLISHABLE_KEY="pk_test_123",
+        QUICKSCALE_BILLING_SECRET_KEY="sk_test_123",
+        QUICKSCALE_BILLING_WEBHOOK_SECRET="whsec_123",
         QUICKSCALE_BILLING_CURRENCY="eur",
     ):
         snapshot = BillingSettingsSnapshot.from_settings()
 
-    assert snapshot.enabled is False
-    assert snapshot.billing_currency == "eur"
-    assert snapshot.resolve_publishable_key() == "pk_test_123"
-    assert snapshot.resolve_secret_key() == "sk_test_123"
-    assert snapshot.resolve_webhook_secret() == "whsec_123"
+        assert snapshot.enabled is False
+        assert snapshot.billing_currency == "eur"
+        assert snapshot.resolve_publishable_key() == "pk_test_123"
+        assert snapshot.resolve_secret_key() == "sk_test_123"
+        assert snapshot.resolve_webhook_secret() == "whsec_123"
 
 
 def test_billing_settings_snapshot_missing_enabled_setting_raises_attribute_error(
@@ -328,7 +324,7 @@ def test_billing_settings_snapshot_missing_enabled_setting_raises_attribute_erro
 def test_get_stripe_client_requires_secret_key_configuration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_SECRET_KEY", "")
 
     with pytest.raises(BillingConfigurationError, match="secret key"):
         get_stripe_client()
@@ -337,7 +333,7 @@ def test_get_stripe_client_requires_secret_key_configuration(
 def test_get_stripe_client_wraps_missing_sdk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_123")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_SECRET_KEY", "sk_test_123")
     monkeypatch.setattr(
         "quickscale_modules_billing.services.import_module",
         lambda module_name: (_ for _ in ()).throw(ImportError(module_name)),
@@ -358,7 +354,7 @@ def test_get_stripe_client_returns_configured_wrapper(
         ),
         Webhook=SimpleNamespace(construct_event=lambda **kwargs: {"id": "evt_123"}),
     )
-    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_123")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_SECRET_KEY", "sk_test_123")
     monkeypatch.setattr(
         "quickscale_modules_billing.services.import_module",
         lambda module_name: fake_module,
@@ -1876,7 +1872,7 @@ def test_handle_stripe_event_credits_subscription_user_and_records_event(
             price_id=plan.stripe_price_id,
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_runtime")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_runtime")
 
     result = handle_stripe_event(
         body=b'{"id":"evt_runtime"}',
@@ -1949,7 +1945,9 @@ def test_handle_stripe_event_prefers_org_reference_and_credits_authoritative_org
             )
         },
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_org_runtime")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_org_runtime"
+    )
 
     result = handle_stripe_event(
         body=b'{"id":"evt_org_runtime"}',
@@ -2008,7 +2006,7 @@ def test_handle_stripe_event_backfills_missing_subscription_before_crediting(
             )
         },
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_metadata")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_metadata")
 
     result = handle_stripe_event(
         body=b'{"id":"evt_metadata"}',
@@ -2090,7 +2088,8 @@ def test_invoice_paid_unresolved_org_holds_one_lock_through_backfill_and_credit(
         "subscription_provider_mutation_lock",
         record_provider_lock,
     )
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_remote_org_lock",
     )
@@ -2139,7 +2138,9 @@ def test_handle_stripe_event_returns_duplicate_without_second_credit(
             subscription_id="sub_duplicate",
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_duplicate")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_duplicate"
+    )
 
     first_result = handle_stripe_event(
         body=b'{"id":"evt_duplicate"}',
@@ -2214,7 +2215,8 @@ def test_handle_stripe_event_serializes_concurrent_duplicate_deliveries(
         "_handle_invoice_paid_event",
         record_handler,
     )
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_concurrent_duplicate",
     )
@@ -2380,7 +2382,9 @@ def test_invoice_paid_reloads_subscription_after_organization_lock(
             state_changed = True
         return original_lock(locked_organization)
 
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_invoice_reload")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_invoice_reload"
+    )
     monkeypatch.setattr(
         billing_services,
         "_lock_organization_for_billing_mutation",
@@ -2458,7 +2462,8 @@ def test_invoice_paid_refuses_provider_identity_drift_before_finalization(
         "_lock_organization_for_billing_mutation",
         replace_identity_before_lock,
     )
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_invoice_identity_drift",
     )
@@ -2492,7 +2497,7 @@ def test_handle_stripe_event_marks_unknown_types_as_processed(
             event_object={"id": "cus_unknown"},
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unknown")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unknown")
 
     result = handle_stripe_event(
         body=b'{"id":"evt_unknown"}',
@@ -2524,7 +2529,7 @@ def test_handle_stripe_event_records_processing_errors_for_retry(
             user_reference=_user_reference(user),
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_error")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_error")
 
     with pytest.raises(Exception, match="No billing plan matches Stripe price"):
         handle_stripe_event(
@@ -2547,7 +2552,7 @@ def test_handle_stripe_event_rejects_missing_webhook_secret(
     organization,
     org_context,
 ) -> None:
-    monkeypatch.delenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", raising=False)
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "")
 
     with pytest.raises(BillingConfigurationError, match="webhook secret"):
         handle_stripe_event(
@@ -2565,7 +2570,9 @@ def test_handle_stripe_event_rejects_missing_event_id(
     organization,
     org_context,
 ) -> None:
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_id")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_id"
+    )
 
     with pytest.raises(BillingWebhookError, match="missing an id"):
         handle_stripe_event(
@@ -2581,7 +2588,9 @@ def test_handle_stripe_event_rejects_missing_event_type(
     organization,
     org_context,
 ) -> None:
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_type")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_type"
+    )
 
     with pytest.raises(BillingWebhookError, match="missing a type"):
         handle_stripe_event(
@@ -2597,7 +2606,9 @@ def test_handle_stripe_event_rejects_missing_event_object(
     organization,
     org_context,
 ) -> None:
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_object")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_object"
+    )
 
     with pytest.raises(BillingWebhookError, match="data.object"):
         handle_stripe_event(
@@ -2623,7 +2634,9 @@ def test_handle_stripe_event_rejects_missing_event_data(
     organization,
     org_context,
 ) -> None:
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_data")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_data"
+    )
 
     with pytest.raises(BillingWebhookError, match="data.object"):
         handle_stripe_event(
@@ -2670,7 +2683,7 @@ def test_handle_stripe_event_uses_metadata_price_fallback(
     fallback_event["data"]["object"]["parent"]["subscription_details"]["metadata"][
         "stripe_price_id"
     ] = plan.stripe_price_id
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_fallback")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_fallback")
 
     result = handle_stripe_event(
         body=b'{"id":"evt_fallback"}',
@@ -2698,7 +2711,8 @@ def test_handle_stripe_event_rejects_invoice_without_id(
         user_reference=_user_reference(user),
     )
     event["data"]["object"].pop("id")
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_missing_invoice_id",
     )
@@ -2726,7 +2740,9 @@ def test_handle_stripe_event_rejects_missing_billing_price_id(
         user_reference=_user_reference(user),
     )
     event["data"]["object"]["lines"] = {"data": []}
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_price_id")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_missing_price_id"
+    )
 
     with pytest.raises(BillingWebhookError, match="missing a billing price id"):
         handle_stripe_event(
@@ -2769,7 +2785,8 @@ def test_handle_stripe_event_uses_subscription_details_user_reference(
             )
         },
     )
-    monkeypatch.setenv(
+    monkeypatch.setattr(
+        settings,
         "QUICKSCALE_BILLING_WEBHOOK_SECRET",
         "whsec_subscription_details",
     )
@@ -2826,7 +2843,9 @@ def test_handle_stripe_event_rejects_multiple_price_ids(
             },
         ]
     }
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_many_prices")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_many_prices"
+    )
 
     with pytest.raises(BillingWebhookError, match="multiple billing price ids"):
         handle_stripe_event(
@@ -2854,7 +2873,9 @@ def test_handle_invoice_paid_credits_organization_after_provenance_user_deleted(
     )
     deleted_user_reference = _user_reference(user)
     user.delete()
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unresolvable")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unresolvable"
+    )
     event = _invoice_paid_event(
         event_id="evt_unresolvable",
         invoice_id="in_unresolvable",
@@ -2884,7 +2905,9 @@ def test_handle_invoice_paid_treats_unknown_user_model_as_nullable_provenance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_plan(price_id="price_unknown_model")
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unknown_model")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unknown_model"
+    )
     event = _invoice_paid_event(
         event_id="evt_unknown_model",
         invoice_id="in_unknown_model",
@@ -2935,7 +2958,9 @@ def test_handle_stripe_event_rejects_unresolvable_organization_before_backfill(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _create_plan(price_id="price_unresolvable_org")
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unresolvable_org")
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_unresolvable_org"
+    )
     fake_client = FakeStripeClient(
         event=_invoice_paid_event(
             event_id="evt_unresolvable_org",
@@ -2984,7 +3009,7 @@ def test_handle_stripe_event_rejects_invalid_signature(
     fake_client = FakeStripeClient(
         construct_error=BillingWebhookSignatureError("Webhook signature is invalid.")
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_invalid")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_invalid")
 
     with pytest.raises(BillingWebhookSignatureError, match="invalid"):
         handle_stripe_event(
@@ -3010,7 +3035,7 @@ def test_handle_stripe_event_rejects_disabled_runtime(
             price_id="price_disabled",
         )
     )
-    monkeypatch.setenv("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_disabled")
+    monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_disabled")
 
     with override_settings(QUICKSCALE_BILLING_ENABLED=False):
         with pytest.raises(BillingDisabledError, match="disabled"):
