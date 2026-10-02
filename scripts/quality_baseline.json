@@ -371,30 +371,6 @@
         "symbol": "build_schema_from_manifest",
         "type": "function"
       },
-      "quickscale_core/src/quickscale_core/manifest/resolver.py::_apply_normalization_rule": {
-        "file": "quickscale_core/src/quickscale_core/manifest/resolver.py",
-        "max_complexity": 13,
-        "symbol": "_apply_normalization_rule",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/manifest/resolver.py::_check_validation_rule": {
-        "file": "quickscale_core/src/quickscale_core/manifest/resolver.py",
-        "max_complexity": 39,
-        "symbol": "_check_validation_rule",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/manifest/resolver.py::_project_derived_setting": {
-        "file": "quickscale_core/src/quickscale_core/manifest/resolver.py",
-        "max_complexity": 15,
-        "symbol": "_project_derived_setting",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/manifest/resolver.py::_project_wiring_contribution": {
-        "file": "quickscale_core/src/quickscale_core/manifest/resolver.py",
-        "max_complexity": 18,
-        "symbol": "_project_wiring_contribution",
-        "type": "function"
-      },
       "quickscale_core/src/quickscale_core/manifest/social_manifest.py::resolve_social_target": {
         "file": "quickscale_core/src/quickscale_core/manifest/social_manifest.py",
         "max_complexity": 11,
