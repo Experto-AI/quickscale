@@ -62,6 +62,10 @@ class AbstractListing(TenantModel):
     class Meta(TenantModel.Meta):
         abstract = True
         ordering = ["-published_date", "-created_at"]
+        # Rule 25's recorded abstract-base exception: a fixed or templated name
+        # is inherited by every subclass, so two concrete models collide in the
+        # shared schema (or break Django's 30-character E034 check).  Django
+        # generates a unique, bounded name per concrete subclass instead.
         indexes = [
             models.Index(fields=["-published_date"]),
             models.Index(fields=["status"]),
