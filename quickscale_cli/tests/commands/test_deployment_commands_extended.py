@@ -7,6 +7,7 @@ import pytest
 
 from quickscale_core.generator.runtime_database import RUNTIME_DB_ROLE
 
+from quickscale_cli.commands import deployment_commands
 from quickscale_cli.commands.deployment_commands import (
     _check_and_upgrade_railway_cli,
     _check_poetry_lock_step,
@@ -712,3 +713,44 @@ class TestRemainingHelpers:
             "RUNTIME_DB_PASSWORD",
             "RUNTIME_DATABASE_URL",
         } & set(batch_vars)
+
+
+class TestFacadePatchTargets:
+    """The facade keeps patch targets effective across the split modules."""
+
+    def test_patched_variables_reader_flows_through_existing_service_variables(
+        self,
+    ) -> None:
+        """Patching the facade variables reader reaches the service reader."""
+        with patch.object(
+            deployment_commands,
+            "get_railway_variables",
+            return_value={"A": "1"},
+        ) as getter:
+            variables = deployment_commands._existing_service_variables("svc")
+
+        getter.assert_called_once_with("svc")
+        assert variables == {"A": "1"}
+
+    def test_patched_runner_flows_through_service_listing(self) -> None:
+        """Patching the facade runner reaches the Railway service listing."""
+        completed = Mock(returncode=0, stdout="[]")
+        with patch.object(
+            deployment_commands, "run_railway_command", return_value=completed
+        ) as runner:
+            assert deployment_commands._list_railway_services() == []
+
+        runner.assert_called_once_with(["service", "list", "--json"], timeout=30)
+
+    def test_patched_batch_setter_flows_through_env_config(self) -> None:
+        """Patching the facade batch setter reaches environment configuration."""
+        with patch.object(
+            deployment_commands,
+            "set_railway_variables_batch",
+            return_value=(True, []),
+        ) as setter:
+            deployment_commands._configure_env_vars_step("svc", None, existing_vars={})
+
+        setter.assert_called_once()
+        env_vars = setter.call_args.args[0]
+        assert env_vars["DEBUG"] == "False"

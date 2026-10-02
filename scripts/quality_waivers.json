@@ -351,6 +351,116 @@
       "reason": "Module Conventions rule 11 privatizes the one-off helpers.py file to _helpers.py; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
       "expires_on": "2027-03-31",
       "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W049",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_deploy_service_config.py::_verify_deployment_step",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits deployment_commands.py into private _<name>.py modules that deployment_commands re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W050",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_status_diagnostics.py::_compute_drift_diagnostics",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits status_command.py into private _<name>.py modules that status_command re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W051",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_status_display.py::_display_drift_diagnostics",
+      "base_ceiling": 0,
+      "ceiling": 22,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits status_command.py into private _<name>.py modules that status_command re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W052",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_status_diagnostics.py::_state_file_has_consolidated_sections",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits status_command.py into private _<name>.py modules that status_command re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W053",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/utils/_dependency_write.py::_append_dependency_entries",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits module_dependency_sync.py into private _<name>.py modules that module_dependency_sync re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W054",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/utils/_dependency_write.py::_patch_module_path_dependencies",
+      "base_ceiling": 0,
+      "ceiling": 24,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits module_dependency_sync.py into private _<name>.py modules that module_dependency_sync re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W055",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/utils/_dependency_write.py::_update_dependency_entries",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits module_dependency_sync.py into private _<name>.py modules that module_dependency_sync re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W056",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/utils/_dependency_sync_ops.py::sync_project_module_dependencies",
+      "base_ceiling": 0,
+      "ceiling": 27,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits module_dependency_sync.py into private _<name>.py modules that module_dependency_sync re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W057",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/utils/_railway_project.py::_get_railway_variables_json",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits railway_utils.py into private _<name>.py modules that railway_utils re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W058",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/utils/_railway_project.py::get_railway_variables",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits railway_utils.py into private _<name>.py modules that railway_utils re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W059",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/utils/_railway_project.py::link_database_to_service",
+      "base_ceiling": 0,
+      "ceiling": 19,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits railway_utils.py into private _<name>.py modules that railway_utils re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
     }
   ]
 }

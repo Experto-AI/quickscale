@@ -9,7 +9,9 @@ from click.testing import CliRunner
 
 import pytest
 
+from quickscale_core.contracts.module_discovery import ModulePresenceState
 from quickscale_core.schema.config_schema import ConfigValidationError
+from quickscale_cli.commands import status_command
 from quickscale_cli.commands.status_command import (
     _build_json_output,
     _check_contract_vintage,
@@ -1092,3 +1094,69 @@ class TestContractVintageInDiagnostics:
         assert cv["module_count"] == 1
         assert cv["modules_behind_count"] == 1
         assert cv["modules_behind"][0]["module"] == "social"
+
+
+class TestFacadePatchTargets:
+    """The facade keeps patch targets effective across the split modules."""
+
+    def test_patched_docker_probe_flows_through_display(self, capsys) -> None:
+        """Patching the facade docker probe reaches the display helper."""
+        with patch.object(
+            status_command, "_get_docker_status", return_value={"app": "Up"}
+        ):
+            status_command._display_docker_status()
+
+        assert "app: Up" in capsys.readouterr().out
+
+    def test_patched_subprocess_flows_through_docker_probe(self) -> None:
+        """Patching the facade subprocess binding reaches the docker probe."""
+        completed = Mock(returncode=0, stdout="app: Up\n")
+        with patch.object(
+            status_command.subprocess, "run", return_value=completed
+        ) as runner:
+            assert status_command._get_docker_status() == {"app": "Up"}
+
+        runner.assert_called_once()
+
+    def test_patched_delta_helpers_flow_through_pending_changes(self) -> None:
+        """Patching the facade delta helpers reaches pending-change display."""
+        delta = Mock(has_changes=True)
+        with (
+            patch.object(
+                status_command, "compute_delta", return_value=delta
+            ) as compute,
+            patch.object(
+                status_command, "format_delta", return_value="module auth added"
+            ) as formatter,
+        ):
+            status_command._display_pending_changes(Mock(), None)
+
+        compute.assert_called_once()
+        formatter.assert_called_once_with(delta)
+
+    def test_patched_manifest_loader_flows_through_status_manifests(
+        self, tmp_path
+    ) -> None:
+        """Patching the facade manifest loader reaches status manifest loading."""
+        state = Mock()
+        state.modules = {"auth": Mock()}
+        record = Mock()
+        record.name = "auth"
+        record.state = ModulePresenceState.ACTIVE
+        with (
+            patch.object(
+                status_command,
+                "_discover_project_module_presence",
+                return_value=[record],
+            ),
+            patch.object(
+                status_command,
+                "_load_module_manifests",
+                return_value={"auth": Mock()},
+            ) as loader,
+        ):
+            manifests, records = status_command._load_status_manifests(tmp_path, state)
+
+        loader.assert_called_once_with(tmp_path, ["auth"], strict=True)
+        assert records == [record]
+        assert "auth" in manifests

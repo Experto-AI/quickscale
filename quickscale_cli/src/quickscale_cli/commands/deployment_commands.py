@@ -1,683 +1,90 @@
-"""Deployment commands for production platforms."""
+"""Deployment commands for production platforms.
 
-import json
-import secrets
-import sys
-from pathlib import Path
+The implementation lives in private sibling modules grouped by concern
+(``_deploy_steps``, ``_deploy_service_config``); this module owns the public
+command surface and re-exports every name that previously lived here
+(Module Conventions rule 28), so existing
+``quickscale_cli.commands.deployment_commands`` imports and test patch targets
+keep working unchanged.
+"""
 
-import click
+from __future__ import annotations
+
+import json as json
+import secrets as secrets
+import sys as sys
+from pathlib import Path as Path
+
+import click as click
 
 from quickscale_cli.commands.contract_vintage import (
-    enforce_shipped_contract_vintage,
-    record_confirmed_adoption,
+    enforce_shipped_contract_vintage as enforce_shipped_contract_vintage,
+    record_confirmed_adoption as record_confirmed_adoption,
 )
-from quickscale_core.generator.runtime_database import RUNTIME_DB_ROLE
-from quickscale_core.project_state import ProjectStateManager
-from quickscale_core.schema.state_schema import StateError
+from quickscale_core.generator.runtime_database import (
+    RUNTIME_DB_ROLE as RUNTIME_DB_ROLE,
+)
+from quickscale_core.project_state import ProjectStateManager as ProjectStateManager
+from quickscale_core.schema.state_schema import StateError as StateError
 
 from quickscale_cli.utils.railway_utils import (
-    check_poetry_lock_consistency,
-    check_railway_cli_version,
-    check_uncommitted_changes,
-    deploy_railway_service,
-    fix_poetry_lock,
-    generate_django_secret_key,
-    generate_railway_domain,
-    get_app_service_name,
-    get_railway_cli_version,
-    get_railway_variables,
-    install_railway_cli,
-    is_npm_installed,
-    is_railway_authenticated,
-    is_railway_cli_installed,
-    is_railway_project_initialized,
-    link_database_to_service,
-    login_railway_cli_browserless,
-    run_railway_command,
-    set_railway_variables_batch,
-    upgrade_railway_cli,
-    verify_dockerfile,
-    verify_railway_dependencies,
-    verify_railway_json,
+    check_poetry_lock_consistency as check_poetry_lock_consistency,
+    check_railway_cli_version as check_railway_cli_version,
+    check_uncommitted_changes as check_uncommitted_changes,
+    deploy_railway_service as deploy_railway_service,
+    fix_poetry_lock as fix_poetry_lock,
+    generate_django_secret_key as generate_django_secret_key,
+    generate_railway_domain as generate_railway_domain,
+    get_app_service_name as get_app_service_name,
+    get_railway_cli_version as get_railway_cli_version,
+    get_railway_variables as get_railway_variables,
+    install_railway_cli as install_railway_cli,
+    is_npm_installed as is_npm_installed,
+    is_railway_authenticated as is_railway_authenticated,
+    is_railway_cli_installed as is_railway_cli_installed,
+    is_railway_project_initialized as is_railway_project_initialized,
+    link_database_to_service as link_database_to_service,
+    login_railway_cli_browserless as login_railway_cli_browserless,
+    run_railway_command as run_railway_command,
+    set_railway_variables_batch as set_railway_variables_batch,
+    upgrade_railway_cli as upgrade_railway_cli,
+    verify_dockerfile as verify_dockerfile,
+    verify_railway_dependencies as verify_railway_dependencies,
+    verify_railway_json as verify_railway_json,
 )
-
-
-def runtime_database_url(postgres_service: str, password: str) -> str:
-    """Build RUNTIME_DATABASE_URL for the restricted runtime role.
-
-    Host, port and database are Railway reference variables on the PostgreSQL
-    service, resolved by Railway at deploy time. The generated start.sh creates
-    the role from RUNTIME_DB_ROLE and RUNTIME_DB_PASSWORD before migrating.
-    """
-    ref = postgres_service
-    return (
-        f"postgresql://{RUNTIME_DB_ROLE}:{password}"
-        f"@${{{{{ref}.PGHOST}}}}:${{{{{ref}.PGPORT}}}}/${{{{{ref}.PGDATABASE}}}}"
-    )
+from quickscale_cli.commands._deploy_steps import (
+    _app_service_exists_step as _app_service_exists_step,
+    _check_and_upgrade_railway_cli as _check_and_upgrade_railway_cli,
+    _check_poetry_lock_step as _check_poetry_lock_step,
+    _check_uncommitted_changes_step as _check_uncommitted_changes_step,
+    _create_app_service_step as _create_app_service_step,
+    _ensure_railway_auth_step as _ensure_railway_auth_step,
+    _ensure_railway_cli_step as _ensure_railway_cli_step,
+    _generate_domain_step as _generate_domain_step,
+    _init_railway_project_step as _init_railway_project_step,
+    _link_database_step as _link_database_step,
+    _list_railway_service_names as _list_railway_service_names,
+    _list_railway_services as _list_railway_services,
+    _postgres_service_matches as _postgres_service_matches,
+    _setup_postgres_step as _setup_postgres_step,
+    _verify_dependencies_step as _verify_dependencies_step,
+    _verify_railway_files_step as _verify_railway_files_step,
+)
+from quickscale_cli.commands._deploy_service_config import (
+    _configure_env_vars_step as _configure_env_vars_step,
+    _deploy_app_step as _deploy_app_step,
+    _display_summary as _display_summary,
+    _existing_service_variables as _existing_service_variables,
+    _runtime_role_variables as _runtime_role_variables,
+    _verify_deployment_step as _verify_deployment_step,
+    runtime_database_url as runtime_database_url,
+)
 
 
 @click.group()
 def deploy() -> None:
     """Deployment commands for production platforms."""
     pass
-
-
-def _check_uncommitted_changes_step() -> None:
-    """Check for uncommitted git changes."""
-    has_changes, status_output = check_uncommitted_changes()
-    if has_changes:
-        click.secho("⚠️  Warning: You have uncommitted changes:", fg="yellow")
-        click.echo(status_output)
-        click.echo("💡 Consider committing your changes before deployment")
-        if not click.confirm("Continue anyway?", default=True):
-            click.echo("Deployment cancelled")
-            sys.exit(0)
-    else:
-        click.secho("✅ No uncommitted changes", fg="green")
-
-
-def _verify_railway_files_step() -> None:
-    """Verify railway.json and Dockerfile exist."""
-    is_valid, error_msg = verify_railway_json()
-    if not is_valid:
-        click.secho(f"❌ Error: {error_msg}", fg="red", err=True)
-        click.echo("💡 Railway needs railway.json to configure deployment", err=True)
-        sys.exit(1)
-    click.secho("✅ railway.json is valid", fg="green")
-
-    dockerfile_exists, error_msg = verify_dockerfile()
-    if not dockerfile_exists:
-        click.secho(f"❌ Error: {error_msg}", fg="red", err=True)
-        click.echo("💡 Railway uses Dockerfile to build your application", err=True)
-        sys.exit(1)
-    click.secho("✅ Dockerfile found", fg="green")
-
-
-def _verify_dependencies_step() -> None:
-    """Verify required Railway dependencies are present."""
-    deps_ok, missing_deps = verify_railway_dependencies()
-    if not deps_ok:
-        click.secho("⚠️  Warning: Missing required Railway dependencies:", fg="yellow")
-        for dep in missing_deps:
-            click.echo(f"   - {dep}")
-        click.echo("💡 Add these to pyproject.toml dependencies:")
-        click.echo('   gunicorn = "^21.0"')
-        click.echo('   psycopg2-binary = "^2.9"')
-        click.echo('   dj-database-url = "^2.1"')
-        click.echo('   whitenoise = "^6.6"')
-        if not click.confirm("Continue anyway?", default=False):
-            click.echo("Deployment cancelled")
-            sys.exit(0)
-    else:
-        click.secho("✅ All required dependencies present", fg="green")
-
-
-def _check_poetry_lock_step() -> None:
-    """Check poetry.lock consistency and offer to fix."""
-    is_consistent, lock_message = check_poetry_lock_consistency()
-    if not is_consistent:
-        click.secho(f"⚠️  Warning: {lock_message}", fg="yellow")
-        if "not found" not in lock_message.lower():
-            click.echo(
-                "💡 The lock file needs to be regenerated to match pyproject.toml"
-            )
-            if click.confirm("Run 'poetry lock' to fix?", default=True):
-                click.echo("🔄 Updating poetry.lock...")
-                success, fix_message = fix_poetry_lock()
-                if success:
-                    click.secho(f"✅ {fix_message}", fg="green")
-                else:
-                    click.secho(f"❌ Error: {fix_message}", fg="red", err=True)
-                    click.echo("💡 Try running manually: poetry lock", err=True)
-                    if not click.confirm("Continue anyway?", default=False):
-                        click.echo("Deployment cancelled")
-                        sys.exit(0)
-            else:
-                click.echo("💡 Run 'poetry lock' before deploying")
-                if not click.confirm("Continue without fixing?", default=False):
-                    click.echo("Deployment cancelled")
-                    sys.exit(0)
-        else:
-            click.echo("💡 Run 'poetry lock' to create poetry.lock file")
-            if not click.confirm("Continue anyway?", default=False):
-                click.echo("Deployment cancelled")
-                sys.exit(0)
-    else:
-        click.secho("✅ poetry.lock is consistent", fg="green")
-
-
-def _ensure_railway_cli_step() -> None:
-    """Ensure Railway CLI is installed and up to date."""
-    if not is_railway_cli_installed():
-        click.secho("⚠️  Railway CLI is not installed", fg="yellow")
-
-        if not is_npm_installed():
-            click.secho("❌ Error: npm is not installed", fg="red", err=True)
-            click.echo("\n💡 Install Node.js and npm first:", err=True)
-            click.echo("   https://nodejs.org/", err=True)
-            click.echo(
-                "\nThen run this command again to auto-install Railway CLI", err=True
-            )
-            sys.exit(1)
-
-        click.echo("📦 Installing Railway CLI via npm...")
-        click.echo("   This may take a minute...")
-        if install_railway_cli():
-            click.secho("✅ Railway CLI installed successfully", fg="green")
-        else:
-            click.secho("❌ Error: Failed to install Railway CLI", fg="red", err=True)
-            click.echo("\n💡 Try installing manually:", err=True)
-            click.echo("   npm install -g @railway/cli", err=True)
-            click.echo("📖 See: https://docs.railway.app/develop/cli", err=True)
-            sys.exit(1)
-    else:
-        click.secho("✅ Railway CLI is installed", fg="green")
-        _check_and_upgrade_railway_cli()
-
-
-def _check_and_upgrade_railway_cli() -> None:
-    """Check Railway CLI version and upgrade if needed."""
-    current_version = get_railway_cli_version()
-    if current_version:
-        click.echo(f"   Current version: {current_version}")
-
-        if not check_railway_cli_version("4.0.0"):
-            click.secho(
-                f"⚠️  Railway CLI version {current_version} is outdated (need 4.0.0+)",
-                fg="yellow",
-            )
-            click.echo("📦 Upgrading Railway CLI via npm...")
-            click.echo("   This may take a minute...")
-
-            if upgrade_railway_cli():
-                new_version = get_railway_cli_version()
-                click.secho(f"✅ Railway CLI upgraded to {new_version}", fg="green")
-            else:
-                click.secho("⚠️  Warning: Failed to upgrade Railway CLI", fg="yellow")
-                click.echo("💡 Try upgrading manually:", err=True)
-                click.echo("   npm update -g @railway/cli", err=True)
-                if not click.confirm("Continue with current version?", default=False):
-                    sys.exit(1)
-        else:
-            click.secho("✅ Railway CLI version is up to date", fg="green")
-
-
-def _ensure_railway_auth_step() -> None:
-    """Ensure Railway CLI is authenticated."""
-    if not is_railway_authenticated():
-        click.secho("⚠️  Not authenticated with Railway", fg="yellow")
-        click.echo("\n🌐 Starting browserless authentication...")
-        click.echo("   You will receive a URL and pairing code")
-        click.echo("   Visit the URL in your browser and enter the code")
-        click.echo("")
-
-        if login_railway_cli_browserless():
-            click.secho("✅ Successfully authenticated with Railway", fg="green")
-        else:
-            click.secho("❌ Error: Authentication failed", fg="red", err=True)
-            click.echo("\n💡 Try authenticating manually:", err=True)
-            click.echo("   railway login                    (opens browser)", err=True)
-            click.echo(
-                "   railway login --browserless      (for headless/remote systems)",
-                err=True,
-            )
-            sys.exit(1)
-    else:
-        click.secho("✅ Already authenticated with Railway", fg="green")
-
-
-def _init_railway_project_step() -> None:
-    """Initialize Railway project if needed."""
-    if not is_railway_project_initialized():
-        click.echo("\n📦 Initializing Railway project...")
-        click.echo("💡 You can create a new project or link to an existing one")
-
-        try:
-            result = run_railway_command(["init"], timeout=60, interactive=True)
-
-            if result.returncode != 0:
-                click.secho(
-                    "❌ Error: Failed to initialize Railway project", fg="red", err=True
-                )
-                sys.exit(1)
-
-            click.secho("✅ Railway project initialized", fg="green")
-        except (FileNotFoundError, TimeoutError) as e:
-            click.secho(f"❌ Error: {e}", fg="red", err=True)
-            sys.exit(1)
-    else:
-        click.echo("✅ Railway project already initialized")
-
-
-def _list_railway_services() -> list[dict[str, object]]:
-    """Return services in the linked Railway environment.
-
-    Uses ``railway service list --json``.  A bare ``railway service`` is the
-    deprecated interactive link prompt: once a project has services it waits
-    for a selection and only ends at the command timeout.
-    """
-    result = run_railway_command(["service", "list", "--json"], timeout=30)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"railway service list failed: {(result.stderr or result.stdout).strip()}"
-        )
-    services = json.loads(result.stdout)
-    if not isinstance(services, list) or not all(
-        isinstance(service, dict) for service in services
-    ):
-        raise RuntimeError("railway service list returned an invalid JSON payload")
-    return services
-
-
-def _list_railway_service_names() -> list[str]:
-    """Return the service names in the linked Railway environment."""
-    return [str(service.get("name", "")) for service in _list_railway_services()]
-
-
-def _postgres_service_matches(services: list[dict[str, object]]) -> list[str]:
-    """Return PostgreSQL service names, preferring declared service types."""
-    typed_matches: list[str] = []
-    name_matches: list[str] = []
-    for service in services:
-        name = str(service.get("name", "")).strip()
-        if not name:
-            continue
-        service_type = next(
-            (
-                str(service[key]).strip().casefold()
-                for key in ("type", "serviceType", "service_type")
-                if service.get(key)
-            ),
-            "",
-        )
-        if "postgres" in service_type:
-            typed_matches.append(name)
-        elif not service_type and "postgres" in name.casefold():
-            name_matches.append(name)
-    return typed_matches or name_matches
-
-
-def _setup_postgres_step() -> str:
-    """Return the one unambiguous PostgreSQL service name."""
-    try:
-        matches = _postgres_service_matches(_list_railway_services())
-    except Exception as exc:
-        raise click.ClickException(f"Unable to list Railway services: {exc}") from exc
-
-    if not matches:
-        click.echo("Adding PostgreSQL service...")
-        result = run_railway_command(["add", "--database", "postgres"], timeout=30)
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip()
-            raise click.ClickException(
-                f"Unable to add a PostgreSQL service: {detail or 'unknown error'}"
-            )
-        try:
-            matches = _postgres_service_matches(_list_railway_services())
-        except Exception as exc:
-            raise click.ClickException(
-                f"Unable to confirm the PostgreSQL service: {exc}"
-            ) from exc
-
-    if len(matches) != 1:
-        matched_names = ", ".join(matches) if matches else "none"
-        raise click.ClickException(
-            "Expected exactly one PostgreSQL service, "
-            f"found {len(matches)} ({matched_names}). "
-            "Create or remove Railway database services, then re-run the deploy."
-        )
-
-    click.echo(f"✅ PostgreSQL service found: {matches[0]}")
-    return matches[0]
-
-
-def _app_service_exists_step(app_service: str) -> bool:
-    """Return whether the app service already exists, failing on unreadable state."""
-    try:
-        names = _list_railway_service_names()
-    except Exception as exc:
-        raise click.ClickException(f"Unable to list Railway services: {exc}") from exc
-    exists = app_service.casefold() in (name.casefold() for name in names)
-    if exists:
-        click.echo(f"✅ Service '{app_service}' already exists")
-    return exists
-
-
-def _create_app_service_step(app_service: str) -> None:
-    """Create application service."""
-    try:
-        names = _list_railway_service_names()
-
-        if app_service.lower() in (name.lower() for name in names):
-            click.echo(f"✅ Service '{app_service}' already exists")
-        else:
-            # Railway CLI 5.x prompts ("What do you need?", "Enter a variable")
-            # whenever it sees a TTY, even with --service, and its TUI leaves the
-            # terminal in raw mode on timeout. Run without a TTY so it never prompts.
-            result = run_railway_command(
-                ["add", "--service", app_service], timeout=60, input_data=""
-            )
-
-            if result.returncode != 0:
-                click.secho(
-                    f"⚠️  Warning: Could not create service '{app_service}'", fg="yellow"
-                )
-                detail = (result.stderr or result.stdout or "").strip()
-                if detail:
-                    click.echo(f"   {detail}", err=True)
-                click.echo("💡 Create manually: railway add --service", err=True)
-            else:
-                click.secho(f"✅ Service '{app_service}' created", fg="green")
-    except Exception as e:
-        click.secho(f"⚠️  Warning: Could not create app service: {e}", fg="yellow")
-
-
-def _link_database_step(app_service: str, postgres_service: str) -> bool:
-    """Link DATABASE_URL from PostgreSQL to app service."""
-    try:
-        link_success, link_message = link_database_to_service(
-            app_service, postgres_service
-        )
-    except ValueError as exc:
-        click.secho(f"❌ Error: {exc}", fg="red", err=True)
-        sys.exit(1)
-
-    if link_success:
-        click.secho(f"✅ {link_message}", fg="green")
-        return True
-    else:
-        click.secho(f"⚠️  Warning: {link_message}", fg="yellow")
-        click.echo("💡 You may need to link DATABASE_URL manually:")
-        click.echo(
-            f"   railway variable set "
-            f"'DATABASE_URL=${{{{{postgres_service}.DATABASE_URL}}}}' "
-            f"--service {app_service}"
-        )
-        click.echo("   Use single quotes to prevent shell expansion errors")
-        click.echo(
-            "   Or link via Railway dashboard > Variables > New Variable > Reference"
-        )
-        return False
-
-
-def _generate_domain_step(app_service: str) -> str | None:
-    """Generate public domain and return the domain name."""
-    try:
-        domain_url = generate_railway_domain(app_service)
-    except ValueError as exc:
-        click.secho(f"❌ Error: {exc}", fg="red", err=True)
-        sys.exit(1)
-
-    if domain_url:
-        click.secho(f"✅ Domain generated: {domain_url}", fg="green")
-        return domain_url.replace("https://", "").replace("http://", "")
-    else:
-        click.secho("⚠️  Warning: Could not auto-generate domain", fg="yellow")
-        click.echo("💡 Generate manually: railway domain")
-        click.echo("💡 Then set: railway variable set ALLOWED_HOSTS=<your-domain>")
-        return None
-
-
-def _existing_service_variables(app_service: str) -> dict[str, str]:
-    """Return the app service's current Railway variables or fail hard."""
-    try:
-        variables = get_railway_variables(app_service)
-    except Exception as exc:
-        raise click.ClickException(
-            f"Unable to read Railway variables for service '{app_service}': {exc}"
-        ) from exc
-    if variables is None:
-        raise click.ClickException(
-            f"Unable to read Railway variables for service '{app_service}'."
-        )
-    return variables
-
-
-def _runtime_role_variables(
-    postgres_service: str, existing: dict[str, str]
-) -> dict[str, str]:
-    """Return the runtime-role variables to set, honouring what already exists.
-
-    - ``RUNTIME_DATABASE_URL`` set without ``RUNTIME_DB_PASSWORD``: the role is
-      operator-managed, so nothing is written.
-    - ``RUNTIME_DB_PASSWORD`` already set: it is reused, so a re-deploy never
-      rotates the password underneath the container still serving traffic.
-    - Otherwise a new URL-safe (hex) password is generated.
-    """
-    if existing.get("RUNTIME_DATABASE_URL") and not existing.get("RUNTIME_DB_PASSWORD"):
-        return {}
-    password = existing.get("RUNTIME_DB_PASSWORD") or secrets.token_hex(24)
-    return {
-        "RUNTIME_DB_ROLE": RUNTIME_DB_ROLE,
-        "RUNTIME_DB_PASSWORD": password,
-        "RUNTIME_DATABASE_URL": runtime_database_url(postgres_service, password),
-    }
-
-
-def _configure_env_vars_step(
-    app_service: str,
-    domain_name: str | None,
-    postgres_service: str = "Postgres",
-    existing_vars: dict[str, str] | None = None,
-) -> None:
-    """Configure environment variables in batch, including the runtime DB role."""
-    if existing_vars is None:
-        raise click.ClickException(
-            f"Railway variables for service '{app_service}' were not loaded."
-        )
-
-    click.echo(f"Setting variables for service: {app_service}")
-    click.echo("💡 Setting all variables at once to minimize deployments")
-
-    # Django settings module must reference a valid Python package path.
-    django_package = app_service.replace("-", "_")
-
-    env_vars = {
-        "SECRET_KEY": existing_vars.get("SECRET_KEY") or generate_django_secret_key(),
-        "DEBUG": "False",
-        "DJANGO_SETTINGS_MODULE": f"{django_package}.settings.production",
-    }
-
-    runtime_vars = _runtime_role_variables(postgres_service, existing_vars)
-    env_vars.update(runtime_vars)
-
-    if domain_name:
-        env_vars["ALLOWED_HOSTS"] = domain_name
-
-    success, failed_keys = set_railway_variables_batch(env_vars, service=app_service)
-
-    if success:
-        click.secho("✅ All environment variables configured successfully", fg="green")
-        for key in env_vars:
-            if key in ("SECRET_KEY", "RUNTIME_DB_PASSWORD"):
-                state = "reused" if existing_vars.get(key) else "generated"
-                click.echo(f"   • {key}=<{state}>")
-            elif key == "RUNTIME_DATABASE_URL":
-                click.echo(f"   • {key}=<{RUNTIME_DB_ROLE} @ {postgres_service}>")
-            else:
-                click.echo(f"   • {key}={env_vars[key]}")
-        if not runtime_vars:
-            click.echo(
-                "   • RUNTIME_DATABASE_URL: operator-managed (RUNTIME_DB_PASSWORD unset), left unchanged"
-            )
-        click.echo(
-            "💡 Variables are set without triggering a deployment. The deploy step below will start one."
-        )
-    else:
-        click.secho(
-            "❌ Error: Some environment variables could not be set — "
-            "deployment aborted",
-            fg="red",
-            err=True,
-        )
-        if failed_keys:
-            click.echo("Failed variables:", err=True)
-            for key in failed_keys:
-                click.echo(f"   • {key}", err=True)
-        click.echo(
-            "💡 Set variables securely with: railway variable set KEY --stdin",
-            err=True,
-        )
-        sys.exit(1)
-
-
-def _deploy_app_step(app_service: str) -> None:
-    """Deploy application to Railway."""
-    click.echo("💡 Using railway.json for build and deployment configuration")
-    click.echo("💡 Migrations will run automatically at startup (via railway.json)")
-    click.echo("This may take a few minutes...")
-
-    try:
-        result = deploy_railway_service(
-            project_path=Path.cwd(),
-            service_name=app_service,
-            timeout=60,
-        )
-
-        if result.returncode != 0:
-            click.secho("❌ Error: Deployment failed", fg="red", err=True)
-            click.echo(f"\n{result.stderr}", err=True)
-            click.echo("\n💡 Troubleshooting:", err=True)
-            click.echo("   - Check build logs: railway logs", err=True)
-            click.echo("   - Verify railway.json exists in project root", err=True)
-            click.echo("   - Verify Dockerfile is present", err=True)
-            click.echo("   - Check pyproject.toml dependencies", err=True)
-            click.echo(
-                "   - Ensure DATABASE_URL is linked to PostgreSQL service", err=True
-            )
-            sys.exit(1)
-
-        click.secho("✅ Deployment started", fg="green")
-        click.echo("💡 Railway is building and deploying your application...")
-        click.echo("💡 The startCommand in railway.json will:")
-        click.echo("   1. Run database migrations (requires DATABASE_URL)")
-        click.echo("   2. Start Gunicorn server")
-    except TimeoutError:
-        click.secho("⚠️  Deployment command timed out", fg="yellow")
-
-
-def _verify_deployment_step(app_service: str) -> bool:
-    """Verify environment variables were set correctly."""
-    try:
-        deployed_vars = get_railway_variables(app_service)
-    except Exception as exc:
-        raise click.ClickException(
-            f"Unable to verify Railway variables for service '{app_service}': {exc}"
-        ) from exc
-    if deployed_vars is None:
-        raise click.ClickException(
-            f"Unable to verify Railway variables for service '{app_service}'."
-        )
-    database_url_present = False
-
-    required_vars = [
-        "DATABASE_URL",
-        "SECRET_KEY",
-        "DEBUG",
-        "DJANGO_SETTINGS_MODULE",
-        "ALLOWED_HOSTS",
-    ]
-    missing_vars: list[str] = []
-    present_vars: list[tuple[str, str]] = []
-    for var in required_vars:
-        if var in deployed_vars and deployed_vars[var]:
-            if var == "SECRET_KEY":
-                present_vars.append((var, "<set>"))
-            elif var == "DATABASE_URL":
-                present_vars.append((var, "<linked to PostgreSQL>"))
-                database_url_present = True
-            else:
-                value = deployed_vars[var]
-                if len(value) > 50:
-                    value = value[:50] + "..."
-                present_vars.append((var, value))
-        else:
-            missing_vars.append(var)
-
-    if not missing_vars:
-        click.secho("✅ Environment variables verified", fg="green")
-    else:
-        click.secho(
-            f"⚠️  Environment variables partially configured "
-            f"({len(missing_vars)} missing)",
-            fg="yellow",
-        )
-    for var, value in present_vars:
-        click.echo(f"   • {var}={value}")
-    for var in missing_vars:
-        click.secho(f"   ⚠️  {var} not set", fg="yellow")
-
-    return database_url_present
-
-
-def _display_summary(
-    app_service: str,
-    domain_url: str | None,
-    database_linked: bool,
-    postgres_service: str,
-) -> None:
-    """Display deployment summary."""
-    click.echo("\n" + "=" * 60)
-    click.secho("🎉 DEPLOYMENT SUMMARY", fg="green", bold=True)
-    click.echo("=" * 60)
-
-    click.echo(f"\n📦 Project: {app_service}")
-    if domain_url:
-        click.echo(f"🌐 URL: {domain_url}")
-        click.echo("💡 Note: First deployment may take 5-10 minutes")
-    else:
-        click.echo("🌐 URL: Get with 'railway status'")
-
-    click.echo("\n✅ Services configured:")
-    click.echo("   • PostgreSQL database")
-    click.echo(f"   • {app_service} application")
-    if database_linked:
-        click.echo("   • DATABASE_URL linked")
-    else:
-        click.echo("   • DATABASE_URL not linked (manual action required)")
-    click.echo("   • Public domain generated")
-
-    click.echo("\n📋 Next steps:")
-    click.echo(f"   1. Monitor deployment: railway logs --service {app_service}")
-    click.echo("   2. Wait for deployment to complete (check Railway dashboard)")
-    if domain_url:
-        click.echo(f"   3. Visit your site: {domain_url}")
-    else:
-        click.echo("   3. Get URL: railway status")
-    click.echo(
-        "   4. Create superuser automatically: set DJANGO_SUPERUSER_USERNAME, "
-        "DJANGO_SUPERUSER_EMAIL and DJANGO_SUPERUSER_PASSWORD variables in Railway "
-        "dashboard — start.sh will create it on next deploy"
-    )
-    click.echo(
-        f"      Or manually: railway ssh --service {app_service} "
-        f"python manage.py createsuperuser"
-    )
-    click.echo("   5. Configure custom domain (optional): railway domain")
-
-    click.echo("\n⚠️  Important:")
-    click.echo("   • Monitor logs for startup errors: railway logs")
-    click.echo("   • Verify DATABASE_URL in Railway dashboard > Variables")
-    if not database_linked:
-        click.echo(
-            "   • Link DB manually: railway variable set "
-            f"'DATABASE_URL=${{{{{postgres_service}.DATABASE_URL}}}}' "
-            f"--service {app_service}"
-        )
-    click.echo("   • Check healthcheck status in Railway dashboard")
-    click.echo("   • Migrations run automatically on first deploy")
-    click.echo(
-        f"   • start.sh creates the restricted '{RUNTIME_DB_ROLE}' database role "
-        "before migrating"
-    )
-
-    click.echo("\n📖 Documentation:")
-    click.echo("   • Railway: https://docs.railway.app")
-    click.echo("   • QuickScale: docs/deployment/railway.md")
-
-    click.echo("\n" + "=" * 60)
-    click.secho("✅ Deployment process completed successfully!", fg="green", bold=True)
-    click.echo("=" * 60)
 
 
 @deploy.command()
