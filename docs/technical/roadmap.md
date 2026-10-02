@@ -125,9 +125,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
 
-  **Landed (first slice):** rules 4, 5, and 23 (cross-module public surface, dependency layers, and
-  the `services.py` public surface) are enforced by the conformance test with a control case each;
-  the rest now follows the landed SA226 authorization swap.
+  **Landed (first two slices):** rules 4, 5, and 23 (cross-module public surface, dependency
+  layers, and the `services.py` public surface) and rules 1, 3, 31, and 35 (settings names and the
+  enabled switch, setting reads, the theme seam, and secrets) are enforced by the conformance test
+  with a control case each; the rest covers the other landed tickets' rules, SA215's own drift
+  fixes, and SA216's write-effect rule.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no

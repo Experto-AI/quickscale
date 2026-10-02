@@ -9,6 +9,7 @@ partition of rules 1-39 so no rule can be silently omitted.
 
 from __future__ import annotations
 
+import copy
 import re
 from dataclasses import replace
 from pathlib import Path
@@ -24,6 +25,13 @@ GOLDEN_MANIFEST: dict[str, object] = {
     "name": "demo",
     "config": {
         "mutable": {
+            "enabled": {
+                "type": "boolean",
+                "default": True,
+                "django_setting": "QUICKSCALE_DEMO_ENABLED",
+                "description": "Enable the demo module.",
+                "validation": {},
+            },
             "api_rate_limit": {
                 "type": "string",
                 "default": "5/hour",
@@ -70,6 +78,7 @@ GOLDEN_README = """\
 A demo module.
 
 ## Configuration
+- `enabled` - enable the demo module.
 - `api_rate_limit` - throttle rate.
 
 ## Public surface
@@ -148,7 +157,11 @@ def _golden_module(name: str = "demo") -> Module:
             "poetry.toml": "[virtualenvs]\nin-project = true\n",
         },
         tests={
-            "settings.py": "SECRET_KEY = 'test'\n",
+            "settings.py": (
+                "SECRET_KEY = 'test'\n"
+                "QUICKSCALE_DEMO_ENABLED = True\n"
+                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
+            ),
             "test_widget.py": '"""Widget behaviour."""\n\n\ndef test_widget():\n    assert True\n',
         },
     )
@@ -179,11 +192,229 @@ def _violations(detector, *modules: Module, extra_dirs: tuple[str, ...] = ()) ->
     return detector(_corpus(*modules, extra_dirs=extra_dirs))
 
 
+def _with_option(module: Module, key: str, option: dict[str, object]) -> Module:
+    """Replace one mutable manifest option on a copy of the module."""
+    manifest = copy.deepcopy(module.manifest)
+    manifest["config"]["mutable"][key] = option
+    return replace(module, manifest=manifest)
+
+
+def _without_option(module: Module, key: str) -> Module:
+    manifest = copy.deepcopy(module.manifest)
+    del manifest["config"]["mutable"][key]
+    return replace(module, manifest=manifest)
+
+
+def _with_mount(module: Module, mount: str) -> Module:
+    """Declare ``mount`` as the module's URL include in its manifest."""
+    manifest = copy.deepcopy(module.manifest)
+    for projection in manifest["derivation"]["wiring_projections"]:
+        if projection.get("wiring_field") == "url_includes":
+            projection["expression"]["value"] = [[mount, f"quickscale_modules_{module.name}.urls"]]
+    return replace(module, manifest=manifest)
+
+
+def _seam_corpus(template: str, module: Module | None = None) -> Corpus:
+    """Build a corpus whose theme seam template is the given ``index.html.j2``."""
+    return replace(
+        _corpus(module if module is not None else _golden_module()),
+        core_files={checker.THEME_SEAM_TEMPLATE: template},
+    )
+
+
 def test_golden_fixture_passes_every_covered_rule() -> None:
     module = _golden_module()
     corpus = _corpus(module)
     failed = {rule.number: rule.detector(corpus) for rule in checker.RULES if rule.detector(corpus)}
     assert failed == {}
+
+
+def test_settings_names_control() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_1_settings_names, module) == []
+    no_enabled = _without_option(module, "enabled")
+    assert any(
+        "declares no enabled option" in violation
+        for violation in _violations(checker.rule_1_settings_names, no_enabled)
+    )
+    wrong_type = _with_option(
+        module,
+        "enabled",
+        {
+            "type": "string",
+            "default": "yes",
+            "django_setting": "QUICKSCALE_DEMO_ENABLED",
+            "description": "Enable the demo module.",
+            "validation": {},
+        },
+    )
+    assert any(
+        "enabled type" in violation
+        for violation in _violations(checker.rule_1_settings_names, wrong_type)
+    )
+    wrong_name = _with_option(
+        module,
+        "enabled",
+        {
+            "type": "boolean",
+            "default": True,
+            "django_setting": "QUICKSCALE_DEMO_ON",
+            "description": "Enable the demo module.",
+            "validation": {},
+        },
+    )
+    assert any(
+        "enabled setting" in violation
+        for violation in _violations(checker.rule_1_settings_names, wrong_name)
+    )
+    bad_suffix = _with_option(
+        module,
+        "api_rate_limit",
+        {
+            "type": "integer",
+            "default": 5,
+            "django_setting": "QUICKSCALE_DEMO_API_RATE_LIMIT",
+            "description": "Throttle rate.",
+            "validation": {},
+        },
+    )
+    assert any(
+        "expected string" in violation
+        for violation in _violations(checker.rule_1_settings_names, bad_suffix)
+    )
+    bad_default = _with_option(
+        module,
+        "action_key_env_var",
+        {
+            "type": "string",
+            "default": "not-a-name",
+            "django_setting": "QUICKSCALE_DEMO_ACTION_KEY_ENV_VAR",
+            "description": "Environment variable name.",
+            "validation": {},
+        },
+    )
+    assert any(
+        "not an environment-variable name" in violation
+        for violation in _violations(checker.rule_1_settings_names, bad_default)
+    )
+
+
+def test_settings_reads_control() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_3_settings_reads, module) == []
+    undeclared = _with_files(
+        module,
+        services=("from django.conf import settings\n\nKEY = settings.QUICKSCALE_DEMO_MISSING\n"),
+    )
+    assert any(
+        "reads undeclared" in violation
+        for violation in _violations(checker.rule_3_settings_reads, undeclared)
+    )
+    cross_module = _with_files(
+        module,
+        services=(
+            "from django.conf import settings\n\nKEY = settings.QUICKSCALE_BILLING_SECRET_KEY\n"
+        ),
+    )
+    assert any(
+        "reads billing's" in violation
+        for violation in _violations(checker.rule_3_settings_reads, cross_module)
+    )
+    with_default = _with_files(
+        module,
+        services=(
+            "from django.conf import settings\n\n"
+            'KEY = getattr(settings, "QUICKSCALE_DEMO_ENABLED", True)\n'
+        ),
+    )
+    assert any(
+        "through getattr()" in violation
+        for violation in _violations(checker.rule_3_settings_reads, with_default)
+    )
+    aliased_default = _with_files(
+        module,
+        services=(
+            "from django.conf import settings as cfg\n\n"
+            'KEY = getattr(cfg, "QUICKSCALE_DEMO_ENABLED", True)\n'
+        ),
+    )
+    assert any(
+        "through getattr()" in violation
+        for violation in _violations(checker.rule_3_settings_reads, aliased_default)
+    )
+    qualified_default = _with_files(
+        module,
+        services=(
+            "import django.conf as conf\n\n"
+            'KEY = getattr(conf.settings, "QUICKSCALE_DEMO_ENABLED", True)\n'
+        ),
+    )
+    assert any(
+        "through getattr()" in violation
+        for violation in _violations(checker.rule_3_settings_reads, qualified_default)
+    )
+    missing_setting = replace(
+        module,
+        tests={**module.tests, "settings.py": "SECRET_KEY = 'test'\n"},
+    )
+    assert any(
+        "tests/settings.py does not define" in violation
+        for violation in _violations(checker.rule_3_settings_reads, missing_setting)
+    )
+    commented_setting = replace(
+        module,
+        tests={
+            **module.tests,
+            "settings.py": (
+                "SECRET_KEY = 'test'\n"
+                "# QUICKSCALE_DEMO_ENABLED = True\n"
+                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
+            ),
+        },
+    )
+    assert any(
+        "tests/settings.py does not define QUICKSCALE_DEMO_ENABLED" in violation
+        for violation in _violations(checker.rule_3_settings_reads, commented_setting)
+    )
+    annotation_only = replace(
+        module,
+        tests={
+            **module.tests,
+            "settings.py": (
+                "SECRET_KEY = 'test'\n"
+                "QUICKSCALE_DEMO_ENABLED: bool\n"
+                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
+            ),
+        },
+    )
+    assert any(
+        "tests/settings.py does not define QUICKSCALE_DEMO_ENABLED" in violation
+        for violation in _violations(checker.rule_3_settings_reads, annotation_only)
+    )
+    annotated_value = replace(
+        module,
+        tests={
+            **module.tests,
+            "settings.py": (
+                "SECRET_KEY = 'test'\n"
+                "QUICKSCALE_DEMO_ENABLED: bool = True\n"
+                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
+            ),
+        },
+    )
+    assert _violations(checker.rule_3_settings_reads, annotated_value) == []
+    unpacked_setting = replace(
+        module,
+        tests={
+            **module.tests,
+            "settings.py": (
+                "SECRET_KEY = 'test'\n"
+                "QUICKSCALE_DEMO_ENABLED, = (True,)\n"
+                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
+            ),
+        },
+    )
+    assert _violations(checker.rule_3_settings_reads, unpacked_setting) == []
 
 
 def test_identity_names_control() -> None:
@@ -3968,6 +4199,79 @@ def test_migration_mixed_import_control() -> None:
         **{"migrations/0003_extra.py": "from quickscale_modules_billing import models\n"},
     )
     assert _violations(checker.rule_5_dependency_direction, models_only) == []
+
+
+def test_theme_seam_control() -> None:
+    good = "{{ seam_module_flags }}\n{{ seam_module_paths }}\n"
+    assert checker.rule_31_theme_seam(_seam_corpus(good)) == []
+    missing = _seam_corpus("{{ seam_module_flags }}\n")
+    assert any("does not render" in violation for violation in checker.rule_31_theme_seam(missing))
+    literal_line = _seam_corpus('{{ seam_module_flags }}\n"demo": true,\n{{ seam_module_paths }}\n')
+    assert any(
+        "names module 'demo' literally" in violation
+        for violation in checker.rule_31_theme_seam(literal_line)
+    )
+    bare_key = _seam_corpus("{{ seam_module_flags }}\ndemo: true,\n{{ seam_module_paths }}\n")
+    assert any("bare key" in violation for violation in checker.rule_31_theme_seam(bare_key))
+    absolute_mount = _seam_corpus("{{ seam_module_flags }}\n{{ seam_module_paths }}\n'/demo/'")
+    assert any(
+        "names module 'demo' literally" in violation
+        for violation in checker.rule_31_theme_seam(absolute_mount)
+    )
+    empty_core = _corpus(_golden_module())
+    assert checker.rule_31_theme_seam(empty_core) == []
+    missing_template = replace(empty_core, core_files={"other.py": "x\n"})
+    assert any(
+        "carries no theme index.html.j2" in violation
+        for violation in checker.rule_31_theme_seam(missing_template)
+    )
+    auth = _with_mount(_golden_module("auth"), "accounts/")
+    accounts_literal = _seam_corpus(
+        '{{ seam_module_flags }}\n{{ seam_module_paths }}\n<a href="/accounts/">Accounts</a>\n',
+        auth,
+    )
+    assert any(
+        "mount 'accounts/'" in violation
+        for violation in checker.rule_31_theme_seam(accounts_literal)
+    )
+    named_url = _seam_corpus(
+        "{{ seam_module_flags }}\n{{ seam_module_paths }}\n{% url 'quickscale_auth:login' %}\n",
+        auth,
+    )
+    assert checker.rule_31_theme_seam(named_url) == []
+
+
+def test_secrets_control() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_35_secrets, module) == []
+    getenv = _with_files(module, services='import os\n\nKEY = os.getenv("DEMO_KEY")\n')
+    assert any(
+        "uses os.getenv/os.environ" in violation
+        for violation in _violations(checker.rule_35_secrets, getenv)
+    )
+    environ = _with_files(module, services='import os\n\nKEY = os.environ["DEMO_KEY"]\n')
+    environ_violations = _violations(checker.rule_35_secrets, environ)
+    assert len(environ_violations) == 1
+    assert "uses os.getenv/os.environ" in environ_violations[0]
+    aliased = _with_files(
+        module,
+        services='import os as operating_system\n\nKEY = operating_system.getenv("DEMO_KEY")\n',
+    )
+    assert any(
+        "uses os.getenv/os.environ" in violation
+        for violation in _violations(checker.rule_35_secrets, aliased)
+    )
+    orgs = _golden_module("orgs")
+    boot_guard = _with_files(
+        orgs,
+        checks=('import os\n\nBYPASS = os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS")\n'),
+    )
+    assert _violations(checker.rule_35_secrets, boot_guard) == []
+    other_variable = _with_files(orgs, checks='import os\n\nKEY = os.environ.get("DEMO_KEY")\n')
+    assert any(
+        "uses os.getenv/os.environ" in violation
+        for violation in _violations(checker.rule_35_secrets, other_variable)
+    )
 
 
 def test_layer_table_mirrors_the_shipped_modules() -> None:
