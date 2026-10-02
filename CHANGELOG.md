@@ -393,6 +393,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     module stays the import path every caller uses and re-exports its full former surface, while
     its route/context assembly, adapter bridge, environment-sync, and report logic live in focused
     private sibling modules.
+  - **Status, deployment, and Railway utility modules keep their import surfaces while the
+    implementations split.** `status_command.py`, `deployment_commands.py`, `railway_utils.py`, and
+    `module_dependency_sync.py` stay the import paths every caller uses and re-export their full
+    former surfaces, while status context/diagnostics/display, deploy pre-flight/service
+    configuration, Railway CLI/project helpers, and dependency TOML reading, writing, and sync
+    logic live in focused private sibling modules.
   - **Modules answer whether they are enabled and declare what they use.** Every module publishes
     `services.is_enabled()` for its own `QUICKSCALE_<MODULE>_ENABLED` setting, and each manifest's
     `required_modules` lists every module its code references. `plan`/`apply` therefore install
@@ -428,6 +434,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `quickscale_modules_storage._helpers`), analytics no longer ships an event-vocabulary file,
     and the CLI's module configurator registry and core's imperative inventory derive their module
     set from `quickscale_modules/*/module.yml`.
+  - **Orgs' invitation accept view uses the login-required mixin.** An anonymous visit to an
+    invitation link is routed to the configured login page through
+    `LoginRequiredMixin.handle_no_permission()` instead of a hand-written `redirect_to_login`,
+    keeping the module's authorization on the shared convention idiom.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

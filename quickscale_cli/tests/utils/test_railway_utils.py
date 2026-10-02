@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from quickscale_cli.utils import railway_utils
 from quickscale_cli.utils.railway_utils import (
     _compare_versions,
     check_poetry_lock_consistency,
@@ -1711,3 +1712,51 @@ class TestLinkDatabaseToService:
             call_args = mock_run.call_args[0][0]
             assert "--service" in call_args
             assert "custom-app-123" in call_args
+
+
+class TestFacadePatchTargets:
+    """The facade keeps patch targets effective across the split modules."""
+
+    def test_patched_subprocess_flows_through_npm_probe(self) -> None:
+        """Patching the facade subprocess binding reaches the npm probe."""
+        with patch.object(
+            railway_utils.subprocess, "run", return_value=Mock(returncode=0)
+        ) as runner:
+            assert railway_utils.is_npm_installed() is True
+
+        runner.assert_called_once()
+
+    def test_patched_runner_flows_through_domain_generation(self) -> None:
+        """Patching the facade runner reaches Railway domain generation."""
+        completed = Mock(
+            returncode=0, stdout="Generated domain: https://myapp.up.railway.app"
+        )
+        with patch.object(
+            railway_utils, "run_railway_command", return_value=completed
+        ) as runner:
+            domain = railway_utils.generate_railway_domain("svc")
+
+        runner.assert_called_once_with(["domain", "--service", "svc"], timeout=30)
+        assert domain == "https://myapp.up.railway.app"
+
+    def test_patched_variable_setter_flows_through_batch(self) -> None:
+        """Patching the facade variable setter reaches the batch wrapper."""
+        with patch.object(
+            railway_utils, "set_railway_variable", return_value=True
+        ) as setter:
+            assert railway_utils.set_railway_variables_batch({"A": "1"}) == (True, [])
+
+        setter.assert_called_once_with(
+            "A", "1", service=None, environment=None, skip_deploy=True
+        )
+
+    def test_patched_json_reader_flows_through_variables(self) -> None:
+        """Patching the facade JSON reader reaches variable retrieval."""
+        with patch.object(
+            railway_utils,
+            "_get_railway_variables_json",
+            return_value={"K": "V"},
+        ) as reader:
+            assert railway_utils.get_railway_variables("svc") == {"K": "V"}
+
+        reader.assert_called_once_with(["variables", "--service", "svc"])
