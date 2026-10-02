@@ -473,18 +473,6 @@
         "symbol": "create_published_listing_from_payload",
         "type": "function"
       },
-      "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py::_refresh_message_status": {
-        "file": "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py",
-        "max_complexity": 15,
-        "symbol": "_refresh_message_status",
-        "type": "function"
-      },
-      "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py::ingest_webhook_event": {
-        "file": "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py",
-        "max_complexity": 17,
-        "symbol": "ingest_webhook_event",
-        "type": "function"
-      },
       "quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py::get_client_ip": {
         "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py",
         "max_complexity": 13,
