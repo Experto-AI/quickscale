@@ -377,6 +377,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     service module stays the import path every caller uses and re-exports its full former surface,
     while the Stripe client, Checkout, subscription, webhook, credit, and removal logic live in
     focused private sibling modules.
+  - **Apply command keeps its import surface while the implementation splits.** The apply command
+    module stays the import path every caller uses and re-exports its full former surface, while
+    its Git checkpointing, config validation, embedding, state, and step-execution logic live in
+    focused private sibling modules.
   - **Modules answer whether they are enabled and declare what they use.** Every module publishes
     `services.is_enabled()` for its own `QUICKSCALE_<MODULE>_ENABLED` setting, and each manifest's
     `required_modules` lists every module its code references. `plan`/`apply` therefore install

@@ -1098,34 +1098,67 @@ class TestRegenerateManagedWiringIncompleteManifest:
 def test_cli_manifest_error_handlers_do_not_classify_presence_by_message() -> None:
     """CLI production handlers must not infer presence from exception text."""
 
+    commands_dir = Path(__file__).resolve().parents[1] / "src/quickscale_cli/commands"
     source_paths = [
         Path(__file__).resolve().parents[1]
         / "src/quickscale_cli/utils/module_wiring_manager.py",
-        Path(__file__).resolve().parents[1]
-        / "src/quickscale_cli/commands/apply_command.py",
-        Path(__file__).resolve().parents[1]
-        / "src/quickscale_cli/commands/status_command.py",
+        commands_dir / "apply_command.py",
+        commands_dir / "status_command.py",
+        *sorted(
+            path
+            for path in commands_dir.glob("_*.py")
+            if not path.name.startswith("__")
+        ),
     ]
 
-    for source_path in source_paths:
-        source = source_path.read_text()
-        assert "Manifest file not found" not in source
-        tree = ast.parse(source, filename=str(source_path))
+    def _message_based_manifest_handlers(source: str, filename: str) -> list[str]:
+        """Return handlers that catch ManifestError and classify by message text."""
+        violations: list[str] = []
+        tree = ast.parse(source, filename=filename)
         for node in ast.walk(tree):
             if not isinstance(node, ast.ExceptHandler):
                 continue
             handler_type = node.type
             catches_manifest_error = handler_type is not None and any(
-                isinstance(candidate, ast.Name) and candidate.id == "ManifestError"
+                (isinstance(candidate, ast.Name) and candidate.id == "ManifestError")
+                or (
+                    isinstance(candidate, ast.Attribute)
+                    and candidate.attr == "ManifestError"
+                )
                 for candidate in ast.walk(handler_type)
             )
             if not catches_manifest_error:
                 continue
-            assert not any(
+            if any(
                 isinstance(candidate, ast.Compare)
                 and any(isinstance(op, (ast.In, ast.NotIn)) for op in candidate.ops)
                 for candidate in ast.walk(node)
-            ), f"message-based ManifestError classifier found in {source_path}"
+            ):
+                violations.append(filename)
+        return violations
+
+    for source_path in source_paths:
+        source = source_path.read_text()
+        assert "Manifest file not found" not in source
+        violations = _message_based_manifest_handlers(source, str(source_path))
+        assert not violations, (
+            f"message-based ManifestError classifier found in {source_path}"
+        )
+
+    # Control: the same classifier check must reject a moved-module handler that
+    # reads presence out of the exception message through the facade alias.
+    control_source = (
+        "def _abort(error: Exception) -> None:\n"
+        "    try:\n"
+        "        load()\n"
+        "    except _apply_command.ManifestError as error:\n"
+        '        if "not found" in str(error):\n'
+        "            return\n"
+        "        raise\n"
+    )
+    assert _message_based_manifest_handlers(control_source, "control.py") == [
+        "control.py"
+    ]
 
 
 class TestRegenerateManagedWiringPriorBasePath:

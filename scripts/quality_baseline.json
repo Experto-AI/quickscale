@@ -2,7 +2,6 @@
   "schema_version": 1,
   "dead_code": {
     "allowed_messages": [
-      "quickscale_cli/src/quickscale_cli/commands/apply_command.py: unused variable 'q'",
       "quickscale_modules/blog/src/quickscale_modules_blog/views.py: unused variable 'req'",
       "quickscale_modules/blog/src/quickscale_modules_blog/views.py: unused variable 'req'",
       "quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py: unused variable 'app_configs'",
@@ -11,54 +10,6 @@
   },
   "complexity": {
     "allowed_functions": {
-      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_attempt_provenance_repair_if_needed": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
-        "max_complexity": 13,
-        "symbol": "_attempt_provenance_repair_if_needed",
-        "type": "function"
-      },
-      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_build_project_state_snapshot": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
-        "max_complexity": 12,
-        "symbol": "_build_project_state_snapshot",
-        "type": "function"
-      },
-      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_display_next_steps_impl": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
-        "max_complexity": 26,
-        "symbol": "_display_next_steps_impl",
-        "type": "function"
-      },
-      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_execute_apply_steps_locked": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
-        "max_complexity": 55,
-        "symbol": "_execute_apply_steps_locked",
-        "type": "function"
-      },
-      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_generate_with_existing_config": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
-        "max_complexity": 16,
-        "symbol": "_generate_with_existing_config",
-        "type": "function"
-      },
-      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_load_and_validate_config": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
-        "max_complexity": 11,
-        "symbol": "_load_and_validate_config",
-        "type": "function"
-      },
-      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_normalize_backups_gitignore_entry": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
-        "max_complexity": 21,
-        "symbol": "_normalize_backups_gitignore_entry",
-        "type": "function"
-      },
-      "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_validate_module_prerequisites": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
-        "max_complexity": 45,
-        "symbol": "_validate_module_prerequisites",
-        "type": "function"
-      },
       "quickscale_cli/src/quickscale_cli/commands/deployment_commands.py::_verify_deployment_step": {
         "file": "quickscale_cli/src/quickscale_cli/commands/deployment_commands.py",
         "max_complexity": 12,
@@ -585,6 +536,54 @@
         "file": "quickscale_modules/billing/src/quickscale_modules_billing/services.py",
         "max_complexity": 15,
         "symbol": "handle_stripe_event",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/_context.py::_attempt_provenance_repair_if_needed": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_context.py",
+        "max_complexity": 13,
+        "symbol": "_attempt_provenance_repair_if_needed",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/_state.py::_build_project_state_snapshot": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_state.py",
+        "max_complexity": 12,
+        "symbol": "_build_project_state_snapshot",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/_finalize.py::_display_next_steps_impl": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_finalize.py",
+        "max_complexity": 26,
+        "symbol": "_display_next_steps_impl",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/_steps.py::_execute_apply_steps_locked": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_steps.py",
+        "max_complexity": 55,
+        "symbol": "_execute_apply_steps_locked",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/_generation.py::_generate_with_existing_config": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_generation.py",
+        "max_complexity": 16,
+        "symbol": "_generate_with_existing_config",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/_config.py::_load_and_validate_config": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_config.py",
+        "max_complexity": 11,
+        "symbol": "_load_and_validate_config",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/_runtime.py::_normalize_backups_gitignore_entry": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_runtime.py",
+        "max_complexity": 21,
+        "symbol": "_normalize_backups_gitignore_entry",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/_config.py::_validate_module_prerequisites": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_config.py",
+        "max_complexity": 45,
+        "symbol": "_validate_module_prerequisites",
         "type": "function"
       }
     }
