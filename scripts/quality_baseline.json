@@ -239,18 +239,6 @@
         "symbol": "_parse_applied_state",
         "type": "function"
       },
-      "quickscale_core/src/quickscale_core/contracts/module_options.py::get_env_var_portability": {
-        "file": "quickscale_core/src/quickscale_core/contracts/module_options.py",
-        "max_complexity": 14,
-        "symbol": "get_env_var_portability",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/contracts/module_options.py::sanitize_module_options": {
-        "file": "quickscale_core/src/quickscale_core/contracts/module_options.py",
-        "max_complexity": 11,
-        "symbol": "sanitize_module_options",
-        "type": "function"
-      },
       "quickscale_core/src/quickscale_core/dr_engine/_paths.py::_snapshot_capture_is_complete": {
         "file": "quickscale_core/src/quickscale_core/dr_engine/_paths.py",
         "max_complexity": 17,
@@ -376,24 +364,6 @@
         "max_complexity": 11,
         "symbol": "resolve_social_target",
         "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/project_state.py::ProjectStateManager._read_through_import_legacy": {
-        "file": "quickscale_core/src/quickscale_core/project_state.py",
-        "max_complexity": 11,
-        "symbol": "ProjectStateManager._read_through_import_legacy",
-        "type": "method"
-      },
-      "quickscale_core/src/quickscale_core/project_state.py::ProjectStateManager._state_file_has_consolidated_sections": {
-        "file": "quickscale_core/src/quickscale_core/project_state.py",
-        "max_complexity": 15,
-        "symbol": "ProjectStateManager._state_file_has_consolidated_sections",
-        "type": "method"
-      },
-      "quickscale_core/src/quickscale_core/project_state.py::ProjectStateManager.materialize_authoritative_state": {
-        "file": "quickscale_core/src/quickscale_core/project_state.py",
-        "max_complexity": 20,
-        "symbol": "ProjectStateManager.materialize_authoritative_state",
-        "type": "method"
       },
       "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section": {
         "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",

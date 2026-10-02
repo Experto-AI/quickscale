@@ -103,6 +103,30 @@ def _add_authoritative_module_contract(repo_dir: Path) -> None:
         (module_dir / "module.yml").write_text(f"name: {module_name}\n")
 
 
+# The git_utils split ships one file per sibling surface (SA231); the
+# hermetic wrapper repo symlinks every one of them, because the facade
+# imports its siblings at module import time.
+_GIT_UTILS_FACADE_MODULES = (
+    "git_errors.py",
+    "git_naming.py",
+    "git_publish.py",
+    "git_repo.py",
+    "git_runner.py",
+    "git_subtree.py",
+    "git_tags.py",
+    "git_utils.py",
+)
+
+
+def _symlink_git_utils_surface(core_src: Path, real_repo_root: Path) -> None:
+    """Link git_utils and its split sibling modules into the hermetic repo."""
+    real_utils_dir = (
+        real_repo_root / "quickscale_core" / "src" / "quickscale_core" / "utils"
+    )
+    for module_file in _GIT_UTILS_FACADE_MODULES:
+        (core_src / module_file).symlink_to(real_utils_dir / module_file)
+
+
 def _git_available() -> bool:
     """Return True if git is available on PATH."""
     return shutil.which("git") is not None
@@ -2398,19 +2422,11 @@ class TestPublishModuleReleaseAuthoritativeGate:
         script_copy = scripts_dir / "publish_module.py"
         script_copy.write_text(real_script.read_text())
 
-        # Create quickscale_core/src structure with symlink to real git_utils
+        # Create quickscale_core/src structure with symlinks to the real
+        # git_utils surface (facade plus its split sibling modules).
         core_src = repo_dir / "quickscale_core" / "src" / "quickscale_core" / "utils"
         core_src.mkdir(parents=True)
-        real_git_utils = (
-            real_repo_root
-            / "quickscale_core"
-            / "src"
-            / "quickscale_core"
-            / "utils"
-            / "git_utils.py"
-        )
-        # Use symlink to avoid copying the entire package
-        (core_src / "git_utils.py").symlink_to(real_git_utils)
+        _symlink_git_utils_surface(core_src, real_repo_root)
 
         # Create __init__.py files to make it a valid package
         (repo_dir / "quickscale_core" / "__init__.py").write_text("")
@@ -2689,18 +2705,11 @@ class _PublishModuleExpectedRemoteShaBase:
         real_script = real_repo_root / "scripts" / "publish_module.py"
         (scripts_dir / "publish_module.py").write_text(real_script.read_text())
 
-        # Copy git_utils.py (need to include our new functions)
+        # Symlink git_utils.py and its split sibling modules so the facade's
+        # eager imports resolve inside the hermetic repo.
         core_src = repo_dir / "quickscale_core" / "src" / "quickscale_core" / "utils"
         core_src.mkdir(parents=True)
-        real_git_utils = (
-            real_repo_root
-            / "quickscale_core"
-            / "src"
-            / "quickscale_core"
-            / "utils"
-            / "git_utils.py"
-        )
-        (core_src / "git_utils.py").symlink_to(real_git_utils)
+        _symlink_git_utils_surface(core_src, real_repo_root)
 
         # Package __init__.py files
         (repo_dir / "quickscale_core" / "__init__.py").write_text("")

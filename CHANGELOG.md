@@ -369,6 +369,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     option resolver stays the import path every caller uses and re-exports its full former surface,
     while its normalization, validation, legacy-alias, and projection engines live in focused
     sibling modules.
+  - **Project state and Git utilities keep their import surfaces while the implementations split.**
+    `project_state.py` and `utils/git_utils.py` stay the import paths every caller uses and re-export
+    their full former surfaces, while their records, legacy import, drift, runner, repository, tag,
+    subtree, and publication logic live in focused sibling modules.
   - **Billing services keep their import surface while the implementation splits.** The billing
     service module stays the import path every caller uses and re-exports its full former surface,
     while the Stripe client, Checkout, subscription, webhook, credit, and removal logic live in

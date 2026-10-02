@@ -167,8 +167,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   tightened, while its unaccepted per-function debt stays visible as regressions. `manifest/loader.py`
   and `manifest/resolver.py` are now facades over focused sibling modules, each under 800 lines,
   re-exporting their full prior surfaces; all sixteen of their functions at CC >= 11 and all six
-  accepted complexity entries are resolved. Batch 1 remains open on `project_state.py`,
-  `utils/git_utils.py`, and `contracts/`.
+  accepted complexity entries are resolved. `project_state.py` and `utils/git_utils.py` are now
+  facades over focused sibling modules, each under 800 lines, re-exporting their full prior
+  surfaces; all five remaining functions at CC >= 11 and all five remaining accepted complexity
+  entries in this batch are resolved, `contracts/module_options.py` included. Batch 1 is complete;
+  the module batch and the closing gate batch remain, the gate waiting on SA232.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on

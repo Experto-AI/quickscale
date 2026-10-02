@@ -236,6 +236,16 @@ def _is_manual_only_restore_gate(normalized_name: str) -> bool:
     )
 
 
+def _matches_any_prefix(normalized_name: str, prefixes: tuple[str, ...]) -> bool:
+    """Return whether *normalized_name* starts with any of *prefixes*."""
+    return any(normalized_name.startswith(prefix) for prefix in prefixes)
+
+
+def _contains_any_token(normalized_name: str, tokens: tuple[str, ...]) -> bool:
+    """Return whether *normalized_name* contains any of *tokens*."""
+    return any(token in normalized_name for token in tokens)
+
+
 def get_env_var_portability(name: str) -> tuple[str, str]:
     """Classify an environment variable name for DR env-var sync.
 
@@ -254,7 +264,7 @@ def get_env_var_portability(name: str) -> tuple[str, str]:
         return ENV_VAR_PORTABILITY_IGNORED, "blank name"
     if normalized in IGNORED_ENV_EXACT:
         return ENV_VAR_PORTABILITY_IGNORED, "shell/runtime noise"
-    if any(normalized.startswith(prefix) for prefix in IGNORED_ENV_PREFIXES):
+    if _matches_any_prefix(normalized, IGNORED_ENV_PREFIXES):
         return ENV_VAR_PORTABILITY_IGNORED, "shell/runtime noise"
     if _is_manual_only_restore_gate(normalized):
         return (
@@ -263,16 +273,16 @@ def get_env_var_portability(name: str) -> tuple[str, str]:
         )
     if normalized in NON_PORTABLE_ENV_EXACT:
         return ENV_VAR_PORTABILITY_MANUAL, "provider-owned or target-owned variable"
-    if any(normalized.startswith(prefix) for prefix in NON_PORTABLE_ENV_PREFIXES):
+    if _matches_any_prefix(normalized, NON_PORTABLE_ENV_PREFIXES):
         return ENV_VAR_PORTABILITY_MANUAL, "provider-owned or target-owned variable"
-    if any(token in normalized for token in NON_PORTABLE_ENV_CONTAINS):
+    if _contains_any_token(normalized, NON_PORTABLE_ENV_CONTAINS):
         return (
             ENV_VAR_PORTABILITY_MANUAL,
             "sensitive or environment-specific variable",
         )
     if normalized in PORTABLE_ENV_EXACT:
         return ENV_VAR_PORTABILITY_PORTABLE, "portable variable"
-    if any(normalized.startswith(prefix) for prefix in PORTABLE_ENV_PREFIXES):
+    if _matches_any_prefix(normalized, PORTABLE_ENV_PREFIXES):
         return ENV_VAR_PORTABILITY_PORTABLE, "portable variable"
     return (
         ENV_VAR_PORTABILITY_MANUAL,
