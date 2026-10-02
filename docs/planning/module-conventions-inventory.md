@@ -163,21 +163,25 @@ The enforcement gaps the audit recorded are closed or accepted:
   social ships its `test_rls_boundary.py`, the README check reads option keys and command names,
   references by name are checked over the layer table, the root `mypy.ini` carries one section per
   module with no per-module `[tool.mypy]`, option `validation:` blocks are read by core, the
-  manifest loader refuses version specifiers, `collect_wiring` refuses unequal shared values, the
-  gate is renamed, and `TENANT_TABLE_REGISTRY` is test-owned.
+  manifest loader refuses version specifiers, `collect_wiring` refuses unequal shared values (gap
+  10's first clause; its generated-composition clause is recorded below), the gate is renamed, and
+  `TENANT_TABLE_REGISTRY` is test-owned.
 - Gap 3 (the user-FK gate sees only its suite's apps) is accepted, as recorded in decisions.md
   rule 27.
-- Three residuals are accepted as properties of the fixed checks: a module's `test_isolation.py` is
+- Four residuals are accepted as properties of the fixed checks: a module's `test_isolation.py` is
   invoked explicitly by the PostgreSQL gate and does not self-enroll; rule 38's README match is a
-  substring anywhere in the file (a floor, as D41 records); and rule 19's detector follows the
+  substring anywhere in the file (a floor, as D41 records); rule 19's detector follows the
   view-module names (`views.py`, `debug_views.py`, `_view*.py`, `*_views.py`), so view code a rule 28
-  split files under another private name stays outside the check.
+  split files under another private name stays outside the check; and the generated `base.py` still
+  spreads a module's `REST_FRAMEWORK` keys over the template defaults, so a module can override the
+  `anon`/`user` throttle rates, which no gate owns.
 
 The names decisions.md quoted from the audit-time shipped state now carry the renamed forms
 (`QUICKSCALE_MODE` → `QUICKSCALE_ORGS_MODE`, `backups_create` → `quickscale_backups_create`,
-`quickscale_modules_<module>` app labels → `quickscale_<module>`). The
+`quickscale_modules_<module>` app labels → `quickscale_<module>`). The audit-time prose of the
 [Coherence audit re-run](#coherence-audit-re-run-2026-09-28) section and the evidence cells in
-sections 1–41 above remain the 2026-09-28 audit record, not a description of the current tree.
+sections 1–41 below remain the 2026-09-28 audit record, not a description of the current tree; the
+index statuses and this closing pass are the current state.
 
 ---
 
@@ -2355,13 +2359,14 @@ any difference from this summary. Rules 2, 9, 11, 13, 14, 18, 22, and 27 were am
 12. **A shipped-source oracle.** `TENANT_TABLE_REGISTRY` is recorded as a CI parity oracle but lives
     in orgs' `tenancy.py` (D37).
 
-**Closing note (SA215, 2026-10-02).** Gaps 1, 2, and 4–12 are closed: the rule 40 harness covers
-the statically checkable rules, the page-style contract is discovery-driven, the isolation gates
-derive their module sets, the README check reads option and command names, references by name are
-checked, the root `mypy.ini` carries one section per module, option `validation:` blocks are read,
-`required_modules` refuses specifiers, `collect_wiring` refuses unequal values, the gate is renamed,
-and the tenant registry is test-owned. Gap 3 is accepted with its reason in decisions.md rule 27.
-The list above is the audit-time record, not a description of the current tree.
+**Closing note (SA215, 2026-10-02).** Gaps 1, 2, and 4–12 are closed (gap 10's generated-composition
+clause excepted, as the [Closing pass](#closing-pass-sa215-2026-10-02) records): the rule 40 harness
+covers the statically checkable rules, the page-style contract is discovery-driven, the isolation
+gates derive their module sets, the README check reads option and command names, references by name
+are checked, the root `mypy.ini` carries one section per module, option `validation:` blocks are
+read, `required_modules` refuses specifiers, `collect_wiring` refuses unequal values, the gate is
+renamed, and the tenant registry is test-owned. Gap 3 is accepted with its reason in decisions.md
+rule 27. The list above is the audit-time record, not a description of the current tree.
 
 ## Consistent by design
 

@@ -402,7 +402,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** auth (`views.py`, `AppConfig`, README); orgs (`removal.py`, the
   account-deletion lookup, memberships, invitations); blog, notifications, billing, crm, forms,
   backups (anonymize handlers where the inventory lists them); decisions.md and [organizations.md](organizations.md). These are Track 3 surfaces
-  (`auth/views.py`, orgs' removal path) plus module code that SA215 also edits, hence the dependency;
+  (`auth/views.py`, orgs' removal path) plus module code that SA215 also edited (the dependency edge
+  closed with SA215);
   billing is a Track 2 surface, so SA216 lands through the serialized merge queue.
 
 ## Deferred constraints and references
