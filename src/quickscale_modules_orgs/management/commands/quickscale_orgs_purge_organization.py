@@ -25,15 +25,21 @@ Contract rules enforced by this command:
 * The shared ``set_current_org_for_context()`` helper establishes consistent
   ContextVar + ``SET LOCAL app.current_org_id`` before touching RLS-protected
   tables.
+
+Module Conventions rule 28: the FK-safe ordering, label disambiguation, and
+queryset helpers live in ``_purge_plan`` and are re-exported here.  The
+``Command.handle`` entry point the rule 34 boundary check follows stays
+physically in this module, as does ``_resolve_models`` and ``_model_label``
+because tests patch ``get_tenant_models`` and ``_model_label`` on this module.
 """
 
 from __future__ import annotations
 
 import logging
 import uuid
-from collections import Counter
+from collections import Counter as Counter
 from contextlib import ExitStack, nullcontext
-from heapq import heappop, heappush
+from heapq import heappop as heappop, heappush as heappush
 from typing import Any, cast
 
 from django.apps import apps
@@ -41,6 +47,19 @@ from django.core.exceptions import FieldDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
 from django.db import models, transaction
 
+from quickscale_modules_orgs._purge_plan import (
+    _PURGE_ORDER_OVERRIDES as _PURGE_ORDER_OVERRIDES,
+    _carries_provider_value as _carries_provider_value,
+    _disambiguated_model_labels as _plan_disambiguated_model_labels,
+    _get_filter_for_org as _get_filter_for_org,
+    _get_qs as _get_qs,
+    _mapping_carries_value as _mapping_carries_value,
+    _model_key as _model_key,
+    _removal_label_prefixes as _removal_label_prefixes,
+    _self_blocking_foreign_keys as _self_blocking_foreign_keys,
+    _topologically_order_models as _topologically_order_models,
+)
+from quickscale_modules_orgs._purge_support import _PurgeSupportMixin
 from quickscale_modules_orgs.current_org import (
     reset_current_org_id,
     set_current_org_for_context,
@@ -53,7 +72,7 @@ from quickscale_modules_orgs.models import (
 )
 from quickscale_modules_orgs.removal import (
     ORGANIZATION_MODEL_LABEL,
-    REMOVAL_LABEL_PREFIX_ATTRIBUTE,
+    REMOVAL_LABEL_PREFIX_ATTRIBUTE as REMOVAL_LABEL_PREFIX_ATTRIBUTE,
     DeclaredBoundaryGuard,
     RemovalAction,
     RemovalBoundary,
@@ -70,20 +89,6 @@ from quickscale_modules_orgs.tenancy import (
 
 logger = logging.getLogger(__name__)
 
-# Additional child-before-parent constraints belong here only when installed FK
-# metadata cannot represent them. Each pair is ``(before_label, after_label)``.
-_PURGE_ORDER_OVERRIDES: tuple[tuple[str, str], ...] = ()
-
-
-def _removal_label_prefixes() -> dict[str, str]:
-    """Return each installed app's declared removal display prefix."""
-    prefixes: dict[str, str] = {}
-    for app_config in apps.get_app_configs():
-        prefix = getattr(app_config, REMOVAL_LABEL_PREFIX_ATTRIBUTE, "")
-        if prefix:
-            prefixes[app_config.label] = str(prefix)
-    return prefixes
-
 
 def _model_label(model: type[models.Model]) -> str:
     plural = str(model._meta.verbose_name_plural)
@@ -93,112 +98,16 @@ def _model_label(model: type[models.Model]) -> str:
     return f"{plural[:1].upper()}{plural[1:]}"
 
 
-def _model_key(model: type[models.Model]) -> str:
-    return model._meta.label_lower
-
-
-def _self_blocking_foreign_keys(
-    model: type[models.Model],
-) -> tuple[models.ForeignKey, ...]:
-    """Return self-FKs that Django's collector would treat as blockers."""
-    return tuple(
-        field
-        for field in model._meta.fields
-        if isinstance(field, models.ForeignKey)
-        and field.remote_field.model is model
-        and field.remote_field.on_delete
-        in {
-            models.DO_NOTHING,
-            models.PROTECT,
-            models.RESTRICT,
-        }
-    )
-
-
-def _topologically_order_models(
-    tenant_models: list[type[models.Model]],
-    order_overrides: tuple[tuple[str, str], ...] = _PURGE_ORDER_OVERRIDES,
-) -> list[type[models.Model]]:
-    """Order models before every deletion that could collect or block them."""
-    models_by_key = {_model_key(model): model for model in tenant_models}
-    outgoing: dict[str, set[str]] = {key: set() for key in models_by_key}
-    incoming_count = dict.fromkeys(models_by_key, 0)
-    hard_orderings: set[tuple[str, str]] = set()
-
-    def add_ordering(before: str, after: str) -> None:
-        if before == after:
-            return
-        if before not in models_by_key or after not in models_by_key:
-            raise CommandError(
-                "Organization purge order references an unknown model: "
-                f"{before} -> {after}."
-            )
-        if after not in outgoing[before]:
-            outgoing[before].add(after)
-            incoming_count[after] += 1
-
-    for model in tenant_models:
-        child_key = _model_key(model)
-        for field in model._meta.fields:
-            if not isinstance(field, models.ForeignKey):
-                continue
-            parent_key = _model_key(field.remote_field.model)
-            if parent_key not in models_by_key or parent_key == child_key:
-                continue
-            if field.remote_field.on_delete is models.CASCADE:
-                hard_orderings.add((child_key, parent_key))
-            elif field.remote_field.on_delete in {
-                models.DO_NOTHING,
-                models.PROTECT,
-                models.RESTRICT,
-            }:
-                hard_orderings.add((child_key, parent_key))
-
-    for before, after in order_overrides:
-        normalized_ordering = (before.lower(), after.lower())
-        if any(key not in models_by_key for key in normalized_ordering):
-            raise CommandError(
-                "Organization purge order override references an unknown model: "
-                f"{normalized_ordering[0]} -> {normalized_ordering[1]}."
-            )
-        hard_orderings.add(normalized_ordering)
-
-    for before, after in sorted(hard_orderings):
-        add_ordering(before, after)
-
-    ready: list[str] = []
-    for key, count in incoming_count.items():
-        if count == 0:
-            heappush(ready, key)
-
-    ordered_keys: list[str] = []
-    while ready:
-        key = heappop(ready)
-        ordered_keys.append(key)
-        for dependent in sorted(outgoing[key]):
-            incoming_count[dependent] -= 1
-            if incoming_count[dependent] == 0:
-                heappush(ready, dependent)
-
-    if len(ordered_keys) != len(models_by_key):
-        cyclic = sorted(key for key, count in incoming_count.items() if count)
-        raise CommandError(
-            "Cannot derive an FK-safe organization purge order; resolve the "
-            f"blocking cycle involving: {', '.join(cyclic)}"
-        )
-    return [models_by_key[key] for key in ordered_keys]
-
-
 def _disambiguated_model_labels(
     tenant_models: list[type[models.Model]],
 ) -> list[str]:
-    """Keep legacy labels when unique and qualify project label collisions."""
-    base_labels = [_model_label(model) for model in tenant_models]
-    label_counts = Counter(base_labels)
-    return [
-        label if label_counts[label] == 1 else f"{label} ({_model_key(model)})"
-        for model, label in zip(tenant_models, base_labels, strict=True)
-    ]
+    """Keep legacy labels when unique and qualify project label collisions.
+
+    Resolves ``_model_label`` from this module's globals so the
+    ``quickscale_orgs_purge_organization._model_label`` test patch seam keeps
+    intercepting every label lookup.
+    """
+    return _plan_disambiguated_model_labels(tenant_models, model_label=_model_label)
 
 
 def _resolve_models() -> list[dict[str, Any]]:
@@ -237,48 +146,17 @@ def _resolve_models() -> list[dict[str, Any]]:
     ]
 
 
-def _get_filter_for_org(
-    filter_key: str, organization: Organization
-) -> dict[str, object]:
-    """Build a filter dict for a given filter_key and organization."""
-    value: object = organization.pk if filter_key.endswith("_id") else organization
-    return {filter_key: value}
-
-
-def _get_qs(model: type[models.Model], filter_kwargs: dict[str, object]) -> Any:
-    """Get a QuerySet for *model* filtered by *filter_kwargs*.
-
-    Tries ``all_objects`` first (TenantManager super-scope bypass), then
-    falls back to the default ``objects`` manager.
-    """
+def _parse_organization_id(raw_org_id: object) -> uuid.UUID:
+    """Parse the destructive targeting value or fail with the contract message."""
     try:
-        return model.all_objects.filter(**filter_kwargs)  # type: ignore[attr-defined]
-    except AttributeError:
-        return model.objects.filter(**filter_kwargs)
+        return uuid.UUID(str(raw_org_id).strip())
+    except ValueError, AttributeError:
+        raise CommandError(
+            f"Invalid --organization-id value: {raw_org_id!r}. Must be a valid UUID."
+        )
 
 
-def _carries_provider_value(field: models.Field, value: object) -> bool:
-    """Return whether *value* is set rather than an empty provider slot."""
-    if value is None:
-        return False
-    if isinstance(field, (models.CharField, models.TextField)) and value == "":
-        return False
-    return True
-
-
-def _mapping_carries_value(value: object, key: str) -> bool:
-    """Return whether *value* carries provider state at *key*.
-
-    A declared structured field that does not hold a mapping cannot be
-    inspected key by key, so a non-empty value fails closed instead of being
-    read as absent.
-    """
-    if isinstance(value, dict):
-        return value.get(key) not in (None, "")
-    return bool(value)
-
-
-class Command(BaseCommand):
+class Command(_PurgeSupportMixin, BaseCommand):
     help = (
         "Purge an organization and all owned rows across all modules. "
         "Current Stripe-backed subscriptions must be cancelled and pending "
@@ -316,16 +194,13 @@ class Command(BaseCommand):
             help="Override reserved-org guard (System and personal orgs).",
         )
 
-    def handle(self, *args: object, **options: Any) -> str | None:
-        del args
-        raw_org_id: str | None = options.get("organization_id")
-        slug: str | None = options.get("slug")
-        dry_run: bool = options.get("dry_run", False)
-        self._force: bool = options.get("force", False)
-
-        # ------------------------------------------------------------------
-        # Resolve targeting mode
-        # ------------------------------------------------------------------
+    def _validate_targeting(
+        self,
+        raw_org_id: str | None,
+        slug: str | None,
+        dry_run: bool,
+    ) -> None:
+        """Reject impossible targeting combinations and warn on ignored flags."""
         if raw_org_id and slug:
             raise CommandError(
                 "Cannot combine --organization-id (destructive) with --slug "
@@ -346,23 +221,22 @@ class Command(BaseCommand):
                 )
             )
 
-        # ------------------------------------------------------------------
-        # Slug mode — non-destructive preflight only
-        # ------------------------------------------------------------------
+    def handle(self, *args: object, **options: Any) -> str | None:
+        del args
+        raw_org_id: str | None = options.get("organization_id")
+        slug: str | None = options.get("slug")
+        dry_run: bool = options.get("dry_run", False)
+        self._force: bool = options.get("force", False)
+
+        self._validate_targeting(raw_org_id, slug, dry_run)
+
+        # Slug mode — non-destructive preflight only.
         if slug:
             return self._preflight_by_slug(slug.strip())
 
-        # ------------------------------------------------------------------
-        # Organization ID mode — parse UUID and dispatch
-        # ------------------------------------------------------------------
+        # Organization ID mode — parse UUID and dispatch.
         assert raw_org_id is not None  # noqa: S101 - internal invariant guaranteed by the caller
-        try:
-            org_id = uuid.UUID(raw_org_id.strip())
-        except ValueError, AttributeError:
-            raise CommandError(
-                f"Invalid --organization-id value: {raw_org_id!r}. "
-                "Must be a valid UUID."
-            )
+        org_id = _parse_organization_id(raw_org_id)
 
         coordinator = RemovalCoordinator(RemovalBoundary.PURGE)
         self._require_dischargeable_obligations(coordinator)
@@ -380,32 +254,6 @@ class Command(BaseCommand):
                 )
             self._reconcile_provider_states(org_id, persist=True)
             return self._purge_by_uuid(org_id, coordinator=coordinator)
-
-    # ------------------------------------------------------------------
-    # Slug preflight
-    # ------------------------------------------------------------------
-
-    def _preflight_by_slug(self, slug: str) -> str | None:
-        """Look up an organization by slug and print its state (non-destructive)."""
-        try:
-            organization = Organization.objects.get(slug=slug)
-        except Organization.DoesNotExist:
-            raise CommandError(
-                f"No organization found with slug {slug!r}. "
-                "Use --organization-id <uuid> to search by UUID or check the slug."
-            )
-
-        self._guard_reserved_org(organization)
-        self._print_ownership_summary(
-            organization, self._build_ownership_map_guarded(organization)
-        )
-        self.stdout.write(
-            self.style.WARNING(
-                "Preflight only — no changes were made. "
-                "Use --organization-id <uuid> for destructive execution."
-            )
-        )
-        return None
 
     # ------------------------------------------------------------------
     # Dry run by UUID
@@ -636,7 +484,9 @@ class Command(BaseCommand):
 
         The ``INVALIDATE`` stage's executor is the declaring app's
         ``invalidate_organization_cache`` hook, so the stage is discharged only
-        after each installed app's own invalidation has run.
+        after each installed app's own invalidation has run.  This method stays
+        on the command module so the rule 34 boundary check follows the
+        INVALIDATE discharge on ``Command.handle``'s entry path.
         """
         for app_config in sorted(
             apps.get_app_configs(), key=lambda config: config.label
@@ -777,6 +627,32 @@ class Command(BaseCommand):
             if str(reason or "").strip():
                 raise CommandError(str(reason))
 
+    def _model_field_carries_provider_value(
+        self,
+        model: type[models.Model],
+        field_name: str,
+        organization: Organization,
+    ) -> bool:
+        """Return whether one model-classified provider-backed field holds a value."""
+        if not has_organization_id_field(model):
+            return False
+        try:
+            field = cast(models.Field, model._meta.get_field(field_name))
+        except FieldDoesNotExist as exc:
+            raise CommandError(
+                f"Cannot purge organization {organization.pk}: "
+                f"{_model_key(model)}.{field_name} is declared "
+                "provider-backed but is not a model field."
+            ) from exc
+        queryset = _get_qs(model, {"organization_id": organization.pk})
+        locked_rows = list(
+            queryset.select_for_update().only(field_name)  # type: ignore[attr-defined]
+        )
+        return any(
+            _carries_provider_value(field, getattr(row, field_name))
+            for row in locked_rows
+        )
+
     def _guard_provider_backed_fields(self, organization: Organization) -> None:
         """Refuse a purge while a row carries provider-backed state (SA208/SA213).
 
@@ -804,42 +680,13 @@ class Command(BaseCommand):
                 f"Cannot purge organization {organization.pk}: {exc}"
             ) from exc
 
-        # Every declared label must resolve, guarded or not: a misspelled or
-        # uninstalled label would otherwise be read as "no provider state".
-        for obligation in obligations:
-            for provider_field in obligation.external_provider_fields:
-                try:
-                    apps.get_model(provider_field.model_label)
-                except LookupError as exc:
-                    raise CommandError(
-                        f"Cannot purge organization {organization.pk}: obligation "
-                        f"{obligation.name!r} names "
-                        f"{provider_field.model_label}, which is not an installed "
-                        "model."
-                    ) from exc
+        self._validate_declared_field_labels(obligations, organization)
 
-        carried_fields: list[str] = []
-        for model, field_name in declared_fields:
-            if not has_organization_id_field(model):
-                continue
-            try:
-                field = cast(models.Field, model._meta.get_field(field_name))
-            except FieldDoesNotExist as exc:
-                raise CommandError(
-                    f"Cannot purge organization {organization.pk}: "
-                    f"{_model_key(model)}.{field_name} is declared "
-                    "provider-backed but is not a model field."
-                ) from exc
-            queryset = _get_qs(model, {"organization_id": organization.pk})
-            locked_rows = list(
-                queryset.select_for_update().only(field_name)  # type: ignore[attr-defined]
-            )
-            if any(
-                _carries_provider_value(field, getattr(row, field_name))
-                for row in locked_rows
-            ):
-                carried_fields.append(f"{_model_key(model)}.{field_name}")
-
+        carried_fields = [
+            f"{_model_key(model)}.{field_name}"
+            for model, field_name in declared_fields
+            if self._model_field_carries_provider_value(model, field_name, organization)
+        ]
         carried_fields.extend(
             self._carried_declared_refusal_fields(organization, refusal_fields)
         )
@@ -851,6 +698,71 @@ class Command(BaseCommand):
                 f"provider-backed values: {joined_fields}. Clear or reconcile "
                 "these fields before retrying."
             )
+
+    def _refusal_field_rows(
+        self,
+        model: type[models.Model],
+        provider_field: Any,
+        organization: Organization,
+        label: str,
+    ) -> list:
+        """Return the locked rows a declared refusal field must be read from."""
+        if model._meta.label_lower == ORGANIZATION_MODEL_LABEL:
+            # The organization row itself carries the declared state.
+            return [organization]
+        if has_organization_id_field(model):
+            queryset = _get_qs(model, {"organization_id": organization.pk})
+            return list(
+                queryset.select_for_update().only(  # type: ignore[attr-defined]
+                    provider_field.field_name
+                )
+            )
+        raise CommandError(
+            f"Cannot purge organization {organization.pk}: declared "
+            f"refusal field {label} is not organization-scoped, so the "
+            "purge cannot inspect it."
+        )
+
+    def _carried_refusal_field_messages(
+        self,
+        organization: Organization,
+        provider_field: Any,
+    ) -> list[str]:
+        """Return one declared refusal field's carried-value labels."""
+        try:
+            model = apps.get_model(provider_field.model_label)
+        except LookupError as exc:
+            raise CommandError(
+                f"Cannot purge organization {organization.pk}: declared refusal "
+                f"field names {provider_field.model_label}, which is not an "
+                "installed model."
+            ) from exc
+        label = f"{provider_field.model_label}.{provider_field.field_name}"
+        rows = self._refusal_field_rows(model, provider_field, organization, label)
+        try:
+            model_field = model._meta.get_field(provider_field.field_name)
+        except FieldDoesNotExist as exc:
+            raise CommandError(
+                f"Cannot purge organization {organization.pk}: "
+                f"{label} is declared as a refusal field but is not a model "
+                "field."
+            ) from exc
+        if provider_field.structured_keys:
+            return [
+                f"{label}[{key}]"
+                for row in rows
+                for key in provider_field.structured_keys
+                if _mapping_carries_value(getattr(row, provider_field.field_name), key)
+            ]
+        if any(
+            _carries_provider_value(
+                model_field,
+                getattr(row, provider_field.field_name),
+            )
+            for row in rows
+        ):
+            return [label]
+        return []
 
     def _carried_declared_refusal_fields(
         self,
@@ -870,137 +782,7 @@ class Command(BaseCommand):
         """
         carried: list[str] = []
         for provider_field in refusal_fields:
-            try:
-                model = apps.get_model(provider_field.model_label)
-            except LookupError as exc:
-                raise CommandError(
-                    f"Cannot purge organization {organization.pk}: declared refusal "
-                    f"field names {provider_field.model_label}, which is not an "
-                    "installed model."
-                ) from exc
-            label = f"{provider_field.model_label}.{provider_field.field_name}"
-            if model._meta.label_lower == ORGANIZATION_MODEL_LABEL:
-                # The organization row itself carries the declared state.
-                rows: list = [organization]
-            elif has_organization_id_field(model):
-                queryset = _get_qs(model, {"organization_id": organization.pk})
-                rows = list(
-                    queryset.select_for_update().only(  # type: ignore[attr-defined]
-                        provider_field.field_name
-                    )
-                )
-            else:
-                raise CommandError(
-                    f"Cannot purge organization {organization.pk}: declared "
-                    f"refusal field {label} is not organization-scoped, so the "
-                    "purge cannot inspect it."
-                )
-            try:
-                model_field = model._meta.get_field(provider_field.field_name)
-            except FieldDoesNotExist as exc:
-                raise CommandError(
-                    f"Cannot purge organization {organization.pk}: "
-                    f"{label} is declared as a refusal field but is not a model "
-                    "field."
-                ) from exc
-            if provider_field.structured_keys:
-                for row in rows:
-                    value = getattr(row, provider_field.field_name)
-                    carried.extend(
-                        f"{label}[{key}]"
-                        for key in provider_field.structured_keys
-                        if _mapping_carries_value(value, key)
-                    )
-            elif any(
-                _carries_provider_value(
-                    model_field,
-                    getattr(row, provider_field.field_name),
-                )
-                for row in rows
-            ):
-                carried.append(label)
+            carried.extend(
+                self._carried_refusal_field_messages(organization, provider_field)
+            )
         return carried
-
-    def _check_tombstone(
-        self,
-        org_id: uuid.UUID,
-        *,
-        heal_social_cache: bool,
-        coordinator: RemovalCoordinator,
-    ) -> None:
-        """Check for a tombstone when the org does not exist."""
-        try:
-            tombstone = OrganizationTombstone.objects.get(organization_id=org_id)
-        except OrganizationTombstone.DoesNotExist:
-            return
-
-        if heal_social_cache:
-            self._invalidate_organization_caches(org_id, coordinator=coordinator)
-
-        self.stdout.write(
-            f"Organization {org_id} was already purged "
-            f"on {tombstone.purged_at:%Y-%m-%d %H:%M:%S} UTC. "
-            "No action taken."
-        )
-        self.stdout.write("  Memberships deleted: 0")
-        self.stdout.write("  Invitations deleted: 0")
-        raise CommandError(
-            "No-op: organization was already purged. See output above.",
-            returncode=0,
-        )
-
-    def _guard_reserved_org(self, organization: Organization) -> None:
-        """Raise :class:`CommandError` if *organization* is reserved.
-
-        Guards System and personal orgs.  ``--force`` bypasses the guard.
-        """
-        if self._force:
-            return
-        reserved_labels: list[str] = []
-        if organization.is_system:
-            reserved_labels.append("System")
-        if organization.is_personal:
-            reserved_labels.append("personal")
-        if reserved_labels:
-            label = " and ".join(reserved_labels)
-            raise CommandError(
-                f"Cannot purge the {label} organization ({organization.pk}). "
-                "Use --force to override."
-            )
-
-    def _print_ownership_summary(
-        self,
-        organization: Organization,
-        ownership_map: dict[str, int],
-    ) -> None:
-        """Print the ownership summary for *organization*."""
-        self.stdout.write(f"Organization: {organization.pk} ({organization.name})")
-        if organization.slug:
-            self.stdout.write(f"  Slug: {organization.slug}")
-
-        total_owned = 0
-        for label, count in sorted(ownership_map.items()):
-            if count:
-                self.stdout.write(f"  {label}: {count}")
-                total_owned += count
-        if not total_owned:
-            self.stdout.write("  No owned rows found.")
-
-    def _print_purge_summary(
-        self,
-        organization: Organization,
-        ownership_map: dict[str, int],
-    ) -> None:
-        """Print the purge completion summary."""
-        total_deleted = sum(ownership_map.values())
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Organization {organization.pk} ({organization.name}) has been purged."
-            )
-        )
-        for label, count in sorted(ownership_map.items()):
-            if count:
-                self.stdout.write(f"  {label}: {count}")
-        self.stdout.write(f"  Total rows deleted: {total_deleted}")
-        self.stdout.write(f"  Tombstone recorded for: {organization.pk}")
