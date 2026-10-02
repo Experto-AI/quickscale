@@ -364,42 +364,6 @@
         "symbol": "get_distinct_id",
         "type": "function"
       },
-      "quickscale_modules/blog/src/quickscale_modules_blog/apps.py::QuickscaleBlogConfig": {
-        "file": "quickscale_modules/blog/src/quickscale_modules_blog/apps.py",
-        "max_complexity": 13,
-        "symbol": "QuickscaleBlogConfig",
-        "type": "class"
-      },
-      "quickscale_modules/blog/src/quickscale_modules_blog/apps.py::QuickscaleBlogConfig.ready": {
-        "file": "quickscale_modules/blog/src/quickscale_modules_blog/apps.py",
-        "max_complexity": 12,
-        "symbol": "QuickscaleBlogConfig.ready",
-        "type": "method"
-      },
-      "quickscale_modules/blog/src/quickscale_modules_blog/services.py::_validate_blog_image_upload": {
-        "file": "quickscale_modules/blog/src/quickscale_modules_blog/services.py",
-        "max_complexity": 13,
-        "symbol": "_validate_blog_image_upload",
-        "type": "function"
-      },
-      "quickscale_modules/blog/src/quickscale_modules_blog/services.py::create_published_post_from_payload": {
-        "file": "quickscale_modules/blog/src/quickscale_modules_blog/services.py",
-        "max_complexity": 37,
-        "symbol": "create_published_post_from_payload",
-        "type": "function"
-      },
-      "quickscale_modules/blog/src/quickscale_modules_blog/views.py::_build_media_response_url": {
-        "file": "quickscale_modules/blog/src/quickscale_modules_blog/views.py",
-        "max_complexity": 11,
-        "symbol": "_build_media_response_url",
-        "type": "function"
-      },
-      "quickscale_modules/blog/src/quickscale_modules_blog/views.py::publish_post_api": {
-        "file": "quickscale_modules/blog/src/quickscale_modules_blog/views.py",
-        "max_complexity": 13,
-        "symbol": "publish_post_api",
-        "type": "function"
-      },
       "quickscale_modules/crm/src/quickscale_modules_crm/admin.py::_CrmOrgAwareAdminMixin.save_model": {
         "file": "quickscale_modules/crm/src/quickscale_modules_crm/admin.py",
         "max_complexity": 12,
