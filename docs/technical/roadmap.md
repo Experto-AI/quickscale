@@ -26,21 +26,20 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 |---|---|---|---|---|---|
 | SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | — | Deferred |
 | SA232 | Split the long CLI command, `dr_engine`, and billing files | post-v88 | 2 | — | Deferred |
-| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | — | Deferred |
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
+| SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | SA215 | Deferred |
-| SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | SA215 | Deferred |
+| SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
+| SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA231 (closing gate batch) ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA232
-Track 3: SA215 (remaining rules) ──► SA216
-     critical path: SA215 → SA191 → SA153
+Track 3: SA216
+     critical path: SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -49,10 +48,10 @@ Arrows within a track are queue order; the table holds the actual dependency edg
 ported, and SA204 has not frozen the migration history. SA204 freezes migration history before
 any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** SA215 runs on Track 3, which owns the conformance harness it adds rules
-to. SA231 (Track 1) fills its track until SA215 lands and SA191 can start. SA232 (Track 2) splits
+**Off the critical path.** SA215 landed on Track 3, which owns the conformance harness it added rules
+to. SA231 (Track 1) fills its track until SA191 starts. SA232 (Track 2) splits
 `dr_engine`; SA231's gate lists SA232's unfinished files in the baseline, and SA232 removes those
-entries. SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
+entries. SA216 follows SA215 because both change auth's views, orgs' removal path, and the
 user-referencing models.
 
 ### Track states
@@ -63,7 +62,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA231 | yes | yes | yes | **yes** | no |
 | 2 | SA232 | yes | yes | yes | **yes** | no |
-| 3 | SA215 | yes | yes | yes | **yes** | **yes** |
+| 3 | SA216 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
@@ -110,28 +109,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA215 — Enforce the remaining module conventions and close the inventory.**
-
-  **Context:** the twelve modules grew one at a time and follow different conventions. The drift
-  items (D1–D42) are in
-  [module-conventions-inventory.md](../planning/module-conventions-inventory.md), the rules in
-  [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
-  and this ticket closes them.
-
-  **Remaining:** the rules the conformance test does not yet cover, including SA216's
-  write-effect rule; the release notes; decisions' quoted names; the inventory's closing pass.
-
-  **Scope:** the conformance test extended to every rule of 1–39 it does not yet cover, with a
-  control case per rule; the release notes; the inventory's closing pass. A drift item no
-  convention ticket fixed is fixed here or recorded as an accepted exception.
-
-  **Acceptance:** every inventory drift item (sections 1–41) is fixed or recorded as an accepted
-  exception with its reason; the conformance test passes and rejects a violation of each rule; a
-  freshly generated project with all twelve modules passes `make ci-e2e`; the release notes list every
-  moved public URL with its operator step (Stripe and Resend webhook endpoints); decisions.md
-  names quoted from the shipped state are updated; the inventory is marked resolved.
-
-  **Surfaces:** the conformance test; release notes; decisions; the inventory.
+- [x] **SA215 — Enforce the remaining module conventions and close the inventory.**
 
 - [ ] **SA231 — Split long files and complex functions in batches, then make the quality gate fail.**
 

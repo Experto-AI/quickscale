@@ -169,13 +169,14 @@ The enforcement gaps the audit recorded are closed or accepted:
   rule 27.
 - Three residuals are accepted as properties of the fixed checks: a module's `test_isolation.py` is
   invoked explicitly by the PostgreSQL gate and does not self-enroll; rule 38's README match is a
-  substring anywhere in the file (a floor, as D41 records); and rule 19's detector scans `views.py`
-  and `debug_views.py`, so the forbidden tokens in rule 28's private view modules (`_view_*.py`,
-  `_api_views.py`) remain a review boundary until the detector is widened.
+  substring anywhere in the file (a floor, as D41 records); and rule 19's detector follows the
+  view-module names (`views.py`, `debug_views.py`, `_view*.py`, `*_views.py`), so view code a rule 28
+  split files under another private name stays outside the check.
 
 The names decisions.md quoted from the audit-time shipped state now carry the renamed forms
 (`QUICKSCALE_MODE` → `QUICKSCALE_ORGS_MODE`, `backups_create` → `quickscale_backups_create`,
-`quickscale_modules_<module>` app labels → `quickscale_<module>`). The evidence cells in
+`quickscale_modules_<module>` app labels → `quickscale_<module>`). The
+[Coherence audit re-run](#coherence-audit-re-run-2026-09-28) section and the evidence cells in
 sections 1–41 above remain the 2026-09-28 audit record, not a description of the current tree.
 
 ---
