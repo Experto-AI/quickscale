@@ -381,6 +381,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     module stays the import path every caller uses and re-exports its full former surface, while
     its Git checkpointing, config validation, embedding, state, and step-execution logic live in
     focused private sibling modules.
+  - **Module commands keep their import surface while the implementation splits.** The module
+    command module stays the import path every caller uses and re-exports its full former surface,
+    while its embedding, update, snapshot, and commit logic live in focused private sibling
+    modules.
   - **Modules answer whether they are enabled and declare what they use.** Every module publishes
     `services.is_enabled()` for its own `QUICKSCALE_<MODULE>_ENABLED` setting, and each manifest's
     `required_modules` lists every module its code references. `plan`/`apply` therefore install
@@ -402,6 +406,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     operation decomposes into payload validation, featured-media/category/tag resolution, and one
     atomic create step, and the upload validator splits its limits, storage-delegation, and Pillow
     paths, with the public `services.py` surface, its error classes, and its test seams unchanged.
+  - **Auth's account-deletion view drops below the size and complexity ceilings.** The deletion
+    guard, provider reconciliation, handler plumbing, and tenant-reference helpers live in focused
+    modules re-exported from `views.py`, with the declared removal boundary, its capability and
+    app-config patch seams, and its log channel unchanged.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -187,7 +187,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   delivery and webhook patch seams kept on the facade. Blog's `services.py` decomposes its publish
   and upload operations into focused helpers, so both recorded complexity entries drop below the
   ceiling and the baseline drops the package's two live entries plus its four already-resolved
-  ones. The remaining modules and the closing gate batch remain, the gate waiting on SA232.
+  ones. Auth's `views.py` is a re-exported facade over `_profile_views.py`, five
+  `_account_deletion_*.py` modules, and a shared `_logging.py` seam, every file under 800 lines,
+  with its `form_valid`, `_reconcile_removal_provider_state`, and `_account_deletion_handlers`
+  below the CC 11 ceiling and its rule 34 boundary wiring, patch seams, and log channel kept on
+  the facade. The remaining modules and the closing gate batch remain, the gate waiting on SA232.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
@@ -214,8 +218,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `_<name>.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
   test patch target still resolves through the facade. Its eight accepted complexity entries are
   re-keyed with rename waivers and its one dead-code allowance is resolved by a parameter rename;
-  the pre-existing apply-command complexity regressions are unchanged. The remaining CLI files and
-  the `dr_engine` slice remain.
+  the pre-existing apply-command complexity regressions are unchanged.
+
+  **Landed (CLI slice, second file):** `module_commands.py` is a facade over five private
+  `_module_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
+  test patch target still resolves through the facade. Its five accepted complexity entries are
+  re-keyed with rename waivers; the pre-existing module-command complexity regressions are
+  unchanged. The remaining CLI files and the `dr_engine` slice remain.
 
   **Scope:** SA231's rules, one package-sized slice at a time through the serialized merge queue:
   `quickscale_cli` commands and utilities (`apply_command.py`, `module_commands.py`,

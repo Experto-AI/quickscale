@@ -40,32 +40,32 @@
         "symbol": "execute",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_check_local_pre_pull_guard": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-        "max_complexity": 14,
-        "symbol": "_check_local_pre_pull_guard",
-        "type": "function"
-      },
-      "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_perform_module_embed": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+      "quickscale_cli/src/quickscale_cli/commands/_module_embed.py::_perform_module_embed": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_module_embed.py",
         "max_complexity": 20,
         "symbol": "_perform_module_embed",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_update_single_module": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-        "max_complexity": 17,
-        "symbol": "_update_single_module",
-        "type": "function"
-      },
-      "quickscale_cli/src/quickscale_cli/commands/module_commands.py::embed_module": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+      "quickscale_cli/src/quickscale_cli/commands/_module_embed.py::embed_module": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_module_embed.py",
         "max_complexity": 17,
         "symbol": "embed_module",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/module_commands.py::update": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+      "quickscale_cli/src/quickscale_cli/commands/_module_update.py::_check_local_pre_pull_guard": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_module_update.py",
+        "max_complexity": 14,
+        "symbol": "_check_local_pre_pull_guard",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/_module_update.py::_update_single_module": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_module_update.py",
+        "max_complexity": 17,
+        "symbol": "_update_single_module",
+        "type": "function"
+      },
+      "quickscale_cli/src/quickscale_cli/commands/_module_update.py::update": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_module_update.py",
         "max_complexity": 17,
         "symbol": "update",
         "type": "function"
