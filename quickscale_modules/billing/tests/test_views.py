@@ -1704,7 +1704,7 @@ def test_webhook_view_maps_configuration_errors_to_500(
         "quickscale_modules_billing.views.handle_stripe_event",
         lambda **kwargs: (_ for _ in ()).throw(
             BillingConfigurationError(
-                "Stripe webhook secret is not configured in the runtime environment."
+                "Stripe webhook secret is not configured in the runtime settings."
             )
         ),
     )
@@ -1721,7 +1721,7 @@ def test_webhook_view_maps_configuration_errors_to_500(
         "error": {
             "code": "configuration_error",
             "message": (
-                "Stripe webhook secret is not configured in the runtime environment."
+                "Stripe webhook secret is not configured in the runtime settings."
             ),
         }
     }

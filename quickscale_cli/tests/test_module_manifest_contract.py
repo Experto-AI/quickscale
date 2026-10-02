@@ -11,7 +11,11 @@ from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
 )
 from quickscale_core.contracts.module_catalog import get_discovered_module_entries
-from quickscale_core.generator.seam import render_module_flags, seam_modules
+from quickscale_core.generator.seam import (
+    render_module_flags,
+    render_module_paths,
+    seam_modules,
+)
 from quickscale_core.manifest.entry_point import (
     MANIFEST_ADAPTER_REGISTRY,
     refresh_managed_adapters,
@@ -454,6 +458,26 @@ def test_react_index_html_and_typescript_interface_module_sets_are_symmetric() -
         "The rendered seam module set and useModules.ts diverge.\n"
         f"  In the seam only: {sorted(seam_module_names - ts_modules)}\n"
         f"  In useModules.ts only: {sorted(ts_modules - seam_module_names)}"
+    )
+
+
+def test_react_seam_module_paths_match_typescript_interface() -> None:
+    """The seam's modulePaths keys and QuickScaleModulePaths must be identical.
+
+    The producer names the theme's path-bearing module surfaces (rule 31);
+    asymmetry means the rendered seam and the TypeScript contract disagree.
+    """
+    seam_path_keys = set(re.findall(r"^\s+(\w+):", render_module_paths(), re.MULTILINE))
+    use_modules = (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts").read_text()
+    interface_block = use_modules.split("interface QuickScaleModulePaths {")[1].split(
+        "}"
+    )[0]
+    ts_paths = set(re.findall(r"^\s+(\w+):\s+string", interface_block, re.MULTILINE))
+
+    assert seam_path_keys == ts_paths, (
+        "The rendered seam modulePaths and QuickScaleModulePaths diverge.\n"
+        f"  In the seam only: {sorted(seam_path_keys - ts_paths)}\n"
+        f"  In useModules.ts only: {sorted(ts_paths - seam_path_keys)}"
     )
 
 
