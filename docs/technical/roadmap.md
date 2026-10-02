@@ -123,9 +123,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
 
-  **Start early:** SA230 and SA228 have merged, so the first slice moves rules 4, 5, and 23 (the
-  cross-module, import-graph, and `services.py` rules, already met on `v89`) out of the harness's
-  `OPEN_RULES`, each with its control case; the rest waits for SA220 and SA226.
+  **Landed (first slice):** rules 4, 5, and 23 (cross-module public surface, dependency layers, and
+  the `services.py` public surface) are enforced by the conformance test with a control case each;
+  the rest waits for SA220 and SA226.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
