@@ -14,20 +14,38 @@ from quickscale_modules_orgs.constants import RESERVED_ORG_SLUGS
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
 
 
-def _personal_slug_bases(organization: Organization) -> list[str]:
-    slug_field = cast(models.SlugField, Organization._meta.get_field("slug"))
-    max_length = slug_field.max_length or 150
+def _owner_slug_inputs(organization: Organization) -> tuple[str, str]:
+    """Return the owner username and pk used as slug bases, or two empties."""
     owner_membership = (
         OrganizationMembership.objects.select_related("user")
         .filter(organization=organization, role=OrgRole.OWNER)
         .order_by("joined_at", "user__pk")
         .first()
     )
-    owner_username = ""
-    owner_pk = ""
-    if owner_membership is not None:
-        owner_username = str(getattr(owner_membership.user, "username", "") or "")
-        owner_pk = str(owner_membership.user.pk)
+    if owner_membership is None:
+        return "", ""
+    owner_username = str(getattr(owner_membership.user, "username", "") or "")
+    return owner_username, str(owner_membership.user.pk)
+
+
+def _unique_slug_bases(
+    raw_bases: list[str],
+    max_length: int,
+    organization: Organization,
+) -> list[str]:
+    """Normalize, truncate, and deduplicate slug bases, with a last-resort base."""
+    unique_bases: list[str] = []
+    for base in raw_bases:
+        normalized_base = str(base or "")[:max_length].strip("-")
+        if normalized_base and normalized_base not in unique_bases:
+            unique_bases.append(normalized_base)
+    return unique_bases or [f"org-{organization.pk}"]
+
+
+def _personal_slug_bases(organization: Organization) -> list[str]:
+    slug_field = cast(models.SlugField, Organization._meta.get_field("slug"))
+    max_length = slug_field.max_length or 150
+    owner_username, owner_pk = _owner_slug_inputs(organization)
 
     raw_bases = [
         slugify(str(organization.slug or "")),
@@ -36,12 +54,7 @@ def _personal_slug_bases(organization: Organization) -> list[str]:
         f"user-{owner_pk}" if owner_pk else "",
         f"org-{organization.pk}",
     ]
-    unique_bases: list[str] = []
-    for base in raw_bases:
-        normalized_base = str(base or "")[:max_length].strip("-")
-        if normalized_base and normalized_base not in unique_bases:
-            unique_bases.append(normalized_base)
-    return unique_bases or [f"org-{organization.pk}"]
+    return _unique_slug_bases(raw_bases, max_length, organization)
 
 
 def _iter_slug_candidates(organization: Organization) -> Iterator[str]:
@@ -76,6 +89,52 @@ class Command(BaseCommand):
             help="Report the slug changes without saving them.",
         )
 
+    @staticmethod
+    def _slug_is_valid(current_slug: str) -> bool:
+        """Return whether *current_slug* already satisfies the slug contract."""
+        return bool(
+            current_slug
+            and slugify(current_slug) == current_slug
+            and current_slug not in RESERVED_ORG_SLUGS
+        )
+
+    def _update_organization_slug(
+        self,
+        organization: Organization,
+        used_slugs: set[str],
+        *,
+        dry_run: bool,
+    ) -> bool:
+        """Normalize one organization's slug, returning whether it changed."""
+        current_slug = str(organization.slug or "").strip()
+        if self._slug_is_valid(current_slug):
+            return False
+
+        used_slugs.discard(current_slug)
+        new_slug = next(
+            candidate
+            for candidate in _iter_slug_candidates(organization)
+            if candidate not in used_slugs
+        )
+        if new_slug == current_slug:
+            used_slugs.add(current_slug)
+            return False
+
+        if dry_run:
+            self.stdout.write(
+                f"organization={organization.pk} personal_slug="
+                f"{current_slug or '<blank>'} -> {new_slug} (dry run)"
+            )
+        else:
+            organization.slug = new_slug
+            organization.save(update_fields=["slug"])
+            self.stdout.write(
+                f"organization={organization.pk} personal_slug="
+                f"{current_slug or '<blank>'} -> {new_slug}"
+            )
+        used_slugs.add(new_slug)
+        return True
+
     def handle(self, *args: object, **options: object) -> None:
         del args
         dry_run = bool(options.get("dry_run", False))
@@ -90,38 +149,12 @@ class Command(BaseCommand):
         for organization in Organization.objects.filter(is_personal=True).order_by(
             "pk"
         ):
-            current_slug = str(organization.slug or "").strip()
-            if (
-                current_slug
-                and slugify(current_slug) == current_slug
-                and current_slug not in RESERVED_ORG_SLUGS
+            if self._update_organization_slug(
+                organization,
+                used_slugs,
+                dry_run=dry_run,
             ):
-                continue
-
-            used_slugs.discard(current_slug)
-            new_slug = next(
-                candidate
-                for candidate in _iter_slug_candidates(organization)
-                if candidate not in used_slugs
-            )
-            if new_slug == current_slug:
-                used_slugs.add(current_slug)
-                continue
-
-            if dry_run:
-                self.stdout.write(
-                    f"organization={organization.pk} personal_slug="
-                    f"{current_slug or '<blank>'} -> {new_slug} (dry run)"
-                )
-            else:
-                organization.slug = new_slug
-                organization.save(update_fields=["slug"])
-                self.stdout.write(
-                    f"organization={organization.pk} personal_slug="
-                    f"{current_slug or '<blank>'} -> {new_slug}"
-                )
-            used_slugs.add(new_slug)
-            updated_count += 1
+                updated_count += 1
 
         if dry_run:
             summary = (
