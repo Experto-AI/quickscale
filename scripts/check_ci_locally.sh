@@ -505,6 +505,11 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ No committed secrets found"
             LOCAL_GATE_FAILURE_LABEL="Secret Scanning Gate"
             ;;
+        check-module-conventions)
+            LOCAL_GATE_DESCRIPTION="Running module conventions conformance check..."
+            LOCAL_GATE_SUCCESS="✓ Every covered Module Conventions rule passes"
+            LOCAL_GATE_FAILURE_LABEL="Module Conventions Gate"
+            ;;
         *)
             LOCAL_GATE_DESCRIPTION="Running $target..."
             LOCAL_GATE_SUCCESS="✓ $target passed"
@@ -711,6 +716,11 @@ report_static_failure_banner() {
         check-secret-scanning)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ Secret Scanning Gate Failed        ║"
+            echo "╚════════════════════════════════════════╝"
+            ;;
+        check-module-conventions)
+            echo "╔════════════════════════════════════════╗"
+            echo "║   ✗ Module Conventions Gate Failed     ║"
             echo "╚════════════════════════════════════════╝"
             ;;
         typecheck)

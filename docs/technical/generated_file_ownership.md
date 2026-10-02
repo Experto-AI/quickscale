@@ -4,7 +4,7 @@
 > **Related docs**: [Decisions § Generated-File Ownership](decisions.md#generated-file-ownership-taxonomy) (authoritative rules) | [Generated Project Structure](generated_project_structure.md) | [Beta-site migration](../planning/beta-site-migration.md)
 
 **Purpose:** Inventory of the `INTENTIONALLY_UNMANAGED` replacement/merge
-categories carried by `quickscale_devtools/beta_migration.py`, with the rationale
+categories carried by `quickscale_devtools/beta_migration/`, with the rationale
 for each. Existing files in these categories are not structurally replaced or
 merged, but a path may participate in copy-if-missing adoption or the fresh
 scaffold's one-time field-aware identity reconciliation. Neither operation

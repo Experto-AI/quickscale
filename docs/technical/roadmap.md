@@ -26,8 +26,8 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 |---|---|---|---|---|---|
 | SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | — | Deferred |
 | SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220 | Deferred |
-| SA230 | Build the conformance-test harness with the rules already met | post-v88 | 3 | — | Deferred |
-| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA220, SA226, SA230 | Deferred |
+| SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | — | Deferred |
+| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA220, SA226 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -38,9 +38,9 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA231 (while blocked) · SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA220
-Track 3: SA230 ──► SA226 ──► SA216 (after SA215)
+Track 3: SA226 ──► SA216 (after SA215)
      critical path: SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
@@ -52,9 +52,9 @@ ported, and SA204 has not frozen the migration history. SA219 landed the setting
 `_ENABLED` settings, and SA226's org-role authorization needs SA220's capabilities. SA204 freezes
 migration history before any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** SA230 (Track 3) runs while SA220 lands; it is the harness
-SA215 adds rules to. SA216 waits for SA215 because both change auth's views,
-orgs' removal path, and the user-referencing models.
+**Off the critical path.** SA230's landed harness is the one SA215 adds rules to. SA231 (Track 1)
+fills the track while SA215 is blocked and pauses once SA215 can start. SA216 waits for SA215
+because both change auth's views, orgs' removal path, and the user-referencing models.
 
 ### Track states
 
@@ -62,9 +62,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA215 | no | no | no | no | **yes** |
+| 1 | SA231 | yes | yes | yes | **yes** | no |
 | 2 | SA220 | yes | yes | yes | **yes** | **yes** |
-| 3 | SA230 (in progress) | yes | yes | yes | **yes** | no |
+| 3 | SA226 | no | no | no | no | no |
 
 ### Ownership and merge coordination
 
@@ -81,7 +81,7 @@ A track is **truly green** only when all three states are yes.
   `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
   and the billing module (`billing/services.py`, `billing/views.py`, `billing/adapter.py`, and its
-  docs),   and, for the conventions, the manifest option schema and the CLI's `module_config`,
+  docs), and, for the conventions, the manifest option schema and the CLI's `module_config`,
   module settings names, and `is_enabled()` (SA220).
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
@@ -122,7 +122,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and this ticket closes them.
 
   **Start early:** once SA230 merges, the first slice adds the import-graph, cross-module, and
-  `services.py` rules (already met on `v89`); the rest waits for SA219, SA220, and SA226.
+  `services.py` rules (already met on `v89`); the rest waits for SA220 and SA226.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
@@ -136,19 +136,37 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the conformance test; release notes; decisions; the inventory.
 
-- [ ] **SA230 — Build the conformance-test harness with the rules already met.**
+- [x] **SA230 — Build the conformance-test harness with the rules already met.**
 
-  **Context:** the harness and the rules the shipped code already meets can land now, so each
-  convention ticket's rules drop into a running gate.
+- [ ] **SA231 — Split long files and complex functions in batches, then make the quality gate fail.**
 
-  **Scope:** the rule 40 conformance test and its registry row; a check with a control case for
-  each rule that `v89` already satisfies; a recorded list of the rules still open, each naming the
-  ticket that closes it.
+  **Context:** `make quality` (`scripts/check_quality.sh`) measures radon complexity and file
+  length against a ratchet baseline (`scripts/quality_baseline.json`), but it only warns: no CI
+  stage or registered gate runs it. The last report shows 188 functions at CC ≥ 11 (40 at ≥ 21),
+  22 critical and 70 warning regressions against the baseline, and 23 files of 800 lines or more
+  (the largest are billing `services.py`, `apply_command.py`, and `dr_engine/orchestration.py`,
+  at 2,900–4,600 lines). File length is not in the baseline at all.
 
-  **Acceptance:** the harness runs as a registered gate; each covered rule's check fails on its
-  control case and passes on `v89`; SA215 only adds rules to it.
+  **Scope:** behavior-preserving batches, each a package-sized slice through the serialized merge
+  queue, merging `v89` before each one: (1) Track 1 surfaces (`beta_migration/`, core contracts,
+  manifest, `project_state`, `git_utils`); (2) CLI commands; (3) `dr_engine`; (4) modules, each
+  only after the convention ticket editing it has merged. Public import paths stay put (re-export
+  where a file splits), existing tests pass unchanged, functions move toward CC < 11, and each
+  batch re-tightens the baseline for its files. The final batch adds file length to the baseline
+  ratchet and registers `make quality` as a failing gate.
 
-  **Surfaces:** the conformance test, its registry row, and gate documentation.
+  **Landed (batch 1, first slice):** `beta_migration.py` is a 15-module package, each module under
+  800 lines, with its public import surface re-exported; its two accepted complexity entries are
+  relocated and tightened, while its unaccepted per-function debt stays visible as regressions. Batch
+  1 remains open on `manifest/loader.py`, `manifest/resolver.py`, `project_state.py`,
+  `utils/git_utils.py`, and `contracts/`; no function has been reduced yet.
+
+  **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
+  lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
+  a regression, which a control case proves; the gate is registered and runs in local CI.
+
+  **Surfaces:** each batch's files; `scripts/quality_baseline.json`, `scripts/check_quality.sh`;
+  the gate registry and gate documentation.
 
 - [x] **SA219 — Move every setting onto one naming family and refuse retired names.**
 
@@ -368,7 +386,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - A decision records who owns a pre-facade donor `production.py` (today donor-owned by policy
     and refused at preflight).
 
-  **Surfaces:** `quickscale_devtools/.../beta_migration.py`, its tests and smoke gate; the migration
+  **Surfaces:** `quickscale_devtools/.../beta_migration/`, its tests and smoke gate; the migration
   playbook and gap ledger; the `showcase_react` theme, generator, and
   `generated_file_ownership.md` (design layer); decisions.
 

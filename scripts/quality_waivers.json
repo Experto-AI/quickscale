@@ -111,6 +111,26 @@
       "reason": "SA228 moves listings' public publish operation into services.py; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
       "expires_on": "2027-03-31",
       "decision_ref": "module-conventions"
+    },
+    {
+      "waiver_id": "W014",
+      "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/planning.py::_prepare_beta_migration_report",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA231 splits beta_migration.py into the beta_migration package; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W015",
+      "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/toml_editing.py::_locate_toml_section_bounds",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA231 splits beta_migration.py into the beta_migration package; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
     }
   ]
 }

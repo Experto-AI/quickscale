@@ -75,7 +75,7 @@
         check-module-app-declaration check-org-context-primitives \
          check-csrf-exempt check-commit-testimony check-project-contract-vintage check-gate-suites isolation-conformance \
          check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture security-negative-probes refresh-action-pins \
-         check-workflow-security check-secret-scanning \
+         check-workflow-security check-secret-scanning check-module-conventions \
          check-gate-parity check-ci-gate-generation \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
@@ -341,6 +341,7 @@ help:
 	@echo "  make check-generated-deploy-posture  - Run Django's deployment checks on a freshly generated project in both forwarding cells"
 	@echo "  make check-workflow-security      - Blocking zizmor scan: action pinning and top-level workflow permissions"
 	@echo "  make check-secret-scanning        - Blocking gitleaks secret scan with reasoned allowlists"
+	@echo "  make check-module-conventions     - Module Conventions rule 40 conformance check over every manifest and module source"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts and the known-bad Dockerfile gate control"
 	@echo "  make refresh-action-pins          - Operator: refresh SHA-pinned actions to their latest releases (CHECK=1 reports only)"
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
@@ -1067,6 +1068,15 @@ check-workflow-security:
 # allowlists in scripts/gitleaks.toml.
 check-secret-scanning:
 	@$(PYTHON) scripts/check_secret_scanning.py
+
+# --- Module Conventions Conformance Gate (rule 40) ---
+
+# Run the rule 40 conformance check over every module manifest and module
+# source tree.  Every covered rule's detector has a control case in
+# scripts/test_check_module_conventions.py; rules whose owning convention
+# ticket has not landed are recorded in the check's OPEN_RULES mapping.
+check-module-conventions:
+	@$(PYTHON) scripts/check_module_conventions.py
 
 security-negative-probes:
 	@$(PYTHON) scripts/check_security_gates.py security-negative-probes

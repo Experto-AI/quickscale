@@ -1,0 +1,485 @@
+"""Deterministic fresh-first execution and verification."""
+
+from .constants import (
+    FRESH_FIRST_COMPONENT_DIR_SKIP,
+    FRESH_FIRST_COPY_MISSING_DIRS,
+    FRESH_FIRST_DONOR_DJANGO_FILES,
+    FRESH_FIRST_REPLACED_ROOT_FILES,
+    FRESH_FIRST_UTILITY_DIRS,
+    MANUAL_HANDOFF_REASON,
+    VERIFICATION_COMMAND_SPECS,
+    VERIFICATION_COMMAND_TIMEOUT_SECONDS,
+)
+from .identity import _build_identity_reconciliation_plan
+from .model import (
+    BetaMigrationInput,
+    BetaMigrationReport,
+    CheckStatus,
+    ProjectSnapshot,
+    VerificationCommandResult,
+    VerificationCommandSpec,
+    _append_blocker,
+    _append_completed_step,
+    _append_skipped_step,
+    _record_changed_file,
+)
+from .planning import (
+    _build_pending_manual_actions,
+    _fresh_first_actions,
+    _prepare_beta_migration_report,
+)
+from .preflight import _protected_recipient_paths
+from .snapshots import _load_project_snapshot
+from .toml_editing import (
+    _collect_missing_path_dependency_values,
+    _insert_missing_path_dependencies,
+)
+import shutil
+import subprocess
+from ..handoff_prompt import HANDOFF_PROMPT_FILENAME, write_handoff_prompt
+from pathlib import Path
+from quickscale_core.advisory_lock import AdvisoryLock
+from quickscale_core.project_state import ProjectStateManager
+from quickscale_core.schema.state_schema import StateManager
+from quickscale_core.utils.poetry_env import build_isolated_poetry_env
+from typing import Any
+
+
+def _remove_path(path: Path) -> None:
+    if not path.exists():
+        return
+    if path.is_dir():
+        shutil.rmtree(path)
+        return
+    path.unlink()
+
+
+def _copy_path(source: Path, destination: Path) -> None:
+    _remove_path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if source.is_dir():
+        shutil.copytree(source, destination)
+        return
+    shutil.copy2(source, destination)
+
+
+def _refresh_recipient_snapshot(report: BetaMigrationReport) -> ProjectSnapshot:
+    """Reload the recipient snapshot after a mutation step."""
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+    refreshed = _load_project_snapshot(report.recipient.path)
+    report.recipient = refreshed
+    if report.donor is not None and report.path_dependency_diff is not None:
+        report.planned_actions = _fresh_first_actions(
+            report.donor,
+            refreshed,
+            identity_reconciliation_required=report.identity_reconciliation_required,
+            path_dependency_diff=report.path_dependency_diff,
+        )
+    return refreshed
+
+
+def _execute_identity_reconciliation(report: BetaMigrationReport) -> None:
+    """Reconcile the recipient identity to the donor identity when required."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    if not report.identity_reconciliation_required:
+        _append_completed_step(
+            report,
+            step="identity-reconciliation",
+            detail="Recipient slug/package already match the donor identity; no reconciliation was required.",
+        )
+        return
+
+    recipient_snapshot = report.recipient
+    old_slug = recipient_snapshot.identity.slug
+    old_package = recipient_snapshot.identity.package
+    state_lock = AdvisoryLock(
+        recipient_snapshot.path,
+        operation="beta-migration-identity-reconciliation",
+    )
+    with state_lock:
+        plan = _build_identity_reconciliation_plan(report)
+        recipient_snapshot.config_path.write_text(plan.config_content)
+        _record_changed_file(report, recipient_snapshot.config_path)
+
+        if plan.source_package_dir != plan.target_package_dir:
+            plan.source_package_dir.rename(plan.target_package_dir)
+            _record_changed_file(report, plan.source_package_dir)
+            _record_changed_file(report, plan.target_package_dir)
+
+        for target_path, content in plan.file_updates:
+            target_path.write_text(content)
+            _record_changed_file(report, target_path)
+
+        if plan.state is not None:
+            project_state = ProjectStateManager(recipient_snapshot.path)
+            project_state.save_state(plan.state)
+            StateManager(recipient_snapshot.path).flush_empty_consolidated_sections()
+            _record_changed_file(
+                report,
+                recipient_snapshot.path / ".quickscale" / "state.yml",
+            )
+
+    refreshed = _refresh_recipient_snapshot(report)
+    _append_completed_step(
+        report,
+        step="identity-reconciliation",
+        detail=(
+            f"Reconciled recipient identity from slug={old_slug}, package={old_package} "
+            f"to slug={refreshed.identity.slug}, package={refreshed.identity.package}."
+        ),
+    )
+
+
+def _execute_copy_custom_router_and_pages(report: BetaMigrationReport) -> None:
+    """Copy App.tsx and donor-only pages into the recipient."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    app_relative_path = FRESH_FIRST_REPLACED_ROOT_FILES[0]
+    donor_app = report.donor.path / app_relative_path
+    recipient_app = report.recipient.path / app_relative_path
+    shutil.copy2(donor_app, recipient_app)
+    _record_changed_file(report, recipient_app)
+
+    pages_relative_path = FRESH_FIRST_COPY_MISSING_DIRS[0]
+    donor_pages_dir = report.donor.path / pages_relative_path
+    recipient_pages_dir = report.recipient.path / pages_relative_path
+    recipient_names = {path.name for path in recipient_pages_dir.iterdir()}
+    copied_pages: list[str] = []
+    for source_path in sorted(donor_pages_dir.iterdir(), key=lambda item: item.name):
+        if source_path.name in recipient_names:
+            continue
+        destination_path = recipient_pages_dir / source_path.name
+        _copy_path(source_path, destination_path)
+        _record_changed_file(report, destination_path)
+        copied_pages.append(source_path.name)
+
+    _append_completed_step(
+        report,
+        step="copy-custom-router-and-pages",
+        detail=(
+            "Copied donor App.tsx and donor-only pages: "
+            f"{', '.join(copied_pages) or '(none)'}"
+        ),
+    )
+
+
+def _execute_copy_custom_components_and_utilities(report: BetaMigrationReport) -> None:
+    """Copy donor component directories and utility trees into the recipient."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    donor_components_dir = report.donor.path / "frontend" / "src" / "components"
+    recipient_components_dir = report.recipient.path / "frontend" / "src" / "components"
+
+    copied_component_dirs: list[str] = []
+    for source_dir in sorted(
+        donor_components_dir.iterdir(), key=lambda item: item.name
+    ):
+        if not source_dir.is_dir() or source_dir.name in FRESH_FIRST_COMPONENT_DIR_SKIP:
+            continue
+        destination_dir = recipient_components_dir / source_dir.name
+        _copy_path(source_dir, destination_dir)
+        _record_changed_file(report, destination_dir)
+        copied_component_dirs.append(f"{source_dir.name}/")
+
+    copied_utility_dirs: list[str] = []
+    for relative_dir in FRESH_FIRST_UTILITY_DIRS:
+        source_dir = report.donor.path / "frontend" / "src" / relative_dir
+        if not source_dir.is_dir():
+            continue
+        destination_dir = report.recipient.path / "frontend" / "src" / relative_dir
+        _copy_path(source_dir, destination_dir)
+        _record_changed_file(report, destination_dir)
+        copied_utility_dirs.append(f"{relative_dir}/")
+
+    _append_completed_step(
+        report,
+        step="copy-custom-components-and-utilities",
+        detail=(
+            "Copied donor component dirs "
+            f"{', '.join(copied_component_dirs) or '(none)'} and utility dirs "
+            f"{', '.join(copied_utility_dirs) or '(none)'}."
+        ),
+    )
+
+
+def _execute_copy_selected_django_files(report: BetaMigrationReport) -> None:
+    """Copy selected donor Django files into the recipient package."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    copied_files: list[str] = []
+    for relative_path in FRESH_FIRST_DONOR_DJANGO_FILES:
+        source_path = report.donor.package_dir / relative_path
+        if not source_path.exists():
+            continue
+        destination_path = report.recipient.package_dir / relative_path
+        _copy_path(source_path, destination_path)
+        _record_changed_file(report, destination_path)
+        copied_files.append(relative_path)
+
+    _append_completed_step(
+        report,
+        step="copy-selected-django-files",
+        detail=f"Copied donor Django files: {', '.join(copied_files) or '(none)'}",
+    )
+
+
+def _execute_sync_missing_path_dependencies(report: BetaMigrationReport) -> None:
+    """Add any missing donor path dependencies to the recipient pyproject.toml."""
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+
+    missing_dependencies = _collect_missing_path_dependency_values(report)
+    if not missing_dependencies:
+        _append_completed_step(
+            report,
+            step="sync-missing-path-dependencies",
+            detail="Recipient pyproject.toml already contained all donor path dependencies.",
+        )
+        return
+
+    if _insert_missing_path_dependencies(
+        report.recipient.pyproject_path, missing_dependencies
+    ):
+        _record_changed_file(report, report.recipient.pyproject_path)
+        _refresh_recipient_snapshot(report)
+
+    _append_completed_step(
+        report,
+        step="sync-missing-path-dependencies",
+        detail=(
+            "Added missing donor path dependencies to recipient pyproject.toml: "
+            f"{', '.join(missing_dependencies.keys())}"
+        ),
+    )
+
+
+def _execute_preserve_managed_recipient_files(report: BetaMigrationReport) -> None:
+    """Record the protected recipient-managed file boundary."""
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+
+    protected_paths = ", ".join(
+        str(path) for path in _protected_recipient_paths(report.recipient)
+    )
+    _append_completed_step(
+        report,
+        step="preserve-managed-recipient-files",
+        detail=f"Preserved recipient-managed files without donor overwrite: {protected_paths}",
+    )
+
+
+def _build_verification_subprocess_context(
+    report: BetaMigrationReport, spec: VerificationCommandSpec
+) -> tuple[Path, dict[str, Any]]:
+    """Build the working directory and subprocess kwargs for one command."""
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+
+    working_dir = (
+        report.recipient.path
+        if spec.cwd_suffix == "."
+        else report.recipient.path / spec.cwd_suffix
+    )
+    subprocess_kwargs: dict[str, Any] = {
+        "cwd": working_dir,
+        "capture_output": True,
+        "text": True,
+        "check": False,
+        "timeout": VERIFICATION_COMMAND_TIMEOUT_SECONDS,
+    }
+    if (
+        len(spec.argv) >= 2
+        and spec.argv[0] == "poetry"
+        and spec.argv[1] in {"lock", "install"}
+    ):
+        subprocess_kwargs["env"] = build_isolated_poetry_env()
+    return working_dir, subprocess_kwargs
+
+
+def _append_verification_result(
+    report: BetaMigrationReport,
+    spec: VerificationCommandSpec,
+    working_dir: Path,
+    *,
+    status: CheckStatus,
+    return_code: int | None,
+    stdout: str,
+    stderr: str,
+) -> None:
+    """Append one captured verification result to the report."""
+    report.verification_results.append(
+        VerificationCommandResult(
+            command=spec.display_command,
+            cwd=str(working_dir),
+            status=status,
+            return_code=return_code,
+            stdout=stdout,
+            stderr=stderr,
+        )
+    )
+
+
+def _run_verification_command(
+    report: BetaMigrationReport, spec: VerificationCommandSpec
+) -> None:
+    """Run one verification command and record its success or failure."""
+    working_dir, subprocess_kwargs = _build_verification_subprocess_context(
+        report, spec
+    )
+    try:
+        result = subprocess.run(list(spec.argv), **subprocess_kwargs)  # noqa: S603 - fixed argv list, shell disabled
+    except subprocess.TimeoutExpired as exc:
+        _append_verification_result(
+            report,
+            spec,
+            working_dir,
+            status="failed",
+            return_code=None,
+            stdout="",
+            stderr=(
+                f"Verification command timed out after "
+                f"{VERIFICATION_COMMAND_TIMEOUT_SECONDS}s: {spec.display_command}"
+            ),
+        )
+        raise ValueError(
+            f"Verification command timed out after "
+            f"{VERIFICATION_COMMAND_TIMEOUT_SECONDS}s: {spec.display_command} "
+            f"in {working_dir}. "
+            "Re-run the migration or increase VERIFICATION_COMMAND_TIMEOUT_SECONDS "
+            "if the command is legitimately slow."
+        ) from exc
+    except OSError as exc:
+        _append_verification_result(
+            report,
+            spec,
+            working_dir,
+            status="failed",
+            return_code=None,
+            stdout="",
+            stderr=str(exc),
+        )
+        raise ValueError(
+            f"Verification command failed to start: {spec.display_command}: {exc}"
+        ) from exc
+
+    verification_status: CheckStatus = "passed" if result.returncode == 0 else "failed"
+    _append_verification_result(
+        report,
+        spec,
+        working_dir,
+        status=verification_status,
+        return_code=result.returncode,
+        stdout=result.stdout or "",
+        stderr=result.stderr or "",
+    )
+    if result.returncode != 0:
+        raise ValueError(
+            f"Verification command failed with exit code {result.returncode}: {spec.display_command}"
+        )
+
+
+def _execute_verification_stack(report: BetaMigrationReport) -> None:
+    """Execute the shared verification stack and capture subprocess output."""
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+
+    for spec in VERIFICATION_COMMAND_SPECS:
+        _run_verification_command(report, spec)
+
+    _append_completed_step(
+        report,
+        step="run-verification-stack",
+        detail=f"Executed {len(report.verification_results)} verification commands successfully.",
+    )
+
+
+def _execute_write_handoff_prompt(report: BetaMigrationReport) -> None:
+    """Write the report-derived handoff prompt into the recipient."""
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+
+    report.pending_manual_actions = _build_pending_manual_actions(report)
+    prompt_path = write_handoff_prompt(report)
+    _record_changed_file(report, prompt_path)
+    _append_completed_step(
+        report,
+        step="write-handoff-prompt",
+        detail=(
+            f"Wrote {HANDOFF_PROMPT_FILENAME} into the recipient with "
+            f"{len(report.pending_manual_actions)} remaining manual actions."
+        ),
+    )
+
+
+def _execute_fresh_first(report: BetaMigrationReport) -> BetaMigrationReport:
+    """Execute the deterministic fresh-first workflow on the recipient."""
+    step_handlers: list[tuple[str, Any]] = [
+        ("identity-reconciliation", _execute_identity_reconciliation),
+        ("copy-custom-router-and-pages", _execute_copy_custom_router_and_pages),
+        (
+            "copy-custom-components-and-utilities",
+            _execute_copy_custom_components_and_utilities,
+        ),
+        ("copy-selected-django-files", _execute_copy_selected_django_files),
+        ("sync-missing-path-dependencies", _execute_sync_missing_path_dependencies),
+        ("preserve-managed-recipient-files", _execute_preserve_managed_recipient_files),
+        ("run-verification-stack", _execute_verification_stack),
+        ("write-handoff-prompt", _execute_write_handoff_prompt),
+    ]
+
+    report.phase = "fresh-first-executed"
+    for index, (step_name, handler) in enumerate(step_handlers):
+        try:
+            handler(report)
+        except Exception as exc:
+            report.phase = "fresh-first-partial"
+            report.status = "blocked"
+            _append_blocker(report, f"{step_name} failed: {exc}")
+            for remaining_step_name, _ in step_handlers[index + 1 :]:
+                _append_skipped_step(
+                    report,
+                    step=remaining_step_name,
+                    detail=f"Skipped after blocker in {step_name}: {exc}",
+                )
+            _append_skipped_step(
+                report,
+                step="replace-production-repository-and-deploy",
+                detail=MANUAL_HANDOFF_REASON,
+            )
+            return report
+
+    _append_completed_step(
+        report,
+        step="finish-fresh-first-run",
+        detail="Fresh-first completed through deterministic file mutation and local verification.",
+    )
+    _append_skipped_step(
+        report,
+        step="run-local-smoke-tests",
+        detail=MANUAL_HANDOFF_REASON,
+    )
+    _append_skipped_step(
+        report,
+        step="replace-production-repository-and-deploy",
+        detail=MANUAL_HANDOFF_REASON,
+    )
+    report.status = "ready"
+    return report
+
+
+def run_beta_migration(inputs: BetaMigrationInput) -> BetaMigrationReport:
+    """Run the fresh-first beta migration workflow."""
+    report = _prepare_beta_migration_report(inputs, execution_intent="run")
+    if report.blockers or inputs.dry_run:
+        report.pending_manual_actions = _build_pending_manual_actions(report)
+        return report
+
+    report = _execute_fresh_first(report)
+    report.pending_manual_actions = _build_pending_manual_actions(report)
+    return report
