@@ -6,6 +6,10 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from django.test import RequestFactory
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.response import Response
+from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework.views import APIView
 
 from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.current_org import (
@@ -18,9 +22,160 @@ from quickscale_modules_orgs.current_org import (
 from quickscale_modules_orgs.models import OrgRole, Organization, OrganizationMembership
 from quickscale_modules_orgs.permissions import (
     ROLE_HIERARCHY,
+    HasOrgRole,
     resolve_request_org,
     user_has_org_role,
 )
+
+
+class _OrgRoleProbeView(APIView):
+    """Minimal DRF view whose only gate is the configured HasOrgRole."""
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [HasOrgRole(OrgRole.MEMBER)]
+
+    def get(self, request: object, **kwargs: object) -> Response:
+        del request, kwargs
+        return Response({"ok": True})
+
+
+def _drf_request(user: object, organization: Organization | None = None):
+    """Build a forced-authenticated DRF request with an optional org context."""
+    request = APIRequestFactory().get("/")
+    force_authenticate(request, user=user)
+    if organization is not None:
+        request.org = organization
+    return request
+
+
+def _member_user(organization: Organization, role: OrgRole, username: str):
+    user = get_user_model().objects.create_user(
+        username=username,
+        email=f"{username}@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=organization,
+        role=role,
+    )
+    return user
+
+
+@pytest.mark.django_db
+def test_has_org_role_configured_instance_is_what_drf_calls() -> None:
+    """DRF instantiates each permission_classes entry; the configured one returns itself."""
+    permission = HasOrgRole(OrgRole.ADMIN)
+
+    assert permission() is permission
+    assert permission.min_role == OrgRole.ADMIN
+
+
+@pytest.mark.django_db
+def test_has_org_role_refuses_viewer_and_allows_member_or_higher() -> None:
+    """A member gate admits member/admin/owner and refuses a viewer."""
+    organization = Organization.objects.create(name="RoleGate", slug="role-gate")
+    statuses = {}
+    view = _OrgRoleProbeView.as_view()
+
+    for role in (OrgRole.VIEWER, OrgRole.MEMBER, OrgRole.ADMIN, OrgRole.OWNER):
+        user = _member_user(organization, role, f"role-gate-{role}")
+        response = view(_drf_request(user, organization))
+        statuses[role] = response.status_code
+
+    assert statuses == {
+        OrgRole.VIEWER: 403,
+        OrgRole.MEMBER: 200,
+        OrgRole.ADMIN: 200,
+        OrgRole.OWNER: 200,
+    }
+
+
+@pytest.mark.django_db
+def test_has_org_role_refuses_an_absent_membership() -> None:
+    """An authenticated caller with no membership in the active org is refused."""
+    organization = Organization.objects.create(
+        name="NoMembership", slug="no-membership"
+    )
+    outsider = get_user_model().objects.create_user(
+        username="role-gate-outsider",
+        email="role-gate-outsider@example.com",
+        password="secret123",
+    )
+
+    response = _OrgRoleProbeView.as_view()(_drf_request(outsider, organization))
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_has_org_role_fails_closed_without_an_organization_context() -> None:
+    """A member of some organization is still refused when the request has no org."""
+    organization = Organization.objects.create(name="NoContext", slug="no-context")
+    member = _member_user(organization, OrgRole.OWNER, "role-gate-nocontext")
+
+    response = _OrgRoleProbeView.as_view()(_drf_request(member))
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_has_org_role_resolves_the_org_slug_route_kwarg() -> None:
+    """Without request.org, the routed org_slug resolves the organization."""
+    organization = Organization.objects.create(
+        name="SlugResolved", slug="slug-resolved"
+    )
+    member = _member_user(organization, OrgRole.MEMBER, "role-gate-slug")
+    viewer = _member_user(organization, OrgRole.VIEWER, "role-gate-slug-viewer")
+    view = _OrgRoleProbeView.as_view()
+
+    member_request = APIRequestFactory().get(f"/orgs/{organization.slug}/probe/")
+    force_authenticate(member_request, user=member)
+    member_response = view(member_request, org_slug=organization.slug)
+
+    viewer_request = APIRequestFactory().get(f"/orgs/{organization.slug}/probe/")
+    force_authenticate(viewer_request, user=viewer)
+    viewer_response = view(viewer_request, org_slug=organization.slug)
+
+    assert member_response.status_code == 200
+    assert viewer_response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_has_org_role_grants_superusers() -> None:
+    """A superuser passes the role gate for the request's organization."""
+    organization = Organization.objects.create(name="SuperGate", slug="super-gate")
+    superuser = get_user_model().objects.create_superuser(
+        username="role-gate-super",
+        email="role-gate-super@example.com",
+        password="secret123",
+    )
+
+    response = _OrgRoleProbeView.as_view()(_drf_request(superuser, organization))
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_has_org_role_admits_superusers_without_an_org_context() -> None:
+    """A superuser is the operator path and passes even with no org context."""
+    superuser = get_user_model().objects.create_superuser(
+        username="role-gate-superless",
+        email="role-gate-superless@example.com",
+        password="secret123",
+    )
+
+    response = _OrgRoleProbeView.as_view()(_drf_request(superuser))
+
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_has_org_role_refuses_anonymous_callers() -> None:
+    """An anonymous DRF request is refused, not admitted by a default role."""
+    response = _OrgRoleProbeView.as_view()(APIRequestFactory().get("/"))
+
+    assert response.status_code == 403
 
 
 @pytest.mark.django_db
