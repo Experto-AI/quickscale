@@ -1,85 +1,119 @@
-"""Server-rendered org management views for the QuickScale organizations module."""
+"""Server-rendered org management views for the QuickScale organizations module.
+
+Module Conventions rule 28: this module is a re-exporting facade over private
+``_<name>.py`` sibling modules grouped by concern (``_view_context``,
+``_view_serialization``, ``_view_invitation``, ``_view_org_management``, and
+``_api_views``).  It keeps the pricing-handoff seam
+(``_billing_pricing_path`` over ``collect_capabilities``) and the
+invitation-notification seam (``_load_invitation_notification_sender``) with
+the views that resolve them from this module's globals, so every prior
+``quickscale_modules_orgs.views`` import path, test patch target, and
+``mock.patch("quickscale_modules_orgs.views...")`` seam keeps resolving.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping as Mapping
 from datetime import UTC
 from importlib import import_module
 from typing import Any, cast
 
 from django.apps import apps
-from django.conf import settings
+from django.conf import settings as settings
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import redirect_to_login as redirect_to_login
 from django.core.exceptions import ValidationError
-from django.db import connection, transaction
-from django.db.models import QuerySet
-from django.http import Http404, HttpRequest, HttpResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.db import connection as connection, transaction
+from django.db.models import QuerySet as QuerySet
+from django.http import Http404 as Http404, HttpRequest, HttpResponse
+from django.shortcuts import get_object_or_404 as get_object_or_404, redirect
 from django.urls import NoReverseMatch, reverse
-from django.utils import timezone
-from django.views import View
-from django.views.generic import FormView, ListView, TemplateView
-from rest_framework.authentication import SessionAuthentication
+from django.utils import timezone as timezone
+from django.views import View as View
+from django.views.generic import (
+    FormView,
+    ListView as ListView,
+    TemplateView as TemplateView,
+)
+from rest_framework.authentication import SessionAuthentication as SessionAuthentication
 from rest_framework.exceptions import (
-    NotFound,
-    NotAuthenticated,
-    PermissionDenied,
+    NotAuthenticated as NotAuthenticated,
+    NotFound as NotFound,
+    PermissionDenied as PermissionDenied,
     ValidationError as DRFValidationError,
 )
-from rest_framework.parsers import JSONParser
-from rest_framework.permissions import AllowAny
-from rest_framework.renderers import JSONRenderer
+from rest_framework.parsers import JSONParser as JSONParser
+from rest_framework.permissions import AllowAny as AllowAny
+from rest_framework.renderers import JSONRenderer as JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
+from rest_framework.views import APIView as APIView
 
 from quickscale_core.runtime import collect_capabilities
-
-from ._constants import (
+from quickscale_modules_orgs._api_views import (
+    OrgApiBaseView as OrgApiBaseView,
+    OrgApiDetailView as OrgApiDetailView,
+    OrgApiMemberRemoveView as OrgApiMemberRemoveView,
+    OrgApiMemberRoleView as OrgApiMemberRoleView,
+    OrgApiMembersView as OrgApiMembersView,
+    OrgApiRevokeInvitationView as OrgApiRevokeInvitationView,
+    OrgApiSettingsView as OrgApiSettingsView,
+    OrgsSessionAuthentication as OrgsSessionAuthentication,
+)
+from quickscale_modules_orgs._view_context import (
+    OrganizationContextMixin as OrganizationContextMixin,
+    SaasModeRequiredMixin as SaasModeRequiredMixin,
+    _is_saas_mode as _is_saas_mode,
+)
+from quickscale_modules_orgs._view_invitation import (
+    OrgInvitationAcceptView as OrgInvitationAcceptView,
+    _INVITATION_PAGE_COPY as _INVITATION_PAGE_COPY,
+)
+from quickscale_modules_orgs._view_org_management import (
+    MemberListView as MemberListView,
+    MemberManagementContextMixin as MemberManagementContextMixin,
+    OrgDashboardView as OrgDashboardView,
+    OrgListView as OrgListView,
+    OrgSettingsView as OrgSettingsView,
+    RevokeInvitationView as RevokeInvitationView,
+    _membership_id_in_range as _membership_id_in_range,
+)
+from quickscale_modules_orgs._view_serialization import (
+    _first_error_message as _first_error_message,
+    _form_error_data as _form_error_data,
+    _get_inviter_display_name as _get_inviter_display_name,
+    _normalize_email as _normalize_email,
+    _serialize_invitation as _serialize_invitation,
+    _serialize_membership as _serialize_membership,
+    _serialize_organization as _serialize_organization,
+    _serialize_role_choices as _serialize_role_choices,
+    _validation_error_data as _validation_error_data,
+)
+from quickscale_modules_orgs._constants import (
     ACTIVE_ORG_SESSION_KEY,
     ORG_INVITATION_ACCEPT_URL_NAME,
-    PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
+    PENDING_ORG_INVITATION_TOKEN_SESSION_KEY as PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
 )
-from .forms import InviteForm, OrgCreateForm, OrgSettingsForm, RoleChangeForm
-from .models import (
+from quickscale_modules_orgs.forms import (
+    InviteForm,
+    OrgCreateForm,
+    OrgSettingsForm as OrgSettingsForm,
+    RoleChangeForm as RoleChangeForm,
+)
+from quickscale_modules_orgs.models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
     OrgRole,
 )
-from .permissions import OrgRoleMixin, user_has_org_role
+from quickscale_modules_orgs.permissions import (
+    OrgRoleMixin,
+    user_has_org_role as user_has_org_role,
+)
 
 _UNSET = object()
 _ORG_INVITATION_TEMPLATE_KEY = "notifications.org_invitation"
 _MEMBERS_TEMPLATE_NAME = "quickscale_orgs/members.html"
-_INVITATION_PAGE_COPY = {
-    "accepted": {
-        "title": "Invitation already used",
-        "message": "This invitation link has already been redeemed and can no longer be used.",
-    },
-    "invalid_role": {
-        "title": "Invitation unavailable",
-        "message": "This invitation is no longer valid because owner invitations are not supported.",
-    },
-    "expired": {
-        "title": "Invitation expired",
-        "message": "This invitation link has expired. Ask an organization admin to send you a new invite.",
-    },
-    "email_mismatch": {
-        "title": "Invitation email mismatch",
-        "message": "This invitation can only be accepted by the invited email address.",
-    },
-}
-
-
-def _is_saas_mode() -> bool:
-    # SA14.6: QUICKSCALE_ORGS_MODE is guaranteed by the boot guard in
-    # QuickscaleOrgsConfig.ready() — direct access, no fallback.
-    return settings.QUICKSCALE_ORGS_MODE == "saas"
-
-
-def _normalize_email(value: Any) -> str:
-    return str(value or "").strip().lower()
 
 
 def _load_invitation_notification_sender() -> Any | None:
@@ -124,571 +158,6 @@ def _org_creation_redirect_urls(organization: Organization) -> dict[str, str | N
         "next_url": billing_pricing_url or _canonical_org_detail_path(organization),
         "billing_pricing_url": billing_pricing_url,
     }
-
-
-def _get_inviter_display_name(user: Any) -> str:
-    get_full_name = getattr(user, "get_full_name", None)
-    full_name = str(get_full_name()).strip() if callable(get_full_name) else ""
-    if full_name:
-        return full_name
-
-    get_username = getattr(user, "get_username", None)
-    username = str(get_username()).strip() if callable(get_username) else ""
-    if username:
-        return username
-
-    email = str(getattr(user, "email", "")).strip()
-    return email or "QuickScale"
-
-
-def _serialize_organization(
-    organization: Organization,
-    *,
-    role: str | None = None,
-    member_count: int | None = None,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "id": str(organization.id),
-        "name": organization.name,
-        "slug": organization.slug,
-        "is_personal": organization.is_personal,
-    }
-    if role is not None:
-        payload["role"] = role
-        payload["role_label"] = str(OrgRole(role).label)
-    if member_count is not None:
-        payload["member_count"] = member_count
-    return payload
-
-
-def _serialize_membership(membership: OrganizationMembership) -> dict[str, Any]:
-    return {
-        "id": membership.pk,
-        "role": membership.role,
-        "role_label": str(OrgRole(membership.role).label),
-        "joined_at": membership.joined_at.astimezone(UTC).isoformat(),
-        "user": {
-            "id": str(membership.user.pk),
-            "username": str(membership.user.get_username()),
-            "email": str(getattr(membership.user, "email", "")),
-            "display_name": _get_inviter_display_name(membership.user),
-        },
-    }
-
-
-def _serialize_invitation(invitation: OrganizationInvitation) -> dict[str, Any]:
-    return {
-        "id": str(invitation.pk),
-        "email": invitation.email,
-        "role": invitation.role,
-        "role_label": str(OrgRole(invitation.role).label),
-        "expires_at": invitation.expires_at.astimezone(UTC).isoformat(),
-    }
-
-
-def _serialize_role_choices(
-    role_choices: list[tuple[str, str]],
-) -> list[dict[str, str]]:
-    return [{"value": str(value), "label": str(label)} for value, label in role_choices]
-
-
-def _form_error_data(form: Any) -> dict[str, list[str]]:
-    errors: dict[str, list[str]] = {}
-    for field, messages in form.errors.items():
-        error_key = "non_field_errors" if field == "__all__" else str(field)
-        errors[error_key] = [str(message) for message in messages]
-    return errors
-
-
-def _validation_error_data(error: ValidationError) -> dict[str, list[str]]:
-    if hasattr(error, "message_dict"):
-        return {
-            ("non_field_errors" if field == "__all__" else str(field)): [
-                str(message) for message in messages
-            ]
-            for field, messages in error.message_dict.items()
-        }
-    return {"non_field_errors": [str(message) for message in error.messages]}
-
-
-def _first_error_message(
-    error: ValidationError,
-    *,
-    fallback: str,
-) -> str:
-    for messages in _validation_error_data(error).values():
-        if messages:
-            return messages[0]
-    return fallback
-
-
-class SaasModeRequiredMixin:
-    """Return 404 when a SaaS-only page is requested in solo mode."""
-
-    def dispatch(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> HttpResponse:
-        if not _is_saas_mode():
-            raise Http404("Org routes are hidden in solo mode.")
-        next_dispatch = getattr(super(), "dispatch")
-        return cast(HttpResponse, next_dispatch(request, *args, **kwargs))
-
-
-class OrganizationContextMixin:
-    """Resolve the active organization and acting membership for the current view."""
-
-    request: HttpRequest
-    kwargs: dict[str, Any]
-    _organization: Organization | None = None
-    _acting_membership: OrganizationMembership | None = None
-    _acting_membership_loaded = False
-
-    def get_organization(self) -> Organization:
-        if self._organization is not None:
-            return self._organization
-
-        organization = getattr(self.request, "org", None)
-        if isinstance(organization, Organization):
-            self._organization = organization
-            return organization
-
-        org_slug = self.kwargs.get("org_slug")
-        if not org_slug:
-            raise Http404("Organization not found.")
-
-        self._organization = get_object_or_404(Organization, slug=org_slug)
-        return self._organization
-
-    def get_acting_membership(self) -> OrganizationMembership | None:
-        if self._acting_membership_loaded:
-            return self._acting_membership
-
-        if getattr(self.request.user, "is_superuser", False):
-            self._acting_membership_loaded = True
-            self._acting_membership = None
-            return None
-
-        self._acting_membership = OrganizationMembership.objects.filter(
-            user=self.request.user,
-            organization=self.get_organization(),
-        ).first()
-        self._acting_membership_loaded = True
-        return self._acting_membership
-
-    def acting_user_is_owner_like(self) -> bool:
-        if getattr(self.request.user, "is_superuser", False):
-            return True
-        acting_membership = self.get_acting_membership()
-        return bool(
-            acting_membership is not None and acting_membership.role == OrgRole.OWNER
-        )
-
-
-class OrgsSessionAuthentication(SessionAuthentication):
-    """Session authentication that keeps a 401 challenge for anonymous callers.
-
-    DRF answers an unauthenticated request 403 when the authentication scheme
-    declares no challenge header; the organization API has always answered
-    401, so the scheme names its challenge.
-    """
-
-    def authenticate_header(self, request: Request) -> str:
-        del request
-        return "Session"
-
-
-class OrgApiBaseView(OrganizationContextMixin, APIView):
-    """Base view for all OrgApi* JSON endpoints.
-
-    A DRF ``APIView`` with session authentication only, so DRF enforces CSRF
-    on unsafe methods and every error goes through the one QuickScale
-    exception handler the generated settings install (Module Conventions rule
-    9).  ``AllowAny`` is deliberate: this base performs its own
-    authentication and org-role checks below (the sanctioned pattern for a
-    view that does), so its answers do not depend on the project's default
-    DRF permissions.  SaaS-mode gating, authentication, request parsing, and
-    optional org-role access control keep their behaviour: solo mode hides
-    the routes with a 404, an anonymous caller answers 401, and a caller
-    below ``min_org_role`` answers 403.  The org-role logic stays here, on
-    the sanctioned ``OrgApiBaseView``, not rewritten as a permission class.
-
-    Subclasses set ``min_org_role`` to an OrgRole value to enable
-    org-scoped access gating. When ``min_org_role`` is None (the default),
-    the view handles all orgs the user belongs to without scoping.
-    """
-
-    authentication_classes = [OrgsSessionAuthentication]
-    parser_classes = [JSONParser]
-    permission_classes = [AllowAny]
-    renderer_classes = [JSONRenderer]
-
-    min_org_role: OrgRole | None = None
-
-    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
-        """Run the module's access gates before the HTTP method handler."""
-        if not _is_saas_mode():
-            raise Http404("Org routes are hidden in solo mode.")
-
-        super().initial(request, *args, **kwargs)
-
-        user = getattr(request, "user", None)
-        if not bool(user is not None and getattr(user, "is_authenticated", False)):
-            raise NotAuthenticated("Authentication required")
-
-        if self.min_org_role is not None:
-            try:
-                organization = self.get_organization()
-            except Http404 as error:
-                raise PermissionDenied("Forbidden") from error
-
-            request.org = organization
-            if not user_has_org_role(request.user, organization, self.min_org_role):
-                raise PermissionDenied("Forbidden")
-
-    def get_json_payload(self, request: Request) -> Mapping[str, Any]:
-        """Return the request's JSON object payload or fail validation."""
-        payload = request.data
-        if not isinstance(payload, Mapping):
-            raise DRFValidationError(
-                {"non_field_errors": ["JSON object payload expected"]}
-            )
-        return payload
-
-
-class OrgListView(SaasModeRequiredMixin, LoginRequiredMixin, ListView):
-    """List the organizations the current user belongs to."""
-
-    template_name = "quickscale_orgs/org_list.html"
-    context_object_name = "organizations"
-
-    def get_queryset(self) -> QuerySet[Organization]:
-        return (
-            Organization.objects.filter(
-                quickscale_orgs_memberships__user=self.request.user
-            )
-            .distinct()
-            .order_by("name")
-        )
-
-
-class OrgCreateView(SaasModeRequiredMixin, LoginRequiredMixin, FormView):
-    """Create a new organization and hand off to the next onboarding step."""
-
-    form_class = OrgCreateForm
-    template_name = "quickscale_orgs/org_create.html"
-
-    def form_valid(self, form: OrgCreateForm) -> HttpResponse:
-        organization = form.save(user=self.request.user)
-        # The handoff lands on a flat billing route, which TenantMiddleware
-        # resolves from the session, so record the new organization as active
-        # before redirecting; solo mode ignores the key.
-        self.request.session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
-        next_url = _org_creation_redirect_urls(organization)["next_url"]
-        # ``next_url`` is always a string: the helper falls back to the
-        # canonical org detail path when no module declares a handoff.
-        return redirect(cast(str, next_url))
-
-
-class OrgInvitationAcceptView(SaasModeRequiredMixin, LoginRequiredMixin, TemplateView):
-    """Render the public org invitation accept page."""
-
-    template_name = "quickscale_orgs/org_invitation_accept.html"
-    request: HttpRequest
-    kwargs: dict[str, Any]
-    _invitation: OrganizationInvitation | None = None
-    _invitation_page_state = "pending"
-
-    def dispatch(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> HttpResponse:
-        if not _is_saas_mode():
-            raise Http404("Org routes are hidden in solo mode.")
-
-        session = getattr(request, "session", None)
-        try:
-            invitation = self.get_invitation()
-        except Http404:
-            self._clear_pending_invitation_token(session)
-            raise
-
-        terminal_response = self.get_terminal_response(invitation)
-        if terminal_response is not None:
-            self._clear_pending_invitation_token(session)
-            return terminal_response
-
-        if request.user.is_authenticated:
-            response = self.accept_authenticated_invitation(request)
-            self._clear_pending_invitation_token(session)
-            return response
-
-        if session is not None:
-            session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
-        return self.handle_no_permission()
-
-    def get_invitation(self) -> OrganizationInvitation:
-        if self._invitation is None:
-            self._invitation = get_object_or_404(
-                OrganizationInvitation.objects.select_related("organization"),
-                token=self.kwargs["token"],
-            )
-        return self._invitation
-
-    def get_terminal_response(
-        self,
-        invitation: OrganizationInvitation,
-    ) -> HttpResponse | None:
-        if invitation.role == OrgRole.OWNER:
-            return self.render_invitation_page(
-                invitation,
-                page_state="invalid_role",
-                status=410,
-            )
-        if invitation.accepted_at is not None:
-            return self.render_invitation_page(
-                invitation,
-                page_state="accepted",
-                status=410,
-            )
-        if invitation.expires_at <= timezone.now():
-            return self.render_invitation_page(
-                invitation,
-                page_state="expired",
-                status=410,
-            )
-        return None
-
-    def accept_authenticated_invitation(self, request: HttpRequest) -> HttpResponse:
-        normalized_user_email = _normalize_email(getattr(request.user, "email", ""))
-
-        try:
-            with transaction.atomic():
-                invitation = (
-                    OrganizationInvitation.objects.select_related(
-                        "organization",
-                        "invited_by",
-                    )
-                    .select_for_update()
-                    .get(token=self.kwargs["token"])
-                )
-                self._invitation = invitation
-                terminal_response = self.get_terminal_response(invitation)
-                if terminal_response is not None:
-                    return terminal_response
-                if normalized_user_email != _normalize_email(invitation.email):
-                    return self.render_invitation_page(
-                        invitation,
-                        page_state="email_mismatch",
-                        status=403,
-                    )
-
-                OrganizationMembership.objects.get_or_create(
-                    user=request.user,
-                    organization=invitation.organization,
-                    defaults={
-                        "role": invitation.role,
-                        "invited_by": invitation.invited_by,
-                    },
-                )
-                invitation.accepted_at = timezone.now()
-                invitation.save(update_fields=["accepted_at"])
-        except OrganizationInvitation.DoesNotExist:
-            return HttpResponse(status=404)
-
-        return redirect(
-            reverse(
-                "quickscale_orgs:detail",
-                kwargs={"org_slug": invitation.organization.slug},
-            )
-        )
-
-    def render_invitation_page(
-        self,
-        invitation: OrganizationInvitation,
-        *,
-        page_state: str,
-        status: int,
-    ) -> HttpResponse:
-        self._invitation = invitation
-        self._invitation_page_state = page_state
-        return self.render_to_response(self.get_context_data(), status=status)
-
-    @staticmethod
-    def _clear_pending_invitation_token(session: Any | None) -> None:
-        if session is None:
-            return
-        session.pop(PENDING_ORG_INVITATION_TOKEN_SESSION_KEY, None)
-
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        context = super().get_context_data(**kwargs)
-        invitation = self.get_invitation()
-        page_copy = _INVITATION_PAGE_COPY.get(self._invitation_page_state)
-        context.update(
-            {
-                "invitation": invitation,
-                "organization": invitation.organization,
-                "invitation_page_state": self._invitation_page_state,
-                "invitation_page_title": (
-                    page_copy["title"]
-                    if page_copy is not None
-                    else "Accept your organization invitation"
-                ),
-                "invitation_page_message": (
-                    page_copy["message"]
-                    if page_copy is not None
-                    else (
-                        f"{invitation.organization.name} invited {invitation.email} to join "
-                        f"as {OrgRole(invitation.role).label}."
-                    )
-                ),
-            }
-        )
-        return context
-
-
-class OrgDashboardView(
-    LoginRequiredMixin, OrgRoleMixin, OrganizationContextMixin, TemplateView
-):
-    """Render the active organization's dashboard."""
-
-    min_org_role = OrgRole.VIEWER
-    template_name = "quickscale_orgs/org_dashboard.html"
-
-    def dispatch(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> HttpResponse:
-        if not _is_saas_mode() and kwargs.get("org_slug") is not None:
-            raise Http404("Org routes are hidden in solo mode.")
-        if _is_saas_mode() and kwargs.get("org_slug") is None:
-            return redirect("/orgs/")
-        return cast(HttpResponse, super().dispatch(request, *args, **kwargs))
-
-    def get(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> HttpResponse:
-        # Org-switcher: record the active org in the session so the middleware
-        # can resolve it for content routes.
-        if _is_saas_mode():
-            organization = self.get_organization()
-            request.session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
-        return super().get(request, *args, **kwargs)
-
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        context = super().get_context_data(**kwargs)
-        organization = self.get_organization()
-        context.update(
-            {
-                "organization": organization,
-                "member_count": OrganizationMembership.objects.filter(
-                    organization=organization,
-                ).count(),
-                "active_plan": None,
-                "credit_balance": None,
-                "recent_activity": [],
-                "saas_mode": _is_saas_mode(),
-            }
-        )
-        return context
-
-
-class MemberManagementContextMixin(OrganizationContextMixin):
-    """Shared helpers for the organization members admin surface."""
-
-    def get_memberships(self) -> QuerySet[OrganizationMembership]:
-        return (
-            OrganizationMembership.objects.select_related("user")
-            .filter(organization=self.get_organization())
-            .order_by("user__username", "user__email")
-        )
-
-    def get_pending_invitations(self) -> QuerySet[OrganizationInvitation]:
-        return (
-            OrganizationInvitation.objects.select_related("invited_by")
-            .filter(
-                organization=self.get_organization(),
-                accepted_at__isnull=True,
-                expires_at__gt=timezone.now(),
-            )
-            .order_by("email", "expires_at")
-        )
-
-    def get_invite_form(self, *, data: Any | None = None) -> InviteForm:
-        return InviteForm(
-            data=data,
-            organization=self.get_organization(),
-            invited_by=self.request.user,
-            owner_like=self.acting_user_is_owner_like(),
-        )
-
-    def get_membership_for_action(
-        self,
-        membership_id: Any,
-    ) -> OrganizationMembership:
-        try:
-            parsed_membership_id = int(membership_id)
-        except (TypeError, ValueError) as error:
-            raise ValidationError(
-                {"membership_id": ["Invalid member selection."]}
-            ) from error
-
-        membership_pk_lower_bound, membership_pk_upper_bound = (
-            connection.ops.integer_field_range(
-                OrganizationMembership._meta.pk.get_internal_type()
-            )
-        )
-        if (
-            membership_pk_lower_bound is not None
-            and parsed_membership_id < membership_pk_lower_bound
-        ) or (
-            membership_pk_upper_bound is not None
-            and parsed_membership_id > membership_pk_upper_bound
-        ):
-            raise ValidationError({"membership_id": ["Invalid member selection."]})
-
-        return get_object_or_404(
-            OrganizationMembership.objects.select_related("user"),
-            pk=parsed_membership_id,
-            organization=self.get_organization(),
-        )
-
-    def get_members_context(
-        self,
-        *,
-        form_error: str | None = None,
-        invite_form: InviteForm | None = None,
-    ) -> dict[str, Any]:
-        owner_like = self.acting_user_is_owner_like()
-        return {
-            "organization": self.get_organization(),
-            "memberships": self.get_memberships(),
-            "pending_invitations": self.get_pending_invitations(),
-            "actor_is_owner_like": owner_like,
-            "owner_role": OrgRole.OWNER,
-            "role_choices": RoleChangeForm.available_role_choices(
-                owner_like=owner_like
-            ),
-            "form_error": form_error,
-            "invite_form": invite_form or self.get_invite_form(),
-        }
-
-    def get_members_redirect(self) -> HttpResponse:
-        return redirect(
-            reverse(
-                "quickscale_orgs:members",
-                kwargs={"org_slug": self.get_organization().slug},
-            )
-        )
 
 
 class InvitationNotificationMixin:
@@ -753,108 +222,22 @@ class InvitationNotificationMixin:
         return _get_inviter_display_name(self.request.user)
 
 
-class MemberListView(
-    SaasModeRequiredMixin,
-    LoginRequiredMixin,
-    OrgRoleMixin,
-    MemberManagementContextMixin,
-    TemplateView,
-):
-    """List organization members and handle role changes or removals."""
+class OrgCreateView(SaasModeRequiredMixin, LoginRequiredMixin, FormView):
+    """Create a new organization and hand off to the next onboarding step."""
 
-    min_org_role = OrgRole.ADMIN
-    template_name = _MEMBERS_TEMPLATE_NAME
+    form_class = OrgCreateForm
+    template_name = "quickscale_orgs/org_create.html"
 
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        context = super().get_context_data(**kwargs)
-        context.update(
-            self.get_members_context(
-                form_error=cast(str | None, kwargs.get("form_error")),
-                invite_form=cast(InviteForm | None, kwargs.get("invite_form")),
-            )
-        )
-        return context
-
-    def post(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> HttpResponse:
-        organization = self.get_organization()
-        try:
-            membership_id = int(request.POST["membership_id"])
-        except KeyError, TypeError, ValueError:
-            context = self.get_context_data(form_error="Invalid member selection.")
-            return self.render_to_response(context, status=400)
-
-        membership_pk_lower_bound, membership_pk_upper_bound = (
-            connection.ops.integer_field_range(
-                OrganizationMembership._meta.pk.get_internal_type()
-            )
-        )
-        if (
-            membership_pk_lower_bound is not None
-            and membership_id < membership_pk_lower_bound
-        ) or (
-            membership_pk_upper_bound is not None
-            and membership_id > membership_pk_upper_bound
-        ):
-            context = self.get_context_data(form_error="Invalid member selection.")
-            return self.render_to_response(context, status=400)
-
-        membership = get_object_or_404(
-            OrganizationMembership.objects.select_related("user"),
-            pk=membership_id,
-            organization=organization,
-        )
-        action = request.POST.get("action")
-
-        if action == "change-role":
-            form = RoleChangeForm(
-                request.POST,
-                target_membership=membership,
-                acting_membership=self.get_acting_membership(),
-                acting_user_is_superuser=getattr(request.user, "is_superuser", False),
-            )
-            if not form.is_valid():
-                error = form.errors.get("role", ["Unable to update role."])[0]
-                context = self.get_context_data(form_error=error)
-                return self.render_to_response(context, status=400)
-            try:
-                form.save()
-            except ValidationError as error:
-                context = self.get_context_data(
-                    form_error=_first_error_message(
-                        error,
-                        fallback="Unable to update role.",
-                    )
-                )
-                return self.render_to_response(context, status=400)
-        elif action == "remove":
-            if OrganizationMembership.is_last_owner_with_members(
-                user=membership.user,
-                organization=organization,
-            ):
-                context = self.get_context_data(
-                    form_error="You cannot remove the last owner."
-                )
-                return self.render_to_response(context, status=400)
-            try:
-                membership.delete()
-            except ValidationError as error:
-                context = self.get_context_data(
-                    form_error=_first_error_message(
-                        error,
-                        fallback="You cannot remove the last owner.",
-                    )
-                )
-                return self.render_to_response(context, status=400)
-        else:
-            context = self.get_context_data(form_error="Unknown member action.")
-            return self.render_to_response(context, status=400)
-
-        return self.get_members_redirect()
+    def form_valid(self, form: OrgCreateForm) -> HttpResponse:
+        organization = form.save(user=self.request.user)
+        # The handoff lands on a flat billing route, which TenantMiddleware
+        # resolves from the session, so record the new organization as active
+        # before redirecting; solo mode ignores the key.
+        self.request.session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
+        next_url = _org_creation_redirect_urls(organization)["next_url"]
+        # ``next_url`` is always a string: the helper falls back to the
+        # canonical org detail path when no module declares a handoff.
+        return redirect(cast(str, next_url))
 
 
 class InviteView(
@@ -903,66 +286,6 @@ class InviteView(
             return self.form_invalid(form)
 
         return self.get_members_redirect()
-
-
-class RevokeInvitationView(
-    SaasModeRequiredMixin,
-    LoginRequiredMixin,
-    OrgRoleMixin,
-    MemberManagementContextMixin,
-    View,
-):
-    """Revoke an active pending organization invitation from the admin surface."""
-
-    min_org_role = OrgRole.ADMIN
-
-    def post(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> HttpResponse:
-        del request, args
-        invitation = get_object_or_404(
-            self.get_pending_invitations(),
-            pk=kwargs["invitation_id"],
-            organization=self.get_organization(),
-        )
-        invitation.delete()
-        return self.get_members_redirect()
-
-
-class OrgSettingsView(
-    SaasModeRequiredMixin,
-    LoginRequiredMixin,
-    OrgRoleMixin,
-    OrganizationContextMixin,
-    FormView,
-):
-    """Update the active organization's display name and slug."""
-
-    form_class = OrgSettingsForm
-    min_org_role = OrgRole.ADMIN
-    template_name = "quickscale_orgs/settings.html"
-
-    def get_form_kwargs(self) -> dict[str, Any]:
-        kwargs = super().get_form_kwargs()
-        kwargs["instance"] = self.get_organization()
-        return kwargs
-
-    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
-        context = super().get_context_data(**kwargs)
-        context["organization"] = self.get_organization()
-        return context
-
-    def form_valid(self, form: OrgSettingsForm) -> HttpResponse:
-        organization = form.save()
-        return redirect(
-            reverse(
-                "quickscale_orgs:settings",
-                kwargs={"org_slug": organization.slug},
-            )
-        )
 
 
 class OrgApiListCreateView(OrgApiBaseView):
@@ -1021,79 +344,6 @@ class OrgApiListCreateView(OrgApiBaseView):
         )
 
 
-class OrgApiDetailView(OrgApiBaseView):
-    """Return JSON metadata for the active organization."""
-
-    min_org_role = OrgRole.VIEWER
-
-    def get(
-        self,
-        request: Request,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Response:
-        del request, args, kwargs
-        organization = self.get_organization()
-        acting_membership = self.get_acting_membership()
-        return Response(
-            {
-                "organization": _serialize_organization(
-                    organization,
-                    role=(
-                        None if acting_membership is None else acting_membership.role
-                    ),
-                    member_count=OrganizationMembership.objects.filter(
-                        organization=organization,
-                    ).count(),
-                ),
-                "actor": {
-                    "role": (
-                        None if acting_membership is None else acting_membership.role
-                    ),
-                    "is_owner_like": self.acting_user_is_owner_like(),
-                },
-            }
-        )
-
-
-class OrgApiMembersView(OrgApiBaseView, MemberManagementContextMixin):
-    """Return JSON members and pending invitations for org admins."""
-
-    min_org_role = OrgRole.ADMIN
-
-    def get(
-        self,
-        request: Request,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Response:
-        del request, args, kwargs
-        owner_like = self.acting_user_is_owner_like()
-        acting_membership = self.get_acting_membership()
-        return Response(
-            {
-                "organization": _serialize_organization(self.get_organization()),
-                "actor": {
-                    "role": (
-                        None if acting_membership is None else acting_membership.role
-                    ),
-                    "is_owner_like": owner_like,
-                },
-                "members": [
-                    _serialize_membership(membership)
-                    for membership in self.get_memberships()
-                ],
-                "pending_invitations": [
-                    _serialize_invitation(invitation)
-                    for invitation in self.get_pending_invitations()
-                ],
-                "role_choices": _serialize_role_choices(
-                    RoleChangeForm.available_role_choices(owner_like=owner_like)
-                ),
-            }
-        )
-
-
 class OrgApiInviteView(
     InvitationNotificationMixin,
     OrgApiBaseView,
@@ -1124,122 +374,6 @@ class OrgApiInviteView(
             {"invitation": _serialize_invitation(invitation)},
             status=201,
         )
-
-
-class OrgApiMemberRoleView(OrgApiBaseView, MemberManagementContextMixin):
-    """Update a member role from a JSON payload."""
-
-    min_org_role = OrgRole.ADMIN
-
-    def post(
-        self,
-        request: Request,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Response:
-        del args
-        payload = self.get_json_payload(request)
-
-        try:
-            membership = self.get_membership_for_action(kwargs["membership_id"])
-        except ValidationError as error:
-            raise DRFValidationError(_validation_error_data(error)) from error
-        except Http404 as error:
-            raise NotFound("Member not found") from error
-
-        form = RoleChangeForm(
-            payload,
-            target_membership=membership,
-            acting_membership=self.get_acting_membership(),
-            acting_user_is_superuser=getattr(request.user, "is_superuser", False),
-        )
-        if not form.is_valid():
-            raise DRFValidationError(_form_error_data(form))
-
-        try:
-            updated_membership = form.save()
-        except ValidationError as error:
-            raise DRFValidationError(_validation_error_data(error)) from error
-        return Response({"member": _serialize_membership(updated_membership)})
-
-
-class OrgApiMemberRemoveView(OrgApiBaseView, MemberManagementContextMixin):
-    """Remove an organization member."""
-
-    min_org_role = OrgRole.ADMIN
-
-    def post(
-        self,
-        request: Request,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Response:
-        del request, args
-        try:
-            membership = self.get_membership_for_action(kwargs["membership_id"])
-        except ValidationError as error:
-            raise DRFValidationError(_validation_error_data(error)) from error
-        except Http404 as error:
-            raise NotFound("Member not found") from error
-
-        if OrganizationMembership.is_last_owner_with_members(
-            user=membership.user,
-            organization=self.get_organization(),
-        ):
-            raise DRFValidationError(
-                {"non_field_errors": ["You cannot remove the last owner."]}
-            )
-
-        removed_member_id = membership.pk
-        try:
-            membership.delete()
-        except ValidationError as error:
-            raise DRFValidationError(_validation_error_data(error)) from error
-        return Response({"status": "removed", "member_id": removed_member_id})
-
-
-class OrgApiRevokeInvitationView(OrgApiBaseView, MemberManagementContextMixin):
-    """Revoke an active pending organization invitation."""
-
-    min_org_role = OrgRole.ADMIN
-
-    def post(
-        self,
-        request: Request,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Response:
-        del request, args
-        invitation = get_object_or_404(
-            self.get_pending_invitations(),
-            pk=kwargs["invitation_id"],
-            organization=self.get_organization(),
-        )
-        invitation_id = str(invitation.pk)
-        invitation.delete()
-        return Response({"status": "revoked", "invitation_id": invitation_id})
-
-
-class OrgApiSettingsView(OrgApiBaseView):
-    """Update the active organization's display name and slug from JSON."""
-
-    min_org_role = OrgRole.ADMIN
-
-    def post(
-        self,
-        request: Request,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Response:
-        del args, kwargs
-        payload = self.get_json_payload(request)
-
-        form = OrgSettingsForm(payload, instance=self.get_organization())
-        if not form.is_valid():
-            raise DRFValidationError(_form_error_data(form))
-
-        organization = form.save()
-        return Response({"organization": _serialize_organization(organization)})
 
 
 org_index_view = OrgListView.as_view()

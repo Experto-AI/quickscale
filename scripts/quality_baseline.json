@@ -22,14 +22,14 @@
         "symbol": "up",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/dr_commands.py::_build_env_sync_plan": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/dr_commands.py",
+      "quickscale_cli/src/quickscale_cli/commands/_dr_env_sync.py::_build_env_sync_plan": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_dr_env_sync.py",
         "max_complexity": 14,
         "symbol": "_build_env_sync_plan",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/dr_commands.py::_resolve_execute_surface_selection": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/dr_commands.py",
+      "quickscale_cli/src/quickscale_cli/commands/_dr_report.py::_resolve_execute_surface_selection": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_dr_report.py",
         "max_complexity": 11,
         "symbol": "_resolve_execute_surface_selection",
         "type": "function"
@@ -387,54 +387,6 @@
         "max_complexity": 20,
         "symbol": "create_published_listing_from_payload",
         "type": "function"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py::get_client_ip": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py",
-        "max_complexity": 13,
-        "symbol": "get_client_ip",
-        "type": "function"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py::Command": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py",
-        "max_complexity": 16,
-        "symbol": "Command",
-        "type": "class"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py::Command.handle": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_check_tenant_isolation.py",
-        "max_complexity": 42,
-        "symbol": "Command.handle",
-        "type": "method"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py::Command": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py",
-        "max_complexity": 11,
-        "symbol": "Command",
-        "type": "class"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py::_personal_slug_bases": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_promote_to_saas.py",
-        "max_complexity": 11,
-        "symbol": "_personal_slug_bases",
-        "type": "function"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_purge_organization.py::Command.handle": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_purge_organization.py",
-        "max_complexity": 11,
-        "symbol": "Command.handle",
-        "type": "method"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/managers.py::OrganizationManager.create_personal_for": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/managers.py",
-        "max_complexity": 16,
-        "symbol": "OrganizationManager.create_personal_for",
-        "type": "method"
-      },
-      "quickscale_modules/orgs/src/quickscale_modules_orgs/views.py::MemberListView.post": {
-        "file": "quickscale_modules/orgs/src/quickscale_modules_orgs/views.py",
-        "max_complexity": 12,
-        "symbol": "MemberListView.post",
-        "type": "method"
       },
       "quickscale_modules/social/src/quickscale_modules_social/_contracts.py::get_social_runtime_settings": {
         "file": "quickscale_modules/social/src/quickscale_modules_social/_contracts.py",

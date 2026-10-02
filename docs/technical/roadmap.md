@@ -196,7 +196,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `_account_deletion_*.py` modules, and a shared `_logging.py` seam, every file under 800 lines,
   with its `form_valid`, `_reconcile_removal_provider_state`, and `_account_deletion_handlers`
   below the CC 11 ceiling and its rule 34 boundary wiring, patch seams, and log channel kept on
-  the facade. The remaining modules and the closing gate batch remain, the gate waiting on SA232.
+  the facade. Orgs' `tenancy.py`, `current_org.py`, `removal.py`, `checks.py`, and `views.py` are
+  re-exporting facades over focused private siblings, and the purge command moves its plan and
+  support helpers behind its boundary-checked `Command.handle`; every orgs source file is under 800
+  lines, all eleven orgs complexity regressions and the package's eight accepted entries are
+  resolved, and the baseline drops those keys plus waivers W006–W010 while the existing orgs suite
+  passes unchanged. No Track 1 module file reaches 800 lines; the closing gate batch remains, the
+  gate waiting on SA232.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
@@ -235,6 +241,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `_plan_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
   test patch target still resolves through the facade. Its two accepted complexity entries are
   re-keyed with rename waivers; the pre-existing plan-command complexity regressions are unchanged.
+
+  **Landed (CLI slice, fourth file):** `dr_commands.py` is a facade over four private
+  `_dr_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
+  test patch target still resolves through the facade. Its two accepted complexity entries are
+  re-keyed with rename waivers; its remaining accepted entry, `execute`, is unchanged.
   The remaining CLI files and the `dr_engine` slice remain.
 
   **Scope:** SA231's rules, one package-sized slice at a time through the serialized merge queue:

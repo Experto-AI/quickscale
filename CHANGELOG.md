@@ -389,6 +389,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     module stays the import path every caller uses and re-exports its full former surface, while
     its new-project, add-module, reconfigure, and existing-project validation logic live in focused
     private sibling modules.
+  - **DR commands keep their import surface while the implementation splits.** The DR command
+    module stays the import path every caller uses and re-exports its full former surface, while
+    its route/context assembly, adapter bridge, environment-sync, and report logic live in focused
+    private sibling modules.
   - **Modules answer whether they are enabled and declare what they use.** Every module publishes
     `services.is_enabled()` for its own `QUICKSCALE_<MODULE>_ENABLED` setting, and each manifest's
     `required_modules` lists every module its code references. `plan`/`apply` therefore install
@@ -414,6 +418,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     guard, provider reconciliation, handler plumbing, and tenant-reference helpers live in focused
     modules re-exported from `views.py`, with the declared removal boundary, its capability and
     app-config patch seams, and its log channel unchanged.
+  - **Orgs internals are split behind unchanged import surfaces.** The tenancy, current-org,
+    removal, system-check, view, and purge-command helpers live in focused private modules
+    re-exported from their original paths, and the module's remaining functions sit below the
+    recorded complexity ceilings, so importers, test patch targets, and the purge boundary check
+    are unaffected.
   - **Module packages follow one file-name convention.** One-off helper files move under private
     names (`quickscale_modules_orgs._constants`, `quickscale_modules_social._contracts`,
     `quickscale_modules_storage._helpers`), analytics no longer ships an event-vocabulary file,
