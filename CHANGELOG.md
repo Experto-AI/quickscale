@@ -393,6 +393,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     module stays the import path every caller uses and re-exports its full former surface, while
     its route/context assembly, adapter bridge, environment-sync, and report logic live in focused
     private sibling modules.
+  - **Status, deployment, and Railway utility modules keep their import surfaces while the
+    implementations split.** `status_command.py`, `deployment_commands.py`, `railway_utils.py`, and
+    `module_dependency_sync.py` stay the import paths every caller uses and re-export their full
+    former surfaces, while status context/diagnostics/display, deploy pre-flight/service
+    configuration, Railway CLI/project helpers, and dependency TOML reading, writing, and sync
+    logic live in focused private sibling modules.
   - **Modules answer whether they are enabled and declare what they use.** Every module publishes
     `services.is_enabled()` for its own `QUICKSCALE_<MODULE>_ENABLED` setting, and each manifest's
     `required_modules` lists every module its code references. `plan`/`apply` therefore install

@@ -1,938 +1,102 @@
-"""Status command for showing project state
+"""Status command for showing project state.
 
-Implements `quickscale status` - displays current vs desired state and project info
+Implements `quickscale status` — displays current vs desired state and project
+info.
+
+The implementation lives in private sibling modules grouped by concern
+(``_status_context``, ``_status_diagnostics``, ``_status_display``); this
+module owns the public command surface and re-exports every name that
+previously lived here (Module Conventions rule 28), so existing
+``quickscale_cli.commands.status_command`` imports and test patch targets keep
+working unchanged.
 """
 
-import subprocess
-from pathlib import Path
+from __future__ import annotations
 
-import click
-import yaml
+import subprocess as subprocess
+from pathlib import Path as Path
+
+import click as click
+import yaml as yaml
 
 from quickscale_core.contracts.module_catalog import (
-    find_not_ready_modules,
-    get_module_readiness_reason,
+    find_not_ready_modules as find_not_ready_modules,
+    get_module_readiness_reason as get_module_readiness_reason,
 )
 from quickscale_core.schema.config_schema import (
-    ConfigValidationError,
-    QuickScaleConfig,
-    validate_config,
+    ConfigValidationError as ConfigValidationError,
+    QuickScaleConfig as QuickScaleConfig,
+    validate_config as validate_config,
 )
-from quickscale_core.schema.delta import compute_delta, format_delta
+from quickscale_core.schema.delta import (
+    compute_delta as compute_delta,
+    format_delta as format_delta,
+)
 from quickscale_core.schema.state_schema import (
-    QuickScaleState,
-    StateError,
-    StateManager,
+    QuickScaleState as QuickScaleState,
+    StateError as StateError,
+    StateManager as StateManager,
 )
-from quickscale_core.config import ConfigError
+from quickscale_core.config import ConfigError as ConfigError
 from quickscale_core.contracts.module_discovery import (
-    ModulePresenceRecord,
-    ModulePresenceState,
-    discover_module_presence,
+    ModulePresenceRecord as ModulePresenceRecord,
+    ModulePresenceState as ModulePresenceState,
+    discover_module_presence as discover_module_presence,
 )
-from quickscale_core.manifest import ModuleManifest
-from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
+from quickscale_core.manifest import ModuleManifest as ModuleManifest
+from quickscale_core.manifest.loader import (
+    ManifestError as ManifestError,
+    get_manifest_for_module as get_manifest_for_module,
+)
 from quickscale_core.project_state import (
-    FILE_HASHES_FILENAME,
-    ProjectStateManager,
-    check_version_drift,
+    FILE_HASHES_FILENAME as FILE_HASHES_FILENAME,
+    ProjectStateManager as ProjectStateManager,
+    check_version_drift as check_version_drift,
 )
 from quickscale_cli.commands.contract_vintage import (
-    check_contract_vintage as _check_contract_vintage,
-    load_declared_project_steps,
-    load_shipped_contract_manifests,
+    check_contract_vintage as _check_contract_vintage,  # noqa: F401 - private seam re-exported for callers and patchers
+    load_declared_project_steps as load_declared_project_steps,
+    load_shipped_contract_manifests as load_shipped_contract_manifests,
 )
-
-
-def _get_docker_status() -> dict[str, str] | None:
-    """Get Docker container status if running
-
-    Returns:
-        Dictionary with container names and status, or None if Docker not available
-
-    """
-    try:
-        result = subprocess.run(
-            ["docker", "compose", "ps", "--format", "{{.Name}}: {{.Status}}"],  # noqa: S607 - PATH-resolved executable by design
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            status = {}
-            for line in result.stdout.strip().splitlines():
-                if ": " in line:
-                    name, state = line.split(": ", 1)
-                    status[name] = state
-            return status if status else None
-    except FileNotFoundError:
-        pass
-    return None
-
-
-def _format_datetime(iso_string: str) -> str:
-    """Format ISO datetime string for display"""
-    try:
-        from datetime import datetime
-
-        dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
-        return dt.strftime("%Y-%m-%d %H:%M")
-    except ValueError, TypeError:
-        return iso_string
-
-
-def _detect_project_context() -> tuple[Path | None, Path | None, Path | None]:
-    """Detect project context from current directory
-
-    Returns:
-        Tuple of (project_path, config_path, state_path) - any may be None
-
-    """
-    cwd = Path.cwd()
-
-    # Check for quickscale.yml in current directory
-    config_path = cwd / "quickscale.yml"
-    state_path = cwd / ".quickscale" / "state.yml"
-
-    if config_path.exists() or state_path.exists():
-        return (
-            cwd,
-            config_path if config_path.exists() else None,
-            state_path if state_path.exists() else None,
-        )
-
-    # Not in a QuickScale project
-    return None, None, None
-
-
-def _load_config(config_path: Path) -> QuickScaleConfig | None:
-    """Load and validate quickscale.yml"""
-    yaml_content = config_path.read_text()
-    return validate_config(yaml_content)
-
-
-def _load_module_manifests(
-    project_path: Path,
-    module_names: list[str],
-    *,
-    strict: bool = False,
-) -> dict[str, ModuleManifest]:
-    """Load manifests for installed modules
-
-    Args:
-        project_path: Path to the project root
-        module_names: List of module names to load manifests for
-
-    Returns:
-        Dictionary mapping module names to their manifests
-
-    """
-    manifests: dict[str, ModuleManifest] = {}
-    for module_name in module_names:
-        manifest = get_manifest_for_module(project_path, module_name, strict=strict)
-        if manifest:
-            manifests[module_name] = manifest
-    return manifests
-
-
-def _discover_project_module_presence(
-    project_path: Path,
-    module_names: list[str],
-) -> list[ModulePresenceRecord]:
-    """Capture typed filesystem presence for state-owned modules."""
-    return discover_module_presence(
-        base_path=project_path / "modules",
-        expected_names=module_names,
-    )
-
-
-def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> None:
-    """Abort status when non-public-ready modules appear in config or applied state."""
-    not_ready = find_not_ready_modules(module_names)
-    if not not_ready:
-        return
-
-    click.secho(
-        f"\n❌ Unsupported non-public-ready module state detected in {source}:",
-        fg="red",
-        err=True,
-        bold=True,
-    )
-    for module_name in not_ready:
-        reason = get_module_readiness_reason(module_name)
-        if reason is not None:
-            click.echo(f"  • {reason}", err=True)
-
-    guidance = (
-        "\n💡 Resolve the non-public-ready module state above before running "
-        "'quickscale status' again."
-    )
-
-    click.echo(guidance, err=True)
-    raise click.Abort()
-
-
-def _abort_for_manifest_error(error: ManifestError) -> None:
-    """Abort status with an actionable manifest validation message."""
-    click.secho(
-        "\n❌ Installed module manifest error during 'status':",
-        fg="red",
-        err=True,
-        bold=True,
-    )
-    click.echo(f"  • {error}", err=True)
-    click.echo(
-        "\n💡 Fix the embedded module.yml or remove and re-embed the affected "
-        "module before running 'quickscale status' again.",
-        err=True,
-    )
-    raise click.Abort()
-
-
-def _display_project_info(state: QuickScaleState) -> None:
-    """Display project information from state"""
-    click.echo("\n📁 Project Information:")
-    click.echo(f"   Slug: {state.project.slug}")
-    click.echo(f"   Package: {state.project.package}")
-    click.echo(f"   Theme: {state.project.theme}")
-    click.echo(f"   Created: {_format_datetime(state.project.created_at)}")
-    click.echo(f"   Last Applied: {_format_datetime(state.project.last_applied)}")
-
-
-def _display_modules(state: QuickScaleState) -> None:
-    """Display applied modules from state"""
-    click.echo("\n📦 Applied Modules:")
-    if not state.modules:
-        click.echo("   (none)")
-        return
-
-    for name, module in state.modules.items():
-        version_str = f"v{module.version}" if module.version else "unknown"
-        embedded_at = (
-            _format_datetime(module.embedded_at) if module.embedded_at else "unknown"
-        )
-        click.echo(f"   • {name} ({version_str}) - embedded {embedded_at}")
-
-
-def _display_pending_changes(
-    config: QuickScaleConfig | None,
-    state: QuickScaleState | None,
-    manifests: dict[str, ModuleManifest] | None = None,
-) -> None:
-    """Display pending changes between config and state"""
-    if config is None:
-        return
-
-    delta = compute_delta(config, state, manifests)
-
-    if delta.has_changes:
-        click.echo("\n⚡ Pending Changes:")
-        change_summary = format_delta(delta)
-        for line in change_summary.splitlines():
-            click.echo(f"   {line}")
-        click.echo("\n💡 Run 'quickscale apply' to apply these changes")
-    else:
-        click.secho("\n✅ Configuration matches applied state", fg="green")
-
-
-def _display_docker_status() -> None:
-    """Display Docker container status if available"""
-    status = _get_docker_status()
-
-    if status is None:
-        return
-
-    click.echo("\n🐳 Docker Status:")
-    for name, state in status.items():
-        # Determine color based on status
-        if "Up" in state or "running" in state.lower():
-            color = "green"
-        elif "Exited" in state or "stopped" in state.lower():
-            color = "yellow"
-        else:
-            color = "white"
-        click.secho(f"   • {name}: {state}", fg=color)
-
-
-def _display_drift_warnings(state_manager: StateManager) -> None:
-    """Display warnings about state/filesystem drift"""
-    drift = state_manager.verify_filesystem()
-
-    if drift["orphaned_modules"]:
-        click.echo("\n⚠️  Orphaned Modules (in filesystem but not in state):")
-        for module in drift["orphaned_modules"]:
-            click.secho(f"   • {module}", fg="yellow")
-        click.echo("   These modules may have been manually added.")
-
-    if drift["missing_modules"]:
-        click.echo("\n⚠️  Missing Modules (in state but not in filesystem):")
-        for module in drift["missing_modules"]:
-            click.secho(f"   • {module}", fg="red")
-        click.echo("   These modules may have been manually removed.")
-
-
-def _display_managed_file_drift_warnings(
-    project_state_manager: ProjectStateManager,
-) -> None:
-    """Display warnings about managed wiring files that drifted since apply."""
-    drifted = project_state_manager.detect_managed_file_drift()
-    if not drifted:
-        return
-
-    click.echo("\n⚠️  Managed file drift detected (file changed since last apply):")
-    for record in drifted:
-        click.secho(
-            f"   • {record.path} (expected hash {record.hash[:12]}…)",
-            fg="yellow",
-        )
-    click.echo(
-        "   These managed files were modified after the last 'quickscale apply'. "
-        "Re-run apply to restore them, or commit your edits if they are intentional."
-    )
-
-
-def _display_version_drift_warnings(
-    project_state_manager: ProjectStateManager,
-) -> None:
-    """Display warnings about module version drift between state and config."""
-    try:
-        state = project_state_manager.load_state()
-        config = project_state_manager.load_config()
-    except (ConfigError, StateError, OSError) as error:
-        click.echo(
-            f"\n⚠️  Could not check version drift between .quickscale/state.yml "
-            f"and .quickscale/config.yml: {error}"
-        )
-        return
-
-    drift = check_version_drift(state, config)
-    if not drift:
-        return
-
-    click.echo(
-        "\n⚠️  Module version drift between .quickscale/state.yml and "
-        ".quickscale/config.yml:"
-    )
-    for warning in drift:
-        click.secho(f"   • {warning.message}", fg="yellow")
-    click.echo(
-        "   Apply will reconcile .quickscale/config.yml to the canonical state version."
-    )
-
-
-def _state_file_has_consolidated_sections(state_dir: Path) -> bool:
-    """Check whether ``state.yml`` on disk has consolidated sections.
-
-    Returns True when the state file exists and contains the
-    ``managed_files`` section, an explicit (even empty) ``modules`` key, or
-    modules with consolidated tracking fields
-    (``prefix``/``branch``/``installed_at``) — the same authoritative-state
-    markers ``ProjectStateManager`` uses.
-    """
-    state_file = state_dir / "state.yml"
-    if not state_file.exists():
-        return False
-    try:
-        with open(state_file) as handle:
-            data = yaml.safe_load(handle) or {}
-    except yaml.YAMLError, OSError:
-        return False
-
-    if not isinstance(data, dict):
-        return False
-
-    if "managed_files" in data:
-        return True
-
-    modules_data = data.get("modules")
-    if modules_data is not None and isinstance(modules_data, dict) and not modules_data:
-        # An explicit empty ``modules: {}`` key records "no modules tracked"
-        # authoritatively; legacy config.yml must not be read through (SA207).
-        return True
-
-    if isinstance(modules_data, dict):
-        for _name, info in modules_data.items():
-            if isinstance(info, dict) and (
-                "prefix" in info or "branch" in info or "installed_at" in info
-            ):
-                return True
-
-    return False
-
-
-def _legacy_files_present(state_dir: Path) -> list[str]:
-    """Return legacy state files that are present on disk."""
-    legacy_files: list[str] = []
-    config_yml = state_dir / "config.yml"
-    file_hashes_yml = state_dir / FILE_HASHES_FILENAME
-    if config_yml.exists():
-        legacy_files.append("config.yml")
-    if file_hashes_yml.exists():
-        legacy_files.append(FILE_HASHES_FILENAME)
-    return legacy_files
-
-
-def _module_tracking_diagnostics(
-    state: QuickScaleState | None,
-) -> tuple[int, int, list[str]]:
-    """Return total, consolidated, and incomplete module tracking values."""
-    modules = state.modules if state else {}
-    needing_consolidation = [
-        name for name, module in modules.items() if not module.has_consolidated_tracking
-    ]
-    total = len(modules)
-    return total, total - len(needing_consolidation), sorted(needing_consolidation)
-
-
-def _filesystem_drift_diagnostics(
-    project_path: Path,
-    state: QuickScaleState | None,
-    state_manager: StateManager,
-    presence_records: list[ModulePresenceRecord] | None,
-) -> dict[str, list[str]]:
-    """Return filesystem drift, including typed incomplete-module states."""
-    modules = state.modules if state else {}
-    fs_drift = state_manager.verify_filesystem()
-    records = presence_records
-    if records is None:
-        records = _discover_project_module_presence(project_path, list(modules))
-
-    state_module_names = set(modules)
-    incomplete = sorted(
-        record.name
-        for record in records
-        if record.name in state_module_names
-        and record.state is ModulePresenceState.INCOMPLETE
-    )
-    missing = sorted(
-        record.name
-        for record in records
-        if record.name in state_module_names
-        and record.state is ModulePresenceState.ABSENT
-    )
-    return {
-        "orphaned_modules": sorted(fs_drift.get("orphaned_modules", [])),
-        "missing_modules": missing,
-        "incomplete_modules": incomplete,
-    }
-
-
-def _version_drift_diagnostics(
-    project_state_manager: ProjectStateManager,
-) -> list[dict[str, object]]:
-    """Return serializable version drift diagnostics."""
-    try:
-        state = project_state_manager.load_state()
-        config = project_state_manager.load_config()
-    except ConfigError, StateError, OSError:
-        state = None
-        config = None
-
-    return [
-        {
-            "module": warning.module,
-            "state_version": warning.state_version,
-            "config_version": warning.config_version,
-        }
-        for warning in check_version_drift(state, config)
-    ]
-
-
-def _compute_drift_diagnostics(
-    project_path: Path,
-    state: QuickScaleState | None,
-    project_state_manager: ProjectStateManager,
-    state_manager: StateManager,
-    manifests: dict[str, ModuleManifest] | None = None,
-    presence_records: list[ModulePresenceRecord] | None = None,
-    contract_manifests: dict[str, ModuleManifest] | None = None,
-) -> dict:
-    """Compute M2 drift and compatibility diagnostics.
-
-    Returns a dictionary suitable for both text display and JSON serialization.
-    The diagnostics cover:
-
-    * ``state_consolidated`` — whether ``state.yml`` on disk carries the
-      consolidated sections (``managed_files`` or module tracking fields).
-    * ``legacy_files_present`` — which legacy files exist on disk.
-    * ``legacy_compat_active`` — whether read-through import from legacy
-      files is active (consolidated sections absent and legacy files present).
-    * ``module_tracking`` — per-module consolidated tracking status.
-    * ``managed_files_consolidated`` — whether the ``managed_files`` section
-      is populated in state.
-    * ``filesystem_drift`` — orphaned, missing, and incomplete modules.
-    * ``managed_file_drift`` — managed files that drifted since last apply.
-    * ``version_drift`` — version disagreements between state and config.
-    """
-    state_dir = project_path / ".quickscale"
-    consolidated_on_disk = _state_file_has_consolidated_sections(state_dir)
-
-    # Check which legacy files exist on disk.
-    legacy_files_present = _legacy_files_present(state_dir)
-
-    legacy_compat_active = (not consolidated_on_disk) and bool(legacy_files_present)
-
-    # Module tracking completeness.
-    (
-        module_tracking_total,
-        module_tracking_consolidated,
-        modules_needing_consolidation,
-    ) = _module_tracking_diagnostics(state)
-
-    # Filesystem drift (orphaned/missing/incomplete modules).
-    filesystem_drift = _filesystem_drift_diagnostics(
-        project_path,
-        state,
-        state_manager,
-        presence_records,
-    )
-
-    # Managed files consolidation.
-    managed_files_consolidated = bool(state and state.managed_files)
-
-    # Managed file drift.
-    managed_drift_records = project_state_manager.detect_managed_file_drift()
-    managed_file_drift = [
-        {"path": r.path, "expected_hash": r.hash} for r in managed_drift_records
-    ]
-
-    # Version drift between state and config.
-    version_drift = _version_drift_diagnostics(project_state_manager)
-
-    # SA10.2: contract-vintage check.
-    project_contract = state.project.project_contract if state else None
-    vintage_manifests = (
-        contract_manifests if contract_manifests is not None else manifests
-    )
-    contract_vintage = _check_contract_vintage(
-        project_contract,
-        vintage_manifests,
-        project_steps=load_declared_project_steps(),
-        adopted_steps=(
-            state.project.adopted_contract_steps if state is not None else None
-        ),
-    )
-    contract_vintage["has_state"] = state is not None
-
-    return {
-        "state_consolidated": consolidated_on_disk,
-        "legacy_files_present": legacy_files_present,
-        "legacy_compat_active": legacy_compat_active,
-        "module_tracking": {
-            "total": module_tracking_total,
-            "consolidated": module_tracking_consolidated,
-            "needs_consolidation": sorted(modules_needing_consolidation),
-        },
-        "managed_files_consolidated": managed_files_consolidated,
-        "filesystem_drift": {
-            "orphaned_modules": filesystem_drift["orphaned_modules"],
-            "missing_modules": filesystem_drift["missing_modules"],
-            "incomplete_modules": filesystem_drift["incomplete_modules"],
-        },
-        "managed_file_drift": managed_file_drift,
-        "version_drift": version_drift,
-        "contract_vintage": contract_vintage,
-    }
-
-
-def _display_state_consolidation(diagnostics: dict) -> None:
-    """Display state-consolidation and legacy-file diagnostics."""
-    if diagnostics["state_consolidated"]:
-        click.secho("   State consolidation: ✅ consolidated", fg="green")
-    else:
-        click.secho(
-            "   State consolidation: ⚠️  legacy mode (read-through import active)",
-            fg="yellow",
-        )
-
-    # Legacy files on disk.
-    legacy = diagnostics["legacy_files_present"]
-    if legacy:
-        if diagnostics["legacy_compat_active"]:
-            click.secho(
-                f"   Legacy files on disk: {', '.join(legacy)} (active compatibility inputs)",
-                fg="yellow",
-            )
-        else:
-            click.echo(
-                f"   Legacy files on disk: {', '.join(legacy)} (ignored — consolidated)"
-            )
-    else:
-        click.echo("   Legacy files on disk: none")
-
-
-def _display_module_tracking(diagnostics: dict) -> None:
-    """Display module tracking completeness."""
-    mt = diagnostics["module_tracking"]
-    if mt["total"] == 0:
-        click.echo("   Module tracking: (no modules)")
-    elif mt["needs_consolidation"]:
-        click.secho(
-            f"   Module tracking: {mt['consolidated']}/{mt['total']} consolidated"
-            f" — needs consolidation: {', '.join(mt['needs_consolidation'])}",
-            fg="yellow",
-        )
-    else:
-        click.secho(
-            f"   Module tracking: {mt['consolidated']}/{mt['total']} fully consolidated",
-            fg="green",
-        )
-
-
-def _display_managed_files(diagnostics: dict) -> None:
-    """Display managed-file consolidation status."""
-    if diagnostics["managed_files_consolidated"]:
-        click.secho("   Managed files: ✅ consolidated in state.yml", fg="green")
-        return
-    legacy_hashes_present = FILE_HASHES_FILENAME in diagnostics["legacy_files_present"]
-    if legacy_hashes_present and diagnostics["legacy_compat_active"]:
-        click.secho(
-            f"   Managed files: ⚠️  using legacy {FILE_HASHES_FILENAME}",
-            fg="yellow",
-        )
-    elif legacy_hashes_present:
-        click.secho(
-            f"   Managed files: no records (legacy {FILE_HASHES_FILENAME} ignored)",
-            fg="yellow",
-        )
-    else:
-        click.echo("   Managed files: no records")
-
-
-def _display_filesystem_drift(diagnostics: dict) -> None:
-    """Display typed filesystem drift diagnostics."""
-    fs = diagnostics["filesystem_drift"]
-    orphaned = fs["orphaned_modules"]
-    missing = fs["missing_modules"]
-    incomplete = fs.get("incomplete_modules", [])
-    if not orphaned and not missing and not incomplete:
-        click.secho("   Filesystem drift: ✅ clean", fg="green")
-    else:
-        parts: list[str] = []
-        if orphaned:
-            parts.append(f"{len(orphaned)} orphaned ({', '.join(orphaned)})")
-        if missing:
-            parts.append(f"{len(missing)} missing ({', '.join(missing)})")
-        if incomplete:
-            parts.append(f"{len(incomplete)} incomplete ({', '.join(incomplete)})")
-        click.secho(f"   Filesystem drift: ⚠️  {'; '.join(parts)}", fg="yellow")
-
-    if incomplete:
-        click.echo(
-            "\n⚠️  Incomplete Modules (directory present but module.yml missing):"
-        )
-        for module in incomplete:
-            click.secho(f"   • {module}", fg="yellow")
-        click.echo(
-            "   These modules need a valid module.yml before they can be applied."
-        )
-
-
-def _display_managed_file_drift(diagnostics: dict) -> None:
-    """Display managed-file content drift."""
-    mf_drift = diagnostics["managed_file_drift"]
-    if not mf_drift:
-        click.secho("   Managed file drift: ✅ clean", fg="green")
-    else:
-        paths = ", ".join(r["path"] for r in mf_drift)
-        click.secho(
-            f"   Managed file drift: ⚠️  {len(mf_drift)} drifted ({paths})",
-            fg="yellow",
-        )
-
-
-def _display_version_drift(diagnostics: dict) -> None:
-    """Display module-version drift."""
-    vd = diagnostics["version_drift"]
-    if not vd:
-        click.secho("   Version drift: ✅ clean", fg="green")
-    else:
-        modules_str = ", ".join(w["module"] for w in vd)
-        click.secho(
-            f"   Version drift: ⚠️  {len(vd)} disagreement(s) ({modules_str})",
-            fg="yellow",
-        )
-
-
-def _display_contract_vintage(diagnostics: dict) -> None:
-    """Display contract-vintage diagnostics."""
-    cv = diagnostics.get("contract_vintage", {})
-    module_count = cv.get("module_count", 0)
-    behind_count = cv.get("modules_behind_count", 0)
-    modules_behind = cv.get("modules_behind", [])
-    project_step_count = cv.get("project_step_count", 0)
-    project_steps_behind = cv.get("project_steps_behind", [])
-    project_contract = cv.get("project_contract")
-
-    click.echo("")
-    click.secho("🏛️  Contract Vintage:", bold=True)
-
-    if project_contract is None:
-        has_state = cv.get("has_state", True)
-        if has_state:
-            msg = "   Project contract: unknown (legacy project — pre-v0.87.0)"
-        else:
-            msg = "   Project contract: unknown (no state yet — run 'quickscale apply')"
-        click.secho(msg, fg="yellow")
-    else:
-        click.echo(f"   Project contract: {project_contract}")
-
-    if project_step_count == 0:
-        click.echo("   Generated-project contract steps: none declared")
-    elif not project_steps_behind:
-        click.secho(
-            f"   Generated-project contract steps: {project_step_count}/"
-            f"{project_step_count} satisfied ✅",
-            fg="green",
-        )
-    else:
-        click.secho(
-            f"   Generated-project contract steps: "
-            f"{project_step_count - len(project_steps_behind)}/{project_step_count}"
-            f" satisfied — {len(project_steps_behind)} step(s) behind ⚠️",
-            fg="yellow",
-        )
-        for entry in project_steps_behind:
-            click.secho(
-                f"\n   • generated project ({entry['id']}) requires"
-                f" project_contract >= {entry['minimum']}",
-                fg="yellow",
-            )
-            if entry.get("title"):
-                click.echo(f"     {entry['title']}")
-            for step in entry.get("manual_adoption_steps", []):
-                click.echo(f"     {step}")
-
-    if module_count == 0:
-        click.echo("   Module vintage requirements: none declared")
-    elif behind_count == 0:
-        click.secho(
-            f"   Module vintage: {module_count}/{module_count} satisfied ✅",
-            fg="green",
-        )
-    else:
-        click.secho(
-            f"   Module vintage: {module_count - behind_count}/{module_count}"
-            f" satisfied — {behind_count} module(s) behind ⚠️",
-            fg="yellow",
-        )
-        for entry in modules_behind:
-            click.secho(
-                f"\n   • {entry['module']} requires project_contract"
-                f" >= {entry['minimum']}",
-                fg="yellow",
-            )
-            steps = entry.get("manual_adoption_steps", [])
-            for step in steps:
-                click.echo(f"     {step}")
-
-
-def _display_drift_diagnostics(diagnostics: dict) -> None:
-    """Display M2 drift and compatibility diagnostics in text format."""
-    click.echo("\n🔍 M2 Drift & Compatibility:")
-    _display_state_consolidation(diagnostics)
-    _display_module_tracking(diagnostics)
-    _display_managed_files(diagnostics)
-    _display_filesystem_drift(diagnostics)
-    _display_managed_file_drift(diagnostics)
-    _display_version_drift(diagnostics)
-    _display_contract_vintage(diagnostics)
-
-
-def _build_json_output(
-    project_path: Path,
-    config_path: Path | None,
-    state: QuickScaleState | None,
-    config: QuickScaleConfig | None,
-    manifests: dict[str, ModuleManifest] | None = None,
-    drift_diagnostics: dict | None = None,
-) -> dict:
-    """Build JSON output for status command."""
-
-    output: dict = {
-        "project_path": str(project_path),
-        "has_config": config_path is not None and config_path.exists(),
-        "has_state": state is not None,
-    }
-
-    if state:
-        output["state"] = {
-            "version": state.version,
-            "project": {
-                "slug": state.project.slug,
-                "package": state.project.package,
-                "theme": state.project.theme,
-                "created_at": state.project.created_at,
-                "last_applied": state.project.last_applied,
-            },
-            "modules": {
-                name: {
-                    "version": module.version,
-                    "commit_sha": module.commit_sha,
-                    "embedded_at": module.embedded_at,
-                }
-                for name, module in state.modules.items()
-            },
-        }
-
-    if config:
-        output["config"] = {
-            "version": config.version,
-            "project": {
-                "slug": config.project.slug,
-                "package": config.project.package,
-                "theme": config.project.theme,
-            },
-            "modules": list(config.modules.keys()),
-            "docker": {
-                "start": config.docker.start,
-                "build": config.docker.build,
-            },
-        }
-
-        delta = compute_delta(config, state, manifests)
-        output["pending_changes"] = {
-            "has_changes": delta.has_changes,
-            "modules_to_add": delta.modules_to_add,
-            "modules_to_remove": delta.modules_to_remove,
-            "modules_unchanged": delta.modules_unchanged,
-            "theme_changed": delta.theme_changed,
-        }
-
-    docker_status = _get_docker_status()
-    if docker_status:
-        output["docker"] = docker_status
-
-    # Phase 4: include explicit drift/compatibility diagnostics.
-    if drift_diagnostics is not None:
-        output["drift"] = drift_diagnostics
-
-    return output
-
-
-def _display_text_status(
-    project_path: Path,
-    state: QuickScaleState | None,
-    config: QuickScaleConfig | None,
-    config_path: Path | None,
-    state_path: Path | None,
-    state_manager: StateManager,
-    project_state_manager: ProjectStateManager,
-    manifests: dict[str, ModuleManifest] | None = None,
-    drift_diagnostics: dict | None = None,
-) -> None:
-    """Display status in text format."""
-    # Display header
-    click.echo("\n🔍 QuickScale Project Status")
-    click.echo("=" * 40)
-
-    # Handle case where neither state nor config exists
-    if state is None and config is None:
-        click.secho("\n⚠️  No state or configuration found", fg="yellow")
-        click.echo("   This might be a new or corrupted project.")
-        if config_path:
-            click.echo(f"\n   Expected config: {config_path}")
-        if state_path:
-            click.echo(f"   Expected state: {state_path}")
-        raise click.Abort()
-
-    # Display state information
-    if state:
-        _display_project_info(state)
-        _display_modules(state)
-        _display_drift_warnings(state_manager)
-        _display_managed_file_drift_warnings(project_state_manager)
-        _display_version_drift_warnings(project_state_manager)
-    else:
-        click.secho("\n⚠️  No state file found (.quickscale/state.yml)", fg="yellow")
-        click.echo("   Run 'quickscale apply' to initialize the project state.")
-
-    # Phase 4: display explicit M2 drift & compatibility diagnostics.
-    if drift_diagnostics is not None:
-        _display_drift_diagnostics(drift_diagnostics)
-
-    resolved_manifests = manifests
-    if resolved_manifests is None and state and state.modules:
-        resolved_manifests = _load_module_manifests(
-            project_path,
-            list(state.modules.keys()),
-        )
-
-    # Display pending changes
-    _display_pending_changes(config, state, resolved_manifests)
-
-    # Display Docker status
-    _display_docker_status()
-
-    click.echo("")  # Final newline
-
-
-def _load_status_state_and_config(
-    project_path: Path,
-    config_path: Path | None,
-) -> tuple[
-    StateManager, ProjectStateManager, QuickScaleState | None, QuickScaleConfig | None
-]:
-    """Load status inputs and apply the command's fail-hard module policy."""
-    state_manager = StateManager(project_path)
-    project_state_manager = ProjectStateManager(project_path)
-    try:
-        state = state_manager.load()
-    except StateError as error:
-        click.secho(
-            f"❌ Failed to load .quickscale/state.yml: {error}", fg="red", err=True
-        )
-        raise click.Abort() from error
-
-    try:
-        config = _load_config(config_path) if config_path else None
-    except ConfigValidationError as error:
-        click.secho(f"❌ Invalid quickscale.yml:\n{error}", fg="red", err=True)
-        raise click.Abort() from error
-    except OSError as error:
-        click.secho(f"❌ Failed to read quickscale.yml: {error}", fg="red", err=True)
-        raise click.Abort() from error
-
-    if config is not None:
-        _abort_for_not_ready_modules(
-            list(config.modules.keys()), source="quickscale.yml"
-        )
-    if state is not None:
-        _abort_for_not_ready_modules(
-            list(state.modules.keys()),
-            source=".quickscale/state.yml",
-        )
-    return state_manager, project_state_manager, state, config
-
-
-def _load_status_manifests(
-    project_path: Path,
-    state: QuickScaleState | None,
-) -> tuple[dict[str, ModuleManifest] | None, list[ModulePresenceRecord]]:
-    """Load active module manifests and preserve typed presence records."""
-    manifests: dict[str, ModuleManifest] | None = None
-    presence_records: list[ModulePresenceRecord] = []
-    if not state or not state.modules:
-        return manifests, presence_records
-
-    presence_records = _discover_project_module_presence(
-        project_path,
-        list(state.modules.keys()),
-    )
-    active_module_names = [
-        record.name
-        for record in presence_records
-        if record.state is ModulePresenceState.ACTIVE
-    ]
-    try:
-        manifests = _load_module_manifests(
-            project_path,
-            active_module_names,
-            strict=True,
-        )
-    except ManifestError as error:
-        _abort_for_manifest_error(error)
-    return manifests, presence_records
+from quickscale_cli.commands._status_context import (
+    _abort_for_manifest_error as _abort_for_manifest_error,
+    _abort_for_not_ready_modules as _abort_for_not_ready_modules,
+    _detect_project_context as _detect_project_context,
+    _discover_project_module_presence as _discover_project_module_presence,
+    _format_datetime as _format_datetime,
+    _get_docker_status as _get_docker_status,
+    _load_config as _load_config,
+    _load_module_manifests as _load_module_manifests,
+    _load_status_manifests as _load_status_manifests,
+    _load_status_state_and_config as _load_status_state_and_config,
+)
+from quickscale_cli.commands._status_diagnostics import (
+    _compute_drift_diagnostics as _compute_drift_diagnostics,
+    _filesystem_drift_diagnostics as _filesystem_drift_diagnostics,
+    _legacy_files_present as _legacy_files_present,
+    _module_tracking_diagnostics as _module_tracking_diagnostics,
+    _state_file_has_consolidated_sections as _state_file_has_consolidated_sections,
+    _version_drift_diagnostics as _version_drift_diagnostics,
+)
+from quickscale_cli.commands._status_display import (
+    _build_json_output as _build_json_output,
+    _display_contract_vintage as _display_contract_vintage,
+    _display_docker_status as _display_docker_status,
+    _display_drift_diagnostics as _display_drift_diagnostics,
+    _display_drift_warnings as _display_drift_warnings,
+    _display_filesystem_drift as _display_filesystem_drift,
+    _display_managed_file_drift as _display_managed_file_drift,
+    _display_managed_file_drift_warnings as _display_managed_file_drift_warnings,
+    _display_managed_files as _display_managed_files,
+    _display_module_tracking as _display_module_tracking,
+    _display_modules as _display_modules,
+    _display_pending_changes as _display_pending_changes,
+    _display_project_info as _display_project_info,
+    _display_state_consolidation as _display_state_consolidation,
+    _display_text_status as _display_text_status,
+    _display_version_drift as _display_version_drift,
+    _display_version_drift_warnings as _display_version_drift_warnings,
+)
 
 
 @click.command()

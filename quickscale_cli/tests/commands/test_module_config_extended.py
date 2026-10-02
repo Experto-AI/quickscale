@@ -32,6 +32,7 @@ from quickscale_core.contracts.module_options import (
     STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
 )
+from quickscale_cli.utils import module_dependency_sync
 from quickscale_cli.utils.module_dependency_sync import sync_project_module_dependencies
 from quickscale_cli.utils.module_dependency_sync import (
     DependencySyncError,
@@ -2412,3 +2413,82 @@ class TestRepinExistingMode:
         pyproject_content = (project / "pyproject.toml").read_text()
         # Non-string fallback from storage table-form produces ">=1.14.4"
         assert 'django-storages = ">=1.14.4"' in pyproject_content
+
+
+class TestFacadePatchTargets:
+    """The facade keeps patch targets effective across the split modules."""
+
+    def test_patched_wheelhouse_resolver_flows_through_sync(self, tmp_path) -> None:
+        """Patching the facade wheelhouse resolver reaches dependency sync."""
+        (tmp_path / "pyproject.toml").write_text("[tool.poetry.dependencies]\n")
+        with patch.object(
+            module_dependency_sync, "_resolve_wheelhouse_dir", return_value=None
+        ) as resolver:
+            result = module_dependency_sync.sync_project_module_dependencies(
+                tmp_path, {"auth": {}}
+            )
+
+        resolver.assert_called_once_with()
+        assert result.changed is False
+
+    def test_patched_tomllib_flows_through_validated_write(self, tmp_path) -> None:
+        """Patching the facade tomllib binding reaches TOML validation."""
+        target = tmp_path / "out.toml"
+        with patch.object(
+            module_dependency_sync.tomllib, "loads", return_value={}
+        ) as loads:
+            module_dependency_sync._write_validated_toml(target, "key = 1")
+
+        loads.assert_called_once_with("key = 1")
+        assert target.read_text() == "key = 1"
+
+    def test_patched_sys_prefix_flows_through_wheelhouse_resolver(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """Patching the facade sys binding reaches wheelhouse resolution."""
+        monkeypatch.delenv("QUICKSCALE_LOCAL_WHEELHOUSE", raising=False)
+        (tmp_path / "quickscale_wheels").mkdir()
+        with patch.object(module_dependency_sync.sys, "prefix", str(tmp_path)):
+            resolved = module_dependency_sync._resolve_wheelhouse_dir()
+
+        assert resolved == tmp_path / "quickscale_wheels"
+
+    def test_patched_entry_writer_flows_through_module_sync(self, tmp_path) -> None:
+        """Patching the facade entry writer reaches the sync entry point."""
+        (tmp_path / "pyproject.toml").write_text("[tool.poetry.dependencies]\n")
+        with (
+            patch.object(
+                module_dependency_sync, "_resolve_wheelhouse_dir", return_value=None
+            ),
+            patch.object(
+                module_dependency_sync, "_append_dependency_entries"
+            ) as appender,
+        ):
+            result = module_dependency_sync.sync_project_module_dependencies(
+                tmp_path, {"auth": {}}
+            )
+
+        appender.assert_called_once_with(tmp_path / "pyproject.toml", [])
+        assert result.changed is False
+
+    def test_patched_manifest_loader_flows_through_path_dependency_patch(
+        self, tmp_path
+    ) -> None:
+        """Patching the facade manifest loader reaches path-dependency patching."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "pyproject.toml").write_text(
+            "[project]\n"
+            'name = "auth"\n'
+            "\n"
+            "[tool.poetry.dependencies]\n"
+            'quickscale-core = { path = "../../missing", develop = true }\n'
+        )
+        with patch.object(
+            module_dependency_sync, "get_manifest_for_module", return_value=None
+        ) as loader:
+            module_dependency_sync._patch_module_path_dependencies(
+                tmp_path, {"auth": {}}
+            )
+
+        loader.assert_called_once_with(tmp_path, "auth", strict=True)
