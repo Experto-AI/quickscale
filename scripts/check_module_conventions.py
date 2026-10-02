@@ -145,6 +145,19 @@ CORE_RUNTIME_ROLE_ENV_VARS = (
     "QUICKSCALE_ALLOW_BYPASSRLS",
     "QUICKSCALE_PRIVILEGED_COMMAND",
 )
+# Rule 6's refusal declaration: a module keeps a ``RETIRED_SETTINGS`` mapping
+# in ``checks.py`` and names it to the startup check; a manifest names its
+# retired option keys under ``retired_options``.
+RETIRED_SETTINGS_NAME = "RETIRED_SETTINGS"
+# Rule 19's forbidden tokens and the listed operator paths where a superuser
+# check is sanctioned (audited cross-tenant operator access).
+VIEW_FILE_NAMES = ("views.py", "debug_views.py")
+FORBIDDEN_VIEW_TOKENS = ("is_staff", "is_superuser", "IsAdminUser", "redirect_to_login")
+OPERATOR_VIEW_TOKENS: dict[tuple[str, str], frozenset[str]] = {
+    ("forms", "views.py"): frozenset({"is_superuser"}),
+    ("orgs", "debug_views.py"): frozenset({"is_superuser"}),
+    ("orgs", "views.py"): frozenset({"is_superuser"}),
+}
 TICKET_IN_TEST = re.compile(r"(?<![A-Za-z0-9])(?:SA|AF)\d+|CR-SA\d+")
 RATE_LITERAL = re.compile(r"\d+/(?:second|minute|hour|day)")
 # Rule 26: method calls whose value preserves signature dependence.  A method
@@ -865,6 +878,16 @@ def _settings_attribute_reads(tree: ast.Module) -> list[tuple[str, int]]:
     return found
 
 
+def _settings_attribute_names(tree: ast.Module) -> list[tuple[str, int]]:
+    """Collect every settings attribute read, whatever the name (rule 6)."""
+    found: list[tuple[str, int]] = []
+    names, modules = _settings_bindings(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and _is_settings_receiver(node.value, names, modules):
+            found.append((node.attr, node.lineno))
+    return found
+
+
 def _declared_exports(tree: ast.Module) -> list[str] | None:
     """Return ``__all__``'s literal names, annotated declarations included."""
     for node in tree.body:
@@ -1373,6 +1396,120 @@ def rule_5_dependency_direction(corpus: Corpus) -> list[str]:
         for attribute, lineno in _settings_attribute_reads(_parse(text)):
             if _setting_name_module(attribute) is not None:
                 violations.append(f"rule 5: core {rel}:{lineno} names module setting {attribute}")
+    return violations
+
+
+def _mapping_entries(node: Any) -> list[tuple[Any, Any]]:
+    """Return every key/value pair in a nested mapping or list."""
+    entries: list[tuple[Any, Any]] = []
+    if isinstance(node, Mapping):
+        entries.extend(node.items())
+        for value in node.values():
+            entries.extend(_mapping_entries(value))
+    elif isinstance(node, list):
+        for item in node:
+            entries.extend(_mapping_entries(item))
+    return entries
+
+
+def _retired_declaration_keys(tree: ast.Module) -> list[ast.Constant]:
+    """Return the string keys of every ``RETIRED_SETTINGS`` mapping in a tree."""
+    keys: list[ast.Constant] = []
+    for node in ast.walk(tree):
+        targets: list[ast.expr] = []
+        value: ast.expr | None = None
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+            value = node.value
+        if not any(
+            isinstance(target, ast.Name) and target.id.endswith(RETIRED_SETTINGS_NAME)
+            for target in targets
+        ):
+            continue
+        if not isinstance(value, ast.Dict):
+            continue
+        for key in value.keys:
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                keys.append(key)
+    return keys
+
+
+def _all_option_keys(module: Module) -> set[str]:
+    """Return every option key the module's manifest declares."""
+    keys: set[str] = set()
+    config = module.manifest.get("config")
+    if isinstance(config, Mapping):
+        for kind in ("mutable", "immutable"):
+            options = config.get(kind)
+            if isinstance(options, Mapping):
+                keys.update(str(key) for key in options)
+    return keys
+
+
+def rule_6_no_legacy_names(corpus: Corpus) -> list[str]:
+    """
+    Rule 6: renames are refusals, not aliases.
+
+    The statically checkable clauses: no shipped manifest authors a
+    ``legacy_aliases`` entry (the loader refuses authoring; the
+    derivation-schema ``LegacyKeyAlias`` type stays a retained API), a retired
+    option key is not also accepted as a live option, and a module's declared
+    retired setting names are read nowhere in shipped source outside their
+    refusal declaration.
+    """
+    violations: list[str] = []
+    retired: set[str] = set()
+    for module in corpus.modules:
+        for rel, text in module.files.items():
+            if rel.endswith(".py") and RETIRED_SETTINGS_NAME in text:
+                for key in _retired_declaration_keys(_parse(text)):
+                    retired.add(cast(str, key.value))
+        if any(
+            key == "legacy_aliases" and value not in (None, [], {})
+            for key, value in _mapping_entries(module.manifest)
+        ):
+            violations.append(f"rule 6: {module.name}: manifest authors a legacy alias")
+        retired_options = module.manifest.get("retired_options")
+        if isinstance(retired_options, Mapping):
+            live = _all_option_keys(module)
+            for key in retired_options:
+                if isinstance(key, str) and key in live:
+                    violations.append(
+                        f"rule 6: {module.name}: retired option {key!r} is still accepted"
+                    )
+    if not retired:
+        return violations
+    populations: list[tuple[str, Mapping[str, str]]] = [
+        (f"{module.name}: ", module.files) for module in corpus.modules
+    ]
+    populations.append(("core ", corpus.core_files))
+    populations.append(("cli ", corpus.cli_files))
+    for prefix, files in populations:
+        for rel, text in files.items():
+            if not rel.endswith(".py"):
+                continue
+            tree = _parse(text)
+            allowed = {id(key) for key in _retired_declaration_keys(tree)}
+            docstrings = _docstring_nodes(tree)
+            for attribute, lineno in _settings_attribute_names(tree):
+                if attribute in retired:
+                    violations.append(
+                        f"rule 6: {prefix}{rel}:{lineno} reads retired setting {attribute}"
+                    )
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Constant)
+                    and isinstance(node.value, str)
+                    and node.value in retired
+                    and id(node) not in allowed
+                    and id(node) not in docstrings
+                ):
+                    violations.append(
+                        f"rule 6: {prefix}{rel}:{node.lineno} names retired setting {node.value}"
+                    )
     return violations
 
 
@@ -2451,6 +2588,65 @@ def rule_18_package_tooling(corpus: Corpus) -> list[str]:
                 violations.append(f"rule 18: {module.name}: pyproject has no [tool.ruff]")
         if "settings.py" not in module.tests:
             violations.append(f"rule 18: {module.name}: tests/settings.py is missing")
+    return violations
+
+
+def _view_token(node: ast.AST) -> str | None:
+    """Return the forbidden authorization token a view node uses, if any."""
+    if isinstance(node, ast.Name) and node.id in FORBIDDEN_VIEW_TOKENS:
+        return node.id
+    if isinstance(node, ast.Attribute) and node.attr in FORBIDDEN_VIEW_TOKENS:
+        return node.attr
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        if node.value in FORBIDDEN_VIEW_TOKENS:
+            return node.value
+    return None
+
+
+def rule_19_authorization(corpus: Corpus) -> list[str]:
+    """
+    Rule 19: module views authorize by org role, not site-wide staff flags.
+
+    The statically checkable clause: ``is_staff``, ``is_superuser``,
+    ``IsAdminUser``, and hand-written ``redirect_to_login`` — imported or
+    aliased, read as an attribute, or passed as a string — appear only in the
+    listed operator paths.  The "logged in is one of the three idioms" and
+    "README lists the minimum role" clauses stay review rules: rule 9
+    sanctions ``AllowAny`` plus a view's own authentication, and the README
+    prose is not a code property.
+    """
+    violations: list[str] = []
+    for module in corpus.modules:
+        for rel, text in module.files.items():
+            basename = Path(rel).name
+            if not rel.endswith(".py") or basename not in VIEW_FILE_NAMES:
+                continue
+            allowed = OPERATOR_VIEW_TOKENS.get((module.name, basename), frozenset())
+            tree = _parse(text)
+            docstrings = _docstring_nodes(tree)
+            for node in ast.walk(tree):
+                token = _view_token(node)
+                if token is None or token in allowed:
+                    continue
+                if isinstance(node, ast.Constant) and id(node) in docstrings:
+                    continue
+                violations.append(
+                    f"rule 19: {module.name}: {rel}:{node.lineno} uses {token} outside "
+                    "the listed operator paths"
+                )
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    imported = [alias.name for alias in node.names]
+                elif isinstance(node, ast.Import):
+                    imported = [alias.name.split(".")[-1] for alias in node.names]
+                else:
+                    continue
+                for name in imported:
+                    if name in FORBIDDEN_VIEW_TOKENS and name not in allowed:
+                        violations.append(
+                            f"rule 19: {module.name}: {rel}:{node.lineno} imports {name} "
+                            "outside the listed operator paths"
+                        )
     return violations
 
 
@@ -3735,12 +3931,122 @@ def rule_33_shared_stems(corpus: Corpus) -> list[str]:
     return violations
 
 
+def _name_reference_target(value: str) -> str | None:
+    """Resolve an app label, model label, namespace, or package path to its module."""
+    for module in sorted(MODULE_LAYERS, key=len, reverse=True):
+        for stem in (f"quickscale_modules_{module}", f"quickscale_{module}"):
+            if value == stem:
+                return module
+            if value.startswith(stem) and len(value) > len(stem) and value[len(stem)] in ".:_":
+                return module
+    return None
+
+
+def _migration_model_reference_ids(tree: ast.Module) -> set[int]:
+    """Return the nodes a migration may use to reach another module's models."""
+    ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _call_func_name(node) == "get_model":
+            for argument in node.args:
+                if isinstance(argument, ast.Constant):
+                    ids.add(id(argument))
+            for keyword in node.keywords:
+                if keyword.arg in {"app_label", "model_name"} and isinstance(
+                    keyword.value, ast.Constant
+                ):
+                    ids.add(id(keyword.value))
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = list(node.targets) if isinstance(node, ast.Assign) else [node.target]
+            if not any(
+                isinstance(target, ast.Name) and target.id in {"dependencies", "run_before"}
+                for target in targets
+            ):
+                continue
+            if node.value is None:
+                continue
+            for child in ast.walk(node.value):
+                if isinstance(child, ast.Constant):
+                    ids.add(id(child))
+    return ids
+
+
+def _is_migration_model_path(value: str, target: str) -> bool:
+    """Return True for a migration's historical model path or label (rule 5)."""
+    package = f"quickscale_modules_{target}.models"
+    label = f"quickscale_{target}"
+    return value == package or value.startswith(f"{package}.") or value.startswith(f"{label}.")
+
+
+def rule_34_name_references(corpus: Corpus) -> list[str]:
+    """
+    Rule 34: references to another module by name obey the layer table.
+
+    The statically checkable clauses over non-import references: app labels,
+    package paths given to ``import_module``, model labels, URL namespaces,
+    label prefixes, and ``apps.get_model`` / ``apps.is_installed`` /
+    ``apps.get_app_config`` arguments.  Imports stay with rule 5; a migration's
+    historical model lookups (``get_model`` arguments, ``dependencies`` /
+    ``run_before`` entries, and ``.models`` paths or dotted model labels) are
+    excepted there and here, while its other by-name references are checked.
+    """
+    violations: list[str] = []
+    name_edges: set[tuple[str, str]] = set()
+    edges: dict[str, set[str]] = {}
+    for module in corpus.modules:
+        layer = MODULE_LAYERS.get(module.name)
+        if layer is None:
+            continue
+        for rel, text in module.files.items():
+            if not rel.endswith(".py"):
+                continue
+            in_migrations = rel.startswith("migrations/")
+            tree = _parse(text)
+            docstrings = _docstring_nodes(tree)
+            model_ids = _migration_model_reference_ids(tree) if in_migrations else set()
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                    continue
+                if id(node) in docstrings:
+                    continue
+                target = _name_reference_target(node.value)
+                if target is None or target == module.name:
+                    continue
+                if in_migrations and (
+                    id(node) in model_ids or _is_migration_model_path(node.value, target)
+                ):
+                    continue
+                other_layer = MODULE_LAYERS.get(target)
+                if other_layer is None:
+                    continue
+                if other_layer > layer:
+                    violations.append(
+                        f"rule 34: {module.name}: {rel}:{node.lineno} references {target} "
+                        f"by name upward (layer {other_layer} above layer {layer})"
+                    )
+                elif other_layer == layer:
+                    name_edges.add((module.name, target))
+            for other, path, _names, _lineno, _kind in _cross_module_imports(tree):
+                if other == module.name:
+                    continue
+                if in_migrations and path[:1] == ("models",):
+                    continue
+                if MODULE_LAYERS.get(other) == layer:
+                    edges.setdefault(module.name, set()).add(other)
+    for source, target in name_edges:
+        edges.setdefault(source, set()).add(target)
+    for cycle in _same_layer_cycles(edges):
+        if any((a, b) in name_edges for a, b in zip(cycle, cycle[1:])):
+            violations.append(f"rule 34: same-layer name-reference cycle: {' -> '.join(cycle)}")
+    return violations
+
+
 RULES: tuple[Rule, ...] = (
     Rule(1, "settings names and the enabled switch", rule_1_settings_names),
     Rule(2, "identity names", rule_2_identity_names),
     Rule(3, "reading settings", rule_3_settings_reads),
     Rule(4, "how one module uses another", rule_4_public_surface),
     Rule(5, "dependency direction", rule_5_dependency_direction),
+    Rule(6, "no legacy names", rule_6_no_legacy_names),
     Rule(7, "URL mounts and route names", rule_7_urls),
     Rule(8, "templates, static files, template tags", rule_8_templates),
     Rule(9, "HTTP APIs", rule_9_http_apis),
@@ -3752,6 +4058,7 @@ RULES: tuple[Rule, ...] = (
     Rule(16, "signals", rule_16_signals),
     Rule(17, "management commands", rule_17_management_commands),
     Rule(18, "package tooling", rule_18_package_tooling),
+    Rule(19, "authorization by org role", rule_19_authorization),
     Rule(20, "email", rule_20_email),
     Rule(22, "analytics events", rule_22_analytics_events),
     Rule(23, "service surface", rule_23_service_surface),
@@ -3765,24 +4072,22 @@ RULES: tuple[Rule, ...] = (
         "shared-namespace stems (database functions and advisory-lock keys)",
         rule_33_shared_stems,
     ),
+    Rule(34, "references by name", rule_34_name_references),
     Rule(35, "secrets", rule_35_secrets),
     Rule(38, "README content", rule_38_readme_content),
     Rule(39, "module dependencies", rule_39_module_dependencies),
 )
 
-# Rules whose owning convention ticket has not landed yet, or that another
-# gate already enforces.  The coverage test keeps this a partition with RULES
-# over 1-39, so SA215 cannot forget a rule.
+# Rules the harness does not yet cover: their remaining code change has not
+# landed, or another gate already enforces them.  The coverage test keeps this
+# a partition with RULES over 1-39, so SA215 cannot forget a rule.
 OPEN_RULES: tuple[tuple[int, str], ...] = (
-    (6, "SA219"),
-    (11, "SA220"),
-    (19, "SA226"),
+    (11, "SA215 (the one-off file privatization slice)"),
     (21, "SA216 (rule 21 is a review rule; each module's write-effect rollback test)"),
     (25, "SA215"),
     (27, "SA215 (user-FK conformance gate orgs/tests/test_user_fk_conformance.py)"),
     (28, "SA215"),
     (30, "SA215 (enforced in apply itself, core collect_wiring)"),
-    (34, "SA220"),
     (36, "SA215"),
     (37, "SA215"),
 )

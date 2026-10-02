@@ -22,14 +22,14 @@
         "symbol": "up",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/dr_commands.py::_build_env_sync_plan": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/dr_commands.py",
+      "quickscale_cli/src/quickscale_cli/commands/_dr_env_sync.py::_build_env_sync_plan": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_dr_env_sync.py",
         "max_complexity": 14,
         "symbol": "_build_env_sync_plan",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/dr_commands.py::_resolve_execute_surface_selection": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/dr_commands.py",
+      "quickscale_cli/src/quickscale_cli/commands/_dr_report.py::_resolve_execute_surface_selection": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_dr_report.py",
         "max_complexity": 11,
         "symbol": "_resolve_execute_surface_selection",
         "type": "function"
@@ -70,14 +70,14 @@
         "symbol": "update",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/plan_command.py::_handle_add_modules": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/plan_command.py",
+      "quickscale_cli/src/quickscale_cli/commands/_plan_add.py::_handle_add_modules": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_plan_add.py",
         "max_complexity": 13,
         "symbol": "_handle_add_modules",
         "type": "function"
       },
-      "quickscale_cli/src/quickscale_cli/commands/plan_command.py::_parse_add_module_selection": {
-        "file": "quickscale_cli/src/quickscale_cli/commands/plan_command.py",
+      "quickscale_cli/src/quickscale_cli/commands/_plan_add.py::_parse_add_module_selection": {
+        "file": "quickscale_cli/src/quickscale_cli/commands/_plan_add.py",
         "max_complexity": 11,
         "symbol": "_parse_add_module_selection",
         "type": "function"

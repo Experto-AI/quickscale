@@ -125,11 +125,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
 
-  **Landed (first two slices):** rules 4, 5, and 23 (cross-module public surface, dependency
-  layers, and the `services.py` public surface) and rules 1, 3, 31, and 35 (settings names and the
-  enabled switch, setting reads, the theme seam, and secrets) are enforced by the conformance test
-  with a control case each; the rest covers the other landed tickets' rules, SA215's own drift
-  fixes, and SA216's write-effect rule.
+  **Landed (first three slices):** rules 4, 5, and 23 (cross-module public surface, dependency
+  layers, and the `services.py` public surface), rules 1, 3, 31, and 35 (settings names and the
+  enabled switch, setting reads, the theme seam, and secrets), and rules 6, 19, and 34 (no legacy
+  names, authorization by org role, and references by name) are enforced by the conformance test
+  with a control case each; orgs' invitation redirect now goes through the login-required mixin.
+  The rest covers rule 11's one-off file privatization (`orgs/constants.py`,
+  `social/contracts.py`, `storage/helpers.py`), SA215's own drift fixes (rules 25, 28, 36, 37),
+  and SA216's write-effect rule.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
@@ -227,7 +230,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `_module_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
   test patch target still resolves through the facade. Its five accepted complexity entries are
   re-keyed with rename waivers; the pre-existing module-command complexity regressions are
-  unchanged. The remaining CLI files and the `dr_engine` slice remain.
+  unchanged.
+
+  **Landed (CLI slice, third file):** `plan_command.py` is a facade over five private
+  `_plan_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
+  test patch target still resolves through the facade. Its two accepted complexity entries are
+  re-keyed with rename waivers; the pre-existing plan-command complexity regressions are unchanged.
+
+  **Landed (CLI slice, fourth file):** `dr_commands.py` is a facade over four private
+  `_dr_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
+  test patch target still resolves through the facade. Its two accepted complexity entries are
+  re-keyed with rename waivers; its remaining accepted entry, `execute`, is unchanged.
+  The remaining CLI files and the `dr_engine` slice remain.
 
   **Scope:** SA231's rules, one package-sized slice at a time through the serialized merge queue:
   `quickscale_cli` commands and utilities (`apply_command.py`, `module_commands.py`,

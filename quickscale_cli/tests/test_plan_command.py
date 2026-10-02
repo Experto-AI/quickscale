@@ -1,9 +1,14 @@
 """Tests for quickscale plan command"""
 
 import os
+from pathlib import Path
+from unittest.mock import Mock
 
+import click
+import pytest
 from click.testing import CliRunner
 
+from quickscale_cli.commands import plan_command
 from quickscale_cli.commands.plan_command import plan
 from quickscale_core.contracts.module_catalog import get_discovered_module_entries
 
@@ -398,3 +403,57 @@ class TestPlanYamlValidation:
             assert config.project.slug == "myapp"
             assert config.project.theme == "showcase_react"
             assert "analytics" in config.modules
+
+
+class TestFacadePatchTargets:
+    """The facade keeps patch targets effective across the split modules."""
+
+    def test_patched_applied_modules_flows_through_collect(self, monkeypatch):
+        """Patching the facade helper reaches callers in private modules."""
+        monkeypatch.setattr(
+            plan_command,
+            "_get_applied_modules",
+            lambda project_path: ["auth"],
+        )
+
+        assert plan_command._collect_existing_modules(Path("."), None) == ["auth"]
+
+    def test_patched_package_validator_flows_through_resolver(self, monkeypatch):
+        """Patching the facade validator reaches callers in private modules."""
+        rejected: list[str] = []
+
+        def reject(package_name: str) -> None:
+            rejected.append(package_name)
+            raise ValueError("rejected by patch")
+
+        monkeypatch.setattr(plan_command, "_validate_package_name", reject)
+
+        with pytest.raises(click.Abort):
+            plan_command._resolve_project_package("myapp", "valid_package")
+
+        assert rejected == ["valid_package"]
+
+    def test_patched_path_cwd_flows_through_planner(self, monkeypatch, tmp_path):
+        """Patching the facade Path binding reaches cwd access in private modules."""
+
+        class PatchedPath(Path):
+            @classmethod
+            def cwd(cls):
+                return tmp_path
+
+        monkeypatch.setattr(plan_command, "Path", PatchedPath)
+
+        result = plan_command._determine_output_path_for_plan("myapp", None)
+
+        assert result == tmp_path / "myapp" / "quickscale.yml"
+
+    def test_patched_path_construction_flows_through_planner(self, monkeypatch):
+        """Patching the facade Path binding reaches construction in private modules."""
+        sentinel = Path("/tmp/patched-output.yml")
+        mock_path = Mock(return_value=sentinel)
+        monkeypatch.setattr(plan_command, "Path", mock_path)
+
+        result = plan_command._determine_output_path_for_plan("myapp", "custom.yml")
+
+        mock_path.assert_called_once_with("custom.yml")
+        assert result is sentinel
