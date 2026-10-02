@@ -4529,6 +4529,15 @@ def organization_pricing_page_url(organization: Any) -> str:
         ) from exc
 
 
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_BILLING_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_BILLING_ENABLED)
+
+
 __all__ = [
     "account_deletion_user_reference_organization_ids",
     "cancel_current_subscription",
@@ -4554,6 +4563,7 @@ __all__ = [
     "guard_organization_removal_provider_state",
     "handle_stripe_event",
     "InsufficientCreditsError",
+    "is_enabled",
     "organization_pricing_page_url",
     "OrgSelectionRequiredError",
     "resume_current_subscription",
