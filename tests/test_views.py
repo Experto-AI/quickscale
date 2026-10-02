@@ -7,7 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from PIL import Image
 from quickscale_modules_blog.models import Category, Post, Tag
-from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
 
 
 def _create_published_posts(
