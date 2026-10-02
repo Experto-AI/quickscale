@@ -55,34 +55,34 @@ def _perform_api_request(client, method, url, data=None):
     return getattr(client, method)(url, data or {}, format="json")
 
 
-def _assert_staff_only_route(
+def _assert_org_role_route(
     api_client,
-    non_staff_authenticated_client,
+    orgless_authenticated_client,
     authenticated_client,
     method,
     url,
-    expected_staff_status,
+    expected_status,
     data=None,
 ):
-    """Assert the CRM API route is anonymous-denied, non-staff-denied, and staff-allowed."""
+    """Assert a route refuses anonymous and orgless callers and admits a role holder."""
     anonymous_response = _perform_api_request(api_client, method, url, data)
     assert anonymous_response.status_code in (
         status.HTTP_401_UNAUTHORIZED,
         status.HTTP_403_FORBIDDEN,
     )
 
-    non_staff_response = _perform_api_request(
-        non_staff_authenticated_client, method, url, data
+    orgless_response = _perform_api_request(
+        orgless_authenticated_client, method, url, data
     )
-    assert non_staff_response.status_code == status.HTTP_403_FORBIDDEN
+    assert orgless_response.status_code == status.HTTP_403_FORBIDDEN
 
-    staff_response = _perform_api_request(authenticated_client, method, url, data)
-    assert staff_response.status_code == expected_staff_status
+    member_response = _perform_api_request(authenticated_client, method, url, data)
+    assert member_response.status_code == expected_status
 
 
 def _assert_api_hidden_for_all_callers(
     api_client,
-    non_staff_authenticated_client,
+    orgless_authenticated_client,
     authenticated_client,
     method,
     url,
@@ -91,7 +91,7 @@ def _assert_api_hidden_for_all_callers(
     """Assert the CRM API route stays hidden when the module API toggle is off."""
     for client in (
         api_client,
-        non_staff_authenticated_client,
+        orgless_authenticated_client,
         authenticated_client,
     ):
         response = _perform_api_request(client, method, url, data)
@@ -121,8 +121,10 @@ class TestCRMDashboardView:
         MIDDLEWARE=DASHBOARD_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
-    def test_dashboard_returns_403_for_authenticated_non_staff_user(self, client, user):
-        """Authenticated non-staff users should be blocked from the HTML dashboard."""
+    def test_dashboard_returns_403_for_authenticated_user_without_org_context(
+        self, client, user
+    ):
+        """An authenticated user with no organization context is refused."""
         client.force_login(user)
 
         response = client.get(reverse("quickscale_crm:dashboard"))
@@ -133,16 +135,21 @@ class TestCRMDashboardView:
         MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
-    def test_dashboard_returns_200_for_staff_user(self, client, user, contact, deal):
-        """Staff users should be able to render the dashboard."""
-        from quickscale_modules_orgs.models import Organization
+    def test_dashboard_returns_200_for_org_viewer(self, client, user, contact, deal):
+        """A viewer-role org member can render the dashboard."""
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
 
-        user.is_staff = True
-        user.save(update_fields=["is_staff"])
-        client.force_login(user)
         personal_org = Organization.objects.get(
             is_personal=True, quickscale_orgs_memberships__user=user
         )
+        OrganizationMembership.objects.filter(
+            user=user, organization=personal_org
+        ).update(role=OrgRole.VIEWER)
+        client.force_login(user)
         _activate_org_in_session(client, personal_org)
 
         response = client.get(reverse("quickscale_crm:dashboard"))
@@ -152,31 +159,134 @@ class TestCRMDashboardView:
 
 @pytest.mark.django_db
 class TestCRMAPIPermissions:
-    """Permission matrix tests for the staff-only CRM API."""
+    """Organization-role permission matrix tests for the CRM API."""
 
-    def test_api_root_requires_staff(
+    def test_api_root_denies_anonymous_and_orgless_callers(
         self,
         api_client,
-        non_staff_authenticated_client,
+        orgless_authenticated_client,
         authenticated_client,
     ):
-        """The CRM API root should only allow staff users."""
+        """The CRM API root refuses anonymous and orgless callers."""
         url = reverse("quickscale_crm:api_root")
 
-        _assert_staff_only_route(
+        _assert_org_role_route(
             api_client,
-            non_staff_authenticated_client,
+            orgless_authenticated_client,
             authenticated_client,
             "get",
             url,
             status.HTTP_200_OK,
         )
 
+    def test_viewer_reads_but_cannot_write(
+        self,
+        viewer_client,
+        member_client,
+    ):
+        """A viewer reads the API while a member writes; the viewer's write is refused."""
+        url = reverse("quickscale_crm:tag_list")
+
+        viewer_read = viewer_client.get(url)
+        assert viewer_read.status_code == status.HTTP_200_OK
+
+        viewer_write = viewer_client.post(url, {"name": "Viewer Tag"}, format="json")
+        assert viewer_write.status_code == status.HTTP_403_FORBIDDEN
+
+        member_write = member_client.post(url, {"name": "Member Tag"}, format="json")
+        assert member_write.status_code == status.HTTP_201_CREATED
+
+    def test_viewer_is_refused_deal_writes(self, viewer_client):
+        """A viewer is refused a deal write before any object lookup."""
+        response = viewer_client.post(
+            reverse("quickscale_crm:deal_bulk_update_stage"),
+            {"deal_ids": [1], "stage_id": 1},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_viewer_head_on_contact_notes_does_not_create(self, viewer_client):
+        """A viewer HEAD on nested contact notes lists, never creates (rule 19)."""
+        from quickscale_modules_crm.models import Company, Contact, ContactNote
+        from quickscale_modules_orgs.current_org import org_scope
+
+        organization = viewer_client._personal_org
+        with org_scope(organization):
+            company = Company.objects.create(
+                name="Viewer Head Co", organization=organization
+            )
+            contact = Contact.objects.create(
+                first_name="View",
+                last_name="Only",
+                email="viewer-head@example.com",
+                company=company,
+                organization=organization,
+            )
+            before = ContactNote.objects.count()
+
+        response = viewer_client.head(
+            reverse("quickscale_crm:contact_notes", args=[contact.id]),
+            data={"text": "head note"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        with org_scope(organization):
+            assert ContactNote.objects.count() == before
+
+    def test_viewer_head_on_deal_notes_does_not_create(self, viewer_client):
+        """A viewer HEAD on nested deal notes lists, never creates (rule 19)."""
+        from decimal import Decimal
+
+        from quickscale_modules_crm.models import (
+            Company,
+            Contact,
+            Deal,
+            DealNote,
+            Stage,
+        )
+        from quickscale_modules_orgs.current_org import org_scope
+
+        organization = viewer_client._personal_org
+        with org_scope(organization):
+            company = Company.objects.create(
+                name="Viewer Head Deals", organization=organization
+            )
+            contact = Contact.objects.create(
+                first_name="Deal",
+                last_name="Viewer",
+                email="viewer-head-deal@example.com",
+                company=company,
+                organization=organization,
+            )
+            stage = Stage.objects.create(
+                name="Viewer Head Stage", order=1, organization=organization
+            )
+            deal = Deal.objects.create(
+                title="Viewer Head Deal",
+                contact=contact,
+                amount=Decimal("1.00"),
+                stage=stage,
+                organization=organization,
+            )
+            before = DealNote.objects.count()
+
+        response = viewer_client.head(
+            reverse("quickscale_crm:deal_notes", args=[deal.id]),
+            data={"text": "head note"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        with org_scope(organization):
+            assert DealNote.objects.count() == before
+
     @override_settings(QUICKSCALE_CRM_API_ENABLED=False, REST_FRAMEWORK={})
     def test_api_root_returns_404_when_api_disabled(
         self,
         api_client,
-        non_staff_authenticated_client,
+        orgless_authenticated_client,
         authenticated_client,
     ):
         """The CRM API root should stay hidden when the API toggle is off."""
@@ -184,7 +294,7 @@ class TestCRMAPIPermissions:
 
         _assert_api_hidden_for_all_callers(
             api_client,
-            non_staff_authenticated_client,
+            orgless_authenticated_client,
             authenticated_client,
             "get",
             url,
@@ -202,19 +312,19 @@ class TestCRMAPIPermissions:
             "deal_note_list",
         ],
     )
-    def test_primary_resource_routes_require_staff(
+    def test_primary_resource_routes_deny_anonymous_and_orgless_callers(
         self,
         api_client,
-        non_staff_authenticated_client,
+        orgless_authenticated_client,
         authenticated_client,
         route_name,
     ):
-        """Primary CRM resource routes should only allow staff users."""
+        """Primary CRM resource routes refuse anonymous and orgless callers."""
         url = reverse(f"quickscale_crm:{route_name}")
 
-        _assert_staff_only_route(
+        _assert_org_role_route(
             api_client,
-            non_staff_authenticated_client,
+            orgless_authenticated_client,
             authenticated_client,
             "get",
             url,
@@ -222,7 +332,7 @@ class TestCRMAPIPermissions:
         )
 
     @pytest.mark.parametrize(
-        ("route_name", "method", "payload", "expected_staff_status"),
+        ("route_name", "method", "payload", "expected_status"),
         [
             pytest.param(
                 "contact_notes",
@@ -254,29 +364,29 @@ class TestCRMAPIPermissions:
             ),
         ],
     )
-    def test_nested_note_actions_require_staff(
+    def test_nested_note_actions_deny_anonymous_and_orgless_callers(
         self,
         api_client,
-        non_staff_authenticated_client,
+        orgless_authenticated_client,
         authenticated_client,
         contact,
         deal,
         route_name,
         method,
         payload,
-        expected_staff_status,
+        expected_status,
     ):
-        """Nested CRM note actions should only allow staff users."""
+        """Nested CRM note actions refuse anonymous and orgless callers."""
         object_id = contact.id if route_name == "contact_notes" else deal.id
         url = reverse(f"quickscale_crm:{route_name}", args=[object_id])
 
-        _assert_staff_only_route(
+        _assert_org_role_route(
             api_client,
-            non_staff_authenticated_client,
+            orgless_authenticated_client,
             authenticated_client,
             method,
             url,
-            expected_staff_status,
+            expected_status,
             payload,
         )
 
@@ -303,23 +413,23 @@ class TestCRMAPIPermissions:
             ),
         ],
     )
-    def test_deal_bulk_actions_require_staff(
+    def test_deal_bulk_actions_deny_anonymous_and_orgless_callers(
         self,
         api_client,
-        non_staff_authenticated_client,
+        orgless_authenticated_client,
         authenticated_client,
         deal,
         closed_won_stage,
         route_name,
         payload_factory,
     ):
-        """Deal bulk actions should only allow staff users."""
+        """Deal bulk actions refuse anonymous and orgless callers."""
         url = reverse(f"quickscale_crm:{route_name}")
         payload = payload_factory(deal, closed_won_stage)
 
-        _assert_staff_only_route(
+        _assert_org_role_route(
             api_client,
-            non_staff_authenticated_client,
+            orgless_authenticated_client,
             authenticated_client,
             "post",
             url,
@@ -343,7 +453,7 @@ class TestCRMAPIPermissions:
     def test_primary_resource_routes_return_404_when_api_disabled(
         self,
         api_client,
-        non_staff_authenticated_client,
+        orgless_authenticated_client,
         authenticated_client,
         route_name,
     ):
@@ -352,7 +462,7 @@ class TestCRMAPIPermissions:
 
         _assert_api_hidden_for_all_callers(
             api_client,
-            non_staff_authenticated_client,
+            orgless_authenticated_client,
             authenticated_client,
             "get",
             url,
@@ -381,7 +491,7 @@ class TestCRMAPIPermissions:
     def test_nested_note_actions_return_404_when_api_disabled(
         self,
         api_client,
-        non_staff_authenticated_client,
+        orgless_authenticated_client,
         authenticated_client,
         contact,
         deal,
@@ -395,7 +505,7 @@ class TestCRMAPIPermissions:
 
         _assert_api_hidden_for_all_callers(
             api_client,
-            non_staff_authenticated_client,
+            orgless_authenticated_client,
             authenticated_client,
             method,
             url,
@@ -429,7 +539,7 @@ class TestCRMAPIPermissions:
     def test_deal_bulk_actions_return_404_when_api_disabled(
         self,
         api_client,
-        non_staff_authenticated_client,
+        orgless_authenticated_client,
         authenticated_client,
         deal,
         closed_won_stage,
@@ -442,7 +552,7 @@ class TestCRMAPIPermissions:
 
         _assert_api_hidden_for_all_callers(
             api_client,
-            non_staff_authenticated_client,
+            orgless_authenticated_client,
             authenticated_client,
             "post",
             url,
@@ -454,14 +564,12 @@ class TestCRMAPIPermissions:
         MIDDLEWARE=DASHBOARD_SAAS_TEST_MIDDLEWARE,
         TEMPLATES=DASHBOARD_TEST_TEMPLATES,
     )
-    def test_dashboard_stays_available_to_staff_when_api_is_disabled(
+    def test_dashboard_stays_available_to_org_members_when_api_is_disabled(
         self, client, user, contact, deal
     ):
-        """Disabling the API should not disable the separate staff-only HTML dashboard."""
+        """Disabling the API should not disable the separate org-role HTML dashboard."""
         from quickscale_modules_orgs.models import Organization
 
-        user.is_staff = True
-        user.save(update_fields=["is_staff"])
         client.force_login(user)
         personal_org = Organization.objects.get(
             is_personal=True, quickscale_orgs_memberships__user=user
@@ -630,21 +738,21 @@ class TestContactViewSet:
         )
 
     @override_settings(REST_FRAMEWORK={})
-    def test_contact_list_returns_403_for_non_staff_user_without_host_defaults(
-        self, non_staff_authenticated_client, contact
+    def test_contact_list_returns_403_for_orgless_user_without_host_defaults(
+        self, orgless_authenticated_client, contact
     ):
-        """Explicit CRM auth should still reject non-staff users without global DRF settings."""
-        response = non_staff_authenticated_client.get(
+        """Explicit CRM auth should still reject an authenticated caller with no org context without global DRF settings."""
+        response = orgless_authenticated_client.get(
             reverse("quickscale_crm:contact_list")
         )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @override_settings(REST_FRAMEWORK={})
-    def test_contact_list_allows_staff_user_without_host_defaults(
+    def test_contact_list_allows_org_member_without_host_defaults(
         self, authenticated_client, contact
     ):
-        """Staff CRM access should remain available without global DRF settings."""
+        """CRM access should remain available to an org member without global DRF settings."""
         response = authenticated_client.get(reverse("quickscale_crm:contact_list"))
 
         assert response.status_code == status.HTTP_200_OK
@@ -1205,8 +1313,6 @@ class TestF1110Phase1SoloRoutePersonalOrgTerminalStageResolution:
             organization=personal_org,
         )
 
-        staff_user.is_staff = True
-        staff_user.save(update_fields=["is_staff"])
         client.force_login(staff_user)
         _activate_org_in_session(client, personal_org)
 

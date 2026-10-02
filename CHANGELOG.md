@@ -374,6 +374,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `required_modules` lists every module its code references. `plan`/`apply` therefore install
     storage for blog, and analytics and orgs for forms, instead of assembling a project that
     references a module it did not select.
+  - **Module back offices authorize by organization role.** Blog and listings publishing, the CRM
+    dashboard and API, and the forms submission-management API check the active organization's role
+    — viewer to read, member to write — instead of Django's site-wide staff flags, while superusers
+    keep the audited cross-tenant operator path.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

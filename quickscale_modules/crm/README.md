@@ -6,7 +6,8 @@ tracking, and deal pipeline functionality.
 ## Overview
 
 - **7 core models**: Tag, Company, Contact, Stage, Deal, ContactNote, DealNote.
-- **RESTful API**: session-authenticated, staff-only CRUD operations with Django REST Framework.
+- **RESTful API**: session-authenticated CRUD operations authorized by organization role
+  (minimum `viewer` to read, `member` to write) with Django REST Framework.
 - **Deal pipeline**: configurable stages with probability tracking.
 - **Bulk operations**: update multiple deals at once.
 - **Django admin**: full admin interface with inlines.
@@ -49,13 +50,13 @@ stage.
 
 ### API
 
-All staff-authenticated API endpoints are available under `crm/api/` when
+All member-authenticated API endpoints are available under `crm/api/` when
 `QUICKSCALE_CRM_API_ENABLED` is `true` (route names are snake_case under
 `quickscale_crm:`):
 
 | Endpoint | Methods | Description |
 |----------|---------|-------------|
-| `crm/api/` | GET | Staff-only API root with CRM endpoint links |
+| `crm/api/` | GET | API root with CRM endpoint links (viewer role) |
 | `crm/api/tags/` | GET, POST | List/create tags |
 | `crm/api/tags/{id}/` | GET, PUT, PATCH, DELETE | Tag detail |
 | `crm/api/companies/` | GET, POST | List/create companies |
@@ -77,10 +78,14 @@ All staff-authenticated API endpoints are available under `crm/api/` when
 | `crm/api/deal-notes/{id}/` | GET, PUT, PATCH, DELETE | Deal note detail |
 
 All CRM API endpoints, including standalone note routes, nested note actions, and deal bulk
-actions, use session authentication and require a staff user. The HTML dashboard at
-`crm/dashboard/` is a separate staff-only surface: anonymous users are redirected to the
-configured login entry, authenticated non-staff users receive `403`, and staff users can view
-the dashboard regardless of the `QUICKSCALE_CRM_API_ENABLED` toggle. When `QUICKSCALE_CRM_API_ENABLED` is `false`, the
+actions, use session authentication and authorize by the active organization's role: reads
+(list, retrieve, and note lists) require the `viewer` role, writes (create, update, delete,
+bulk actions, and note creation) require the `member` role, and an authenticated caller below
+the minimum is refused. The HTML dashboard at `crm/dashboard/` requires the `viewer` role:
+anonymous users are redirected to
+the configured login entry, an authenticated caller below `viewer` receives `403`, and a
+`viewer` can view the dashboard regardless of the `QUICKSCALE_CRM_API_ENABLED` toggle. When
+`QUICKSCALE_CRM_API_ENABLED` is `false`, the
 `crm/api/` routes remain hidden and return `404`.
 
 Filtering:
@@ -100,8 +105,8 @@ module's paths are:
 
 | URL name | Path | View |
 |----------|------|------|
-| `quickscale_crm:dashboard` | `crm/dashboard/` | Staff-only CRM dashboard |
-| `quickscale_crm:api_root` | `crm/api/` | Staff-only API root with endpoint links |
+| `quickscale_crm:dashboard` | `crm/dashboard/` | CRM dashboard (viewer role) |
+| `quickscale_crm:api_root` | `crm/api/` | API root with endpoint links (viewer role) |
 | `quickscale_crm:tag_list`, `quickscale_crm:tag_detail` | `crm/api/tags/` and `crm/api/tags/<id>/` | Tag API |
 | `quickscale_crm:company_list`, `quickscale_crm:company_detail` | `crm/api/companies/` and detail | Company API |
 | `quickscale_crm:contact_list`, `quickscale_crm:contact_detail`, `quickscale_crm:contact_notes` | `crm/api/contacts/`, detail, and `crm/api/contacts/<id>/notes/` | Contact API |
@@ -126,8 +131,8 @@ quickscale apply
 
 A manual installation adds `rest_framework`, `django_filters`, and `quickscale_modules_crm` to
 `INSTALLED_APPS`, mounts the module's URLs, and runs `python manage.py migrate quickscale_crm`.
-The staff API and dashboard are subject to the active-organization behavior of orgs'
-`TenantMiddleware`: a staff user without a selected organization is redirected to the org
+The API and dashboard are subject to the active-organization behavior of orgs'
+`TenantMiddleware`: a user without a selected organization is redirected to the org
 selector before the dashboard or API runs.
 
 ## Extending

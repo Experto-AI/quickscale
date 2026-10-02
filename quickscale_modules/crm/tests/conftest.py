@@ -109,50 +109,83 @@ def api_client():
     return APIClient()
 
 
+class OrgEnrichedAPIClient(APIClient):
+    """APIClient that sets the session org and ContextVar for org scoping.
+
+    Each request resets the fixture-seeded current-org so ``org_scope``
+    enters from a fail-closed baseline (ContextVar=None).  On exit,
+    ``org_scope`` restores to None — proving the Python ContextVar, DB GUC,
+    and RLS row invisibility are restored after each synthetic request.
+    """
+
+    def request(self, **kwargs):
+        reset_current_org_id()
+        with org_scope(self._personal_org):
+            return super().request(**kwargs)
+
+
+def _org_session_client(user, organization):
+    """Build an org-enriched API client for *user* with *organization* active."""
+    client = OrgEnrichedAPIClient()
+    client.force_login(user)
+    session = client.session
+    session[ACTIVE_ORG_SESSION_KEY] = str(organization.id)
+    session.save()
+    client._personal_org = organization
+    return client
+
+
+def _role_user(username: str, role: OrgRole):
+    """Create a user whose personal-org membership carries *role*."""
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username=username,
+        email=f"{username}@example.com",
+        password="TestPass123!",
+    )
+    organization = Organization.objects.create_personal_for(user)
+    OrganizationMembership.objects.filter(user=user, organization=organization).update(
+        role=role
+    )
+    return user, organization
+
+
 @pytest.fixture
 def authenticated_client(staff_user):
-    """Create a staff-authenticated API client with personal org context.
+    """Create an org-member-authenticated API client with personal org context.
 
     Uses session-based auth (``force_login``) and sets the active
     org in the session so ``TenantMiddleware`` resolves ``request.org``.
     Also primes the ContextVar for TenantManager auto-scoping at the DB
     level.
     """
-    from quickscale_modules_orgs.models import Organization
-
     personal_org = Organization.objects.get(
         is_personal=True, quickscale_orgs_memberships__user=staff_user
     )
-    personal_org_id = personal_org.id
-
-    class OrgEnrichedAPIClient(APIClient):
-        """APIClient that sets session org and ContextVar for org scoping."""
-
-        def request(self, **kwargs):
-            # Reset fixture-seeded current-org so org_scope enters from a
-            # fail-closed baseline (ContextVar=None).  On exit, org_scope
-            # restores to None — proving the Python ContextVar, DB GUC, and
-            # RLS row invisibility are restored after each synthetic request
-            # Prior code cleared only the ContextVar via
-            # reset_current_org_id(), leaving the SET LOCAL GUC active in
-            # pytest's outer transaction.
-            reset_current_org_id()
-            with org_scope(personal_org):
-                return super().request(**kwargs)
-
-    client = OrgEnrichedAPIClient()
-    client.force_login(staff_user)
-    # Set the active org in the session so TenantMiddleware resolves it.
-    session = client.session
-    session[ACTIVE_ORG_SESSION_KEY] = str(personal_org_id)
-    session.save()
-    client._personal_org = personal_org
-    return client
+    return _org_session_client(staff_user, personal_org)
 
 
 @pytest.fixture
-def non_staff_authenticated_client(user):
-    """Create a non-staff authenticated API client"""
+def viewer_client(db):
+    """An API client for a user whose only org role is viewer."""
+    user, organization = _role_user("crm-viewer", OrgRole.VIEWER)
+    return _org_session_client(user, organization)
+
+
+@pytest.fixture
+def member_client(db):
+    """An API client for a user whose only org role is member."""
+    user, organization = _role_user("crm-member", OrgRole.MEMBER)
+    return _org_session_client(user, organization)
+
+
+@pytest.fixture
+def orgless_authenticated_client(user):
+    """Create an authenticated API client with no active-organization context.
+
+    ``force_authenticate`` skips the session, so ``TenantMiddleware`` never
+    resolves ``request.org``: the org-role permission must fail closed.
+    """
     client = APIClient()
     client.force_authenticate(user=user)
     return client

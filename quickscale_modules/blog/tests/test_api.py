@@ -193,6 +193,50 @@ def staff_org(db, staff_user):
     return Organization.objects.get_system_org()
 
 
+@pytest.fixture
+def viewer_user(db):
+    """Create a user who is only a viewer in their personal org (SaaS mode)."""
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        Organization,
+        OrganizationMembership,
+    )
+
+    user_model = get_user_model()
+    viewer_user = user_model.objects.create_user(
+        username="viewer",
+        email="viewer@example.com",
+        password="viewerpass123",
+    )
+    organization = Organization.objects.create_personal_for(viewer_user)
+    OrganizationMembership.objects.filter(
+        user=viewer_user, organization=organization
+    ).update(role=OrgRole.VIEWER)
+    return viewer_user
+
+
+@pytest.fixture
+def member_user(db):
+    """Create a user whose only org role is member (SaaS mode)."""
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        Organization,
+        OrganizationMembership,
+    )
+
+    user_model = get_user_model()
+    member_user = user_model.objects.create_user(
+        username="member",
+        email="member@example.com",
+        password="memberpass123",
+    )
+    organization = Organization.objects.create_personal_for(member_user)
+    OrganizationMembership.objects.filter(
+        user=member_user, organization=organization
+    ).update(role=OrgRole.MEMBER)
+    return member_user
+
+
 @pytest.fixture(autouse=True)
 def clear_blog_api_throttle_cache():
     """Keep DRF throttle history isolated across tests."""
@@ -263,9 +307,9 @@ class TestPublishPostApi:
         assert response.status_code == 401
         assert _error(response)["code"] == "not_authenticated"
 
-    def test_publish_post_api_non_staff_returns_403(self, client, user):
-        """Test API requires staff permissions"""
-        _login_with_org(client, user)
+    def test_publish_post_api_viewer_role_returns_403(self, client, viewer_user):
+        """Test API requires at least the member org role"""
+        _login_with_org(client, viewer_user)
 
         response = client.post(
             reverse("quickscale_blog:api_publish_post"),
@@ -274,9 +318,22 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 403
-        error = _error(response)
-        assert error["code"] == "permission_denied"
-        assert error["message"] == "Staff access required"
+        assert _error(response)["code"] == "permission_denied"
+
+    def test_publish_post_api_member_role_creates_published_post(
+        self, client, member_user
+    ):
+        """Test API admits an org member at the member role"""
+        _login_with_org(client, member_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "Member Post", "content": "Body"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        assert response.json()["status"] == "published"
 
     def test_publish_post_api_missing_csrf_returns_403(self, staff_user):
         """Test API enforces CSRF protection for session-authenticated requests"""
@@ -954,8 +1011,8 @@ class TestPublishPostApi:
         system_org,
         blog_org_scope,
     ):
-        """A user without a personal org falls back to the System org and
-        restores the prior ContextVar through the shared org scope.
+        """A System-org member publishes to the System org and the prior
+        ContextVar is restored through the shared org scope.
 
         Runs under an explicit outer ``transaction.atomic()``, asserts both
         the Python ContextVar and the PostgreSQL GUC return to the exact
@@ -965,21 +1022,30 @@ class TestPublishPostApi:
         from django.db import transaction
 
         from quickscale_modules_orgs.current_org import get_current_org_id
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            OrganizationMembership,
+        )
 
         User = get_user_model()
         fallback_user = User.objects.create_user(
             username="sysfallback",
             email="sysfallback@example.com",
             password="pass",
-            is_staff=True,
         )
-        # No personal org → System org fallback in _resolve_api_org.
+        # No personal org → the request's System-org context is used.
+        OrganizationMembership.objects.create(
+            user=fallback_user,
+            organization=system_org,
+            role=OrgRole.MEMBER,
+        )
         request = APIRequestFactory().post(
             reverse("quickscale_blog:api_publish_post"),
             data=json.dumps({"title": "System Fallback", "content": "Body"}),
             content_type="application/json",
         )
         force_authenticate(request, user=fallback_user)
+        request.org = system_org
 
         with transaction.atomic():
             response = PostPublishAPIView.as_view()(request)
@@ -999,6 +1065,7 @@ class TestPublishPostApi:
     def test_publish_post_api_handled_error_restores_prior_context(
         self,
         staff_user,
+        staff_org,
         system_org,
     ):
         """A handled publish error (400) restores the prior org context.
@@ -1019,6 +1086,7 @@ class TestPublishPostApi:
             content_type="application/json",
         )
         force_authenticate(request, user=staff_user)
+        request.org = staff_org
 
         with transaction.atomic():
             response = PostPublishAPIView.as_view()(request)
@@ -1105,9 +1173,9 @@ class TestUploadMediaApi:
         assert response.status_code == 401
         assert _error(response)["code"] == "not_authenticated"
 
-    def test_upload_media_api_non_staff_returns_403(self, client, user):
-        """Test media uploads require staff access."""
-        _login_with_org(client, user)
+    def test_upload_media_api_viewer_role_returns_403(self, client, viewer_user):
+        """Test media uploads require at least the member org role."""
+        _login_with_org(client, viewer_user)
 
         response = client.post(
             reverse("quickscale_blog:api_upload_media"),
@@ -1115,7 +1183,7 @@ class TestUploadMediaApi:
         )
 
         assert response.status_code == 403
-        assert _error(response)["message"] == "Staff access required"
+        assert _error(response)["code"] == "permission_denied"
 
     def test_upload_media_api_missing_csrf_returns_403(self, staff_user):
         """Test session-authenticated media uploads enforce CSRF protection."""
@@ -1435,6 +1503,7 @@ class TestUploadMediaApi:
             format="multipart",
         )
         force_authenticate(request, user=staff_user)
+        request.org = staff_org
 
         with transaction.atomic():
             set_current_org_id(distinct_prior)
@@ -1498,6 +1567,7 @@ class TestUploadMediaApi:
     def test_upload_media_api_handled_error_restores_prior_context(
         self,
         staff_user,
+        staff_org,
         system_org,
     ):
         """Upload handled error (400) restores the prior org context.
@@ -1523,6 +1593,7 @@ class TestUploadMediaApi:
             format="multipart",
         )
         force_authenticate(request, user=staff_user)
+        request.org = staff_org
 
         with transaction.atomic():
             response = MediaUploadAPIView.as_view()(request)

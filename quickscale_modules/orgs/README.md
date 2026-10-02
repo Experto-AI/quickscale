@@ -55,6 +55,9 @@ org-scoped views and APIs:
 - `user_has_org_role(user, organization, min_role)`.
 - `require_org_role(min_role)`, a decorator for function views.
 - `OrgRoleMixin`, a class-based-view mixin with a configurable `min_org_role`.
+- `HasOrgRole(min_role)`, the DRF permission class for JSON endpoints; it resolves the request's
+  organization the same way and delegates to `user_has_org_role`, refusing a request with no
+  organization context. Superusers pass as the operator path, matching `user_has_org_role`.
 - `resolve_request_org(request, route_kwargs)`, which returns the request's organization from
   the active context or the routed `org_slug`.
 

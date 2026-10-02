@@ -356,16 +356,15 @@ class TestContactFormE2EWorkflow:
     def test_staff_without_org_fails_closed_on_admin_submissions(
         self, staff_client, seeded_contact_form
     ):
-        """View-unit defense-in-depth: force-auth staff without org gets
-        empty list on admin submission list (fail-closed)."""
+        """View-unit defense-in-depth: force-auth staff without org is refused
+        (403) before the admin submission list can read any data."""
         url = reverse(
             "quickscale_forms:admin_submission_list",
             kwargs={"pk": seeded_contact_form.pk},
         )
         response = staff_client.get(url)
-        assert response.status_code == 200
-        assert len(response.data) == 0, (
-            "Staff without org must see empty submission list (fail-closed)"
+        assert response.status_code == 403, (
+            "Staff without org must be refused (fail-closed)"
         )
 
     def test_anonymous_user_cannot_list_submissions(

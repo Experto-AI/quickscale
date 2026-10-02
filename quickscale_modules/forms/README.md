@@ -10,7 +10,7 @@ data-driven admin interface — no code changes required to add or modify forms.
   Django admin.
 - Four built-in presets (`contact`, `newsletter`, `feedback`, `support`) are created by the
   initial migration.
-- A public schema and submit API, and a staff-only submission-management API.
+- A public schema and submit API, and a member-role submission-management API.
 - Honeypot spam protection and per-IP rate limiting.
 - Tenant-scoped: submissions belong to an organization through orgs' `TenantModel`.
 
@@ -22,11 +22,11 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
 | `enabled` | boolean | `true` | `QUICKSCALE_FORMS_ENABLED` | Mount the module's pages and APIs. Off keeps the app and its data installed, serves none of its URLs, and stops the scheduled retention command. |
-| `submissions_per_page` | integer | `25` | `QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE` | Number of submissions shown per page in the staff submissions API. |
+| `submissions_per_page` | integer | `25` | `QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE` | Number of submissions shown per page in the admin submissions API. |
 | `spam_protection_enabled` | boolean | `true` | `QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED` | Enable honeypot spam protection globally for forms that also keep their per-form flag enabled. |
 | `rate_limit` | string | `5/hour` | `QUICKSCALE_FORMS_RATE_LIMIT` | Throttle rate for form submissions, per IP. Format: `<count>/<period>`. |
 | `retention_days` | integer | `365` | `QUICKSCALE_FORMS_RETENTION_DAYS` | Default days assigned to newly created forms before anonymization (`0` = keep forever); existing forms keep their stored value. |
-| `api_enabled` | boolean | `true` | `QUICKSCALE_FORMS_API_ENABLED` | Enable REST API endpoints for staff submission management. |
+| `api_enabled` | boolean | `true` | `QUICKSCALE_FORMS_API_ENABLED` | Enable REST API endpoints for organization submission management. |
 
 A manual installation must set these settings explicitly; generated projects have them rendered
 by `quickscale apply`. The public schema and submit endpoints stay available regardless of
@@ -40,10 +40,10 @@ by `quickscale apply`. The public schema and submit endpoints stay available reg
 |--------|------|------|-------------|
 | `GET` | `forms/api/{slug}/` | Public | Fetch form schema |
 | `POST` | `forms/api/{slug}/submit/` | Public | Submit form data |
-| `GET` | `forms/api/admin/forms/` | Staff+ | List forms with submission counts |
-| `GET` | `forms/api/admin/forms/{id}/submissions/` | Staff+ | List submissions |
-| `GET/PATCH` | `forms/api/admin/forms/{id}/submissions/{sub_id}/` | Staff+ | Submission detail/update |
-| `GET` | `forms/api/admin/forms/{id}/submissions/export/` | Staff+ | Download CSV |
+| `GET` | `forms/api/admin/forms/` | Viewer+ | List forms with submission counts |
+| `GET` | `forms/api/admin/forms/{id}/submissions/` | Viewer+ | List submissions |
+| `GET/PATCH` | `forms/api/admin/forms/{id}/submissions/{sub_id}/` | Viewer+ / Member+ | Submission detail (GET) and update (PATCH) |
+| `GET` | `forms/api/admin/forms/{id}/submissions/export/` | Viewer+ | Download CSV |
 
 Every error answers the shared `{"error": {"code", "message", "fields"}}` shape (`fields` only
 for validation errors), produced by `quickscale_core.runtime.conventions.exception_handler` —
@@ -80,20 +80,21 @@ The message is dispatched through the notifications module's `send_notification`
 the submission commits, so a rolled-back submission sends nothing; delivery failures are logged
 and never block submission processing.
 
-### Staff access model
+### Access model
 
-Staff-level access (`forms/api/admin/forms/*`) follows a retained-role model; an active organization
-selection is required for regular staff to see any data.
+Admin access (`forms/api/admin/forms/*`) authorizes by the active organization's role; an active
+organization selection is required for a regular member to see any data. Reads (list, retrieve,
+export) require the `viewer` role and writes (`PATCH`) require the `member` role.
 
 | Role | Org context | Behavior |
 |------|-------------|----------|
-| Superuser | After org selection | Cross-tenant SELECT via `operator_access` (audited). All `GET`/list operations run inside `operator_access`, which is gated to superusers and logged at `INFO` level. `PATCH` saves inside the target submission's `org_scope`. Without an active org selected, the middleware redirects to `/orgs/` — same as regular staff. |
-| Regular staff | Active org selected | Data is scoped via RLS to the request's active organization; only records belonging to that org are visible. |
-| Regular staff | None | Fail-closed: `TenantMiddleware` redirects to `/orgs/` before view execution (302). View-unit tests without middleware show an empty list or 404. No data is leaked. |
+| Superuser | After org selection | Cross-tenant SELECT via `operator_access` (audited). All `GET`/list operations run inside `operator_access`, which is gated to superusers and logged at `INFO` level. `PATCH` saves inside the target submission's `org_scope`. Without an active org selected, the middleware redirects to `/orgs/`; a direct superuser call with no org context still reaches this audited operator path (`200`). |
+| Organization member | Active org selected | Data is scoped via RLS to the request's active organization; only records belonging to that org are visible. Reads need `viewer` or above; writes need `member` or above; a caller below the action's minimum is refused (`403`). |
+| Organization member | None | Fail-closed: `TenantMiddleware` redirects to `/orgs/` before view execution (302). A non-superuser view-unit call without org context is refused by the permission (`403`). No data is leaked. |
 | Anonymous | N/A | Denied (`403 Forbidden`). |
 
 The `QUICKSCALE_FORMS_API_ENABLED` setting is checked on every admin request before any role-specific
-logic — a disabled API returns 404 for both superuser and regular staff.
+logic — a disabled API returns 404 for every caller.
 
 ## URLs
 
@@ -106,10 +107,10 @@ module's paths are:
 | `quickscale_forms:form_page` | `forms/<slug>/` | Public form page (React mount point) |
 | `quickscale_forms:form_schema` | `forms/api/<slug>/` | Public form schema |
 | `quickscale_forms:form_submit` | `forms/api/<slug>/submit/` | Public submission endpoint |
-| `quickscale_forms:admin_form_list` | `forms/api/admin/forms/` | Staff form list |
-| `quickscale_forms:admin_submission_list` | `forms/api/admin/forms/<pk>/submissions/` | Staff submission list |
-| `quickscale_forms:admin_submission_detail` | `forms/api/admin/forms/<pk>/submissions/<sub_pk>/` | Staff submission detail |
-| `quickscale_forms:admin_submission_export` | `forms/api/admin/forms/<pk>/submissions/export/` | Staff CSV export |
+| `quickscale_forms:admin_form_list` | `forms/api/admin/forms/` | Viewer-role form list |
+| `quickscale_forms:admin_submission_list` | `forms/api/admin/forms/<pk>/submissions/` | Viewer-role submission list |
+| `quickscale_forms:admin_submission_detail` | `forms/api/admin/forms/<pk>/submissions/<sub_pk>/` | Viewer-role GET / member-role PATCH submission detail |
+| `quickscale_forms:admin_submission_export` | `forms/api/admin/forms/<pk>/submissions/export/` | Viewer-role CSV export |
 
 ## Management commands
 
