@@ -28,7 +28,7 @@ def test_app_config_declares_organization_cache_keys() -> None:
 
 def test_organization_cache_keys_cover_bare_and_org_partitioned_keys() -> None:
     """The declaration returns the social keys a removal boundary must clear."""
-    from quickscale_modules_social.contracts import (
+    from quickscale_modules_social._contracts import (
         SOCIAL_EMBEDS_CACHE_KEY,
         SOCIAL_LINKS_CACHE_KEY,
     )

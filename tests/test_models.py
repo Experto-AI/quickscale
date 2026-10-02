@@ -10,7 +10,7 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.test import override_settings
 
-from quickscale_modules_social.contracts import (
+from quickscale_modules_social._contracts import (
     ResolvedSocialEmbedMetadata,
     SocialEmbedResolution,
 )

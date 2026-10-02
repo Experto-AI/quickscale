@@ -10,7 +10,7 @@ from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
-from quickscale_modules_social.contracts import (
+from quickscale_modules_social._contracts import (
     SOCIAL_EMBEDS_CACHE_KEY,
     SOCIAL_LINKS_CACHE_KEY,
     SOCIAL_PROVIDER_CHOICES,

@@ -10,7 +10,7 @@ from django.db.utils import OperationalError, ProgrammingError
 
 from quickscale_modules_orgs.current_org import get_current_org_id
 
-from quickscale_modules_social.contracts import (
+from quickscale_modules_social._contracts import (
     DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST,
     DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
     SOCIAL_EMBEDS_CACHE_KEY,
