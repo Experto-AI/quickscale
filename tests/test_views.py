@@ -582,14 +582,13 @@ class TestFormSubmitAPIView:
 
 @pytest.mark.django_db
 class TestAdminFormListAPIView:
-    """Tests for the staff GET /forms/api/admin/forms/ endpoint
+    """Tests for the admin GET /forms/api/admin/forms/ endpoint
 
-    Retained-role contract:
-    * Superuser: cross-tenant read via ``operator_access``.
-    * Regular staff with active org: scoped to that org via RLS.
-    * Regular staff without org: fail-closed — view-unit tests assert
-      empty list (no ContextVar); session-pipeline tests assert 302
-      redirect to /orgs/ before view executes.
+    Org-role contract (rule 19):
+    * Superuser: the operator path — cross-tenant read via ``operator_access``.
+    * Viewer or above with active org: scoped to that org via RLS.
+    * No org context: the permission refuses the request (403);
+      session-pipeline tests assert 302 redirect to /orgs/ before view executes.
     * Anonymous: denied (403).
 
     /forms/api/admin/forms/ is NON-EXEMPT from
@@ -610,9 +609,8 @@ class TestAdminFormListAPIView:
         assert len(response.data) >= 1
         assert "submission_count" in response.data[0]
 
-    def test_staff_without_org_fails_closed(self, staff_client, form):
-        """View-unit defense-in-depth: force-auth staff without org sees
-        empty list (fail-closed).
+    def test_staff_without_org_is_refused(self, staff_client, form):
+        """View-unit defense-in-depth: force-auth staff without org is refused.
 
         This test uses ``force_authenticate`` (DRF-only, no session
         middleware).  The session-parity proof for real middleware-pipeline
@@ -621,10 +619,7 @@ class TestAdminFormListAPIView:
         """
         url = reverse("quickscale_forms:admin_form_list")
         response = staff_client.get(url)
-        assert response.status_code == 200
-        assert len(response.data) == 0, (
-            "Staff without org must see empty list (fail-closed)"
-        )
+        assert response.status_code == 403
 
     def test_superuser_sees_org_scoped_form(self, superuser_client, org, org_form):
         """Superuser sees forms from a scoped org via cross-tenant read.
@@ -709,10 +704,10 @@ class TestAdminFormListAPIView:
     # not start with /admin/ or any other exempt prefix), so the
     # middleware DOES run and populates the ContextVar from the session.
     #
-    # * Regular staff with active org: ContextVar populated → RLS
-    #   scopes the queryset to the active org.  Staff see only forms
-    #   belonging to that org.
-    # * Regular staff without active org: middleware redirects to
+    # * An org member (viewer or above) with active org: ContextVar
+    #   populated → RLS scopes the queryset to the active org.  Members see
+    #   only forms belonging to that org.
+    # * An org member without active org: middleware redirects to
     #   /orgs/ before the view executes (302).
     # * Superuser with active org: ContextVar populated but
     #   _get_org_bound_queryset returns all_objects.all() regardless.
@@ -727,12 +722,12 @@ class TestAdminFormListAPIView:
     def test_staff_session_active_org_sees_own_org_forms(
         self, staff_user, api_client, form, db
     ):
-        """Regular staff with force_login + ACTIVE_ORG_SESSION_KEY sees
+        """An org member with force_login + ACTIVE_ORG_SESSION_KEY sees
         only forms belonging to their active org.
 
         Real session-auth pipeline proof.
         /forms/api/admin/forms/ is non-exempt, so TenantMiddleware runs and
-        populates the ContextVar from the session.  Staff see their own
+        populates the ContextVar from the session.  Members see their own
         org's form and do NOT see forms from other orgs.
         """
         from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
@@ -744,7 +739,7 @@ class TestAdminFormListAPIView:
         )
         from quickscale_modules_forms.models import Form
 
-        # Create a separate org for the staff user (different from
+        # Create a separate org for the member user (different from
         # System org where ``form`` fixture lives).
         own_org = Organization.objects.create(
             name="Staff Own Org", slug="staff-own-org"
@@ -755,7 +750,7 @@ class TestAdminFormListAPIView:
             role=OrgRole.ADMIN,
         )
 
-        # Create a form under the staff user's org.
+        # Create a form under the member user's org.
         with org_scope(own_org):
             Form.all_objects.create(
                 organization=own_org,
@@ -776,16 +771,16 @@ class TestAdminFormListAPIView:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
         slugs = [item["slug"] for item in response.data]
         assert "own-contact" in slugs, (
-            f"Staff must see their own org's form. Got slugs: {slugs}"
+            f"Member must see their own org's form. Got slugs: {slugs}"
         )
         # System org's form (created by the ``form`` fixture) must NOT
         # be visible — different org, RLS-scoped out.
         assert "test-contact" not in slugs, (
-            f"Staff must NOT see System org's form (different org). Got slugs: {slugs}"
+            f"Member must NOT see System org's form (different org). Got slugs: {slugs}"
         )
 
     def test_staff_session_cross_org_excluded(self, staff_user, api_client, db):
-        """Regular staff with force_login + ACTIVE_ORG_SESSION_KEY set
+        """An org member with force_login + ACTIVE_ORG_SESSION_KEY set
         to one org does not see forms belonging to a different org.
 
         Proves cross-tenant isolation through the
@@ -835,10 +830,49 @@ class TestAdminFormListAPIView:
         response = api_client.get(url)
         assert response.status_code == 200
         slugs = [item["slug"] for item in response.data]
-        assert "own-form" in slugs, f"Staff must see own org's form. Got slugs: {slugs}"
-        assert "other-form" not in slugs, (
-            f"Staff must NOT see other org's form. Got slugs: {slugs}"
+        assert "own-form" in slugs, (
+            f"Member must see own org's form. Got slugs: {slugs}"
         )
+        assert "other-form" not in slugs, (
+            f"Member must NOT see other org's form. Got slugs: {slugs}"
+        )
+
+    def test_viewer_session_reads_active_org_forms(self, user, api_client, db):
+        """A viewer-role session can read its active org's forms (rule 19)."""
+        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+        from quickscale_modules_forms.models import Form
+
+        viewer_org = Organization.objects.create(name="Viewer Org", slug="viewer-org")
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=viewer_org,
+            role=OrgRole.VIEWER,
+        )
+        with org_scope(viewer_org):
+            Form.all_objects.create(
+                organization=viewer_org,
+                title="Viewer Contact",
+                slug="viewer-contact",
+                success_message="Thanks!",
+                is_active=True,
+            )
+
+        api_client.force_login(user=user)
+        session = api_client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(viewer_org.pk)
+        session.save()
+
+        response = api_client.get(reverse("quickscale_forms:admin_form_list"))
+
+        assert response.status_code == 200
+        slugs = [item["slug"] for item in response.data]
+        assert "viewer-contact" in slugs
 
     def test_superuser_session_active_org_sees_cross_tenant(
         self, superuser, api_client, db
@@ -918,7 +952,7 @@ class TestAdminFormListAPIView:
     # staff and superusers.
 
     def test_staff_session_no_active_org_redirects(self, staff_user, api_client, db):
-        """Regular staff without ACTIVE_ORG_SESSION_KEY gets 302
+        """An authenticated user without ACTIVE_ORG_SESSION_KEY gets 302
         redirect to /orgs/ on the admin_form_list path.
 
         Proves TenantMiddleware redirects to /orgs/
@@ -971,11 +1005,12 @@ class TestAdminFormListAPIView:
 
 @pytest.mark.django_db
 class TestAdminSubmissionListAPIView:
-    """Tests for the staff GET /forms/api/admin/forms/{id}/submissions/ endpoint
+    """Tests for the admin GET /forms/api/admin/forms/{id}/submissions/ endpoint
 
-    Retained-role:
-    * Superuser: cross-tenant read via ``operator_access``.
-    * Regular staff without org: fail-closed (empty list).
+    Org-role contract (rule 19):
+    * Superuser: the operator path — cross-tenant read via ``operator_access``.
+    * Viewer or above with active org: RLS-scoped to that org.
+    * No org context: the permission refuses the request (403).
     """
 
     def test_superuser_can_list_submissions(self, superuser_client, form, submission):
@@ -985,9 +1020,8 @@ class TestAdminSubmissionListAPIView:
         assert response.status_code == 200
         assert len(response.data) >= 1
 
-    def test_staff_without_org_gets_empty_list(self, staff_client, form, submission):
-        """View-unit defense-in-depth: force-auth staff without org gets
-        empty submission list (fail-closed).
+    def test_staff_without_org_is_refused(self, staff_client, form, submission):
+        """View-unit defense-in-depth: force-auth staff without org is refused.
 
         Session-parity proof for the real middleware pipeline is
         ``test_staff_session_active_org_sees_own_org_forms`` and
@@ -995,10 +1029,7 @@ class TestAdminSubmissionListAPIView:
         """
         url = reverse("quickscale_forms:admin_submission_list", kwargs={"pk": form.pk})
         response = staff_client.get(url)
-        assert response.status_code == 200
-        assert len(response.data) == 0, (
-            "Staff without org must receive empty list (fail-closed)"
-        )
+        assert response.status_code == 403
 
     def test_filter_by_status(self, superuser_client, form, submission):
         """Submissions can be filtered by status query param."""
@@ -1114,24 +1145,112 @@ class TestAdminSubmissionDetailAPIView:
             "targeted the correct record despite mismatched active org"
         )
 
-    def test_staff_without_org_gets_404_on_detail(self, staff_client, form, submission):
-        """View-unit defense-in-depth: force-auth staff without org gets
-        404 on submission detail (fail-closed)."""
+    def _scoped_submission(self, organization):
+        """Create an active form and submission under *organization*."""
+        from quickscale_modules_forms.models import Form, FormSubmission
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(organization):
+            scoped_form = Form.all_objects.create(
+                organization=organization,
+                title="Role Form",
+                slug=f"role-form-{organization.slug}",
+                success_message="Thanks!",
+                is_active=True,
+            )
+            scoped_submission = FormSubmission.all_objects.create(
+                form=scoped_form,
+                organization=organization,
+                ip_address="127.0.0.1",
+                user_agent="RoleAgent/1.0",
+            )
+        return scoped_form, scoped_submission
+
+    def _login_with_org_session(self, api_client, user, organization):
+        """Log *user* in with *organization* active in the session."""
+        from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+
+        api_client.force_login(user=user)
+        session = api_client.session
+        session[ACTIVE_ORG_SESSION_KEY] = str(organization.pk)
+        session.save()
+
+    def test_viewer_session_cannot_patch_submission(self, user, api_client, db, org_a):
+        """A viewer-role session reads the detail but is refused the PATCH."""
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            OrganizationMembership,
+        )
+
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=org_a,
+            role=OrgRole.VIEWER,
+        )
+        scoped_form, scoped_submission = self._scoped_submission(org_a)
+        self._login_with_org_session(api_client, user, org_a)
+
+        url = reverse(
+            "quickscale_forms:admin_submission_detail",
+            kwargs={"pk": scoped_form.pk, "sub_pk": scoped_submission.pk},
+        )
+        read_response = api_client.get(url)
+        write_response = api_client.patch(url, data={"status": "read"}, format="json")
+
+        assert read_response.status_code == 200
+        assert write_response.status_code == 403
+        with org_scope(org_a):
+            scoped_submission.refresh_from_db()
+        assert scoped_submission.status != "read"
+
+    def test_member_session_can_patch_submission(self, user, api_client, db, org_a):
+        """A member-role session can PATCH a submission in its active org."""
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            OrganizationMembership,
+        )
+
+        OrganizationMembership.objects.create(
+            user=user,
+            organization=org_a,
+            role=OrgRole.MEMBER,
+        )
+        scoped_form, scoped_submission = self._scoped_submission(org_a)
+        self._login_with_org_session(api_client, user, org_a)
+
+        url = reverse(
+            "quickscale_forms:admin_submission_detail",
+            kwargs={"pk": scoped_form.pk, "sub_pk": scoped_submission.pk},
+        )
+        response = api_client.patch(url, data={"status": "read"}, format="json")
+
+        assert response.status_code == 200
+        with org_scope(org_a):
+            scoped_submission.refresh_from_db()
+        assert scoped_submission.status == "read"
+
+    def test_staff_without_org_is_refused_on_detail(
+        self, staff_client, form, submission
+    ):
+        """View-unit defense-in-depth: force-auth staff without org is refused."""
         url = reverse(
             "quickscale_forms:admin_submission_detail",
             kwargs={"pk": form.pk, "sub_pk": submission.pk},
         )
         response = staff_client.get(url)
-        assert response.status_code == 404
+        assert response.status_code == 403
 
 
 @pytest.mark.django_db
 class TestAdminSubmissionExportView:
-    """Tests for the staff CSV export view
+    """Tests for the admin CSV export view
 
-    Retained-role:
-    * Superuser: cross-tenant read via ``operator_access`` (audited).
-    * Regular staff without org: fail-closed (404).
+    Org-role contract (rule 19):
+    * Superuser: the operator path — cross-tenant read via ``operator_access``.
+    * Viewer or above with active org: RLS-scoped to that org.
+    * No org context: the permission refuses the request (403).
     """
 
     def test_superuser_gets_csv(self, superuser_client, form, submission, field_value):
@@ -1178,14 +1297,13 @@ class TestAdminSubmissionExportView:
         assert rows[0][-1] == "'=2+2"
         assert rows[1][-1] == "'  +SUM(A1:A2)"
 
-    def test_staff_without_org_gets_404_on_export(self, staff_client, form):
-        """View-unit defense-in-depth: force-auth staff without org gets
-        404 on CSV export (fail-closed)."""
+    def test_staff_without_org_is_refused_on_export(self, staff_client, form):
+        """View-unit defense-in-depth: force-auth staff without org is refused."""
         url = reverse(
             "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = staff_client.get(url)
-        assert response.status_code == 404
+        assert response.status_code == 403
 
     def test_returns_403_for_anonymous(self, api_client, form):
         """Anonymous user cannot export submissions"""

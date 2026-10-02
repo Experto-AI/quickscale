@@ -32,7 +32,7 @@ urlpatterns = [
         FormSubmitAPIView.as_view(),
         name="form_submit",
     ),
-    # Staff REST API
+    # Organization-role REST API
     path(
         "api/admin/forms/",
         AdminFormListAPIView.as_view(),
