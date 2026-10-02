@@ -181,8 +181,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   lines. `notifications/services.py` is a re-exported facade over `_settings.py`, `_templates.py`,
   `_sanitization.py`, `_delivery.py`, and `_webhooks.py`, each under 800 lines, with its two
   accepted complexity entries resolved, its rule 26 signature-verification entry point and its
-  delivery and webhook patch seams kept on the facade. The remaining modules and the closing gate
-  batch remain, the gate waiting on SA232.
+  delivery and webhook patch seams kept on the facade. Blog's `services.py` decomposes its publish
+  and upload operations into focused helpers, so both recorded complexity entries drop below the
+  ceiling and the baseline drops the package's two live entries plus its four already-resolved
+  ones. The remaining modules and the closing gate batch remain, the gate waiting on SA232.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on

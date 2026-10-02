@@ -53,26 +53,6 @@
       "decision_ref": "module-conventions"
     },
     {
-      "waiver_id": "W011",
-      "entry_key": "complexity:quickscale_modules/blog/src/quickscale_modules_blog/services.py::_validate_blog_image_upload",
-      "base_ceiling": 0,
-      "ceiling": 13,
-      "owner": "QuickScale maintainers",
-      "reason": "SA228 moves blog's public upload validation into services.py; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "module-conventions"
-    },
-    {
-      "waiver_id": "W012",
-      "entry_key": "complexity:quickscale_modules/blog/src/quickscale_modules_blog/services.py::create_published_post_from_payload",
-      "base_ceiling": 0,
-      "ceiling": 37,
-      "owner": "QuickScale maintainers",
-      "reason": "SA228 moves blog's public publish operation into services.py; the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "module-conventions"
-    },
-    {
       "waiver_id": "W013",
       "entry_key": "complexity:quickscale_modules/listings/src/quickscale_modules_listings/services.py::create_published_listing_from_payload",
       "base_ceiling": 0,
