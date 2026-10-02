@@ -156,11 +156,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   batch re-tightens the baseline for its files. The final batch adds file length to the baseline
   ratchet and registers `make quality` as a failing gate.
 
-  **Landed (batch 1, first slice):** `beta_migration.py` is a 15-module package, each module under
-  800 lines, with its public import surface re-exported; its two accepted complexity entries are
-  relocated and tightened, while its unaccepted per-function debt stays visible as regressions. Batch
-  1 remains open on `manifest/loader.py`, `manifest/resolver.py`, `project_state.py`,
-  `utils/git_utils.py`, and `contracts/`; no function has been reduced yet.
+  **Landed (batch 1):** `beta_migration.py` is a 15-module package, each module under 800 lines,
+  with its public import surface re-exported; its two accepted complexity entries are relocated and
+  tightened, while its unaccepted per-function debt stays visible as regressions. `manifest/loader.py`
+  is now a facade over six sibling modules, each under 800 lines, re-exporting its full prior
+  surface; its ten functions at CC >= 11 and both accepted complexity entries are resolved. Batch 1
+  remains open on `manifest/resolver.py`, `project_state.py`, `utils/git_utils.py`, and `contracts/`.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
