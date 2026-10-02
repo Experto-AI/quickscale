@@ -46,7 +46,15 @@ def _get_admin_uploaded_restore_artifact_trust_issue(
     artifact: Any,
 ) -> str | None:
     """Return why one checksum-matched artifact is not trusted for admin upload."""
-    from quickscale_modules_backups.models import BackupArtifact, BackupSnapshot
+    artifact_issue = _admin_uploaded_artifact_trust_issue(artifact)
+    if artifact_issue is not None:
+        return artifact_issue
+    return _admin_uploaded_snapshot_trust_issue(artifact)
+
+
+def _admin_uploaded_artifact_trust_issue(artifact: Any) -> str | None:
+    """Return why the artifact row itself is not a trusted restore candidate."""
+    from quickscale_modules_backups.models import BackupArtifact
 
     if artifact.status == BackupArtifact.Status.DELETED:
         return "matching recorded artifact has been deleted"
@@ -63,11 +71,16 @@ def _get_admin_uploaded_restore_artifact_trust_issue(
             "matching recorded artifact is not classified as an eligible "
             "restore candidate"
         )
+    return None
 
+
+def _admin_uploaded_snapshot_trust_issue(artifact: Any) -> str | None:
+    """Return why the linked snapshot fails the full-backup trust contract."""
     from quickscale_core.runtime import (
         _build_snapshot_full_backup_contract,
         _get_authoritative_snapshot_for_artifact,
     )
+    from quickscale_modules_backups.models import BackupSnapshot
 
     snapshot = _get_authoritative_snapshot_for_artifact(artifact)
     if snapshot is None:
@@ -87,6 +100,14 @@ def _get_admin_uploaded_restore_artifact_trust_issue(
             "matching authoritative snapshot does not satisfy the full-backup contract"
         )
 
+    return _admin_uploaded_dump_provenance_trust_issue(artifact, full_backup_contract)
+
+
+def _admin_uploaded_dump_provenance_trust_issue(
+    artifact: Any,
+    full_backup_contract: dict[str, Any],
+) -> str | None:
+    """Return why the snapshot's authoritative-dump metadata does not match."""
     provenance = full_backup_contract.get("provenance", {})
     authoritative_dump = (
         provenance.get("authoritative_dump", {}) if isinstance(provenance, dict) else {}

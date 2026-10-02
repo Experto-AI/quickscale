@@ -674,6 +674,23 @@ class TestBackupPolicyAdmin:
             "Confirmation must exactly match the backup filename."
             in response.content.decode("utf-8")
         )
+        assert response.context["selected_artifact"] == postgresql_backup_artifact
+
+    def test_restore_page_keeps_no_selection_on_invalid_form(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        """An incomplete POST renders with no resolved restore selection."""
+        del backup_policy, postgresql_backup_artifact
+        response = admin_client.post(
+            reverse("admin:quickscale_backups_backuppolicy_restore"),
+            {"operation": "dry_run"},
+        )
+
+        assert response.status_code == 200
+        assert response.context["selected_artifact"] is None
 
     @pytest.mark.parametrize(
         ("artifact_kind", "expected_error"),
@@ -1142,6 +1159,7 @@ class TestBackupPolicyAdmin:
         assert "Failed to initiate background restore" in response.content.decode(
             "utf-8"
         )
+        assert response.context["selected_artifact"] == postgresql_backup_artifact
         mocked_popen.assert_called_once()
 
     def test_restore_page_cleanly_reports_uploaded_spawn_failure(
