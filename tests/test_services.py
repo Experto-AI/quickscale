@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from django.test import override_settings
+
 from quickscale_modules_orgs import services
 from quickscale_modules_orgs.exceptions import CurrentOrgError, OrgsError
 
@@ -9,6 +11,7 @@ from quickscale_modules_orgs.exceptions import CurrentOrgError, OrgsError
 SERVICE_SURFACE = [
     "CurrentOrgError",
     "OrgsError",
+    "is_enabled",
 ]
 
 
@@ -24,3 +27,11 @@ def test_services_reexports_the_module_error_bases() -> None:
     assert services.OrgsError is OrgsError
     assert services.CurrentOrgError is CurrentOrgError
     assert issubclass(CurrentOrgError, OrgsError)
+
+
+def test_is_enabled_reads_the_module_enabled_setting() -> None:
+    """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_ORGS_ENABLED`` both ways."""
+    with override_settings(QUICKSCALE_ORGS_ENABLED=True):
+        assert services.is_enabled() is True
+    with override_settings(QUICKSCALE_ORGS_ENABLED=False):
+        assert services.is_enabled() is False

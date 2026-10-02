@@ -14,9 +14,22 @@ re-exported here for the callers that catch it.
 
 from __future__ import annotations
 
+from django.conf import settings
+
 from .exceptions import CurrentOrgError, OrgsError
+
+
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_ORGS_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_ORGS_ENABLED)
+
 
 __all__ = [
     "CurrentOrgError",
     "OrgsError",
+    "is_enabled",
 ]
