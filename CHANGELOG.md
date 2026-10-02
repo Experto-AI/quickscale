@@ -369,6 +369,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     option resolver stays the import path every caller uses and re-exports its full former surface,
     while its normalization, validation, legacy-alias, and projection engines live in focused
     sibling modules.
+  - **Project state and Git utilities keep their import surfaces while the implementations split.**
+    `project_state.py` and `utils/git_utils.py` stay the import paths every caller uses and re-export
+    their full former surfaces, while their records, legacy import, drift, runner, repository, tag,
+    subtree, and publication logic live in focused sibling modules.
   - **Modules answer whether they are enabled and declare what they use.** Every module publishes
     `services.is_enabled()` for its own `QUICKSCALE_<MODULE>_ENABLED` setting, and each manifest's
     `required_modules` lists every module its code references. `plan`/`apply` therefore install
