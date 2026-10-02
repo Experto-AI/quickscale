@@ -86,10 +86,13 @@ Billing's Stripe credentials now reach module code as the projected
 `QUICKSCALE_BILLING_PUBLISHABLE_KEY`, `QUICKSCALE_BILLING_SECRET_KEY`, and
 `QUICKSCALE_BILLING_WEBHOOK_SECRET` settings that `quickscale apply` renders from the environment
 variables the `*_env_var` options name. Apply renders them from the embedded billing adapter, so
-update the embedded billing module to this release first: `quickscale update` followed by
-`quickscale apply`, or `quickscale update --confirm-contract-adoption` in one step. Until then an
-enabled billing module refuses startup with `quickscale_billing.E001` naming the missing projected
-settings, and the credential values stay in the deployment environment under the same names.
+update the embedded billing module to this release first: from a clean tree, run
+`quickscale update --confirm-contract-adoption`, which updates the embedded billing module through
+its configured branch, regenerates the managed wiring including the projected secrets, and records
+the adoption; an unflagged `quickscale update` or `quickscale apply` is refused while the adoption
+is pending. Until then an enabled billing module refuses startup with `quickscale_billing.E001`
+naming the missing projected settings, and the credential values stay in the deployment environment
+under the same names.
 
 ## Compatibility
 
