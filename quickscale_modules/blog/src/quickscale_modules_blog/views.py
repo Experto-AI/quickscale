@@ -21,6 +21,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from quickscale_modules_orgs.models import OrgRole
+from quickscale_modules_orgs.permissions import HasOrgRole
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 from quickscale_modules_orgs.sanitization import sanitize_rendered_html
 
@@ -31,7 +33,6 @@ from .exceptions import (
     BlogPublishValidationError,
 )
 from .models import Category, Post, Tag
-from .permissions import IsStaffUser
 from .services import (
     create_blog_media_asset_from_request,
     create_published_post_from_payload,
@@ -47,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_api_org(request: Request | HttpRequest, author: Any) -> Any:
-    """Return the organization for staff API write operations.
+    """Return the organization for authenticated API write operations.
 
     Requests authenticated by the session use ``request.org`` from
     middleware.  A request without a middleware org context resolves the
@@ -170,14 +171,15 @@ class BlogApiBaseView(APIView):
     """Shared contract for the blog module's DRF automation API views.
 
     Session authentication only (Module Conventions rule 9): DRF's
-    ``SessionAuthentication`` enforces CSRF on unsafe methods.  The staff
-    role is the module's platform-level write gate (Module Conventions rule
-    19's operator path), and every error goes through the one QuickScale
-    exception handler the generated settings install.
+    ``SessionAuthentication`` enforces CSRF on unsafe methods.  Both
+    endpoints write the active organization's data, so they authorize by org
+    role through orgs' ``HasOrgRole`` (rule 19): any member may write today's
+    automation flow, while a viewer is refused.  Every error goes through the
+    one QuickScale exception handler the generated settings install.
     """
 
     authentication_classes = [BlogSessionAuthentication]
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.MEMBER)]
     throttle_classes = [BlogApiThrottle]
     throttle_scope = "quickscale_blog_api"
     http_method_names = ["post"]

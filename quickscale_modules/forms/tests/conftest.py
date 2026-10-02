@@ -71,12 +71,12 @@ def user(db):
 
 @pytest.fixture
 def staff_user(db):
-    """Staff Django user with admin access (not a superuser).
+    """Django-staff user without an organization (not a superuser).
 
-    This fixture provides a plain staff user for view-unit defense-in-depth
-    tests. Session-parity proofs that exercise the real
-    middleware pipeline use ``force_login`` + ``ACTIVE_ORG_SESSION_KEY``
-    instead.
+    Module admin APIs authorize by organization role (rule 19), so
+    ``is_staff`` grants no module access.  Session-parity proofs that exercise
+    the real middleware pipeline use ``force_login`` +
+    ``ACTIVE_ORG_SESSION_KEY`` instead.
     """
     return User.objects.create_user(
         username="staffuser",
@@ -110,12 +110,12 @@ def api_client():
 
 @pytest.fixture
 def staff_client(api_client, staff_user):
-    """DRF API client authenticated as staff user (non-superuser).
+    """DRF API client authenticated as a staff user (non-superuser).
 
-    Uses ``force_authenticate`` (DRF-only, no session middleware).
-    This is a view-unit defense-in-depth fixture.
-    Session-parity proofs that exercise the real middleware pipeline
-    use ``force_login`` + ``ACTIVE_ORG_SESSION_KEY`` instead.
+    Uses ``force_authenticate`` (DRF-only, no session middleware), so it
+    carries no organization context: the org-role permission refuses its
+    requests.  Session-parity proofs that exercise the real middleware
+    pipeline use ``force_login`` + ``ACTIVE_ORG_SESSION_KEY`` instead.
     """
     api_client.force_authenticate(user=staff_user)
     return api_client

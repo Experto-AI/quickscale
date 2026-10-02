@@ -7,6 +7,9 @@ from typing import Any, Callable, cast
 
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.urls import Resolver404, resolve
+from rest_framework.permissions import BasePermission
+from rest_framework.request import Request
+from rest_framework.views import APIView
 
 from .current_org import (
     CurrentOrgError,
@@ -93,6 +96,46 @@ class OrgRoleMixin:
             HttpResponse,
             cast(Any, super()).dispatch(request, *args, **kwargs),
         )
+
+
+class HasOrgRole(BasePermission):
+    """DRF permission class requiring a minimum organization role.
+
+    Configure the role an action needs and add the configured class to a
+    view's ``permission_classes``::
+
+        permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.MEMBER)]
+
+    DRF instantiates each entry in ``permission_classes`` by calling it, so a
+    configured instance returns itself from ``__call__``.  The request's
+    organization is resolved through :func:`resolve_request_org` — the active
+    ``request.org`` context or the ``org_slug`` route kwarg — and a request
+    with no resolvable organization fails closed.  The role decision is
+    :func:`user_has_org_role`, the same check ``OrgApiBaseView``'s
+    ``min_org_role`` uses (Module Conventions rule 19).  Superusers pass as
+    the listed operator path (rule 19 keeps ``is_superuser`` for
+    ``operator_access``), with or without organization context.
+    """
+
+    def __init__(self, min_role: OrgRole = OrgRole.VIEWER) -> None:
+        self.min_role = min_role
+
+    def __call__(self) -> "HasOrgRole":
+        return self
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        user = getattr(request, "user", None)
+        if not bool(user is not None and getattr(user, "is_authenticated", False)):
+            return False
+        if getattr(user, "is_superuser", False):
+            return True
+        organization = resolve_request_org(
+            request,
+            dict(getattr(view, "kwargs", {}) or {}),
+        )
+        if organization is None:
+            return False
+        return user_has_org_role(user, organization, self.min_role)
 
 
 def resolve_request_org(

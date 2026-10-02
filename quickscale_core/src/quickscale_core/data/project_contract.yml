@@ -185,3 +185,9 @@ steps:
     adoption_steps:
       - "Update the embedded billing module to this release before applying: `quickscale apply` renders settings/modules.py from the embedded module's adapter, so an apply against a project whose `modules/billing` predates this release still writes no QUICKSCALE_BILLING_PUBLISHABLE_KEY, QUICKSCALE_BILLING_SECRET_KEY, or QUICKSCALE_BILLING_WEBHOOK_SECRET, and an enabled billing module refuses startup with quickscale_billing.E001 naming them. From a clean tree, run `quickscale update --confirm-contract-adoption`, which updates the embedded modules through their configured branches, regenerates the managed wiring including the projected secrets, and records this step's adoption; an unflagged `quickscale update` or `quickscale apply` is refused while the adoption is pending. Run `quickscale apply` afterwards for any remaining desired-state changes."
       - "Keep the credential values in the deployment environment under the same `*_env_var` names; only the resolution path changes, so no secret value is copied into quickscale.yml or state."
+
+  - id: sa226-org-role-back-offices
+    minimum: "0.89.0"
+    title: "Adopt the organization-role CRM workspace wording"
+    adoption_steps:
+      - "Compare and manually adopt the current showcase_react CrmPage.tsx copy and the CRM dashboard template: the workspace text and the dashboard link describe organization-role access (viewers read, members write) instead of a staff-only dashboard; Django admin remains staff-gated."

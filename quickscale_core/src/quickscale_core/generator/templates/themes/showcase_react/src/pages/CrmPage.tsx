@@ -77,7 +77,7 @@ export function CrmPage() {
           <h1 className="text-3xl font-bold tracking-tight">CRM Workspace</h1>
           <p className="text-muted-foreground">
             API-backed CRM workspace at {appPaths.crm} for contacts, companies, deals, and pipeline.
-            The Django dashboard at {documentPaths.crmDashboard} remains staff-only.
+            The Django dashboard at {documentPaths.crmDashboard} is available to organization viewers.
           </p>
         </div>
         <div className="flex gap-2">
@@ -88,7 +88,7 @@ export function CrmPage() {
           </Button>
           <Button asChild>
             <a href={documentPaths.crmDashboard} target="_blank" rel="noopener noreferrer">
-              <ArrowUpRight className="mr-2 h-4 w-4" /> Staff CRM Dashboard
+              <ArrowUpRight className="mr-2 h-4 w-4" /> CRM Dashboard
             </a>
           </Button>
         </div>
