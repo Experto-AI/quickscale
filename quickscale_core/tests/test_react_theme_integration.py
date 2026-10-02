@@ -1328,8 +1328,9 @@ class TestReactThemeModuleActivationMatrix:
         assert "documentPaths.crmApiBase" in crm_page
         assert "The Django dashboard at" in normalized_crm_page
         assert "documentPaths.crmDashboard" in crm_page
-        assert "remains staff-only." in normalized_crm_page
-        assert "Staff CRM Dashboard" in crm_page
+        assert "remains staff-only." not in normalized_crm_page
+        assert "is available to organization viewers." in normalized_crm_page
+        assert "CRM Dashboard" in crm_page
 
         assert "Storage & CDN" in settings_page
         assert "No admin config surface" in settings_page

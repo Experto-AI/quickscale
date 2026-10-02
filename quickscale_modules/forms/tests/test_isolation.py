@@ -4,6 +4,10 @@ T1.7: org-scoped URL patterns are removed (D1/D5).  The admin submission
 list is now an operator-only path (``all_objects``) that returns all
 submissions cross-tenant.  The isolation test verifies that the operator
 admin path correctly returns submissions from both organizations.
+
+Rule 19: the admin API authorizes by organization role, so an authenticated
+caller with no active-organization context is refused (403) before it can
+reach any data.
 """
 
 import pytest
@@ -80,9 +84,8 @@ def test_staff_without_org_fails_closed_on_admin_list(
 ):
     """Regular staff without org context must fail-closed on admin endpoints.
 
-    Staff with no active org context see no data. This is the
-    retained-role fail-closed behavior — the previous behavior returned all
-    data via the operator path.
+    The org-role permission refuses the request (403) before the view runs,
+    so no data is reachable without an active organization.
     """
     from django.urls import reverse
 
@@ -90,9 +93,6 @@ def test_staff_without_org_fails_closed_on_admin_list(
         "quickscale_forms:admin_form_list",
     )
     response = staff_client.get(url)
-    assert response.status_code == 200, (
-        f"Expected 200 OK (empty list), got {response.status_code}"
-    )
-    assert len(response.data) == 0, (
-        "Staff without org must receive an empty list (fail-closed)"
+    assert response.status_code == 403, (
+        f"Expected 403 Forbidden without an org context, got {response.status_code}"
     )

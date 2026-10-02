@@ -74,7 +74,8 @@ The two-step automation flow is:
 2. Rewrite Markdown image links to the returned URLs.
 3. Publish the post with `POST blog/api/publish/`.
 
-Both endpoints accept a staff session with CSRF; the DRF throttle (`quickscale_blog_api`, its
+Both endpoints accept a member session with CSRF and authorize by the active organization's
+role (minimum role: `member`; a `viewer` is refused); the DRF throttle (`quickscale_blog_api`, its
 rate from `QUICKSCALE_BLOG_API_RATE_LIMIT`) applies after authentication and permissions. Media upload
 accepts `multipart/form-data` with `file` (required), `alt`, and `kind`
 (`inline`, `featured`, or `general`), and enforces `QUICKSCALE_BLOG_API_UPLOAD_MAX_BYTES`, the allowed
@@ -83,7 +84,8 @@ image formats, `QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH`, and `QUICKSCALE_BLOG_API_
 `category_slug`, `tags`, `featured_image_id`, and `featured_image_alt`. The publish response
 returns the post `id`, `slug`, `url`, and `status`.
 
-Automation clients sign in as a staff user and send the session cookie with the CSRF token; the
+Automation clients sign in as an organization member (role `member` or above) and send the
+session cookie with the CSRF token; the
 former bearer-token scheme (`BLOG_API_TOKENS`) is removed.
 
 ### RSS feed
@@ -103,8 +105,8 @@ module's routes are:
 | `quickscale_blog:category_list` | `blog/category/<slug>/` | Posts by category |
 | `quickscale_blog:tag_list` | `blog/tag/<slug>/` | Posts by tag |
 | `quickscale_blog:feed` | `blog/feed/` | RSS feed when `QUICKSCALE_BLOG_RSS_ENABLED` is true |
-| `quickscale_blog:api_upload_media` | `blog/api/media/` | Staff image upload for the automation API |
-| `quickscale_blog:api_publish_post` | `blog/api/publish/` | Staff publish endpoint for Markdown posts |
+| `quickscale_blog:api_upload_media` | `blog/api/media/` | Member-role image upload for the automation API |
+| `quickscale_blog:api_publish_post` | `blog/api/publish/` | Member-role publish endpoint for Markdown posts |
 
 There are no `/orgs/<slug>/blog/...` paths: the active organization is resolved from
 `request.org` at runtime (the System organization for anonymous readers, the session or personal

@@ -24,10 +24,9 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA226 | Authorize tenant modules by org role | post-v88 | 3 | — | Deferred |
 | SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | SA232 | Deferred |
 | SA232 | Split the long CLI command, `dr_engine`, and billing files | post-v88 | 2 | — | Deferred |
-| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | SA226 | Deferred |
+| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -40,8 +39,8 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA231 (until SA215 lands) ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA232
-Track 3: SA226 ──► SA215 (remaining rules) ──► SA216
-     critical path: SA226 → SA215 → SA191 → SA153
+Track 3: SA215 (remaining rules) ──► SA216
+     critical path: SA215 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -49,12 +48,12 @@ Arrows within a track are queue order; the table holds the actual dependency edg
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
 ported, and SA204 has not frozen the migration history. SA219 landed the settings family, the
 `_ENABLED` switches, and the rule 35 secret projection; SA220 landed `is_enabled()` on every
-module's public service surface and made `required_modules` cover every reference, so SA226's
-org-role authorization follows it. SA204 freezes
+module's public service surface and made `required_modules` cover every reference, and SA226's
+org-role authorization has followed it. SA204 freezes
 migration history before any post-SA153 module schema change. SA154 is an inventory, not work.
 
 **Off the critical path.** SA215 runs on Track 3, which owns SA230's harness that SA215 adds rules
-to: its first slice landed ahead of SA226, and the rest follows SA226 on the same track. SA231
+to: its first slice landed ahead of SA226, and SA226 has now landed on the same track. SA231
 (Track 1) fills its track until SA215 lands and SA191 can start. SA232 (Track 2) takes SA231's
 batches on Track 2's own surfaces, so both tracks split files at once; only SA231's closing gate
 batch waits for it. SA216 waits for SA215
@@ -68,7 +67,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA231 | yes | yes | yes | **yes** | no |
 | 2 | SA232 | yes | yes | yes | **yes** | no |
-| 3 | SA226 | yes | yes | yes | **yes** | **yes** |
+| 3 | SA215 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
@@ -128,7 +127,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Landed (first slice):** rules 4, 5, and 23 (cross-module public surface, dependency layers, and
   the `services.py` public surface) are enforced by the conformance test with a control case each;
-  the rest waits for SA226.
+  the rest now follows the landed SA226 authorization swap.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
@@ -193,6 +192,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   three largest: billing `services.py` (4,575), `apply_command.py` (3,989), and
   `dr_engine/orchestration.py` (2,897). Billing's convention tickets (SA219, SA220) have merged.
 
+  **Landed (billing slice):** billing `services.py` is a facade over fifteen private `_<name>.py`
+  modules, all under the 800-line ceiling; every prior name is re-exported, the rule 26 webhook
+  entry point stays in `services.py`, and the existing tests and public import paths are unchanged.
+  The eleven accepted complexity entries are re-keyed to their new files with rename waivers; the
+  pre-existing billing complexity regressions are unchanged and remain for the closing
+  re-tightening. The CLI and `dr_engine` slices remain.
+
   **Scope:** SA231's rules, one package-sized slice at a time through the serialized merge queue:
   `quickscale_cli` commands and utilities (`apply_command.py`, `module_commands.py`,
   `plan_command.py`, `dr_commands.py`, `status_command.py`, `deployment_commands.py`,
@@ -212,16 +218,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA220 — Give every module `is_enabled()` and make `required_modules` cover every import.**
 
-- [ ] **SA226 — Authorize tenant modules by org role.**
-
-  **Context:** inventory § 21; D22; rule 19. Tenant modules authorize with site-wide `is_staff`.
-
-  **Scope:** blog, listings, crm, and forms authorize by org role through orgs' `permissions` (new
-  DRF `HasOrgRole`).
-
-  **Acceptance:** an org member without the role is refused in each module's views and APIs.
-
-  **Surfaces:** orgs `permissions`; blog, listings, crm, forms.
+- [x] **SA226 — Authorize tenant modules by org role.**
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 

@@ -25,6 +25,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from quickscale_modules_orgs.models import OrgRole
+from quickscale_modules_orgs.permissions import HasOrgRole
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
 from quickscale_modules_orgs.sanitization import sanitize_rendered_html
 
@@ -34,7 +36,6 @@ from .exceptions import (
 )
 from .filters import get_listing_filter
 from .models import Listing
-from .permissions import IsStaffUser
 from .services import create_published_listing_from_payload
 
 
@@ -58,16 +59,17 @@ class ListingPublishAPIView(APIView):
     """Create and publish a listing from a JSON payload.
 
     Session authentication only (Module Conventions rule 9): DRF's
-    ``SessionAuthentication`` enforces CSRF on unsafe methods.  The staff
-    role is the module's platform-level write gate (Module Conventions rule
-    19's operator path), and every error goes through the one QuickScale
-    exception handler the generated settings install.  The JSON renderer is
-    the only one, so an HTML-preferring client never receives DRF's
-    browsable-API page instead of the one error shape.
+    ``SessionAuthentication`` enforces CSRF on unsafe methods.  The endpoint
+    writes the active organization's data, so it authorizes by org role
+    through orgs' ``HasOrgRole`` (rule 19): any member may write, while a
+    viewer is refused.  Every error goes through the one QuickScale exception
+    handler the generated settings install.  The JSON renderer is the only
+    one, so an HTML-preferring client never receives DRF's browsable-API page
+    instead of the one error shape.
     """
 
     authentication_classes = [ListingsSessionAuthentication]
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.MEMBER)]
     parser_classes = [JSONParser]
     renderer_classes = [JSONRenderer]
     http_method_names = ["post"]

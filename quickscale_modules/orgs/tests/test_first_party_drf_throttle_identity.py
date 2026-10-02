@@ -379,12 +379,12 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
             (
                 "quickscale_modules/forms/src/quickscale_modules_forms/views.py",
                 "FormSubmitAPIView.create",
-                321,
+                329,
             ),
             (
                 "quickscale_modules/forms/src/quickscale_modules_forms/views.py",
                 "FormSubmitAPIView.create",
-                347,
+                355,
             ),
         ]
     )

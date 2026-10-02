@@ -2,8 +2,8 @@
 
 T1.7: single flat route tree (D1/D5).  Route-sniffing and per-org scoping
 via URL kwargs are removed.  Public schema/submit endpoints resolve the
-System org (D2) for anonymous requests; staff admin views use the operator
-path (``all_objects``) for cross-tenant visibility.
+System org (D2) for anonymous requests; superuser admin views use the
+operator path (``all_objects``) for cross-tenant visibility.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from rest_framework.generics import (
     RetrieveUpdateAPIView,
 )
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAuthenticated, SAFE_METHODS
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -56,6 +56,8 @@ from quickscale_modules_orgs.current_org import (
     operator_access,
     org_scope,
 )
+from quickscale_modules_orgs.models import OrgRole
+from quickscale_modules_orgs.permissions import HasOrgRole
 
 logger = logging.getLogger(__name__)
 
@@ -150,12 +152,18 @@ def _emit_submission_event(submission: FormSubmission, request: Request) -> None
 
 
 class FormsAdminApiMixin:
-    """Explicit auth and enablement guard for forms admin API endpoints."""
+    """Explicit org-role auth and enablement guard for forms admin API endpoints."""
 
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
     # Set by APIView.dispatch on every concrete view that mixes this in.
     request: Request
+
+    def get_permissions(self) -> list[Any]:
+        """Require viewer for safe methods and member for writes (rule 19)."""
+        min_role = (
+            OrgRole.VIEWER if self.request.method in SAFE_METHODS else OrgRole.MEMBER
+        )
+        return [IsAuthenticated(), HasOrgRole(min_role)]
 
     def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
         # Rule 3: the startup check has validated the declared value, so the
@@ -172,8 +180,8 @@ class FormsAdminApiMixin:
         """Return True when the requesting user is a superuser.
 
         Superusers are the only role permitted cross-tenant SELECT via
-        ``operator_access``.  Regular staff (is_staff=True, is_superuser=False)
-        are always scoped to their active org and fail-closed without one.
+        ``operator_access``.  Regular members are always scoped to their
+        active org and fail-closed without one.
         """
         return bool(getattr(self.request.user, "is_superuser", False))
 
@@ -183,9 +191,9 @@ class FormsAdminApiMixin:
         * **Superuser**: returns ``model.all_objects.all()`` — cross-tenant
           read access.  The view must wrap evaluation in ``operator_access``
           for audit logging (see ``_with_superuser_operator_access``).
-        * **Regular staff with active org**: returns ``model.objects.all()``
+        * **Regular member with active org**: returns ``model.objects.all()``
           which is RLS-scoped to the request's active org context.
-        * **Regular staff without active org**: returns ``model.objects.none()``
+        * **Regular member without active org**: returns ``model.objects.none()``
           — fail-closed: no org context, no data.
 
         Child-data prefetches that must bypass RLS (e.g. ``FormFieldValue``
@@ -385,12 +393,12 @@ class FormSubmitAPIView(CreateAPIView):
 
 
 class AdminFormListAPIView(FormsAdminApiMixin, ListAPIView):
-    """Staff-only: list all forms with submission counts.
+    """Viewer-role: list all forms with submission counts.
 
     SA85 Phase 4 retained-role behavior:
     * Superuser: cross-tenant read via ``operator_access`` (audited).
-    * Regular staff with active org: scoped to that org via RLS.
-    * Regular staff without org: fail-closed (empty list).
+    * Regular member with active org: scoped to that org via RLS.
+    * Regular member without org: refused by the permission (403).
     """
 
     serializer_class = AdminFormListSerializer
@@ -409,12 +417,12 @@ class AdminFormListAPIView(FormsAdminApiMixin, ListAPIView):
 
 
 class AdminSubmissionListAPIView(FormsAdminApiMixin, ListAPIView):
-    """Staff-only: paginated list of submissions for a given form.
+    """Viewer-role: paginated list of submissions for a given form.
 
     SA85 Phase 4 retained-role behavior:
     * Superuser: cross-tenant read via ``operator_access`` (audited).
-    * Regular staff with active org: scoped to that org via RLS.
-    * Regular staff without org: fail-closed (empty list).
+    * Regular member with active org: scoped to that org via RLS.
+    * Regular member without org: refused by the permission (403).
 
     Child ``FormFieldValue`` prefetch continues to use ``all_objects``
     (AF1-CR-002 invariant) regardless of user role.
@@ -462,11 +470,11 @@ class AdminSubmissionListAPIView(FormsAdminApiMixin, ListAPIView):
 
 
 class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
-    """Staff-only: retrieve or patch a single submission (status / is_spam only).
+    """Viewer-role GET / member-role PATCH for a single submission (status / is_spam only).
 
     SA85 Phase 4 retained-role behavior:
     * **GET**: Superuser may read cross-tenant via ``operator_access`` (audited).
-      Regular staff is scoped to active org or fail-closed.
+      A regular member is scoped to the active org or fail-closed.
     * **PATCH**: Target identified through allowed read elevation.  The actual
       save occurs inside ``org_scope(submission.organization)`` so the write
       respects the target tenant boundary even when the read used a cross-tenant
@@ -525,12 +533,12 @@ class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
 
 
 class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
-    """Staff-only: stream all submissions for a form as a CSV file.
+    """Viewer-role: stream all submissions for a form as a CSV file.
 
     SA85 Phase 4 retained-role behavior:
     * Superuser: cross-tenant read via ``operator_access`` (audited).
-    * Regular staff with active org: scoped to that org via RLS.
-    * Regular staff without org: fail-closed (404).
+    * Regular member with active org: scoped to that org via RLS.
+    * Regular member without org: refused by the permission (403).
 
     Child ``FormField`` / ``FormFieldValue`` queries continue to use
     ``all_objects`` (AF1-CR-002 / AF1-CR-REV-001 invariants).
