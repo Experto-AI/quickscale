@@ -402,6 +402,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     operation decomposes into payload validation, featured-media/category/tag resolution, and one
     atomic create step, and the upload validator splits its limits, storage-delegation, and Pillow
     paths, with the public `services.py` surface, its error classes, and its test seams unchanged.
+  - **Auth's account-deletion view drops below the size and complexity ceilings.** The deletion
+    guard, provider reconciliation, handler plumbing, and tenant-reference helpers live in focused
+    modules re-exported from `views.py`, with the declared removal boundary, its capability and
+    app-config patch seams, and its log channel unchanged.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

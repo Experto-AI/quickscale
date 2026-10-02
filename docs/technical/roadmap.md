@@ -184,7 +184,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   delivery and webhook patch seams kept on the facade. Blog's `services.py` decomposes its publish
   and upload operations into focused helpers, so both recorded complexity entries drop below the
   ceiling and the baseline drops the package's two live entries plus its four already-resolved
-  ones. The remaining modules and the closing gate batch remain, the gate waiting on SA232.
+  ones. Auth's `views.py` is a re-exported facade over `_profile_views.py`, five
+  `_account_deletion_*.py` modules, and a shared `_logging.py` seam, every file under 800 lines,
+  with its `form_valid`, `_reconcile_removal_provider_state`, and `_account_deletion_handlers`
+  below the CC 11 ceiling and its rule 34 boundary wiring, patch seams, and log channel kept on
+  the facade. The remaining modules and the closing gate batch remain, the gate waiting on SA232.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
