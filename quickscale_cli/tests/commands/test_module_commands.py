@@ -3577,6 +3577,56 @@ class TestSyncStateModuleVersionTriple:
         assert module_state.embedded_at is not None
         assert module_state.embedded_at != ""
 
+    def test_embedded_at_resolves_through_facade_datetime(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """The clock is resolved through the module_commands facade at call time."""
+        from datetime import datetime as real_datetime
+
+        from quickscale_core.schema.state_schema import (
+            ModuleState,
+            ProjectState,
+            QuickScaleState,
+            StateManager,
+        )
+        from quickscale_cli.commands import module_commands
+
+        (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
+        state_manager = StateManager(tmp_path)
+        state_manager.save(
+            QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    slug="myapp",
+                    package="myapp",
+                    theme="showcase_react",
+                    created_at="2025-01-01T00:00:00",
+                    last_applied="2025-01-01T00:00:00",
+                ),
+                modules={
+                    "auth": ModuleState(
+                        name="auth",
+                        version="0.82.0",
+                        commit_sha="a" * 40,
+                        embedded_at="2025-01-01T00:00:00",
+                    ),
+                },
+            )
+        )
+
+        class _FrozenDatetime:
+            @classmethod
+            def now(cls) -> real_datetime:
+                return real_datetime(2000, 1, 1, 0, 0, 0)
+
+        monkeypatch.setattr(module_commands, "datetime", _FrozenDatetime)
+
+        module_commands._sync_state_module_version(tmp_path, "auth", "0.83.0")
+
+        updated_state = state_manager.load()
+        assert updated_state is not None
+        assert updated_state.modules["auth"].embedded_at == "2000-01-01T00:00:00"
+
 
 # ============================================================================
 # F2.7: Caller parity — update path sync helper produces same triple

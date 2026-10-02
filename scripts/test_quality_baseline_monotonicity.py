@@ -5438,28 +5438,27 @@ class TestShellSubprocess:
             # large-file regressions from the monitoring scope are captured.
             # The find stub prevents unrelated file growth from affecting
             # the result.
-            # Override only the three SA114 target keys with higher values.
+            # Override only the three pinned keys with higher values.
             real_baseline = json.loads(
                 (_REPO_ROOT / "scripts" / "quality_baseline.json").read_text()
             )
             higher_baseline = json.loads(json.dumps(real_baseline))
-            # Bump the three SA114 keys and keep only them, so the fixture
+            # Bump the three pinned keys and keep only them, so the fixture
             # difference against the merge base is exactly these three
             # increases, independent of any waivers the repository carries.
-            sa114_keys = (
+            pinned_keys = (
                 "quickscale_core/src/quickscale_core/schema/config_schema.py"
                 "::_validate_modules_section",
-                "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                "::_perform_module_embed",
-                "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                "::_update_single_module",
+                "quickscale_core/src/quickscale_core/schema/state_schema.py::StateManager.load",
+                "quickscale_core/src/quickscale_core/generator/generator.py"
+                "::get_generator_emission_mapping",
             )
             bumped = dict(higher_baseline["complexity"]["allowed_functions"])
-            bumped[sa114_keys[0]] = dict(bumped[sa114_keys[0]], max_complexity=13)
-            bumped[sa114_keys[1]] = dict(bumped[sa114_keys[1]], max_complexity=25)
-            bumped[sa114_keys[2]] = dict(bumped[sa114_keys[2]], max_complexity=20)
+            bumped[pinned_keys[0]] = dict(bumped[pinned_keys[0]], max_complexity=13)
+            bumped[pinned_keys[1]] = dict(bumped[pinned_keys[1]], max_complexity=30)
+            bumped[pinned_keys[2]] = dict(bumped[pinned_keys[2]], max_complexity=37)
             higher_baseline["complexity"]["allowed_functions"] = {
-                key: bumped[key] for key in sa114_keys
+                key: bumped[key] for key in pinned_keys
             }
             temp_baseline = tmp_path / "baseline_higher.json"
             temp_baseline.write_text(json.dumps(higher_baseline), encoding="utf-8")
@@ -5484,11 +5483,11 @@ class TestShellSubprocess:
                     {
                         "waiver_id": "W-NE-CPX2",
                         "entry_key": (
-                            "complexity:quickscale_cli/src/quickscale_cli/commands/"
-                            "module_commands.py::_perform_module_embed"
+                            "complexity:quickscale_core/src/quickscale_core/schema/"
+                            "state_schema.py::StateManager.load"
                         ),
-                        "base_ceiling": 20,
-                        "ceiling": 25,
+                        "base_ceiling": 28,
+                        "ceiling": 30,
                         "owner": "test@example.com",
                         "reason": "Nonempty diagnostic shell test",
                         "expires_on": future,
@@ -5497,11 +5496,11 @@ class TestShellSubprocess:
                     {
                         "waiver_id": "W-NE-CPX3",
                         "entry_key": (
-                            "complexity:quickscale_cli/src/quickscale_cli/commands/"
-                            "module_commands.py::_update_single_module"
+                            "complexity:quickscale_core/src/quickscale_core/generator/"
+                            "generator.py::get_generator_emission_mapping"
                         ),
-                        "base_ceiling": 17,
-                        "ceiling": 20,
+                        "base_ceiling": 35,
+                        "ceiling": 37,
                         "owner": "test@example.com",
                         "reason": "Nonempty diagnostic shell test",
                         "expires_on": future,

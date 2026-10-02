@@ -215,8 +215,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `_<name>.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
   test patch target still resolves through the facade. Its eight accepted complexity entries are
   re-keyed with rename waivers and its one dead-code allowance is resolved by a parameter rename;
-  the pre-existing apply-command complexity regressions are unchanged. The remaining CLI files and
-  the `dr_engine` slice remain.
+  the pre-existing apply-command complexity regressions are unchanged.
+
+  **Landed (CLI slice, second file):** `module_commands.py` is a facade over five private
+  `_module_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
+  test patch target still resolves through the facade. Its five accepted complexity entries are
+  re-keyed with rename waivers; the pre-existing module-command complexity regressions are
+  unchanged. The remaining CLI files and the `dr_engine` slice remain.
 
   **Scope:** SA231's rules, one package-sized slice at a time through the serialized merge queue:
   `quickscale_cli` commands and utilities (`apply_command.py`, `module_commands.py`,

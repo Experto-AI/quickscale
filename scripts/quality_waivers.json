@@ -271,6 +271,56 @@
       "reason": "SA232 splits apply_command.py into private _<name>.py modules that apply_command re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
       "expires_on": "2027-03-31",
       "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W036",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_module_embed.py::_perform_module_embed",
+      "base_ceiling": 0,
+      "ceiling": 20,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits module_commands.py into private _<name>.py modules that module_commands re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W037",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_module_embed.py::embed_module",
+      "base_ceiling": 0,
+      "ceiling": 17,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits module_commands.py into private _<name>.py modules that module_commands re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W038",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_module_update.py::_check_local_pre_pull_guard",
+      "base_ceiling": 0,
+      "ceiling": 14,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits module_commands.py into private _<name>.py modules that module_commands re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W039",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_module_update.py::_update_single_module",
+      "base_ceiling": 0,
+      "ceiling": 17,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits module_commands.py into private _<name>.py modules that module_commands re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W040",
+      "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_module_update.py::update",
+      "base_ceiling": 0,
+      "ceiling": 17,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits module_commands.py into private _<name>.py modules that module_commands re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
     }
   ]
 }
