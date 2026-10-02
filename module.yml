@@ -59,7 +59,9 @@ config:
   immutable: {}
 
 required_modules:
+  - analytics
   - notifications
+  - orgs
 
 # Dependencies required by this module
 dependencies:
