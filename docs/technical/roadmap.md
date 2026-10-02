@@ -24,7 +24,8 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | — | Deferred |
+| SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | SA232 | Deferred |
+| SA232 | Split the long CLI command, `dr_engine`, and billing files | post-v88 | 2 | — | Deferred |
 | SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
@@ -37,7 +38,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA231 (until SA215 lands) ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: — (queue complete)
+Track 2: SA232
 Track 3: SA215 (remaining rules) ──► SA216
      critical path: SA215 → SA191 → SA153
 ```
@@ -53,7 +54,9 @@ migration history before any post-SA153 module schema change. SA154 is an invent
 
 **Off the critical path.** SA215 runs on Track 3, which owns SA230's harness that SA215 adds rules
 to: its first slice landed ahead of SA226, and SA226 has now landed on the same track. SA231
-(Track 1) fills its track until SA215 lands and SA191 can start. SA216 waits for SA215
+(Track 1) fills its track until SA215 lands and SA191 can start. SA232 (Track 2) takes SA231's
+batches on Track 2's own surfaces, so both tracks split files at once; only SA231's closing gate
+batch waits for it. SA216 waits for SA215
 because both change auth's views, orgs' removal path, and the user-referencing models.
 
 ### Track states
@@ -63,7 +66,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA231 | yes | yes | yes | **yes** | no |
-| 2 | — | — | — | — | **yes** | no |
+| 2 | SA232 | yes | yes | yes | **yes** | no |
 | 3 | SA215 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
@@ -151,19 +154,23 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Scope:** behavior-preserving batches, each a package-sized slice through the serialized merge
   queue, merging `v89` before each one: (1) Track 1 surfaces (`beta_migration/`, core contracts,
-  manifest, `project_state`, `git_utils`); (2) CLI commands; (3) `dr_engine`; (4) modules, each
-  only after the convention ticket editing it has merged. Public import paths stay put (re-export
-  where a file splits), existing tests pass unchanged, functions move toward CC < 11, and each
-  batch re-tightens the baseline for its files. The final batch adds file length to the baseline
-  ratchet and registers `make quality` as a failing gate.
+  manifest, `project_state`, `git_utils`); (2) modules other than billing, each only after the
+  convention ticket editing it has merged. SA232 takes the CLI commands, `dr_engine`, and billing
+  on Track 2. Public import paths stay put (re-export where a file splits), existing tests pass
+  unchanged, functions move toward CC < 11, and each batch re-tightens the baseline for its files.
+  The final batch, once SA232 merges, adds file length to the baseline ratchet and registers
+  `make quality` as a failing gate.
 
   **Landed (batch 1):** `beta_migration.py` is a 15-module package, each module under 800 lines,
   with its public import surface re-exported; its two accepted complexity entries are relocated and
   tightened, while its unaccepted per-function debt stays visible as regressions. `manifest/loader.py`
   and `manifest/resolver.py` are now facades over focused sibling modules, each under 800 lines,
   re-exporting their full prior surfaces; all sixteen of their functions at CC >= 11 and all six
-  accepted complexity entries are resolved. Batch 1 remains open on `project_state.py`,
-  `utils/git_utils.py`, and `contracts/`.
+  accepted complexity entries are resolved. `project_state.py` and `utils/git_utils.py` are now
+  facades over focused sibling modules, each under 800 lines, re-exporting their full prior
+  surfaces; all five remaining functions at CC >= 11 and all five remaining accepted complexity
+  entries in this batch are resolved, `contracts/module_options.py` included. Batch 1 is complete;
+  the module batch and the closing gate batch remain, the gate waiting on SA232.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
@@ -171,6 +178,28 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** each batch's files; `scripts/quality_baseline.json`, `scripts/check_quality.sh`;
   the gate registry and gate documentation.
+
+- [ ] **SA232 — Split the long CLI command, `dr_engine`, and billing files.**
+
+  **Context:** SA231's CLI and `dr_engine` batches plus billing, run on Track 2, which owns most of
+  these files, while Track 1 finishes its own. Ten of the 800-line files are here, including the
+  three largest: billing `services.py` (4,575), `apply_command.py` (3,989), and
+  `dr_engine/orchestration.py` (2,897). Billing's convention tickets (SA219, SA220) have merged.
+
+  **Scope:** SA231's rules, one package-sized slice at a time through the serialized merge queue:
+  `quickscale_cli` commands and utilities (`apply_command.py`, `module_commands.py`,
+  `plan_command.py`, `dr_commands.py`, `status_command.py`, `deployment_commands.py`,
+  `railway_utils.py`, `module_dependency_sync.py`); `quickscale_core/dr_engine/`; billing
+  `services.py`, split into private `_<name>.py` files that `services.py` re-exports (Module
+  Conventions rule 28).
+
+  **Acceptance:** every file in scope is under 800 lines, and no function in scope reaches CC 21
+  unless the baseline lists it with a reason; zero regressions against the baseline for these
+  files; public import paths and existing tests unchanged; each slice re-tightens the baseline for
+  its files.
+
+  **Surfaces:** the files above; their entries in `scripts/quality_baseline.json`, which SA231 also
+  edits, so each slice resolves it at its merge.
 
 - [x] **SA219 — Move every setting onto one naming family and refuse retired names.**
 
