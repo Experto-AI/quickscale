@@ -1,14 +1,12 @@
 """DRF ViewSets and views for CRM module"""
 
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
-from django.contrib.auth.models import AnonymousUser
-from django.contrib.auth.views import redirect_to_login
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db.models import Case, CharField, Count, F, Q, QuerySet, Sum, Value, When
-from django.http import Http404, HttpRequest
-from django.http.response import HttpResponseBase
+from django.http import Http404, HttpRequest, HttpResponse
 from django.urls import reverse
 from django.views.generic import TemplateView
 from django_filters.rest_framework import DjangoFilterBackend
@@ -17,11 +15,14 @@ from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAuthenticated, SAFE_METHODS
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.routers import APIRootView
 from rest_framework.views import APIView
+
+from quickscale_modules_orgs.models import OrgRole
+from quickscale_modules_orgs.permissions import HasOrgRole, OrgRoleMixin
 
 from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 from .serializers import (
@@ -115,21 +116,19 @@ def _resolve_terminal_stage(
     return None
 
 
-class CRMDashboardView(TemplateView):
-    """Dashboard view for CRM module showing summary statistics"""
+class CRMDashboardView(LoginRequiredMixin, OrgRoleMixin, TemplateView):
+    """Dashboard view for CRM module showing summary statistics.
+
+    Anonymous visitors are redirected to login; an authenticated user below
+    the organization's viewer role is refused (Module Conventions rule 19).
+    """
 
     template_name = "quickscale_crm/crm/dashboard.html"
+    min_org_role = OrgRole.VIEWER
 
-    def dispatch(
-        self, request: HttpRequest, *args: Any, **kwargs: Any
-    ) -> HttpResponseBase:
-        user = getattr(request, "user", AnonymousUser())
-        if not user.is_authenticated:
-            return redirect_to_login(request.get_full_path())
-        if not user.is_staff:
-            raise PermissionDenied("CRM dashboard access is limited to staff users.")
-        request.user = user
-        return super().dispatch(request, *args, **kwargs)
+    def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        """Require login first, then the viewer org role."""
+        return cast(HttpResponse, super().dispatch(request, *args, **kwargs))
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -238,10 +237,21 @@ class DealPagination(_PlainListPagination):
 
 
 class CRMModelViewSet(CRMApiEnabledMixin, viewsets.ModelViewSet):
-    """Shared explicit staff-only auth policy for CRM API endpoints."""
+    """Shared org-role auth policy for CRM API endpoints (rule 19).
+
+    Reads require the organization's viewer role; writes require its member
+    role.  Every request is scoped to the active organization by
+    ``OrgScopedReadMixin``.
+    """
 
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+
+    def get_permissions(self) -> list[Any]:
+        """Require viewer for safe methods and member for writes (rule 19)."""
+        min_role = (
+            OrgRole.VIEWER if self.request.method in SAFE_METHODS else OrgRole.MEMBER
+        )
+        return [IsAuthenticated(), HasOrgRole(min_role)]
 
 
 class OrgScopedReadMixin(CRMModelViewSet):
@@ -276,10 +286,10 @@ class OrgScopedReadMixin(CRMModelViewSet):
 
 
 class CRMApiRootView(CRMApiEnabledMixin, APIRootView):
-    """Staff-only API root for the CRM router."""
+    """Org-role API root for the CRM router."""
 
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.VIEWER)]
 
 
 class TagViewSet(OrgScopedReadMixin):
@@ -327,7 +337,7 @@ class ContactViewSet(OrgScopedReadMixin):
         """List or create notes for a contact"""
         contact = self.get_object()
 
-        if request.method == "GET":
+        if request.method in SAFE_METHODS:
             notes = contact.notes.all()
             serializer = ContactNoteSerializer(notes, many=True)
             return Response(serializer.data)
@@ -385,7 +395,7 @@ class DealViewSet(OrgScopedReadMixin):
         """List or create notes for a deal"""
         deal = self.get_object()
 
-        if request.method == "GET":
+        if request.method in SAFE_METHODS:
             notes = deal.notes.all()
             serializer = DealNoteSerializer(notes, many=True)
             return Response(serializer.data)

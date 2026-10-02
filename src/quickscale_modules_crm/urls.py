@@ -63,10 +63,11 @@ _SNAKE_ROUTE_NAMES = [
 
 
 class CRMRouter(DefaultRouter):
-    """Default router with the CRM-specific staff-only API root.
+    """Default router with the CRM-specific organization-role API root.
 
     Route names are snake_case without the module name (rule 7), and the API
-    root is ``quickscale_crm:api_root``.
+    root is ``quickscale_crm:api_root``.  The root requires the active
+    organization's viewer role (Module Conventions rule 19).
     """
 
     APIRootView = CRMApiRootView
