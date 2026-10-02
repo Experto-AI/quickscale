@@ -151,11 +151,20 @@ CORE_RUNTIME_ROLE_ENV_VARS = (
 # retired option keys under ``retired_options``.
 RETIRED_SETTINGS_NAME = "RETIRED_SETTINGS"
 # Rule 19's forbidden tokens and the listed operator paths where a superuser
-# check is sanctioned (audited cross-tenant operator access).
+# check is sanctioned (audited cross-tenant operator access).  The scan set is
+# every Django view module plus the private ``_view*.py`` / ``*_views.py``
+# siblings rule 28 splits move view code into, so the check follows the code
+# rather than a fixed list of basenames; a token is sanctioned only by an
+# explicit ``OPERATOR_VIEW_TOKENS`` entry.
 VIEW_FILE_NAMES = ("views.py", "debug_views.py")
+VIEW_FILE_PRIVATE_PREFIX = "_view"
+VIEW_FILE_PRIVATE_SUFFIX = "_views.py"
 FORBIDDEN_VIEW_TOKENS = ("is_staff", "is_superuser", "IsAdminUser", "redirect_to_login")
 OPERATOR_VIEW_TOKENS: dict[tuple[str, str], frozenset[str]] = {
     ("forms", "views.py"): frozenset({"is_superuser"}),
+    ("orgs", "_api_views.py"): frozenset({"is_superuser"}),
+    ("orgs", "_view_context.py"): frozenset({"is_superuser"}),
+    ("orgs", "_view_org_management.py"): frozenset({"is_superuser"}),
     ("orgs", "debug_views.py"): frozenset({"is_superuser"}),
     ("orgs", "views.py"): frozenset({"is_superuser"}),
 }
@@ -2750,6 +2759,25 @@ def _view_token(node: ast.AST) -> str | None:
     return None
 
 
+def _is_view_file(rel: str) -> bool:
+    """
+    Return whether a module file belongs to rule 19's view scan set.
+
+    ``views.py`` and ``debug_views.py`` are the Django view modules; the
+    private ``_view*.py`` and ``*_views.py`` siblings hold the view code rule
+    28 splits move out of them, so the scan follows the code rather than a
+    fixed list of basenames.
+    """
+    if not rel.endswith(".py"):
+        return False
+    basename = Path(rel).name
+    return (
+        basename in VIEW_FILE_NAMES
+        or basename.startswith(VIEW_FILE_PRIVATE_PREFIX)
+        or basename.endswith(VIEW_FILE_PRIVATE_SUFFIX)
+    )
+
+
 def rule_19_authorization(corpus: Corpus) -> list[str]:
     """
     Rule 19: module views authorize by org role, not site-wide staff flags.
@@ -2757,17 +2785,18 @@ def rule_19_authorization(corpus: Corpus) -> list[str]:
     The statically checkable clause: ``is_staff``, ``is_superuser``,
     ``IsAdminUser``, and hand-written ``redirect_to_login`` — imported or
     aliased, read as an attribute, or passed as a string — appear only in the
-    listed operator paths.  The "logged in is one of the three idioms" and
-    "README lists the minimum role" clauses stay review rules: rule 9
-    sanctions ``AllowAny`` plus a view's own authentication, and the README
-    prose is not a code property.
+    listed operator paths across every view module and its private split
+    siblings (``_view*.py``/``*_views.py``).  The "logged in is one of the
+    three idioms" and "README lists the minimum role" clauses stay review
+    rules: rule 9 sanctions ``AllowAny`` plus a view's own authentication, and
+    the README prose is not a code property.
     """
     violations: list[str] = []
     for module in corpus.modules:
         for rel, text in module.files.items():
-            basename = Path(rel).name
-            if not rel.endswith(".py") or basename not in VIEW_FILE_NAMES:
+            if not _is_view_file(rel):
                 continue
+            basename = Path(rel).name
             allowed = OPERATOR_VIEW_TOKENS.get((module.name, basename), frozenset())
             tree = _parse(text)
             docstrings = _docstring_nodes(tree)

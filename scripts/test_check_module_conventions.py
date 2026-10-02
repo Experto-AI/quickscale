@@ -4422,6 +4422,20 @@ def test_authorization_controls() -> None:
         "redirect_to_login" in violation
         for violation in _violations(checker.rule_19_authorization, login)
     )
+    private_sibling = _with_files(
+        module,
+        **{
+            "_view_invitation.py": (
+                "from django.contrib.auth.views import redirect_to_login\n\n"
+                "def index(request):\n"
+                "    return redirect_to_login(request.get_full_path())\n"
+            )
+        },
+    )
+    assert any(
+        "redirect_to_login" in violation
+        for violation in _violations(checker.rule_19_authorization, private_sibling)
+    )
     operator = _with_files(
         _golden_module("orgs"),
         views='def index(request, user):\n    return getattr(user, "is_superuser", False)\n',
