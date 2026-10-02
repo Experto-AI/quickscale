@@ -432,6 +432,16 @@ class TestBillingManifestEntryPoint:
         }
         for key in expected_keys:
             assert key in spec.settings, f"Missing expected setting: {key}"
+        # Rule 35: each Stripe secret is projected from its `_ENV_VAR` option.
+        assert spec.settings["QUICKSCALE_BILLING_PUBLISHABLE_KEY"] == (
+            "__QS_ENV__:STRIPE_PUBLISHABLE_KEY"
+        )
+        assert spec.settings["QUICKSCALE_BILLING_SECRET_KEY"] == (
+            "__QS_ENV__:STRIPE_SECRET_KEY"
+        )
+        assert spec.settings["QUICKSCALE_BILLING_WEBHOOK_SECRET"] == (
+            "__QS_ENV__:QUICKSCALE_BILLING_WEBHOOK_SECRET"
+        )
 
     def test_disabled_returns_empty_spec(self) -> None:
         """When billing is disabled, the spec should still be valid (no PR-4 short-circuit)."""

@@ -49,6 +49,27 @@ def _billing_post_hook(
         if str_key in settings:
             settings[str_key] = str(settings[str_key])
 
+    # Rule 35 — each Stripe secret reaches module code as a setting that
+    # renders the environment variable its `_ENV_VAR` option names (core's
+    # `__QS_ENV__` projection), as analytics and notifications do.  A blank
+    # option name projects an empty value, never a dangling reference.
+    for env_var_option, secret_setting in (
+        (
+            "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
+            "QUICKSCALE_BILLING_PUBLISHABLE_KEY",
+        ),
+        (
+            "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
+            "QUICKSCALE_BILLING_SECRET_KEY",
+        ),
+        (
+            "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
+            "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        ),
+    ):
+        env_var_name = str(settings.get(env_var_option, "")).strip()
+        settings[secret_setting] = f"__QS_ENV__:{env_var_name}" if env_var_name else ""
+
     # Rule 32 — every Stripe-calling billing endpoint carries an explicit
     # scope stemmed as quickscale_billing_<purpose>, and the rate for those
     # scopes is the module's _RATE_LIMIT option, contributed here for rule

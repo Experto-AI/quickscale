@@ -24,11 +24,10 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA219 | Move every setting onto one naming family and refuse retired names | post-v88 | 2 | — | Deferred |
-| SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | SA219 | Deferred |
+| SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | — | Deferred |
 | SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220 | Deferred |
 | SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | — | Deferred |
-| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | SA219, SA220, SA226 | Deferred |
+| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | SA220, SA226 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -40,18 +39,18 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA231 (until SA215 lands) ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA219 ──► SA220
+Track 2: SA220
 Track 3: SA215 (rules already met) · SA226 ──► SA215 (remaining rules) ──► SA216
-     critical path: SA219 → SA220 → SA226 → SA215 → SA191 → SA153
+     critical path: SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
-ported, and SA204 has not frozen the migration history. SA219's renames and refusals run through
-the startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's org-role
-authorization needs SA220's capabilities. SA204 freezes migration history before any post-SA153
-module schema change. SA154 is an inventory, not work.
+ported, and SA204 has not frozen the migration history. SA219 landed the settings family, the
+`_ENABLED` switches, and the rule 35 secret projection; SA220's `is_enabled()` reads those
+`_ENABLED` settings, and SA226's org-role authorization needs SA220's capabilities. SA204 freezes
+migration history before any post-SA153 module schema change. SA154 is an inventory, not work.
 
 **Off the critical path.** SA215 runs on Track 3, which owns SA230's harness that SA215 adds rules
 to: its first slice runs now, ahead of SA226, and shortens the critical path's SA215 segment. SA231
@@ -65,7 +64,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA231 | yes | yes | yes | **yes** | no |
-| 2 | SA219 | yes | yes | yes | **yes** | **yes** |
+| 2 | SA220 | yes | yes | yes | **yes** | **yes** |
 | 3 | SA215 (first slice) | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
@@ -84,7 +83,7 @@ A track is **truly green** only when all three states are yes.
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
   and the billing module (`billing/services.py`, `billing/views.py`, `billing/adapter.py`, and its
   docs), and, for the conventions, the manifest option schema and the CLI's `module_config`,
-  module settings names, and `is_enabled()` (SA219, SA220).
+  module settings names, and `is_enabled()` (SA220).
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
@@ -96,7 +95,7 @@ A track is **truly green** only when all three states are yes.
   SA215).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
-  SA219, SA220, SA226, SA230) touch every module and cross every track, so each lands in
+  SA220, SA226, SA230) touch every module and cross every track, so each lands in
   module-sized slices through that queue, merging `v89` before each slice; a slice edits another
   convention ticket's surface only where its own rule forces it (a rename's callers, for example).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
@@ -126,7 +125,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Start early:** SA230 and SA228 have merged, so the first slice moves rules 4, 5, and 23 (the
   cross-module, import-graph, and `services.py` rules, already met on `v89`) out of the harness's
-  `OPEN_RULES`, each with its control case; the rest waits for SA219, SA220, and SA226.
+  `OPEN_RULES`, each with its control case; the rest waits for SA220 and SA226.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
@@ -173,24 +172,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** each batch's files; `scripts/quality_baseline.json`, `scripts/check_quality.sh`;
   the gate registry and gate documentation.
 
-- [ ] **SA219 — Move every setting onto one naming family and refuse retired names.**
-
-  **Context:** inventory §§ 1, 2, 4, 33, 37, 41; D1–D3, D8, D34, D38, D42; rules 1, 6, 31, 35, and
-  39. Two settings families and three spellings of a boolean flag.
-
-  **Open scope:**
-  - *Seam producer (rule 31).* The generator renders the theme's seam producer (`index.html.j2`)
-    from the discovered module set: a flag is true only when its module is installed and enabled,
-    and `modulePaths` come from `{% url %}`. The generated `templates/index.html` is user-owned
-    (U3), so existing projects need a release-note step.
-  - *Secrets (rule 35).* Billing's `os.getenv` reads become settings `apply` renders from their
-    `_ENV_VAR` options through core's `__QS_ENV__` projection, as analytics and notifications do.
-
-  **Acceptance:** a switched-off or uninstalled module's theme flag is false and its paths come from
-  `{% url %}`; no module calls `os.getenv`; the release notes carry the `index.html` step.
-
-  **Surfaces:** the generator and the theme's `index.html.j2`; billing settings, manifest, and
-  `.env.example` block; core's `__QS_ENV__` projection.
+- [x] **SA219 — Move every setting onto one naming family and refuse retired names.**
 
 - [ ] **SA220 — Give every module `is_enabled()` and make `required_modules` cover every import.**
 

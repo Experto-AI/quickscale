@@ -350,10 +350,14 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Modules stop reading each other's settings.** Forms asks analytics' runtime snapshot and
     orgs asks notifications' settings snapshot, so one module's configuration never leaks into
     another's code.
-  - **Module secrets reach module code as applied settings.** Analytics and notifications read
-    their PostHog key and host, Resend API key, and webhook secret from projected Django settings
-    that `quickscale apply` renders from each module's `_env_var` option, and a switched-on module
-    whose required secret is empty fails startup.
+  - **The React shell seam is rendered from the shipped module inventory.**
+    `window.__QUICKSCALE__.modules` carries a key for every shipped module — `true` only while the
+    module is installed and enabled — and its `modulePaths` entries reverse named Django routes
+    instead of literal paths.
+  - **Module secrets reach module code as applied settings.** Analytics, notifications, and billing
+    read their PostHog key and host, Resend API key and webhook secret, and Stripe keys and webhook
+    secret from projected Django settings that `quickscale apply` renders from each module's
+    `_env_var` option, and a switched-on module whose required secret is empty fails startup.
   - **Module conventions are enforced by a registered gate.** `make check-module-conventions` runs
     one conformance check over every module manifest and module source tree; each covered rule has a
     control case proving it rejects a violation, and rules whose convention work is still pending

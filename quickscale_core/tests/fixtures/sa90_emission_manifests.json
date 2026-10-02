@@ -23,6 +23,8 @@
       "sa217": "Regenerated 2026-09-30 \u2014 the managed settings schema now reaches generated settings/modules.py and base.py imports it (SA217); testproject/settings/base.py and testproject/settings/modules.py were re-hashed in all three variants, and their canonical (umask-independent) mode is recorded as 644.",
       "sa218": "Regenerated 2026-09-28 \u2014 generated settings install quickscale_core.runtime.conventions.exception_handler as REST_FRAMEWORK[EXCEPTION_HANDLER] (SA218). 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa219-foundation-enabled-flags": "Regenerated 2026-10-01 \u2014 every remaining React module flag requires installed-and-enabled: auth, storage, backups, notifications, analytics, and billing gained the `and settings.QUICKSCALE_<MODULE>_ENABLED` clause and social's flag now requires installed-and-enabled instead of its feature pair (SA219, rule 31). The five foundation modules (auth, backups, orgs, social, storage) declare `enabled`, their public URL mounts drop when off, the backups scheduled runs refuse, the backups/storage rule-35 checks stay silent, and apply refuses to switch off a module an installed module requires. templates/index.html, templates/base.html, templates/social/link_tree.html, templates/social/embeds.html, testproject/settings/modules.py, testproject/urls.py, and testproject/context_processors.py changed where those surfaces render; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa219-discovery-seam-producer": "Regenerated 2026-10-01 \u2014 the React seam producer is rendered from the shipped module inventory (SA219, rule 31): templates/index.html carries a key for every shipped module and modulePaths reverses named routes ({% url %}) instead of mount literals, and testproject/urls.py names the /crm/ React shell route crm-shell for that reversal. 2 fixture hashes updated per variant: templates/index.html and testproject/urls.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa217-schema-import-exposure": "Regenerated 2026-10-01 \u2014 the generated <package>/settings/base.py import of MODULE_SETTINGS_SCHEMA is annotated `# noqa: F401` with a comment: Django settings expose every uppercase global in the module and the generic startup check validates against settings.MODULE_SETTINGS_SCHEMA, so the import is intentional and the project's own ruff check no longer reports it unused. 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa219-orgs-mode-setting": "Regenerated 2026-10-01 \u2014 the orgs runtime mode setting renamed QUICKSCALE_MODE to QUICKSCALE_ORGS_MODE, so templates/index.html (owner.mode) and testproject/context_processors.py (billing dashboard URL) were re-hashed in all three variants. All unrelated paths, hashes, and modes remain authoritative.",
       "sa221": "Regenerated 2026-09-28 \u2014 module identity rename (SA221): admin templates, React admin links, and generated Makefile/ci.yml now use the quickscale_<module> app labels.",
       "sa223": "Regenerated 2026-09-30 \u2014 the React theme's useApi.ts parses the one QuickScale error shape and a new src/test/useApiErrors.test.ts pins it; both emitted paths were re-hashed in all three variants.",
@@ -476,7 +478,7 @@
     },
     "templates/index.html": {
       "mode": "644",
-      "sha256": "3044206087a4ec8fded1f8b1ee70ebad52221be1260230b42d198969e00ec51b"
+      "sha256": "143967305c394178a6283ee75ac723f46f8e024e87d7ea525c0b01da2a3e1cf3"
     },
     "templates/social/embeds.html": {
       "mode": "644",
@@ -504,7 +506,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "02f1c20bc9142ab20233d42365a2e5752a4c6955979679dc79dca95d693eae6e"
+      "sha256": "63366e3ee9f038aeeb807c1ed80afda5c253d90c406ceb3d9ffb244f95740e99"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -520,7 +522,7 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "162e660348d66d95ceaf9ffd748ea80c092c5b2653f4fe76b78b507136ebc096"
+      "sha256": "3b8239c90c47b3c74f9440222ea8626501e815b0d04db02df4789f45f09fe622"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
@@ -954,7 +956,7 @@
     },
     "templates/index.html": {
       "mode": "644",
-      "sha256": "3044206087a4ec8fded1f8b1ee70ebad52221be1260230b42d198969e00ec51b"
+      "sha256": "143967305c394178a6283ee75ac723f46f8e024e87d7ea525c0b01da2a3e1cf3"
     },
     "templates/social/embeds.html": {
       "mode": "644",
@@ -982,7 +984,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "02f1c20bc9142ab20233d42365a2e5752a4c6955979679dc79dca95d693eae6e"
+      "sha256": "63366e3ee9f038aeeb807c1ed80afda5c253d90c406ceb3d9ffb244f95740e99"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -998,7 +1000,7 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "162e660348d66d95ceaf9ffd748ea80c092c5b2653f4fe76b78b507136ebc096"
+      "sha256": "3b8239c90c47b3c74f9440222ea8626501e815b0d04db02df4789f45f09fe622"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
@@ -1432,7 +1434,7 @@
     },
     "templates/index.html": {
       "mode": "644",
-      "sha256": "3044206087a4ec8fded1f8b1ee70ebad52221be1260230b42d198969e00ec51b"
+      "sha256": "143967305c394178a6283ee75ac723f46f8e024e87d7ea525c0b01da2a3e1cf3"
     },
     "templates/social/embeds.html": {
       "mode": "644",
@@ -1460,7 +1462,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "02f1c20bc9142ab20233d42365a2e5752a4c6955979679dc79dca95d693eae6e"
+      "sha256": "63366e3ee9f038aeeb807c1ed80afda5c253d90c406ceb3d9ffb244f95740e99"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -1476,7 +1478,7 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "162e660348d66d95ceaf9ffd748ea80c092c5b2653f4fe76b78b507136ebc096"
+      "sha256": "3b8239c90c47b3c74f9440222ea8626501e815b0d04db02df4789f45f09fe622"
     },
     "testproject/urls_modules.py": {
       "mode": "644",

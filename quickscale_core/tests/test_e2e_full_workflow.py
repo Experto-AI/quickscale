@@ -949,37 +949,25 @@ class TestFullE2EWorkflow:
         generator.generate(project_name, project_path)
         self._install_project_dependencies(project_path)
 
-        # ── Embed the auth and orgs modules as path dependencies ────────
-        # orgs depends on auth, so both must be available at lock time.
-        for module_name in ("auth", "orgs"):
-            _copytree_for_generated_project_smoke(
-                REPO_ROOT / "quickscale_modules" / module_name,
-                project_path / "modules" / module_name,
-            )
+        # ── Embed auth and orgs through the managed wiring path ─────────
+        # orgs depends on auth, so both must be available at lock time.  The
+        # module set is declared and the managed wiring regenerated so
+        # settings/modules.py carries each installed module's compiled schema:
+        # the stray-manager check under test must not be preempted by the
+        # generic settings-schema startup check.
+        from quickscale_cli.commands.module_config import (
+            default_module_config_from_manifest,
+        )
 
-        pyproject_path = project_path / "pyproject.toml"
-        pyproject_content = pyproject_path.read_text()
+        auth_options = default_module_config_from_manifest("auth")
+        self._embed_auth_and_orgs_via_subtree(project_path)
+        self._write_quickscale_yml_with_auth(
+            project_path, project_name, "showcase_react", auth_options
+        )
+        self._sync_module_dependencies(project_path, auth_options)
+        self._regenerate_wiring(project_path)
 
-        if "quickscale-module-auth" not in pyproject_content:
-            path_deps = (
-                'quickscale-module-auth = {path = "./modules/auth", develop = true}\n'
-                'quickscale-module-orgs = {path = "./modules/orgs", develop = true}\n'
-            )
-            # Anchor on the section boundary rather than a specific
-            # dependency pin so routine version bumps don't silently
-            # break this insertion point.
-            anchor = "\n[tool.poetry.group.dev.dependencies]"
-            assert anchor in pyproject_content, (
-                "Generated pyproject.toml is missing the dev-dependencies "
-                "section used as the path-dependency insertion anchor"
-            )
-            pyproject_content = pyproject_content.replace(
-                anchor,
-                f"{path_deps}{anchor}",
-            )
-            pyproject_path.write_text(pyproject_content)
-
-        # Regenerate lock and install with the new path dependency
+        # Regenerate lock and install with the new path dependencies
         poetry_env = build_isolated_poetry_env()
         lock_result = subprocess.run(
             ["poetry", "lock"],
@@ -1039,8 +1027,9 @@ class TestFullE2EWorkflow:
             f"\n"
             f"QUICKSCALE_ORGS_MODE = 'solo'\n"
             f"\n"
+            # The managed wiring already installs quickscale_modules_orgs;
+            # only the stray-manager test app is added here.
             f"INSTALLED_APPS += [\n"
-            f'    "quickscale_modules_orgs",\n'
             f'    "{project_name}.test_unprotected",\n'
             f"]\n"
             f"\n"
@@ -1562,6 +1551,141 @@ class TestFullE2EWorkflow:
             f"Poetry install failed: {install_result.stderr}"
         )
 
+    def _get_local_repo_branch(self) -> str:
+        """Return the current branch of the local maintainer repo."""
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        branch = result.stdout.strip()
+        if not branch:
+            # Detached HEAD fallback - subtree add accepts a commit-ish.
+            return "HEAD"
+        return branch
+
+    def _embed_auth_and_orgs_via_subtree(self, project_path: Path) -> str:
+        """Copy auth + orgs module content into the generated project.
+
+        Sources both modules from ``quickscale_modules/`` into
+        ``modules/`` so the layout matches generated-project expectations.
+        Org is embedded alongside auth because the auth manifest requires
+        ``orgs`` — the auth module's views import
+        ``quickscale_modules_orgs.models`` at import time.
+
+        Returns the local repo branch name for logging continuity with callers
+        that previously received a subtree branch label.
+        """
+        for module_name in ("auth", "orgs"):
+            _copytree_for_generated_project_smoke(
+                REPO_ROOT / "quickscale_modules" / module_name,
+                project_path / "modules" / module_name,
+            )
+
+        # Sanity-check that both embeds actually landed.
+        for module_name in ("auth", "orgs"):
+            module_dir = project_path / "modules" / module_name
+            assert (module_dir / "module.yml").exists(), (
+                f"{module_name} module manifest missing after copy"
+            )
+            assert (module_dir / "pyproject.toml").exists(), (
+                f"{module_name} module pyproject.toml missing after copy"
+            )
+            assert (
+                module_dir / "src" / f"quickscale_modules_{module_name}"
+            ).is_dir(), f"{module_name} module source tree missing after copy"
+
+        return self._get_local_repo_branch()
+
+    def _write_quickscale_yml_with_auth(
+        self,
+        project_path: Path,
+        project_name: str,
+        theme: str,
+        auth_options: dict[str, object],
+        orgs_options: dict[str, object] | None = None,
+    ) -> None:
+        """Write a minimal quickscale.yml that declares auth + orgs modules.
+
+        Org is included because the auth manifest declares
+        ``required_modules: [orgs]`` — the auth module's views import
+        ``quickscale_modules_orgs.models`` at import time.
+        """
+        import yaml
+
+        if orgs_options is None:
+            orgs_options = {"mode": "solo"}
+
+        config_payload = {
+            "version": "1",
+            "project": {
+                "slug": project_name,
+                "package": project_name,
+                "theme": theme,
+            },
+            "docker": {"start": False},
+            "modules": {
+                "auth": dict(auth_options),
+                "orgs": dict(orgs_options),
+            },
+        }
+        rendered = yaml.safe_dump(
+            config_payload,
+            sort_keys=False,
+            default_flow_style=False,
+        )
+        (project_path / "quickscale.yml").write_text(rendered)
+
+    def _sync_module_dependencies(
+        self,
+        project_path: Path,
+        auth_options: dict[str, object],
+        orgs_options: dict[str, object] | None = None,
+    ) -> None:
+        """Add embedded auth + orgs modules as Poetry path dependencies.
+
+        Regenerating managed wiring only writes settings/URL files; it does
+        not register the module with Poetry. Without this step the module's
+        Python packages are not importable from the generated project venv.
+
+        Org is synced alongside auth because the auth manifest declares
+        ``required_modules: [orgs]`` — the auth module's views import
+        ``quickscale_modules_orgs.models`` at import time.
+        """
+        from quickscale_cli.utils.module_dependency_sync import (
+            sync_project_module_dependencies,
+        )
+
+        if orgs_options is None:
+            orgs_options = {"mode": "solo"}
+
+        sync_result = sync_project_module_dependencies(
+            project_path,
+            {
+                "auth": auth_options,
+                "orgs": orgs_options,
+            },
+        )
+        assert "quickscale-module-auth" in sync_result.added_path_dependencies, (
+            "sync_project_module_dependencies did not register the auth module "
+            f"as a path dependency: {sync_result}"
+        )
+        assert "quickscale-module-orgs" in sync_result.added_path_dependencies, (
+            "sync_project_module_dependencies did not register the orgs module "
+            f"as a path dependency: {sync_result}"
+        )
+
+    def _regenerate_wiring(self, project_path: Path) -> None:
+        """Regenerate managed settings/URL wiring for all embedded modules."""
+        from quickscale_cli.utils.module_wiring_manager import (
+            regenerate_managed_wiring,
+        )
+
+        success, message = regenerate_managed_wiring(project_path)
+        assert success, f"regenerate_managed_wiring failed: {message}"
+
     def _build_react_frontend(self, project_path: Path) -> None:
         """Install, type-check, and build React frontend assets."""
         self._ensure_pnpm_available()
@@ -1979,21 +2103,6 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
     so the login URL served by the module is ``/accounts/login/``.
     """
 
-    def _get_local_repo_branch(self) -> str:
-        """Return the current branch of the local maintainer repo."""
-        result = subprocess.run(
-            ["git", "branch", "--show-current"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        branch = result.stdout.strip()
-        if not branch:
-            # Detached HEAD fallback - subtree add accepts a commit-ish.
-            return "HEAD"
-        return branch
-
     def _run_git(
         self, project_path: Path, *args: str
     ) -> subprocess.CompletedProcess[str]:
@@ -2005,126 +2114,6 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
             text=True,
             timeout=60,
         )
-
-    def _embed_auth_and_orgs_via_subtree(self, project_path: Path) -> str:
-        """Copy auth + orgs module content into the generated project.
-
-        Sources both modules from ``quickscale_modules/`` into
-        ``modules/`` so the layout matches generated-project expectations.
-        Org is embedded alongside auth because the auth manifest requires
-        ``orgs`` — the auth module's views import
-        ``quickscale_modules_orgs.models`` at import time.
-
-        Returns the local repo branch name for logging continuity with callers
-        that previously received a subtree branch label.
-        """
-        for module_name in ("auth", "orgs"):
-            _copytree_for_generated_project_smoke(
-                REPO_ROOT / "quickscale_modules" / module_name,
-                project_path / "modules" / module_name,
-            )
-
-        # Sanity-check that both embeds actually landed.
-        for module_name in ("auth", "orgs"):
-            module_dir = project_path / "modules" / module_name
-            assert (module_dir / "module.yml").exists(), (
-                f"{module_name} module manifest missing after copy"
-            )
-            assert (module_dir / "pyproject.toml").exists(), (
-                f"{module_name} module pyproject.toml missing after copy"
-            )
-            assert (
-                module_dir / "src" / f"quickscale_modules_{module_name}"
-            ).is_dir(), f"{module_name} module source tree missing after copy"
-
-        return self._get_local_repo_branch()
-
-    def _write_quickscale_yml_with_auth(
-        self,
-        project_path: Path,
-        project_name: str,
-        theme: str,
-        auth_options: dict[str, object],
-        orgs_options: dict[str, object] | None = None,
-    ) -> None:
-        """Write a minimal quickscale.yml that declares auth + orgs modules.
-
-        Org is included because the auth manifest declares
-        ``required_modules: [orgs]`` — the auth module's views import
-        ``quickscale_modules_orgs.models`` at import time.
-        """
-        import yaml
-
-        if orgs_options is None:
-            orgs_options = {"mode": "solo"}
-
-        config_payload = {
-            "version": "1",
-            "project": {
-                "slug": project_name,
-                "package": project_name,
-                "theme": theme,
-            },
-            "docker": {"start": False},
-            "modules": {
-                "auth": dict(auth_options),
-                "orgs": dict(orgs_options),
-            },
-        }
-        rendered = yaml.safe_dump(
-            config_payload,
-            sort_keys=False,
-            default_flow_style=False,
-        )
-        (project_path / "quickscale.yml").write_text(rendered)
-
-    def _sync_module_dependencies(
-        self,
-        project_path: Path,
-        auth_options: dict[str, object],
-        orgs_options: dict[str, object] | None = None,
-    ) -> None:
-        """Add embedded auth + orgs modules as Poetry path dependencies.
-
-        Regenerating managed wiring only writes settings/URL files; it does
-        not register the module with Poetry. Without this step the module's
-        Python packages are not importable from the generated project venv.
-
-        Org is synced alongside auth because the auth manifest declares
-        ``required_modules: [orgs]`` — the auth module's views import
-        ``quickscale_modules_orgs.models`` at import time.
-        """
-        from quickscale_cli.utils.module_dependency_sync import (
-            sync_project_module_dependencies,
-        )
-
-        if orgs_options is None:
-            orgs_options = {"mode": "solo"}
-
-        sync_result = sync_project_module_dependencies(
-            project_path,
-            {
-                "auth": auth_options,
-                "orgs": orgs_options,
-            },
-        )
-        assert "quickscale-module-auth" in sync_result.added_path_dependencies, (
-            "sync_project_module_dependencies did not register the auth module "
-            f"as a path dependency: {sync_result}"
-        )
-        assert "quickscale-module-orgs" in sync_result.added_path_dependencies, (
-            "sync_project_module_dependencies did not register the orgs module "
-            f"as a path dependency: {sync_result}"
-        )
-
-    def _regenerate_wiring(self, project_path: Path) -> None:
-        """Regenerate managed settings/URL wiring for all embedded modules."""
-        from quickscale_cli.utils.module_wiring_manager import (
-            regenerate_managed_wiring,
-        )
-
-        success, message = regenerate_managed_wiring(project_path)
-        assert success, f"regenerate_managed_wiring failed: {message}"
 
     def _assert_auth_url_responds(
         self, server_process, port: int, timeout: int = 20

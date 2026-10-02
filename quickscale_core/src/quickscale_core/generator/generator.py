@@ -19,6 +19,7 @@ from quickscale_core.generator.runtime_pins import (
     PYTHON_VERSION,
     QUICKSCALE_CORE_PIN,
 )
+from quickscale_core.generator.seam import render_module_flags, render_module_paths
 from quickscale_core.utils.file_utils import (
     ensure_directory,
     validate_project_name,
@@ -520,6 +521,10 @@ class ProjectGenerator:
             "selected_modules": list(self.selected_modules)
             if self.selected_modules is not None
             else None,
+            # Rule 31: the React seam's module flags and paths are rendered
+            # from the shipped module inventory, never hand-written per module.
+            "seam_module_flags": render_module_flags(),
+            "seam_module_paths": render_module_paths(),
             # Generated-project runtime pins (owned by this module, not the generator)
             "python_version": PYTHON_VERSION,
             "python_constraint": PYTHON_CONSTRAINT,

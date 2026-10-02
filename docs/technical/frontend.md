@@ -71,14 +71,16 @@ It is written by `templates/index.html.j2` and carries:
 | `modules` | Boolean flag per module: `true` only when the module is installed and its `QUICKSCALE_<MODULE>_ENABLED` is on |
 | `modulePaths` | Server-resolved base paths for `crm`, `social`, `analytics` |
 
-[decisions.md § Module Conventions](decisions.md#module-conventions) rule 31 (SA219) changes how
-the producer fills `modules` and `modulePaths`: a flag is `true` only when the module is installed
-and its `QUICKSCALE_<MODULE>_ENABLED` is on, and paths come from `{% url %}`, not literals. Every
-shipped module flag now requires installed-and-enabled, and the public social producers
-(`templates/social/link_tree.html.j2`, `templates/social/embeds.html.j2`) and the shared
-navigation apply the same installed-and-enabled social condition before hydrating or linking. The
-`modulePaths` rework to `{% url %}` and the discovery-rendered producer D34 option A describes
-remain open until SA215 enforces rule 31. The three-place rule below is unchanged.
+[decisions.md § Module Conventions](decisions.md#module-conventions) rule 31 (SA219) fixes how the
+producer fills `modules` and `modulePaths`: the generator renders `templates/index.html.j2` from
+the shipped module inventory, so `modules` carries a key for every shipped module — `true` only
+while the module is installed and its `QUICKSCALE_<MODULE>_ENABLED` is on, `false` when the module
+is absent — and every `modulePaths` entry reverses a named route with `{% url %}` (`crm` through
+the `crm-shell` route the generated `<package>/urls.py` names, `social` through
+`social-link-tree`/`social-embeds`, `analytics` through `quickscale_analytics:dashboard`), never a
+literal. The public social producers (`templates/social/link_tree.html.j2`,
+`templates/social/embeds.html.j2`) and the shared navigation apply the same installed-and-enabled
+social condition before hydrating or linking. The three-place rule below is unchanged.
 | `owner.mode` | `"solo"` or `"saas"` — see [organizations.md](organizations.md) |
 | `owner.currentOrgSlug` | Current org slug, or `null` |
 | `publicPage` | Optional; present only on public non-SPA social surfaces |
@@ -107,7 +109,7 @@ There is no token auth and no separate API origin. Session cookies plus CSRF is 
 The generated `urls.py` establishes precedence. Order matters and is the actual specification of who owns what:
 
 1. `healthcheck/`, `admin/`
-2. **React shell patterns** — `/`, and the reserved `^orgs...`, `^(profile|blog|listings|crm|settings)/?$`, `^forms/?$`, `^forms/<slug>/?$` routes
+2. **React shell patterns** — `/`, and the reserved `^orgs...`, `^crm/?$` (named `crm-shell`), `^(profile|blog|listings|settings)/?$`, `^forms/?$`, `^forms/<slug>/?$` routes
 3. `PRE_HOME_MODULE_URLPATTERNS`
 4. Public social surfaces — `^social/?$`, `^social/embeds/?$`
 5. `POST_HOME_MODULE_URLPATTERNS`
@@ -225,7 +227,7 @@ The authoritative statement of both rules is [decisions.md § Module Implementat
 
 ## Module frontend surfaces
 
-Modules are pluggable on the backend and **hard-wired on the frontend**. No module ships TSX. All SPA pages for module surfaces live in the theme (`src/pages/BlogPage.tsx`, `CrmPage.tsx`, `ListingsPage.tsx`, `FormsPage.tsx`, `src/pages/orgs/*`), and the module name list is duplicated in `index.html.j2`, `useModules.ts`, and `validateQuickScaleSeam.ts`.
+Modules are pluggable on the backend and **hard-wired on the frontend**. No module ships TSX. All SPA pages for module surfaces live in the theme (`src/pages/BlogPage.tsx`, `CrmPage.tsx`, `ListingsPage.tsx`, `FormsPage.tsx`, `src/pages/orgs/*`), and the module name list is declared in the theme's TypeScript (`useModules.ts`, `validateQuickScaleSeam.ts`). The producer no longer repeats it: `templates/index.html.j2` injects the generator-rendered seam (rule 31), which carries a key for every shipped module.
 
 Adding a module with a React surface therefore touches the theme. That is the current design, consistent with [module-extension.md](module-extension.md)'s "Theme/frontend → user-owned generated code" classification: modules own backend contracts, the theme owns presentation.
 
@@ -278,7 +280,7 @@ Each module surface is in one of three states, and **this is the most important 
 Recorded so they are not rediscovered as surprises. None of these are settled decisions; they are the current state.
 
 - **Two presentations for one module.** `blog` and `listings` have both a React launcher page and a server-rendered UI, even though they now share design tokens.
-- **Module name list duplicated in three files** (`index.html.j2`, `useModules.ts`, `validateQuickScaleSeam.ts`), with no gate binding them together. Module Conventions rules 31 and 37 remove the `index.html.j2` copy (it is rendered from discovery, SA219); the two TypeScript copies stay by design.
+- **The seam validator's module list is ungated.** `validateQuickScaleSeam.ts` declares its required module keys separately, and no gate binds that list to the shipped inventory or to `useModules.ts`. The producer is no longer a third copy — `templates/index.html.j2` injects the generator-rendered seam (rule 31) — and `test_module_manifest_contract.py` binds the rendered set to `useModules.ts`.
 - **Vite dev proxy duplicates the URL-ownership table** with no gate binding them together.
 - **`manifest: true` is emitted but unused**, leaving the unhashed-filename convention as the only thing keeping `{% static %}` references valid.
 - **Theme frontend internals are explicitly out of scope** for [arch-audit.md](../others/arch-audit.md), so none of the above appears in the structural findings.

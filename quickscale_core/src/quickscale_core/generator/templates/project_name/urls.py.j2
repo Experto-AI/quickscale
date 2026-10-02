@@ -57,7 +57,10 @@ react_shell_urlpatterns = [
         r"^orgs/(?!api(?:/|$))[^/]+/(blog|listings|members|settings)/?$",
         orgs_react_shell_view,
     ),
-    re_path(r"^(profile|blog|listings|crm|settings)/?$", react_shell_view),
+    # The CRM SPA route is named: the React seam's modulePaths.crm entry
+    # reverses it (Module Conventions rule 31) instead of writing a literal.
+    re_path(r"^crm/?$", react_shell_view, name="crm-shell"),
+    re_path(r"^(profile|blog|listings|settings)/?$", react_shell_view),
     re_path(r"^forms/?$", react_shell_view),
     re_path(r"^forms/[^/]+/?$", react_shell_view),
 ]

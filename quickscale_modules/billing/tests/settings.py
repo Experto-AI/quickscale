@@ -15,10 +15,14 @@ SECRET_KEY = "test-secret-key-for-billing-module"
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
-# Billing is installed enabled in this suite; billing's rule 35 startup check
-# needs the Stripe secret key and webhook secret to resolve.
-os.environ.setdefault("STRIPE_SECRET_KEY", "sk_test_billing_suite")
-os.environ.setdefault("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_billing_suite")
+# Billing is installed enabled in this suite; billing's rule 35 startup checks
+# run while Django populates the app registry, before the test conftest loads,
+# so the projected secret settings must be populated here.  Apply renders
+# these from the environment variables the `_ENV_VAR` options name; the suite
+# sets them directly, as notifications' suite does.
+QUICKSCALE_BILLING_PUBLISHABLE_KEY = "pk_test_billing_suite"
+QUICKSCALE_BILLING_SECRET_KEY = "sk_test_billing_suite"
+QUICKSCALE_BILLING_WEBHOOK_SECRET = "whsec_billing_suite"
 
 INSTALLED_APPS = [
     "django.contrib.admin",

@@ -20,7 +20,9 @@ from .modules import (
     MODULE_INSTALLED_APPS,
     MODULE_MIDDLEWARE,
     MODULE_SETTINGS,
-    MODULE_SETTINGS_SCHEMA,
+    # Django settings expose every uppercase global in this module, and the
+    # generic startup check validates against them; the import is the exposure.
+    MODULE_SETTINGS_SCHEMA,  # noqa: F401
 )
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
