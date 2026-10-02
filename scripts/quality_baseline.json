@@ -2,7 +2,6 @@
   "schema_version": 1,
   "dead_code": {
     "allowed_messages": [
-      "quickscale_cli/src/quickscale_cli/commands/_runtime.py: unused variable 'q'",
       "quickscale_modules/blog/src/quickscale_modules_blog/views.py: unused variable 'req'",
       "quickscale_modules/blog/src/quickscale_modules_blog/views.py: unused variable 'req'",
       "quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py: unused variable 'app_configs'",

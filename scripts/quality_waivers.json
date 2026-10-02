@@ -291,16 +291,6 @@
       "reason": "SA232 splits apply_command.py into private _<name>.py modules that apply_command re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
       "expires_on": "2027-03-31",
       "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W036",
-      "entry_key": "dead_code:allowed_messages:quickscale_cli/src/quickscale_cli/commands/_runtime.py: unused variable 'q':multiplicity",
-      "base_ceiling": 0,
-      "ceiling": 1,
-      "owner": "QuickScale maintainers",
-      "reason": "SA232 splits apply_command.py into private _<name>.py modules that apply_command re-exports (Module Conventions rule 28); the file path changes, so the dead-code message is a rename (delete plus new exemption), not a new finding.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
     }
   ]
 }

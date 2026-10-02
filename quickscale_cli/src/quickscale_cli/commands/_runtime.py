@@ -104,7 +104,7 @@ def _run_local_migrations(project_path: Path) -> bool:
     return outcome.success
 
 
-def _should_check_stale_volumes(ctx: "ApplyContext") -> bool:
+def _should_check_stale_volumes(ctx: ApplyContext) -> bool:
     """Return whether this apply is provisioning a project's database anew.
 
     ``had_existing_state`` is True only when an authoritative
@@ -241,7 +241,7 @@ def _start_docker(
     outcome = _apply_command.step_start_docker(
         step_ctx,
         should_auto_start_docker=True,
-        start_docker_fn=lambda p, q: _apply_command._start_docker_impl(
+        start_docker_fn=lambda p, _: _apply_command._start_docker_impl(
             p,
             build=build,
             verbose=verbose,
