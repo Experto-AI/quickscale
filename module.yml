@@ -74,6 +74,7 @@ config:
 
 required_modules:
   - orgs
+  - storage
 
 dependencies:
   - djangorestframework>=3.17.2
