@@ -28,7 +28,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA220 | Give every module `is_enabled()` and make `required_modules` cover every import | post-v88 | 2 | SA219 | Deferred |
 | SA226 | Authorize tenant modules by org role | post-v88 | 3 | SA220 | Deferred |
 | SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | — | Deferred |
-| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 1 | SA219, SA220, SA226 | Deferred |
+| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | SA219, SA220, SA226 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -39,9 +39,9 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA231 (while blocked) · SA215 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA231 (until SA215 lands) ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA219 ──► SA220
-Track 3: SA226 ──► SA216 (after SA215)
+Track 3: SA215 (rules already met) · SA226 ──► SA215 (remaining rules) ──► SA216
      critical path: SA219 → SA220 → SA226 → SA215 → SA191 → SA153
 ```
 
@@ -53,8 +53,9 @@ the startup check, SA220's `is_enabled()` reads SA219's `_ENABLED`, and SA226's 
 authorization needs SA220's capabilities. SA204 freezes migration history before any post-SA153
 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** SA230's landed harness is the one SA215 adds rules to. SA231 (Track 1)
-fills the track while SA215 is blocked and pauses once SA215 can start. SA216 waits for SA215
+**Off the critical path.** SA215 runs on Track 3, which owns SA230's harness that SA215 adds rules
+to: its first slice runs now, ahead of SA226, and shortens the critical path's SA215 segment. SA231
+(Track 1) fills its track until SA215 lands and SA191 can start. SA216 waits for SA215
 because both change auth's views, orgs' removal path, and the user-referencing models.
 
 ### Track states
@@ -65,7 +66,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA231 | yes | yes | yes | **yes** | no |
 | 2 | SA219 | yes | yes | yes | **yes** | **yes** |
-| 3 | SA226 | no | no | no | no | no |
+| 3 | SA215 (first slice) | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
@@ -91,7 +92,8 @@ A track is **truly green** only when all three states are yes.
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block, and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
-  theme's React API client, and the conformance harness with its registry row (SA230, SA226).
+  theme's React API client, and the conformance harness with its registry row (SA230, SA226,
+  SA215).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
   SA219, SA220, SA226, SA230) touch every module and cross every track, so each lands in
@@ -122,8 +124,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
 
-  **Start early:** once SA230 merges, the first slice adds the import-graph, cross-module, and
-  `services.py` rules (already met on `v89`); the rest waits for SA219, SA220, and SA226.
+  **Start early:** SA230 and SA228 have merged, so the first slice moves rules 4, 5, and 23 (the
+  cross-module, import-graph, and `services.py` rules, already met on `v89`) out of the harness's
+  `OPEN_RULES`, each with its control case; the rest waits for SA219, SA220, and SA226.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
