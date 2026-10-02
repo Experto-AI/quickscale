@@ -371,18 +371,6 @@
         "symbol": "build_schema_from_manifest",
         "type": "function"
       },
-      "quickscale_core/src/quickscale_core/manifest/loader.py::_parse_contract_vintage": {
-        "file": "quickscale_core/src/quickscale_core/manifest/loader.py",
-        "max_complexity": 11,
-        "symbol": "_parse_contract_vintage",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/manifest/loader.py::_parse_managed_files": {
-        "file": "quickscale_core/src/quickscale_core/manifest/loader.py",
-        "max_complexity": 13,
-        "symbol": "_parse_managed_files",
-        "type": "function"
-      },
       "quickscale_core/src/quickscale_core/manifest/resolver.py::_apply_normalization_rule": {
         "file": "quickscale_core/src/quickscale_core/manifest/resolver.py",
         "max_complexity": 13,
