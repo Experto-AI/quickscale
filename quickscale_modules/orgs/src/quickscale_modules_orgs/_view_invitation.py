@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.contrib.auth.views import redirect_to_login
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -49,7 +49,7 @@ _INVITATION_PAGE_COPY = {
 }
 
 
-class OrgInvitationAcceptView(SaasModeRequiredMixin, TemplateView):
+class OrgInvitationAcceptView(SaasModeRequiredMixin, LoginRequiredMixin, TemplateView):
     """Render the public org invitation accept page."""
 
     template_name = "quickscale_orgs/org_invitation_accept.html"
@@ -86,7 +86,7 @@ class OrgInvitationAcceptView(SaasModeRequiredMixin, TemplateView):
 
         if session is not None:
             session[PENDING_ORG_INVITATION_TOKEN_SESSION_KEY] = str(invitation.token)
-        return redirect_to_login(request.get_full_path())
+        return self.handle_no_permission()
 
     def get_invitation(self) -> OrganizationInvitation:
         if self._invitation is None:
