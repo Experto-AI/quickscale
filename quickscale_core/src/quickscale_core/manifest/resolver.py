@@ -8,6 +8,11 @@ This module is the runtime engine that the derivation schema types
 It is the one path every module's declared options flow through; the
 per-module contract files it replaced are gone.
 
+The normalization, validation, legacy-alias, derived-setting, and wiring
+engines live in the sibling ``resolver_*`` modules; this module owns the
+public entry points and re-exports every name that previously lived here, so
+all existing ``quickscale_core.manifest.resolver`` imports keep working.
+
 The resolver is intentionally generic — it operates on the declarative
 derivation rules rather than module-specific imperative logic.
 """
@@ -27,6 +32,37 @@ from quickscale_core.manifest.derivation import (
     ValidationRule,
     WiringProjection,
     build_schema_from_manifest,
+)
+from quickscale_core.manifest.resolver_derived import (
+    _project_all_derived_settings,
+    _project_derived_setting,
+)
+from quickscale_core.manifest.resolver_legacy import (
+    _apply_legacy_transform,
+    _migrate_legacy_keys,
+)
+from quickscale_core.manifest.resolver_normalization import (
+    _apply_list_rule,
+    _apply_normalization_rule,
+    _canonical_url,
+    _coerce_list_items,
+    _is_empty_container,
+    _is_supported_list_item,
+    _list_chain_declines,
+    _normalize_value,
+    _slugify,
+)
+from quickscale_core.manifest.resolver_validation import (
+    _check_validation_rule,
+    _validate_value,
+)
+from quickscale_core.manifest.resolver_wiring import (
+    _WIRING_ALL_FIELDS,
+    _WIRING_LIST_FIELDS,
+    _WIRING_URL_FIELDS,
+    _coerce_contribution,
+    _project_all_wiring,
+    _project_wiring_contribution,
 )
 from quickscale_core.manifest.schema import ManagedFileDeclaration, ModuleManifest
 
@@ -77,666 +113,6 @@ class ResolverResult:
     managed_files: tuple[ManagedFileDeclaration, ...] = ()
 
 
-# ---------------------------------------------------------------------------
-# Normalization engine
-# ---------------------------------------------------------------------------
-
-
-def _canonical_url(value: str) -> str:
-    """Return *value* as an absolute URL with no trailing slash.
-
-    A value without a scheme gets ``https://`` prepended, matching the
-    canonical form modules store for an operator-configured URL.
-    """
-    candidate = value.strip()
-    if not candidate:
-        return ""
-    if not candidate.startswith(("http://", "https://")):
-        candidate = "https://" + candidate.lstrip("/")
-    return candidate.rstrip("/")
-
-
-def _slugify(value: Any, *, max_length: Any, replace: Mapping[str, Any]) -> str:
-    """Canonicalize *value* as a slug.
-
-    Applies the declared literal replacements first, then lowercases, maps
-    whitespace and ``_`` to ``-``, drops characters outside ``[a-z0-9-]``,
-    collapses repeated dashes, trims leading/trailing dashes, and truncates
-    to *max_length* when one is declared.
-    """
-    candidate = str(value)
-    for source, target in replace.items():
-        candidate = candidate.replace(str(source), str(target))
-    candidate = candidate.lower()
-    candidate = re.sub(r"[\s_]+", "-", candidate)
-    candidate = re.sub(r"[^a-z0-9-]+", "", candidate)
-    candidate = re.sub(r"-{2,}", "-", candidate).strip("-")
-    if isinstance(max_length, int):
-        candidate = candidate[:max_length]
-    return candidate
-
-
-def _is_supported_list_item(item: Any) -> bool:
-    """Return whether *item* is a scalar or an empty container.
-
-    The ``list`` rule documents comma-split strings and wrapped scalars; an
-    empty container is an emptied item the rule drops.  Anything else (a
-    mapping, a non-empty container, an arbitrary object) is not representable.
-    """
-    if item is None or isinstance(item, (str, int, float, bool)):
-        return True
-    if isinstance(item, (list, tuple, set, frozenset, Mapping)):
-        return not item
-    return False
-
-
-def _coerce_list_items(value: Any) -> list[Any] | None:
-    """Return the items a ``list`` rule normalizes, or ``None`` when *value*
-    is a shape the rule cannot represent.
-
-    ``None`` is empty; a string comma-splits; a list or tuple is taken as
-    items when every item is a scalar or an empty container; a scalar wraps.
-    An unsupported shape — a mapping, a set, an item the rule would silently
-    stringify — returns ``None`` so the declared type check refuses the value
-    instead of the rule turning it into a plausible-looking list.
-    """
-    if value is None:
-        return []
-    if isinstance(value, str):
-        return list(value.split(","))
-    if isinstance(value, (list, tuple)):
-        items = list(value)
-        if not all(_is_supported_list_item(item) for item in items):
-            return None
-        return items
-    if isinstance(value, (int, float, bool)):
-        return [value]
-    return None
-
-
-def _is_empty_container(value: Any) -> bool:
-    """Return whether *value* is an empty list or mapping item."""
-    return isinstance(value, (list, tuple, set, frozenset, Mapping)) and not value
-
-
-def _apply_list_rule(value: Any, rule: NormalizationRule) -> Any:
-    """Apply a ``list`` rule: coerce, run nested item rules, drop empties/dedupe.
-
-    An empty item — ``None`` or an empty container — is dropped before the item
-    rules run, so a rule can never stringify it (``slug`` would turn an empty
-    set into the literal ``"set"``).  A value the rule cannot represent (a
-    mapping or another non-scalar container) is returned unchanged, so the
-    declared type check refuses it instead of the rule silently stringifying it.
-    """
-    items = _coerce_list_items(value)
-    if items is None:
-        return value
-    normalized: list[Any] = []
-    for item in items:
-        if item is None or _is_empty_container(item):
-            continue
-        candidate = item
-        for item_rule in rule.item_rules:
-            candidate = _apply_normalization_rule(candidate, item_rule)
-            if candidate is None or _is_empty_container(candidate):
-                break
-            if not isinstance(candidate, (str, int, float, bool)):
-                break
-        if candidate is None:
-            continue
-        if isinstance(candidate, str) and not candidate.strip():
-            continue
-        if _is_empty_container(candidate):
-            continue
-        if candidate in normalized:
-            continue
-        normalized.append(candidate)
-    return normalized
-
-
-def _apply_normalization_rule(value: Any, rule: NormalizationRule) -> Any:
-    """Apply a single normalization rule to a value.
-
-    Args:
-        value: The raw input value.
-        rule: The normalization rule to apply.
-
-    Returns:
-        The normalized value.
-    """
-    rule_type = rule.rule_type
-
-    if rule_type == "identity":
-        return value
-
-    if rule_type == "strip":
-        if isinstance(value, str):
-            return value.strip()
-        return value
-
-    if rule_type == "lowercase":
-        if isinstance(value, str):
-            return value.lower()
-        return value
-
-    if rule_type == "url":
-        if isinstance(value, str):
-            return _canonical_url(value)
-        return value
-
-    if rule_type == "choice_map":
-        str_value = str(value).strip()
-        return rule.mapping.get(str_value, value)
-
-    if rule_type == "coerce_int":
-        try:
-            return int(value)
-        except TypeError, ValueError:
-            return value
-
-    if rule_type == "coerce_bool":
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            return value.strip().lower() in ("true", "1", "yes")
-        if isinstance(value, (int, float)):
-            return bool(value)
-        return value
-
-    if rule_type == "slug":
-        return _slugify(value, max_length=rule.max_length, replace=rule.replace)
-
-    if rule_type == "list":
-        return _apply_list_rule(value, rule)
-
-    # Unknown rule type: pass through unchanged
-    return value
-
-
-def _list_chain_declines(value: Any, rules: list[NormalizationRule]) -> bool:
-    """Return whether a list-normalization chain must leave *value* alone.
-
-    An unsupported shape must reach the declared type check unchanged; when the
-    chain declares a ``list`` rule, an earlier rule (``slug``) must not
-    stringify its items first.
-    """
-    if not any(rule.rule_type == "list" for rule in rules):
-        return False
-    if value is None:
-        return False
-    if isinstance(value, (list, tuple)):
-        return not all(_is_supported_list_item(item) for item in value)
-    return not isinstance(value, (str, int, float, bool))
-
-
-def _normalize_value(
-    value: Any,
-    option_key: str,
-    option_derivation: Any | None,
-    shared_rules: list[NormalizationRule],
-) -> Any:
-    """Apply all applicable normalization rules to a single option value.
-
-    Shared rules are applied first (in order), then per-option rules.  A chain
-    that declares a ``list`` rule declines an unsupported shape entirely, so no
-    earlier rule in the chain can stringify it before the type check sees it.
-
-    Args:
-        value: The raw input value.
-        option_key: The option key being normalized.
-        option_derivation: The per-option derivation metadata, if any.
-        shared_rules: Module-wide normalization rules.
-
-    Returns:
-        The normalized value.
-    """
-    rules = [
-        rule
-        for rule in shared_rules
-        if rule.source_key == "*" or rule.source_key == option_key
-    ]
-    if option_derivation is not None:
-        rules.extend(option_derivation.normalization_rules)
-
-    if _list_chain_declines(value, rules):
-        return value
-
-    result = value
-    for rule in rules:
-        result = _apply_normalization_rule(result, rule)
-
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Validation engine
-# ---------------------------------------------------------------------------
-
-
-def _check_validation_rule(
-    value: Any, rule: ValidationRule, option_key: str
-) -> str | None:
-    """Check a single validation rule against a value.
-
-    Args:
-        value: The resolved value to validate.
-        rule: The validation rule to check.
-        option_key: The option key (for error messages).
-
-    Returns:
-        An issue description string if the rule fails, or ``None`` if it
-        passes.
-    """
-    rule_type = rule.rule_type
-
-    if rule_type == "required":
-        if value is None or (isinstance(value, str) and not value.strip()):
-            return rule.description or f"{option_key} is required"
-
-    elif rule_type == "choices":
-        if value is not None and value not in rule.allowed_values:
-            allowed = ", ".join(str(v) for v in rule.allowed_values)
-            return rule.description or f"{option_key} must be one of: {allowed}"
-
-    elif rule_type == "range":
-        if value is not None:
-            try:
-                numeric = float(value)
-            except TypeError, ValueError:
-                return rule.description or f"{option_key} must be a numeric value"
-            if rule.min_value is not None and numeric < rule.min_value:
-                return rule.description or f"{option_key} must be >= {rule.min_value}"
-            if rule.max_value is not None and numeric > rule.max_value:
-                return rule.description or f"{option_key} must be <= {rule.max_value}"
-
-    elif rule_type == "pattern":
-        if value is not None and rule.pattern:
-            import re
-
-            str_value = str(value)
-            if not re.fullmatch(rule.pattern, str_value):
-                return (
-                    rule.description
-                    or f"{option_key} must match pattern {rule.pattern}"
-                )
-
-    elif rule_type == "min_length":
-        if value is not None:
-            try:
-                if len(value) < (rule.min_value or 0):
-                    return (
-                        rule.description
-                        or f"{option_key} length must be >= {rule.min_value}"
-                    )
-            except TypeError:
-                pass
-
-    elif rule_type == "max_length":
-        if value is not None:
-            try:
-                if len(value) > (rule.max_value or 0):
-                    return (
-                        rule.description
-                        or f"{option_key} length must be <= {rule.max_value}"
-                    )
-            except TypeError:
-                pass
-
-    elif rule_type == "type":
-        # Type validation is declared but not enforced at this layer;
-        # the manifest schema's option_type field is the source of truth
-        # for type coercion.  This rule type is reserved for future use.
-        pass
-
-    return None
-
-
-def _validate_value(
-    value: Any,
-    option_key: str,
-    option_derivation: Any | None,
-    shared_rules: list[ValidationRule],
-) -> list[str]:
-    """Run all applicable validation rules against a single option value.
-
-    Args:
-        value: The resolved value to validate.
-        option_key: The option key being validated.
-        option_derivation: The per-option derivation metadata, if any.
-        shared_rules: Module-wide validation rules.
-
-    Returns:
-        List of issue description strings for failed rules.
-    """
-    issues: list[str] = []
-
-    # Check shared rules
-    for rule in shared_rules:
-        if rule.option_key == "*" or rule.option_key == option_key:
-            issue = _check_validation_rule(value, rule, option_key)
-            if issue:
-                issues.append(issue)
-
-    # Check per-option rules
-    if option_derivation is not None:
-        for rule in option_derivation.validation_rules:
-            issue = _check_validation_rule(value, rule, option_key)
-            if issue:
-                issues.append(issue)
-
-    return issues
-
-
-# ---------------------------------------------------------------------------
-# Legacy alias migration
-# ---------------------------------------------------------------------------
-
-
-def _apply_legacy_transform(value: Any, alias: LegacyKeyAlias) -> Any:
-    """Apply the value transform declared on a legacy alias.
-
-    Args:
-        value: The raw value from the legacy key.
-        alias: The legacy alias declaration.
-
-    Returns:
-        The transformed value suitable for the current key.
-    """
-    transform = alias.transform
-
-    if transform == "identity":
-        return value
-
-    if transform == "split_comma_list":
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-        return value
-
-    if transform == "rename_value":
-        str_value = str(value).strip()
-        return alias.transform_params.get(str_value, value)
-
-    if transform == "negate_boolean":
-        if isinstance(value, bool):
-            return not value
-        return value
-
-    # Unknown transform: pass through
-    return value
-
-
-def _migrate_legacy_keys(
-    overrides: dict[str, Any],
-    derivation_schema: ModuleDerivationSchema,
-) -> dict[str, Any]:
-    """Apply legacy key alias migrations to the overrides dict.
-
-    For each legacy alias declared in the derivation schema, if the
-    overrides contain the legacy key, the value is transformed and
-    moved to the current key.  The legacy key is removed from the
-    overrides.
-
-    Args:
-        overrides: Mutable copy of user-supplied overrides.
-        derivation_schema: The module's derivation schema.
-
-    Returns:
-        A dict of legacy-key -> migrated-value pairs that were applied.
-    """
-    migrations: dict[str, Any] = {}
-    all_aliases = derivation_schema.get_all_legacy_aliases()
-
-    for alias in all_aliases:
-        if alias.legacy_key in overrides:
-            raw_value = overrides.pop(alias.legacy_key)
-            migrated_value = _apply_legacy_transform(raw_value, alias)
-            # Only set the current key if it wasn't already provided
-            # explicitly (explicit current key wins over legacy alias).
-            if alias.current_key not in overrides:
-                overrides[alias.current_key] = migrated_value
-            migrations[alias.legacy_key] = migrated_value
-
-    return migrations
-
-
-# ---------------------------------------------------------------------------
-# Derived settings projection
-# ---------------------------------------------------------------------------
-
-
-def _project_derived_setting(setting: DerivedSetting, resolved: dict[str, Any]) -> Any:
-    """Compute the value for a single derived Django setting.
-
-    Args:
-        setting: The derived setting declaration.
-        resolved: The fully resolved option values.
-
-    Returns:
-        The computed setting value.
-    """
-    derivation_type = setting.derivation_type
-
-    if derivation_type == "static":
-        return setting.expression.get("value", setting.default)
-
-    if derivation_type == "direct":
-        option_key = setting.expression.get("option")
-        if option_key and option_key in resolved:
-            value = resolved[option_key]
-            return value if value is not None else setting.default
-        return setting.default
-
-    if derivation_type == "conditional":
-        branches = setting.expression.get("branches", {})
-        # Use the first source option as the branch selector
-        for source_key in setting.source_options:
-            if source_key in resolved:
-                selector = resolved[source_key]
-                if (
-                    isinstance(selector, (str, int, float, bool))
-                    and selector in branches
-                ):
-                    return branches[selector]
-        return setting.default
-
-    if derivation_type == "computed":
-        # Computed derivations use a template string with {option_key}
-        # placeholders.  This is a simple format-string substitution;
-        # more complex expression evaluation is deferred to a later phase.
-        template = setting.expression.get("template", "")
-        if template:
-            try:
-                # Build a safe substitution context from resolved values
-                context = {
-                    k: str(v) if v is not None else "" for k, v in resolved.items()
-                }
-                return template.format(**context)
-            except KeyError, IndexError, ValueError, AttributeError:
-                return setting.default
-        return setting.default
-
-    # Unknown derivation type: return default
-    return setting.default
-
-
-def _project_all_derived_settings(
-    manifest: ModuleManifest,
-    derivation_schema: ModuleDerivationSchema,
-    resolved: dict[str, Any],
-) -> dict[str, Any]:
-    """Project manifest settings, then apply explicit derivations.
-
-    Every mutable manifest option with a ``django_setting`` contributes a
-    direct baseline value.  Explicit ``DerivedSetting`` declarations are
-    applied afterward so an adapter can intentionally transform or supplement
-    that baseline without dropping settings that have no explicit derivation.
-
-    Args:
-        manifest: The manifest declaring the mutable option-to-setting map.
-        derivation_schema: The module's derivation schema.
-        resolved: The fully resolved option values.
-
-    Returns:
-        A mapping of Django setting keys to their computed values.
-    """
-    result = {
-        setting_key: resolved[option_key]
-        for option_key, setting_key in manifest.get_django_settings_mapping().items()
-    }
-    all_settings = derivation_schema.get_all_derived_settings()
-
-    for setting in all_settings:
-        result[setting.setting_key] = _project_derived_setting(setting, resolved)
-
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Wiring projection engine
-# ---------------------------------------------------------------------------
-
-_WIRING_URL_FIELDS = frozenset({"url_includes", "pre_home_url_includes"})
-_WIRING_LIST_FIELDS = frozenset({"apps", "middleware"})
-_WIRING_ALL_FIELDS = _WIRING_URL_FIELDS | _WIRING_LIST_FIELDS
-
-
-def _coerce_contribution(raw: Any, wiring_field: str) -> list[Any]:
-    """Coerce a raw projection contribution to a list of appropriate items.
-
-    For URL fields the items must be two-element sequences; each is coerced
-    to a ``(str, str)`` tuple.  For list fields (apps/middleware) the items
-    are strings.
-
-    Args:
-        raw: The raw contribution from the projection expression.
-        wiring_field: The target wiring field name (for URL vs list).
-
-    Returns:
-        A list of coerced contribution items, or an empty list if *raw* is
-        ``None`` or empty.
-    """
-    if raw is None:
-        return []
-    if not isinstance(raw, (list, tuple)):
-        return []
-
-    result: list[Any] = []
-    if wiring_field in _WIRING_URL_FIELDS:
-        for item in raw:
-            if isinstance(item, (list, tuple)) and len(item) >= 2:
-                result.append((str(item[0]), str(item[1])))
-    else:
-        for item in raw:
-            if item is not None:
-                result.append(str(item))
-    return result
-
-
-def _project_wiring_contribution(
-    projection: WiringProjection,
-    resolved: dict[str, Any],
-) -> list[Any]:
-    """Compute the contribution for a single wiring projection.
-
-    Uses the same derivation-type vocabulary as :func:`_project_derived_setting`
-    (static / direct / conditional / computed).  The return value is always a
-    list; callers accumulate lists per wiring field.
-
-    Args:
-        projection: The wiring projection declaration.
-        resolved: The fully resolved option values.
-
-    Returns:
-        A list of string items (for ``apps``/``middleware``) or
-        ``(str, str)`` tuples (for URL fields).
-    """
-    derivation_type = projection.derivation_type
-    wiring_field = projection.wiring_field
-
-    if derivation_type == "static":
-        raw = projection.expression.get("value", projection.default)
-        return _coerce_contribution(raw, wiring_field)
-
-    if derivation_type == "direct":
-        option_key = projection.expression.get("option")
-        if option_key and option_key in resolved:
-            value = resolved[option_key]
-            if value is not None:
-                raw = value if isinstance(value, (list, tuple)) else [value]
-                coerced = _coerce_contribution(raw, wiring_field)
-                if coerced:
-                    return coerced
-        return _coerce_contribution(projection.default, wiring_field)
-
-    if derivation_type == "conditional":
-        branches = projection.expression.get("branches", {})
-        for source_key in projection.source_options:
-            if source_key in resolved:
-                selector = resolved[source_key]
-                if (
-                    isinstance(selector, (str, int, float, bool))
-                    and selector in branches
-                ):
-                    return _coerce_contribution(branches[selector], wiring_field)
-        return _coerce_contribution(projection.default, wiring_field)
-
-    if derivation_type == "computed":
-        # Computed wiring projections use the same template approach as
-        # DerivedSetting but produce a list of items via a "values" template
-        # list rather than a single string.
-        templates = projection.expression.get("values", [])
-        context = {k: str(v) if v is not None else "" for k, v in resolved.items()}
-        result: list[Any] = []
-        for template in templates:
-            try:
-                rendered = str(template).format(**context)
-                result.append(rendered)
-            except KeyError, IndexError, ValueError, AttributeError:
-                pass
-        if result:
-            return _coerce_contribution(result, wiring_field)
-        return _coerce_contribution(projection.default, wiring_field)
-
-    # Unknown derivation type: return default
-    return _coerce_contribution(projection.default, wiring_field)
-
-
-def _project_all_wiring(
-    derivation_schema: ModuleDerivationSchema,
-    resolved: dict[str, Any],
-) -> dict[str, list[Any]]:
-    """Compute all wiring contributions from the derivation schema.
-
-    Args:
-        derivation_schema: The module's derivation schema.
-        resolved: The fully resolved option values.
-
-    Returns:
-        A mapping from wiring field name to accumulated contribution list.
-        Keys present only when at least one projection declares them.
-    """
-    accumulated: dict[str, list[Any]] = {
-        "apps": [],
-        "middleware": [],
-        "url_includes": [],
-        "pre_home_url_includes": [],
-    }
-
-    for projection in derivation_schema.get_all_wiring_projections():
-        wf = projection.wiring_field
-        if wf not in _WIRING_ALL_FIELDS:
-            continue
-        contribution = _project_wiring_contribution(projection, resolved)
-        accumulated[wf].extend(contribution)
-
-    return accumulated
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
 def normalize_module_option_values(
     manifest: ModuleManifest,
     overrides: Mapping[str, Any] | None = None,
@@ -779,6 +155,38 @@ def normalize_module_option_values(
     return resolved
 
 
+def _is_url_include_pair(item: Any) -> bool:
+    """Return whether *item* is a ``[route, include]`` pair of strings."""
+    return (
+        isinstance(item, (list, tuple))
+        and len(item) == 2
+        and all(isinstance(part, str) for part in item)
+    )
+
+
+def _url_projection_items(
+    projection: WiringProjection, resolved: dict[str, Any]
+) -> tuple[str, list[Any]] | None:
+    """Return the option key and runtime items of a direct URL projection.
+
+    Only a direct projection onto a URL field can feed malformed values into
+    the wiring result; every other projection is ignored here.
+    """
+    if (
+        projection.wiring_field not in _WIRING_URL_FIELDS
+        or projection.derivation_type != "direct"
+    ):
+        return None
+    option_key = projection.expression.get("option")
+    if not isinstance(option_key, str) or option_key not in resolved:
+        return None
+    value = resolved[option_key]
+    if value is None:
+        return None
+    items = list(value) if isinstance(value, (list, tuple)) else [value]
+    return option_key, items
+
+
 def _url_projection_issues(
     derivation_schema: ModuleDerivationSchema, resolved: dict[str, Any]
 ) -> list[str]:
@@ -791,29 +199,18 @@ def _url_projection_issues(
     """
     issues: list[str] = []
     for projection in derivation_schema.get_all_wiring_projections():
-        if (
-            projection.wiring_field not in _WIRING_URL_FIELDS
-            or projection.derivation_type != "direct"
-        ):
+        target = _url_projection_items(projection, resolved)
+        if target is None:
             continue
-        option_key = projection.expression.get("option")
-        if not isinstance(option_key, str) or option_key not in resolved:
-            continue
-        value = resolved[option_key]
-        if value is None:
-            continue
-        items = value if isinstance(value, (list, tuple)) else [value]
+        option_key, items = target
         for index, item in enumerate(items):
-            if (
-                not isinstance(item, (list, tuple))
-                or len(item) != 2
-                or not all(isinstance(part, str) for part in item)
-            ):
-                issues.append(
-                    f"modules.{derivation_schema.module_name}.{option_key} cannot "
-                    f"feed {projection.wiring_field}: item {index} is not a "
-                    "[route, include] pair of strings"
-                )
+            if _is_url_include_pair(item):
+                continue
+            issues.append(
+                f"modules.{derivation_schema.module_name}.{option_key} cannot "
+                f"feed {projection.wiring_field}: item {index} is not a "
+                "[route, include] pair of strings"
+            )
     return issues
 
 
@@ -914,9 +311,44 @@ def resolve_module_config(
 
 
 __all__ = [
+    "Any",
+    "DerivedSetting",
+    "LegacyKeyAlias",
+    "ManagedFileDeclaration",
+    "Mapping",
+    "ModuleDerivationSchema",
+    "ModuleManifest",
+    "NormalizationRule",
     "ResolverResult",
-    "normalize_module_option_values",
-    "resolve_module_config",
-    "_project_wiring_contribution",
+    "ValidationRule",
+    "WiringProjection",
+    "_WIRING_ALL_FIELDS",
+    "_WIRING_LIST_FIELDS",
+    "_WIRING_URL_FIELDS",
+    "_apply_legacy_transform",
+    "_apply_list_rule",
+    "_apply_normalization_rule",
+    "_canonical_url",
+    "_check_validation_rule",
+    "_coerce_contribution",
+    "_coerce_list_items",
+    "_is_empty_container",
+    "_is_supported_list_item",
+    "_list_chain_declines",
+    "_migrate_legacy_keys",
+    "_normalize_value",
+    "_project_all_derived_settings",
     "_project_all_wiring",
+    "_project_derived_setting",
+    "_project_wiring_contribution",
+    "_slugify",
+    "_url_projection_issues",
+    "_validate_value",
+    "annotations",
+    "build_schema_from_manifest",
+    "dataclass",
+    "field",
+    "normalize_module_option_values",
+    "re",
+    "resolve_module_config",
 ]
