@@ -24,7 +24,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | SA232 | Deferred |
+| SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | — | Deferred |
 | SA232 | Split the long CLI command, `dr_engine`, and billing files | post-v88 | 2 | — | Deferred |
 | SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
@@ -37,7 +37,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA231 (until SA215 lands) ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA231 (closing gate batch) ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA232
 Track 3: SA215 (remaining rules) ──► SA216
      critical path: SA215 → SA191 → SA153
@@ -46,18 +46,14 @@ Track 3: SA215 (remaining rules) ──► SA216
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
-ported, and SA204 has not frozen the migration history. SA219 landed the settings family, the
-`_ENABLED` switches, and the rule 35 secret projection; SA220 landed `is_enabled()` on every
-module's public service surface and made `required_modules` cover every reference, and SA226's
-org-role authorization has followed it. SA204 freezes
-migration history before any post-SA153 module schema change. SA154 is an inventory, not work.
+ported, and SA204 has not frozen the migration history. SA204 freezes migration history before
+any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Off the critical path.** SA215 runs on Track 3, which owns SA230's harness that SA215 adds rules
-to: its first slice landed ahead of SA226, and SA226 has now landed on the same track. SA231
-(Track 1) fills its track until SA215 lands and SA191 can start. SA232 (Track 2) takes SA231's
-batches on Track 2's own surfaces, so both tracks split files at once; only SA231's closing gate
-batch waits for it. SA216 waits for SA215
-because both change auth's views, orgs' removal path, and the user-referencing models.
+**Off the critical path.** SA215 runs on Track 3, which owns the conformance harness it adds rules
+to. SA231 (Track 1) fills its track until SA215 lands and SA191 can start. SA232 (Track 2) splits
+`dr_engine`; SA231's gate lists SA232's unfinished files in the baseline, and SA232 removes those
+entries. SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
+user-referencing models.
 
 ### Track states
 
@@ -85,7 +81,7 @@ A track is **truly green** only when all three states are yes.
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
   and the billing module (`billing/services.py`, `billing/views.py`, `billing/adapter.py`, and its
   docs), and, for the conventions, the manifest option schema and the CLI's `module_config`,
-  module settings names, and `is_enabled()` (SA220).
+  module settings names, and `is_enabled()`.
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
@@ -93,16 +89,13 @@ A track is **truly green** only when all three states are yes.
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block, and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
-  theme's React API client, and the conformance harness with its registry row (SA230, SA226,
-  SA215).
+  theme's React API client, and the conformance harness with its registry row (SA215).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
-  a ticket that does lands through the serialized merge queue. The convention tickets (SA215,
-  SA220, SA226, SA230) touch every module and cross every track, so each lands in
-  module-sized slices through that queue, merging `v89` before each slice; a slice edits another
-  convention ticket's surface only where its own rule forces it (a rename's callers, for example).
+  a ticket that does lands through the serialized merge queue. SA215 touches every module and crosses every
+  track, so it lands in module-sized slices through that queue, merging `v89` before each slice.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
-  [decisions.md](decisions.md) (SA204, SA153, and the convention tickets, which update the names it
+  [decisions.md](decisions.md) (SA204, SA153, and SA215, which update the names it
   quotes from the shipped state). Each track resolves the shared set at its
   own merge, after the previous merge lands, then runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
@@ -125,21 +118,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
 
-  **Landed (first four slices):** rules 4, 5, and 23 (cross-module public surface, dependency
-  layers, and the `services.py` public surface), rules 1, 3, 31, and 35 (settings names and the
-  enabled switch, setting reads, the theme seam, and secrets), rules 6, 19, and 34 (no legacy
-  names, authorization by org role, and references by name), and rules 11, 25, 28, 36, and 37
-  (one-off file privatization, package files and tests, constraint and index names, module file
-  names, type-check configuration, and module lists derived from discovery) are enforced by the
-  conformance test with a control case each; orgs' invitation redirect now goes through the
-  login-required mixin. The one-off files are private (`orgs/_constants.py`,
-  `social/_contracts.py`, `storage/_helpers.py`), analytics' `events.py` is gone, listings'
-  abstract indexes stay unnamed under rule 25's recorded abstract-base exception, backups has its
-  missing `mypy.ini` section, and the imperative inventory and CLI configurator registry derive
-  their module set from discovery. The rest covers SA216's write-effect rule, the release notes,
-  decisions' quoted names, and the inventory's closing pass.
+  **Remaining:** the rules the conformance test does not yet cover, including SA216's
+  write-effect rule; the release notes; decisions' quoted names; the inventory's closing pass.
 
-  **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
+  **Scope:** the conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
   convention ticket fixed is fixed here or recorded as an accepted exception.
 
@@ -151,58 +133,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the conformance test; release notes; decisions; the inventory.
 
-- [x] **SA230 — Build the conformance-test harness with the rules already met.**
-
 - [ ] **SA231 — Split long files and complex functions in batches, then make the quality gate fail.**
 
-  **Context:** `make quality` (`scripts/check_quality.sh`) measures radon complexity and file
-  length against a ratchet baseline (`scripts/quality_baseline.json`), but it only warns: no CI
-  stage or registered gate runs it. The last report shows 188 functions at CC ≥ 11 (40 at ≥ 21),
-  22 critical and 70 warning regressions against the baseline, and 23 files of 800 lines or more
-  (the largest are billing `services.py`, `apply_command.py`, and `dr_engine/orchestration.py`,
-  at 2,900–4,600 lines). File length is not in the baseline at all.
+  **Context:** `make quality` (`scripts/check_quality.sh`) measures radon complexity against a
+  ratchet baseline (`scripts/quality_baseline.json`), but it only warns: no CI stage or registered
+  gate runs it, and file length is not in the baseline. Batch 1 and the module batch have landed;
+  no Track 1 file reaches 800 lines.
 
-  **Scope:** behavior-preserving batches, each a package-sized slice through the serialized merge
-  queue, merging `v89` before each one: (1) Track 1 surfaces (`beta_migration/`, core contracts,
-  manifest, `project_state`, `git_utils`); (2) modules other than billing, each only after the
-  convention ticket editing it has merged. SA232 takes the CLI commands, `dr_engine`, and billing
-  on Track 2. Public import paths stay put (re-export where a file splits), existing tests pass
-  unchanged, functions move toward CC < 11, and each batch re-tightens the baseline for its files.
-  The final batch, once SA232 merges, adds file length to the baseline ratchet and registers
-  `make quality` as a failing gate.
-
-  **Landed (batch 1):** `beta_migration.py` is a 15-module package, each module under 800 lines,
-  with its public import surface re-exported; its two accepted complexity entries are relocated and
-  tightened, while its unaccepted per-function debt stays visible as regressions. `manifest/loader.py`
-  and `manifest/resolver.py` are now facades over focused sibling modules, each under 800 lines,
-  re-exporting their full prior surfaces; all sixteen of their functions at CC >= 11 and all six
-  accepted complexity entries are resolved. `project_state.py` and `utils/git_utils.py` are now
-  facades over focused sibling modules, each under 800 lines, re-exporting their full prior
-  surfaces; all five remaining functions at CC >= 11 and all five remaining accepted complexity
-  entries in this batch are resolved, `contracts/module_options.py` included. Batch 1 is complete.
-
-  **Landed (module batch):** `backups/admin.py` is a re-exported facade over
-  `_admin_forms.py`, `_admin_restore.py`, and `_admin_artifact.py`, each under 800 lines, with its
-  two accepted complexity entries resolved and its admin patch seam kept on the facade; the three
-  backups management commands, `persistence.py`, and `services.py` resolve their five remaining
-  accepted entries, the copy helpers move to `_admin_upload.py`, and every file stays under 800
-  lines. `notifications/services.py` is a re-exported facade over `_settings.py`, `_templates.py`,
-  `_sanitization.py`, `_delivery.py`, and `_webhooks.py`, each under 800 lines, with its two
-  accepted complexity entries resolved, its rule 26 signature-verification entry point and its
-  delivery and webhook patch seams kept on the facade. Blog's `services.py` decomposes its publish
-  and upload operations into focused helpers, so both recorded complexity entries drop below the
-  ceiling and the baseline drops the package's two live entries plus its four already-resolved
-  ones. Auth's `views.py` is a re-exported facade over `_profile_views.py`, five
-  `_account_deletion_*.py` modules, and a shared `_logging.py` seam, every file under 800 lines,
-  with its `form_valid`, `_reconcile_removal_provider_state`, and `_account_deletion_handlers`
-  below the CC 11 ceiling and its rule 34 boundary wiring, patch seams, and log channel kept on
-  the facade. Orgs' `tenancy.py`, `current_org.py`, `removal.py`, `checks.py`, and `views.py` are
-  re-exporting facades over focused private siblings, and the purge command moves its plan and
-  support helpers behind its boundary-checked `Command.handle`; every orgs source file is under 800
-  lines, all eleven orgs complexity regressions and the package's eight accepted entries are
-  resolved, and the baseline drops those keys plus waivers W006–W010 while the existing orgs suite
-  passes unchanged. No Track 1 module file reaches 800 lines; the closing gate batch remains, the
-  gate waiting on SA232.
+  **Scope:** the closing batch: add file length to the baseline ratchet, list each file SA232 has
+  not yet split with its reason, re-tighten the baseline, and register `make quality` as a failing
+  gate. Public import paths and existing tests stay unchanged.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
@@ -213,53 +153,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA232 — Split the long CLI command, `dr_engine`, and billing files.**
 
-  **Context:** SA231's CLI and `dr_engine` batches plus billing, run on Track 2, which owns most of
-  these files, while Track 1 finishes its own. Ten of the 800-line files are here, including the
-  three largest: billing `services.py` (4,575), `apply_command.py` (3,989), and
-  `dr_engine/orchestration.py` (2,897). Billing's convention tickets (SA219, SA220) have merged.
+  **Context:** the billing and CLI slices have landed. The `dr_engine` slice remains:
+  `dr_engine/orchestration.py` is 2,897 lines.
 
-  **Landed (billing slice):** billing `services.py` is a facade over fifteen private `_<name>.py`
-  modules, all under the 800-line ceiling; every prior name is re-exported, the rule 26 webhook
-  entry point stays in `services.py`, and the existing tests and public import paths are unchanged.
-  The eleven accepted complexity entries are re-keyed to their new files with rename waivers; the
-  pre-existing billing complexity regressions are unchanged and remain for the closing
-  re-tightening.
-
-  **Landed (CLI slice, first file):** `apply_command.py` is a facade over eleven private
-  `_<name>.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
-  test patch target still resolves through the facade. Its eight accepted complexity entries are
-  re-keyed with rename waivers and its one dead-code allowance is resolved by a parameter rename;
-  the pre-existing apply-command complexity regressions are unchanged.
-
-  **Landed (CLI slice, second file):** `module_commands.py` is a facade over five private
-  `_module_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
-  test patch target still resolves through the facade. Its five accepted complexity entries are
-  re-keyed with rename waivers; the pre-existing module-command complexity regressions are
-  unchanged.
-
-  **Landed (CLI slice, third file):** `plan_command.py` is a facade over five private
-  `_plan_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
-  test patch target still resolves through the facade. Its two accepted complexity entries are
-  re-keyed with rename waivers; the pre-existing plan-command complexity regressions are unchanged.
-
-  **Landed (CLI slice, fourth file):** `dr_commands.py` is a facade over four private
-  `_dr_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
-  test patch target still resolves through the facade. Its two accepted complexity entries are
-  re-keyed with rename waivers; its remaining accepted entry, `execute`, is unchanged.
-
-  **Landed (CLI slice, remaining files):** `status_command.py`, `deployment_commands.py`,
-  `railway_utils.py`, and `module_dependency_sync.py` are facades over ten private `_*.py`
-  modules, all under the 700-line ceiling; every prior name is re-exported, every test patch target
-  still resolves through the facade, sixteen facade-patch regression tests pin propagation, and
-  eleven accepted complexity entries are re-keyed with rename waivers. The `dr_engine` slice
-  remains.
-
-  **Scope:** SA231's rules, one package-sized slice at a time through the serialized merge queue:
-  `quickscale_cli` commands and utilities (`apply_command.py`, `module_commands.py`,
-  `plan_command.py`, `dr_commands.py`, `status_command.py`, `deployment_commands.py`,
-  `railway_utils.py`, `module_dependency_sync.py`); `quickscale_core/dr_engine/`; billing
-  `services.py`, split into private `_<name>.py` files that `services.py` re-exports (Module
-  Conventions rule 28).
+  **Scope:** SA231's rules for `quickscale_core/dr_engine/`: private modules behind a re-exporting
+  facade, through the serialized merge queue; remove the file's baseline exception if SA231's gate
+  has listed it.
 
   **Acceptance:** every file in scope is under 800 lines, and no function in scope reaches CC 21
   unless the baseline lists it with a reason; zero regressions against the baseline for these
@@ -268,12 +167,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the files above; their entries in `scripts/quality_baseline.json`, which SA231 also
   edits, so each slice resolves it at its merge.
-
-- [x] **SA219 — Move every setting onto one naming family and refuse retired names.**
-
-- [x] **SA220 — Give every module `is_enabled()` and make `required_modules` cover every import.**
-
-- [x] **SA226 — Authorize tenant modules by org role.**
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
