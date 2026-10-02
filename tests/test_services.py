@@ -7,6 +7,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from django.test import override_settings
 
 from quickscale_modules_listings import services
 from quickscale_modules_listings.exceptions import (
@@ -21,6 +22,7 @@ from quickscale_modules_listings.models import Listing
 SERVICE_SURFACE = [
     "ListingsError",
     "create_published_listing_from_payload",
+    "is_enabled",
 ]
 
 
@@ -177,3 +179,11 @@ class TestCreatePublishedListingFromPayload:
 
             # The savepoint rollback left the surrounding transaction usable.
             assert Listing.objects.filter(organization=org).exists()
+
+
+def test_is_enabled_reads_the_module_enabled_setting() -> None:
+    """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_LISTINGS_ENABLED`` both ways."""
+    with override_settings(QUICKSCALE_LISTINGS_ENABLED=True):
+        assert services.is_enabled() is True
+    with override_settings(QUICKSCALE_LISTINGS_ENABLED=False):
+        assert services.is_enabled() is False
