@@ -123,9 +123,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
 
-  **Start early:** SA230 and SA228 have merged, so the first slice moves rules 4, 5, and 23 (the
-  cross-module, import-graph, and `services.py` rules, already met on `v89`) out of the harness's
-  `OPEN_RULES`, each with its control case; the rest waits for SA226.
+  **Landed (first slice):** rules 4, 5, and 23 (cross-module public surface, dependency layers, and
+  the `services.py` public surface) are enforced by the conformance test with a control case each;
+  the rest waits for SA226.
 
   **Scope:** SA230's conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
@@ -161,9 +161,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Landed (batch 1):** `beta_migration.py` is a 15-module package, each module under 800 lines,
   with its public import surface re-exported; its two accepted complexity entries are relocated and
   tightened, while its unaccepted per-function debt stays visible as regressions. `manifest/loader.py`
-  is now a facade over six sibling modules, each under 800 lines, re-exporting its full prior
-  surface; its ten functions at CC >= 11 and both accepted complexity entries are resolved. Batch 1
-  remains open on `manifest/resolver.py`, `project_state.py`, `utils/git_utils.py`, and `contracts/`.
+  and `manifest/resolver.py` are now facades over focused sibling modules, each under 800 lines,
+  re-exporting their full prior surfaces; all sixteen of their functions at CC >= 11 and all six
+  accepted complexity entries are resolved. Batch 1 remains open on `project_state.py`,
+  `utils/git_utils.py`, and `contracts/`.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on

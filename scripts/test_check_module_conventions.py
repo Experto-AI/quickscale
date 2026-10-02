@@ -114,6 +114,12 @@ def _golden_module(name: str = "demo") -> Module:
                 "    def __str__(self) -> str:\n"
                 "        return 'widget'\n"
             ),
+            "services.py": (
+                '"""Demo service surface."""\n\n'
+                '__all__ = ["demo_query"]\n\n\n'
+                "def demo_query(*, subject: str) -> str:\n"
+                "    return subject\n"
+            ),
             "urls.py": (
                 '"""Demo URLs."""\n\nfrom django.urls import path\n\n'
                 "from . import views\n\n"
@@ -3546,6 +3552,427 @@ def test_malformed_tree_returns_violations_not_tracebacks(
     assert checker.check_conventions(tmp_path)
     assert checker.main([str(tmp_path)]) == 1
     assert "VIOLATION:" in capsys.readouterr().out
+
+
+def test_cross_module_import_outside_public_surface_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        views="from quickscale_modules_storage.helpers import select_storage_backend\n",
+    )
+    assert any(
+        "outside the module's public surface" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+    assert _violations(checker.rule_4_public_surface, module) == []
+
+
+def test_orgs_extension_base_import_is_allowed() -> None:
+    module = _golden_module()
+    # The golden fixture's models.py builds on orgs' published extension base.
+    assert _violations(checker.rule_4_public_surface, module) == []
+
+
+def test_package_root_import_checks_every_name_control() -> None:
+    module = _golden_module()
+    broken = _with_files(module, views="from quickscale_modules_orgs import models, checks\n")
+    assert any(
+        "imports orgs:checks" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+
+
+def test_cross_module_setting_read_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        views=(
+            "from django.conf import settings\n\n\nRATE = settings.QUICKSCALE_BLOG_POSTS_PER_PAGE\n"
+        ),
+    )
+    assert any(
+        "reads blog's setting" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+
+
+def test_migration_model_import_is_excepted() -> None:
+    module = _golden_module()
+    excepted = _with_files(
+        module,
+        **{
+            "migrations/0001_initial.py": "from quickscale_modules_orgs.models import TenantModel\n"
+        },
+    )
+    assert _violations(checker.rule_4_public_surface, excepted) == []
+
+
+def test_upward_import_control() -> None:
+    auth = _golden_module("auth")
+    broken = _with_files(auth, views="from quickscale_modules_blog.models import Post\n")
+    assert any(
+        "imports upward" in violation
+        for violation in _violations(checker.rule_5_dependency_direction, broken)
+    )
+    assert _violations(checker.rule_5_dependency_direction, auth) == []
+
+
+def test_same_layer_cycle_control() -> None:
+    blog = _with_files(
+        _golden_module("blog"), views="from quickscale_modules_crm.models import Contact\n"
+    )
+    crm = _with_files(
+        _golden_module("crm"), views="from quickscale_modules_blog.models import Post\n"
+    )
+    assert any(
+        "cycle" in violation
+        for violation in _violations(checker.rule_5_dependency_direction, blog, crm)
+    )
+
+
+def test_core_module_setting_name_control() -> None:
+    module = _golden_module()
+    corpus = replace(
+        _corpus(module),
+        core_files={
+            "runtime.py": (
+                "from django.conf import settings\n\nMODE = settings.QUICKSCALE_ORGS_MODE\n"
+            )
+        },
+    )
+    assert any(
+        "names module setting" in violation
+        for violation in checker.rule_5_dependency_direction(corpus)
+    )
+
+
+def test_service_surface_requires_all_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module, **{"services.py": "def demo_query(*, subject):\n    return subject\n"}
+    )
+    assert any(
+        "no __all__" in violation
+        for violation in _violations(checker.rule_23_service_surface, broken)
+    )
+    assert _violations(checker.rule_23_service_surface, module) == []
+
+
+def test_service_surface_export_must_be_defined_control() -> None:
+    module = _golden_module()
+    broken = _with_files(module, **{"services.py": '__all__ = ["missing"]\n'})
+    assert any(
+        "is not defined" in violation
+        for violation in _violations(checker.rule_23_service_surface, broken)
+    )
+
+
+def test_service_surface_positional_parameter_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        **{
+            "services.py": (
+                '__all__ = ["demo_query"]\n\n\n'
+                "def demo_query(subject, other):\n"
+                "    return subject\n"
+            )
+        },
+    )
+    assert any(
+        "positional" in violation
+        for violation in _violations(checker.rule_23_service_surface, broken)
+    )
+
+
+def test_service_surface_cross_module_export_control() -> None:
+    provider = _golden_module("provider")
+    consumer = _golden_module("consumer")
+    imported = _with_files(
+        consumer,
+        views="from quickscale_modules_provider.services import demo_query\n",
+    )
+    assert _violations(checker.rule_23_service_surface, provider, imported) == []
+    hidden = _with_files(
+        consumer,
+        views="from quickscale_modules_provider.services import hidden\n",
+    )
+    assert any(
+        "outside provider's services.__all__" in violation
+        for violation in _violations(checker.rule_23_service_surface, provider, hidden)
+    )
+
+
+def test_aliased_settings_read_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        views=(
+            "from django.conf import settings as cfg\n\n\n"
+            "RATE = cfg.QUICKSCALE_BLOG_POSTS_PER_PAGE\n"
+        ),
+    )
+    assert any(
+        "reads blog's setting" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+
+
+def test_aliased_core_setting_read_control() -> None:
+    module = _golden_module()
+    corpus = replace(
+        _corpus(module),
+        core_files={
+            "runtime.py": (
+                "from django.conf import settings as cfg\n\nMODE = cfg.QUICKSCALE_ORGS_MODE\n"
+            )
+        },
+    )
+    assert any(
+        "names module setting" in violation
+        for violation in checker.rule_5_dependency_direction(corpus)
+    )
+
+
+def test_migration_model_import_is_not_an_upward_reference() -> None:
+    orgs = _golden_module("orgs")
+    excepted = _with_files(
+        orgs,
+        **{
+            "migrations/0001_initial.py": (
+                "from quickscale_modules_billing.models import Subscription\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_5_dependency_direction, excepted) == []
+    non_model = _with_files(
+        orgs,
+        **{
+            "migrations/0001_initial.py": (
+                "from quickscale_modules_billing.services import debit_user\n"
+            )
+        },
+    )
+    assert any(
+        "imports upward" in violation
+        for violation in _violations(checker.rule_5_dependency_direction, non_model)
+    )
+
+
+def test_async_service_signature_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        **{
+            "services.py": (
+                '__all__ = ["demo_query"]\n\n\n'
+                "async def demo_query(subject, other):\n"
+                "    return subject\n"
+            )
+        },
+    )
+    assert any(
+        "positional" in violation
+        for violation in _violations(checker.rule_23_service_surface, broken)
+    )
+
+
+def test_re_exported_service_signature_control() -> None:
+    module = _golden_module()
+    broken = replace(
+        module,
+        files={
+            **module.files,
+            "helpers.py": "def demo_query(subject, other):\n    return subject\n",
+            "services.py": '__all__ = ["demo_query"]\n\n\nfrom .helpers import demo_query\n',
+        },
+    )
+    assert any(
+        "positional" in violation
+        for violation in _violations(checker.rule_23_service_surface, broken)
+    )
+    good = replace(
+        broken,
+        files={
+            **broken.files,
+            "helpers.py": "def demo_query(*, subject):\n    return subject\n",
+        },
+    )
+    assert _violations(checker.rule_23_service_surface, good) == []
+
+
+def test_service_surface_annotated_all_is_accepted() -> None:
+    module = _golden_module()
+    declared = _with_files(
+        module,
+        **{
+            "services.py": (
+                '__all__: list[str] = ["demo_query"]\n\n\n'
+                "def demo_query(*, subject: str) -> str:\n"
+                "    return subject\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_23_service_surface, declared) == []
+
+
+def test_service_module_member_access_control() -> None:
+    provider = _golden_module("provider")
+    consumer = _golden_module("consumer")
+    hidden = _with_files(
+        consumer,
+        views=(
+            "from quickscale_modules_provider import services as provider_services\n\n\n"
+            "def index():\n"
+            "    return provider_services.hidden()\n"
+        ),
+    )
+    assert any(
+        "outside services.__all__" in violation
+        for violation in _violations(checker.rule_23_service_surface, provider, hidden)
+    )
+    exported = _with_files(
+        consumer,
+        views=(
+            "from quickscale_modules_provider import services as provider_services\n\n\n"
+            "def index():\n"
+            "    return provider_services.demo_query(subject='x')\n"
+        ),
+    )
+    assert _violations(checker.rule_23_service_surface, provider, exported) == []
+
+
+def test_qualified_settings_read_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        views=(
+            "import django.conf as conf\n\n\nRATE = conf.settings.QUICKSCALE_BLOG_POSTS_PER_PAGE\n"
+        ),
+    )
+    assert any(
+        "reads blog's setting" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+
+
+def test_unaliased_qualified_settings_read_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        views=(
+            "import django.conf\n\n\nRATE = django.conf.settings.QUICKSCALE_BLOG_POSTS_PER_PAGE\n"
+        ),
+    )
+    assert any(
+        "reads blog's setting" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+
+
+def test_parent_module_settings_read_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        views=(
+            "from django import conf as cfg\n\n\n"
+            "RATE = cfg.settings.QUICKSCALE_BLOG_POSTS_PER_PAGE\n"
+        ),
+    )
+    assert any(
+        "reads blog's setting" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+    corpus = replace(
+        _corpus(module),
+        core_files={
+            "runtime.py": (
+                "from django import conf as cfg\n\nMODE = cfg.settings.QUICKSCALE_ORGS_MODE\n"
+            )
+        },
+    )
+    assert any(
+        "names module setting" in violation
+        for violation in checker.rule_5_dependency_direction(corpus)
+    )
+
+
+def test_renamed_re_exported_service_signature_control() -> None:
+    module = _golden_module()
+    broken = replace(
+        module,
+        files={
+            **module.files,
+            "helpers.py": "def internal(subject, other):\n    return subject\n",
+            "services.py": (
+                '__all__ = ["demo_query"]\n\n\nfrom .helpers import internal as demo_query\n'
+            ),
+        },
+    )
+    assert any(
+        "positional" in violation
+        for violation in _violations(checker.rule_23_service_surface, broken)
+    )
+    good = replace(
+        broken,
+        files={
+            **broken.files,
+            "helpers.py": "def internal(*, subject):\n    return subject\n",
+        },
+    )
+    assert _violations(checker.rule_23_service_surface, good) == []
+
+
+def test_unaliased_dotted_service_import_control() -> None:
+    provider = _golden_module("provider")
+    consumer = _golden_module("consumer")
+    exported = _with_files(
+        consumer,
+        views=(
+            "import quickscale_modules_provider.services\n\n\n"
+            "def index():\n"
+            "    return quickscale_modules_provider.services.demo_query(subject='x')\n"
+        ),
+    )
+    assert _violations(checker.rule_23_service_surface, provider, exported) == []
+    hidden = _with_files(
+        consumer,
+        views=(
+            "import quickscale_modules_provider.services\n\n\n"
+            "def index():\n"
+            "    return quickscale_modules_provider.services.hidden()\n"
+        ),
+    )
+    assert any(
+        "outside services.__all__" in violation
+        for violation in _violations(checker.rule_23_service_surface, provider, hidden)
+    )
+
+
+def test_migration_mixed_import_control() -> None:
+    orgs = _golden_module("orgs")
+    mixed = _with_files(
+        orgs,
+        **{
+            "migrations/0002_extra.py": (
+                "from quickscale_modules_billing import models, services\n"
+            )
+        },
+    )
+    assert any(
+        "imports upward" in violation
+        for violation in _violations(checker.rule_5_dependency_direction, mixed)
+    )
+    models_only = _with_files(
+        orgs,
+        **{"migrations/0003_extra.py": "from quickscale_modules_billing import models\n"},
+    )
+    assert _violations(checker.rule_5_dependency_direction, models_only) == []
+
+
+def test_layer_table_mirrors_the_shipped_modules() -> None:
+    corpus = checker.load_corpus(REPO_ROOT)
+    assert {module.name for module in corpus.modules} == set(checker.MODULE_LAYERS)
 
 
 def test_covered_and_open_rules_partition_1_to_39() -> None:

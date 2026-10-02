@@ -89,6 +89,39 @@ SETTING_NAME_EXCEPTIONS: dict[str, dict[str, str]] = {
         "querystring_auth": "AWS_QUERYSTRING_AUTH",
     },
 }
+# Rule 4's public surface per module: every module publishes its operations and
+# questions through services.py; a foundation additionally publishes the
+# extension bases other modules build on.  Orgs' list is the one decision §4
+# names, and changing the list is a decision edit.
+ORG_PUBLIC_SURFACE: tuple[str, ...] = (
+    "services",
+    "models",
+    "managers",
+    "admin",
+    "current_org",
+    "tenancy",
+    "removal",
+    "sanitization",
+    "public_context",
+    "permissions",
+    "signals",
+)
+# Rule 5's fixed layer table; moving a module between layers is a decision edit.
+MODULE_LAYERS: dict[str, int] = {
+    "orgs": 1,
+    "auth": 1,
+    "storage": 1,
+    "notifications": 1,
+    "analytics": 2,
+    "backups": 2,
+    "billing": 3,
+    "blog": 3,
+    "crm": 3,
+    "forms": 3,
+    "listings": 3,
+    "social": 3,
+}
+MODULE_IMPORT_PREFIX = "quickscale_modules_"
 SNAKE_CASE = re.compile(r"^[a-z][a-z0-9_]*$")
 TICKET_IN_TEST = re.compile(r"(?<![A-Za-z0-9])(?:SA|AF)\d+|CR-SA\d+")
 RATE_LITERAL = re.compile(r"\d+/(?:second|minute|hour|day)")
@@ -717,6 +750,246 @@ def _meta_class(node: ast.ClassDef) -> ast.ClassDef | None:
     return None
 
 
+def _module_target(parts: tuple[str, ...]) -> tuple[str, tuple[str, ...]] | None:
+    """Resolve a dotted import path to (module name, path after the package)."""
+    for index, part in enumerate(parts):
+        if part.startswith(MODULE_IMPORT_PREFIX) and len(part) > len(MODULE_IMPORT_PREFIX):
+            return part[len(MODULE_IMPORT_PREFIX) :], parts[index + 1 :]
+        if part == "quickscale_modules" and index + 1 < len(parts) and parts[index + 1]:
+            return parts[index + 1], parts[index + 2 :]
+    return None
+
+
+def _cross_module_imports(
+    tree: ast.Module,
+) -> list[tuple[str, tuple[str, ...], tuple[str, ...], int, str]]:
+    """Collect every import of a first-party module, nested scopes included."""
+    found: list[tuple[str, tuple[str, ...], tuple[str, ...], int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            target = _module_target(tuple(node.module.split(".")))
+            if target is not None:
+                found.append(
+                    (
+                        target[0],
+                        target[1],
+                        tuple(alias.name for alias in node.names),
+                        node.lineno,
+                        "from",
+                    )
+                )
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                target = _module_target(tuple(alias.name.split(".")))
+                if target is not None:
+                    found.append(
+                        (target[0], target[1], (alias.name.split(".")[-1],), node.lineno, "import")
+                    )
+    return found
+
+
+def _public_surface(module_name: str) -> tuple[str, ...]:
+    """Rule 4: services.py everywhere, plus the foundation's extension bases."""
+    return ORG_PUBLIC_SURFACE if module_name == "orgs" else ("services",)
+
+
+def _setting_name_module(attribute: str) -> str | None:
+    """Return the module a QUICKSCALE_<MODULE>_* name belongs to, if any."""
+    for module in MODULE_LAYERS:
+        if attribute.startswith(f"QUICKSCALE_{module.upper()}_"):
+            return module
+    return None
+
+
+def _settings_bindings(tree: ast.Module) -> tuple[set[str], set[tuple[str, ...]]]:
+    """Return settings bindings and module paths ending at ``django.conf``."""
+    names = {"settings"}
+    modules: set[tuple[str, ...]] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "django.conf":
+            for alias in node.names:
+                if alias.name == "settings":
+                    names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "django":
+            for alias in node.names:
+                if alias.name == "conf":
+                    modules.add((alias.asname or alias.name,))
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "django.conf":
+                    modules.add((alias.asname,) if alias.asname else ("django", "conf"))
+    return names, modules
+
+
+def _is_settings_receiver(node: ast.expr, names: set[str], modules: set[tuple[str, ...]]) -> bool:
+    """Resolve ``settings``, an import alias, or a qualified Django conf path."""
+    if isinstance(node, ast.Name):
+        return node.id in names or node.id.endswith("settings")
+    if isinstance(node, ast.Attribute) and node.attr == "settings":
+        chain = _attribute_chain(node.value)
+        return chain is not None and chain in modules
+    return False
+
+
+def _settings_attribute_reads(tree: ast.Module) -> list[tuple[str, int]]:
+    """Collect ``settings.QUICKSCALE_*`` attribute reads from executable code."""
+    found: list[tuple[str, int]] = []
+    names, modules = _settings_bindings(tree)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute) or not node.attr.startswith("QUICKSCALE_"):
+            continue
+        if _is_settings_receiver(node.value, names, modules):
+            found.append((node.attr, node.lineno))
+    return found
+
+
+def _declared_exports(tree: ast.Module) -> list[str] | None:
+    """Return ``__all__``'s literal names, annotated declarations included."""
+    for node in tree.body:
+        targets: list[ast.expr] = []
+        value: ast.expr | None = None
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+            value = node.value
+        if not any(isinstance(target, ast.Name) and target.id == "__all__" for target in targets):
+            continue
+        if not isinstance(value, ast.List):
+            return None
+        names = [
+            element.value
+            for element in value.elts
+            if isinstance(element, ast.Constant) and isinstance(element.value, str)
+        ]
+        if len(names) != len(value.elts):
+            return None
+        return names
+    return None
+
+
+def _service_functions(
+    module: Module, tree: ast.Module
+) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Resolve exported service functions, following intra-package re-exports."""
+    functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    prefix = f"quickscale_modules_{module.name}."
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or not node.module:
+            continue
+        if node.level:
+            source = f"{node.module.replace('.', '/')}.py"
+        elif node.module.startswith(prefix):
+            source = f"{node.module[len(prefix) :].replace('.', '/')}.py"
+        else:
+            continue
+        if source == "services.py":
+            continue
+        text = module.files.get(source)
+        if text is None:
+            continue
+        sibling = _parse(text)
+        definitions = {
+            child.name: child
+            for child in sibling.body
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        for alias in node.names:
+            local = alias.asname or alias.name
+            if local not in functions and alias.name in definitions:
+                functions[local] = definitions[alias.name]
+    return functions
+
+
+def _service_module_bindings(tree: ast.Module) -> dict[tuple[str, ...], str]:
+    """Map dotted local names bound to another module's services to that module."""
+    bindings: dict[tuple[str, ...], str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            target = _module_target(tuple(node.module.split(".")))
+            if target is None or target[1]:
+                continue
+            for alias in node.names:
+                if alias.name == "services":
+                    bindings[(alias.asname or alias.name,)] = target[0]
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                target = _module_target(tuple(alias.name.split(".")))
+                if target is None or target[1] != ("services",):
+                    continue
+                if alias.asname:
+                    bindings[(alias.asname,)] = target[0]
+                else:
+                    bindings[tuple(alias.name.split("."))] = target[0]
+    return bindings
+
+
+def _attribute_chain(node: ast.expr) -> tuple[str, ...] | None:
+    """Flatten ``a.b.c`` into ("a", "b", "c")."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+        return tuple(reversed(parts))
+    return None
+
+
+def _module_bindings(tree: ast.Module) -> set[str]:
+    """Names bound at module level: definitions, assignments, and imports."""
+    bound: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    bound.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            bound.add(node.target.id)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                bound.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                bound.add(alias.asname or alias.name)
+    return bound
+
+
+def _same_layer_cycles(edges: Mapping[str, set[str]]) -> list[list[str]]:
+    """Return one representative cycle per cyclic same-layer component."""
+    cycles: list[list[str]] = []
+    reported: set[frozenset[str]] = set()
+    state: dict[str, int] = {}
+    path: list[str] = []
+
+    def visit(node: str) -> None:
+        state[node] = 1
+        path.append(node)
+        for neighbour in sorted(edges.get(node, ())):
+            if state.get(neighbour, 0) == 1:
+                cycle = path[path.index(neighbour) :] + [neighbour]
+                key = frozenset(cycle)
+                if key not in reported:
+                    reported.add(key)
+                    cycles.append(cycle)
+            elif state.get(neighbour, 0) == 0:
+                visit(neighbour)
+        path.pop()
+        state[node] = 2
+
+    for node in sorted(edges):
+        if state.get(node, 0) == 0:
+            visit(node)
+    return cycles
+
+
 # ---------------------------------------------------------------------------
 # Rule detectors
 # ---------------------------------------------------------------------------
@@ -787,6 +1060,74 @@ def rule_2_identity_names(corpus: Corpus) -> list[str]:
                         violations.append(
                             f"rule 2: {module.name}: {rel} sets db_table on {node.name}"
                         )
+    return violations
+
+
+def rule_4_public_surface(corpus: Corpus) -> list[str]:
+    """Enforce the public-surface rule for one module using another (rule 4)."""
+    violations: list[str] = []
+    for module in corpus.modules:
+        for rel, text in module.files.items():
+            if not rel.endswith(".py"):
+                continue
+            tree = _parse(text)
+            in_migrations = rel.startswith("migrations/")
+            for other, path, names, lineno, _kind in _cross_module_imports(tree):
+                if other == module.name:
+                    continue
+                surface = _public_surface(other)
+                components = (path[0],) if path else names
+                for component in components:
+                    if component not in surface and not (in_migrations and component == "models"):
+                        violations.append(
+                            f"rule 4: {module.name}: {rel}:{lineno} imports {other}:{component} "
+                            "outside the module's public surface"
+                        )
+            for attribute, lineno in _settings_attribute_reads(tree):
+                owner = _setting_name_module(attribute)
+                if owner is not None and owner != module.name:
+                    violations.append(
+                        f"rule 4: {module.name}: {rel}:{lineno} reads {owner}'s setting {attribute}"
+                    )
+    return violations
+
+
+def rule_5_dependency_direction(corpus: Corpus) -> list[str]:
+    """Enforce the layer table and acyclic same-layer imports (rule 5)."""
+    violations: list[str] = []
+    edges: dict[str, set[str]] = {}
+    for module in corpus.modules:
+        layer = MODULE_LAYERS.get(module.name)
+        for rel, text in module.files.items():
+            if not rel.endswith(".py"):
+                continue
+            in_migrations = rel.startswith("migrations/")
+            for other, path, names, lineno, _kind in _cross_module_imports(_parse(text)):
+                if other == module.name or layer is None:
+                    continue
+                if in_migrations and path[:1] == ("models",):
+                    continue
+                other_layer = MODULE_LAYERS.get(other)
+                if other_layer is None:
+                    continue
+                for component in (path[0],) if path else names:
+                    if in_migrations and component == "models":
+                        continue
+                    if other_layer > layer:
+                        violations.append(
+                            f"rule 5: {module.name}: {rel}:{lineno} imports upward from "
+                            f"{other}:{component} (layer {other_layer} above layer {layer})"
+                        )
+                    elif other_layer == layer:
+                        edges.setdefault(module.name, set()).add(other)
+    for cycle in _same_layer_cycles(edges):
+        violations.append(f"rule 5: same-layer import cycle: {' -> '.join(cycle)}")
+    for rel, text in corpus.core_files.items():
+        if not rel.endswith(".py"):
+            continue
+        for attribute, lineno in _settings_attribute_reads(_parse(text)):
+            if _setting_name_module(attribute) is not None:
+                violations.append(f"rule 5: core {rel}:{lineno} names module setting {attribute}")
     return violations
 
 
@@ -1969,6 +2310,78 @@ def rule_22_analytics_events(corpus: Corpus) -> list[str]:
     return violations
 
 
+def rule_23_service_surface(corpus: Corpus) -> list[str]:
+    """services.py declares __all__, and its public functions take a subject (rule 23)."""
+    violations: list[str] = []
+    exports: dict[str, set[str]] = {}
+    for module in corpus.modules:
+        services = module.files.get("services.py")
+        if services is None:
+            violations.append(f"rule 23: {module.name}: services.py is missing")
+            continue
+        tree = _parse(services)
+        declared = _declared_exports(tree)
+        if declared is None:
+            violations.append(f"rule 23: {module.name}: services.py declares no __all__")
+            continue
+        exports[module.name] = set(declared)
+        bound = _module_bindings(tree)
+        functions = _service_functions(module, tree)
+        for name in declared:
+            if name not in bound:
+                violations.append(
+                    f"rule 23: {module.name}: service {name!r} in __all__ is not defined"
+                )
+                continue
+            function = functions.get(name)
+            if function is None:
+                continue
+            positional = len(function.args.posonlyargs) + len(function.args.args)
+            if positional > 1 or function.args.vararg is not None:
+                violations.append(
+                    f"rule 23: {module.name}: {name} takes {positional} positional "
+                    "parameter(s); services take keyword-only parameters after at most "
+                    "one subject"
+                )
+    for module in corpus.modules:
+        for rel, text in module.files.items():
+            if not rel.endswith(".py"):
+                continue
+            tree = _parse(text)
+            for other, path, names, lineno, kind in _cross_module_imports(tree):
+                if other == module.name or kind != "from" or path[:1] != ("services",):
+                    continue
+                other_exports = exports.get(other)
+                if other_exports is None:
+                    continue
+                for name in names:
+                    if name not in other_exports:
+                        violations.append(
+                            f"rule 23: {module.name}: {rel}:{lineno} imports {name!r} "
+                            f"outside {other}'s services.__all__"
+                        )
+            for prefix, provider in _service_module_bindings(tree).items():
+                provider_exports = exports.get(provider)
+                if provider == module.name or provider_exports is None:
+                    continue
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.Attribute):
+                        continue
+                    chain = _attribute_chain(node)
+                    if chain is None or len(chain) != len(prefix) + 1:
+                        continue
+                    member = chain[-1]
+                    if chain[: len(prefix)] != prefix or member in provider_exports:
+                        continue
+                    if member.startswith("__"):
+                        continue
+                    violations.append(
+                        f"rule 23: {module.name}: {rel}:{node.lineno} uses "
+                        f"{provider}.services.{member} outside services.__all__"
+                    )
+    return violations
+
+
 def rule_24_small_conventions(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
@@ -2914,6 +3327,8 @@ def rule_33_shared_stems(corpus: Corpus) -> list[str]:
 
 RULES: tuple[Rule, ...] = (
     Rule(2, "identity names", rule_2_identity_names),
+    Rule(4, "how one module uses another", rule_4_public_surface),
+    Rule(5, "dependency direction", rule_5_dependency_direction),
     Rule(7, "URL mounts and route names", rule_7_urls),
     Rule(8, "templates, static files, template tags", rule_8_templates),
     Rule(9, "HTTP APIs", rule_9_http_apis),
@@ -2927,6 +3342,7 @@ RULES: tuple[Rule, ...] = (
     Rule(18, "package tooling", rule_18_package_tooling),
     Rule(20, "email", rule_20_email),
     Rule(22, "analytics events", rule_22_analytics_events),
+    Rule(23, "service surface", rule_23_service_surface),
     Rule(24, "small conventions", rule_24_small_conventions),
     Rule(26, "inbound webhooks", rule_26_webhooks),
     Rule(29, "test names", rule_29_test_names),
@@ -2946,13 +3362,10 @@ RULES: tuple[Rule, ...] = (
 OPEN_RULES: tuple[tuple[int, str], ...] = (
     (1, "SA219"),
     (3, "SA219"),
-    (4, "SA228"),
-    (5, "SA228"),
     (6, "SA219"),
     (11, "SA220"),
     (19, "SA226"),
     (21, "SA216 (rule 21 is a review rule; each module's write-effect rollback test)"),
-    (23, "SA228"),
     (25, "SA215"),
     (27, "SA215 (user-FK conformance gate orgs/tests/test_user_fk_conformance.py)"),
     (28, "SA215"),

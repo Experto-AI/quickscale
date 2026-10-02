@@ -365,6 +365,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Manifest loading keeps its import surface while the implementation splits.** The module
     manifest loader stays the import path every caller uses and re-exports its full former surface,
     while its parsing logic lives in focused sibling modules.
+  - **Manifest resolution keeps its import surface while the implementation splits.** The module
+    option resolver stays the import path every caller uses and re-exports its full former surface,
+    while its normalization, validation, legacy-alias, and projection engines live in focused
+    sibling modules.
   - **Modules answer whether they are enabled and declare what they use.** Every module publishes
     `services.is_enabled()` for its own `QUICKSCALE_<MODULE>_ENABLED` setting, and each manifest's
     `required_modules` lists every module its code references. `plan`/`apply` therefore install
