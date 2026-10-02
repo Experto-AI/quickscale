@@ -1082,3 +1082,11 @@ def test_service_surface_re_exports_the_module_exceptions() -> None:
     assert issubclass(
         services_module.SocialConfigurationError, services_module.SocialError
     )
+
+
+def test_is_enabled_reads_the_module_enabled_setting() -> None:
+    """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_SOCIAL_ENABLED`` both ways."""
+    with override_settings(QUICKSCALE_SOCIAL_ENABLED=True):
+        assert social_services.is_enabled() is True
+    with override_settings(QUICKSCALE_SOCIAL_ENABLED=False):
+        assert social_services.is_enabled() is False
