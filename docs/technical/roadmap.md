@@ -230,6 +230,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `_plan_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
   test patch target still resolves through the facade. Its two accepted complexity entries are
   re-keyed with rename waivers; the pre-existing plan-command complexity regressions are unchanged.
+
+  **Landed (CLI slice, fourth file):** `dr_commands.py` is a facade over four private
+  `_dr_*.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
+  test patch target still resolves through the facade. Its two accepted complexity entries are
+  re-keyed with rename waivers; its remaining accepted entry, `execute`, is unchanged.
   The remaining CLI files and the `dr_engine` slice remain.
 
   **Scope:** SA231's rules, one package-sized slice at a time through the serialized merge queue:

@@ -1741,3 +1741,134 @@ def test_fetch_railway_runtime_variables_unparsable_text_becomes_click_exception
                 railway_environment=None,
                 role="target",
             )
+
+
+class TestFacadePatchTargets:
+    """The facade keeps patch targets effective across the split modules."""
+
+    def test_patched_adapter_flows_through_fetch_snapshot_report(self) -> None:
+        """Patching the facade adapter bridge reaches the snapshot fetcher."""
+        context = _context()
+
+        with patch.object(
+            dr_commands,
+            "_call_adapter",
+            return_value={"status": "ready"},
+        ) as mocked_adapter:
+            report = dr_commands._fetch_snapshot_report(
+                context,
+                snapshot_id="snap-123",
+                sidecar_payloads=("env-var-manifest.json",),
+            )
+
+        assert report == {"status": "ready"}
+        mocked_adapter.assert_called_once_with(
+            "fetch_snapshot_report",
+            snapshot_id="snap-123",
+            sidecar_payloads=["env-var-manifest.json"],
+        )
+
+    def test_patched_live_variables_flow_through_env_sync_plan(self) -> None:
+        """Patching the facade loader reaches the env-sync planner."""
+        context = _context()
+
+        with patch.object(
+            dr_commands,
+            "_load_source_live_variables",
+            return_value={"BLOG_THEME": "midnight"},
+        ):
+            plan = dr_commands._build_env_sync_plan(
+                context,
+                {
+                    "sidecar_payloads": {
+                        "env-var-manifest.json": {
+                            "status": "ready",
+                            "names": ["BLOG_THEME"],
+                        }
+                    }
+                },
+            )
+
+        assert plan["portable_candidates"] == ["BLOG_THEME"]
+
+    def test_patched_batch_setter_flows_through_execute_portable_env_sync(self) -> None:
+        """Patching the facade batch setter reaches the portable env executor."""
+        context = _context()
+
+        with (
+            patch.object(
+                dr_commands,
+                "_load_source_live_variables",
+                return_value={"DEBUG": "true", "BLOG_THEME": "midnight"},
+            ),
+            patch.object(
+                dr_commands,
+                "set_railway_variables_batch",
+                return_value=(True, []),
+            ) as mocked_set,
+        ):
+            result = dr_commands._execute_portable_env_sync(
+                context,
+                {
+                    "portable_candidates": ["DEBUG", "BLOG_THEME"],
+                    "manual_requirements": [],
+                    "portable_conflicts": [],
+                },
+            )
+
+        assert result["status"] == "completed"
+        assert result["copied"] == ["BLOG_THEME", "DEBUG"]
+        mocked_set.assert_called_once_with(
+            {"DEBUG": "true", "BLOG_THEME": "midnight"},
+            service="myapp-target",
+            environment=None,
+        )
+
+    def test_patched_route_builder_flows_through_latest_phase_record(self) -> None:
+        """Patching the facade report builder reaches the phase lookup."""
+        record = {"phase": "plan", "status": "ready"}
+
+        with patch.object(
+            dr_commands,
+            "_build_route_report",
+            return_value={"latest_records": {"plan": record}},
+        ) as mocked_route_report:
+            latest = dr_commands._latest_route_phase_record(
+                {"snapshot_id": "snap-123"},
+                route="local-to-railway-develop",
+                phase="plan",
+            )
+
+        assert latest is record
+        mocked_route_report.assert_called_once_with(
+            {"snapshot_id": "snap-123"}, route="local-to-railway-develop"
+        )
+
+    def test_patched_route_table_flows_through_resolve_route(self) -> None:
+        """Patching the facade route table reaches route resolution."""
+        sentinel = object()
+
+        with patch.object(dr_commands, "_DR_ROUTES", {"custom": sentinel}):
+            assert dr_commands._resolve_route("custom") is sentinel
+
+    def test_patched_execute_constants_flow_through_selection_and_status(self) -> None:
+        """Patching the facade execute constants reaches selection and status checks."""
+        with (
+            patch.object(dr_commands, "_DR_EXECUTE_SURFACES", ("custom_surface",)),
+            patch.object(dr_commands, "_DR_EXECUTE_RETRYABLE_STATUSES", {"custom"}),
+        ):
+            selected = dr_commands._resolve_execute_surface_selection(
+                latest_execute_record={
+                    "payload": {"custom_surface": {"status": "custom"}}
+                },
+                database=False,
+                media=False,
+                env_vars=False,
+                resume=True,
+            )
+            follow_up = dr_commands._surface_result_requires_follow_up(
+                {"status": "custom"}
+            )
+
+        assert selected == ("custom_surface",)
+        assert follow_up is True
