@@ -153,8 +153,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA232 — Split the long CLI command, `dr_engine`, and billing files.**
 
-  **Context:** the billing and CLI slices have landed. The `dr_engine` slice remains:
-  `dr_engine/orchestration.py` is 2,897 lines.
+  **Context:** the billing, CLI, and `dr_engine` slices have landed; the split work this ticket
+  scheduled is complete.
+
+  **Landed (dr_engine slice):** `dr_engine/orchestration.py` is a re-exporting facade over ten
+  private `_*.py` modules, all under the 700-line ceiling; every prior name is re-exported, every
+  cluster function/class/constant resolves through the facade at call time so test patch targets
+  keep propagating, facade-seam regression tests pin it, and the accepted complexity entries are
+  re-keyed with rename waivers. No file in the package reaches 800 lines.
 
   **Scope:** SA231's rules for `quickscale_core/dr_engine/`: private modules behind a re-exporting
   facade, through the serialized merge queue; remove the file's baseline exception if SA231's gate

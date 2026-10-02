@@ -214,58 +214,58 @@
         "symbol": "_persist_snapshot_sidecar_payload",
         "type": "function"
       },
-      "quickscale_core/src/quickscale_core/dr_engine/orchestration.py::_build_snapshot_full_backup_contract": {
-        "file": "quickscale_core/src/quickscale_core/dr_engine/orchestration.py",
-        "max_complexity": 34,
-        "symbol": "_build_snapshot_full_backup_contract",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/dr_engine/orchestration.py::_complete_capture_after_dump": {
-        "file": "quickscale_core/src/quickscale_core/dr_engine/orchestration.py",
+      "quickscale_core/src/quickscale_core/dr_engine/_capture.py::_complete_capture_after_dump": {
+        "file": "quickscale_core/src/quickscale_core/dr_engine/_capture.py",
         "max_complexity": 12,
         "symbol": "_complete_capture_after_dump",
         "type": "function"
       },
-      "quickscale_core/src/quickscale_core/dr_engine/orchestration.py::_delete_snapshot_storage": {
-        "file": "quickscale_core/src/quickscale_core/dr_engine/orchestration.py",
-        "max_complexity": 18,
-        "symbol": "_delete_snapshot_storage",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/dr_engine/orchestration.py::_resolve_media_runtime": {
-        "file": "quickscale_core/src/quickscale_core/dr_engine/orchestration.py",
-        "max_complexity": 11,
-        "symbol": "_resolve_media_runtime",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/dr_engine/orchestration.py::_resume_backup_capture": {
-        "file": "quickscale_core/src/quickscale_core/dr_engine/orchestration.py",
+      "quickscale_core/src/quickscale_core/dr_engine/_capture.py::_resume_backup_capture": {
+        "file": "quickscale_core/src/quickscale_core/dr_engine/_capture.py",
         "max_complexity": 25,
         "symbol": "_resume_backup_capture",
         "type": "function"
       },
-      "quickscale_core/src/quickscale_core/dr_engine/orchestration.py::_validate_policy_snapshot_internal": {
-        "file": "quickscale_core/src/quickscale_core/dr_engine/orchestration.py",
-        "max_complexity": 13,
-        "symbol": "_validate_policy_snapshot_internal",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/dr_engine/orchestration.py::build_backup_snapshot_report": {
-        "file": "quickscale_core/src/quickscale_core/dr_engine/orchestration.py",
-        "max_complexity": 12,
-        "symbol": "build_backup_snapshot_report",
-        "type": "function"
-      },
-      "quickscale_core/src/quickscale_core/dr_engine/orchestration.py::create_backup": {
-        "file": "quickscale_core/src/quickscale_core/dr_engine/orchestration.py",
+      "quickscale_core/src/quickscale_core/dr_engine/_capture.py::create_backup": {
+        "file": "quickscale_core/src/quickscale_core/dr_engine/_capture.py",
         "max_complexity": 13,
         "symbol": "create_backup",
         "type": "function"
       },
-      "quickscale_core/src/quickscale_core/dr_engine/orchestration.py::sync_backup_snapshot_media": {
-        "file": "quickscale_core/src/quickscale_core/dr_engine/orchestration.py",
+      "quickscale_core/src/quickscale_core/dr_engine/_media.py::_resolve_media_runtime": {
+        "file": "quickscale_core/src/quickscale_core/dr_engine/_media.py",
+        "max_complexity": 11,
+        "symbol": "_resolve_media_runtime",
+        "type": "function"
+      },
+      "quickscale_core/src/quickscale_core/dr_engine/_media.py::sync_backup_snapshot_media": {
+        "file": "quickscale_core/src/quickscale_core/dr_engine/_media.py",
         "max_complexity": 13,
         "symbol": "sync_backup_snapshot_media",
+        "type": "function"
+      },
+      "quickscale_core/src/quickscale_core/dr_engine/_policy.py::_validate_policy_snapshot_internal": {
+        "file": "quickscale_core/src/quickscale_core/dr_engine/_policy.py",
+        "max_complexity": 13,
+        "symbol": "_validate_policy_snapshot_internal",
+        "type": "function"
+      },
+      "quickscale_core/src/quickscale_core/dr_engine/_remote.py::_delete_snapshot_storage": {
+        "file": "quickscale_core/src/quickscale_core/dr_engine/_remote.py",
+        "max_complexity": 18,
+        "symbol": "_delete_snapshot_storage",
+        "type": "function"
+      },
+      "quickscale_core/src/quickscale_core/dr_engine/_report.py::_build_snapshot_full_backup_contract": {
+        "file": "quickscale_core/src/quickscale_core/dr_engine/_report.py",
+        "max_complexity": 34,
+        "symbol": "_build_snapshot_full_backup_contract",
+        "type": "function"
+      },
+      "quickscale_core/src/quickscale_core/dr_engine/_report.py::build_backup_snapshot_report": {
+        "file": "quickscale_core/src/quickscale_core/dr_engine/_report.py",
+        "max_complexity": 12,
+        "symbol": "build_backup_snapshot_report",
         "type": "function"
       },
       "quickscale_core/src/quickscale_core/dr_engine/primitives.py::_build_pg_dump_command": {
