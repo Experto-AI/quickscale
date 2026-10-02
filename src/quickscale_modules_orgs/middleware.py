@@ -32,7 +32,7 @@ from django.http import (
 )
 from django.shortcuts import redirect
 
-from .constants import ACTIVE_ORG_SESSION_KEY
+from ._constants import ACTIVE_ORG_SESSION_KEY
 
 from .current_org import (
     clear_current_org,

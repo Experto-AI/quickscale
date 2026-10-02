@@ -35,7 +35,7 @@ from rest_framework.views import APIView
 
 from quickscale_core.runtime import collect_capabilities
 
-from .constants import (
+from ._constants import (
     ACTIVE_ORG_SESSION_KEY,
     ORG_INVITATION_ACCEPT_URL_NAME,
     PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,

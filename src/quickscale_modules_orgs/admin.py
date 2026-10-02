@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .constants import ACTIVE_ORG_SESSION_KEY
+from ._constants import ACTIVE_ORG_SESSION_KEY
 from .current_org import org_scope, set_current_org_id
 from ._debug import clear_debug_as_org, get_debug_as_org, set_debug_as_org
 from .models import (

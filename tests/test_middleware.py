@@ -15,7 +15,7 @@ from django.test import RequestFactory
 from django.test import override_settings
 from django.utils import timezone
 
-from quickscale_modules_orgs.constants import (
+from quickscale_modules_orgs._constants import (
     ACTIVE_ORG_SESSION_KEY,
     PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
 )

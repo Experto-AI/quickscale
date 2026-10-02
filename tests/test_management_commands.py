@@ -2497,7 +2497,7 @@ def test_purge_organization_clears_social_cache() -> None:
     """
     from django.core.cache import cache
 
-    from quickscale_modules_social.contracts import (
+    from quickscale_modules_social._contracts import (
         SOCIAL_EMBEDS_CACHE_KEY,
         SOCIAL_LINKS_CACHE_KEY,
     )
@@ -2592,7 +2592,7 @@ def test_purge_tombstone_retry_heals_social_cache() -> None:
     """A rerun after post-commit cache failure retries invalidation."""
     from django.core.cache import cache
 
-    from quickscale_modules_social.contracts import (
+    from quickscale_modules_social._contracts import (
         SOCIAL_EMBEDS_CACHE_KEY,
         SOCIAL_LINKS_CACHE_KEY,
     )

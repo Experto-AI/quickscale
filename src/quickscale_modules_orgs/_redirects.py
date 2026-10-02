@@ -16,7 +16,7 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .constants import (
+from ._constants import (
     ORG_INVITATION_ACCEPT_URL_NAME,
     PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
 )

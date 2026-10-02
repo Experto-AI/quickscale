@@ -17,7 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from quickscale_modules_auth.allauth_adapter import QuickscaleAccountAdapter
-from quickscale_modules_orgs.constants import (
+from quickscale_modules_orgs._constants import (
     ORG_INVITATION_ACCEPT_URL_NAME,
     PENDING_ORG_INVITATION_TOKEN_SESSION_KEY,
 )

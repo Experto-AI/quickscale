@@ -10,7 +10,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
-from quickscale_modules_orgs.constants import (
+from quickscale_modules_orgs._constants import (
     ACTIVE_ORG_SESSION_KEY,
     DEBUG_AS_ORG_SESSION_KEY,
 )

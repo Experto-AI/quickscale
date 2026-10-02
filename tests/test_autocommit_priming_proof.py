@@ -27,7 +27,7 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import RequestFactory
 
-from quickscale_modules_orgs.constants import ACTIVE_ORG_SESSION_KEY
+from quickscale_modules_orgs._constants import ACTIVE_ORG_SESSION_KEY
 from quickscale_modules_orgs.current_org import (
     get_current_org_id,
     reset_current_org_id,

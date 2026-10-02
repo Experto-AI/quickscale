@@ -67,7 +67,7 @@ class Organization(models.Model):
     def clean(self) -> None:
         """Validate reserved singleton invariants for the System org."""
         super().clean()
-        from .constants import RESERVED_ORG_SLUGS, SYSTEM_ORG_SLUG
+        from ._constants import RESERVED_ORG_SLUGS, SYSTEM_ORG_SLUG
 
         errors: dict[str, str] = {}
 

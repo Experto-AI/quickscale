@@ -68,7 +68,7 @@ class OrganizationManager(models.Manager["Organization"]):
 
     def _validate_system_org(self, row: "Organization") -> None:
         """Assert the row meets System org invariants, or raise RuntimeError."""
-        from .constants import SYSTEM_ORG_SLUG
+        from ._constants import SYSTEM_ORG_SLUG
 
         if not row.is_system:
             raise RuntimeError(
@@ -105,7 +105,7 @@ class OrganizationManager(models.Manager["Organization"]):
             The ``Organization`` instance with ``is_system=True`` and
             slug ``__system__``.
         """
-        from .constants import SYSTEM_ORG_NAME, SYSTEM_ORG_SLUG
+        from ._constants import SYSTEM_ORG_NAME, SYSTEM_ORG_SLUG
 
         # Fast path — the system org already exists.
         try:
@@ -146,7 +146,7 @@ class OrganizationManager(models.Manager["Organization"]):
 
     def create_personal_for(self, user: Any) -> "Organization":
         """Return the user's personal organization, creating it if needed."""
-        from .constants import RESERVED_ORG_SLUGS
+        from ._constants import RESERVED_ORG_SLUGS
         from .models import OrgRole, OrganizationMembership
 
         existing_membership = (
