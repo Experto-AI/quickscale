@@ -413,48 +413,6 @@
         "symbol": "get_distinct_id",
         "type": "function"
       },
-      "quickscale_modules/backups/src/quickscale_modules_backups/admin.py::BackupArtifactAdmin.reset_stale_restore_action": {
-        "file": "quickscale_modules/backups/src/quickscale_modules_backups/admin.py",
-        "max_complexity": 12,
-        "symbol": "BackupArtifactAdmin.reset_stale_restore_action",
-        "type": "method"
-      },
-      "quickscale_modules/backups/src/quickscale_modules_backups/admin.py::BackupPolicyAdmin.restore_backup_view": {
-        "file": "quickscale_modules/backups/src/quickscale_modules_backups/admin.py",
-        "max_complexity": 32,
-        "symbol": "BackupPolicyAdmin.restore_backup_view",
-        "type": "method"
-      },
-      "quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_create.py::Command.handle": {
-        "file": "quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_create.py",
-        "max_complexity": 12,
-        "symbol": "Command.handle",
-        "type": "method"
-      },
-      "quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_pin.py::Command.handle": {
-        "file": "quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_pin.py",
-        "max_complexity": 12,
-        "symbol": "Command.handle",
-        "type": "method"
-      },
-      "quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_restore.py::Command.handle": {
-        "file": "quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_restore.py",
-        "max_complexity": 14,
-        "symbol": "Command.handle",
-        "type": "method"
-      },
-      "quickscale_modules/backups/src/quickscale_modules_backups/persistence.py::_get_admin_uploaded_restore_artifact_trust_issue": {
-        "file": "quickscale_modules/backups/src/quickscale_modules_backups/persistence.py",
-        "max_complexity": 14,
-        "symbol": "_get_admin_uploaded_restore_artifact_trust_issue",
-        "type": "function"
-      },
-      "quickscale_modules/backups/src/quickscale_modules_backups/services.py::prepare_admin_uploaded_restore_artifact": {
-        "file": "quickscale_modules/backups/src/quickscale_modules_backups/services.py",
-        "max_complexity": 11,
-        "symbol": "prepare_admin_uploaded_restore_artifact",
-        "type": "function"
-      },
       "quickscale_modules/blog/src/quickscale_modules_blog/apps.py::QuickscaleBlogConfig": {
         "file": "quickscale_modules/blog/src/quickscale_modules_blog/apps.py",
         "max_complexity": 13,
@@ -513,18 +471,6 @@
         "file": "quickscale_modules/listings/src/quickscale_modules_listings/services.py",
         "max_complexity": 20,
         "symbol": "create_published_listing_from_payload",
-        "type": "function"
-      },
-      "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py::_refresh_message_status": {
-        "file": "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py",
-        "max_complexity": 15,
-        "symbol": "_refresh_message_status",
-        "type": "function"
-      },
-      "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py::ingest_webhook_event": {
-        "file": "quickscale_modules/notifications/src/quickscale_modules_notifications/services.py",
-        "max_complexity": 17,
-        "symbol": "ingest_webhook_event",
         "type": "function"
       },
       "quickscale_modules/orgs/src/quickscale_modules_orgs/current_org.py::get_client_ip": {

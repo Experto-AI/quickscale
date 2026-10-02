@@ -171,8 +171,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
   accepted complexity entries are resolved. `project_state.py` and `utils/git_utils.py` are now
   facades over focused sibling modules, each under 800 lines, re-exporting their full prior
   surfaces; all five remaining functions at CC >= 11 and all five remaining accepted complexity
-  entries in this batch are resolved, `contracts/module_options.py` included. Batch 1 is complete;
-  the module batch and the closing gate batch remain, the gate waiting on SA232.
+  entries in this batch are resolved, `contracts/module_options.py` included. Batch 1 is complete.
+
+  **Landed (module batch):** `backups/admin.py` is a re-exported facade over
+  `_admin_forms.py`, `_admin_restore.py`, and `_admin_artifact.py`, each under 800 lines, with its
+  two accepted complexity entries resolved and its admin patch seam kept on the facade; the three
+  backups management commands, `persistence.py`, and `services.py` resolve their five remaining
+  accepted entries, the copy helpers move to `_admin_upload.py`, and every file stays under 800
+  lines. `notifications/services.py` is a re-exported facade over `_settings.py`, `_templates.py`,
+  `_sanitization.py`, `_delivery.py`, and `_webhooks.py`, each under 800 lines, with its two
+  accepted complexity entries resolved, its rule 26 signature-verification entry point and its
+  delivery and webhook patch seams kept on the facade. The remaining modules and the closing gate
+  batch remain, the gate waiting on SA232.
 
   **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
