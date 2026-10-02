@@ -7,9 +7,9 @@ module's source, and core's and the CLI's option handling that fails on each
 of the Module Conventions rules 1-39.  This check runs the detectors for the
 rules the shipped tree already meets.  Each detector has a control case in
 ``scripts/test_check_module_conventions.py`` proving it rejects a violation.
-Rules whose owning convention ticket has not landed yet are recorded in
-``OPEN_RULES`` with the ticket that closes them, and the test suite keeps the
-two sets a partition of rules 1-39.
+Rules not yet enforced here are recorded in ``OPEN_RULES`` with the ticket or
+mechanism that closes them, and the test suite keeps the two sets a partition
+of rules 1-39.
 
 Each covered rule is enforced over the statically checkable clauses of the
 rule; SA215 extends the harness to the rules and clauses still open.
@@ -89,6 +89,17 @@ SETTING_NAME_EXCEPTIONS: dict[str, dict[str, str]] = {
         "querystring_auth": "AWS_QUERYSTRING_AUTH",
     },
 }
+# Rule 1's fixed suffix types; every standard suffix carries the type in this
+# table.  A descriptive boolean (analytics' exclude_debug) is not a suffix.
+SETTING_SUFFIX_TYPES: dict[str, str] = {
+    "enabled": "boolean",
+    "api_enabled": "boolean",
+    "per_page": "integer",
+    "rate_limit": "string",
+    "retention_days": "integer",
+    "ttl_seconds": "integer",
+    "env_var": "string",
+}
 # Rule 4's public surface per module: every module publishes its operations and
 # questions through services.py; a foundation additionally publishes the
 # extension bases other modules build on.  Orgs' list is the one decision §4
@@ -123,6 +134,17 @@ MODULE_LAYERS: dict[str, int] = {
 }
 MODULE_IMPORT_PREFIX = "quickscale_modules_"
 SNAKE_CASE = re.compile(r"^[a-z][a-z0-9_]*$")
+ENV_VAR_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
+# Rule 31's seam producer, relative to the core package.  The template renders
+# the discovered module set; the theme's TypeScript may still name its own
+# React surfaces (rule 37's allowlist).
+THEME_SEAM_TEMPLATE = "generator/templates/themes/showcase_react/templates/index.html.j2"
+# Rule 35's one listed exception: orgs' RLS boot guard reads core's runtime-role
+# variables before settings load.
+CORE_RUNTIME_ROLE_ENV_VARS = (
+    "QUICKSCALE_ALLOW_BYPASSRLS",
+    "QUICKSCALE_PRIVILEGED_COMMAND",
+)
 TICKET_IN_TEST = re.compile(r"(?<![A-Za-z0-9])(?:SA|AF)\d+|CR-SA\d+")
 RATE_LITERAL = re.compile(r"\d+/(?:second|minute|hour|day)")
 # Rule 26: method calls whose value preserves signature dependence.  A method
@@ -995,6 +1017,75 @@ def _same_layer_cycles(edges: Mapping[str, set[str]]) -> list[list[str]]:
 # ---------------------------------------------------------------------------
 
 
+def rule_1_settings_names(corpus: Corpus) -> list[str]:
+    """
+    Rule 1: the setting family, the enabled switch, and env-var options.
+
+    The statically checkable clauses: every module declares its enabled switch
+    as ``QUICKSCALE_<MODULE>_ENABLED`` (boolean); every first-party setting
+    carries the ``QUICKSCALE_<MODULE>_`` stem, the listed third-party
+    exceptions excepted; every standard suffix keeps its fixed type; an
+    ``_env_var`` option's default is an environment-variable name, and a
+    QuickScale-defined one carries the module stem (rule 35's projection).
+    """
+    violations: list[str] = []
+    for module in corpus.modules:
+        config = module.manifest.get("config")
+        options: dict[str, Any] = {}
+        if isinstance(config, Mapping):
+            for kind in ("mutable", "immutable"):
+                block = config.get(kind)
+                if isinstance(block, Mapping):
+                    options.update(block)
+        prefix = f"QUICKSCALE_{module.name.upper()}_"
+        enabled = options.get("enabled")
+        if not isinstance(enabled, Mapping):
+            violations.append(f"rule 1: {module.name}: declares no enabled option")
+        else:
+            if enabled.get("type") != "boolean":
+                violations.append(
+                    f"rule 1: {module.name}: enabled type is {enabled.get('type')!r}, "
+                    "expected boolean"
+                )
+            if enabled.get("django_setting") != f"{prefix}ENABLED":
+                violations.append(
+                    f"rule 1: {module.name}: enabled setting is "
+                    f"{enabled.get('django_setting')!r}, expected {prefix}ENABLED"
+                )
+        for key, option in options.items():
+            if not isinstance(key, str) or not isinstance(option, Mapping):
+                continue
+            setting = option.get("django_setting")
+            if isinstance(setting, str) and setting.startswith("QUICKSCALE_"):
+                exception = SETTING_NAME_EXCEPTIONS.get(module.name, {}).get(key)
+                if exception is None and not setting.startswith(prefix):
+                    violations.append(
+                        f"rule 1: {module.name}: option {key!r} setting {setting} lacks "
+                        f"the {prefix} stem"
+                    )
+            for suffix, expected_type in SETTING_SUFFIX_TYPES.items():
+                if key == suffix or key.endswith(f"_{suffix}"):
+                    if option.get("type") != expected_type:
+                        violations.append(
+                            f"rule 1: {module.name}: option {key!r} type is "
+                            f"{option.get('type')!r}, expected {expected_type}"
+                        )
+                    break
+            if key.endswith("_env_var"):
+                default = option.get("default")
+                if not isinstance(default, str) or not ENV_VAR_NAME.match(default):
+                    violations.append(
+                        f"rule 1: {module.name}: option {key!r} default {default!r} is "
+                        "not an environment-variable name"
+                    )
+                elif default.startswith("QUICKSCALE_") and not default.startswith(prefix):
+                    violations.append(
+                        f"rule 1: {module.name}: option {key!r} default {default} lacks "
+                        f"the {prefix} stem"
+                    )
+    return violations
+
+
 def rule_2_identity_names(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
@@ -1060,6 +1151,160 @@ def rule_2_identity_names(corpus: Corpus) -> list[str]:
                         violations.append(
                             f"rule 2: {module.name}: {rel} sets db_table on {node.name}"
                         )
+    return violations
+
+
+def _option_settings(module: Module) -> set[str]:
+    """Rule 3: the setting names the manifest's options declare."""
+    settings: set[str] = set()
+    config = module.manifest.get("config")
+    if isinstance(config, Mapping):
+        for kind in ("mutable", "immutable"):
+            options = config.get(kind)
+            if not isinstance(options, Mapping):
+                continue
+            for option in options.values():
+                if not isinstance(option, Mapping):
+                    continue
+                setting = option.get("django_setting")
+                if isinstance(setting, str):
+                    settings.add(setting)
+    return settings
+
+
+def _manifest_declared_settings(module: Module) -> set[str]:
+    """
+    Rule 3: the settings the manifest declares for the module's runtime.
+
+    An option's ``django_setting``; for an ``_env_var`` option also the
+    ``_ENV_VAR`` projection core renders for it (the name minus its
+    ``_ENV_VAR`` suffix).
+    """
+    declared = _option_settings(module)
+    config = module.manifest.get("config")
+    if isinstance(config, Mapping):
+        for kind in ("mutable", "immutable"):
+            options = config.get(kind)
+            if not isinstance(options, Mapping):
+                continue
+            for key, option in options.items():
+                if not isinstance(key, str) or not isinstance(option, Mapping):
+                    continue
+                setting = option.get("django_setting")
+                if (
+                    isinstance(setting, str)
+                    and key.endswith("_env_var")
+                    and setting.endswith("_ENV_VAR")
+                ):
+                    declared.add(setting[: -len("_ENV_VAR")])
+    return declared
+
+
+def _declared_settings(module: Module) -> set[str]:
+    """
+    Rule 3: manifest-declared settings plus the adapter's literal wiring.
+
+    A setting a module's own ``adapter.py`` names (its post-hook, as analytics
+    and billing project their secrets) is module-declared wiring too.
+    """
+    declared = _manifest_declared_settings(module)
+    adapter = module.files.get("adapter.py")
+    if adapter is not None:
+        prefix = f"QUICKSCALE_{module.name.upper()}_"
+        for node in ast.walk(_parse(adapter)):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and node.value.startswith(prefix)
+            ):
+                declared.add(node.value)
+    return declared
+
+
+def _bound_names(target: ast.expr) -> set[str]:
+    """Return the names an assignment target binds, destructuring included."""
+    if isinstance(target, ast.Name):
+        return {target.id}
+    if isinstance(target, (ast.Tuple, ast.List)):
+        names: set[str] = set()
+        for element in target.elts:
+            names |= _bound_names(element)
+        return names
+    if isinstance(target, ast.Starred):
+        return _bound_names(target.value)
+    return set()
+
+
+def _module_level_targets(statements: list[ast.stmt]) -> set[str]:
+    """Return names assigned or imported at a settings module's top level."""
+    names: set[str] = set()
+    for node in statements:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+        for target in targets:
+            names |= _bound_names(target)
+        for alias in getattr(node, "names", []) or []:
+            if isinstance(alias, ast.alias):
+                names.add(alias.asname or alias.name.split(".")[0])
+        for field in ("body", "orelse", "finalbody"):
+            block = getattr(node, field, None)
+            if isinstance(block, list):
+                names |= _module_level_targets(block)
+        for handler in getattr(node, "handlers", []) or []:
+            names |= _module_level_targets(handler.body)
+    return names
+
+
+def rule_3_settings_reads(corpus: Corpus) -> list[str]:
+    """
+    Rule 3: reads go to the module's own declared settings, directly.
+
+    The statically checkable clauses: module code reads only settings its
+    manifest (or its own adapter) declares, never another module's setting,
+    and reads no setting through ``getattr(settings, ...)``; the module's
+    ``tests/settings.py`` defines every manifest option's setting.
+    """
+    violations: list[str] = []
+    for module in corpus.modules:
+        declared = _declared_settings(module)
+        tests_settings = module.tests.get("settings.py")
+        if tests_settings is not None:
+            defined = _module_level_targets(_parse(tests_settings).body)
+            for setting in sorted(_option_settings(module)):
+                if setting not in defined:
+                    violations.append(
+                        f"rule 3: {module.name}: tests/settings.py does not define {setting}"
+                    )
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            tree = _parse(text)
+            names, modules = _settings_bindings(tree)
+            for name, lineno in _settings_attribute_reads(tree):
+                owner = _setting_name_module(name)
+                if owner is not None and owner != module.name:
+                    violations.append(
+                        f"rule 3: {module.name}: {rel}:{lineno} reads {owner}'s {name}"
+                    )
+                elif name not in declared:
+                    violations.append(
+                        f"rule 3: {module.name}: {rel}:{lineno} reads undeclared {name}"
+                    )
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                if not isinstance(node.func, ast.Name) or node.func.id != "getattr":
+                    continue
+                if node.args and _is_settings_receiver(node.args[0], names, modules):
+                    violations.append(
+                        f"rule 3: {module.name}: {rel}:{node.lineno} reads settings "
+                        "through getattr()"
+                    )
     return violations
 
 
@@ -3140,6 +3385,72 @@ def rule_29_test_names(corpus: Corpus) -> list[str]:
     return violations
 
 
+def _declared_mounts(module: Module) -> list[str]:
+    """Rule 31: the URL mounts the module's manifest declares (rule 7)."""
+    mounts: list[str] = []
+    for entry in _wiring_projection(module.manifest, "url_includes"):
+        if (
+            isinstance(entry, (list, tuple))
+            and entry
+            and isinstance(entry[0], str)
+            and entry[0] not in mounts
+        ):
+            mounts.append(entry[0])
+    return mounts
+
+
+def rule_31_theme_seam(corpus: Corpus) -> list[str]:
+    """
+    Rule 31: the seam producer renders discovery, not hand-written lines.
+
+    The statically checkable clauses of the seam's producer, the theme's
+    ``index.html.j2``: it emits the discovered flags and paths through the
+    seam placeholders instead of literal module lines or mount paths, and it
+    carries no ``INSTALLED_APPS`` test.  A loaded core tree without the
+    template fails; an empty synthetic corpus does not.
+    """
+    violations: list[str] = []
+    template = corpus.core_files.get(THEME_SEAM_TEMPLATE)
+    if template is None:
+        if corpus.core_files:
+            violations.append("rule 31: the core tree carries no theme index.html.j2 seam producer")
+        return violations
+    for placeholder in ("{{ seam_module_flags }}", "{{ seam_module_paths }}"):
+        if placeholder not in template:
+            violations.append(f"rule 31: the theme's index.html.j2 does not render {placeholder}")
+    for module in corpus.modules:
+        name = module.name
+        literals = (
+            f'"{name}"',
+            f"'{name}'",
+            f'"/{name}/"',
+            f"'/{name}/'",
+            f'"{name}/"',
+            f"'{name}/'",
+        )
+        for literal in literals:
+            if literal in template:
+                violations.append(
+                    f"rule 31: the theme's index.html.j2 names module {name!r} literally"
+                )
+        for mount in _declared_mounts(module):
+            if not mount or mount == f"{name}/":
+                continue
+            for literal in (f'"{mount}"', f"'{mount}'", f'"/{mount}"', f"'/{mount}'"):
+                if literal in template:
+                    violations.append(
+                        f"rule 31: the theme's index.html.j2 writes {name}'s mount "
+                        f"{mount!r} literally"
+                    )
+        if re.search(rf"(?m)^\s*{re.escape(name)}\s*:", template):
+            violations.append(
+                f"rule 31: the theme's index.html.j2 writes module {name!r} as a bare key"
+            )
+    if "INSTALLED_APPS" in template:
+        violations.append("rule 31: the theme's index.html.j2 carries an INSTALLED_APPS test")
+    return violations
+
+
 def rule_32_throttles(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
@@ -3195,6 +3506,105 @@ def rule_32_throttles(corpus: Corpus) -> list[str]:
                     break
             if _uses_name(tree, "RunSQL"):
                 violations.append(f"rule 32: {module.name}: {rel} creates raw SQL objects")
+    return violations
+
+
+def _environ_references(tree: ast.Module) -> list[tuple[int, str | None]]:
+    """
+    Rule 35: every ``os.getenv`` / ``os.environ`` use and its literal name.
+
+    Import aliases of ``os``, ``os.environ``, and ``os.getenv`` are followed.
+    A use whose variable name is not a string literal records ``None``.  A
+    call or subscript marks the receiver it belongs to, so one use is reported
+    once.
+    """
+    references: list[tuple[int, str | None]] = []
+    handled: set[int] = set()
+    os_names = {"os"}
+    environ_names = {"environ"}
+    getenv_names = {"getenv"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "os":
+                    os_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "os":
+            for alias in node.names:
+                if alias.name == "environ":
+                    environ_names.add(alias.asname or alias.name)
+                elif alias.name == "getenv":
+                    getenv_names.add(alias.asname or alias.name)
+
+    def record(node: ast.AST, literal: object) -> None:
+        handled.add(id(node))
+        references.append((node.lineno, literal if isinstance(literal, str) else None))
+
+    def is_environ_path(chain: tuple[str, ...]) -> bool:
+        return (len(chain) == 1 and chain[0] in environ_names) or (
+            len(chain) == 2 and chain[0] in os_names and chain[1] == "environ"
+        )
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        chain = _attribute_chain(node.func)
+        if chain is None:
+            continue
+        getenv_call = (len(chain) == 1 and chain[0] in getenv_names) or (
+            len(chain) == 2 and chain[0] in os_names and chain[1] == "getenv"
+        )
+        environ_get_call = (
+            len(chain) == 2 and chain[0] in environ_names and chain[1] == "get"
+        ) or (len(chain) == 3 and chain[0] in os_names and chain[1:] == ("environ", "get"))
+        if getenv_call or environ_get_call:
+            literal = _literal(node.args[0]) if node.args else None
+            record(node, literal)
+            if isinstance(node.func, ast.Attribute):
+                handled.add(id(node.func))
+                handled.add(id(node.func.value))
+    for node in ast.walk(tree):
+        if id(node) in handled:
+            continue
+        if isinstance(node, ast.Subscript):
+            chain = _attribute_chain(node.value)
+            if chain is not None and is_environ_path(chain):
+                record(node, _literal(node.slice))
+                handled.add(id(node.value))
+        elif isinstance(node, ast.Attribute) and node.attr == "environ":
+            chain = _attribute_chain(node)
+            if chain is not None and is_environ_path(chain):
+                record(node, None)
+        elif isinstance(node, ast.Name) and node.id in environ_names:
+            record(node, None)
+    return references
+
+
+def rule_35_secrets(corpus: Corpus) -> list[str]:
+    """
+    Rule 35: secrets reach module code as applied settings, not os.environ.
+
+    The statically checkable clause: module code calls neither ``os.getenv``
+    nor ``os.environ``; orgs' RLS boot guard reading core's two runtime-role
+    variables in ``checks.py`` is the one listed exception (it runs before
+    settings load).
+    """
+    violations: list[str] = []
+    for module in corpus.modules:
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            for lineno, variable in _environ_references(_parse(text)):
+                if (
+                    module.name == "orgs"
+                    and rel == "checks.py"
+                    and variable in CORE_RUNTIME_ROLE_ENV_VARS
+                ):
+                    continue
+                detail = f" ({variable})" if variable else ""
+                violations.append(
+                    f"rule 35: {module.name}: {rel}:{lineno} uses os.getenv/os.environ"
+                    f"{detail} instead of an applied setting"
+                )
     return violations
 
 
@@ -3326,7 +3736,9 @@ def rule_33_shared_stems(corpus: Corpus) -> list[str]:
 
 
 RULES: tuple[Rule, ...] = (
+    Rule(1, "settings names and the enabled switch", rule_1_settings_names),
     Rule(2, "identity names", rule_2_identity_names),
+    Rule(3, "reading settings", rule_3_settings_reads),
     Rule(4, "how one module uses another", rule_4_public_surface),
     Rule(5, "dependency direction", rule_5_dependency_direction),
     Rule(7, "URL mounts and route names", rule_7_urls),
@@ -3346,12 +3758,14 @@ RULES: tuple[Rule, ...] = (
     Rule(24, "small conventions", rule_24_small_conventions),
     Rule(26, "inbound webhooks", rule_26_webhooks),
     Rule(29, "test names", rule_29_test_names),
+    Rule(31, "the theme seam", rule_31_theme_seam),
     Rule(32, "throttles", rule_32_throttles),
     Rule(
         33,
         "shared-namespace stems (database functions and advisory-lock keys)",
         rule_33_shared_stems,
     ),
+    Rule(35, "secrets", rule_35_secrets),
     Rule(38, "README content", rule_38_readme_content),
     Rule(39, "module dependencies", rule_39_module_dependencies),
 )
@@ -3360,8 +3774,6 @@ RULES: tuple[Rule, ...] = (
 # gate already enforces.  The coverage test keeps this a partition with RULES
 # over 1-39, so SA215 cannot forget a rule.
 OPEN_RULES: tuple[tuple[int, str], ...] = (
-    (1, "SA219"),
-    (3, "SA219"),
     (6, "SA219"),
     (11, "SA220"),
     (19, "SA226"),
@@ -3370,9 +3782,7 @@ OPEN_RULES: tuple[tuple[int, str], ...] = (
     (27, "SA215 (user-FK conformance gate orgs/tests/test_user_fk_conformance.py)"),
     (28, "SA215"),
     (30, "SA215 (enforced in apply itself, core collect_wiring)"),
-    (31, "SA219"),
     (34, "SA220"),
-    (35, "SA219"),
     (36, "SA215"),
     (37, "SA215"),
 )
