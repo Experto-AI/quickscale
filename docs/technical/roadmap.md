@@ -207,9 +207,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Landed (CLI slice, first file):** `apply_command.py` is a facade over eleven private
   `_<name>.py` modules, all under the 700-line ceiling; every prior name is re-exported and every
-  test patch target still resolves through the facade. Its eight accepted complexity entries and
-  its dead-code message are re-keyed with rename waivers; the pre-existing apply-command
-  complexity regressions are unchanged. The remaining CLI files and the `dr_engine` slice remain.
+  test patch target still resolves through the facade. Its eight accepted complexity entries are
+  re-keyed with rename waivers and its one dead-code allowance is resolved by a parameter rename;
+  the pre-existing apply-command complexity regressions are unchanged. The remaining CLI files and
+  the `dr_engine` slice remain.
 
   **Scope:** SA231's rules, one package-sized slice at a time through the serialized merge queue:
   `quickscale_cli` commands and utilities (`apply_command.py`, `module_commands.py`,
