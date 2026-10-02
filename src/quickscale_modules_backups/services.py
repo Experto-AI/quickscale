@@ -129,6 +129,16 @@ from django.utils import timezone as django_timezone
 
 from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
 
+
+def is_enabled() -> bool:
+    """Return whether the module is enabled by ``QUICKSCALE_BACKUPS_ENABLED``.
+
+    Rule 4: the question a caller asks before using an optional module;
+    rule 3: the declared setting is read directly, with no default.
+    """
+    return bool(settings.QUICKSCALE_BACKUPS_ENABLED)
+
+
 __all__ = [
     "ArtifactLike",
     "BackupConfigurationError",
@@ -160,6 +170,7 @@ __all__ = [
     "ensure_default_policy",
     "get_backup_snapshot",
     "get_local_backup_directory",
+    "is_enabled",
     "is_restore_stale",
     "load_policy_snapshot",
     "prepare_admin_uploaded_restore_artifact",
