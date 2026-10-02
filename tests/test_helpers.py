@@ -10,7 +10,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
-from quickscale_modules_storage.helpers import (
+from quickscale_modules_storage._helpers import (
     build_public_media_url,
     build_upload_path,
     list_s3_compatible_media_inventory,
@@ -245,7 +245,7 @@ class TestUploadPathAndNaming:
         """Without ``now``, the date segment comes from django.utils.timezone.now()."""
         frozen = datetime(2031, 5, 6, 12, 0, tzinfo=timezone.utc)
         monkeypatch.setattr(
-            "quickscale_modules_storage.helpers.timezone.now", lambda: frozen
+            "quickscale_modules_storage._helpers.timezone.now", lambda: frozen
         )
 
         path = build_upload_path(
@@ -362,7 +362,7 @@ class TestValidateFileUpload:
             raise Image.DecompressionBombError("too many pixels")
 
         monkeypatch.setattr(
-            "quickscale_modules_storage.helpers.Image.open",
+            "quickscale_modules_storage._helpers.Image.open",
             raise_decompression_bomb,
         )
 

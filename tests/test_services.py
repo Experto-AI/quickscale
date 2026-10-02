@@ -6,7 +6,7 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 
-from quickscale_modules_storage import helpers, services
+from quickscale_modules_storage import _helpers, services
 
 #: Exactly the names rule 23 makes the module's public service surface.
 SERVICE_SURFACE = [
@@ -33,10 +33,12 @@ def test_services_publishes_exactly_the_declared_surface() -> None:
 
 def test_services_reexports_the_helper_implementations() -> None:
     """The public surface stays one implementation, not a parallel copy."""
-    assert services.build_upload_path is helpers.build_upload_path
-    assert services.select_storage_backend is helpers.select_storage_backend
-    assert services.make_cache_friendly_name is helpers.make_cache_friendly_name
-    assert services.sanitize_relative_media_path is helpers.sanitize_relative_media_path
+    assert services.build_upload_path is _helpers.build_upload_path
+    assert services.select_storage_backend is _helpers.select_storage_backend
+    assert services.make_cache_friendly_name is _helpers.make_cache_friendly_name
+    assert (
+        services.sanitize_relative_media_path is _helpers.sanitize_relative_media_path
+    )
 
 
 def test_build_upload_path_takes_its_asset_arguments_keyword_only() -> None:

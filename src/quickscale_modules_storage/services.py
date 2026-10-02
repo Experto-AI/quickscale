@@ -15,7 +15,7 @@ from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 
 from quickscale_modules_storage.exceptions import StorageError
-from quickscale_modules_storage.helpers import (
+from quickscale_modules_storage._helpers import (
     StorageBackendSelection,
     ValidatedUpload,
     build_public_media_url as _build_public_media_url,

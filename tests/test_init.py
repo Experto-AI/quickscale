@@ -5,7 +5,7 @@ from __future__ import annotations
 import quickscale_modules_storage as package
 
 # The helper symbols the package root used to re-export; they now live in
-# ``quickscale_modules_storage.helpers`` and are reached through that module.
+# ``quickscale_modules_storage._helpers`` and are reached through that module.
 FORMER_ROOT_EXPORTS = (
     "StorageBackendSelection",
     "ValidatedUpload",
