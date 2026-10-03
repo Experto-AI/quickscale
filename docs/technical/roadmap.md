@@ -363,30 +363,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** the new `bap-web-new` repository and its reseed step; the migration prompt; the
   `forms` module only for upstreamed customizations.
 
-- [ ] **SA240 — Add the idempotent `quickscale_orgs_create_site_org` command for SA191's cutover.**
-
-  **Context:** SA191 rebuilds `bap-web` on a fresh database and must create the site's
-  organization in the deploy step that runs `migrate`, before the catalog is reseeded under the
-  restricted runtime role. Today a project can create one only through orgs' admin or services
-  (the [migration prompt](../planning/bap-web-migration-prompt.md) says so). Split out of SA191 so
-  Track 3 delivers it while SA191 waits on the conventions.
-
-  **Scope:** `quickscale_orgs_create_site_org <slug> <name>` (the Module Conventions command
-  name): creates the organization once, is a no-op on rerun with the same arguments, and fails on
-  a slug that exists under a different name or is reserved (`RESERVED_ORG_SLUGS`). First establish
-  which role can create an organization. If the runtime role can, the command runs under it like
-  orgs' other commands. If it needs the superuser role, a decision entry adds it as the third
-  sanctioned privileged command in all four places that declare the two-command contract
-  ([decisions.md](decisions.md) § RLS enforcement rule), including the CLI producer (Track 2,
-  through the serialized merge queue) and the generated `start.sh`.
-
-  **Acceptance:** tests prove creation, an idempotent rerun, and the conflicting-name and
-  reserved-slug failures, and that the command runs under the role the scope settled on and fails
-  closed under any other. orgs' README documents it.
-
-  **Surfaces:** orgs management commands, tests, and README; if privileged, orgs' `checks.py`, the
-  `quickscale_core.runtime` settings facade, the CLI producer, the generated `start.sh`, and
-  decisions.
+- [x] **SA240 — Add the idempotent `quickscale_orgs_create_site_org` command for SA191's cutover.**
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
