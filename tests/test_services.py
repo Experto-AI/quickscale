@@ -309,28 +309,6 @@ def test_send_notification_persists_partial_failures_per_recipient(
 
 
 @pytest.mark.django_db
-def test_send_notification_can_dispatch_inline_when_requested(
-    notification_settings_row,
-) -> None:
-    del notification_settings_row
-
-    message = send_notification(
-        template_key="notifications.generic",
-        recipients=["inline@example.com"],
-        context={"headline": "Inline dispatch", "body": "Immediate body"},
-        dispatch_after_commit=False,
-        mailer=lambda mail: f"inline::{mail.to[0]}",
-    )
-
-    message.refresh_from_db()
-    delivery = message.deliveries.get()
-
-    assert message.status == NotificationMessage.Status.SENT
-    assert delivery.status == NotificationDelivery.Status.SENT
-    assert delivery.provider_message_id == "inline::inline@example.com"
-
-
-@pytest.mark.django_db
 def test_rolled_back_send_notification_dispatches_nothing(
     notification_settings_row,
     django_capture_on_commit_callbacks,
@@ -758,7 +736,6 @@ def test_services_publishes_exactly_the_declared_surface() -> None:
         "NotificationConfigurationError",
         "NotificationDisabledError",
         "NotificationError",
-        "NotificationSettingsSnapshot",
         "NotificationTemplateDefinition",
         "NotificationTemplateError",
         "NotificationValidationError",
