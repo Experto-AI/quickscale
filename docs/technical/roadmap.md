@@ -24,9 +24,16 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
+| SA233 | Key the quality ratchet by qualified name and retire the rename waivers | post-v88 | 1 | — | Deferred |
+| SA234 | Retarget test patches to defining modules and remove facade back-imports | post-v88 | 2 | SA233 | Deferred |
+| SA235 | Declare module UI paths in manifests and render host routes from discovery | post-v88 | 1 | — | Deferred |
+| SA236 | Make settings snapshots private and guard optional senders on `is_enabled()` | post-v88 | 3 | — | Deferred |
+| SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
+| SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | SA234 | Deferred |
+| SA239 | Derive blog and storage upload extensions from the validated image format | post-v88 | 2 | — | Deferred |
 | SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215, SA235, SA236, SA237, SA238 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | SA215 | Deferred |
@@ -35,21 +42,30 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: — (queue complete)
-Track 3: SA215 (remaining rules) ──► SA216
-     critical path: SA215 → SA191 → SA153
+Track 1: SA233 ──► SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 2: SA239 ──► SA234 ──► SA237
+Track 3: SA215 (closing pass, in progress) ──► SA236 ──► SA238 ──► SA216
+     critical path: SA233 → SA234 → SA238 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
 
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
-ported, and SA204 has not frozen the migration history. SA204 freezes migration history before
-any post-SA153 module schema change. SA154 is an inventory, not work.
+ported, and SA204 has not frozen the migration history. SA234 must untangle the split facades
+before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract, so the facade work
+runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
+SA154 is an inventory, not work.
 
-**Off the critical path.** SA215 runs on Track 3, which owns the conformance harness it adds rules
-to. SA231 (Track 1) is closed; SA191 waits for SA215. SA216 waits for SA215 because both change
-auth's views, orgs' removal path, and the user-referencing models.
+**Parallel start.** All three tracks can start now: SA233 (Track 1), SA239 (Track 2), and SA215
+(Track 3, resuming its closing pass). SA215 closes inventory sections 1–41. The coherence audit's
+seventh pass (sections 42–47, D43–D48) is carried by SA235–SA238. Each begins by recording its
+decision (proposed rules 41–46 in the
+[inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
+its own item, harness clause, and inventory section, and SA191 waits for all of them.
+
+**Off the critical path.** SA239 is a standalone S3 fix that ships in the next release that has it.
+SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
+user-referencing models.
 
 ### Track states
 
@@ -57,13 +73,15 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 | no | no | no | no | no |
-| 2 | — | — | — | — | **yes** | no |
-| 3 | SA215 | yes | yes | yes | **yes** | **yes** |
+| 1 | SA233 | yes | yes | yes | **yes** | **yes** |
+| 2 | SA239 | yes | yes | yes | **yes** | no |
+| 3 | SA215 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
-- Track 1 owns gate documentation, `scripts/gate_registry.json`, the parity oracles, the hosted
+- Track 1 owns gate documentation, `scripts/gate_registry.json`, the quality ratchet
+  (`scripts/check_quality.sh`, `quality_baseline.json`, `quality_waivers.json`, and the
+  monotonicity check), the generated `urls.py.j2` and the theme's social seam pages, the parity oracles, the hosted
   workflow triggers, the maintainer migration tools with their smoke gate and playbook, the
   migration-history freeze gate and `decisions.md` § Clean-Break Migration History, the `bap-web`
   migration and its reseed step, the property extension, public templates, and the portal's
@@ -76,7 +94,8 @@ A track is **truly green** only when all three states are yes.
   `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
   and the billing module (`billing/services.py`, `billing/views.py`, `billing/adapter.py`, and its
-  docs), and, for the conventions, the manifest option schema and the CLI's `module_config`,
+  docs), the split facades of the CLI commands, `dr_engine`, and billing with the tests that patch
+  them, the blog and storage upload-path builders, and, for the conventions, the manifest option schema and the CLI's `module_config`,
   module settings names, and `is_enabled()`.
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
@@ -85,10 +104,14 @@ A track is **truly green** only when all three states are yes.
   blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block, and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
-  theme's React API client, and the conformance harness with its registry row (SA215).
+  theme's React API client, module settings snapshots and the module split facades' loggers and
+  re-exports, and the conformance harness with its registry row (SA215).
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue. SA215 touches every module and crosses every
   track, so it lands in module-sized slices through that queue, merging `v89` before each slice.
+  The seventh-pass convention tickets (SA235–SA238) also cross tracks: each adds its own harness
+  clause (a Track 3 surface), and SA235 touches orgs' `TenantMiddleware`. They land through the
+  same queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md) (SA204, SA153, and SA215, which update the names it
@@ -106,13 +129,166 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
+- [ ] **SA233 — Key the quality ratchet by qualified name and retire the rename waivers.**
+
+  **Context:** `quality_baseline.json` keys complexity by file path, so every function SA231/SA232
+  moved needed a waiver whose only reason is "path changes, so the baseline key is a rename" (55
+  entries, all expiring 2027-03-31). `make quality` now fails, so each further split mints more
+  waivers, and the waivers lapse in a single batch on that expiry date (arch audit
+  `split-facades-patch-coupled`, first step).
+
+  **Acceptance:** complexity entries are keyed by `module.qualname`, so moving a function between
+  files neither regresses nor needs a waiver; file-length entries stay keyed by path. Every rename
+  waiver is deleted, and the remaining waivers carry a real reason. The monotonicity check rejects a
+  worsened qualname and accepts a pure move, with a control for each. `quality_tools.md` describes
+  the key.
+
+  **Surfaces:** `scripts/check_quality.sh`, `quality_baseline.json`, `quality_waivers.json`,
+  `check_quality_baseline_monotonicity.py` and its tests, and `quality_tools.md`.
+
+- [ ] **SA234 — Retarget test patches to defining modules and remove facade back-imports.**
+
+  **Context:** to keep the existing test patch targets, the SA231/SA232 splits made 51 private
+  modules import their own facade and call their collaborators through it (CLI 32, `dr_engine` 9,
+  billing 10). The facades are now import cycles, and 381 names, 197 of them private, are pinned
+  surface. A helper that binds a name directly turns a facade patch into a silent no-op
+  (`36075de9`). No decision states this contract (arch audit `split-facades-patch-coupled`,
+  option 1 with option 3's guard).
+
+  **Scope:** first a decision entry: a test's seam is the module that defines the name (or an
+  injected collaborator), never the re-export path; private modules import siblings, never their
+  own facade; a facade re-exports public names only. Then package by package, starting with
+  `apply_command` because SA191 edits it next: codemod `patch("<facade>.X")` targets to the defining
+  module, replace `_facade.name` lookups with direct imports, and trim the facade and its surface
+  test to public names. After that come `module_commands`, the other CLI facades, `dr_engine`, and
+  billing.
+
+  **Acceptance:** no `_*.py` module in the CLI, `dr_engine`, or billing imports its own package's
+  facade; a registered gate fails when one does, with a control case. The facade-surface tests pin
+  no private or incidental names (`re`, `Any`, `annotations`), and billing and the CLI split
+  facades gain one. Public import paths are unchanged. The full suites pass, and none of their
+  patches targets a re-export.
+
+  **Surfaces:** the CLI command facades and their private modules and tests; `dr_engine`;
+  billing's `services.py` facade and its private modules and tests; the new gate and its registry
+  row (a Track 1 surface, through the serialized merge queue); decisions.
+
+- [ ] **SA235 — Declare module UI paths in manifests and render host routes from discovery.**
+
+  **Context:** the generated `urls.py.j2` puts React shell routes for `blog/`, `listings/`,
+  `forms/`, and `crm/` before the modules' own mounts. As a result, `reverse("quickscale_blog:post_list")`
+  and `reverse("quickscale_listings:listing_list")` resolve to the shell, and the routes ignore each
+  module's `_ENABLED` switch. Module paths are also repeated as literals in the generator
+  templates, the theme's social pages (which hand-write the seam), `base.html.j2`, and orgs'
+  `TenantMiddleware` (coherence D43 `mount-path-copies`, with prior items `theme-module-presence`
+  and `module-lists-outside-members`; tech audit §9). Once `bap-web` ports, a URL move becomes a
+  one-way door, so this lands before SA191.
+
+  **Scope:** record rule 41 (D43, recommended option A) after the maintainer decides whether the
+  modules' server-rendered indexes stay reachable. Each module with a React surface declares
+  `spa_routes` in its manifest. The generator renders them after the module's own includes, and
+  only for installed and enabled modules. Project-namespace route names become
+  `quickscale_<module>:<name>`. The social seam pages render through `generator/seam.py`.
+  `TenantMiddleware` reads its prefixes from orgs' URL names. Rule 40's detectors for rules 7, 31,
+  and 37 read `generator/templates/**/*.j2` too (enforcement gap 13).
+
+  **Acceptance:** a generated-project test proves that every module root URL name resolves to its
+  own view, and a `^blog/?$` shell control fails it. No module path literal remains in the
+  generator or theme templates or in another module, and the harness rejects one in a `.j2` file.
+  `frontend.md` § URL ownership matches the code. The release notes give the user-owned `urls.py`
+  step for each moved route.
+
+  **Surfaces:** module manifests (`spa_routes`); `urls.py.j2`, the social seam pages,
+  `base.html.j2`, `generator/seam.py`; orgs' `TenantMiddleware`; the harness; `frontend.md`;
+  decisions.
+
+- [ ] **SA236 — Make settings snapshots private and guard optional senders on `is_enabled()`.**
+
+  **Context:** rule 3 forbids per-module settings readers, yet five modules (analytics, backups,
+  billing, notifications, social) each hold a frozen settings snapshot, in three shapes. Orgs reads
+  notifications' snapshot. Forms wraps its notification send in `except Exception`, which swallows
+  configuration errors. Rules 3 and 20 still describe notifications' admin row as a runtime switch,
+  but the code made it a read-only mirror of settings. Notifications also has no rollback test and
+  keeps an unused `dispatch_after_commit=False` hazard (coherence D44 `settings-snapshot-readers`,
+  D45 `optional-sender-guard`, and the prior item `write-effects-on-commit`).
+
+  **Scope:** record rules 42 and 43 (recommended option A for each) and reword rules 3 and 20.
+  Move every snapshot into a private `_settings.py` built by `from_settings()` with no defaults,
+  and keep it out of `__all__`. Orgs calls `notifications.services.is_enabled()`. Forms catches
+  only `NotificationError`. Remove the `dispatch_after_commit` parameter and add a notifications
+  rollback test.
+
+  **Acceptance:** the harness rejects a settings class outside `_settings.py` or in `__all__`,
+  another module's `Settings`/`Snapshot` attribute, and `except Exception` around another
+  module's service call, each with a control case. A rolled-back write sends no notification.
+
+  **Surfaces:** analytics, backups, billing (a Track 2 surface), notifications, social, orgs'
+  sender, and forms' `_email.py`; the harness; decisions.
+
+- [ ] **SA237 — One org-role check and root-only type-stub exemptions.**
+
+  **Context:** billing's post-lock re-check (`_subscription_mutations.py`) re-implements orgs' role
+  check with the string `"owner"` and an extra `is_active` test. Ten module `pyproject.toml` files
+  carry `[[tool.mypy.overrides]]` blocks that CI never reads. Their coverage is uneven (anymail is
+  missing from the root `mypy.ini`), and the harness exempts them with no listed exception
+  (coherence D46 `org-role-check-copies`, D47 `mypy-overrides-unread`).
+
+  **Scope:** record rules 44 and 45 (recommended option A for each). Billing calls
+  `user_has_org_role(user, org, OrgRole.OWNER)` and keeps `is_active` at the call site. Delete the
+  module overrides blocks, add any stub exemption the root needs, and remove the harness's
+  `overrides` skip.
+
+  **Acceptance:** the harness rejects an `OrganizationMembership` `role=` query outside orgs and
+  any `[tool.mypy]` table in a module, each with a control case. The root mypy run passes.
+
+  **Surfaces:** billing `_subscription_mutations.py`; module `pyproject.toml` files; root
+  `mypy.ini`; the harness (Track 3, through the queue); decisions.
+
+- [ ] **SA238 — Split-facade conventions: log channels, re-exports, and view discovery by content.**
+
+  **Context:** module splits (auth, backups, billing, notifications, orgs) name their private files
+  in three different forms, follow two re-export policies, and handle loggers two ways. Billing's
+  logger moved silently from `…billing.services` to `…billing._subscription_mutations`. Rule 19's
+  scan finds views by file name, so a third naming form would escape it (coherence D48
+  `split-facade-conventions`). SA234 sets the re-export contract this ticket applies to modules.
+
+  **Scope:** record rule 46. Private files in a split module log on the facade's channel. Module
+  facades re-export public names only, under SA234's decision, and their tests patch the defining
+  module. Rule 19 finds view code by content: a Django or DRF view subclass, or a function that
+  takes `request`.
+
+  **Acceptance:** the harness rejects `getLogger(__name__)` in a `_<name>.py` that has a facade, and
+  a view class in an unscanned file name, each with a control case. No module facade re-exports a
+  private name. The release notes list every log channel that moved since 0.88.0.
+
+  **Surfaces:** loggers and facades in auth, backups, billing (Track 2), notifications, and orgs,
+  with their tests; harness rule 19 and rule 28; release notes; decisions.
+
+- [ ] **SA239 — Derive blog and storage upload extensions from the validated image format.**
+
+  **Context:** `blog_media_upload_to` and storage's `build_upload_path` take the stored extension
+  from the client's filename. So a valid image named `x.html` is stored as `.html`, and on the
+  S3-compatible backend it is served as `text/html` from the media origin. SA226 widened who can
+  reach this from staff to any org member (tech audit `blog-upload-client-extension`, S3). The
+  severity rises to S2 if a deployment serves the bucket from the app's own site (tech audit
+  question 1).
+
+  **Acceptance:** both builders map Pillow's validated format to a fixed extension (JPEG→`.jpg`,
+  PNG→`.png`, WEBP→`.webp`, GIF→`.gif`). Blog API and storage tests upload a valid PNG named
+  `x.html` and assert that the stored name ends in `.png`. A harness clause rejects
+  `Path(<filename>).suffix` in an `upload_to` builder (tech audit tooling gap), with a control case.
+  Existing objects keep their names.
+
+  **Surfaces:** `blog/models.py`, `storage/_helpers.py` (and `validate_file_upload`'s return if the
+  format is carried), their tests; the harness (Track 3, through the queue).
+
 - [ ] **SA215 — Enforce the remaining module conventions and close the inventory.**
 
   **Context:** the twelve modules grew one at a time and follow different conventions. The drift
   items (D1–D42) are in
   [module-conventions-inventory.md](../planning/module-conventions-inventory.md), the rules in
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
-  and this ticket closes them.
+  and this ticket closes them. The seventh pass's D43–D48 (sections 42–47) are closed by SA235–SA238, not here.
 
   **Scope:** the conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
@@ -149,7 +325,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   The gate compares against a checked-in manifest of the frozen files' content hashes (it works in
   shallow CI clones and needs no tag). Before merging, confirm no module schema change shipped
-  between SA191's rebuild and the freeze. `test_module_migration_topology.py` changes from exactly
+  between SA191's rebuild and the freeze, and prove on a restored `bap-web` copy that `migrate`
+  from the frozen `0001` reproduces the FORCE-RLS parity baseline (the door is one-way). SA153's
+  schema work is written as `0002+` migrations from the start. `test_module_migration_topology.py` changes from exactly
   one `0001_initial` to a `0001_initial` followed by an ordered chain, and its `0002` canary is
   inverted.
 
