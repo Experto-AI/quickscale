@@ -1,5 +1,6 @@
 """Beta migration report planning and planned-action assembly."""
 
+from .classification import _classify_donor_files
 from .compatibility import _validate_runtime_compatibility
 from .constants import (
     DRY_RUN_REASON,
@@ -365,6 +366,7 @@ def _prepare_report_plan(report: BetaMigrationReport) -> None:
     if report.blockers or _blocked_due_to_missing_snapshots(report):
         return
     _populate_report_diffs(report)
+    _classify_donor_files(report)
     _validate_fresh_first_path_dependency_targets(report)
     _validate_identity_reconciliation(report)
     if not report.blockers:

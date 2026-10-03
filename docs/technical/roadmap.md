@@ -397,7 +397,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     config, regenerates through a staging directory and `quickscale apply --split-refs-from-branches`,
     then runs fresh-first; next are G-001 and slices (b)–(f); watch the apply confirmation input and
     the fail-closed recipient and stage guards.
-  - [ ] (b) Classification of every donor file, with unclassified files as blockers.
+  - [x] (b) Classification of every donor file, with unclassified files as blockers. Handoff: the
+    audit classifies donor files against the fresh recipient (identity-normalized) and the generator
+    emission inventory, records the inventory in the report and stdout, and blocks before mutation on
+    an unclassified or unreadable file; next are slices (c)–(f), starting with G-001; watch the
+    recognized-root allowlist — a new donor root blocks until the maintainer classifies it.
   - [ ] (c) Project-owned apps (copy, register, mount, regenerate migrations) and frontend
     dependency merge.
   - [ ] (d) The `showcase_react` design layer, its ownership entry and upgrade test, and the

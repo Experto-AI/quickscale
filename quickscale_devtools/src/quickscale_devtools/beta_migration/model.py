@@ -29,6 +29,15 @@ RuntimeFileSource = Literal["donor", "recipient"]
 IdentityValueKind = Literal["package", "slug"]
 
 
+DonorFileClass = Literal[
+    "generated-untouched",
+    "generated-customized",
+    "project-owned",
+    "module-edited",
+    "build-artifact",
+]
+
+
 IdentityReplacement = tuple[str, str, IdentityValueKind]
 
 
@@ -92,6 +101,24 @@ class DiffSummary:
     donor_only: list[str] = field(default_factory=list)
     recipient_only: list[str] = field(default_factory=list)
     shared: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class DonorFileClassification:
+    """One migration class per donor file for the pre-mutation audit.
+
+    ``build_artifacts`` records the top-most skipped artifact paths (a pruned
+    directory stands for the tree beneath it, so dependency installs do not
+    enumerate as files). ``unclassified`` holds every donor file no class
+    matched; a non-empty list blocks the run before mutation.
+    """
+
+    generated_untouched: list[str] = field(default_factory=list)
+    generated_customized: list[str] = field(default_factory=list)
+    project_owned: list[str] = field(default_factory=list)
+    module_edited: list[str] = field(default_factory=list)
+    build_artifacts: list[str] = field(default_factory=list)
+    unclassified: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -178,6 +205,7 @@ class BetaMigrationReport:
     identity_reconciliation_required: bool = False
     module_diff: DiffSummary | None = None
     path_dependency_diff: DiffSummary | None = None
+    donor_file_classification: DonorFileClassification | None = None
     runtime_provenance: RuntimeFileProvenance | None = None
     preflight_checks: list[PreflightCheck] = field(default_factory=list)
     planned_actions: list[PlannedAction] = field(default_factory=list)

@@ -118,6 +118,17 @@ def render_report_summary(report: BetaMigrationReport) -> str:
         f"Blockers: {len(report.blockers)}",
     ]
 
+    if report.donor_file_classification is not None:
+        classification = report.donor_file_classification
+        lines.append(
+            "Donor file classification: "
+            f"{len(classification.generated_untouched)} generated-untouched, "
+            f"{len(classification.generated_customized)} generated-customized, "
+            f"{len(classification.project_owned)} project-owned, "
+            f"{len(classification.module_edited)} module-edited, "
+            f"{len(classification.build_artifacts)} build artifacts"
+        )
+
     if report.written_report_path:
         lines.append(f"Report file: {report.written_report_path}")
 

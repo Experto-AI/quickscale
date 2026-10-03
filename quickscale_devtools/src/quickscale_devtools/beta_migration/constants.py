@@ -124,6 +124,66 @@ FRESH_FIRST_PROTECTED_PACKAGE_FILES = (
 FRESH_FIRST_PROTECTED_ROOT_FILES = ("railway.json",)
 
 
+# ---- Donor-file classification inventory (SA214 slice b) ----
+# Every donor file lands in exactly one migration class. Build artifacts are
+# never carried between trees and are pruned from the donor walk; the tuples
+# below are path rules, not copy targets.
+
+DONOR_ARTIFACT_DIR_COMPONENTS: tuple[str, ...] = (
+    ".cache",
+    ".git",
+    ".hg",
+    ".idea",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pycache__",
+    "htmlcov",
+    "node_modules",
+    "venv",
+)
+
+DONOR_ARTIFACT_ROOT_DIRS: tuple[str, ...] = (
+    ".quickscale",
+    "dist",
+    "media",
+    "staticfiles",
+)
+
+DONOR_ARTIFACT_PATH_PREFIXES: tuple[str, ...] = ("frontend/dist",)
+
+DONOR_ARTIFACT_NAMES: tuple[str, ...] = (
+    ".DS_Store",
+    ".coverage",
+    ".env",
+    "Thumbs.db",
+)
+
+DONOR_ARTIFACT_ROOT_FILES: tuple[str, ...] = ("poetry.lock",)
+
+DONOR_ARTIFACT_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo")
+
+DONOR_ENV_FILE_PREFIX = ".env."
+
+DONOR_ENV_FILE_EXEMPT = ".env.example"
+
+DONOR_RECOGNIZED_PROJECT_DIRS: tuple[str, ...] = (
+    ".github",
+    "db",
+    "frontend",
+    "scripts",
+    "static",
+    "templates",
+    "tests",
+)
+
+DONOR_RECOGNIZED_PROJECT_ROOT_FILES: tuple[str, ...] = ("quickscale.yml",)
+
+
 INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     # ---- Project-level user-owned files ----
     # Root-level generated files that are one-time scaffold and

@@ -234,6 +234,31 @@ _IDENTITY_LINE_RULES: dict[
             ("package",),
         ),
     ),
+    # Symbols and lines that carry generated identity in the remaining
+    # emitted package files (used by donor-file classification comparison).
+    "context_processors.py": ((re.compile(r"Context processors for\s"), ("slug",)),),
+    "views.py": ((re.compile(r"Views for\s"), ("slug",)),),
+    "urls.py": (
+        (re.compile(r"URL configuration for\s"), ("slug",)),
+        (
+            re.compile(
+                r"from\s+\S+\.(?:urls_modules|views)\s+import|handler404|handler500"
+            ),
+            ("package",),
+        ),
+    ),
+    "settings/production.py": (
+        (re.compile(r"Production settings for\s"), ("slug",)),
+        (
+            re.compile(r"\bDEFAULT_FROM_EMAIL\b|\bSERVER_EMAIL\b|\bADMIN_EMAIL\b"),
+            ("slug",),
+        ),
+        (re.compile(r'default="[^"]*@'), ("slug",)),
+        (
+            re.compile(r'^\s*["\'][A-Za-z_][A-Za-z0-9_]*["\']\s*:\s*\{\s*$'),
+            ("package",),
+        ),
+    ),
 }
 
 
