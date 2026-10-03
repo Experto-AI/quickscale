@@ -16,8 +16,9 @@ Exit codes
 
 Output
 ------
-Atomically writes ``.quickscale/quality_baseline_policy.json`` with the full
-comparison result, violation list, waiver evaluation, and final verdict.
+Atomically writes ``quality_baseline_policy.json`` under
+``QUALITY_OUTPUT_DIR`` (default ``.quickscale/``) with the full comparison
+result, violation list, waiver evaluation, and final verdict.
 """
 
 from __future__ import annotations
@@ -177,6 +178,7 @@ def _parse_entry_key(entry_key: str) -> tuple[str, str]:
 
     - ``dead_code:allowed_messages:<msg>:multiplicity``
     - ``complexity:<safe-repo-path>::<nonempty-symbol>``
+    - ``file_length:<safe-repo-path>``
     - ``duplication:allowed_blocks``
 
     Returns ``(section, entry_key)`` where *section* is the validated prefix.
@@ -236,6 +238,22 @@ def _parse_entry_key(entry_key: str) -> tuple[str, str]:
         )
         return ("complexity", entry_key)
 
+    if entry_key.startswith("file_length:"):
+        remainder = entry_key[len("file_length:") :]
+        if not remainder:
+            raise ValueError(f"file_length entry_key must have nonempty path: {entry_key!r}")
+        # Must be exactly ``<safe-repo-path>`` — no extra colons
+        if ":" in remainder:
+            raise ValueError(
+                f"file_length entry_key must not contain extra ':' after prefix: {entry_key!r}"
+            )
+        _validate_repo_relative_path(
+            remainder,
+            "waiver_ledger",
+            f"entry_key path component in {entry_key!r}",
+        )
+        return ("file_length", entry_key)
+
     if entry_key == "duplication:allowed_blocks":
         return ("duplication", entry_key)
 
@@ -249,7 +267,9 @@ def _parse_entry_key(entry_key: str) -> tuple[str, str]:
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_BASELINE = _REPO_ROOT / "scripts" / "quality_baseline.json"
 _DEFAULT_WAIVERS = _REPO_ROOT / "scripts" / "quality_waivers.json"
-_OUTPUT_DIR = _REPO_ROOT / ".quickscale"
+# SA231: check_quality.sh exports this so both tools share one artifact dir and
+# tests can point a run outside the repository.
+_OUTPUT_DIR = Path(os.environ.get("QUALITY_OUTPUT_DIR", str(_REPO_ROOT / ".quickscale")))
 _OUTPUT_FILE = _OUTPUT_DIR / "quality_baseline_policy.json"
 _CANONICAL_BASELINE_REPO_PATH = "scripts/quality_baseline.json"
 
@@ -513,12 +533,69 @@ def _validate_baseline_structure(
             )
         indexes[f"complexity:{ck}"] = int(mc)
 
-    # ---- large_files: RETIRED (SA125-DEC-001) ----
-    # A pre-SA125 baseline (e.g. the merge-base side of the comparison) may still
-    # carry the section. It is ignored, never indexed, so no LF key can enter the
-    # monotonicity index from either side and no LF-RISE can ever be computed.
-    # Rejecting a resurrected section is check_quality.sh's job, on the live
-    # baseline only -- doing it here would break every run until the parent ages out.
+    # ---- file_length (SA231) ----
+    # The section is optional so pre-SA231 blobs stay valid: an absent section
+    # contributes no keys, and any key present only in the current baseline is
+    # an increase from 0 that needs a waiver.  Legacy ``large_files`` stays
+    # retired and is never indexed.
+    fl = data.get("file_length")
+    if fl is not None:
+        if not isinstance(fl, dict):
+            raise SchemaValidationError(
+                source,
+                "file_length",
+                f"file_length must be a dict (got {type(fl).__name__})",
+            )
+        fl_files = fl.get("allowed_files")
+        if not isinstance(fl_files, dict):
+            raise SchemaValidationError(
+                source,
+                "file_length.allowed_files",
+                f"file_length.allowed_files must be a dict "
+                f"(got {type(fl_files).__name__ if fl_files is not None else 'None'})",
+            )
+        for fp, entry in fl_files.items():
+            if not isinstance(fp, str) or not fp:
+                raise SchemaValidationError(
+                    source,
+                    "file_length.allowed_files",
+                    "file_length.allowed_files key must be a non-empty string",
+                )
+            # CR-003: validate repo-relative path for file_length keys
+            _validate_repo_relative_path(
+                fp,
+                source,
+                f"file_length.allowed_files[{fp!r}]",
+            )
+            if not isinstance(entry, dict):
+                raise SchemaValidationError(
+                    source,
+                    f"file_length.allowed_files[{fp!r}]",
+                    f"file_length.allowed_files[{fp!r}] must be a dict "
+                    f"(got {type(entry).__name__})",
+                )
+            ml = entry.get("max_lines")
+            if not _is_strict_int(ml) or ml < 0:
+                raise SchemaValidationError(
+                    source,
+                    f"file_length.allowed_files[{fp!r}].max_lines",
+                    f"file_length.allowed_files[{fp!r}].max_lines "
+                    f"must be a non-negative integer "
+                    f"(got {type(ml).__name__ if ml is not None else 'None'})",
+                )
+            reason = entry.get("reason")
+            if not isinstance(reason, str) or not reason:
+                raise SchemaValidationError(
+                    source,
+                    f"file_length.allowed_files[{fp!r}].reason",
+                    f"file_length.allowed_files[{fp!r}].reason must be a non-empty string",
+                )
+            _validate_free_text(
+                reason,
+                source,
+                f"file_length.allowed_files[{fp!r}].reason",
+            )
+            indexes[f"file_length:{fp}"] = int(ml)
 
     # ---- duplication ----
     dup = data.get("duplication")
@@ -773,12 +850,14 @@ def _is_strict_number(value: object) -> bool:
 _SECTION_ERROR_CODES: dict[str, str] = {
     "dead_code": "DC-MULT",
     "complexity": "CC-RISE",
+    "file_length": "FL-RISE",
     "duplication": "DP-RISE",
 }
 
 _SECTION_NAMES: dict[str, str] = {
     "dead_code": "dead_code",
     "complexity": "complexity",
+    "file_length": "file_length",
     "duplication": "duplication",
 }
 
@@ -809,6 +888,9 @@ def _compare_indexes(
             elif ck.startswith("complexity:"):
                 section = "complexity"
                 error_code = "CC-RISE"
+            elif ck.startswith("file_length:"):
+                section = "file_length"
+                error_code = "FL-RISE"
             elif ck.startswith("duplication:"):
                 section = "duplication"
                 error_code = "DP-RISE"
@@ -875,6 +957,8 @@ def _evaluate_violations(
             return "dead_code", "DC-MULT"
         if ck.startswith("complexity:"):
             return "complexity", "CC-RISE"
+        if ck.startswith("file_length:"):
+            return "file_length", "FL-RISE"
         if ck.startswith("duplication:"):
             return "duplication", "DP-RISE"
         return "unknown", "UNKNOWN"
@@ -1549,7 +1633,7 @@ def _main_impl(argv: list[str] | None = None) -> tuple[int, dict[str, Any] | Non
 
 
 def _write_output(data: dict[str, Any]) -> None:
-    """Atomically write the output dict to ``.quickscale/quality_baseline_policy.json``."""
+    """Atomically write the output dict under ``QUALITY_OUTPUT_DIR``."""
     _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     content = json.dumps(data, indent=2, default=str) + "\n"
     fd, tmp_path = tempfile.mkstemp(

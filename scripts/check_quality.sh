@@ -14,7 +14,8 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
 
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-OUTPUT_DIR="$ROOT/.quickscale"
+OUTPUT_DIR="${QUALITY_OUTPUT_DIR:-$ROOT/.quickscale}"
+export QUALITY_OUTPUT_DIR="$OUTPUT_DIR"
 JSON_OUTPUT="$OUTPUT_DIR/quality_report.json"
 MD_OUTPUT="$OUTPUT_DIR/quality_report.md"
 BASELINE_FILE="${QUALITY_BASELINE_FILE:-$ROOT/scripts/quality_baseline.json}"
@@ -355,7 +356,10 @@ analyze_duplication() {
     # Get module paths
     local module_paths=$(get_module_paths)
 
-    # Run pylint with only duplicate-code check enabled
+    # Run pylint with only duplicate-code check enabled.
+    # pylint exits 8 when it reports refactor findings (which includes every
+    # R0801 block), so its output must be captured independently of the exit
+    # status; stdout is the JSON document.
     local pylint_output
     pylint_output=$(poetry run pylint \
         $module_paths \
@@ -365,22 +369,21 @@ analyze_duplication() {
         --ignore-comments=yes \
         --ignore-docstrings=yes \
         --ignore-imports=yes \
-        --output-format=json 2>&1 || echo "[]")
+        --output-format=json 2>/dev/null || true)
 
     echo "$pylint_output" > "$OUTPUT_DIR/duplication.json"
 
-    # Count duplication blocks
+    # Count duplication blocks; unparseable output is a gate error, never zero
     local dup_count
-    dup_count=$(echo "$pylint_output" | python3 -c "
+    if ! dup_count=$(echo "$pylint_output" | python3 -c "
 import sys, json
-try:
-    data = json.load(sys.stdin)
-    # Filter for R0801 (duplicate-code)
-    count = len([d for d in data if d.get('message-id') == 'R0801'])
-    print(count)
-except:
-    print(0)
-" 2>/dev/null || echo "0")
+data = json.load(sys.stdin)
+count = len([d for d in data if d.get('message-id') == 'R0801'])
+print(count)
+" 2>/dev/null); then
+        print_error "pylint duplication output is not valid JSON — refusing to treat it as zero findings"
+        exit 1
+    fi
 
     echo "$dup_count" > "$OUTPUT_DIR/duplication_count.txt"
 
@@ -576,6 +579,13 @@ def validate_baseline(data):
             raise ValueError(
                 f"complexity.allowed_functions[{key}] must match file::symbol ({expected_key})"
             )
+        # SA231: a function at or above the critical CC threshold may be
+        # accepted only when the baseline states why it is listed.
+        if max_complexity >= error_complexity_threshold:
+            require_string(
+                item.get("reason"),
+                f"complexity.allowed_functions[{key}].reason",
+            )
         allowed_functions[key] = {
             "file": file_path,
             "symbol": symbol,
@@ -583,9 +593,31 @@ def validate_baseline(data):
             "max_complexity": max_complexity,
         }
 
-    # SA125-DEC-001: per-file line ceilings are retired. Legacy/extra
-    # large_files data is intentionally ignored; only the surviving sections
-    # below participate in baseline comparisons or exit status.
+    # SA231: file length is ratcheted for files at or above the 800-line
+    # error threshold; each accepted file carries the reason it is listed.
+    file_length = baseline.get("file_length")
+    allowed_files = {}
+    if file_length is not None:
+        file_length = require_mapping(file_length, "file_length")
+        allowed_files_raw = require_mapping(
+            file_length.get("allowed_files"),
+            "file_length.allowed_files",
+        )
+        for key, entry in allowed_files_raw.items():
+            file_path = require_string(key, "file_length.allowed_files key")
+            item = require_mapping(entry, f"file_length.allowed_files[{key}]")
+            max_lines = require_non_negative_int(
+                item.get("max_lines"),
+                f"file_length.allowed_files[{key}].max_lines",
+            )
+            reason = require_string(
+                item.get("reason"),
+                f"file_length.allowed_files[{key}].reason",
+            )
+            allowed_files[file_path] = {
+                "max_lines": max_lines,
+                "reason": reason,
+            }
 
     duplication = require_mapping(baseline.get("duplication"), "duplication")
     allowed_blocks = require_non_negative_int(
@@ -599,15 +631,18 @@ def validate_baseline(data):
         raise ValueError(
             "duplication.allowed_block_identities must be a list of non-empty strings"
         )
-    if len(allowed_block_identities) != allowed_blocks:
+    if "allowed_block_identities" in duplication and (
+        len(allowed_block_identities) != allowed_blocks
+    ):
         raise ValueError(
-            "duplication.allowed_block_identities must list each allowed duplication block"
+            "duplication.allowed_block_identities must list each allowed duplication block when present"
         )
 
     return {
         "schema_version": schema_version,
         "dead_code": {"allowed_messages": allowed_messages},
         "complexity": {"allowed_functions": allowed_functions},
+        "file_length": {"allowed_files": allowed_files},
         "duplication": {
             "allowed_blocks": allowed_blocks,
             "allowed_block_identities": allowed_block_identities,
@@ -841,24 +876,74 @@ if baseline_data is not None:
         resolved_entry["key"] = key
         complexity_resolved.append(resolved_entry)
 
-    # SA125-DEC-001: large files are reported advisorily but never gate.
+    # SA231: files at or above the 800-line error threshold are ratcheted.
+    # A file may sit at or above the threshold only while the baseline lists
+    # it with a reason and the measured size stays within its listed ceiling.
     large_file_regressions = []
-    large_files_resolved = []
-
-    allowed_duplication_blocks = baseline_data["duplication"]["allowed_blocks"]
-    remaining_allowed_duplication_blocks = Counter(
-        baseline_data["duplication"]["allowed_block_identities"]
-    )
-    duplication_regressions = []
-    for block in matching_duplication_blocks:
-        identity = str(block.get("identity", "")).strip()
-        if remaining_allowed_duplication_blocks.get(identity, 0) > 0:
-            remaining_allowed_duplication_blocks[identity] -= 1
+    for file_path, actual_entry in actual_large_files.items():
+        if actual_entry["lines"] < large_file_error_threshold:
+            continue
+        baseline_entry = baseline_data["file_length"]["allowed_files"].get(file_path)
+        if baseline_entry is None:
+            allowed_max_lines = None
+            regression_type = "new"
+        elif actual_entry["lines"] > baseline_entry["max_lines"]:
+            allowed_max_lines = baseline_entry["max_lines"]
+            regression_type = "grown"
+        else:
             continue
 
-        regression = dict(block)
-        regression["severity"] = "warning"
-        duplication_regressions.append(regression)
+        regression = dict(actual_entry)
+        regression["severity"] = (
+            "critical"
+            if actual_entry["lines"] >= large_file_error_threshold
+            else "warning"
+        )
+        regression["regression_type"] = regression_type
+        regression["allowed_max_lines"] = allowed_max_lines
+        if allowed_max_lines is not None:
+            regression["delta"] = actual_entry["lines"] - allowed_max_lines
+        large_file_regressions.append(regression)
+
+    large_files_resolved = []
+    for file_path, baseline_entry in baseline_data["file_length"]["allowed_files"].items():
+        actual_entry = actual_large_files.get(file_path)
+        if actual_entry is not None and actual_entry["lines"] >= large_file_error_threshold:
+            continue
+        large_files_resolved.append(
+            {
+                "file": file_path,
+                "max_lines": baseline_entry["max_lines"],
+            }
+        )
+
+    allowed_duplication_blocks = baseline_data["duplication"]["allowed_blocks"]
+    allowed_duplication_identities = baseline_data["duplication"][
+        "allowed_block_identities"
+    ]
+    duplication_regressions = []
+    if allowed_duplication_identities:
+        # Identity-matched acceptance: each listed block is accepted once.
+        remaining_allowed_duplication_blocks = Counter(
+            allowed_duplication_identities
+        )
+        for block in matching_duplication_blocks:
+            identity = str(block.get("identity", "")).strip()
+            if remaining_allowed_duplication_blocks.get(identity, 0) > 0:
+                remaining_allowed_duplication_blocks[identity] -= 1
+                continue
+
+            regression = dict(block)
+            regression["severity"] = "warning"
+            duplication_regressions.append(regression)
+    else:
+        # Count-ceiling acceptance: pylint's R0801 pairing is not stable across
+        # runs, so a block list without identities accepts up to the ceiling
+        # and regresses only when the observed count exceeds it.
+        for block in matching_duplication_blocks[allowed_duplication_blocks:]:
+            regression = dict(block)
+            regression["severity"] = "warning"
+            duplication_regressions.append(regression)
 
     complexity_regressions.sort(key=regression_sort_key)
     large_file_regressions.sort(key=regression_sort_key)
@@ -866,6 +951,7 @@ if baseline_data is not None:
     warning_regressions = (
         len(new_dead_code)
         + sum(1 for entry in complexity_regressions if entry["severity"] == "warning")
+        + sum(1 for entry in large_file_regressions if entry["severity"] == "warning")
         + len(duplication_regressions)
     )
     critical_regressions = sum(
@@ -884,9 +970,19 @@ if baseline_data is not None:
                 for entry in baseline_data["complexity"]["allowed_functions"].values()
                 if entry["max_complexity"] >= error_complexity_threshold
             ),
-            # SA125-DEC-001: no accepted large-file ceilings exist any more.
-            "large_files_warning": 0,
-            "large_files_error": 0,
+            # SA231: accepted file-length ceilings by threshold band.
+            "large_files_warning": sum(
+                1
+                for entry in baseline_data["file_length"]["allowed_files"].values()
+                if large_file_warning_threshold
+                <= entry["max_lines"]
+                < large_file_error_threshold
+            ),
+            "large_files_error": sum(
+                1
+                for entry in baseline_data["file_length"]["allowed_files"].values()
+                if entry["max_lines"] >= large_file_error_threshold
+            ),
             "duplication_blocks": allowed_duplication_blocks,
         },
     }
@@ -1103,6 +1199,15 @@ else:
             else:
                 lines.append(
                     f"- [{entry['severity']}] Complexity: {entry['file']}::{entry['symbol']} is {entry['complexity']} (baseline {entry['allowed_max_complexity']})"
+                )
+        for entry in regressions["large_files"]["new_or_grown"]:
+            if entry["allowed_max_lines"] is None:
+                lines.append(
+                    f"- [{entry['severity']}] Large file: {entry['file']} is {entry['lines']} lines (new at or above {large_file_error_threshold})"
+                )
+            else:
+                lines.append(
+                    f"- [{entry['severity']}] Large file: {entry['file']} is {entry['lines']} lines (baseline {entry['allowed_max_lines']})"
                 )
         for entry in regressions["duplication"]["new_blocks"]:
             path = entry.get("path") or "unknown-path"

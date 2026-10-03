@@ -127,8 +127,9 @@ or Makefile/CI changes to conceal a red gate. Assign one owning ticket, repair
 within its authorized scope, and rerun. Other
 tracks may continue implementation and unexcluded validation provisionally, but
 no other ticket completes merge-back until the owning repair is green. Preserve
-quality monotonicity: no additional warning or critical regressions, no raised
-complexity ceilings, and no restored file-line ceilings. Findings outside the
+quality monotonicity: no unwaivered warning or critical regressions and no
+unwaivered ceiling increase; a file at or above 800 lines is listed in the
+baseline with its reason and `max_lines` ceiling. Findings outside the
 delivery's scope receive their own ticket.
 
 Long commands must produce durable logs and an actual completion exit code. Run
@@ -217,7 +218,7 @@ $(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
 
 The scripts directory remains outside `.coveragerc`; the product coverage source list
 and `fail_under = 90` are unchanged. The hosted CI job set also contains seven
-separately justified unowned jobs, for twenty-three jobs total. Fifteen registered gates run
+separately justified unowned jobs, for twenty-three jobs total. Sixteen registered gates run
 locally across stages 3–7. `isolation-conformance`
 and the reusable `bypassrls` suite are hosted-unowned jobs: Make exposes both runners for local verification,
 but local execution uses the owned PostgreSQL 18 lifecycle described by

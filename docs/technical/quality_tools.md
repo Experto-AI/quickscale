@@ -61,16 +61,17 @@ quickscale_core/src/models.py:15: unused import 'datetime' (100% confidence)
 }
 ```
 
-### 3. Large File Detection (Advisory)
+### 3. Large File Detection (Gated at 800 Lines)
 
 Identifies files that may benefit from splitting:
-- **Warning:** 500-799 lines
-- **Critical:** >=800 lines
+- **Warning:** 500-799 lines — advisory
+- **Critical:** >=800 lines — gated
 
-These findings are advisory only. They remain in the raw quality report to
-identify files that may benefit from splitting, but they are not baseline
-entries, monotonicity comparisons, regressions, or exit-status inputs. A file
-of any size cannot block `make quality` through line count alone.
+Files below 800 lines are advisory diagnostics only. A file at or above 800
+lines must be listed in the baseline's `file_length` section with a `reason`
+and a `max_lines` ceiling; an unlisted file or one grown past its ceiling is a
+critical regression that fails the gate. The ratchet is shrink-only: removing
+the file or bringing it below 800 lines resolves the entry.
 
 **Why it matters:**
 - Large files are harder to understand and navigate
@@ -176,13 +177,13 @@ The quality analysis script complements existing tools:
 |---------|---------|-------------|
 | `make lint` | Format + basic linting (ruff) | Before every commit |
 | `make ci` | Primary local development checks (lint + typecheck + unit tests; integration when PostgreSQL available) | Before push to GitHub |
-| `make quality` | Deep quality analysis (dead code, complexity, duplication) + baseline monotonicity gate | Weekly / before major releases |
+| `make quality` | Deep quality analysis (dead code, complexity, duplication, file length) + baseline monotonicity gate; a registered gate in `make ci` | Every local CI run, or directly for a quality-only pass |
 
 ## Workflow Recommendations
 
 1. **Daily development:** Use `make lint` for quick fixes
 2. **Before push:** Run `make ci` to run primary local development checks before pushing
-3. **Weekly health check:** Run `make quality` to catch technical debt early
+3. **Quality-only pass:** Run `make quality` to check the ratchet without the rest of local CI
 4. **Before releases:** Review quality reports and address critical issues
 
 ## Interpreting Results
@@ -198,9 +199,13 @@ The quality analysis script complements existing tools:
 - Confirmed dead code (not framework-related)
 
 **Monitor but don't block:**
-- Files >=500 lines (advisory large-file diagnostic)
+- Files 500-799 lines (advisory large-file diagnostic)
 - Dead code with <80% confidence
 - Functions with CC 6-10
+
+**Gated:** files at or above 800 lines and functions at or above CC 11 must be
+listed in the baseline with a ceiling (and a reason, for a critical CC entry or
+any `file_length` entry); a new or grown finding fails `make quality`.
 
 ## Baseline Monotonicity Gate (SA121)
 
@@ -231,11 +236,13 @@ Every increase in the following retained baseline values requires a waiver:
 |---------|-----|----------------|
 | `dead_code` | Per normalized message | Occurrence count (multiplicity) |
 | `complexity` | Per `path::symbol` key | `max_complexity` |
+| `file_length` | Per repo-relative path | `max_lines` |
 | `duplication` | Global | `allowed_blocks` |
 
-Per-file line counts are not part of the comparison scope. The large-file
-analyzer remains diagnostic-only and does not create a waiver or regression
-entry.
+The `file_length` section is optional so pre-SA231 merge-base blobs stay valid:
+an absent section contributes no keys, and a key present only on the current
+side is an increase from 0 that needs a waiver. Legacy `large_files` data is
+never indexed.
 
 A missing base key is treated as 0 (any current value > 0 is an increase).
 Deleted, reduced, or unchanged entries pass without action.  A rename is
@@ -259,7 +266,16 @@ required unless marked optional; extra fields are tolerated but ignored.
         "file": "canonical/repo/relative/path.py",
         "symbol": "function_or_method_name",
         "type": "function|method|class",
-        "max_complexity": 11
+        "max_complexity": 11,
+        "reason": "required when max_complexity >= 21"
+      }
+    }
+  },
+  "file_length": {
+    "allowed_files": {
+      "canonical/repo/relative/path.py": {
+        "max_lines": 800,
+        "reason": "why this file is listed"
       }
     }
   },
@@ -283,10 +299,21 @@ Field-level rules:
   (strict non-negative non-bool `int`).  Paths are validated by a strict
   canonical-path checker that rejects absolute paths, Windows
   backslashes/drive letters, empty/dot/dotdot segments, repeated separators,
-  leading/trailing whitespace, and surrogate/control characters.
+  leading/trailing whitespace, and surrogate/control characters.  A `reason`
+  (non-empty string) is required when `max_complexity` is at or above the
+  critical threshold (21); it is optional below it.
+- **`file_length.allowed_files`** — optional section; a dict mapping each
+  accepted file's canonical repo-relative path to a record with `max_lines`
+  (strict non-negative non-bool `int`) and `reason` (non-empty string).  The
+  section is validated when present; a missing section means no accepted files.
 - **`duplication.allowed_blocks`** — strict non-negative non-bool `int`.
 - **`duplication.allowed_block_identities`** — optional; when present, a list
-  of non-empty strings whose length exactly equals `allowed_blocks`.
+  of non-empty strings whose length exactly equals `allowed_blocks`, and each
+  observed block is accepted once by identity.  When absent, the ceiling is a
+  count ceiling: up to `allowed_blocks` observed blocks are accepted and a
+  higher observed count is a regression.  Count-ceiling acceptance is the
+  stable form because pylint's R0801 block pairing and line ranges are not
+  deterministic across runs.
 
 The helper builds validated ceiling indexes (`dict[str, int]` keyed by
 canonical key) from the merge-base and current baselines after structural
@@ -352,6 +379,8 @@ key that does not match its section's strict canonical syntax:
   separator between a validated repo-relative path and a non-empty symbol.
   Extra or missing separators are rejected.  The path component is validated
   by the same ``_validate_repo_relative_path`` used during baseline loading.
+- ``file_length:<safe-repo-path>`` — exactly one validated repo-relative path
+  after the prefix; extra colons are rejected.
 - ``duplication:allowed_blocks`` — exact literal match only.
 
 Waivers whose ``entry_key`` fails parsing are assigned the ``malformed``
@@ -530,6 +559,11 @@ All tools are configured in root-level files:
 - **vulture:** `.vulture.toml`
 - **pylint:** `pyproject.toml` (tool.pylint sections)
 - **radon:** CLI arguments in script (no config file)
+
+`QUALITY_OUTPUT_DIR` overrides the artifact directory (default
+`.quickscale/`); `check_quality.sh` exports it to the monotonicity helper so
+both tools share one directory. The test suite points each run at a temporary
+directory, so tests never write repository artifacts.
 
 Adjust thresholds based on team preferences and project maturity.
 

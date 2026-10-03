@@ -409,6 +409,7 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
         "check-workflow-security": "Running workflow security gate",
         "check-secret-scanning": "Running secret scanning gate",
         "check-module-conventions": "Running module conventions conformance check",
+        "quality": "Running quality ratchet gate",
     }
     replay_markers = [
         "[2/11] Running linters",

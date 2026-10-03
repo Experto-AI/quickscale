@@ -1419,7 +1419,7 @@ _BASH_RESULT_MARKER = "__SA128B_RESULT__"
 _BASH_PROCESS_GROUP_SETTLE_SECONDS = 0.05
 _BASH_PROCESS_GROUP_CLEANUP_SECONDS = 5.0
 _SHELL_GATE_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
-_OBSERVED_GATE_NAMES: frozenset[str] = frozenset({"frontend-proof", "smoke-install"})
+_OBSERVED_GATE_NAMES: frozenset[str] = frozenset({"frontend-proof", "smoke-install", "quality"})
 _BASH_ARGV_HEADER_RE = re.compile(r"^ARGV:([0-9]+)$")
 
 

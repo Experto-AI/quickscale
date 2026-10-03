@@ -2224,9 +2224,10 @@ re-obtained unconditionally before anything ships.
 
 **The compensating local step.** `make ci` runs the registered gate set locally with its own
 PostgreSQL lifecycle; `make ci-e2e` adds the E2E and privileged lanes. Parity between the local,
-hosted, and publish sets is machine-checked against `scripts/gate_registry.json`, so the local
-run is not a subset chosen by hand — it is the same set the hosted context would run. A partial
-run announces itself as `PARTIAL CI — NOT a full pass` and does not count.
+hosted, and publish sets is machine-checked against `scripts/gate_registry.json`, so each context
+runs its declared set rather than a hand-picked subset — the registry records per-gate context
+membership, including the local-only quality ratchet and the hosted-only commit-testimony gate. A
+partial run announces itself as `PARTIAL CI — NOT a full pass` and does not count.
 
 **Where coverage is mandatory rather than discretionary.** The publish quality check requires
 `QS_E2E_INTEGRATION_REF=<integration-branch> make ci-e2e` on the exact bytes being published
@@ -2275,11 +2276,13 @@ authority — the merge-base blob from Git — so the growth stays visible.
 - ❌ No migration or other historical artifact may be allowlisted, threshold-
   exempted, or gate-exempted to avoid this check (see
   §[Migration-Squash Decision](#migration-squash-decision) rule 5)
-- ✅ Per-file line ceilings (`large_files.*.max_lines`) are retired; see
-  [File-Size Metric Policy](#file-size-metric-policy). The large-file analyzer
-  may report advisory diagnostics, but line counts are not baseline entries,
-  monotonicity keys, waiver keys, regressions, or gate exit-status inputs. The
-  retained baseline sections are `dead_code`, `complexity`, and `duplication`.
+- ✅ Per-file line ceilings are part of the ratchet again, under the
+  `file_length` section (SA231): every entry carries its `max_lines` ceiling
+  and the reason it is listed. Line counts are baseline entries, monotonicity
+  keys, waiver keys, regressions, and gate exit-status inputs for files at or
+  above 800 lines; the retired `large_files` name stays ignored. See
+  [File-Size Metric Policy](#file-size-metric-policy). The baseline sections
+  are `dead_code`, `complexity`, `file_length`, and `duplication`.
 
 **Specification** — the baseline and waiver-ledger schemas, the waiver state
 machine, the canonical diagnostic record, the deterministic error envelope,
@@ -2304,11 +2307,19 @@ ceiling-index construction, and merge-base resolution precedence are owned by
 
 ### File-Size Metric Policy {#file-size-metric-policy}
 
-**Rule:** Per-file line ceilings are retired from the blocking quality policy.
-The large-file analyzer may continue to report advisory diagnostics, but line
-counts are not baseline entries, monotonicity keys, waiver keys, regressions, or
-gate exit-status inputs. The retained baseline sections are `dead_code`,
-`complexity`, and `duplication`.
+**Rule:** Files at or above 800 lines are gated by the quality ratchet. The
+baseline's `file_length` section lists each accepted file with its `max_lines`
+ceiling and the reason it is listed; `make quality` fails when a file at or
+above 800 lines is unlisted or grows past its ceiling, and the merge-base
+monotonicity gate treats each ceiling as a ratchet key. Files below 800 lines
+remain advisory diagnostics. The retired `large_files.max_lines` name is never
+indexed.
+
+**One-time re-baseline (SA231).** The closing batch re-tightened the baseline
+to the measured tree and recorded each increase against the merge base as a
+time-bounded waiver expiring 2027-03-31. From that baseline on the ratchet is
+shrink-only: a new or worsened finding fails `make quality` until it is fixed
+or a new decision waives it.
 
 **Related docs:** [Quality Baseline Monotonicity Gate](#quality-baseline-monotonicity) |
 [roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)

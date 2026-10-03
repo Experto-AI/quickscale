@@ -366,6 +366,21 @@
             },
             "depends_on": [],
             "trigger_inputs": []
+        },
+        {
+            "id": "quality",
+            "description": "Quality ratchet: no new or worsened dead code, complexity, duplication, or file at or above 800 lines against the scripts/quality_baseline.json baseline",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel"
+            ],
+            "bindings": {
+                "make_target": "quality",
+                "ci_job": null,
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": []
         }
     ]
 }
