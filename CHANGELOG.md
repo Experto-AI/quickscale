@@ -363,9 +363,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     secret from projected Django settings that `quickscale apply` renders from each module's
     `_env_var` option, and a switched-on module whose required secret is empty fails startup.
   - **Module conventions are enforced by a registered gate.** `make check-module-conventions` runs
-    one conformance check over every module manifest and module source tree; each covered rule has a
-    control case proving it rejects a violation, and rules whose convention work is still pending
-    are recorded in the check itself.
+    one conformance check over every module manifest and module source tree; every statically
+    checkable convention rule has a control case proving it rejects a violation, and the rules
+    enforced outside it — write-effect rollback tests, the user-FK gate, and `apply`'s wiring
+    check — are named in the check itself.
   - **Manifest loading keeps its import surface while the implementation splits.** The module
     manifest loader stays the import path every caller uses and re-exports its full former surface,
     while its parsing logic lives in focused sibling modules.
@@ -456,6 +457,23 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     paths map Pillow's validated format to a fixed extension (JPEG→`.jpg`, PNG→`.png`,
     WEBP→`.webp`, GIF→`.gif`), so a valid image named with another extension is stored and served
     under its image type instead of the client's suffix.
+  - **Module settings snapshots stay private and optional senders fail loudly.** Each module builds
+    its settings snapshot in a private `_settings.py` with `from_settings()` and no defaults, keeps
+    it out of the public service surface, and an optional sender guards with `is_enabled()` and
+    catches only the module's own error class; notifications' `send_notification` no longer accepts
+    `dispatch_after_commit`.
+  - **Module React shell routes follow discovery.** A module's React page routes are declared in
+    its manifest and rendered after the module's own URL includes only while the module is
+    installed and enabled, so `/blog/` and `/listings/` serve the blog and listings views, the CRM
+    shell route reverses as `quickscale_crm_shell`, and the two public social pages render the
+    shared `window.__QUICKSCALE__` seam.
+  - **A site organization is created once.** `quickscale_orgs_create_site_org <slug> <name>`
+    creates an organization for a deploy step, is a no-op on a rerun with the same arguments, and
+    refuses a slug that already exists under a different name or is reserved (`api`,
+    `__system__`); it runs under the restricted runtime role and is not a privileged command.
+  - **Personal-data fields are inventoried behind a failing test.** A cross-module conformance
+    test walks every installed model and fails when a field that could hold a user's data is
+    neither listed with its anonymization treatment nor excluded with a reason.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

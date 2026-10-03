@@ -309,25 +309,50 @@ def test_send_notification_persists_partial_failures_per_recipient(
 
 
 @pytest.mark.django_db
-def test_send_notification_can_dispatch_inline_when_requested(
+def test_rolled_back_send_notification_dispatches_nothing(
     notification_settings_row,
+    django_capture_on_commit_callbacks,
 ) -> None:
-    del notification_settings_row
+    """Rule 21: a rolled-back write dispatches no delivery; a commit does."""
+    from django.db import transaction
 
-    message = send_notification(
-        template_key="notifications.generic",
-        recipients=["inline@example.com"],
-        context={"headline": "Inline dispatch", "body": "Immediate body"},
-        dispatch_after_commit=False,
-        mailer=lambda mail: f"inline::{mail.to[0]}",
+    del notification_settings_row
+    dispatched: list[str] = []
+
+    def fake_mailer(mail) -> str:
+        dispatched.append(mail.to[0])
+        return f"provider::{mail.to[0]}"
+
+    class _Rollback(Exception):
+        pass
+
+    with pytest.raises(_Rollback):
+        with transaction.atomic():
+            send_notification(
+                template_key="notifications.generic",
+                recipients=["rollback@example.com"],
+                context={"headline": "Rollback", "body": "Discard me."},
+                mailer=fake_mailer,
+            )
+            raise _Rollback
+
+    assert dispatched == [], "a rolled-back write dispatches no delivery"
+    assert not NotificationMessage.objects.exists(), (
+        "a rolled-back write records no tracked notification"
     )
 
-    message.refresh_from_db()
-    delivery = message.deliveries.get()
+    # Positive control: the same write without a rollback dispatches, so the
+    # negative assertion is not vacuous.
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        send_notification(
+            template_key="notifications.generic",
+            recipients=["rollback@example.com"],
+            context={"headline": "Commit", "body": "Send me."},
+            mailer=fake_mailer,
+        )
 
-    assert message.status == NotificationMessage.Status.SENT
-    assert delivery.status == NotificationDelivery.Status.SENT
-    assert delivery.provider_message_id == "inline::inline@example.com"
+    assert len(callbacks) == 1
+    assert dispatched == ["rollback@example.com"]
 
 
 @pytest.mark.django_db
@@ -711,7 +736,6 @@ def test_services_publishes_exactly_the_declared_surface() -> None:
         "NotificationConfigurationError",
         "NotificationDisabledError",
         "NotificationError",
-        "NotificationSettingsSnapshot",
         "NotificationTemplateDefinition",
         "NotificationTemplateError",
         "NotificationValidationError",

@@ -3,12 +3,15 @@
 Hand everything below the line to a coding assistant, started in `/home/victor/code/bap-web-new`.
 This is a one-off, prompt-driven migration; the fresh-first tool (SA214) is not used for it.
 
-**Parked until SA215 lands.** SA215 renames module settings, app labels, URL namespaces, and
-commands ([decisions.md § Module Conventions](../technical/decisions.md#module-conventions)).
-SA215 also moves module back offices (blog, listings, crm, forms) from `is_staff` to org roles
+**SA215 has landed; the port stays parked until its remaining dependencies (SA235–SA238) land.**
+SA215 renamed module settings, app labels, URL
+namespaces, and commands ([decisions.md § Module Conventions](../technical/decisions.md#module-conventions)).
+SA215 also moved module back offices (blog, listings, crm, forms) from `is_staff` to org roles
 (rule 19), so the port gives `bap-web`'s editors an org role (`admin` or as the module README
-states), never `is_staff`. Before handing this over, regenerate `bap-web-new` from the post-SA215 checkout and update the
-version numbers below; the current `bap-web-new` was generated before the renames.
+states), never `is_staff`. Start it only after the
+[schedule](../technical/roadmap.md#scheduling-table) clears SA235–SA238, regenerate `bap-web-new`
+from that checkout, and update the version numbers below; the current `bap-web-new` was generated
+before the renames.
 
 ---
 
@@ -97,8 +100,8 @@ Run each and include the output summary in your report:
    `properties` models; `check_tenant_isolation` passes; the FORCE-RLS table and policy counts equal
    a fresh project's with the same modules.
 7. The catalog seeds through `properties_seed_catalog`, scoped to a local site organization
-   (create it through the `orgs` module's existing admin or services; `create_site_org` does not
-   exist yet), under the restricted runtime role, and the home, catalog, detail, and contact pages render locally with
+   (create it with `quickscale_orgs_create_site_org <slug> <name>`, delivered by SA240 before this
+   port), under the restricted runtime role, and the home, catalog, detail, and contact pages render locally with
    the donor's design.
 8. `git diff <baseline commit> -- modules/` is empty (no vendored edits).
 
@@ -110,6 +113,5 @@ QuickScale, and anything left undone.
 
 ## Out of scope (maintainer, later)
 
-The production dump rehearsal, the new site-organization command (`create_site_org`, a QuickScale
-change), creating the new repository, Railway cutover, media transfer, re-inviting users,
+The production dump rehearsal, creating the new repository, Railway cutover, media transfer, re-inviting users,
 live-site screenshot parity, and archiving the old repository.

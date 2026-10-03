@@ -539,6 +539,76 @@ def test_url_include_literal_control() -> None:
     assert _violations(checker.rule_7_urls, annotated_empty) == []
 
 
+def test_url_mount_template_literal_control() -> None:
+    """A mount literal in a generator `.j2` file fails rule 7 (gap 13)."""
+    module = _golden_module()
+    template = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": ('re_path(r"^demo/?$", demo_shell)\n')
+        },
+    )
+    assert any(
+        "mount 'demo/' is written as a literal" in violation
+        for violation in checker.rule_7_urls(template)
+    )
+    outside_root = replace(
+        _corpus(module),
+        core_files={"generator/notes.j2": 're_path(r"^demo/?$", demo_shell)\n'},
+    )
+    assert checker.rule_7_urls(outside_root) == []
+    assert checker.rule_7_urls(_corpus(module)) == []
+    single_quoted = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": ("re_path(r'^demo/?$', demo_shell)\n")
+        },
+    )
+    assert any(
+        "mount 'demo/' is written as a literal" in violation
+        for violation in checker.rule_7_urls(single_quoted)
+    )
+    ordinary_string = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": ('re_path("^demo/?$", demo_shell)\n')
+        },
+    )
+    assert any(
+        "mount 'demo/' is written as a literal" in violation
+        for violation in checker.rule_7_urls(ordinary_string)
+    )
+    # A route whose path only shares the mount's prefix is not a copy of the
+    # mount and must stay allowed.
+    longer_prefix = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": (
+                're_path("^demographics/?$", demographics_shell)\n'
+            )
+        },
+    )
+    assert checker.rule_7_urls(longer_prefix) == []
+    hyphenated_prefix = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": (
+                're_path("^demo-roll/?$", demo_roll_shell)\n'
+                "re_path(r'^demo-roll/?$', demo_roll_shell)\n"
+            )
+        },
+    )
+    assert checker.rule_7_urls(hyphenated_prefix) == []
+    html_literal = replace(
+        _corpus(module),
+        core_files={"generator/templates/project_name/sample.j2": '<a href="/demo/">Demo</a>\n'},
+    )
+    assert any(
+        "mount 'demo/' is written as a literal" in violation
+        for violation in checker.rule_7_urls(html_literal)
+    )
+
+
 def test_template_page_control() -> None:
     module = _golden_module()
     broken = _with_files(
@@ -4556,6 +4626,41 @@ def test_theme_seam_control() -> None:
     assert checker.rule_31_theme_seam(named_url) == []
 
 
+def test_theme_seam_social_producer_control() -> None:
+    """The public social producers carry the rendered seam, not module lines."""
+    social_template = checker.THEME_SEAM_TEMPLATES[1]
+    corpus = replace(
+        _corpus(_golden_module()),
+        core_files={
+            checker.THEME_SEAM_TEMPLATE: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
+            social_template: ("{{ seam_module_flags }}\ndemo: true,\n{{ seam_module_paths }}\n"),
+        },
+    )
+    violations = checker.rule_31_theme_seam(corpus)
+    assert any(social_template in violation and "bare key" in violation for violation in violations)
+    clean = replace(
+        corpus,
+        core_files={
+            checker.THEME_SEAM_TEMPLATE: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
+            social_template: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
+        },
+    )
+    assert checker.rule_31_theme_seam(clean) == []
+    override = replace(
+        corpus,
+        core_files={
+            checker.THEME_SEAM_TEMPLATE: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
+            social_template: (
+                '{{ seam_module_flags }}\n"demo": "/demo/",\n{{ seam_module_paths }}\n'
+            ),
+        },
+    )
+    assert any(
+        "writes demo's mount 'demo/' literally" in violation
+        for violation in checker.rule_31_theme_seam(override)
+    )
+
+
 def test_secrets_control() -> None:
     module = _golden_module()
     assert _violations(checker.rule_35_secrets, module) == []
@@ -5351,15 +5456,342 @@ def test_module_list_controls() -> None:
     assert checker.rule_37_module_lists(presentation) == []
 
 
+def test_module_list_template_control() -> None:
+    """A module enumeration in a generator `.j2` file fails rule 37 (gap 13)."""
+    corpus = _corpus(
+        _golden_module("alpha"),
+        _golden_module("beta"),
+        _golden_module("gamma"),
+    )
+    template_literal = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/sample.j2": (
+                "{% for m in ['alpha', 'beta'] %}{{ m }}{% endfor %}\n"
+            )
+        },
+    )
+    assert any(
+        "literal <template literal> lists 2 module names: alpha, beta" in violation
+        for violation in checker.rule_37_module_lists(template_literal)
+    )
+    template_alternation = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/sample.j2": ('re_path(r"^(alpha|beta)/?$", view)\n')
+        },
+    )
+    assert any(
+        "literal <template alternation:alpha|beta> lists 2 module names: alpha, beta" in violation
+        for violation in checker.rule_37_module_lists(template_alternation)
+    )
+    non_capturing_alternation = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/sample.j2": ('re_path(r"^(?:alpha|beta)/?$", view)\n')
+        },
+    )
+    assert any(
+        "literal <template alternation:alpha|beta> lists 2 module names: alpha, beta" in violation
+        for violation in checker.rule_37_module_lists(non_capturing_alternation)
+    )
+    # The exception is bound to the approved orgs reservation, not to every
+    # alternation in the host URL template: an unrelated alternation there is
+    # still rejected.
+    unrelated_alternation = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/urls.py.j2": ('re_path(r"^(alpha|beta)/?$", view)\n')
+        },
+    )
+    assert any(
+        "lists 2 module names: alpha, beta" in violation
+        for violation in checker.rule_37_module_lists(unrelated_alternation)
+    )
+    orgs_corpus = _corpus(_golden_module("blog"), _golden_module("listings"))
+    orgs_reservation = replace(
+        orgs_corpus,
+        core_files={
+            "generator/templates/project_name/urls.py.j2": (
+                're_path(r"^orgs/(?!api(?:/|$))[^/]+/(blog|listings|members|settings)/?$", view)\n'
+            )
+        },
+    )
+    assert checker.rule_37_module_lists(orgs_reservation) == []
+
+
+def test_settings_snapshot_location_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_42_settings_snapshots, module) == []
+
+    wrong_location = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n\n'
+            "class DemoRuntimeSettingsSnapshot:\n"
+            "    enabled: bool\n\n"
+            "    @classmethod\n"
+            "    def from_settings(cls):\n"
+            "        return cls(enabled=True)\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+    )
+    assert any(
+        "defines the settings snapshot DemoRuntimeSettingsSnapshot outside _settings.py"
+        in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, wrong_location)
+    )
+
+    misplaced_getter = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n'
+            "from django.conf import settings\n\n\n"
+            "def demo_runtime_settings():\n"
+            "    return DemoRuntimeSettingsSnapshot(enabled=settings.QUICKSCALE_DEMO_ENABLED)\n"
+        ),
+    )
+    assert any(
+        "builds a settings snapshot outside _settings.py" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, misplaced_getter)
+    )
+
+    exported = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["DemoPolicySnapshot", "is_enabled"]\n\n'
+            "from quickscale_modules_demo._settings import DemoPolicySnapshot\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from django.conf import settings\n\n\n"
+                "class DemoPolicySnapshot:\n"
+                "    retention_days: int\n\n\n"
+                "def demo_policy_snapshot():\n"
+                "    return DemoPolicySnapshot(\n"
+                "        retention_days=int(settings.QUICKSCALE_DEMO_RETENTION)\n"
+                "    )\n"
+            ),
+        },
+    )
+    assert any(
+        "exports the settings snapshot DemoPolicySnapshot" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, exported)
+    )
+
+    split_class = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n\n'
+            "class DemoSettingsSnapshot:\n"
+            "    enabled: bool\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from django.conf import settings\n\n"
+                "from quickscale_modules_demo.services import DemoSettingsSnapshot\n\n\n"
+                "def demo_settings_snapshot():\n"
+                "    return DemoSettingsSnapshot(\n"
+                "        enabled=settings.QUICKSCALE_DEMO_ENABLED\n"
+                "    )\n"
+            ),
+        },
+    )
+    assert any(
+        "defines the settings snapshot DemoSettingsSnapshot outside _settings.py" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, split_class)
+    )
+
+    split_class_alias = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n\n'
+            "class DemoSettingsSnapshot:\n"
+            "    enabled: bool\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from django.conf import settings\n\n"
+                "from quickscale_modules_demo.services import (\n"
+                "    DemoSettingsSnapshot as Snapshot,\n"
+                ")\n\n\n"
+                "def demo_settings_snapshot():\n"
+                "    return Snapshot(enabled=settings.QUICKSCALE_DEMO_ENABLED)\n"
+            ),
+        },
+    )
+    assert any(
+        "defines the settings snapshot DemoSettingsSnapshot outside _settings.py" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, split_class_alias)
+    )
+
+    alias_exported = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["Snapshot", "is_enabled"]\n\n'
+            "from quickscale_modules_demo._settings import (\n"
+            "    DemoSettingsSnapshot as Snapshot,\n"
+            ")\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from dataclasses import dataclass\n\n"
+                "from django.conf import settings\n\n\n"
+                "@dataclass(frozen=True)\n"
+                "class DemoSettingsSnapshot:\n"
+                "    enabled: bool\n\n"
+                "    @classmethod\n"
+                "    def from_settings(cls):\n"
+                "        return cls(enabled=bool(settings.QUICKSCALE_DEMO_ENABLED))\n"
+            ),
+        },
+    )
+    assert any(
+        "exports the settings snapshot DemoSettingsSnapshot" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, alias_exported)
+    )
+
+    alias_allowed = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "verify"]\n\n'
+            "from quickscale_modules_demo.checks import check_demo as verify\n\n\n"
+            "def demo_query(*, subject: str) -> str:\n"
+            "    return subject\n"
+        ),
+    )
+    assert _violations(checker.rule_42_settings_snapshots, alias_allowed) == []
+
+
+def test_optional_sender_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_43_optional_senders, module) == []
+
+    settings_read = _with_files(
+        module,
+        views=(
+            "from importlib import import_module\n\n\n"
+            "def load_sender():\n"
+            "    services = import_module('quickscale_modules_notifications.services')\n"
+            "    return services.NotificationSettingsSnapshot.from_settings().enabled\n"
+        ),
+    )
+    assert any(
+        "reads notifications's settings through NotificationSettingsSnapshot" in violation
+        for violation in _violations(checker.rule_43_optional_senders, settings_read)
+    )
+
+    catch_all = _with_files(
+        module,
+        views=(
+            "from quickscale_modules_notifications.services import send_notification\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        send_notification(template_key='x', recipients=[], context={})\n"
+            "    except Exception:\n"
+            "        return\n"
+        ),
+    )
+    assert any(
+        "catches Exception around notifications's service call" in violation
+        for violation in _violations(checker.rule_43_optional_senders, catch_all)
+    )
+
+    dotted_catch_all = _with_files(
+        module,
+        views=(
+            "import quickscale_modules_notifications.services\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        quickscale_modules_notifications.services.send_notification(\n"
+            "            template_key='x', recipients=[], context={}\n"
+            "        )\n"
+            "    except Exception:\n"
+            "        return\n"
+        ),
+    )
+    assert any(
+        "catches Exception around notifications's service call" in violation
+        for violation in _violations(checker.rule_43_optional_senders, dotted_catch_all)
+    )
+
+    dotted_narrowed = _with_files(
+        module,
+        views=(
+            "import quickscale_modules_notifications.services\n\n"
+            "from quickscale_modules_notifications.services import NotificationError\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        quickscale_modules_notifications.services.send_notification(\n"
+            "            template_key='x', recipients=[], context={}\n"
+            "        )\n"
+            "    except NotificationError:\n"
+            "        return\n"
+        ),
+    )
+    assert _violations(checker.rule_43_optional_senders, dotted_narrowed) == []
+
+    narrowed = _with_files(
+        module,
+        views=(
+            "from quickscale_modules_notifications.services import (\n"
+            "    NotificationError,\n"
+            "    send_notification,\n"
+            ")\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        send_notification(template_key='x', recipients=[], context={})\n"
+            "    except NotificationError:\n"
+            "        return\n"
+        ),
+    )
+    assert _violations(checker.rule_43_optional_senders, narrowed) == []
+
+    best_effort = _with_files(
+        module,
+        views=(
+            "def emit() -> None:\n"
+            "    from quickscale_modules_analytics.services import capture_event\n\n"
+            "    try:\n"
+            "        capture_event(distinct_id='x', event='e')\n"
+            "    except Exception:\n"
+            "        return\n"
+        ),
+    )
+    assert _violations(checker.rule_43_optional_senders, best_effort) == []
+
+
 def test_layer_table_mirrors_the_shipped_modules() -> None:
     corpus = checker.load_corpus(REPO_ROOT)
     assert {module.name for module in corpus.modules} == set(checker.MODULE_LAYERS)
 
 
-def test_covered_and_open_rules_partition_1_to_39() -> None:
+# Rules the harness must cover or record as open.  SA215 covered 1-39;
+# SA236 adds 42-43.  Rule 41 and rules 44-46 land with SA235, SA237, and
+# SA238, which extend this set.
+RECORDED_RULE_NUMBERS = frozenset({*range(1, 40), 42, 43})
+
+
+def test_covered_and_open_rules_partition_the_recorded_rules() -> None:
     covered = {rule.number for rule in checker.RULES}
     open_rules = {number for number, _ in checker.OPEN_RULES}
-    assert covered | open_rules == set(range(1, 40))
+    assert covered | open_rules == RECORDED_RULE_NUMBERS
     assert not covered & open_rules
 
 

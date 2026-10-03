@@ -137,6 +137,10 @@ for the module's API: creating or renaming an organization to it is refused.
 
 ## Management commands
 
+- `quickscale_orgs_create_site_org` — create the site's organization once from `<slug> <name>`
+  for a deploy step. A rerun with the same arguments is a no-op; the command fails when the
+  slug already exists under a different name or is reserved (`api`, `__system__`), and it runs
+  under the restricted runtime role.
 - `quickscale_orgs_purge_organization` — purge an organization and all owned rows across all
   modules. Use `--organization-id <uuid>` for destructive execution and `--slug <slug>` for a
   non-destructive preflight; destructive execution and `--dry-run` are refused while a current

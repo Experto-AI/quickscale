@@ -94,6 +94,8 @@ class ResolverResult:
             post-home URL includes contributed by wiring projections.
         pre_home_url_includes: ``(route_prefix, include_path)`` tuples for
             pre-home URL includes contributed by wiring projections.
+        spa_routes: ``(route, name)`` tuples for the module's React shell
+            routes contributed by wiring projections (rule 41).
         managed_files: Manifest-declared managed-file declarations threaded
             through from the :class:`ModuleManifest`.  Empty when the
             manifest declares no managed files.  The assembler converts
@@ -110,6 +112,7 @@ class ResolverResult:
     middleware: tuple[str, ...] = ()
     url_includes: tuple[tuple[str, str], ...] = ()
     pre_home_url_includes: tuple[tuple[str, str], ...] = ()
+    spa_routes: tuple[tuple[str, str], ...] = ()
     managed_files: tuple[ManagedFileDeclaration, ...] = ()
 
 
@@ -203,13 +206,18 @@ def _url_projection_issues(
         if target is None:
             continue
         option_key, items = target
+        pair_label = (
+            "[route, name]"
+            if projection.wiring_field == "spa_routes"
+            else "[route, include]"
+        )
         for index, item in enumerate(items):
             if _is_url_include_pair(item):
                 continue
             issues.append(
                 f"modules.{derivation_schema.module_name}.{option_key} cannot "
                 f"feed {projection.wiring_field}: item {index} is not a "
-                "[route, include] pair of strings"
+                f"{pair_label} pair of strings"
             )
     return issues
 
@@ -306,6 +314,7 @@ def resolve_module_config(
         middleware=_to_str_tuple(wiring["middleware"]),
         url_includes=_to_url_tuple(wiring["url_includes"]),
         pre_home_url_includes=_to_url_tuple(wiring["pre_home_url_includes"]),
+        spa_routes=_to_url_tuple(wiring["spa_routes"]),
         managed_files=tuple(manifest.managed_files.values()),
     )
 

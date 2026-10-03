@@ -55,7 +55,7 @@ _DERIVATION_SECTION_KEYS = frozenset(
 
 #: Executable wiring fields and derivation types a projection may declare.
 _WIRING_FIELDS = frozenset(
-    {"apps", "middleware", "url_includes", "pre_home_url_includes"}
+    {"apps", "middleware", "url_includes", "pre_home_url_includes", "spa_routes"}
 )
 _DERIVATION_TYPES = frozenset({"static", "direct", "conditional", "computed"})
 

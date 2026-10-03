@@ -29,6 +29,34 @@ class TestPlanCommandBasic:
             assert result.exit_code != 0
             assert "not a valid project slug" in result.output
 
+    def test_plan_without_project_slug_aborts_with_usage(self):
+        """A bare plan invocation names the missing slug and shows usage."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(plan, [])
+
+            assert result.exit_code != 0
+            assert "PROJECT_SLUG is required" in result.output
+            assert "Usage examples" in result.output
+
+    @pytest.mark.parametrize(
+        ("package", "message"),
+        [
+            ("", "Package name cannot be empty"),
+            ("1bad", "must be a valid Python identifier"),
+            ("class", "Python keyword"),
+            ("BadName", "must start with a lowercase letter"),
+        ],
+    )
+    def test_plan_rejects_invalid_explicit_package(self, package, message):
+        """Each invalid --package value is refused before any prompting."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(plan, ["myapp", "--package", package])
+
+            assert result.exit_code != 0
+            assert message in result.output
+
     def test_plan_help(self):
         """Test plan command help output"""
         runner = CliRunner()

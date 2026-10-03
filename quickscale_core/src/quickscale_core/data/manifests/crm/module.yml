@@ -79,3 +79,11 @@ derivation:
           - - crm/
             - quickscale_modules_crm.urls
       description: "CRM URL includes"
+
+    - wiring_field: spa_routes
+      derivation_type: static
+      expression:
+        value:
+          - - ^crm/?$
+            - shell
+      description: "CRM React shell route; rendered after the module's own includes (rule 41)"

@@ -178,7 +178,7 @@ def _validate_computed_wiring_target(
     """Refuse a computed projection that targets a URL wiring field."""
     if not wiring:
         return
-    if wiring_field in ("url_includes", "pre_home_url_includes"):
+    if wiring_field in ("url_includes", "pre_home_url_includes", "spa_routes"):
         raise ManifestError(
             f"{path}: computed projections cannot target URL wiring fields",
             module_name,
@@ -255,7 +255,7 @@ def _validate_direct_url_option(
     wiring_field: str | None,
 ) -> None:
     """Validate a direct URL projection's declared option and default items."""
-    if wiring_field not in ("url_includes", "pre_home_url_includes"):
+    if wiring_field not in ("url_includes", "pre_home_url_includes", "spa_routes"):
         return
     if getattr(declared, "option_type", None) != "list":
         raise ManifestError(
