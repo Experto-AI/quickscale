@@ -308,6 +308,276 @@ class TestQualityGateControl:
         assert "new at or above 800" in markdown
         assert _NEW_BIG_FILE in markdown
 
+    # ------------------------------------------------------------------
+    # SA233: moved complexity entries
+    # ------------------------------------------------------------------
+
+    _MOVED_BASELINE_KEY = "quickscale_core.sample.old_home.helper"
+    _MOVED_MODULE = "quickscale_core.sample.new_home"
+    _MOVED_PATH = "quickscale_core/src/quickscale_core/sample/new_home.py"
+
+    @staticmethod
+    def _radon_entry(complexity: int) -> dict:
+        """Return one radon function record named ``helper``."""
+        return {
+            "name": "helper",
+            "type": "function",
+            "complexity": complexity,
+            "rank": "C",
+            "lineno": 1,
+            "endline": 9,
+        }
+
+    def _radon_stub(
+        self,
+        tmp_path: Path,
+        actual_files: dict[str, list[dict]],
+        inventory_files: dict[str, list[dict]],
+    ) -> Path:
+        """
+        Return a poetry stub with per-run radon output.
+
+        ``--min`` marks the threshold-filtered run; its absence marks the
+        full-grade inventory run.
+        """
+        actual_json = json.dumps(actual_files)
+        inventory_json = json.dumps(inventory_files)
+        poetry_stub = _POETRY_STUB.replace(
+            """        # Radon analysis --- return empty JSON
+        if tool == "radon":
+            print("{}")
+            return 0""",
+            f"""        # Radon analysis --- controlled per-run output
+        if tool == "radon":
+            if "--min" in tool_args:
+                print({actual_json!r})
+            else:
+                print({inventory_json!r})
+            return 0""",
+        )
+        assert poetry_stub != _POETRY_STUB, "poetry stub radon branch not found"
+        return self._poetry_stub(tmp_path, poetry_stub)
+
+    def _complexity_inputs(
+        self, tmp_path: Path, entries: list[tuple[str, str, int]]
+    ) -> tuple[Path, Path]:
+        """Return a baseline/ledger pair adding the given complexity entries."""
+        baseline = json.loads(
+            (_REPO_ROOT / "scripts" / "quality_baseline.json").read_text(encoding="utf-8")
+        )
+        for module, qualname, ceiling in entries:
+            baseline["complexity"]["allowed_functions"][f"{module}.{qualname}"] = {
+                "module": module,
+                "qualname": qualname,
+                "type": "function",
+                "max_complexity": ceiling,
+            }
+        # The find stub reports the orchestration file at 2,000 lines; list it
+        # so the fixture isolates the moved complexity entries.
+        baseline["file_length"] = {
+            "allowed_files": {
+                _ORCHESTRATION_FILE: {
+                    "max_lines": 2897,
+                    "reason": "Control-case fixture",
+                }
+            }
+        }
+        temp_baseline = tmp_path / "baseline_complexity_control.json"
+        temp_baseline.write_text(json.dumps(baseline), encoding="utf-8")
+
+        ledger = json.loads(
+            (_REPO_ROOT / "scripts" / "quality_waivers.json").read_text(encoding="utf-8")
+        )
+        for index, (module, qualname, ceiling) in enumerate(entries):
+            ledger["waivers"].append(
+                {
+                    "waiver_id": f"W-CTRL-CPX-{index}",
+                    "entry_key": f"complexity:{module}.{qualname}",
+                    "base_ceiling": 0,
+                    "ceiling": ceiling,
+                    "owner": "test@example.com",
+                    "reason": "Control-case fixture for a complexity entry",
+                    "expires_on": _WAIVER_EXPIRES,
+                    "decision_ref": "quality-baseline-monotonicity",
+                }
+            )
+        ledger["waivers"].append(
+            {
+                "waiver_id": "W-CTRL-FL-MOVE",
+                "entry_key": f"file_length:{_ORCHESTRATION_FILE}",
+                "base_ceiling": 0,
+                "ceiling": 2897,
+                "owner": "test@example.com",
+                "reason": "Control-case fixture for the file-length ratchet",
+                "expires_on": _WAIVER_EXPIRES,
+                "decision_ref": "file-size-metric-policy",
+            }
+        )
+        temp_waivers = tmp_path / "waivers_complexity_control.json"
+        temp_waivers.write_text(json.dumps(ledger), encoding="utf-8")
+        return temp_baseline, temp_waivers
+
+    def _moved_complexity_stubs(
+        self, tmp_path: Path, complexity: int
+    ) -> tuple[Path, Path, Path, Path]:
+        """Return poetry/find stub dirs and a baseline/ledger pair for a move."""
+        files = {self._MOVED_PATH: [self._radon_entry(complexity)]}
+        poetry_bin = self._radon_stub(tmp_path, files, files)
+        find_bin = self._find_stub(tmp_path)
+        temp_baseline, temp_waivers = self._complexity_inputs(
+            tmp_path, [("quickscale_core.sample.old_home", "helper", 12)]
+        )
+        return poetry_bin, find_bin, temp_baseline, temp_waivers
+
+    def test_pure_move_is_not_a_regression(self, tmp_path: Path, quality_output_dir: Path) -> None:
+        """A function at its pre-move ceiling produces no regression."""
+        poetry_bin, find_bin, temp_baseline, temp_waivers = self._moved_complexity_stubs(
+            tmp_path, 12
+        )
+        result = self._run_shell(
+            quality_output_dir,
+            stub_dir=poetry_bin,
+            find_stub_dir=find_bin,
+            extra_env={
+                "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
+                "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
+            },
+        )
+        assert result.returncode == 0, (
+            f"Expected exit 0 for a pure move, got {result.returncode}\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+        status = json.loads(
+            (quality_output_dir / "quality_gate_status.json").read_text(encoding="utf-8")
+        )
+        assert status["total_regressions"] == 0
+        report = json.loads(
+            (quality_output_dir / "quality_report.json").read_text(encoding="utf-8")
+        )
+        assert report["regressions"]["complexity"]["new_or_worse"] == []
+        resolved = report["regressions"]["complexity"]["resolved"]
+        assert self._MOVED_BASELINE_KEY not in [entry["key"] for entry in resolved]
+
+    def test_worsened_move_fails_the_gate(self, tmp_path: Path, quality_output_dir: Path) -> None:
+        """A moved function above its pre-move ceiling fails the gate."""
+        poetry_bin, find_bin, temp_baseline, temp_waivers = self._moved_complexity_stubs(
+            tmp_path, 15
+        )
+        result = self._run_shell(
+            quality_output_dir,
+            stub_dir=poetry_bin,
+            find_stub_dir=find_bin,
+            extra_env={
+                "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
+                "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
+            },
+        )
+        assert result.returncode == 1, (
+            f"Expected exit 1 for a worsened move, got {result.returncode}\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+        status = json.loads(
+            (quality_output_dir / "quality_gate_status.json").read_text(encoding="utf-8")
+        )
+        assert status["warning_regressions"] == 1
+        report = json.loads(
+            (quality_output_dir / "quality_report.json").read_text(encoding="utf-8")
+        )
+        regressions = report["regressions"]["complexity"]["new_or_worse"]
+        assert len(regressions) == 1
+        entry = regressions[0]
+        assert entry["module"] == self._MOVED_MODULE
+        assert entry["qualname"] == "helper"
+        assert entry["regression_type"] == "increased"
+        assert entry["allowed_max_complexity"] == 12
+        assert entry["delta"] == 3
+
+    def test_reduced_stationary_function_is_not_a_move_source(
+        self, tmp_path: Path, quality_output_dir: Path
+    ) -> None:
+        """A function reduced below the reporting threshold is not a move source."""
+        actual = {
+            "quickscale_core/src/quickscale_core/sample/new_home.py": [self._radon_entry(12)],
+        }
+        inventory = {
+            "quickscale_core/src/quickscale_core/sample/old_home.py": [self._radon_entry(5)],
+            "quickscale_core/src/quickscale_core/sample/new_home.py": [self._radon_entry(12)],
+        }
+        poetry_bin = self._radon_stub(tmp_path, actual, inventory)
+        find_bin = self._find_stub(tmp_path)
+        temp_baseline, temp_waivers = self._complexity_inputs(
+            tmp_path, [("quickscale_core.sample.old_home", "helper", 12)]
+        )
+        result = self._run_shell(
+            quality_output_dir,
+            stub_dir=poetry_bin,
+            find_stub_dir=find_bin,
+            extra_env={
+                "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
+                "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
+            },
+        )
+        assert result.returncode == 1, (
+            f"Expected exit 1 for a new function beside a reduced stationary one, "
+            f"got {result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+        report = json.loads(
+            (quality_output_dir / "quality_report.json").read_text(encoding="utf-8")
+        )
+        regressions = report["regressions"]["complexity"]["new_or_worse"]
+        assert len(regressions) == 1
+        entry = regressions[0]
+        assert entry["module"] == "quickscale_core.sample.new_home"
+        assert entry["qualname"] == "helper"
+        assert entry["regression_type"] == "new"
+        assert entry["allowed_max_complexity"] is None
+
+    def test_move_matching_is_order_independent(
+        self, tmp_path: Path, quality_output_dir: Path
+    ) -> None:
+        """Permuting analyzer file order cannot change the move verdict."""
+        a_path = "quickscale_core/src/quickscale_core/sample/a_home.py"
+        z_path = "quickscale_core/src/quickscale_core/sample/z_home.py"
+        entries = [
+            ("quickscale_core.sample.old1", "helper", 20),
+            ("quickscale_core.sample.old2", "helper", 12),
+        ]
+        for order, files in (
+            (
+                "a-first",
+                {a_path: [self._radon_entry(20)], z_path: [self._radon_entry(12)]},
+            ),
+            (
+                "z-first",
+                {z_path: [self._radon_entry(12)], a_path: [self._radon_entry(20)]},
+            ),
+        ):
+            order_dir = tmp_path / order
+            poetry_bin = self._radon_stub(order_dir, files, files)
+            find_bin = self._find_stub(order_dir)
+            temp_baseline, temp_waivers = self._complexity_inputs(order_dir, entries)
+            result = self._run_shell(
+                quality_output_dir,
+                stub_dir=poetry_bin,
+                find_stub_dir=find_bin,
+                extra_env={
+                    "QUALITY_BASELINE_FILE": str(temp_baseline),
+                    "QUALITY_WAIVERS_FILE": str(temp_waivers),
+                    "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
+                },
+            )
+            assert result.returncode == 0, (
+                f"Expected exit 0 for {order} move ordering, got {result.returncode}\n"
+                f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+            )
+            report = json.loads(
+                (quality_output_dir / "quality_report.json").read_text(encoding="utf-8")
+            )
+            assert report["regressions"]["complexity"]["new_or_worse"] == []
+
     def test_new_duplication_block_fails_the_gate(
         self, tmp_path: Path, quality_output_dir: Path
     ) -> None:
