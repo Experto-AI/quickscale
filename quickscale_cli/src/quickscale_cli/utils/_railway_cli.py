@@ -11,8 +11,6 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-import quickscale_cli.utils.railway_utils as _railway_utils
-
 
 def is_npm_installed() -> bool:
     """Check if npm is installed."""
@@ -174,7 +172,7 @@ def check_railway_cli_version(minimum: str = "3.0.0") -> bool:
         parts = version_str.split()
         if len(parts) >= 3:
             current_version = parts[2]
-            return _railway_utils._compare_versions(current_version, minimum) >= 0
+            return _compare_versions(current_version, minimum) >= 0
         return False
     except (
         subprocess.SubprocessError,
@@ -225,7 +223,7 @@ def is_railway_project_initialized() -> bool:
 
 def get_railway_project_info() -> dict[str, Any] | None:
     """Get current Railway project information."""
-    if not _railway_utils.is_railway_project_initialized():
+    if not is_railway_project_initialized():
         return None
 
     try:
@@ -333,7 +331,7 @@ def deploy_railway_service(
         TimeoutError: If the command times out.
 
     """
-    return _railway_utils.run_railway_command(
+    return run_railway_command(
         ["up", "--service", service_name, "--detach"],
         timeout=timeout,
         cwd=project_path,
@@ -372,7 +370,7 @@ def set_railway_variable(
             cmd.extend(["--environment", environment])
         if skip_deploy:
             cmd.append("--skip-deploys")
-        result = _railway_utils.run_railway_command(cmd, timeout=30, input_data=value)
+        result = run_railway_command(cmd, timeout=30, input_data=value)
         return result.returncode == 0
     except Exception:
         return False
@@ -412,7 +410,7 @@ def set_railway_variables_batch(
 
     failed_keys: list[str] = []
     for key, value in variables.items():
-        if not _railway_utils.set_railway_variable(
+        if not set_railway_variable(
             key,
             value,
             service=service,

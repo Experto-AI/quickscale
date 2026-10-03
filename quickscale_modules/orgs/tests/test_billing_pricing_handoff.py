@@ -26,7 +26,7 @@ from quickscale_modules_orgs.models import (
 def test_billing_declares_the_pricing_url_capability() -> None:
     """Rule 4: billing declares its pricing URL on its own AppConfig."""
     from quickscale_core.runtime import collect_capabilities
-    from quickscale_modules_billing.services import organization_pricing_page_url
+    from quickscale_modules_billing._settings import organization_pricing_page_url
 
     config = apps.get_app_config("quickscale_billing")
 
@@ -38,7 +38,7 @@ def test_billing_declares_the_pricing_url_capability() -> None:
 
 def test_billing_pricing_url_is_the_module_pricing_page() -> None:
     """The declared hook answers billing's real flat pricing route."""
-    from quickscale_modules_billing.services import organization_pricing_page_url
+    from quickscale_modules_billing._settings import organization_pricing_page_url
 
     assert reverse("quickscale_billing:pricing_page") == "/billing/pricing/"
     assert organization_pricing_page_url(None) == "/billing/pricing/"

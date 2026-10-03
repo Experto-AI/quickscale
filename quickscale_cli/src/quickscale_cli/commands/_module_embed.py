@@ -19,7 +19,22 @@ from quickscale_cli.commands._module_shared import (
     ModuleExecutionMode,
     STANDALONE_MODULE_EXECUTION_MODE,
 )
-import quickscale_cli.commands.module_commands as _module_commands
+
+import quickscale_core.utils.git_subtree as _git_subtree
+import quickscale_core.manifest.loader_errors as _loader_errors
+import quickscale_core.utils.git_errors as _git_errors
+import quickscale_core.config as _config
+import quickscale_cli.commands._module_shared as _module_shared
+import quickscale_core.utils.git_naming as _git_naming
+import quickscale_core.utils.git_tags as _git_tags
+import quickscale_core.utils.git_repo as _git_repo
+import quickscale_cli.commands.module_output as _module_output
+import quickscale_core.utils.poetry_env as _poetry_env
+import quickscale_cli.utils._dependency_sync_ops as _dependency_sync_ops
+import quickscale_cli.utils._dependency_io as _dependency_io
+import quickscale_cli.utils.module_wiring_manager as _module_wiring_manager
+import quickscale_core as _quickscale_core
+import quickscale_cli.commands.module_config as _module_config
 
 
 def _cleanup_failed_apply_embed(project_path: Path, module: str) -> None:
@@ -37,7 +52,7 @@ def _cleanup_failed_apply_embed(project_path: Path, module: str) -> None:
         )
 
     try:
-        _module_commands.remove_module(module, project_path)
+        _config.remove_module(module, project_path)
     except OSError as error:
         click.secho(
             "⚠️  Failed to remove legacy tracking for partial apply embed "
@@ -63,7 +78,7 @@ def _cleanup_failed_apply_embed_if_needed(
 ) -> None:
     """Clean up a failed embed only for apply-side execution."""
     if execution_mode == APPLY_MODULE_EXECUTION_MODE:
-        _module_commands._cleanup_failed_apply_embed(project_path, module)
+        _cleanup_failed_apply_embed(project_path, module)
 
 
 def _perform_module_embed(
@@ -95,15 +110,15 @@ def _perform_module_embed(
 
     # This seam is deliberately SHA-only: ref selection and peeling happen
     # before this function, so a tag or moving branch can never reach subtree.
-    _module_commands.run_git_subtree_add(
+    _git_subtree.run_git_subtree_add(
         prefix=prefix, remote=remote, branch=source_ref, squash=True
     )
 
     try:
-        installed_version = _module_commands._read_embedded_module_version(
+        installed_version = _module_shared._read_embedded_module_version(
             project_path, module
         )
-    except _module_commands.ManifestError as error:
+    except _loader_errors.ManifestError as error:
         click.secho(
             f"\n❌ Embedded module manifest error: {error}",
             fg="red",
@@ -115,11 +130,9 @@ def _perform_module_embed(
             "before continuing.",
             err=True,
         )
-        _module_commands._cleanup_failed_apply_embed_if_needed(
-            project_path, module, execution_mode
-        )
+        _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
         return False, None
-    except _module_commands.ModuleVersionMismatchError as error:
+    except _loader_errors.ModuleVersionMismatchError as error:
         click.secho(
             f"\n❌ {error}",
             fg="red",
@@ -131,13 +144,11 @@ def _perform_module_embed(
             "this module.",
             err=True,
         )
-        _module_commands._cleanup_failed_apply_embed_if_needed(
-            project_path, module, execution_mode
-        )
+        _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
         return False, None
 
     if execution_mode != APPLY_MODULE_EXECUTION_MODE:
-        _module_commands.add_module(
+        _config.add_module(
             module_name=module,
             prefix=prefix,
             branch=branch,
@@ -153,10 +164,12 @@ def _perform_module_embed(
         }
         embedded_modules.add(module)
         try:
-            wiring_success, wiring_message = _module_commands.regenerate_managed_wiring(
-                project_path,
-                module_names=sorted(embedded_modules),
-                option_overrides={module: dict(config)},
+            wiring_success, wiring_message = (
+                _module_wiring_manager.regenerate_managed_wiring(
+                    project_path,
+                    module_names=sorted(embedded_modules),
+                    option_overrides={module: dict(config)},
+                )
             )
         except Exception as error:
             wiring_success, wiring_message = False, str(error)
@@ -171,28 +184,22 @@ def _perform_module_embed(
         click.echo("  ✅ Regenerated managed module wiring")
 
     if sync_dependencies:
-        if not _module_commands._sync_module_dependencies(
-            project_path, {module: config}
-        ):
-            _module_commands._cleanup_failed_apply_embed_if_needed(
-                project_path, module, execution_mode
-            )
+        if not _sync_module_dependencies(project_path, {module: config}):
+            _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
             return False, None
 
     if (
         install_dependencies
-        and _module_commands._resolve_embedded_module_install_path(project_path, module)
+        and _module_shared._resolve_embedded_module_install_path(project_path, module)
         is not None
     ):
-        if not _module_commands._install_module_dependencies(project_path, module):
-            _module_commands._cleanup_failed_apply_embed_if_needed(
-                project_path, module, execution_mode
-            )
+        if not _install_module_dependencies(project_path, module):
+            _cleanup_failed_apply_embed_if_needed(project_path, module, execution_mode)
             return False, None
 
     if execution_mode == APPLY_MODULE_EXECUTION_MODE:
         try:
-            _module_commands.add_module(
+            _config.add_module(
                 module_name=module,
                 prefix=prefix,
                 branch=branch,
@@ -200,7 +207,7 @@ def _perform_module_embed(
                 project_path=project_path,
             )
         except Exception as error:
-            _module_commands._cleanup_failed_apply_embed(project_path, module)
+            _cleanup_failed_apply_embed(project_path, module)
             click.secho(
                 f"\n❌ Failed to update legacy module tracking for {module}: {error}",
                 fg="red",
@@ -288,17 +295,17 @@ def embed_module(
         # This rejects retired-theme / malformed-source projects before
         # any probe or mutation occurs.  The shared
         # regenerate_managed_wiring guard also runs preflight internally.
-        if not _module_commands._validate_embed_theme(project_path):
+        if not _module_output._validate_embed_theme(project_path):
             return False
 
         # Validation steps
-        if not _module_commands._validate_git_environment():
+        if not _module_shared._validate_git_environment():
             return False
 
-        if not _module_commands._validate_module_not_exists(project_path, module):
+        if not _module_shared._validate_module_not_exists(project_path, module):
             return False
 
-        if not _module_commands._validate_module_readiness(
+        if not _module_shared._validate_module_readiness(
             module,
             execution_mode=execution_mode,
         ):
@@ -306,38 +313,38 @@ def embed_module(
 
         # Auth module special check
         if module == "auth" and not skip_auth_migration_check:
-            if not _module_commands._check_auth_module_migrations(
+            if not _module_shared._check_auth_module_migrations(
                 project_path,
                 non_interactive,
                 allow_unverifiable_auth_state,
             ):
                 return False
 
-        branch = _module_commands.resolve_split_branch(module)
+        branch = _git_naming.resolve_split_branch(module)
         resolver: Callable[[str, str], str]
         if split_ref is None:
-            selected_ref = _module_commands.resolve_split_tag(
-                module, _module_commands.quickscale_version
+            selected_ref = _git_naming.resolve_split_tag(
+                module, _quickscale_core.__version__
             )
-            if not _module_commands.check_remote_tag_exists(remote, selected_ref):
-                _module_commands._report_missing_split_tag(
+            if not _git_tags.check_remote_tag_exists(remote, selected_ref):
+                _module_output._report_missing_split_tag(
                     module,
-                    _module_commands.quickscale_version,
+                    _quickscale_core.__version__,
                     selected_ref,
                     remote,
                 )
                 return False
-            resolver = _module_commands.resolve_remote_tag
+            resolver = _git_tags.resolve_remote_tag
         else:
-            _module_commands.validate_tag_name(split_ref)
+            _git_tags.validate_tag_name(split_ref)
             selected_ref = split_ref
             branch = split_ref
-            _module_commands._report_split_ref_override(module, selected_ref)
-            resolver = _module_commands.resolve_remote_ref
+            _module_output._report_split_ref_override(module, selected_ref)
+            resolver = _git_repo.resolve_remote_ref
 
         # Resolve the selected textual ref exactly once. Both standalone and
         # apply paths use the returned peeled SHA for subtree and provenance.
-        ref_resolved, source_ref = _module_commands._resolve_embed_source_ref(
+        ref_resolved, source_ref = _module_output._resolve_embed_source_ref(
             remote,
             selected_ref,
             module,
@@ -349,12 +356,12 @@ def embed_module(
 
         # Interactive module configuration
         config: dict[str, Any] = {}
-        configurator_entry = _module_commands.MODULE_CONFIGURATOR_REGISTRY.get(module)
+        configurator_entry = _module_config.MODULE_CONFIGURATOR_REGISTRY.get(module)
         if configurator_entry is not None:
             config = configurator_entry.configure(non_interactive=non_interactive)
 
         # Perform embedding
-        success, provenance = _module_commands._perform_module_embed(
+        success, provenance = _perform_module_embed(
             project_path,
             module,
             remote,
@@ -367,11 +374,11 @@ def embed_module(
             execution_mode=execution_mode,
         )
 
-        _module_commands._record_embed_provenance(success, provenance, provenance_sink)
+        _record_embed_provenance(success, provenance, provenance_sink)
 
         return success
 
-    except _module_commands.GitError as e:
+    except _git_errors.GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
         return False
     except Exception as e:
@@ -411,7 +418,7 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
             )
             return False
 
-        target_path = _module_commands._resolve_embedded_module_install_path(
+        target_path = _module_shared._resolve_embedded_module_install_path(
             project_path, module
         )
         if target_path is None:
@@ -421,7 +428,7 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
             return True
 
         click.echo("  • Refreshing poetry.lock...")
-        poetry_env = _module_commands.build_isolated_poetry_env()
+        poetry_env = _poetry_env.build_isolated_poetry_env()
         lock_result = subprocess.run(
             ["poetry", "lock"],  # noqa: S607 - PATH-resolved executable by design
             cwd=project_path,
@@ -431,7 +438,7 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
         )
 
         if lock_result.returncode != 0:
-            _module_commands._print_installation_error(
+            _module_output._print_installation_error(
                 project_path,
                 module,
                 lock_result,
@@ -451,7 +458,7 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
         )
 
         if result.returncode != 0:
-            _module_commands._print_installation_error(
+            _module_output._print_installation_error(
                 project_path,
                 module,
                 result,
@@ -491,14 +498,14 @@ def _sync_module_dependencies(
     click.echo("\n📦 Syncing dependency entries...")
 
     try:
-        sync_result = _module_commands.sync_project_module_dependencies(
+        sync_result = _dependency_sync_ops.sync_project_module_dependencies(
             project_path,
             modules_options,
             repin_existing=True,
         )
     except (
-        _module_commands.DependencySyncError,
-        _module_commands.ManifestError,
+        _dependency_io.DependencySyncError,
+        _loader_errors.ManifestError,
     ) as error:
         module_names = ", ".join(sorted(modules_options))
         click.secho(

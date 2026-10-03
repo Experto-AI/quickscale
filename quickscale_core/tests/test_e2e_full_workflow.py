@@ -306,11 +306,11 @@ class TestGeneratedProjectDependencyInstallSmoke:
         self, tmp_path
     ):
         """A generated project should install synced forms dependencies through the CLI path."""
-        from quickscale_cli.commands.module_commands import _install_module_dependencies
+        from quickscale_cli.commands._module_embed import _install_module_dependencies
         from quickscale_cli.commands.module_config import (
             MODULE_CONFIGURATOR_REGISTRY,
         )
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_module_dependencies,
         )
         from quickscale_core.generator import ProjectGenerator
@@ -388,14 +388,14 @@ class TestGeneratedProjectDependencyInstallSmoke:
         self, tmp_path
     ):
         """A generated project should install required dependency distributions for every ready module."""
-        from quickscale_cli.commands.apply_command import (
+        from quickscale_cli.commands._runtime import (
             _run_poetry_install,
             _run_poetry_lock,
         )
         from quickscale_core.contracts.module_catalog import (
             get_discovered_module_entries,
         )
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_module_dependencies,
         )
         from quickscale_core.generator import ProjectGenerator
@@ -1654,7 +1654,7 @@ class TestFullE2EWorkflow:
         ``required_modules: [orgs]`` — the auth module's views import
         ``quickscale_modules_orgs.models`` at import time.
         """
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_module_dependencies,
         )
 

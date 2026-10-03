@@ -959,7 +959,7 @@ def _local_core_wheel() -> Path:
 
 def _pin_project_core_dependency(project_path: Path) -> None:
     """Point the generated project's lockstep core pin at the local wheel."""
-    from quickscale_cli.utils.module_dependency_sync import sync_project_core_dependency
+    from quickscale_cli.utils._dependency_sync_ops import sync_project_core_dependency
 
     wheel = _local_core_wheel()
     sync_project_core_dependency(project_path, wheel.parent)
@@ -2255,7 +2255,7 @@ class TestGeneratedProjectRuntimeSmoke:
         from quickscale_cli.commands.module_config import (
             default_module_config_from_manifest,
         )
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_module_dependencies,
         )
         from quickscale_cli.utils.module_wiring_manager import (
@@ -2472,7 +2472,7 @@ class TestGeneratedProjectRuntimeSmoke:
         local_core_wheelhouse: Path,
     ) -> None:
         """Every authoritative embedded module migrates from a clean PG18 DB."""
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_module_dependencies,
         )
         from quickscale_cli.utils.module_wiring_manager import (
@@ -2857,7 +2857,7 @@ class TestGeneratedProjectRuntimeSmoke:
         from quickscale_cli.commands.module_config import (
             default_module_config_from_manifest,
         )
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_module_dependencies,
         )
         from quickscale_cli.utils.module_wiring_manager import (
@@ -2980,7 +2980,7 @@ class TestGeneratedProjectRuntimeSmoke:
         from quickscale_cli.commands.module_config import (
             default_module_config_from_manifest,
         )
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_module_dependencies,
         )
         from quickscale_cli.utils.module_wiring_manager import (
@@ -3150,7 +3150,7 @@ class TestGeneratedProjectRuntimeSmoke:
         from quickscale_cli.commands.module_config import (
             default_module_config_from_manifest,
         )
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_module_dependencies,
         )
         from quickscale_cli.utils.module_wiring_manager import (

@@ -1,31 +1,36 @@
 """Extended tests for deployment_commands.py - covering missing helper functions."""
 
 from unittest.mock import Mock, patch
+import quickscale_cli.utils._railway_project as _railway_project
+import quickscale_cli.utils._railway_cli as _railway_cli
+import quickscale_cli.commands._deploy_service_config as _deploy_service_config
+import quickscale_cli.commands._deploy_steps as _deploy_steps
 
 import click
 import pytest
 
 from quickscale_core.generator.runtime_database import RUNTIME_DB_ROLE
 
-from quickscale_cli.commands import deployment_commands
-from quickscale_cli.commands.deployment_commands import (
+from quickscale_cli.commands._deploy_steps import (
     _check_and_upgrade_railway_cli,
     _check_poetry_lock_step,
     _check_uncommitted_changes_step,
-    _configure_env_vars_step,
     _create_app_service_step,
-    _deploy_app_step,
-    _display_summary,
     _ensure_railway_auth_step,
     _ensure_railway_cli_step,
-    _existing_service_variables,
     _generate_domain_step,
     _init_railway_project_step,
     _link_database_step,
     _setup_postgres_step,
     _verify_dependencies_step,
-    _verify_deployment_step,
     _verify_railway_files_step,
+)
+from quickscale_cli.commands._deploy_service_config import (
+    _configure_env_vars_step,
+    _deploy_app_step,
+    _display_summary,
+    _existing_service_variables,
+    _verify_deployment_step,
 )
 
 
@@ -37,22 +42,22 @@ from quickscale_cli.commands.deployment_commands import (
 class TestCheckUncommittedChangesStep:
     """Tests for _check_uncommitted_changes_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.check_uncommitted_changes")
+    @patch("quickscale_cli.utils._railway_project.check_uncommitted_changes")
     def test_no_changes(self, mock_check):
         """Test with no uncommitted changes"""
         mock_check.return_value = (False, "")
         _check_uncommitted_changes_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.click.confirm")
-    @patch("quickscale_cli.commands.deployment_commands.check_uncommitted_changes")
+    @patch("click.confirm")
+    @patch("quickscale_cli.utils._railway_project.check_uncommitted_changes")
     def test_has_changes_continue(self, mock_check, mock_confirm):
         """Test with uncommitted changes, user continues"""
         mock_check.return_value = (True, "M file.py")
         mock_confirm.return_value = True
         _check_uncommitted_changes_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.click.confirm")
-    @patch("quickscale_cli.commands.deployment_commands.check_uncommitted_changes")
+    @patch("click.confirm")
+    @patch("quickscale_cli.utils._railway_project.check_uncommitted_changes")
     def test_has_changes_cancel(self, mock_check, mock_confirm):
         """Test with uncommitted changes, user cancels"""
         mock_check.return_value = (True, "M file.py")
@@ -69,23 +74,23 @@ class TestCheckUncommittedChangesStep:
 class TestVerifyRailwayFilesStep:
     """Tests for _verify_railway_files_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.verify_dockerfile")
-    @patch("quickscale_cli.commands.deployment_commands.verify_railway_json")
+    @patch("quickscale_cli.utils._railway_project.verify_dockerfile")
+    @patch("quickscale_cli.utils._railway_project.verify_railway_json")
     def test_all_valid(self, mock_json, mock_docker):
         """Test all files valid"""
         mock_json.return_value = (True, "")
         mock_docker.return_value = (True, "")
         _verify_railway_files_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.verify_railway_json")
+    @patch("quickscale_cli.utils._railway_project.verify_railway_json")
     def test_railway_json_invalid(self, mock_json):
         """Test invalid railway.json"""
         mock_json.return_value = (False, "Missing file")
         with pytest.raises(SystemExit):
             _verify_railway_files_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.verify_dockerfile")
-    @patch("quickscale_cli.commands.deployment_commands.verify_railway_json")
+    @patch("quickscale_cli.utils._railway_project.verify_dockerfile")
+    @patch("quickscale_cli.utils._railway_project.verify_railway_json")
     def test_dockerfile_missing(self, mock_json, mock_docker):
         """Test missing Dockerfile"""
         mock_json.return_value = (True, "")
@@ -102,22 +107,22 @@ class TestVerifyRailwayFilesStep:
 class TestVerifyDependenciesStep:
     """Tests for _verify_dependencies_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.verify_railway_dependencies")
+    @patch("quickscale_cli.utils._railway_project.verify_railway_dependencies")
     def test_all_present(self, mock_verify):
         """Test all dependencies present"""
         mock_verify.return_value = (True, [])
         _verify_dependencies_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.click.confirm")
-    @patch("quickscale_cli.commands.deployment_commands.verify_railway_dependencies")
+    @patch("click.confirm")
+    @patch("quickscale_cli.utils._railway_project.verify_railway_dependencies")
     def test_missing_deps_continue(self, mock_verify, mock_confirm):
         """Test missing deps, user continues"""
         mock_verify.return_value = (False, ["gunicorn"])
         mock_confirm.return_value = True
         _verify_dependencies_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.click.confirm")
-    @patch("quickscale_cli.commands.deployment_commands.verify_railway_dependencies")
+    @patch("click.confirm")
+    @patch("quickscale_cli.utils._railway_project.verify_railway_dependencies")
     def test_missing_deps_cancel(self, mock_verify, mock_confirm):
         """Test missing deps, user cancels"""
         mock_verify.return_value = (False, ["gunicorn", "psycopg2-binary"])
@@ -134,15 +139,15 @@ class TestVerifyDependenciesStep:
 class TestCheckPoetryLockStep:
     """Tests for _check_poetry_lock_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.check_poetry_lock_consistency")
+    @patch("quickscale_cli.utils._railway_project.check_poetry_lock_consistency")
     def test_consistent(self, mock_check):
         """Test consistent lock file"""
         mock_check.return_value = (True, "consistent")
         _check_poetry_lock_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.fix_poetry_lock")
-    @patch("quickscale_cli.commands.deployment_commands.click.confirm")
-    @patch("quickscale_cli.commands.deployment_commands.check_poetry_lock_consistency")
+    @patch("quickscale_cli.utils._railway_project.fix_poetry_lock")
+    @patch("click.confirm")
+    @patch("quickscale_cli.utils._railway_project.check_poetry_lock_consistency")
     def test_inconsistent_fix_success(self, mock_check, mock_confirm, mock_fix):
         """Test inconsistent lock, fix succeeds"""
         mock_check.return_value = (False, "outdated")
@@ -150,9 +155,9 @@ class TestCheckPoetryLockStep:
         mock_fix.return_value = (True, "Fixed")
         _check_poetry_lock_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.fix_poetry_lock")
-    @patch("quickscale_cli.commands.deployment_commands.click.confirm")
-    @patch("quickscale_cli.commands.deployment_commands.check_poetry_lock_consistency")
+    @patch("quickscale_cli.utils._railway_project.fix_poetry_lock")
+    @patch("click.confirm")
+    @patch("quickscale_cli.utils._railway_project.check_poetry_lock_consistency")
     def test_inconsistent_fix_fails(self, mock_check, mock_confirm, mock_fix):
         """Test inconsistent lock, fix fails, user continues"""
         mock_check.return_value = (False, "outdated")
@@ -160,16 +165,16 @@ class TestCheckPoetryLockStep:
         mock_fix.return_value = (False, "Failed to fix")
         _check_poetry_lock_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.click.confirm")
-    @patch("quickscale_cli.commands.deployment_commands.check_poetry_lock_consistency")
+    @patch("click.confirm")
+    @patch("quickscale_cli.utils._railway_project.check_poetry_lock_consistency")
     def test_inconsistent_user_declines_fix(self, mock_check, mock_confirm):
         """Test inconsistent lock, user declines fix, continues"""
         mock_check.return_value = (False, "outdated")
         mock_confirm.side_effect = [False, True]  # don't fix, but continue
         _check_poetry_lock_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.click.confirm")
-    @patch("quickscale_cli.commands.deployment_commands.check_poetry_lock_consistency")
+    @patch("click.confirm")
+    @patch("quickscale_cli.utils._railway_project.check_poetry_lock_consistency")
     def test_lock_not_found(self, mock_check, mock_confirm):
         """Test when lock file not found"""
         mock_check.return_value = (False, "lock not found")
@@ -185,18 +190,18 @@ class TestCheckPoetryLockStep:
 class TestEnsureRailwayCliStep:
     """Tests for _ensure_railway_cli_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.is_railway_cli_installed")
+    @patch("quickscale_cli.utils._railway_cli.is_railway_cli_installed")
     def test_cli_installed(self, mock_installed):
         """Test when CLI is installed"""
         mock_installed.return_value = True
         with patch(
-            "quickscale_cli.commands.deployment_commands._check_and_upgrade_railway_cli"
+            "quickscale_cli.commands._deploy_steps._check_and_upgrade_railway_cli"
         ):
             _ensure_railway_cli_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.install_railway_cli")
-    @patch("quickscale_cli.commands.deployment_commands.is_npm_installed")
-    @patch("quickscale_cli.commands.deployment_commands.is_railway_cli_installed")
+    @patch("quickscale_cli.utils._railway_cli.install_railway_cli")
+    @patch("quickscale_cli.utils._railway_cli.is_npm_installed")
+    @patch("quickscale_cli.utils._railway_cli.is_railway_cli_installed")
     def test_install_success(self, mock_installed, mock_npm, mock_install):
         """Test successful CLI installation"""
         mock_installed.return_value = False
@@ -204,9 +209,9 @@ class TestEnsureRailwayCliStep:
         mock_install.return_value = True
         _ensure_railway_cli_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.install_railway_cli")
-    @patch("quickscale_cli.commands.deployment_commands.is_npm_installed")
-    @patch("quickscale_cli.commands.deployment_commands.is_railway_cli_installed")
+    @patch("quickscale_cli.utils._railway_cli.install_railway_cli")
+    @patch("quickscale_cli.utils._railway_cli.is_npm_installed")
+    @patch("quickscale_cli.utils._railway_cli.is_railway_cli_installed")
     def test_install_fails(self, mock_installed, mock_npm, mock_install):
         """Test failed CLI installation"""
         mock_installed.return_value = False
@@ -224,17 +229,17 @@ class TestEnsureRailwayCliStep:
 class TestCheckAndUpgradeRailwayCli:
     """Tests for _check_and_upgrade_railway_cli"""
 
-    @patch("quickscale_cli.commands.deployment_commands.check_railway_cli_version")
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_cli_version")
+    @patch("quickscale_cli.utils._railway_cli.check_railway_cli_version")
+    @patch("quickscale_cli.utils._railway_cli.get_railway_cli_version")
     def test_version_up_to_date(self, mock_get, mock_check):
         """Test when version is up to date"""
         mock_get.return_value = "4.1.0"
         mock_check.return_value = True
         _check_and_upgrade_railway_cli()
 
-    @patch("quickscale_cli.commands.deployment_commands.upgrade_railway_cli")
-    @patch("quickscale_cli.commands.deployment_commands.check_railway_cli_version")
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_cli_version")
+    @patch("quickscale_cli.utils._railway_cli.upgrade_railway_cli")
+    @patch("quickscale_cli.utils._railway_cli.check_railway_cli_version")
+    @patch("quickscale_cli.utils._railway_cli.get_railway_cli_version")
     def test_upgrade_success(self, mock_get, mock_check, mock_upgrade):
         """Test successful upgrade"""
         mock_get.side_effect = ["3.0.0", "4.1.0"]
@@ -242,10 +247,10 @@ class TestCheckAndUpgradeRailwayCli:
         mock_upgrade.return_value = True
         _check_and_upgrade_railway_cli()
 
-    @patch("quickscale_cli.commands.deployment_commands.click.confirm")
-    @patch("quickscale_cli.commands.deployment_commands.upgrade_railway_cli")
-    @patch("quickscale_cli.commands.deployment_commands.check_railway_cli_version")
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_cli_version")
+    @patch("click.confirm")
+    @patch("quickscale_cli.utils._railway_cli.upgrade_railway_cli")
+    @patch("quickscale_cli.utils._railway_cli.check_railway_cli_version")
+    @patch("quickscale_cli.utils._railway_cli.get_railway_cli_version")
     def test_upgrade_fails_continue(
         self, mock_get, mock_check, mock_upgrade, mock_confirm
     ):
@@ -256,10 +261,10 @@ class TestCheckAndUpgradeRailwayCli:
         mock_confirm.return_value = True
         _check_and_upgrade_railway_cli()
 
-    @patch("quickscale_cli.commands.deployment_commands.click.confirm")
-    @patch("quickscale_cli.commands.deployment_commands.upgrade_railway_cli")
-    @patch("quickscale_cli.commands.deployment_commands.check_railway_cli_version")
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_cli_version")
+    @patch("click.confirm")
+    @patch("quickscale_cli.utils._railway_cli.upgrade_railway_cli")
+    @patch("quickscale_cli.utils._railway_cli.check_railway_cli_version")
+    @patch("quickscale_cli.utils._railway_cli.get_railway_cli_version")
     def test_upgrade_fails_abort(
         self, mock_get, mock_check, mock_upgrade, mock_confirm
     ):
@@ -271,7 +276,7 @@ class TestCheckAndUpgradeRailwayCli:
         with pytest.raises(SystemExit):
             _check_and_upgrade_railway_cli()
 
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_cli_version")
+    @patch("quickscale_cli.utils._railway_cli.get_railway_cli_version")
     def test_no_version(self, mock_get):
         """Test when version cannot be determined"""
         mock_get.return_value = None
@@ -286,14 +291,14 @@ class TestCheckAndUpgradeRailwayCli:
 class TestEnsureRailwayAuthStep:
     """Tests for _ensure_railway_auth_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.is_railway_authenticated")
+    @patch("quickscale_cli.utils._railway_cli.is_railway_authenticated")
     def test_already_authenticated(self, mock_auth):
         """Test when already authenticated"""
         mock_auth.return_value = True
         _ensure_railway_auth_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.login_railway_cli_browserless")
-    @patch("quickscale_cli.commands.deployment_commands.is_railway_authenticated")
+    @patch("quickscale_cli.utils._railway_cli.login_railway_cli_browserless")
+    @patch("quickscale_cli.utils._railway_cli.is_railway_authenticated")
     def test_login_success(self, mock_auth, mock_login):
         """Test successful login"""
         mock_auth.return_value = False
@@ -309,14 +314,14 @@ class TestEnsureRailwayAuthStep:
 class TestInitRailwayProjectStep:
     """Tests for _init_railway_project_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.is_railway_project_initialized")
+    @patch("quickscale_cli.utils._railway_cli.is_railway_project_initialized")
     def test_already_initialized(self, mock_init):
         """Test when project already initialized"""
         mock_init.return_value = True
         _init_railway_project_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
-    @patch("quickscale_cli.commands.deployment_commands.is_railway_project_initialized")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.is_railway_project_initialized")
     def test_init_fails(self, mock_init, mock_run):
         """Test initialization failure"""
         mock_init.return_value = False
@@ -324,8 +329,8 @@ class TestInitRailwayProjectStep:
         with pytest.raises(SystemExit):
             _init_railway_project_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
-    @patch("quickscale_cli.commands.deployment_commands.is_railway_project_initialized")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.is_railway_project_initialized")
     def test_init_exception(self, mock_init, mock_run):
         """Test initialization exception"""
         mock_init.return_value = False
@@ -342,13 +347,13 @@ class TestInitRailwayProjectStep:
 class TestSetupPostgresStep:
     """Tests for _setup_postgres_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_postgres_exists(self, mock_run):
         """Test when PostgreSQL already exists"""
         mock_run.return_value = Mock(returncode=0, stdout='[{"name": "PostgreSQL"}]')
         assert _setup_postgres_step() == "PostgreSQL"
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_postgres_type_wins_over_name_substring(self, mock_run):
         """A declared PostgreSQL type wins over an app name containing postgres."""
         mock_run.return_value = Mock(
@@ -360,7 +365,7 @@ class TestSetupPostgresStep:
         )
         assert _setup_postgres_step() == "primary-db"
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_typed_non_database_name_is_not_a_fallback_match(self, mock_run):
         """An explicitly typed app is never selected because of its name."""
         mock_run.return_value = Mock(
@@ -375,14 +380,14 @@ class TestSetupPostgresStep:
             "postgres",
         ]
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_no_postgres_match_fails(self, mock_run):
         """A listing without a database service is not replaced by a guess."""
         mock_run.return_value = Mock(returncode=0, stdout='[{"name": "web"}]')
         with pytest.raises(click.ClickException, match="found 0"):
             _setup_postgres_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_multiple_postgres_matches_fail(self, mock_run):
         """Multiple database services require an operator decision."""
         mock_run.return_value = Mock(
@@ -392,7 +397,7 @@ class TestSetupPostgresStep:
         with pytest.raises(click.ClickException, match="found 2"):
             _setup_postgres_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_service_listing_failure_fails(self, mock_run):
         """A failed service listing aborts instead of assuming Postgres."""
         mock_run.return_value = Mock(
@@ -401,7 +406,7 @@ class TestSetupPostgresStep:
         with pytest.raises(click.ClickException, match="network unavailable"):
             _setup_postgres_step()
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_check_exception(self, mock_run):
         """Test exception during check"""
         mock_run.side_effect = Exception("network error")
@@ -417,13 +422,13 @@ class TestSetupPostgresStep:
 class TestCreateAppServiceStep:
     """Tests for _create_app_service_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_service_exists(self, mock_run):
         """Test when service already exists"""
         mock_run.return_value = Mock(returncode=0, stdout='[{"name": "myapp"}]')
         _create_app_service_step("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_create_success(self, mock_run):
         """Test successful service creation"""
         mock_run.side_effect = [
@@ -438,7 +443,7 @@ class TestCreateAppServiceStep:
         assert mock_run.call_args_list[1].kwargs.get("interactive", False) is False
         assert mock_run.call_args_list[1].kwargs["input_data"] == ""
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_create_fails(self, mock_run):
         """Test service creation failure"""
         mock_run.side_effect = [
@@ -447,7 +452,7 @@ class TestCreateAppServiceStep:
         ]
         _create_app_service_step("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.run_railway_command")
+    @patch("quickscale_cli.utils._railway_cli.run_railway_command")
     def test_exception(self, mock_run):
         """Test exception during service creation"""
         mock_run.side_effect = Exception("error")
@@ -462,20 +467,20 @@ class TestCreateAppServiceStep:
 class TestDeployAppStep:
     """Tests for _deploy_app_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.deploy_railway_service")
+    @patch("quickscale_cli.utils._railway_cli.deploy_railway_service")
     def test_success(self, mock_deploy):
         """Test successful deployment"""
         mock_deploy.return_value = Mock(returncode=0, stderr="")
         _deploy_app_step("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.deploy_railway_service")
+    @patch("quickscale_cli.utils._railway_cli.deploy_railway_service")
     def test_failure(self, mock_deploy):
         """Test deployment failure"""
         mock_deploy.return_value = Mock(returncode=1, stderr="build failed")
         with pytest.raises(SystemExit):
             _deploy_app_step("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.deploy_railway_service")
+    @patch("quickscale_cli.utils._railway_cli.deploy_railway_service")
     def test_timeout(self, mock_deploy):
         """Test deployment timeout"""
         mock_deploy.side_effect = TimeoutError("timeout")
@@ -490,7 +495,7 @@ class TestDeployAppStep:
 class TestVerifyDeploymentStep:
     """Tests for _verify_deployment_step"""
 
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    @patch("quickscale_cli.utils._railway_project.get_railway_variables")
     def test_all_vars_set(self, mock_vars):
         """Test all variables set"""
         mock_vars.return_value = {
@@ -502,20 +507,20 @@ class TestVerifyDeploymentStep:
         }
         _verify_deployment_step("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    @patch("quickscale_cli.utils._railway_project.get_railway_variables")
     def test_missing_vars(self, mock_vars):
         """Test with missing variables"""
         mock_vars.return_value = {"DEBUG": "False"}
         _verify_deployment_step("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    @patch("quickscale_cli.utils._railway_project.get_railway_variables")
     def test_no_vars(self, mock_vars):
         """Test when vars can't be retrieved"""
         mock_vars.return_value = None
         with pytest.raises(click.ClickException, match="Unable to verify"):
             _verify_deployment_step("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    @patch("quickscale_cli.utils._railway_project.get_railway_variables")
     def test_long_value_truncated(self, mock_vars):
         """Test long variable values are truncated"""
         mock_vars.return_value = {
@@ -523,7 +528,7 @@ class TestVerifyDeploymentStep:
         }
         _verify_deployment_step("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    @patch("quickscale_cli.utils._railway_project.get_railway_variables")
     def test_unparsable_text_output_exits_nonzero(self, mock_vars):
         """Test that text-fallback ValueError causes non-zero exit.
 
@@ -541,19 +546,19 @@ class TestVerifyDeploymentStep:
 class TestExistingServiceVariables:
     """Tests for fail-hard reads of live Railway configuration."""
 
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    @patch("quickscale_cli.utils._railway_project.get_railway_variables")
     def test_none_result_fails(self, mock_vars):
         mock_vars.return_value = None
         with pytest.raises(click.ClickException, match="Unable to read"):
             _existing_service_variables("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    @patch("quickscale_cli.utils._railway_project.get_railway_variables")
     def test_exception_fails(self, mock_vars):
         mock_vars.side_effect = RuntimeError("temporary failure")
         with pytest.raises(click.ClickException, match="temporary failure"):
             _existing_service_variables("myapp")
 
-    @patch("quickscale_cli.commands.deployment_commands.get_railway_variables")
+    @patch("quickscale_cli.utils._railway_project.get_railway_variables")
     def test_empty_mapping_is_valid_first_deploy_state(self, mock_vars):
         mock_vars.return_value = {}
         assert _existing_service_variables("myapp") == {}
@@ -578,36 +583,36 @@ class TestRemainingHelpers:
         assert "${{primary-db.DATABASE_URL}}" in output
         assert "${{Postgres.DATABASE_URL}}" not in output
 
-    @patch("quickscale_cli.commands.deployment_commands.link_database_to_service")
+    @patch("quickscale_cli.utils._railway_project.link_database_to_service")
     def test_link_database_success(self, mock_link):
         """Test successful database link"""
         mock_link.return_value = (True, "Linked")
         _link_database_step("myapp", "Postgres")
         mock_link.assert_called_once_with("myapp", "Postgres")
 
-    @patch("quickscale_cli.commands.deployment_commands.link_database_to_service")
+    @patch("quickscale_cli.utils._railway_project.link_database_to_service")
     def test_link_database_failure(self, mock_link):
         """Test failed database link"""
         mock_link.return_value = (False, "Failed")
         _link_database_step("myapp", "primary-db")
         mock_link.assert_called_once_with("myapp", "primary-db")
 
-    @patch("quickscale_cli.commands.deployment_commands.generate_railway_domain")
+    @patch("quickscale_cli.utils._railway_project.generate_railway_domain")
     def test_generate_domain_success(self, mock_gen):
         """Test successful domain generation"""
         mock_gen.return_value = "https://myapp.up.railway.app"
         result = _generate_domain_step("myapp")
         assert result is not None
 
-    @patch("quickscale_cli.commands.deployment_commands.generate_railway_domain")
+    @patch("quickscale_cli.utils._railway_project.generate_railway_domain")
     def test_generate_domain_failure(self, mock_gen):
         """Test domain generation failure"""
         mock_gen.return_value = None
         result = _generate_domain_step("myapp")
         assert result is None
 
-    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
-    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
     def test_configure_env_vars_success(self, mock_secret, mock_batch):
         """Test successful env var configuration"""
         mock_secret.return_value = "secret-key"
@@ -615,8 +620,8 @@ class TestRemainingHelpers:
         _configure_env_vars_step("myapp", "myapp.up.railway.app", existing_vars={})
         mock_secret.assert_called_once_with()
 
-    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
-    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
     def test_configure_env_vars_failure(self, mock_secret, mock_batch):
         """Test env var configuration with failures hard-stops (SA31)."""
         mock_secret.return_value = "secret-key"
@@ -624,16 +629,16 @@ class TestRemainingHelpers:
         with pytest.raises(SystemExit):
             _configure_env_vars_step("myapp", None, existing_vars={})
 
-    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
-    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
     def test_configure_env_vars_no_domain(self, mock_secret, mock_batch):
         """Test env var config without domain"""
         mock_secret.return_value = "secret-key"
         mock_batch.return_value = (True, [])
         _configure_env_vars_step("myapp", None, existing_vars={})
 
-    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
-    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
     def test_configure_env_vars_hyphenated_service_name(self, mock_secret, mock_batch):
         """Hyphenated service names should map to valid Python settings module."""
         mock_secret.return_value = "secret-key"
@@ -645,8 +650,8 @@ class TestRemainingHelpers:
         assert batch_vars["DJANGO_SETTINGS_MODULE"] == "bap_web.settings.production"
         assert mock_batch.call_args[1]["service"] == "bap-web"
 
-    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
-    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
     def test_configure_env_vars_sets_runtime_role(
         self, mock_secret, mock_batch, capsys
     ):
@@ -666,8 +671,8 @@ class TestRemainingHelpers:
         )
         assert password not in capsys.readouterr().out
 
-    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
-    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
     def test_configure_env_vars_reuses_secret_key(self, mock_secret, mock_batch):
         """A re-deploy keeps sessions and signed values valid."""
         mock_batch.return_value = (True, [])
@@ -679,8 +684,8 @@ class TestRemainingHelpers:
         assert mock_batch.call_args[0][0]["SECRET_KEY"] == "existing-secret"
         mock_secret.assert_not_called()
 
-    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
-    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
     def test_configure_env_vars_reuses_runtime_password(self, mock_secret, mock_batch):
         """A re-deploy keeps the password the running container authenticates with."""
         mock_secret.return_value = "secret-key"
@@ -694,8 +699,8 @@ class TestRemainingHelpers:
         assert batch_vars["RUNTIME_DB_PASSWORD"] == "f" * 48
         assert f"{RUNTIME_DB_ROLE}:{'f' * 48}@" in batch_vars["RUNTIME_DATABASE_URL"]
 
-    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
-    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
     def test_configure_env_vars_leaves_operator_managed_url(
         self, mock_secret, mock_batch
     ):
@@ -723,11 +728,11 @@ class TestFacadePatchTargets:
     ) -> None:
         """Patching the facade variables reader reaches the service reader."""
         with patch.object(
-            deployment_commands,
+            _railway_project,
             "get_railway_variables",
             return_value={"A": "1"},
         ) as getter:
-            variables = deployment_commands._existing_service_variables("svc")
+            variables = _deploy_service_config._existing_service_variables("svc")
 
         getter.assert_called_once_with("svc")
         assert variables == {"A": "1"}
@@ -736,20 +741,22 @@ class TestFacadePatchTargets:
         """Patching the facade runner reaches the Railway service listing."""
         completed = Mock(returncode=0, stdout="[]")
         with patch.object(
-            deployment_commands, "run_railway_command", return_value=completed
+            _railway_cli, "run_railway_command", return_value=completed
         ) as runner:
-            assert deployment_commands._list_railway_services() == []
+            assert _deploy_steps._list_railway_services() == []
 
         runner.assert_called_once_with(["service", "list", "--json"], timeout=30)
 
     def test_patched_batch_setter_flows_through_env_config(self) -> None:
         """Patching the facade batch setter reaches environment configuration."""
         with patch.object(
-            deployment_commands,
+            _railway_cli,
             "set_railway_variables_batch",
             return_value=(True, []),
         ) as setter:
-            deployment_commands._configure_env_vars_step("svc", None, existing_vars={})
+            _deploy_service_config._configure_env_vars_step(
+                "svc", None, existing_vars={}
+            )
 
         setter.assert_called_once()
         env_vars = setter.call_args.args[0]

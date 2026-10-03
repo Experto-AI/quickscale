@@ -6,6 +6,11 @@ settings, a database, or a real storage backend.
 """
 
 from __future__ import annotations
+import quickscale_core.dr_engine._policy as _policy_2
+import quickscale_core.dr_engine._report as _report
+import quickscale_core.dr_engine._metadata as _metadata
+import quickscale_core.dr_engine._capture as _capture
+import quickscale_core.dr_engine._prune as _prune
 
 import json
 from contextlib import nullcontext
@@ -16,7 +21,6 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from quickscale_core.dr_engine import orchestration as orch
 from quickscale_core.dr_engine.primitives import (
     BackupError,
     BackupPolicySnapshot,
@@ -102,17 +106,26 @@ class TestMetadataOrchestration:
     def test_release_metadata_is_deterministic_and_provenanced(self) -> None:
         fake_settings = SimpleNamespace(QUICKSCALE_APP_VERSION="2.4.0")
         with (
-            patch(f"{_ORCH}.settings", fake_settings),
-            patch(f"{_ORCH}.django.get_version", return_value="5.2"),
-            patch(f"{_ORCH}._get_project_slug", return_value="demo"),
-            patch(f"{_ORCH}._get_source_environment", return_value="staging"),
+            patch("django.conf.settings", fake_settings),
+            patch("django.get_version", return_value="5.2"),
             patch(
-                f"{_ORCH}._collect_module_versions",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="demo",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
+                return_value="staging",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._collect_module_versions",
                 return_value={"quickscale_modules_auth": "1.2"},
             ),
-            patch(f"{_ORCH}._get_git_revision", return_value="abc123"),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_git_revision",
+                return_value="abc123",
+            ),
         ):
-            result = orch._build_release_metadata(captured_at=_NOW)
+            result = _metadata._build_release_metadata(captured_at=_NOW)
 
         assert result == {
             "manifest_version": 1,
@@ -128,12 +141,20 @@ class TestMetadataOrchestration:
 
     def test_backup_metadata_keeps_server_and_client_versions_separate(self) -> None:
         with (
-            patch(f"{_ORCH}.django.get_version", return_value="5.2"),
-            patch(f"{_ORCH}._collect_module_versions", return_value={}),
-            patch(f"{_ORCH}._get_database_server_version", return_value="3.45"),
-            patch(f"{_ORCH}.settings", SimpleNamespace(QUICKSCALE_APP_VERSION="dev")),
+            patch("django.get_version", return_value="5.2"),
+            patch(
+                "quickscale_core.dr_engine._metadata._collect_module_versions",
+                return_value={},
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_database_server_version",
+                return_value="3.45",
+            ),
+            patch(
+                "django.conf.settings", SimpleNamespace(QUICKSCALE_APP_VERSION="dev")
+            ),
         ):
-            result = orch._build_backup_metadata(
+            result = _metadata._build_backup_metadata(
                 created_at=_NOW,
                 backup_format="json",
                 database_engine="sqlite",
@@ -155,10 +176,13 @@ class TestMetadataOrchestration:
     ) -> None:
         policy = _policy()
         with (
-            patch(f"{_ORCH}.build_backup_filename", return_value="backup.json"),
-            patch(f"{_ORCH}._dump_database_as_json") as dump,
+            patch(
+                "quickscale_core.dr_engine._paths.build_backup_filename",
+                return_value="backup.json",
+            ),
+            patch("quickscale_core.dr_engine._metadata._dump_database_as_json") as dump,
         ):
-            result = orch._create_database_dump(
+            result = _metadata._create_database_dump(
                 "django.db.backends.sqlite3",
                 policy,
                 shell_runner=None,
@@ -188,7 +212,7 @@ class TestMetadataOrchestration:
     def test_invalid_policy_is_rejected_before_capture(
         self, overrides: dict[str, object], message: str
     ) -> None:
-        issues = orch._validate_policy_snapshot_internal(_policy(**overrides))
+        issues = _policy_2._validate_policy_snapshot_internal(_policy(**overrides))
         assert any(message in issue for issue in issues)
 
 
@@ -206,31 +230,62 @@ class TestCaptureResumeOrchestration:
         dump_result = (dump_path, "json", artifact.filename, None, None, None, None)
         ordered = MagicMock()
         with (
-            patch(f"{_ORCH}._validate_policy_snapshot_internal", return_value=[]),
-            patch(f"{_ORCH}.get_local_backup_directory", return_value=tmp_path),
-            patch(f"{_ORCH}._backup_creation_lock", return_value=nullcontext()),
-            patch(f"{_ORCH}.django.db", _db()),
-            patch(f"{_ORCH}._mint_snapshot_id", return_value="snap-001"),
             patch(
-                f"{_ORCH}._build_snapshot_local_root", return_value=tmp_path / "snap"
+                "quickscale_core.dr_engine._policy._validate_policy_snapshot_internal",
+                return_value=[],
             ),
-            patch(f"{_ORCH}._create_database_dump", return_value=dump_result),
-            patch(f"{_ORCH}._compute_sha256", return_value="checksum"),
-            patch(f"{_ORCH}._build_backup_metadata", return_value={}),
-            patch(f"{_ORCH}.create_snapshot", return_value=snapshot),
-            patch(f"{_ORCH}.create_artifact", return_value=artifact),
             patch(
-                f"{_ORCH}._build_snapshot_database_descriptor",
+                "quickscale_core.dr_engine._paths.get_local_backup_directory",
+                return_value=tmp_path,
+            ),
+            patch(
+                "quickscale_core.dr_engine._lock._backup_creation_lock",
+                return_value=nullcontext(),
+            ),
+            patch("django.db", _db()),
+            patch(
+                "quickscale_core.dr_engine.primitives._mint_snapshot_id",
+                return_value="snap-001",
+            ),
+            patch(
+                "quickscale_core.dr_engine._paths._build_snapshot_local_root",
+                return_value=tmp_path / "snap",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._create_database_dump",
+                return_value=dump_result,
+            ),
+            patch(
+                "quickscale_core.dr_engine.primitives._compute_sha256",
+                return_value="checksum",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._build_backup_metadata",
+                return_value={},
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.create_snapshot",
+                return_value=snapshot,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.create_artifact",
+                return_value=artifact,
+            ),
+            patch(
+                "quickscale_core.dr_engine._paths._build_snapshot_database_descriptor",
                 return_value={"status": "ready"},
             ),
-            patch(f"{_ORCH}.save_snapshot") as save_snapshot,
             patch(
-                f"{_ORCH}._complete_capture_after_dump", return_value=artifact
+                "quickscale_core.dr_engine.persistence.save_snapshot"
+            ) as save_snapshot,
+            patch(
+                "quickscale_core.dr_engine._capture._complete_capture_after_dump",
+                return_value=artifact,
             ) as complete,
         ):
             ordered.attach_mock(save_snapshot, "save_snapshot")
             ordered.attach_mock(complete, "complete")
-            result = orch.create_backup(policy=_policy(), now=_NOW)
+            result = _capture.create_backup(policy=_policy(), now=_NOW)
 
         assert result is artifact
         assert snapshot.authoritative_dump is artifact
@@ -257,18 +312,41 @@ class TestCaptureResumeOrchestration:
         root = tmp_path / "snap"
         root.mkdir()
         with (
-            patch(f"{_ORCH}._validate_policy_snapshot_internal", return_value=[]),
-            patch(f"{_ORCH}.get_local_backup_directory", return_value=tmp_path),
-            patch(f"{_ORCH}._backup_creation_lock", return_value=nullcontext()),
-            patch(f"{_ORCH}.django.db", _db()),
-            patch(f"{_ORCH}._mint_snapshot_id", return_value="snap-001"),
-            patch(f"{_ORCH}._build_snapshot_local_root", return_value=root),
-            patch(f"{_ORCH}.create_snapshot", return_value=snapshot),
-            patch(f"{_ORCH}._create_database_dump", side_effect=OSError("dump failed")),
-            patch(f"{_ORCH}.save_snapshot") as save_snapshot,
+            patch(
+                "quickscale_core.dr_engine._policy._validate_policy_snapshot_internal",
+                return_value=[],
+            ),
+            patch(
+                "quickscale_core.dr_engine._paths.get_local_backup_directory",
+                return_value=tmp_path,
+            ),
+            patch(
+                "quickscale_core.dr_engine._lock._backup_creation_lock",
+                return_value=nullcontext(),
+            ),
+            patch("django.db", _db()),
+            patch(
+                "quickscale_core.dr_engine.primitives._mint_snapshot_id",
+                return_value="snap-001",
+            ),
+            patch(
+                "quickscale_core.dr_engine._paths._build_snapshot_local_root",
+                return_value=root,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.create_snapshot",
+                return_value=snapshot,
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._create_database_dump",
+                side_effect=OSError("dump failed"),
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.save_snapshot"
+            ) as save_snapshot,
         ):
             with pytest.raises(BackupError, match="dump failed"):
-                orch.create_backup(policy=_policy(), now=_NOW)
+                _capture.create_backup(policy=_policy(), now=_NOW)
 
         assert not root.exists()
         assert snapshot.status == "failed"
@@ -295,29 +373,56 @@ class TestCaptureResumeOrchestration:
             child_descriptors_json={"database": {"status": "failed"}, "sidecars": {}},
         )
         with (
-            patch(f"{_ORCH}.get_backup_snapshot", return_value=snapshot),
             patch(
-                f"{_ORCH}._build_snapshot_capture_resume_policy", return_value=_policy()
+                "quickscale_core.dr_engine._state.get_backup_snapshot",
+                return_value=snapshot,
             ),
-            patch(f"{_ORCH}._validate_policy_snapshot_internal", return_value=[]),
-            patch(f"{_ORCH}._build_snapshot_lock_directory", return_value=tmp_path),
-            patch(f"{_ORCH}._backup_creation_lock", return_value=nullcontext()),
-            patch(f"{_ORCH}._get_source_environment", return_value="local"),
-            patch(f"{_ORCH}.refresh_snapshot"),
-            patch(f"{_ORCH}.django.db", _db()),
-            patch(f"{_ORCH}._compute_sha256", return_value="checksum"),
-            patch(f"{_ORCH}._collect_local_backup_validation_issues", return_value=[]),
             patch(
-                f"{_ORCH}._build_snapshot_database_descriptor",
+                "quickscale_core.dr_engine._paths._build_snapshot_capture_resume_policy",
+                return_value=_policy(),
+            ),
+            patch(
+                "quickscale_core.dr_engine._policy._validate_policy_snapshot_internal",
+                return_value=[],
+            ),
+            patch(
+                "quickscale_core.dr_engine._paths._build_snapshot_lock_directory",
+                return_value=tmp_path,
+            ),
+            patch(
+                "quickscale_core.dr_engine._lock._backup_creation_lock",
+                return_value=nullcontext(),
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
+                return_value="local",
+            ),
+            patch("quickscale_core.dr_engine.persistence.refresh_snapshot"),
+            patch("django.db", _db()),
+            patch(
+                "quickscale_core.dr_engine.primitives._compute_sha256",
+                return_value="checksum",
+            ),
+            patch(
+                "quickscale_core.dr_engine.recovery._collect_local_backup_validation_issues",
+                return_value=[],
+            ),
+            patch(
+                "quickscale_core.dr_engine._paths._build_snapshot_database_descriptor",
                 return_value={"status": "ready"},
             ),
-            patch(f"{_ORCH}.save_artifact") as save_artifact,
-            patch(f"{_ORCH}.save_snapshot") as save_snapshot,
             patch(
-                f"{_ORCH}._complete_capture_after_dump", return_value=artifact
+                "quickscale_core.dr_engine.persistence.save_artifact"
+            ) as save_artifact,
+            patch(
+                "quickscale_core.dr_engine.persistence.save_snapshot"
+            ) as save_snapshot,
+            patch(
+                "quickscale_core.dr_engine._capture._complete_capture_after_dump",
+                return_value=artifact,
             ) as complete,
         ):
-            result = orch.create_backup(
+            result = _capture.create_backup(
                 policy=_policy(), now=_NOW, resume_snapshot_id="snap-001"
             )
 
@@ -347,20 +452,30 @@ class TestCaptureResumeOrchestration:
             status=snapshot_status, authoritative_dump=_artifact(status="ready")
         )
         with (
-            patch(f"{_ORCH}.get_backup_snapshot", return_value=snapshot),
             patch(
-                f"{_ORCH}._build_snapshot_capture_resume_policy", return_value=_policy()
+                "quickscale_core.dr_engine._state.get_backup_snapshot",
+                return_value=snapshot,
             ),
-            patch(f"{_ORCH}._validate_policy_snapshot_internal", return_value=[]),
             patch(
-                f"{_ORCH}._snapshot_capture_is_complete",
+                "quickscale_core.dr_engine._paths._build_snapshot_capture_resume_policy",
+                return_value=_policy(),
+            ),
+            patch(
+                "quickscale_core.dr_engine._policy._validate_policy_snapshot_internal",
+                return_value=[],
+            ),
+            patch(
+                "quickscale_core.dr_engine._paths._snapshot_capture_is_complete",
                 side_effect=lambda item: item.status == "ready",
             ),
-            patch(f"{_ORCH}._get_source_environment", return_value="local"),
-            patch(f"{_ORCH}._backup_creation_lock") as lock,
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
+                return_value="local",
+            ),
+            patch("quickscale_core.dr_engine._lock._backup_creation_lock") as lock,
         ):
             with pytest.raises(BackupError, match=message):
-                orch.create_backup(
+                _capture.create_backup(
                     policy=_policy(), resume_snapshot_id="snap-001", now=_NOW
                 )
 
@@ -380,16 +495,23 @@ class TestCaptureResumeOrchestration:
         sidecars = MagicMock()
         with (
             patch(
-                f"{_ORCH}._upload_snapshot_child_to_private_remote",
+                "quickscale_core.dr_engine._remote._upload_snapshot_child_to_private_remote",
                 side_effect=BackupError("offline"),
             ),
-            patch(f"{_ORCH}._mark_remote_upload_failure") as mark_artifact,
-            patch(f"{_ORCH}._mark_snapshot_failed") as mark_snapshot,
-            patch(f"{_ORCH}._capture_snapshot_sidecars", sidecars),
-            patch(f"{_ORCH}.prune_expired_backups") as prune,
+            patch(
+                "quickscale_core.dr_engine._state._mark_remote_upload_failure"
+            ) as mark_artifact,
+            patch(
+                "quickscale_core.dr_engine._state._mark_snapshot_failed"
+            ) as mark_snapshot,
+            patch(
+                "quickscale_core.dr_engine._sidecar._capture_snapshot_sidecars",
+                sidecars,
+            ),
+            patch("quickscale_core.dr_engine._prune.prune_expired_backups") as prune,
         ):
             with pytest.raises(BackupError, match="offline"):
-                orch._complete_capture_after_dump(
+                _capture._complete_capture_after_dump(
                     artifact,
                     snapshot,
                     resolved_policy=_policy(target_mode="private_remote"),
@@ -473,7 +595,7 @@ class TestReportsAndProvenance:
         self, tmp_path: Path
     ) -> None:
         snapshot = self._complete_snapshot(tmp_path)
-        contract = orch._build_snapshot_full_backup_contract(snapshot, now=_NOW)
+        contract = _report._build_snapshot_full_backup_contract(snapshot, now=_NOW)
 
         assert contract["status"] == "complete"
         assert contract["completeness"]["status"] == "complete"
@@ -491,7 +613,7 @@ class TestReportsAndProvenance:
                 }
             )
         )
-        changed = orch._build_snapshot_full_backup_contract(snapshot, now=_NOW)
+        changed = _report._build_snapshot_full_backup_contract(snapshot, now=_NOW)
         assert changed["provenance"]["status"] == "inconsistent"
         assert any(
             "project_slug is inconsistent" in issue
@@ -523,7 +645,7 @@ class TestReportsAndProvenance:
             )
         )
 
-        contract = orch._build_snapshot_full_backup_contract(snapshot, now=_NOW)
+        contract = _report._build_snapshot_full_backup_contract(snapshot, now=_NOW)
 
         assert contract["provenance"]["authoritative_dump"]["module_versions"] == {
             "quickscale_modules_backups": "1.0"
@@ -553,15 +675,15 @@ class TestReportsAndProvenance:
         )
         with (
             patch(
-                f"{_ORCH}._build_snapshot_full_backup_contract",
+                "quickscale_core.dr_engine._report._build_snapshot_full_backup_contract",
                 return_value={"status": "complete"},
             ),
             patch(
-                f"{_ORCH}._load_snapshot_sidecar_payload",
+                "quickscale_core.dr_engine._sidecar._load_snapshot_sidecar_payload",
                 side_effect=[{"name": "ok"}, BackupError("bad json")],
             ) as load,
         ):
-            report = orch.build_backup_snapshot_report(
+            report = _report.build_backup_snapshot_report(
                 snapshot,
                 now=_NOW,
                 sidecar_payloads=("env.json", "env.json", "bad.json"),
@@ -577,14 +699,15 @@ class TestReportsAndProvenance:
         snapshot = _snapshot()
         with (
             patch(
-                f"{_ORCH}.get_backup_snapshot", return_value=snapshot
+                "quickscale_core.dr_engine._state.get_backup_snapshot",
+                return_value=snapshot,
             ) as get_snapshot,
             patch(
-                f"{_ORCH}.build_backup_snapshot_report",
+                "quickscale_core.dr_engine._report.build_backup_snapshot_report",
                 return_value={"snapshot_id": "snap-001"},
             ) as builder,
         ):
-            result = orch.report_backup_snapshot(
+            result = _report.report_backup_snapshot(
                 "snap-001", now=_NOW, sidecar_payloads=("env.json",)
             )
 
@@ -615,12 +738,14 @@ class TestPruneAndDelete:
         deleter = MagicMock()
         with (
             patch(
-                f"{_ORCH}._get_authoritative_snapshot_for_artifact",
+                "quickscale_core.dr_engine._state._get_authoritative_snapshot_for_artifact",
                 return_value=snapshot,
             ),
-            patch(f"{_ORCH}.save_snapshot") as save_snapshot,
+            patch(
+                "quickscale_core.dr_engine.persistence.save_snapshot"
+            ) as save_snapshot,
         ):
-            orch.delete_artifact_files(
+            _prune.delete_artifact_files(
                 artifact, policy=_policy(), remote_deleter=deleter
             )
 
@@ -644,9 +769,10 @@ class TestPruneAndDelete:
         artifact = _artifact(local_path=str(local_path), remote_key="orphan-key")
         deleter = MagicMock()
         with patch(
-            f"{_ORCH}._get_authoritative_snapshot_for_artifact", return_value=None
+            "quickscale_core.dr_engine._state._get_authoritative_snapshot_for_artifact",
+            return_value=None,
         ):
-            orch.delete_artifact_files(
+            _prune.delete_artifact_files(
                 artifact, policy=_policy(), remote_deleter=deleter
             )
 
@@ -667,30 +793,32 @@ class TestPruneAndDelete:
         events: list[str] = []
         with (
             patch(
-                f"{_ORCH}.iter_expired_snapshots", return_value=iter([pinned, expired])
+                "quickscale_core.dr_engine.persistence.iter_expired_snapshots",
+                return_value=iter([pinned, expired]),
             ),
             patch(
-                f"{_ORCH}.iter_expired_unlinked_artifacts", return_value=iter([orphan])
+                "quickscale_core.dr_engine.persistence.iter_expired_unlinked_artifacts",
+                return_value=iter([orphan]),
             ),
             patch(
-                f"{_ORCH}._delete_snapshot_storage",
+                "quickscale_core.dr_engine._remote._delete_snapshot_storage",
                 side_effect=lambda *_args, **_kwargs: events.append("snapshot"),
             ),
             patch(
-                f"{_ORCH}.delete_artifact_files",
+                "quickscale_core.dr_engine._prune.delete_artifact_files",
                 side_effect=lambda *_args, **_kwargs: events.append("orphan"),
             ),
             patch(
-                f"{_ORCH}.save_snapshot",
+                "quickscale_core.dr_engine.persistence.save_snapshot",
                 side_effect=lambda *_args, **_kwargs: events.append("save-snapshot"),
             ),
             patch(
-                f"{_ORCH}.save_artifact",
+                "quickscale_core.dr_engine.persistence.save_artifact",
                 side_effect=lambda *_args, **_kwargs: events.append("save-artifact"),
             ),
-            patch(f"{_ORCH}.django_timezone.now", return_value=_NOW),
+            patch("django.utils.timezone.now", return_value=_NOW),
         ):
-            count = orch.prune_expired_backups(policy=_policy(), now=_NOW)
+            count = _prune.prune_expired_backups(policy=_policy(), now=_NOW)
 
         assert count == 2
         assert events == [
@@ -715,18 +843,29 @@ class TestPruneAndDelete:
         orphan = _artifact(deleted_at=None)
         with (
             patch(
-                f"{_ORCH}.iter_expired_snapshots",
+                "quickscale_core.dr_engine.persistence.iter_expired_snapshots",
                 return_value=iter([expired, pinned]),
             ),
             patch(
-                f"{_ORCH}.iter_expired_unlinked_artifacts", return_value=iter([orphan])
+                "quickscale_core.dr_engine.persistence.iter_expired_unlinked_artifacts",
+                return_value=iter([orphan]),
             ),
-            patch(f"{_ORCH}._delete_snapshot_storage") as delete_storage,
-            patch(f"{_ORCH}.delete_artifact_files") as delete_files,
-            patch(f"{_ORCH}.save_snapshot") as save_snapshot,
-            patch(f"{_ORCH}.save_artifact") as save_artifact,
+            patch(
+                "quickscale_core.dr_engine._remote._delete_snapshot_storage"
+            ) as delete_storage,
+            patch(
+                "quickscale_core.dr_engine._prune.delete_artifact_files"
+            ) as delete_files,
+            patch(
+                "quickscale_core.dr_engine.persistence.save_snapshot"
+            ) as save_snapshot,
+            patch(
+                "quickscale_core.dr_engine.persistence.save_artifact"
+            ) as save_artifact,
         ):
-            count = orch.prune_expired_backups(policy=_policy(), now=_NOW, dry_run=True)
+            count = _prune.prune_expired_backups(
+                policy=_policy(), now=_NOW, dry_run=True
+            )
 
         assert count == 2
         delete_storage.assert_not_called()
@@ -739,7 +878,7 @@ class TestPruneAndDelete:
     def test_prune_dry_run_does_not_reconcile_default_policy(self) -> None:
         with (
             patch(
-                f"{_ORCH}.settings_policy_snapshot",
+                "quickscale_core.dr_engine.persistence.settings_policy_snapshot",
                 return_value=_policy(),
             ),
             patch(
@@ -749,14 +888,20 @@ class TestPruneAndDelete:
             patch(
                 "quickscale_core.dr_engine.persistence.ensure_default_policy"
             ) as ensure_default,
-            patch(f"{_ORCH}.iter_expired_snapshots", return_value=iter([])),
-            patch(f"{_ORCH}.iter_expired_unlinked_artifacts", return_value=iter([])),
-            patch(f"{_ORCH}.django_timezone.now", return_value=_NOW),
+            patch(
+                "quickscale_core.dr_engine.persistence.iter_expired_snapshots",
+                return_value=iter([]),
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.iter_expired_unlinked_artifacts",
+                return_value=iter([]),
+            ),
+            patch("django.utils.timezone.now", return_value=_NOW),
         ):
-            assert orch.prune_expired_backups(now=_NOW, dry_run=True) == 0
+            assert _prune.prune_expired_backups(now=_NOW, dry_run=True) == 0
             ensure_default.assert_not_called()
 
-            assert orch.prune_expired_backups(now=_NOW) == 0
+            assert _prune.prune_expired_backups(now=_NOW) == 0
             ensure_default.assert_called_once_with()
 
     def test_prune_uses_retention_cutoff_and_does_not_delete_pinned_remote(
@@ -765,13 +910,17 @@ class TestPruneAndDelete:
         pinned = _snapshot(has_active_rollback_pin=lambda now=None: True)
         with (
             patch(
-                f"{_ORCH}.iter_expired_snapshots", return_value=iter([pinned])
+                "quickscale_core.dr_engine.persistence.iter_expired_snapshots",
+                return_value=iter([pinned]),
             ) as snapshots,
-            patch(f"{_ORCH}.iter_expired_unlinked_artifacts", return_value=iter([])),
-            patch(f"{_ORCH}.django_timezone.now", return_value=_NOW),
+            patch(
+                "quickscale_core.dr_engine.persistence.iter_expired_unlinked_artifacts",
+                return_value=iter([]),
+            ),
+            patch("django.utils.timezone.now", return_value=_NOW),
         ):
             assert (
-                orch.prune_expired_backups(policy=_policy(retention_days=9), now=_NOW)
+                _prune.prune_expired_backups(policy=_policy(retention_days=9), now=_NOW)
                 == 0
             )
 

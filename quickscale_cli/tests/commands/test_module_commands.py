@@ -1,6 +1,8 @@
 """Tests for module_commands.py - module management functionality."""
 
 from pathlib import Path
+import datetime as _datetime
+import quickscale_cli.commands._module_shared as _module_shared
 from unittest.mock import Mock, patch
 
 import click
@@ -17,26 +19,30 @@ from quickscale_core.manifest.loader import (
 from quickscale_core.utils.git_utils import GitError
 
 
-from quickscale_cli.commands.module_commands import (
+from quickscale_cli.commands._module_shared import (
     APPLY_MODULE_EXECUTION_MODE,
     _check_auth_module_migrations,
-    _commit_module_update,
-    _install_module_dependencies,
-    _perform_module_embed,
-    _print_installation_error,
     _resolve_embedded_module_install_path,
     _sync_state_module_version,
-    _sync_module_dependencies,
-    _update_single_module,
     _validate_git_environment,
     _validate_module_not_exists,
     _validate_remote_branch,
     _validate_update_environment,
-    embed_module,
     ModuleEmbedProvenance,
-    push,
+)
+from quickscale_cli.commands._module_update_io import _commit_module_update
+from quickscale_cli.commands._module_embed import (
+    _install_module_dependencies,
+    _perform_module_embed,
+    _sync_module_dependencies,
+    embed_module,
+)
+from quickscale_cli.commands.module_output import _print_installation_error
+from quickscale_cli.commands._module_update import (
+    _update_single_module,
     update,
 )
+from quickscale_cli.commands._module_push import push
 
 _ADOPTED_CONTRACT_STEPS = [step.id for step in load_project_contract_vintage().steps]
 
@@ -45,11 +51,11 @@ _ADOPTED_CONTRACT_STEPS = [step.id for step in load_project_contract_vintage().s
 def _stub_default_split_tag_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep legacy embed tests hermetic; focused tag tests opt in explicitly."""
     monkeypatch.setattr(
-        "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+        "quickscale_core.utils.git_tags.check_remote_tag_exists",
         lambda remote, tag: True,
     )
     monkeypatch.setattr(
-        "quickscale_cli.commands.module_commands.resolve_remote_tag",
+        "quickscale_core.utils.git_tags.resolve_remote_tag",
         lambda remote, tag: "a" * 40,
     )
 
@@ -57,8 +63,8 @@ def _stub_default_split_tag_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
 class TestValidateGitEnvironment:
     """Tests for _validate_git_environment function."""
 
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
-    @patch("quickscale_cli.commands.module_commands.is_working_directory_clean")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_valid_environment(self, mock_clean, mock_repo):
         """Test validation passes when git repo is clean."""
         mock_repo.return_value = True
@@ -70,7 +76,7 @@ class TestValidateGitEnvironment:
         mock_repo.assert_called_once()
         mock_clean.assert_called_once()
 
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
     def test_not_git_repo(self, mock_repo):
         """Test validation fails when not a git repository."""
         mock_repo.return_value = False
@@ -79,8 +85,8 @@ class TestValidateGitEnvironment:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
-    @patch("quickscale_cli.commands.module_commands.is_working_directory_clean")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_dirty_working_directory(self, mock_clean, mock_repo):
         """Test validation fails when working directory has uncommitted changes."""
         mock_repo.return_value = True
@@ -114,7 +120,7 @@ class TestValidateModuleNotExists:
 class TestValidateRemoteBranch:
     """Tests for _validate_remote_branch function."""
 
-    @patch("quickscale_cli.commands.module_commands.check_remote_branch_exists")
+    @patch("quickscale_core.utils.git_repo.check_remote_branch_exists")
     def test_branch_exists(self, mock_check):
         """Test validation passes when branch exists on remote."""
         mock_check.return_value = True
@@ -128,7 +134,7 @@ class TestValidateRemoteBranch:
             "https://example.com/repo.git", "splits/auth-module"
         )
 
-    @patch("quickscale_cli.commands.module_commands.check_remote_branch_exists")
+    @patch("quickscale_core.utils.git_repo.check_remote_branch_exists")
     def test_branch_does_not_exist(self, mock_check):
         """Test validation fails when branch doesn't exist."""
         mock_check.return_value = False
@@ -143,7 +149,7 @@ class TestValidateRemoteBranch:
 class TestCheckAuthModuleMigrations:
     """Tests for _check_auth_module_migrations function."""
 
-    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
+    @patch("quickscale_cli.utils.auth_migration.assess_auth_migration_state")
     def test_no_migrations_run(self, mock_assess):
         """Test check passes when no migrations have been run."""
         mock_assess.return_value = Mock(
@@ -157,8 +163,8 @@ class TestCheckAuthModuleMigrations:
 
         assert result is True
 
-    @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
-    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
+    @patch("quickscale_cli.utils.auth_migration.format_auth_migration_remediation")
+    @patch("quickscale_cli.utils.auth_migration.assess_auth_migration_state")
     def test_migrations_exist_non_interactive(self, mock_assess, mock_remediation):
         """Test check fails in non-interactive mode when migrations exist."""
         mock_assess.return_value = Mock(
@@ -173,8 +179,8 @@ class TestCheckAuthModuleMigrations:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
-    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
+    @patch("quickscale_cli.utils.auth_migration.format_auth_migration_remediation")
+    @patch("quickscale_cli.utils.auth_migration.assess_auth_migration_state")
     def test_unverifiable_non_interactive_strict(
         self,
         mock_assess,
@@ -194,8 +200,8 @@ class TestCheckAuthModuleMigrations:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
-    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
+    @patch("quickscale_cli.utils.auth_migration.format_auth_migration_remediation")
+    @patch("quickscale_cli.utils.auth_migration.assess_auth_migration_state")
     def test_unverifiable_non_interactive_allowed(
         self,
         mock_assess,
@@ -219,9 +225,9 @@ class TestCheckAuthModuleMigrations:
 
         assert result is True
 
-    @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
-    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_cli.utils.auth_migration.format_auth_migration_remediation")
+    @patch("quickscale_cli.utils.auth_migration.assess_auth_migration_state")
+    @patch("click.confirm")
     def test_migrations_exist_user_confirms(
         self,
         mock_confirm,
@@ -242,9 +248,9 @@ class TestCheckAuthModuleMigrations:
 
         assert result is True
 
-    @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
-    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_cli.utils.auth_migration.format_auth_migration_remediation")
+    @patch("quickscale_cli.utils.auth_migration.assess_auth_migration_state")
+    @patch("click.confirm")
     def test_migrations_exist_user_cancels(
         self,
         mock_confirm,
@@ -269,15 +275,15 @@ class TestCheckAuthModuleMigrations:
 class TestPerformModuleEmbed:
     """Tests for _perform_module_embed function."""
 
-    @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
-    @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
-    @patch("quickscale_cli.commands.module_commands.add_module")
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
+    @patch("quickscale_cli.commands._module_embed._sync_module_dependencies")
+    @patch("quickscale_cli.commands._module_embed._install_module_dependencies")
+    @patch("quickscale_core.config.add_module")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_add")
     @patch(
-        "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+        "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring",
         return_value=(True, "ok"),
     )
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_successful_embed_without_configurator(
         self,
         mock_wiring,
@@ -327,12 +333,12 @@ class TestPerformModuleEmbed:
         assert f"Selected ref: splits/auth-module/{CORE_VERSION}" in output
         assert "Branch: splits/auth-module" not in output
 
-    @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
-    @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
-    @patch("quickscale_cli.commands.module_commands.add_module")
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
+    @patch("quickscale_cli.commands._module_embed._sync_module_dependencies")
+    @patch("quickscale_cli.commands._module_embed._install_module_dependencies")
+    @patch("quickscale_core.config.add_module")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_add")
     @patch(
-        "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+        "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring",
         return_value=(True, "ok"),
     )
     def test_embed_with_configurator(
@@ -356,7 +362,7 @@ class TestPerformModuleEmbed:
         configurator = Mock(return_value={})
 
         with patch(
-            "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+            "quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY",
             {"blog": ModuleConfigurator(name="blog", configure=configurator)},
         ):
             result = _perform_module_embed(
@@ -380,11 +386,11 @@ class TestPerformModuleEmbed:
             {"blog": {"some": "config"}},
         )
 
-    @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
-    @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
-    @patch("quickscale_cli.commands.module_commands.add_module")
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_cli.commands._module_embed._sync_module_dependencies")
+    @patch("quickscale_cli.commands._module_embed._install_module_dependencies")
+    @patch("quickscale_core.config.add_module")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_add")
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_embed_dependency_installation_fails(
         self,
         mock_subtree,
@@ -414,10 +420,10 @@ class TestPerformModuleEmbed:
 
         assert result == (False, None)
 
-    @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
-    @patch("quickscale_cli.commands.module_commands.add_module")
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_cli.commands._module_embed._install_module_dependencies")
+    @patch("quickscale_core.config.add_module")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_add")
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_embed_fails_when_embedded_manifest_is_invalid(
         self, mock_subtree, mock_add_module, mock_install, tmp_path
     ):
@@ -455,11 +461,11 @@ class TestPerformModuleEmbed:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+                "quickscale_core.utils.git_subtree.run_git_subtree_add",
                 side_effect=_fake_subtree_add,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.regenerate_managed_wiring"
+                "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring"
             ) as mock_wiring,
         ):
             result = _perform_module_embed(
@@ -477,15 +483,15 @@ class TestPerformModuleEmbed:
         assert result[0] is True
         mock_wiring.assert_not_called()
 
-    @patch("quickscale_cli.commands.module_commands._sync_module_dependencies")
-    @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
-    @patch("quickscale_cli.commands.module_commands.add_module")
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
+    @patch("quickscale_cli.commands._module_embed._sync_module_dependencies")
+    @patch("quickscale_cli.commands._module_embed._install_module_dependencies")
+    @patch("quickscale_core.config.add_module")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_add")
     @patch(
-        "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+        "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring",
         return_value=(True, "ok"),
     )
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_source_ref_forwarded_to_subtree_add_and_provenance_returned(
         self,
         mock_wiring,
@@ -548,21 +554,21 @@ class TestModuleVersionMismatchEnforcement:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+                "quickscale_core.utils.git_subtree.run_git_subtree_add",
             ),
             patch(
-                "quickscale_cli.commands.module_commands.add_module",
+                "quickscale_core.config.add_module",
             ) as spy_add_module,
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
                 return_value=True,
             ) as spy_sync_deps,
             patch(
-                "quickscale_cli.commands.module_commands._install_module_dependencies",
+                "quickscale_cli.commands._module_embed._install_module_dependencies",
                 return_value=True,
             ) as spy_install,
             patch(
-                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                "quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY",
                 {},
             ),
         ):
@@ -594,21 +600,21 @@ class TestModuleVersionMismatchEnforcement:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+                "quickscale_core.utils.git_subtree.run_git_subtree_add",
             ),
             patch(
-                "quickscale_cli.commands.module_commands.add_module",
+                "quickscale_core.config.add_module",
             ) as spy_add_module,
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
                 return_value=True,
             ) as spy_sync_deps,
             patch(
-                "quickscale_cli.commands.module_commands._install_module_dependencies",
+                "quickscale_cli.commands._module_embed._install_module_dependencies",
                 return_value=True,
             ) as spy_install,
             patch(
-                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                "quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY",
                 {},
             ),
         ):
@@ -644,25 +650,25 @@ class TestModuleVersionMismatchEnforcement:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+                "quickscale_core.utils.git_subtree.run_git_subtree_add",
             ),
             patch(
-                "quickscale_cli.commands.module_commands.add_module",
+                "quickscale_core.config.add_module",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._install_module_dependencies",
+                "quickscale_cli.commands._module_embed._install_module_dependencies",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+                "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring",
                 return_value=(True, "ok"),
             ),
             patch(
-                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                "quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY",
                 {},
             ),
         ):
@@ -692,21 +698,21 @@ class TestModuleVersionMismatchEnforcement:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+                "quickscale_core.utils.git_subtree.run_git_subtree_add",
             ),
             patch(
-                "quickscale_cli.commands.module_commands.add_module",
+                "quickscale_core.config.add_module",
             ) as spy_add_module,
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
                 return_value=True,
             ) as spy_sync_deps,
             patch(
-                "quickscale_cli.commands.module_commands._install_module_dependencies",
+                "quickscale_cli.commands._module_embed._install_module_dependencies",
                 return_value=True,
             ) as spy_install,
             patch(
-                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                "quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY",
                 {},
             ),
         ):
@@ -741,21 +747,21 @@ class TestModuleVersionMismatchEnforcement:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_add",
+                "quickscale_core.utils.git_subtree.run_git_subtree_add",
             ),
             patch(
-                "quickscale_cli.commands.module_commands.add_module",
+                "quickscale_core.config.add_module",
             ) as spy_add_module,
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
                 return_value=True,
             ) as spy_sync_deps,
             patch(
-                "quickscale_cli.commands.module_commands._install_module_dependencies",
+                "quickscale_cli.commands._module_embed._install_module_dependencies",
                 return_value=True,
             ) as spy_install,
             patch(
-                "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+                "quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY",
                 {},
             ),
         ):
@@ -825,7 +831,7 @@ class TestInstallModuleDependencies:
 
         assert resolved is None
 
-    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    @patch("subprocess.run")
     def test_successful_installation(self, mock_run, tmp_path, monkeypatch):
         """Test successful dependency installation."""
         # Create module directory
@@ -859,7 +865,7 @@ class TestInstallModuleDependencies:
         assert lock_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
         assert lock_env["POETRY_CACHE_DIR"] == "/tmp/worker-cache"
 
-    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    @patch("subprocess.run")
     def test_root_module_path_detection(self, mock_run, tmp_path):
         """Root-package modules should still install successfully."""
         module_dir = tmp_path / "modules" / "analytics"
@@ -877,7 +883,7 @@ class TestInstallModuleDependencies:
         assert mock_run.call_args_list[0][0][0] == ["poetry", "lock"]
         assert mock_run.call_args_list[1][0][0] == ["poetry", "install"]
 
-    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    @patch("subprocess.run")
     def test_skips_install_when_no_python_package_detected(self, mock_run, tmp_path):
         """Modules without a Python package should skip Poetry installation cleanly."""
         module_dir = tmp_path / "modules" / "docs_only"
@@ -894,7 +900,7 @@ class TestInstallModuleDependencies:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    @patch("subprocess.run")
     def test_poetry_lock_fails(self, mock_run, tmp_path):
         """Test installation fails when poetry lock fails."""
         module_dir = tmp_path / "modules" / "auth"
@@ -907,7 +913,7 @@ class TestInstallModuleDependencies:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    @patch("subprocess.run")
     def test_poetry_install_fails(self, mock_run, tmp_path):
         """Test installation fails when poetry install fails."""
         module_dir = tmp_path / "modules" / "auth"
@@ -923,7 +929,7 @@ class TestInstallModuleDependencies:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    @patch("subprocess.run")
     def test_nested_module_path_detection(self, mock_run, tmp_path):
         """Nested module layouts should still install successfully."""
         # Create nested module structure
@@ -943,7 +949,7 @@ class TestInstallModuleDependencies:
         assert mock_run.call_args_list[0][0][0] == ["poetry", "lock"]
         assert mock_run.call_args_list[1][0][0] == ["poetry", "install"]
 
-    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    @patch("subprocess.run")
     def test_subprocess_exception(self, mock_run, tmp_path):
         """Test handling of subprocess exceptions (CalledProcessError)."""
         import subprocess
@@ -980,19 +986,19 @@ class TestEmbedModule:
         """Standalone embedding must stop when cleanliness cannot be checked."""
         with (
             patch(
-                "quickscale_cli.commands.module_commands._validate_embed_theme",
+                "quickscale_cli.commands.module_output._validate_embed_theme",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.is_git_repo",
+                "quickscale_core.utils.git_repo.is_git_repo",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.is_working_directory_clean",
+                "quickscale_core.utils.git_repo.is_working_directory_clean",
                 side_effect=GitError("status unavailable"),
             ),
             patch(
-                "quickscale_cli.commands.module_commands._validate_remote_branch"
+                "quickscale_cli.commands._module_shared._validate_remote_branch"
             ) as mock_remote,
         ):
             result = embed_module("auth", tmp_path)
@@ -1010,29 +1016,29 @@ class TestEmbedModule:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands._validate_git_environment",
+                "quickscale_cli.commands._module_shared._validate_git_environment",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._validate_module_not_exists",
+                "quickscale_cli.commands._module_shared._validate_module_not_exists",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._validate_remote_branch",
+                "quickscale_cli.commands._module_shared._validate_remote_branch",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+                "quickscale_core.utils.git_tags.check_remote_tag_exists",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_tag",
+                "quickscale_core.utils.git_tags.resolve_remote_tag",
                 return_value="a" * 40,
             ),
-            patch("quickscale_cli.commands.module_commands.run_git_subtree_add"),
-            patch("quickscale_cli.commands.module_commands.add_module"),
+            patch("quickscale_core.utils.git_subtree.run_git_subtree_add"),
+            patch("quickscale_core.config.add_module"),
             patch(
-                "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+                "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring",
                 return_value=(True, "ok"),
             ) as mock_regenerate,
         ):
@@ -1060,10 +1066,10 @@ class TestEmbedModule:
             }
         }
 
-    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    @patch("quickscale_cli.commands._module_embed._perform_module_embed")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
     def test_billing_module_uses_standard_readiness_path(
         self,
         mock_git_env,
@@ -1081,11 +1087,11 @@ class TestEmbedModule:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+                "quickscale_core.utils.git_tags.check_remote_tag_exists",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_tag",
+                "quickscale_core.utils.git_tags.resolve_remote_tag",
                 return_value="a" * 40,
             ),
         ):
@@ -1100,12 +1106,12 @@ class TestEmbedModule:
         mock_remote.assert_not_called()
         mock_perform.assert_called_once()
 
-    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
-    @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_cli.commands._module_embed._perform_module_embed")
+    @patch("quickscale_cli.commands._module_shared._check_auth_module_migrations")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_successful_embed(
         self,
         mock_git_env,
@@ -1127,7 +1133,7 @@ class TestEmbedModule:
         assert result is True
         mock_perform.assert_called_once()
 
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
     def test_git_validation_fails(self, mock_git_env, tmp_path):
         """Test embedding fails when git validation fails."""
         mock_git_env.return_value = False
@@ -1136,8 +1142,8 @@ class TestEmbedModule:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
     def test_module_already_exists(self, mock_git_env, mock_not_exists, tmp_path):
         """Test embedding fails when module already exists."""
         mock_git_env.return_value = True
@@ -1147,9 +1153,9 @@ class TestEmbedModule:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
     def test_remote_branch_not_found(
         self, mock_git_env, mock_not_exists, mock_remote, tmp_path
     ):
@@ -1162,10 +1168,10 @@ class TestEmbedModule:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    @patch("quickscale_cli.commands._module_shared._check_auth_module_migrations")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
     def test_auth_migration_check_fails(
         self, mock_git_env, mock_not_exists, mock_remote, mock_auth_check, tmp_path
     ):
@@ -1179,12 +1185,12 @@ class TestEmbedModule:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
-    @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_cli.commands._module_embed._perform_module_embed")
+    @patch("quickscale_cli.commands._module_shared._check_auth_module_migrations")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_auth_migration_allow_unverifiable_forwarded(
         self,
         mock_git_env,
@@ -1211,12 +1217,12 @@ class TestEmbedModule:
         assert result is True
         mock_auth_check.assert_called_once_with(tmp_path, True, True)
 
-    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
-    @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_cli.commands._module_embed._perform_module_embed")
+    @patch("quickscale_cli.commands._module_shared._check_auth_module_migrations")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_auth_migration_check_can_be_skipped(
         self,
         mock_git_env,
@@ -1242,11 +1248,11 @@ class TestEmbedModule:
         assert result is True
         mock_auth_check.assert_not_called()
 
-    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_cli.commands._module_embed._perform_module_embed")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_git_error_handling(
         self, mock_git_env, mock_not_exists, mock_remote, mock_perform, tmp_path
     ):
@@ -1262,11 +1268,11 @@ class TestEmbedModule:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_cli.commands._module_embed._perform_module_embed")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_unexpected_error_handling(
         self, mock_git_env, mock_not_exists, mock_remote, mock_perform, tmp_path
     ):
@@ -1280,10 +1286,10 @@ class TestEmbedModule:
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    @patch("quickscale_cli.commands._module_embed._perform_module_embed")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
     def test_embed_with_configurator_called(
         self, mock_git_env, mock_not_exists, mock_remote, mock_perform, tmp_path
     ):
@@ -1296,7 +1302,7 @@ class TestEmbedModule:
         configurator = Mock(return_value={"test": "config"})
 
         with patch(
-            "quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY",
+            "quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY",
             {"blog": ModuleConfigurator(name="blog", configure=configurator)},
         ):
             result = embed_module("blog", tmp_path, non_interactive=True)
@@ -1304,13 +1310,13 @@ class TestEmbedModule:
         assert result is True
         configurator.assert_called_once_with(non_interactive=True)
 
-    @patch("quickscale_cli.commands.module_commands.resolve_remote_tag")
-    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
-    @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_core.utils.git_tags.resolve_remote_tag")
+    @patch("quickscale_cli.commands._module_embed._perform_module_embed")
+    @patch("quickscale_cli.commands._module_shared._check_auth_module_migrations")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_apply_embed_resolves_source_ref_once_and_carries_provenance(
         self,
         mock_git_env,
@@ -1362,12 +1368,12 @@ class TestEmbedModule:
         assert sink[0].source_ref == resolved_sha
         assert sink[0].tracking_branch == "splits/auth-module"
 
-    @patch("quickscale_cli.commands.module_commands.resolve_remote_tag")
-    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
-    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
-    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
-    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
-    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATOR_REGISTRY", {})
+    @patch("quickscale_core.utils.git_tags.resolve_remote_tag")
+    @patch("quickscale_cli.commands._module_embed._perform_module_embed")
+    @patch("quickscale_cli.commands._module_shared._validate_remote_branch")
+    @patch("quickscale_cli.commands._module_shared._validate_module_not_exists")
+    @patch("quickscale_cli.commands._module_shared._validate_git_environment")
+    @patch("quickscale_cli.commands.module_config.MODULE_CONFIGURATOR_REGISTRY", {})
     def test_standalone_embed_resolves_selected_tag_to_sha(
         self,
         mock_git_env,
@@ -1406,15 +1412,15 @@ class TestSA136cEmbedRefSelection:
     def _patch_validations(self) -> tuple[object, ...]:
         return (
             patch(
-                "quickscale_cli.commands.module_commands._validate_embed_theme",
+                "quickscale_cli.commands.module_output._validate_embed_theme",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._validate_git_environment",
+                "quickscale_cli.commands._module_shared._validate_git_environment",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._validate_module_not_exists",
+                "quickscale_cli.commands._module_shared._validate_module_not_exists",
                 return_value=True,
             ),
         )
@@ -1425,31 +1431,31 @@ class TestSA136cEmbedRefSelection:
                 stack.enter_context(validation)
             stack.enter_context(
                 patch(
-                    "quickscale_cli.commands.module_commands.quickscale_version",
+                    "quickscale_core.__version__",
                     "0.91.2",
                 )
             )
             mock_tag = stack.enter_context(
                 patch(
-                    "quickscale_cli.commands.module_commands.resolve_split_tag",
+                    "quickscale_core.utils.git_naming.resolve_split_tag",
                     return_value="splits/auth-module/0.91.2",
                 )
             )
             mock_exists = stack.enter_context(
                 patch(
-                    "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+                    "quickscale_core.utils.git_tags.check_remote_tag_exists",
                     return_value=True,
                 )
             )
             mock_resolve = stack.enter_context(
                 patch(
-                    "quickscale_cli.commands.module_commands.resolve_remote_tag",
+                    "quickscale_core.utils.git_tags.resolve_remote_tag",
                     return_value="b" * 40,
                 )
             )
             mock_perform = stack.enter_context(
                 patch(
-                    "quickscale_cli.commands.module_commands._perform_module_embed",
+                    "quickscale_cli.commands._module_embed._perform_module_embed",
                     return_value=(True, None),
                 )
             )
@@ -1484,15 +1490,15 @@ class TestSA136cEmbedRefSelection:
                 stack.enter_context(validation)
             stack.enter_context(
                 patch(
-                    "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+                    "quickscale_core.utils.git_tags.check_remote_tag_exists",
                     return_value=False,
                 )
             )
             mock_resolve = stack.enter_context(
-                patch("quickscale_cli.commands.module_commands.resolve_remote_tag")
+                patch("quickscale_core.utils.git_tags.resolve_remote_tag")
             )
             mock_perform = stack.enter_context(
-                patch("quickscale_cli.commands.module_commands._perform_module_embed")
+                patch("quickscale_cli.commands._module_embed._perform_module_embed")
             )
             assert (
                 embed_module("auth", tmp_path, skip_auth_migration_check=True) is False
@@ -1508,20 +1514,20 @@ class TestSA136cEmbedRefSelection:
             for validation in self._patch_validations():
                 stack.enter_context(validation)
             mock_exists = stack.enter_context(
-                patch("quickscale_cli.commands.module_commands.check_remote_tag_exists")
+                patch("quickscale_core.utils.git_tags.check_remote_tag_exists")
             )
             mock_tag = stack.enter_context(
-                patch("quickscale_cli.commands.module_commands.resolve_remote_tag")
+                patch("quickscale_core.utils.git_tags.resolve_remote_tag")
             )
             mock_resolve = stack.enter_context(
                 patch(
-                    "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                    "quickscale_core.utils.git_repo.resolve_remote_ref",
                     return_value="c" * 40,
                 )
             )
             mock_perform = stack.enter_context(
                 patch(
-                    "quickscale_cli.commands.module_commands._perform_module_embed",
+                    "quickscale_cli.commands._module_embed._perform_module_embed",
                     return_value=(True, None),
                 )
             )
@@ -1555,19 +1561,19 @@ class TestSA136cEmbedRefSelection:
             for validation in self._patch_validations():
                 stack.enter_context(validation)
             mock_exists = stack.enter_context(
-                patch("quickscale_cli.commands.module_commands.check_remote_tag_exists")
+                patch("quickscale_core.utils.git_tags.check_remote_tag_exists")
             )
             mock_default_resolve = stack.enter_context(
-                patch("quickscale_cli.commands.module_commands.resolve_remote_tag")
+                patch("quickscale_core.utils.git_tags.resolve_remote_tag")
             )
             mock_override_resolve = stack.enter_context(
                 patch(
-                    "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                    "quickscale_core.utils.git_repo.resolve_remote_ref",
                     side_effect=GitError("override ref unavailable"),
                 )
             )
             mock_perform = stack.enter_context(
-                patch("quickscale_cli.commands.module_commands._perform_module_embed")
+                patch("quickscale_cli.commands._module_embed._perform_module_embed")
             )
 
             result = embed_module(
@@ -1592,8 +1598,8 @@ class TestSA136cEmbedRefSelection:
 class TestValidateUpdateEnvironment:
     """Tests for _validate_update_environment function."""
 
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
-    @patch("quickscale_cli.commands.module_commands.is_working_directory_clean")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_valid_update_environment(self, mock_clean, mock_repo):
         """Test validation passes in valid environment."""
         mock_repo.return_value = True
@@ -1602,7 +1608,7 @@ class TestValidateUpdateEnvironment:
         # Should not raise
         _validate_update_environment()
 
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
     def test_not_git_repo_raises(self, mock_repo):
         """Test validation raises when not a git repository."""
         mock_repo.return_value = False
@@ -1610,8 +1616,8 @@ class TestValidateUpdateEnvironment:
         with pytest.raises(click.Abort):
             _validate_update_environment()
 
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
-    @patch("quickscale_cli.commands.module_commands.is_working_directory_clean")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_dirty_working_directory_raises(self, mock_clean, mock_repo):
         """Test validation raises when working directory is dirty."""
         mock_repo.return_value = True
@@ -1620,9 +1626,9 @@ class TestValidateUpdateEnvironment:
         with pytest.raises(click.Abort):
             _validate_update_environment()
 
-    @patch("quickscale_cli.commands.module_commands.is_git_repo", return_value=True)
+    @patch("quickscale_core.utils.git_repo.is_git_repo", return_value=True)
     @patch(
-        "quickscale_cli.commands.module_commands.is_working_directory_clean",
+        "quickscale_core.utils.git_repo.is_working_directory_clean",
         side_effect=GitError("status unavailable"),
     )
     def test_git_status_error_propagates(self, mock_clean, mock_repo):
@@ -1661,13 +1667,13 @@ class TestUpdateSingleModule:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull"
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull"
             ) as mock_pull,
             patch(
-                "quickscale_cli.commands.module_commands._sync_state_module_version"
+                "quickscale_cli.commands._module_shared._sync_state_module_version"
             ) as mock_sync_state,
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update"
+                "quickscale_cli.commands._module_update_io._commit_module_update"
             ) as mock_commit,
         ):
             result = _update_single_module(
@@ -1739,13 +1745,13 @@ class TestUpdateSingleModule:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull"
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull"
             ) as mock_pull,
             patch(
-                "quickscale_cli.commands.module_commands._sync_state_module_version"
+                "quickscale_cli.commands._module_shared._sync_state_module_version"
             ) as mock_sync_state,
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update"
+                "quickscale_cli.commands._module_update_io._commit_module_update"
             ) as mock_commit,
         ):
             result = _update_single_module(
@@ -1834,23 +1840,23 @@ class TestUpdateSingleModule:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value="a" * 40,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 side_effect=_fake_subtree_pull,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 return_value="0.82.0",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._sync_state_module_version",
+                "quickscale_cli.commands._module_shared._sync_state_module_version",
                 side_effect=_fake_sync_state_module_version,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update",
+                "quickscale_cli.commands._module_update_io._commit_module_update",
                 side_effect=Exception("commit failed after staging"),
             ),
         ):
@@ -1940,21 +1946,21 @@ class TestUpdateSingleModule:
         # ModuleVersionMismatchError, which triggers rollback.
         with (
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value="a" * 40,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 side_effect=_fake_subtree_pull,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._sync_state_module_version",
+                "quickscale_cli.commands._module_shared._sync_state_module_version",
             ) as spy_sync_state,
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
             ) as spy_sync_deps,
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update",
+                "quickscale_cli.commands._module_update_io._commit_module_update",
             ) as spy_commit,
         ):
             result = _update_single_module(
@@ -1984,16 +1990,16 @@ class TestUpdateSingleModule:
         assert state_path.read_text() == original_state
 
     @patch(
-        "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
+        "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update"
     )
-    @patch("quickscale_cli.commands.module_commands._commit_module_update")
-    @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
-    @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
+    @patch("quickscale_cli.commands._module_update_io._commit_module_update")
+    @patch("quickscale_cli.commands._module_shared._sync_state_module_version")
+    @patch("quickscale_cli.commands._module_shared._read_embedded_module_version")
     @patch(
-        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        "quickscale_core.utils.git_repo.resolve_remote_ref",
         return_value="a" * 40,
     )
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_pull")
     def test_successful_update(
         self,
         mock_pull,
@@ -2027,16 +2033,16 @@ class TestUpdateSingleModule:
         mock_commit.assert_called_once_with("auth", "modules/auth")
 
     @patch(
-        "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
+        "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update"
     )
-    @patch("quickscale_cli.commands.module_commands._commit_module_update")
-    @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
-    @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
+    @patch("quickscale_cli.commands._module_update_io._commit_module_update")
+    @patch("quickscale_cli.commands._module_shared._sync_state_module_version")
+    @patch("quickscale_cli.commands._module_shared._read_embedded_module_version")
     @patch(
-        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        "quickscale_core.utils.git_repo.resolve_remote_ref",
         return_value="a" * 40,
     )
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_pull")
     def test_update_with_no_preview(
         self,
         mock_pull,
@@ -2061,14 +2067,14 @@ class TestUpdateSingleModule:
         mock_commit.assert_called_once_with("blog", "modules/blog")
 
     @patch(
-        "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
+        "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update"
     )
-    @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
+    @patch("quickscale_cli.commands._module_shared._read_embedded_module_version")
     @patch(
-        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        "quickscale_core.utils.git_repo.resolve_remote_ref",
         return_value="a" * 40,
     )
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_pull")
     def test_update_manifest_error(
         self, mock_pull, mock_resolve, mock_read_version, mock_ensure_state
     ):
@@ -2088,13 +2094,13 @@ class TestUpdateSingleModule:
         assert result is False
 
     @patch(
-        "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
+        "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update"
     )
     @patch(
-        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        "quickscale_core.utils.git_repo.resolve_remote_ref",
         return_value="a" * 40,
     )
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_pull")
     def test_update_git_error(self, mock_pull, mock_resolve, mock_ensure_state):
         """Test handling of GitError during update."""
         from quickscale_core.utils.git_utils import GitError
@@ -2110,16 +2116,16 @@ class TestUpdateSingleModule:
         assert result is False
 
     @patch(
-        "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update"
+        "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update"
     )
-    @patch("quickscale_cli.commands.module_commands._commit_module_update")
-    @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
-    @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
+    @patch("quickscale_cli.commands._module_update_io._commit_module_update")
+    @patch("quickscale_cli.commands._module_shared._sync_state_module_version")
+    @patch("quickscale_cli.commands._module_shared._read_embedded_module_version")
     @patch(
-        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        "quickscale_core.utils.git_repo.resolve_remote_ref",
         return_value="b" * 40,
     )
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_pull")
     def test_subtree_pull_uses_resolved_ref_not_branch_name(
         self,
         mock_pull,
@@ -2158,7 +2164,7 @@ class TestUpdateSingleModule:
 class TestCommitModuleUpdate:
     """Tests for _commit_module_update function."""
 
-    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    @patch("subprocess.run")
     def test_commit_module_update_commits_changes(
         self,
         mock_run,
@@ -2199,7 +2205,7 @@ class TestCommitModuleUpdate:
             "chore(modules): update auth module",
         ]
 
-    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    @patch("subprocess.run")
     def test_commit_module_update_skips_when_no_changes(self, mock_run):
         """Test commit helper returns early when no staged changes exist."""
         mock_run.side_effect = [
@@ -2215,13 +2221,15 @@ class TestCommitModuleUpdate:
 class TestUpdateCommand:
     """Tests for update click command."""
 
-    @patch("quickscale_cli.commands.module_commands._update_single_module")
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands._validate_update_environment")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
-    @patch("quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring")
+    @patch("quickscale_cli.commands._module_update._update_single_module")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_cli.commands._module_shared._validate_update_environment")
+    @patch("click.confirm")
     @patch(
-        "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+        "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring"
+    )
+    @patch(
+        "quickscale_cli.commands._module_update_io._regenerate_and_record_managed_wiring",
         return_value=(True, "regenerated"),
     )
     def test_update_allows_billing_module_through_standard_readiness_path(
@@ -2264,13 +2272,15 @@ class TestUpdateCommand:
         )
         mock_update.assert_called_once()
 
-    @patch("quickscale_cli.commands.module_commands._update_single_module")
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands._validate_update_environment")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
-    @patch("quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring")
+    @patch("quickscale_cli.commands._module_update._update_single_module")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_cli.commands._module_shared._validate_update_environment")
+    @patch("click.confirm")
     @patch(
-        "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+        "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring"
+    )
+    @patch(
+        "quickscale_cli.commands._module_update_io._regenerate_and_record_managed_wiring",
         return_value=(True, "regenerated"),
     )
     def test_successful_update(
@@ -2305,11 +2315,11 @@ class TestUpdateCommand:
 
         assert result.exit_code == 0
 
-    @patch("quickscale_cli.commands.module_commands._update_single_module")
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands._validate_update_environment")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
-    @patch("quickscale_cli.commands.module_commands._roll_back_partial_module_update")
+    @patch("quickscale_cli.commands._module_update._update_single_module")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_cli.commands._module_shared._validate_update_environment")
+    @patch("click.confirm")
+    @patch("quickscale_cli.commands._module_update_io._roll_back_partial_module_update")
     def test_update_stops_and_aborts_on_module_failure(
         self,
         mock_rollback,
@@ -2351,8 +2361,8 @@ class TestUpdateCommand:
         mock_rollback.assert_called_once()
         assert mock_rollback.call_args.args[2] == ["auth"]
 
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands._validate_update_environment")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_cli.commands._module_shared._validate_update_environment")
     def test_no_modules_installed(self, mock_validate, mock_manager_cls):
         """Test update when no modules are installed."""
         state = Mock(modules={})
@@ -2366,9 +2376,9 @@ class TestUpdateCommand:
         assert result.exit_code == 0
         assert "No modules installed" in result.output
 
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands._validate_update_environment")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_cli.commands._module_shared._validate_update_environment")
+    @patch("click.confirm")
     def test_user_cancels_update(self, mock_confirm, mock_validate, mock_manager_cls):
         """Test update cancelled by user."""
         mock_confirm.return_value = False
@@ -2399,7 +2409,7 @@ class TestUpdateVersionDriftWarning:
     def test_warn_version_drift_for_update_returns_empty_when_agreeing(self, tmp_path):
         """Drift warning is silent when state and config agree on versions."""
         from quickscale_core.config import add_module
-        from quickscale_cli.commands.module_commands import (
+        from quickscale_cli.commands._module_shared import (
             _warn_version_drift_for_update,
         )
         from quickscale_core.schema.state_schema import (
@@ -2443,7 +2453,7 @@ class TestUpdateVersionDriftWarning:
     def test_warn_version_drift_for_update_reports_disagreement(self, tmp_path):
         """Drift warning returns VersionDriftWarning when versions disagree."""
         from quickscale_core.config import add_module
-        from quickscale_cli.commands.module_commands import (
+        from quickscale_cli.commands._module_shared import (
             _warn_version_drift_for_update,
         )
         from quickscale_core.project_state import VersionDriftWarning
@@ -2487,13 +2497,15 @@ class TestUpdateVersionDriftWarning:
         assert isinstance(drift[0], VersionDriftWarning)
         assert drift[0].module == "auth"
 
-    @patch("quickscale_cli.commands.module_commands._update_single_module")
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands._validate_update_environment")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
-    @patch("quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring")
+    @patch("quickscale_cli.commands._module_update._update_single_module")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_cli.commands._module_shared._validate_update_environment")
+    @patch("click.confirm")
     @patch(
-        "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+        "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring"
+    )
+    @patch(
+        "quickscale_cli.commands._module_update_io._regenerate_and_record_managed_wiring",
         return_value=(True, "regenerated"),
     )
     def test_update_emits_drift_warning_via_warn_helper(
@@ -2527,7 +2539,7 @@ class TestUpdateVersionDriftWarning:
         # Patch the drift warning helper to a no-op so this test focuses on
         # command routing; the helper's own behavior is exercised above.
         with patch(
-            "quickscale_cli.commands.module_commands._warn_version_drift_for_update",
+            "quickscale_cli.commands._module_shared._warn_version_drift_for_update",
             return_value=[],
         ) as mock_warn:
             runner = CliRunner()
@@ -2550,7 +2562,7 @@ class TestLazyModuleChoice:
         """Construction must not trigger module discovery."""
         from quickscale_core.contracts import module_discovery as _md
         from quickscale_core.contracts import module_catalog as _mc
-        from quickscale_cli.commands.module_commands import _LazyModuleChoice
+        from quickscale_cli.commands._module_shared import _LazyModuleChoice
 
         original_src = _md.discover_shipped_module_names
         call_count = 0
@@ -2574,7 +2586,7 @@ class TestLazyModuleChoice:
 
     def test_case_insensitive_match(self) -> None:
         """_LazyModuleChoice must match module names case-insensitively."""
-        from quickscale_cli.commands.module_commands import _LazyModuleChoice
+        from quickscale_cli.commands._module_shared import _LazyModuleChoice
 
         choice = _LazyModuleChoice()
         all_choices = choice.choices
@@ -2588,7 +2600,7 @@ class TestLazyModuleChoice:
 
     def test_invalid_choice_raises(self) -> None:
         """An invalid module name must produce a click.BadParameter."""
-        from quickscale_cli.commands.module_commands import _LazyModuleChoice
+        from quickscale_cli.commands._module_shared import _LazyModuleChoice
 
         choice = _LazyModuleChoice()
         with pytest.raises(click.BadParameter, match="not one of"):
@@ -2597,7 +2609,7 @@ class TestLazyModuleChoice:
     def test_help_output_lists_choices(self) -> None:
         """CLI help for push --module must list available module names."""
         from click.testing import CliRunner
-        from quickscale_cli.commands.module_commands import push
+        from quickscale_cli.commands._module_push import push
 
         runner = CliRunner()
         result = runner.invoke(push, ["--help"])
@@ -2609,7 +2621,7 @@ class TestLazyModuleChoice:
     def test_invalid_module_via_cli_runner(self) -> None:
         """CLI push with invalid module name must show an error."""
         from click.testing import CliRunner
-        from quickscale_cli.commands.module_commands import push
+        from quickscale_cli.commands._module_push import push
 
         runner = CliRunner()
         result = runner.invoke(push, ["--module", "nonexistent_xyz"])
@@ -2620,10 +2632,10 @@ class TestLazyModuleChoice:
 class TestPushCommand:
     """Tests for push click command."""
 
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_push")
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_push")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
+    @patch("click.confirm")
     def test_successful_push(
         self, mock_confirm, mock_repo, mock_manager_cls, mock_push
     ):
@@ -2642,7 +2654,7 @@ class TestPushCommand:
         assert result.exit_code == 0
         mock_push.assert_called_once()
 
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
     def test_push_not_git_repo(self, mock_repo):
         """Test push fails when not a git repository."""
         mock_repo.return_value = False
@@ -2654,8 +2666,8 @@ class TestPushCommand:
 
         assert result.exit_code != 0
 
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
     def test_push_module_not_installed(self, mock_repo, mock_manager_cls):
         """Test push fails when module is not installed."""
         mock_repo.return_value = True
@@ -2669,9 +2681,9 @@ class TestPushCommand:
 
         assert result.exit_code != 0
 
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
+    @patch("click.confirm")
     def test_user_cancels_push(self, mock_confirm, mock_repo, mock_manager_cls):
         """Test push cancelled by user."""
         mock_repo.return_value = True
@@ -2692,10 +2704,10 @@ class TestPushCommand:
             or "❌" in result.output
         )
 
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_push")
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_push")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
+    @patch("click.confirm")
     def test_push_with_custom_branch(
         self, mock_confirm, mock_repo, mock_manager_cls, mock_push
     ):
@@ -2718,10 +2730,10 @@ class TestPushCommand:
         call_args = mock_push.call_args
         assert call_args[1]["branch"] == "feature/custom-branch"
 
-    @patch("quickscale_cli.commands.module_commands.run_git_subtree_push")
-    @patch("quickscale_cli.commands.module_commands.ProjectStateManager")
-    @patch("quickscale_cli.commands.module_commands.is_git_repo")
-    @patch("quickscale_cli.commands.module_commands.click.confirm")
+    @patch("quickscale_core.utils.git_subtree.run_git_subtree_push")
+    @patch("quickscale_core.project_state_manager.ProjectStateManager")
+    @patch("quickscale_core.utils.git_repo.is_git_repo")
+    @patch("click.confirm")
     def test_push_git_error(self, mock_confirm, mock_repo, mock_manager_cls, mock_push):
         """Test handling of GitError during push."""
         from quickscale_core.utils.git_utils import GitError
@@ -2803,19 +2815,19 @@ class TestUpdatePathProvenancePersistence:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value=expected_sha,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 side_effect=_fake_subtree_pull,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 return_value="0.82.0",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update",
+                "quickscale_cli.commands._module_update_io._commit_module_update",
             ),
         ):
             result = _update_single_module(
@@ -2846,11 +2858,9 @@ class TestUpdatePathProvenancePersistence:
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
         with (
+            patch("quickscale_core.utils.git_repo.resolve_remote_ref") as mock_resolve,
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref"
-            ) as mock_resolve,
-            patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull"
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull"
             ) as mock_pull,
         ):
             result = _update_single_module(
@@ -2934,19 +2944,19 @@ class TestUpdatePathProvenancePersistence:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value=expected_sha,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 side_effect=_fake_subtree_pull,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 return_value="0.82.0",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update",
+                "quickscale_cli.commands._module_update_io._commit_module_update",
             ),
         ):
             result = _update_single_module(
@@ -3016,22 +3026,22 @@ class TestUpdatePathProvenancePersistence:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value=expected_sha,
             ) as mock_resolve,
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 return_value="updated",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 return_value="0.82.0",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update",
+                "quickscale_cli.commands._module_update_io._commit_module_update",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._sync_state_module_version",
+                "quickscale_cli.commands._module_shared._sync_state_module_version",
             ) as mock_sync,
         ):
             result = _update_single_module(
@@ -3085,11 +3095,11 @@ class TestUpdatePathProvenancePersistence:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 side_effect=GitError("Remote branch not found"),
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull"
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull"
             ) as mock_pull,
         ):
             result = _update_single_module(
@@ -3170,19 +3180,19 @@ class TestUpdatePathDependencySync:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value="a" * 40,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 side_effect=_fake_subtree_pull,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 side_effect=_fake_read_version,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update",
+                "quickscale_cli.commands._module_update_io._commit_module_update",
                 side_effect=Exception("commit failed"),
             ),
         ):
@@ -3232,26 +3242,26 @@ class TestUpdatePathDependencySync:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value="a" * 40,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 return_value="updated",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 return_value="0.82.0",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update",
+                "quickscale_cli.commands._module_update_io._commit_module_update",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._sync_state_module_version",
+                "quickscale_cli.commands._module_shared._sync_state_module_version",
             ),
         ):
             result = _update_single_module(
@@ -3323,25 +3333,25 @@ class TestUpdatePathDependencySync:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies"
+                "quickscale_cli.commands._module_embed._sync_module_dependencies"
             ) as mock_sync,
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value="a" * 40,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 return_value="updated",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 return_value="0.82.0",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update",
+                "quickscale_cli.commands._module_update_io._commit_module_update",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._sync_state_module_version",
+                "quickscale_cli.commands._module_shared._sync_state_module_version",
             ),
         ):
             mock_sync.return_value = True
@@ -3397,25 +3407,25 @@ class TestUpdatePathDependencySync:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies"
+                "quickscale_cli.commands._module_embed._sync_module_dependencies"
             ) as mock_sync,
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value="a" * 40,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 return_value="updated",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 return_value="0.83.0",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update",
+                "quickscale_cli.commands._module_update_io._commit_module_update",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._sync_state_module_version",
+                "quickscale_cli.commands._module_shared._sync_state_module_version",
             ),
         ):
             mock_sync.return_value = True
@@ -3470,7 +3480,7 @@ class TestUpdatePathDependencySync:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands._ensure_authoritative_state_for_update",
+                "quickscale_cli.commands._module_update._ensure_authoritative_state_for_update",
                 return_value=Mock(
                     modules={
                         "auth": Mock(
@@ -3481,25 +3491,25 @@ class TestUpdatePathDependencySync:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.module_commands._commit_module_update"
+                "quickscale_cli.commands._module_update_io._commit_module_update"
             ) as mock_commit,
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._sync_state_module_version",
+                "quickscale_cli.commands._module_shared._sync_state_module_version",
             ),
             patch(
-                "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                "quickscale_cli.commands._module_shared._read_embedded_module_version",
                 return_value="0.82.0",
             ),
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value="a" * 40,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 return_value="updated",
             ),
         ):
@@ -3589,7 +3599,6 @@ class TestSyncStateModuleVersionTriple:
             QuickScaleState,
             StateManager,
         )
-        from quickscale_cli.commands import module_commands
 
         (tmp_path / ".quickscale").mkdir(parents=True, exist_ok=True)
         state_manager = StateManager(tmp_path)
@@ -3619,9 +3628,9 @@ class TestSyncStateModuleVersionTriple:
             def now(cls) -> real_datetime:
                 return real_datetime(2000, 1, 1, 0, 0, 0)
 
-        monkeypatch.setattr(module_commands, "datetime", _FrozenDatetime)
+        monkeypatch.setattr(_datetime, "datetime", _FrozenDatetime)
 
-        module_commands._sync_state_module_version(tmp_path, "auth", "0.83.0")
+        _module_shared._sync_state_module_version(tmp_path, "auth", "0.83.0")
 
         updated_state = state_manager.load()
         assert updated_state is not None
@@ -3700,9 +3709,7 @@ class TestAF5RecoveryLedgerRegression:
 
     def test_load_update_recovery_handles_af6_era_ledger(self, tmp_path: Path) -> None:
         """An AF6-era ledger (without resume_checkpoint) must load cleanly."""
-        from quickscale_cli.commands.module_commands import (
-            _load_update_recovery_state,
-        )
+        from quickscale_cli.commands._module_update import _load_update_recovery_state
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3732,9 +3739,7 @@ class TestAF5RecoveryLedgerRegression:
 
     def test_load_update_recovery_handles_af5_era_ledger(self, tmp_path: Path) -> None:
         """An AF5-era ledger WITH resume_checkpoint must load cleanly."""
-        from quickscale_cli.commands.module_commands import (
-            _load_update_recovery_state,
-        )
+        from quickscale_cli.commands._module_update import _load_update_recovery_state
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3769,9 +3774,7 @@ class TestAF5RecoveryLedgerRegression:
         self, tmp_path: Path
     ) -> None:
         """Malformed recovery content must fail hard as RuntimeError."""
-        from quickscale_cli.commands.module_commands import (
-            _load_update_recovery_state,
-        )
+        from quickscale_cli.commands._module_update import _load_update_recovery_state
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3785,9 +3788,7 @@ class TestAF5RecoveryLedgerRegression:
         self, tmp_path: Path
     ) -> None:
         """A malformed resume_checkpoint must fail hard as RuntimeError."""
-        from quickscale_cli.commands.module_commands import (
-            _load_update_recovery_state,
-        )
+        from quickscale_cli.commands._module_update import _load_update_recovery_state
 
         quickscale_dir = tmp_path / ".quickscale"
         quickscale_dir.mkdir()
@@ -3819,9 +3820,7 @@ class TestAF5RecoveryLedgerRegression:
         self, tmp_path: Path
     ) -> None:
         """Absent recovery file must return None."""
-        from quickscale_cli.commands.module_commands import (
-            _load_update_recovery_state,
-        )
+        from quickscale_cli.commands._module_update import _load_update_recovery_state
 
         result = _load_update_recovery_state(tmp_path)
         assert result is None
@@ -3878,8 +3877,8 @@ class TestApplyAllModulesManagedWiringAcceptance:
             MANAGED_ADAPTER_ORIGINS,
             refresh_managed_adapters,
         )
-        from quickscale_cli.commands.apply_command import (
-            ApplyContext,
+        from quickscale_cli.commands._types import ApplyContext
+        from quickscale_cli.commands._context import (
             _regenerate_managed_wiring_for_apply,
         )
 

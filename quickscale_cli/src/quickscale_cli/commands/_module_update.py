@@ -14,7 +14,22 @@ from typing import Any
 import click
 
 from quickscale_cli.commands._module_shared import _UpdatePathSnapshot
-import quickscale_cli.commands.module_commands as _module_commands
+
+import quickscale_core.project_state_manager as _project_state_manager
+import quickscale_core.apply as _apply
+import quickscale_cli.commands.module_output as _module_output
+import quickscale_cli.commands._module_update_io as _module_update_io
+import quickscale_core.schema.state_schema as _state_schema
+import quickscale_core.manifest.loader_errors as _loader_errors
+import quickscale_core.utils.git_errors as _git_errors
+import quickscale_core.schema.config_schema as _config_schema
+import quickscale_cli.commands._module_shared as _module_shared
+import quickscale_cli.commands.contract_vintage as _contract_vintage
+import quickscale_core.config as _config
+import quickscale_core.advisory_lock as _advisory_lock
+import quickscale_core.utils.git_repo as _git_repo
+import quickscale_core.utils.git_subtree as _git_subtree
+import quickscale_cli.commands._module_embed as _module_embed
 
 
 def _ensure_authoritative_state_for_update(
@@ -35,7 +50,7 @@ def _ensure_authoritative_state_for_update(
         StateError: When ``state.yml`` exists but is malformed.  The
             caller's existing ``StateError`` handler surfaces this.
     """
-    manager = _module_commands.ProjectStateManager(project_path)
+    manager = _project_state_manager.ProjectStateManager(project_path)
 
     # If state.yml already has consolidated sections, just load and return.
     if manager._state_file_has_consolidated_sections():
@@ -47,7 +62,7 @@ def _ensure_authoritative_state_for_update(
     if manager.state_file.exists():
         try:
             existing = manager._state_manager.load()
-        except _module_commands.StateError:
+        except _state_schema.StateError:
             raise  # Let caller surface the malformed-state error.
         if existing is not None:
             # Parseable but non-consolidated — materialize.
@@ -65,13 +80,13 @@ def _load_update_recovery_state(project_path: Path) -> Any | None:
     does not exist.  Malformed content raises :class:`LedgerError` which
     is surfaced as a :class:`RuntimeError`.
     """
-    mgr = _module_commands.LedgerManager(project_path)
+    mgr = _apply.LedgerManager(project_path)
     if not mgr.ledger_file.exists():
         return None
 
     try:
         ledger = mgr.load()
-    except _module_commands.LedgerError as error:
+    except _apply.LedgerError as error:
         raise RuntimeError(
             "Failed to load .quickscale/apply-recovery.yml: "
             f"{error}. Fix or clear the recovery snapshot before updating modules."
@@ -91,7 +106,7 @@ def _check_local_pre_pull_guard(
     if applied_state is not None:
         module_state = applied_state.modules.get(module_name)
         if module_state is None:
-            _module_commands._report_local_pre_pull_guard_block(
+            _module_output._report_local_pre_pull_guard_block(
                 module_name,
                 [
                     "",
@@ -102,9 +117,9 @@ def _check_local_pre_pull_guard(
             )
             return False
 
-        recovery_state = _module_commands._load_update_recovery_state(project_path)
+        recovery_state = _load_update_recovery_state(project_path)
         if recovery_state is not None and module_name in recovery_state.modules:
-            _module_commands._report_local_pre_pull_guard_block(
+            _module_output._report_local_pre_pull_guard_block(
                 module_name,
                 [
                     "",
@@ -122,7 +137,7 @@ def _check_local_pre_pull_guard(
         return True
 
     try:
-        desired_config = _module_commands.validate_config(
+        desired_config = _config_schema.validate_config(
             quickscale_config_path.read_text()
         )
     except Exception as error:
@@ -141,7 +156,7 @@ def _check_local_pre_pull_guard(
 
     desired_module = desired_config.modules.get(module_name)
     if desired_module is None:
-        _module_commands._report_local_pre_pull_guard_block(
+        _module_output._report_local_pre_pull_guard_block(
             module_name,
             [
                 "",
@@ -174,7 +189,7 @@ def _check_local_pre_pull_guard(
     drift_lines.append(
         "This guard uses only verified local state and does not predict remote compatibility."
     )
-    _module_commands._report_local_pre_pull_guard_block(module_name, drift_lines)
+    _module_output._report_local_pre_pull_guard_block(module_name, drift_lines)
     return False
 
 
@@ -184,18 +199,18 @@ def _rollback_failed_module_update(
 ) -> str | None:
     """Restore recorded module update snapshots after a failed mutation."""
     try:
-        _module_commands._restore_update_snapshots(snapshots)
+        _module_update_io._restore_update_snapshots(snapshots)
     except Exception as rollback_error:
         return f"Rollback also failed: {rollback_error}"
 
-    _module_commands._refresh_git_index_after_update_rollback(project_path, snapshots)
+    _module_update_io._refresh_git_index_after_update_rollback(project_path, snapshots)
     click.secho("✅ Restored pre-pull update snapshot", fg="green")
     return None
 
 
 def _report_module_update_error(name: str, error: Exception) -> None:
     """Preserve the update command's type-specific failure reports."""
-    if isinstance(error, _module_commands.StateError):
+    if isinstance(error, _state_schema.StateError):
         click.secho(
             f"❌ Failed to load .quickscale/state.yml: {error}",
             fg="red",
@@ -209,14 +224,14 @@ def _report_module_update_error(name: str, error: Exception) -> None:
         return
 
     click.secho(f"❌ Failed to update {name}: {error}", fg="red", err=True)
-    if isinstance(error, _module_commands.ManifestError):
+    if isinstance(error, _loader_errors.ManifestError):
         click.echo(
             f"💡 Fix modules/{name}/module.yml or remove and re-embed the module.",
             err=True,
         )
-    elif isinstance(error, _module_commands.GitError):
+    elif isinstance(error, _git_errors.GitError):
         click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
-    elif isinstance(error, _module_commands.ModuleVersionMismatchError):
+    elif isinstance(error, _loader_errors.ModuleVersionMismatchError):
         click.echo(
             "\n💡 Update QuickScale to the latest version before updating modules.",
             err=True,
@@ -235,9 +250,7 @@ def _update_single_module(
         # For config-only / non-consolidated projects, materialize state.yml
         # from quickscale.yml + legacy config.yml.  Abort if authoritative
         # project metadata (slug/package/theme) cannot be derived.
-        applied_state = _module_commands._ensure_authoritative_state_for_update(
-            project_path
-        )
+        applied_state = _ensure_authoritative_state_for_update(project_path)
         if applied_state is None:
             click.secho(
                 "❌ Cannot update: authoritative project metadata "
@@ -254,18 +267,14 @@ def _update_single_module(
             )
             return False
 
-        if not _module_commands._check_local_pre_pull_guard(
-            project_path, name, applied_state
-        ):
+        if not _check_local_pre_pull_guard(project_path, name, applied_state):
             return False
 
         # Phase 2.3b: resolve the source ref once and reuse it for both
         # the subtree pull and state persistence (CR-PLAN-004).
         try:
-            source_ref = _module_commands.resolve_remote_ref(
-                default_remote, info.branch
-            )
-        except _module_commands.GitError as ref_error:
+            source_ref = _git_repo.resolve_remote_ref(default_remote, info.branch)
+        except _git_errors.GitError as ref_error:
             click.secho(
                 f"❌ Failed to resolve source ref for {name}: {ref_error}",
                 fg="red",
@@ -280,7 +289,7 @@ def _update_single_module(
 
         with TemporaryDirectory(prefix="quickscale-module-update-") as temp_dir:
             try:
-                snapshots = _module_commands._record_update_mutation_snapshots(
+                snapshots = _module_update_io._record_update_mutation_snapshots(
                     project_path,
                     info.prefix,
                     Path(temp_dir),
@@ -311,14 +320,14 @@ def _update_single_module(
                 # ``git fetch``.  See the hermetic integration proof in
                 # ``quickscale_core/tests/test_git_utils.py``
                 # (TestSubtreePullWithCommitSha).
-                output = _module_commands.run_git_subtree_pull(
+                output = _git_subtree.run_git_subtree_pull(
                     prefix=info.prefix,
                     remote=default_remote,
                     branch=source_ref,
                     squash=True,
                 )
 
-                installed_version = _module_commands._read_embedded_module_version(
+                installed_version = _module_shared._read_embedded_module_version(
                     project_path, name
                 )
 
@@ -336,23 +345,21 @@ def _update_single_module(
                 for m_name in applied_state.modules:
                     m_state = applied_state.modules.get(m_name)
                     all_modules_options[m_name] = m_state.options if m_state else {}
-                if not _module_commands._sync_module_dependencies(
+                if not _module_embed._sync_module_dependencies(
                     project_path, all_modules_options
                 ):
                     raise RuntimeError(f"Failed to sync dependency entries for {name}")
 
-                _module_commands._sync_state_module_version(
+                _module_shared._sync_state_module_version(
                     project_path,
                     name,
                     installed_version,
                     commit_sha=source_ref,
                 )
 
-                _module_commands._commit_module_update(name, info.prefix)
+                _module_update_io._commit_module_update(name, info.prefix)
             except Exception as error:
-                rollback_error = _module_commands._rollback_failed_module_update(
-                    project_path, snapshots
-                )
+                rollback_error = _rollback_failed_module_update(project_path, snapshots)
                 if rollback_error is not None:
                     raise RuntimeError(rollback_error) from error
                 raise
@@ -366,7 +373,7 @@ def _update_single_module(
         return True
 
     except Exception as error:
-        _module_commands._report_module_update_error(name, error)
+        _report_module_update_error(name, error)
         return False
 
 
@@ -411,13 +418,13 @@ def update(
             - Commits each successful module update before continuing
     """
     try:
-        _module_commands._validate_update_environment()
+        _module_shared._validate_update_environment()
 
         # Load consolidated state. ProjectStateManager.load_state() performs
         # read-through import of legacy config.yml tracking fields when
         # state.yml lacks consolidated tracking metadata.
         project_path = Path.cwd()
-        manager = _module_commands.ProjectStateManager(project_path)
+        manager = _project_state_manager.ProjectStateManager(project_path)
         try:
             state = manager.load_state()
         except Exception as error:
@@ -438,7 +445,7 @@ def update(
             click.echo("\n💡 Tip: Add modules with 'quickscale plan --add'")
             return
 
-        _module_commands.enforce_shipped_contract_vintage(
+        _contract_vintage.enforce_shipped_contract_vintage(
             state,
             state.modules,
             operation="'quickscale update'",
@@ -448,13 +455,13 @@ def update(
         # Surface module version drift between state and legacy config.
         # Non-fatal: update reconciles both files at the end.
         try:
-            legacy_config = _module_commands.load_config()
-        except _module_commands.ConfigError:
+            legacy_config = _config.load_config()
+        except _config.ConfigError:
             legacy_config = None
-        _module_commands._warn_version_drift_for_update(project_path, legacy_config)
+        _module_shared._warn_version_drift_for_update(project_path, legacy_config)
 
         for name in state.modules:
-            if not _module_commands._validate_module_readiness(name):
+            if not _module_shared._validate_module_readiness(name):
                 raise click.Abort()
 
         # Show installed modules
@@ -471,10 +478,10 @@ def update(
             return
 
         # Acquire advisory lock after confirmation but before mutation.
-        lock = _module_commands.AdvisoryLock(project_path, operation="update")
+        lock = _advisory_lock.AdvisoryLock(project_path, operation="update")
         try:
             lock.acquire()
-        except _module_commands.AdvisoryLockContentionError as error:
+        except _advisory_lock.AdvisoryLockContentionError as error:
             click.secho(f"❌ {error}", fg="red", err=True)
             raise click.Abort() from error
 
@@ -498,7 +505,7 @@ def update(
         try:
             # Update each module
             for name, module_state in state.modules.items():
-                if not _module_commands._update_single_module(
+                if not _update_single_module(
                     name,
                     module_state,
                     "https://github.com/Experto-AI/quickscale.git",
@@ -519,22 +526,22 @@ def update(
                 # must be treated as a failed update so the modules committed
                 # by the pulls above are rolled back with it.
                 try:
-                    refreshed_state = _module_commands.ProjectStateManager(
+                    refreshed_state = _project_state_manager.ProjectStateManager(
                         project_path
                     ).load_state()
                     if refreshed_state is None:
-                        raise _module_commands.StateError(
+                        raise _state_schema.StateError(
                             "authoritative project state could not be loaded"
                         )
                     wiring_success, wiring_message = (
-                        _module_commands._regenerate_and_record_managed_wiring(
+                        _module_update_io._regenerate_and_record_managed_wiring(
                             project_path,
                             refreshed_state.project.package,
                         )
                     )
                     if not wiring_success:
                         raise RuntimeError(wiring_message)
-                    _module_commands._commit_regenerated_managed_wiring(
+                    _module_update_io._commit_regenerated_managed_wiring(
                         refreshed_state.project.package
                     )
                     click.echo("  ✅ Regenerated managed module wiring")
@@ -556,21 +563,21 @@ def update(
             # is still held, then commit it so the next command's clean-tree
             # check still passes (SA207).
             if confirm_contract_adoption and not failed_modules and not wiring_failed:
-                refreshed_state = _module_commands.ProjectStateManager(
+                refreshed_state = _project_state_manager.ProjectStateManager(
                     project_path
                 ).load_state()
                 if refreshed_state is not None:
-                    _module_commands.record_contract_adoption(
+                    _contract_vintage.record_contract_adoption(
                         refreshed_state, project_path
                     )
-                    _module_commands._commit_contract_adoption()
+                    _module_update_io._commit_contract_adoption()
 
             if failed_modules or wiring_failed:
                 # A post-pull failure must not leave the modules committed
                 # before it paired with the pre-update managed wiring.  The
                 # rollback runs under the same advisory lock that protects the
                 # update, so a concurrent update cannot interleave with it.
-                _module_commands._roll_back_partial_module_update(
+                _module_update_io._roll_back_partial_module_update(
                     project_path,
                     pre_update_head,
                     updated_modules,
@@ -615,7 +622,7 @@ def update(
 
         click.secho("\n🎉 Module update complete!", fg="green", bold=True)
 
-    except _module_commands.GitError as e:
+    except _git_errors.GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
         raise click.Abort()
     except click.Abort:

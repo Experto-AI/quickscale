@@ -1,9 +1,8 @@
 """Config loading, prerequisite validation, and immutable-change checks.
 
 Implementation detail of :mod:`quickscale_cli.commands.apply_command`;
-that module re-exports every name defined here (Module Conventions
-rule 28), so existing import paths and test patch targets keep
-working.
+collaborators are resolved through the sibling modules that define
+them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -27,12 +26,20 @@ from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import ManifestError
 
 # AF6 Phase 2 — core step bodies
-import quickscale_cli.commands.apply_command as _apply_command
+
+import quickscale_core.contracts.module_catalog as _module_catalog
+import quickscale_core.manifest.required_modules as _required_modules
+import quickscale_core.schema.config_schema as _config_schema
+import quickscale_core.manifest.option_validation as _option_validation
+import quickscale_cli.commands.apply_support as _apply_support
+import quickscale_core.contracts.resolvers as _resolvers
+import quickscale_core.manifest.loader as _loader
+import quickscale_core.contracts.module_options as _module_options
 
 
 def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> None:
     """Abort apply when non-public-ready modules appear in config or applied state."""
-    not_ready = _apply_command.find_not_ready_modules(module_names)
+    not_ready = _module_catalog.find_not_ready_modules(module_names)
     if not not_ready:
         return
 
@@ -43,7 +50,7 @@ def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> Non
         bold=True,
     )
     for module_name in not_ready:
-        reason = _apply_command.get_module_readiness_reason(module_name)
+        reason = _module_catalog.get_module_readiness_reason(module_name)
         if reason is not None:
             click.echo(f"  • {reason}", err=True)
 
@@ -81,7 +88,7 @@ def _load_module_manifests(
     """Load manifests for all installed modules"""
     manifests: dict[str, ModuleManifest] = {}
     for module_name in module_names:
-        manifest = _apply_command.get_manifest_for_module(
+        manifest = _loader.get_manifest_for_module(
             project_path, module_name, strict=strict
         )
         if manifest:
@@ -199,7 +206,9 @@ def _update_module_config_in_state(
             current_options = state.modules[module_name].options or {}
             for change in module_delta.mutable_changes:
                 current_options[change.option_name] = change.new_value
-            state.modules[module_name].options = _apply_command.sanitize_module_options(
+            state.modules[
+                module_name
+            ].options = _module_options.sanitize_module_options(
                 module_name,
                 current_options,
             )
@@ -209,7 +218,7 @@ def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
     """Normalize module configs so legacy keys never persist after apply."""
     sanitized_modules: list[str] = []
     for module_name, module_config in qs_config.modules.items():
-        normalized = _apply_command.sanitize_module_options(
+        normalized = _module_options.sanitize_module_options(
             module_name, module_config.options or {}
         )
         if normalized == (module_config.options or {}):
@@ -221,14 +230,16 @@ def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
 
 def _materialize_required_module_configs(qs_config: QuickScaleConfig) -> list[str]:
     """Add explicit module config blocks required by selected modules."""
-    required_configs = _apply_command.resolve_required_modules(qs_config.modules.keys())
+    required_configs = _required_modules.resolve_required_modules(
+        qs_config.modules.keys()
+    )
     if not required_configs:
         return []
 
     for module_name, options in required_configs.items():
-        qs_config.modules[module_name] = _apply_command.ModuleConfig(
+        qs_config.modules[module_name] = _config_schema.ModuleConfig(
             name=module_name,
-            options=_apply_command.sanitize_module_options(module_name, options),
+            options=_module_options.sanitize_module_options(module_name, options),
         )
 
     return list(required_configs.keys())
@@ -249,14 +260,12 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
     click.echo(f"\n📋 Reading configuration: {config_path}")
     try:
         yaml_content = config_path.read_text()
-        qs_config = _apply_command.validate_config(yaml_content)
+        qs_config = _config_schema.validate_config(yaml_content)
         original_data = yaml.safe_load(yaml_content) or {}
         original_modules = original_data.get("modules") or {}
-        sanitized_modules = _apply_command._sanitize_loaded_module_configs(qs_config)
-        required_modules = _apply_command._materialize_required_module_configs(
-            qs_config
-        )
-        normalized_yaml = _apply_command.generate_yaml(qs_config)
+        sanitized_modules = _sanitize_loaded_module_configs(qs_config)
+        required_modules = _materialize_required_module_configs(qs_config)
+        normalized_yaml = _config_schema.generate_yaml(qs_config)
         normalized_data = yaml.safe_load(normalized_yaml) or {}
         normalized_modules = normalized_data.get("modules") or {}
         if normalized_modules != original_modules:
@@ -272,9 +281,9 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
                     + ", ".join(required_modules),
                     fg="green",
                 )
-        _apply_command._validate_module_prerequisites(qs_config)
+        _validate_module_prerequisites(qs_config)
         return qs_config
-    except _apply_command.ConfigValidationError as e:
+    except _config_schema.ConfigValidationError as e:
         click.secho(f"\n❌ Configuration error:\n{e}", fg="red", err=True)
         raise click.Abort()
     except Exception as e:
@@ -295,10 +304,10 @@ def _abort_for_disabled_required_modules(qs_config: QuickScaleConfig) -> None:
     manifests: dict[str, Any] = {}
     for module_name in sorted(installed_modules):
         try:
-            resolved = _apply_command._resolved_module_options(
+            resolved = _resolved_module_options(
                 module_name, qs_config.modules[module_name].options or {}
             )
-        except _apply_command.ConfigValidationError:
+        except _config_schema.ConfigValidationError:
             # A retired option key is refused by the existing prerequisite
             # checks with its authored message; this check only reads the
             # enabled flag.
@@ -308,7 +317,7 @@ def _abort_for_disabled_required_modules(qs_config: QuickScaleConfig) -> None:
         for dependant in sorted(installed_modules - {module_name}):
             manifest = manifests.get(dependant)
             if manifest is None:
-                manifest = _apply_command.load_module_manifest_with_fallback(dependant)
+                manifest = _resolvers.load_module_manifest_with_fallback(dependant)
                 manifests[dependant] = manifest
             if module_name in manifest.required_modules:
                 offenders.append((module_name, dependant))
@@ -344,11 +353,11 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     the rule-1 refusal of a module switched off while an installed module
     requires it.
     """
-    _apply_command._abort_for_disabled_required_modules(qs_config)
+    _abort_for_disabled_required_modules(qs_config)
 
     if "orgs" in qs_config.modules:
-        orgs_issues = _apply_command.validate_module_options(
-            _apply_command.load_module_manifest_with_fallback("orgs"),
+        orgs_issues = _option_validation.validate_module_options(
+            _resolvers.load_module_manifest_with_fallback("orgs"),
             qs_config.modules["orgs"].options or {},
         )
         if orgs_issues:
@@ -366,14 +375,14 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
             )
             raise click.Abort()
 
-    _apply_command._abort_for_not_ready_modules(
+    _abort_for_not_ready_modules(
         list(qs_config.modules.keys()), source="quickscale.yml"
     )
 
     storage_config = qs_config.modules.get("storage")
     if storage_config is not None:
-        storage_issues = _apply_command.validate_module_options(
-            _apply_command.load_module_manifest_with_fallback("storage"),
+        storage_issues = _option_validation.validate_module_options(
+            _resolvers.load_module_manifest_with_fallback("storage"),
             storage_config.options or {},
         )
         if storage_issues:
@@ -394,8 +403,8 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
 
     backups_config = qs_config.modules.get("backups")
     if backups_config is not None:
-        backups_issues = _apply_command.validate_module_options(
-            _apply_command.load_module_manifest_with_fallback("backups"),
+        backups_issues = _option_validation.validate_module_options(
+            _resolvers.load_module_manifest_with_fallback("backups"),
             backups_config.options or {},
         )
         if backups_issues:
@@ -415,8 +424,8 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
 
     social_config = qs_config.modules.get("social")
     if social_config is not None:
-        social_issues = _apply_command.validate_module_options(
-            _apply_command.load_module_manifest_with_fallback("social"),
+        social_issues = _option_validation.validate_module_options(
+            _resolvers.load_module_manifest_with_fallback("social"),
             social_config.options or {},
         )
         if social_issues:
@@ -431,7 +440,7 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
                 "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
                 "quickscale.yml to correct the social settings. This phase wires the "
                 "managed backend transport, and the canonical public paths remain "
-                f"{_apply_command.SOCIAL_LINK_TREE_PATH} and {_apply_command.SOCIAL_EMBEDS_PATH} for fresh "
+                f"{_module_options.SOCIAL_LINK_TREE_PATH} and {_module_options.SOCIAL_EMBEDS_PATH} for fresh "
                 "showcase_react generations or manual theme adoption.",
                 err=True,
             )
@@ -442,8 +451,8 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
         return
 
     notifications_options = notifications_config.options or {}
-    notification_issues = _apply_command.validate_module_options(
-        _apply_command.load_module_manifest_with_fallback("notifications"),
+    notification_issues = _option_validation.validate_module_options(
+        _resolvers.load_module_manifest_with_fallback("notifications"),
         notifications_options,
     )
     if not notification_issues:
@@ -456,7 +465,7 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     )
     for issue in notification_issues:
         click.echo(f"  • {issue}", err=True)
-    notifications_adapter = _apply_command.notifications_adapter_module()
+    notifications_adapter = _apply_support.notifications_adapter_module()
     if notifications_adapter is not None and (
         notifications_adapter.notifications_production_targeted(notifications_options)
     ):
@@ -484,8 +493,8 @@ def _resolved_module_options(
     Operator guidance names the conventional value when a configured string is
     blank, the same way the manifest default applies at apply time.
     """
-    resolved = _apply_command.resolve_manifest_module_options(module_name, options)
-    defaults = _apply_command.resolve_manifest_module_options(module_name)
+    resolved = _resolvers.resolve_manifest_module_options(module_name, options)
+    defaults = _resolvers.resolve_manifest_module_options(module_name)
     return {
         key: (defaults.get(key, value) if value in ("", None) else value)
         for key, value in resolved.items()

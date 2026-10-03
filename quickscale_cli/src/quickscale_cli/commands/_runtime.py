@@ -1,9 +1,8 @@
 """Docker, migration, Poetry, env-example, and gitignore step adapters.
 
 Implementation detail of :mod:`quickscale_cli.commands.apply_command`;
-that module re-exports every name defined here (Module Conventions
-rule 28), so existing import paths and test patch targets keep
-working.
+collaborators are resolved through the sibling modules that define
+them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -25,46 +24,57 @@ from quickscale_cli.commands._types import (
     _UNSAFE_GITIGNORE_GLOB_CHARACTERS,
     _UNSAFE_GITIGNORE_LEADING_CHARACTERS,
 )
-import quickscale_cli.commands.apply_command as _apply_command
+
+import quickscale_cli.commands._types as _types
+import quickscale_core.apply.steps.types as _types_2
+import quickscale_core.apply.steps as _steps
+import quickscale_cli.utils.docker_utils as _docker_utils
+import quickscale_cli.utils._dependency_io as _dependency_io
+import quickscale_cli.commands._git_ops as _git_ops
+import quickscale_core.contracts.resolvers as _resolvers
+import quickscale_cli.utils._dependency_sync_ops as _dependency_sync_ops
+import quickscale_core.manifest.loader_errors as _loader_errors
+import quickscale_core.utils.poetry_env as _poetry_env
+import quickscale_cli.commands.apply_support as _apply_support
 
 
 def _run_poetry_install(project_path: Path) -> bool:
     """Run poetry install in project"""
-    return _apply_command._run_command(
+    return _git_ops._run_command(
         ["poetry", "install"],
         project_path,
         "Installing dependencies (poetry install)",
-        env=_apply_command._isolated_poetry_env(),
+        env=_poetry_env.build_isolated_poetry_env(),
     )[0]
 
 
 def _run_poetry_lock(project_path: Path) -> bool:
     """Refresh the generated project's Poetry lockfile."""
-    return _apply_command._run_command(
+    return _git_ops._run_command(
         ["poetry", "lock"],
         project_path,
         "Refreshing dependencies (poetry lock)",
-        env=_apply_command._isolated_poetry_env(),
+        env=_poetry_env.build_isolated_poetry_env(),
     )[0]
 
 
 def _run_migrations(project_path: Path) -> bool:
     """Run Django migrations"""
-    return _apply_command._run_command(
+    return _git_ops._run_command(
         ["poetry", "run", "python", "manage.py", "migrate"],
         project_path,
         "Running migrations",
-        env=_apply_command._isolated_poetry_env(),
+        env=_poetry_env.build_isolated_poetry_env(),
     )[0]
 
 
 def _run_migrations_in_docker_impl(project_path: Path) -> bool:
     """Original implementation used as callback for core step body."""
-    return _apply_command._run_command(
+    return _git_ops._run_command(
         [sys.executable, "-m", "quickscale_cli.main", "manage", "migrate"],
         project_path,
         "Running migrations (Docker)",
-        env=_apply_command._build_quickscale_env(),
+        env=_apply_support._build_quickscale_env(),
     )[0]
 
 
@@ -73,12 +83,12 @@ def _run_migrations_in_docker(project_path: Path) -> bool:
 
     Used for Docker migration path exclusively.
     """
-    step_ctx = _apply_command.StepContext(output_path=project_path)
-    outcome = _apply_command.step_run_migrations(
+    step_ctx = _types_2.StepContext(output_path=project_path)
+    outcome = _steps.step_run_migrations(
         step_ctx,
         should_auto_start_docker=True,
         docker_started=True,
-        run_migrations_in_docker_fn=_apply_command._run_migrations_in_docker_impl,
+        run_migrations_in_docker_fn=_run_migrations_in_docker_impl,
         should_run_local_migrations=False,
     )
     return outcome.success
@@ -92,14 +102,14 @@ def _run_local_migrations(project_path: Path) -> bool:
     the core step body through the same migration step function used
     for Docker migrations.
     """
-    step_ctx = _apply_command.StepContext(output_path=project_path)
-    outcome = _apply_command.step_run_migrations(
+    step_ctx = _types_2.StepContext(output_path=project_path)
+    outcome = _steps.step_run_migrations(
         step_ctx,
         should_auto_start_docker=False,
         docker_started=False,
-        run_migrations_in_docker_fn=_apply_command._run_migrations_in_docker_impl,
+        run_migrations_in_docker_fn=_run_migrations_in_docker_impl,
         should_run_local_migrations=True,
-        run_local_migrations_fn=_apply_command._run_migrations,
+        run_local_migrations_fn=_run_migrations,
     )
     return outcome.success
 
@@ -130,7 +140,7 @@ def _preflight_stale_docker_volumes(project_path: Path) -> bool:
         True when it is safe to continue, False when the operator declined
         and the apply should stop.
     """
-    stale_volumes = _apply_command.find_stale_project_volumes(project_path)
+    stale_volumes = _docker_utils.find_stale_project_volumes(project_path)
     if not stale_volumes:
         return True
 
@@ -149,7 +159,7 @@ def _preflight_stale_docker_volumes(project_path: Path) -> bool:
         "'InconsistentMigrationHistory'."
     )
 
-    if _apply_command._AF5_DESTRUCTIVE_CONFIRM_BYPASS:
+    if _types._AF5_DESTRUCTIVE_CONFIRM_BYPASS:
         return True
 
     click.echo("")
@@ -169,9 +179,9 @@ def _preflight_stale_docker_volumes(project_path: Path) -> bool:
 
     # Containers left over from the earlier project keep its volumes
     # attached; release them first so removal can succeed.
-    _apply_command.compose_down(project_path)
+    _docker_utils.compose_down(project_path)
 
-    removed, failed = _apply_command.remove_volumes(stale_volumes)
+    removed, failed = _docker_utils.remove_volumes(stale_volumes)
     for volume in removed:
         click.secho(f"✅ Removed volume: {volume}", fg="green")
     if failed:
@@ -205,7 +215,7 @@ def _start_docker_impl(
                 cwd=project_path,
                 text=True,
                 check=False,
-                env=_apply_command._build_quickscale_env(),
+                env=_apply_support._build_quickscale_env(),
             )
             click.echo("=" * 50)
             if result.returncode == 0:
@@ -221,12 +231,12 @@ def _start_docker_impl(
             click.secho(f"❌ Unexpected error: {e}", fg="red", err=True)
             return False
     else:
-        success, _ = _apply_command._run_command(
+        success, _ = _git_ops._run_command(
             cmd,
             project_path,
             "Starting Docker services",
             capture=False,
-            env=_apply_command._build_quickscale_env(),
+            env=_apply_support._build_quickscale_env(),
         )
         return success
 
@@ -235,13 +245,11 @@ def _start_docker(
     project_path: Path, build: bool = True, verbose: bool = False
 ) -> bool:
     """Thin wrapper delegating to core step body (AF6 Phase 2)."""
-    step_ctx = _apply_command.StepContext(
-        output_path=project_path, verbose_docker=verbose
-    )
-    outcome = _apply_command.step_start_docker(
+    step_ctx = _types_2.StepContext(output_path=project_path, verbose_docker=verbose)
+    outcome = _steps.step_start_docker(
         step_ctx,
         should_auto_start_docker=True,
-        start_docker_fn=lambda p, _: _apply_command._start_docker_impl(
+        start_docker_fn=lambda p, _: _start_docker_impl(
             p,
             build=build,
             verbose=verbose,
@@ -263,7 +271,7 @@ def _sync_env_example_blocks_impl(
     stations below invoke it: any apply resume point among them lands a
     complete contract.
     """
-    result = _apply_command.sync_env_example_blocks(output_path, qs_config)
+    result = _steps.sync_env_example_blocks(output_path, qs_config)
     if not result.success:
         click.secho(
             "⚠️  Failed to update .env.example with the configured module "
@@ -281,10 +289,10 @@ def _sync_notifications_env_example(
     qs_config: QuickScaleConfig,
 ) -> bool:
     """Thin wrapper delegating to core step body (AF6 Phase 2)."""
-    step_ctx = _apply_command.StepContext(output_path=output_path, qs_config=qs_config)
-    outcome = _apply_command.step_notifications_env_sync(
+    step_ctx = _types_2.StepContext(output_path=output_path, qs_config=qs_config)
+    outcome = _steps.step_notifications_env_sync(
         step_ctx,
-        sync_notifications_fn=_apply_command._sync_env_example_blocks_impl,
+        sync_notifications_fn=_sync_env_example_blocks_impl,
     )
     return outcome.success
 
@@ -294,10 +302,10 @@ def _sync_analytics_env_example(
     qs_config: QuickScaleConfig,
 ) -> bool:
     """Thin wrapper delegating to core step body (AF6 Phase 2)."""
-    step_ctx = _apply_command.StepContext(output_path=output_path, qs_config=qs_config)
-    outcome = _apply_command.step_analytics_env_sync(
+    step_ctx = _types_2.StepContext(output_path=output_path, qs_config=qs_config)
+    outcome = _steps.step_analytics_env_sync(
         step_ctx,
-        sync_analytics_fn=_apply_command._sync_env_example_blocks_impl,
+        sync_analytics_fn=_sync_env_example_blocks_impl,
     )
     return outcome.success
 
@@ -307,10 +315,10 @@ def _sync_billing_env_example(
     qs_config: QuickScaleConfig,
 ) -> bool:
     """Thin wrapper delegating to core step body (AF6 Phase 2)."""
-    step_ctx = _apply_command.StepContext(output_path=output_path, qs_config=qs_config)
-    outcome = _apply_command.step_billing_env_sync(
+    step_ctx = _types_2.StepContext(output_path=output_path, qs_config=qs_config)
+    outcome = _steps.step_billing_env_sync(
         step_ctx,
-        sync_billing_fn=_apply_command._sync_env_example_blocks_impl,
+        sync_billing_fn=_sync_env_example_blocks_impl,
     )
     return outcome.success
 
@@ -363,11 +371,11 @@ def _ensure_backups_gitignore_rules(
         backups_config = config.modules.get("backups")
         if backups_config is None:
             return True
-        options = _apply_command.resolve_manifest_module_options(
+        options = _resolvers.resolve_manifest_module_options(
             "backups", backups_config.options or {}
         )
         local_directory = options["local_directory"]
-        entry = _apply_command._normalize_backups_gitignore_entry(str(local_directory))
+        entry = _normalize_backups_gitignore_entry(str(local_directory))
         if entry is None:
             click.secho(
                 "⚠️  Skipping automatic backups .gitignore update because "
@@ -408,10 +416,8 @@ def _ensure_backups_gitignore_rules(
         click.secho(f"✅ Added backups ignore rule to .gitignore: {entry}", fg="green")
         return True
 
-    step_ctx = _apply_command.StepContext(output_path=project_path, qs_config=qs_config)
-    outcome = _apply_command.step_backups_gitignore(
-        step_ctx, ensure_backups_ignore_fn=_impl
-    )
+    step_ctx = _types_2.StepContext(output_path=project_path, qs_config=qs_config)
+    outcome = _steps.step_backups_gitignore(step_ctx, ensure_backups_ignore_fn=_impl)
     return outcome.success
 
 
@@ -424,9 +430,9 @@ def _run_post_generation_steps_impl(
     to step 13 (the late confirmable phase) together with Docker migrations,
     Railway deploy, and other destructive/remote operations.
     """
-    if not _apply_command._run_poetry_lock(output_path):
+    if not _run_poetry_lock(output_path):
         return False
-    if not _apply_command._run_poetry_install(output_path):
+    if not _run_poetry_install(output_path):
         return False
     return True
 
@@ -437,10 +443,10 @@ def _run_post_generation_steps(output_path: Path) -> bool:
     AF5 Phase 4: No longer passes ``run_migrations``.  Local migrations
     are deferred to step 13.
     """
-    step_ctx = _apply_command.StepContext(output_path=output_path)
-    outcome = _apply_command.step_post_generation_setup(
+    step_ctx = _types_2.StepContext(output_path=output_path)
+    outcome = _steps.step_post_generation_setup(
         step_ctx,
-        run_post_gen_steps_fn=_apply_command._run_post_generation_steps_impl,
+        run_post_gen_steps_fn=_run_post_generation_steps_impl,
     )
     return outcome.success
 
@@ -451,23 +457,23 @@ def _sync_project_module_dependencies_for_apply_impl(
 ) -> bool:
     """Original implementation used as callback for core step body."""
     try:
-        if _apply_command.sync_project_core_dependency(output_path):
+        if _dependency_sync_ops.sync_project_core_dependency(output_path):
             click.echo("  • Pinned quickscale-core to the local wheelhouse")
-    except _apply_command.DependencySyncError as error:
+    except _dependency_io.DependencySyncError as error:
         click.secho(f"❌ Core dependency sync failed: {error}", fg="red", err=True)
         return False
     if not qs_config.modules:
         return True
     click.echo("\n⏳ Syncing module dependency entries...")
     try:
-        sync_result = _apply_command.sync_project_module_dependencies(
+        sync_result = _dependency_sync_ops.sync_project_module_dependencies(
             output_path,
             {
                 module_name: module_config.options or {}
                 for module_name, module_config in qs_config.modules.items()
             },
         )
-    except (_apply_command.DependencySyncError, _apply_command.ManifestError) as error:
+    except (_dependency_io.DependencySyncError, _loader_errors.ManifestError) as error:
         click.secho(f"❌ Module dependency sync failed: {error}", fg="red", err=True)
         return False
     if sync_result.added_package_dependencies:
@@ -491,9 +497,9 @@ def _sync_project_module_dependencies_for_apply(
     qs_config: QuickScaleConfig,
 ) -> bool:
     """Thin wrapper delegating to core step body (AF6 Phase 2)."""
-    step_ctx = _apply_command.StepContext(output_path=output_path, qs_config=qs_config)
-    outcome = _apply_command.step_sync_dependencies(
+    step_ctx = _types_2.StepContext(output_path=output_path, qs_config=qs_config)
+    outcome = _steps.step_sync_dependencies(
         step_ctx,
-        sync_project_deps_fn=_apply_command._sync_project_module_dependencies_for_apply_impl,
+        sync_project_deps_fn=_sync_project_module_dependencies_for_apply_impl,
     )
     return outcome.success

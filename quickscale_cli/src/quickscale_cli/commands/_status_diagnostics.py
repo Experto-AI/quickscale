@@ -19,7 +19,14 @@ from quickscale_core.schema.state_schema import (
     StateManager,
 )
 
-import quickscale_cli.commands.status_command as _status_command
+
+import quickscale_core.project_state_hashes as _project_state_hashes
+import quickscale_cli.commands.contract_vintage as _contract_vintage
+import quickscale_cli.commands._status_context as _status_context
+import quickscale_core.config as _config
+import quickscale_core.schema.state_schema as _state_schema
+import quickscale_core.project_state_drift as _project_state_drift
+import quickscale_core.contracts.module_discovery as _module_discovery
 
 
 def _state_file_has_consolidated_sections(state_dir: Path) -> bool:
@@ -66,11 +73,11 @@ def _legacy_files_present(state_dir: Path) -> list[str]:
     """Return legacy state files that are present on disk."""
     legacy_files: list[str] = []
     config_yml = state_dir / "config.yml"
-    file_hashes_yml = state_dir / _status_command.FILE_HASHES_FILENAME
+    file_hashes_yml = state_dir / _project_state_hashes.FILE_HASHES_FILENAME
     if config_yml.exists():
         legacy_files.append("config.yml")
     if file_hashes_yml.exists():
-        legacy_files.append(_status_command.FILE_HASHES_FILENAME)
+        legacy_files.append(_project_state_hashes.FILE_HASHES_FILENAME)
     return legacy_files
 
 
@@ -97,7 +104,7 @@ def _filesystem_drift_diagnostics(
     fs_drift = state_manager.verify_filesystem()
     records = presence_records
     if records is None:
-        records = _status_command._discover_project_module_presence(
+        records = _status_context._discover_project_module_presence(
             project_path, list(modules)
         )
 
@@ -106,13 +113,13 @@ def _filesystem_drift_diagnostics(
         record.name
         for record in records
         if record.name in state_module_names
-        and record.state is _status_command.ModulePresenceState.INCOMPLETE
+        and record.state is _module_discovery.ModulePresenceState.INCOMPLETE
     )
     missing = sorted(
         record.name
         for record in records
         if record.name in state_module_names
-        and record.state is _status_command.ModulePresenceState.ABSENT
+        and record.state is _module_discovery.ModulePresenceState.ABSENT
     )
     return {
         "orphaned_modules": sorted(fs_drift.get("orphaned_modules", [])),
@@ -129,8 +136,8 @@ def _version_drift_diagnostics(
         state = project_state_manager.load_state()
         config = project_state_manager.load_config()
     except (
-        _status_command.ConfigError,
-        _status_command.StateError,
+        _config.ConfigError,
+        _state_schema.StateError,
         OSError,
     ):
         state = None
@@ -142,7 +149,7 @@ def _version_drift_diagnostics(
             "state_version": warning.state_version,
             "config_version": warning.config_version,
         }
-        for warning in _status_command.check_version_drift(state, config)
+        for warning in _project_state_drift.check_version_drift(state, config)
     ]
 
 
@@ -173,12 +180,10 @@ def _compute_drift_diagnostics(
     * ``version_drift`` — version disagreements between state and config.
     """
     state_dir = project_path / ".quickscale"
-    consolidated_on_disk = _status_command._state_file_has_consolidated_sections(
-        state_dir
-    )
+    consolidated_on_disk = _state_file_has_consolidated_sections(state_dir)
 
     # Check which legacy files exist on disk.
-    legacy_files_present = _status_command._legacy_files_present(state_dir)
+    legacy_files_present = _legacy_files_present(state_dir)
 
     legacy_compat_active = (not consolidated_on_disk) and bool(legacy_files_present)
 
@@ -187,10 +192,10 @@ def _compute_drift_diagnostics(
         module_tracking_total,
         module_tracking_consolidated,
         modules_needing_consolidation,
-    ) = _status_command._module_tracking_diagnostics(state)
+    ) = _module_tracking_diagnostics(state)
 
     # Filesystem drift (orphaned/missing/incomplete modules).
-    filesystem_drift = _status_command._filesystem_drift_diagnostics(
+    filesystem_drift = _filesystem_drift_diagnostics(
         project_path,
         state,
         state_manager,
@@ -207,17 +212,17 @@ def _compute_drift_diagnostics(
     ]
 
     # Version drift between state and config.
-    version_drift = _status_command._version_drift_diagnostics(project_state_manager)
+    version_drift = _version_drift_diagnostics(project_state_manager)
 
     # SA10.2: contract-vintage check.
     project_contract = state.project.project_contract if state else None
     vintage_manifests = (
         contract_manifests if contract_manifests is not None else manifests
     )
-    contract_vintage = _status_command._check_contract_vintage(
+    contract_vintage = _contract_vintage.check_contract_vintage(
         project_contract,
         vintage_manifests,
-        project_steps=_status_command.load_declared_project_steps(),
+        project_steps=_contract_vintage.load_declared_project_steps(),
         adopted_steps=(
             state.project.adopted_contract_steps if state is not None else None
         ),

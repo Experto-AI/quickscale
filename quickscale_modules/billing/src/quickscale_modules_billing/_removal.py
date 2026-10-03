@@ -14,7 +14,6 @@ from django.db import transaction
 from django.db.models import Q
 from quickscale_modules_orgs.current_org import org_scope
 
-import quickscale_modules_billing.services as _services
 from quickscale_modules_billing._payload import (
     _normalize_mapping as _normalize_mapping,
 )
@@ -37,6 +36,8 @@ from quickscale_modules_billing.models import (
     PurchaseCheckout,
     Subscription,
 )
+import quickscale_modules_billing._stripe_client as _stripe_client
+import quickscale_modules_billing._locks as _locks
 
 
 @_translate_stripe_errors("Stripe purchase checkout reconciliation failed.")
@@ -75,7 +76,7 @@ def reconcile_purchase_checkouts_for_removal(
 
     snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
     _ensure_billing_enabled(snapshot)
-    resolved_client = stripe_client or _services.get_stripe_client(
+    resolved_client = stripe_client or _stripe_client.get_stripe_client(
         settings_snapshot=snapshot
     )
     expired_checkout_ids: list[str] = []
@@ -96,7 +97,7 @@ def reconcile_purchase_checkouts_for_removal(
             expired_checkout_ids.append(checkout_session_id)
             if persist:
                 with org_scope(organization):
-                    _services._lock_organization_for_billing_mutation(organization)
+                    _locks._lock_organization_for_billing_mutation(organization)
                     PurchaseCheckout.all_objects.filter(
                         pk=reservation.pk,
                         status=PurchaseCheckout.Status.OPEN,

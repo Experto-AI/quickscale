@@ -1,9 +1,8 @@
 """Apply context preparation, refresh, and provenance repair.
 
 Implementation detail of :mod:`quickscale_cli.commands.apply_command`;
-that module re-exports every name defined here (Module Conventions
-rule 28), so existing import paths and test patch targets keep
-working.
+collaborators are resolved through the sibling modules that define
+them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -26,7 +25,28 @@ from quickscale_core.manifest import ModuleManifest
 # AF6 Phase 2 — core step bodies
 from quickscale_core.apply.steps.types import StepContext
 from quickscale_cli.commands._types import ApplyContext, _APPLY_RECOVERY_FILENAME
-import quickscale_cli.commands.apply_command as _apply_command
+
+import quickscale_cli.commands._config as _config
+import quickscale_cli.commands._generation as _generation
+import quickscale_core.project_state_manager as _project_state_manager
+import quickscale_core.schema.state_schema as _state_schema
+import quickscale_cli.commands._state as _state
+import quickscale_core.schema.delta as _delta
+import quickscale_cli.commands._types as _types
+import quickscale_core.apply.steps as _steps
+import quickscale_core.apply.steps.types as _types_2
+import quickscale_cli.commands.apply_support as _apply_support
+import quickscale_core.utils.theme_validation as _theme_validation
+import quickscale_cli.commands.contract_vintage as _contract_vintage
+import quickscale_core.advisory_lock as _advisory_lock
+import quickscale_core.manifest.loader_errors as _loader_errors
+import quickscale_core.schema.config_schema as _config_schema
+import quickscale_core.manifest.required_modules as _required_modules
+import quickscale_core.utils.git_repo as _git_repo
+import quickscale_core.manifest.loader as _loader
+import quickscale_cli.utils.module_wiring_manager as _module_wiring_manager
+import quickscale_core.project_state_hashes as _project_state_hashes
+import quickscale_core.config as _config_2
 
 
 def _provenance_repair_might_be_needed(ctx: ApplyContext) -> bool:
@@ -95,13 +115,11 @@ def _attempt_provenance_repair_if_needed(ctx: ApplyContext) -> None:
         branch = module_state.branch
 
         try:
-            resolved_sha = _apply_command.resolve_remote_ref(remote, branch)
-            manifest = _apply_command.get_manifest_for_module(
-                ctx.output_path, module_name
-            )
+            resolved_sha = _git_repo.resolve_remote_ref(remote, branch)
+            manifest = _loader.get_manifest_for_module(ctx.output_path, module_name)
             repaired_version = module_state.version
             if manifest is not None:
-                normalized_version = _apply_command.normalize_installed_version(
+                normalized_version = _config_2.normalize_installed_version(
                     manifest.version
                 )
                 if normalized_version is not None:
@@ -124,14 +142,14 @@ def _attempt_provenance_repair_if_needed(ctx: ApplyContext) -> None:
         # Write authoritative state once with repaired commit_sha
         # Do NOT create recovery file — this is a best-effort repair
         try:
-            state_manager = _apply_command.StateManager(ctx.output_path)
+            state_manager = _state_schema.StateManager(ctx.output_path)
             state_manager.save(ctx.existing_state)
             click.secho(
                 "✅ Updated .quickscale/state.yml with repaired provenance",
                 fg="green",
             )
             # Refresh the delta so the next check sees no changes
-            ctx.delta = _apply_command.compute_delta(
+            ctx.delta = _delta.compute_delta(
                 ctx.qs_config, ctx.existing_state, ctx.manifests
             )
         except Exception as e:
@@ -159,7 +177,7 @@ def _handle_delta_and_existing_state(
         return
 
     click.echo("\n📊 Change Detection:")
-    click.echo(_apply_command.format_delta(delta))
+    click.echo(_delta.format_delta(delta))
 
     if not delta.has_changes:
         if has_pending_post_embed_recovery:
@@ -179,9 +197,9 @@ def _handle_delta_and_existing_state(
         )
         raise click.Abort()
 
-    _apply_command._abort_for_config_driven_module_removals(delta)
+    _config._abort_for_config_driven_module_removals(delta)
 
-    if not _apply_command._check_immutable_config_changes(delta):
+    if not _config._check_immutable_config_changes(delta):
         raise click.Abort()
 
     if delta.theme_changed:
@@ -204,10 +222,10 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
         ApplyContext with all loaded and computed data
     """
     # Load and validate configuration
-    qs_config = _apply_command._load_and_validate_config(config_path)
+    qs_config = _config._load_and_validate_config(config_path)
 
     # Determine output path
-    output_path = _apply_command._determine_output_path(
+    output_path = _generation._determine_output_path(
         config_path, qs_config.project.slug
     )
 
@@ -215,13 +233,13 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
     # Use ProjectStateManager.load_state() for read-through legacy
     # compatibility so that apply planning sees the same consolidated
     # state as the rest of M2 (CR-001).
-    project_state_manager = _apply_command.ProjectStateManager(output_path)
-    state_manager = _apply_command.StateManager(output_path)
+    project_state_manager = _project_state_manager.ProjectStateManager(output_path)
+    state_manager = _state_schema.StateManager(output_path)
     try:
         authoritative_state = (
             project_state_manager.load_state() if output_path.exists() else None
         )
-    except _apply_command.StateError as error:
+    except _state_schema.StateError as error:
         click.secho(
             f"\n❌ Failed to load .quickscale/state.yml: {error}",
             fg="red",
@@ -231,11 +249,11 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
 
     try:
         recovery_state = (
-            _apply_command._load_apply_recovery_state(output_path)
+            _state._load_apply_recovery_state(output_path)
             if output_path.exists()
             else None
         )
-    except _apply_command.StateError as error:
+    except _state_schema.StateError as error:
         click.secho(
             f"\n❌ Failed to load .quickscale/{_APPLY_RECOVERY_FILENAME}: {error}",
             fg="red",
@@ -243,30 +261,30 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
         )
         raise click.Abort() from error
 
-    existing_state = _apply_command._merge_apply_recovery_state(
+    existing_state = _state._merge_apply_recovery_state(
         authoritative_state, recovery_state
     )
 
     # Load manifests for modules (needed for config change detection)
     manifests: dict[str, ModuleManifest] = {}
     if existing_state and existing_state.modules:
-        _apply_command._abort_for_not_ready_modules(
+        _config._abort_for_not_ready_modules(
             list(existing_state.modules.keys()),
             source=".quickscale/state.yml",
         )
         try:
-            manifests = _apply_command._load_module_manifests(
+            manifests = _config._load_module_manifests(
                 output_path,
                 list(existing_state.modules.keys()),
                 strict=True,
             )
-        except _apply_command.ManifestError as error:
-            _apply_command._abort_for_manifest_error(error, command_name="apply")
+        except _loader_errors.ManifestError as error:
+            _config._abort_for_manifest_error(error, command_name="apply")
 
     # Compute delta
-    delta = _apply_command.compute_delta(qs_config, existing_state, manifests)
+    delta = _delta.compute_delta(qs_config, existing_state, manifests)
 
-    return _apply_command.ApplyContext(
+    return _types.ApplyContext(
         config_path=config_path,
         qs_config=qs_config,
         output_path=output_path,
@@ -299,7 +317,7 @@ def _regenerate_managed_wiring_for_apply(
                 module_name: dict(module_config.options or {})
                 for module_name, module_config in qs_config.modules.items()
             }
-            return _apply_command.regenerate_managed_wiring(
+            return _module_wiring_manager.regenerate_managed_wiring(
                 output_path,
                 module_names=selected,
                 option_overrides=options,
@@ -316,10 +334,8 @@ def _regenerate_managed_wiring_for_apply(
                 click.echo(traceback.format_exc(), err=True)
             return False, str(exc)
 
-    step_ctx = _apply_command._build_step_context(
-        ctx, embedded_modules=embedded_modules
-    )
-    outcome = _apply_command.step_regenerate_wiring(
+    step_ctx = _build_step_context(ctx, embedded_modules=embedded_modules)
+    outcome = _steps.step_regenerate_wiring(
         step_ctx,
         embedded_modules=embedded_modules,
         regenerate_wiring_fn=_wiring_fn,
@@ -368,10 +384,10 @@ def _refresh_context_after_lock(ctx: ApplyContext) -> None:
     # Use ProjectStateManager.load_state() for read-through legacy
     # compatibility so the post-lock refresh sees the same consolidated
     # state as the rest of M2 (CR-001).
-    project_state_manager = _apply_command.ProjectStateManager(ctx.output_path)
+    project_state_manager = _project_state_manager.ProjectStateManager(ctx.output_path)
     try:
         authoritative_state = project_state_manager.load_state()
-    except _apply_command.StateError:
+    except _state_schema.StateError:
         return  # Keep the pre-lock context; the locked path will surface errors.
 
     # If we could not load authoritative state, keep the pre-lock context.
@@ -383,9 +399,9 @@ def _refresh_context_after_lock(ctx: ApplyContext) -> None:
     # F12.1d: malformed authoritative recovery ledger must fail hard
     # rather than being silently treated as absent.  LedgerError
     # (subclass of StateError) propagates to the operator.
-    recovery_state = _apply_command._load_apply_recovery_state(ctx.output_path)
+    recovery_state = _state._load_apply_recovery_state(ctx.output_path)
 
-    merged_state = _apply_command._merge_apply_recovery_state(
+    merged_state = _state._merge_apply_recovery_state(
         authoritative_state, recovery_state
     )
 
@@ -393,15 +409,15 @@ def _refresh_context_after_lock(ctx: ApplyContext) -> None:
     manifests: dict[str, ModuleManifest] = {}
     if merged_state and merged_state.modules:
         try:
-            manifests = _apply_command._load_module_manifests(
+            manifests = _config._load_module_manifests(
                 ctx.output_path,
                 list(merged_state.modules.keys()),
                 strict=True,
             )
-        except _apply_command.ManifestError as error:
-            _apply_command._abort_for_manifest_error(error, command_name="apply")
+        except _loader_errors.ManifestError as error:
+            _config._abort_for_manifest_error(error, command_name="apply")
 
-    delta = _apply_command.compute_delta(ctx.qs_config, merged_state, manifests)
+    delta = _delta.compute_delta(ctx.qs_config, merged_state, manifests)
 
     ctx.existing_state = merged_state
     ctx.manifests = manifests
@@ -419,7 +435,7 @@ def _build_step_context(
     verbose_docker: bool = False,
 ) -> StepContext:
     """Build a core-safe :class:`StepContext` from the CLI-level :class:`ApplyContext`."""
-    return _apply_command.StepContext(
+    return _types_2.StepContext(
         output_path=ctx.output_path,
         qs_config=ctx.qs_config,
         existing_state=getattr(ctx, "existing_state", None),
@@ -434,15 +450,15 @@ def _build_step_context(
 
 def _resolve_apply_preflight(config_path: Path) -> Path:
     """Validate themes before apply performs any operational mutation."""
-    resolve_root = _apply_command._resolve_apply_raw_root(config_path)
+    resolve_root = _apply_support._resolve_apply_raw_root(config_path)
     try:
-        _apply_command.validate_theme_preflight(
+        _theme_validation.validate_theme_preflight(
             resolve_root,
             config_path=config_path,
             defer_config_errors=True,
         )
-    except _apply_command.ThemeValidationError as exc:
-        _apply_command._report_theme_preflight_error(exc)
+    except _theme_validation.ThemeValidationError as exc:
+        _apply_support._report_theme_preflight_error(exc)
         raise click.Abort() from exc
     return resolve_root
 
@@ -459,18 +475,18 @@ def _enforce_apply_contract_vintage_preflight(
         return
 
     try:
-        authoritative_state = _apply_command.ProjectStateManager(
+        authoritative_state = _project_state_manager.ProjectStateManager(
             output_path
         ).load_state()
-        recovery_state = _apply_command._load_apply_recovery_state(output_path)
-    except _apply_command.StateError as error:
+        recovery_state = _state._load_apply_recovery_state(output_path)
+    except _state_schema.StateError as error:
         click.secho(
             f"\n❌ Failed to load existing project state: {error}",
             fg="red",
             err=True,
         )
         raise click.Abort() from error
-    existing_state = _apply_command._merge_apply_recovery_state(
+    existing_state = _state._merge_apply_recovery_state(
         authoritative_state,
         recovery_state,
     )
@@ -479,14 +495,14 @@ def _enforce_apply_contract_vintage_preflight(
 
     module_names = set(existing_state.modules)
     try:
-        preflight_config = _apply_command.validate_config(config_path.read_text())
-    except _apply_command.ConfigValidationError, OSError:
+        preflight_config = _config_schema.validate_config(config_path.read_text())
+    except _config_schema.ConfigValidationError, OSError:
         return
     configured_modules = set(preflight_config.modules)
     module_names.update(configured_modules)
-    module_names.update(_apply_command.resolve_required_modules(configured_modules))
+    module_names.update(_required_modules.resolve_required_modules(configured_modules))
 
-    _apply_command.enforce_shipped_contract_vintage(
+    _contract_vintage.enforce_shipped_contract_vintage(
         existing_state,
         module_names,
         operation="'quickscale apply'",
@@ -503,15 +519,15 @@ def _record_regenerated_wiring_hashes(ctx: ApplyContext) -> None:
     sections are first written.  Without the hash records, ``quickscale
     status`` reports the adoption's own regeneration as managed-file drift.
     """
-    state_manager = _apply_command.ProjectStateManager(ctx.output_path)
+    state_manager = _project_state_manager.ProjectStateManager(ctx.output_path)
     state = state_manager.load_state()
     if state is None:
         return
-    managed_paths = _apply_command._resolve_managed_wiring_paths(ctx.qs_config)
-    for path_str, digest in _apply_command.compute_file_hashes(
+    managed_paths = _state._resolve_managed_wiring_paths(ctx.qs_config)
+    for path_str, digest in _project_state_hashes.compute_file_hashes(
         ctx.output_path, managed_paths
     ).items():
-        state.managed_files[path_str] = _apply_command.ManagedFileRecord(
+        state.managed_files[path_str] = _state_schema.ManagedFileRecord(
             path=path_str, hash=digest
         )
     state_manager.save_state(state)
@@ -529,16 +545,18 @@ def _regenerate_and_record_adoption(ctx: ApplyContext) -> bool:
     not receive.
     """
     embedded_modules = sorted(ctx.existing_state.modules) if ctx.existing_state else []
-    if not _apply_command._regenerate_managed_wiring_for_apply(ctx, embedded_modules):
+    if not _regenerate_managed_wiring_for_apply(ctx, embedded_modules):
         click.secho(
             "\n❌ Contract adoption not recorded: managed wiring regeneration failed.",
             fg="red",
             err=True,
         )
         return False
-    _apply_command._record_regenerated_wiring_hashes(ctx)
-    current_state = _apply_command.ProjectStateManager(ctx.output_path).load_state()
-    _apply_command.record_contract_adoption(current_state, ctx.output_path)
+    _record_regenerated_wiring_hashes(ctx)
+    current_state = _project_state_manager.ProjectStateManager(
+        ctx.output_path
+    ).load_state()
+    _contract_vintage.record_contract_adoption(current_state, ctx.output_path)
     return True
 
 
@@ -551,18 +569,18 @@ def _record_confirmed_adoption(ctx: ApplyContext) -> bool | None:
     stale context.  Returns ``None`` when the no-delta premise no longer
     holds; the caller aborts rather than acting on a stale desired snapshot.
     """
-    lock = _apply_command.AdvisoryLock(ctx.output_path, operation="apply")
+    lock = _advisory_lock.AdvisoryLock(ctx.output_path, operation="apply")
     try:
         lock.acquire()
-    except _apply_command.AdvisoryLockContentionError as error:
+    except _advisory_lock.AdvisoryLockContentionError as error:
         raise click.ClickException(
             "Unable to acquire the project state lock to record the contract "
             f"adoption: {error}"
         ) from error
     try:
-        _apply_command._refresh_context_after_lock(ctx)
+        _refresh_context_after_lock(ctx)
         if ctx.delta.has_changes or ctx.has_pending_post_embed_recovery:
             return None
-        return _apply_command._regenerate_and_record_adoption(ctx)
+        return _regenerate_and_record_adoption(ctx)
     finally:
         lock.release()

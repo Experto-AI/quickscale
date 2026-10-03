@@ -5,10 +5,8 @@ import os
 import yaml
 from click.testing import CliRunner
 
-from quickscale_cli.commands.plan_command import (
-    _detect_existing_project,
-    _get_applied_modules,
-)
+from quickscale_cli.commands._plan_validation import _detect_existing_project
+from quickscale_cli.commands._plan_shared import _get_applied_modules
 
 
 class TestDetectExistingProject:

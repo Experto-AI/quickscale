@@ -12,12 +12,14 @@ import tomllib
 from pathlib import Path
 from typing import Any, Mapping
 
-import quickscale_cli.utils.module_dependency_sync as _module_dependency_sync
+
+import quickscale_cli.utils._dependency_io as _dependency_io
+import quickscale_core.manifest.loader as _loader
 
 
 def _extract_version_tuple(spec: str) -> tuple[int, ...] | None:
     """Extract the first comparable version tuple from a Poetry version string."""
-    match = _module_dependency_sync._VERSION_PATTERN.search(spec)
+    match = _dependency_io._VERSION_PATTERN.search(spec)
     if match is None:
         return None
     return tuple(int(part) for part in match.group(1).split("."))
@@ -30,8 +32,8 @@ def _prefer_dependency_value(current: Any, candidate: Any) -> Any:
     if not isinstance(current, str) or not isinstance(candidate, str):
         return current
 
-    current_version = _module_dependency_sync._extract_version_tuple(current)
-    candidate_version = _module_dependency_sync._extract_version_tuple(candidate)
+    current_version = _extract_version_tuple(current)
+    candidate_version = _extract_version_tuple(candidate)
     if current_version is None or candidate_version is None:
         return current
     return candidate if candidate_version > current_version else current
@@ -49,20 +51,13 @@ def _render_toml_literal(value: Any) -> str:
     if isinstance(value, float):
         return str(value)
     if isinstance(value, (list, tuple)):
-        return (
-            "["
-            + ", ".join(
-                _module_dependency_sync._render_toml_literal(item) for item in value
-            )
-            + "]"
-        )
+        return "[" + ", ".join(_render_toml_literal(item) for item in value) + "]"
     if isinstance(value, dict):
         rendered_items = [
-            f"{key} = {_module_dependency_sync._render_toml_literal(item)}"
-            for key, item in value.items()
+            f"{key} = {_render_toml_literal(item)}" for key, item in value.items()
         ]
         return "{" + ", ".join(rendered_items) + "}"
-    raise _module_dependency_sync.DependencySyncError(
+    raise _dependency_io.DependencySyncError(
         f"Unsupported TOML dependency value: {value!r}"
     )
 
@@ -72,7 +67,7 @@ def _write_validated_toml(path: Path, content: str) -> None:
     try:
         tomllib.loads(content)
     except tomllib.TOMLDecodeError as error:
-        raise _module_dependency_sync.DependencySyncError(
+        raise _dependency_io.DependencySyncError(
             f"Refusing to write invalid TOML to {path}: {error}"
         ) from error
 
@@ -107,7 +102,7 @@ def _append_dependency_entries(
             break
 
     if section_start is None:
-        raise _module_dependency_sync.DependencySyncError(
+        raise _dependency_io.DependencySyncError(
             f"Unable to locate [tool.poetry.dependencies] in {pyproject_path}"
         )
 
@@ -118,8 +113,7 @@ def _append_dependency_entries(
         insertion_index -= 1
 
     rendered_entries = [
-        f"{dependency_name} = "
-        f"{_module_dependency_sync._render_toml_literal(dependency_value)}"
+        f"{dependency_name} = {_render_toml_literal(dependency_value)}"
         for dependency_name, dependency_value in entries
     ]
     updated_lines = (
@@ -128,9 +122,7 @@ def _append_dependency_entries(
         + lines[insertion_index:section_end]
         + lines[section_end:]
     )
-    _module_dependency_sync._write_validated_toml(
-        pyproject_path, "\n".join(updated_lines) + "\n"
-    )
+    _write_validated_toml(pyproject_path, "\n".join(updated_lines) + "\n")
 
 
 def _update_dependency_entries(
@@ -166,13 +158,13 @@ def _update_dependency_entries(
             break
 
     if section_start is None:
-        raise _module_dependency_sync.DependencySyncError(
+        raise _dependency_io.DependencySyncError(
             f"Unable to locate [tool.poetry.dependencies] in {pyproject_path}"
         )
 
     updated_lines = list(lines)
     for dep_name, dep_value in updates.items():
-        rendered = _module_dependency_sync._render_toml_literal(dep_value)
+        rendered = _render_toml_literal(dep_value)
         new_line = f"{dep_name} = {rendered}"
         found = False
         for i in range(section_start + 1, section_end):
@@ -189,9 +181,7 @@ def _update_dependency_entries(
             updated_lines.insert(section_end, new_line)
             section_end += 1
 
-    _module_dependency_sync._write_validated_toml(
-        pyproject_path, "\n".join(updated_lines) + "\n"
-    )
+    _write_validated_toml(pyproject_path, "\n".join(updated_lines) + "\n")
 
 
 def _resolve_declared_dependency_path(
@@ -212,9 +202,7 @@ def _has_unresolvable_path_dependency(
 ) -> bool:
     """Return whether any declared path dependency points outside the tree."""
     for dep_value in module_poetry_deps.values():
-        dep_path = _module_dependency_sync._resolve_declared_dependency_path(
-            install_path, dep_value
-        )
+        dep_path = _resolve_declared_dependency_path(install_path, dep_value)
         if dep_path is not None and not dep_path.exists():
             return True
     return False
@@ -238,13 +226,11 @@ def _build_path_dependency_overrides(
     """Build replacement values for unresolvable path dependencies."""
     overrides: dict[str, Any] = {}
     for dep_name, dep_value in module_poetry_deps.items():
-        dep_path = _module_dependency_sync._resolve_declared_dependency_path(
-            install_path, dep_value
-        )
+        dep_path = _resolve_declared_dependency_path(install_path, dep_value)
         if dep_path is None or dep_path.exists():
             continue
 
-        local_wheel = _module_dependency_sync._resolve_local_wheel_dependency(
+        local_wheel = _dependency_io._resolve_local_wheel_dependency(
             project_path,
             install_path,
             dep_name,
@@ -254,7 +240,7 @@ def _build_path_dependency_overrides(
             overrides[dep_name] = local_wheel
             continue
 
-        spec = _module_dependency_sync._manifest_version_spec(manifest, dep_name)
+        spec = _manifest_version_spec(manifest, dep_name)
         if spec:
             overrides[dep_name] = spec
     return overrides
@@ -274,7 +260,7 @@ def _rewrite_dependency_lines(raw_toml: str, overrides: Mapping[str, Any]) -> st
                 if isinstance(spec, str):
                     rendered_spec = f'"{spec}"'
                 else:
-                    rendered_spec = _module_dependency_sync._render_toml_literal(spec)
+                    rendered_spec = _render_toml_literal(spec)
                 result_lines.append(f"{indent}{dep_name} = {rendered_spec}")
                 matched = True
                 break
@@ -297,33 +283,29 @@ def _patch_module_path_dependencies(
     that ``poetry lock`` can resolve it from PyPI.
     """
     for module_name in sorted(module_options_by_name):
-        install_path = _module_dependency_sync.resolve_embedded_module_install_path(
+        install_path = _dependency_io.resolve_embedded_module_install_path(
             project_path, module_name
         )
         if install_path is None:
             continue
         module_pyproject_path = install_path / "pyproject.toml"
-        module_pyproject = _module_dependency_sync._load_toml_file(
-            module_pyproject_path
-        )
-        module_poetry_deps = _module_dependency_sync._load_poetry_dependencies(
+        module_pyproject = _dependency_io._load_toml_file(module_pyproject_path)
+        module_poetry_deps = _dependency_io._load_poetry_dependencies(
             module_pyproject_path, module_pyproject
         )
 
-        if not _module_dependency_sync._has_unresolvable_path_dependency(
-            install_path, module_poetry_deps
-        ):
+        if not _has_unresolvable_path_dependency(install_path, module_poetry_deps):
             continue
 
         # Load manifest and build a version override map for path deps.
-        manifest = _module_dependency_sync.get_manifest_for_module(
+        manifest = _loader.get_manifest_for_module(
             project_path, module_name, strict=True
         )
         if manifest is None:
             continue
 
         raw_toml = module_pyproject_path.read_text(encoding="utf-8")
-        overrides = _module_dependency_sync._build_path_dependency_overrides(
+        overrides = _build_path_dependency_overrides(
             project_path,
             install_path,
             manifest,
@@ -331,7 +313,7 @@ def _patch_module_path_dependencies(
             wheelhouse,
         )
         if overrides:
-            _module_dependency_sync._write_validated_toml(
+            _write_validated_toml(
                 module_pyproject_path,
-                _module_dependency_sync._rewrite_dependency_lines(raw_toml, overrides),
+                _rewrite_dependency_lines(raw_toml, overrides),
             )

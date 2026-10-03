@@ -1,6 +1,7 @@
 """Tests for quickscale apply command"""
 
 import click
+import quickscale_core.contracts.module_catalog as _module_catalog
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,11 +11,13 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from quickscale_cli.commands.apply_command import (
+from quickscale_cli.commands._config import (
     _abort_for_not_ready_modules,
     _load_and_validate_config,
-    _regenerate_managed_wiring_for_apply,
     _validate_module_prerequisites,
+)
+from quickscale_cli.commands._context import _regenerate_managed_wiring_for_apply
+from quickscale_cli.commands.apply_command import (
     apply,
 )
 from quickscale_core.contracts.resolvers import resolve_manifest_module_options
@@ -40,7 +43,7 @@ def _make_apply_context(project_path, *, package_name="myapp"):
 def _stub_post_generation_steps():
     """Keep CLI smoke tests focused on apply orchestration, not Poetry/migration tooling."""
     with patch(
-        "quickscale_cli.commands.apply_command._run_post_generation_steps",
+        "quickscale_cli.commands._runtime._run_post_generation_steps",
         return_value=True,
     ):
         yield
@@ -511,13 +514,12 @@ docker:
 
     def test_abort_for_not_ready_modules_reports_reason(self, capsys, monkeypatch):
         """A non-ready module in config or state aborts apply with its reason."""
-        import quickscale_cli.commands.apply_command as apply_command_module
 
         monkeypatch.setattr(
-            apply_command_module, "find_not_ready_modules", lambda names: ["hidden"]
+            _module_catalog, "find_not_ready_modules", lambda names: ["hidden"]
         )
         monkeypatch.setattr(
-            apply_command_module,
+            _module_catalog,
             "get_module_readiness_reason",
             lambda name: (
                 f"Module '{name}' is not a public-ready QuickScale module yet."
@@ -1207,7 +1209,7 @@ git_index_checkpoint: "deadbeefcafebabedeadbeefcafebabedeadbeef"
                 )
 
             with patch(
-                "quickscale_cli.commands.apply_command._execute_apply_steps"
+                "quickscale_cli.commands._steps._execute_apply_steps"
             ) as mock_execute:
                 result = runner.invoke(
                     apply,
@@ -1325,9 +1327,7 @@ class TestApplyDriftDetection:
     def test_warn_version_drift_for_apply_reports_disagreement(self, tmp_path, capsys):
         """Apply should surface state/config version drift as a warning."""
         from quickscale_core.config import add_module
-        from quickscale_cli.commands.apply_command import (
-            _warn_version_drift_for_apply,
-        )
+        from quickscale_cli.commands._state import _warn_version_drift_for_apply
         from quickscale_core.schema.state_schema import (
             ModuleState,
             ProjectState,
@@ -1375,9 +1375,7 @@ class TestApplyDriftDetection:
     def test_warn_version_drift_for_apply_silent_when_agreeing(self, tmp_path, capsys):
         """Apply should stay quiet when state and config agree."""
         from quickscale_core.config import add_module
-        from quickscale_cli.commands.apply_command import (
-            _warn_version_drift_for_apply,
-        )
+        from quickscale_cli.commands._state import _warn_version_drift_for_apply
         from quickscale_core.schema.state_schema import (
             ModuleState,
             ProjectState,
@@ -1422,9 +1420,7 @@ class TestApplyDriftDetection:
         self, tmp_path, capsys
     ):
         """A shape-invalid config.yml must warn and return [] rather than raise."""
-        from quickscale_cli.commands.apply_command import (
-            _warn_version_drift_for_apply,
-        )
+        from quickscale_cli.commands._state import _warn_version_drift_for_apply
 
         project = tmp_path / "myapp"
         project.mkdir()
@@ -1444,7 +1440,7 @@ class TestApplyDriftDetection:
 
     def test_capture_managed_file_hashes_writes_ledger(self, tmp_path, capsys):
         """Apply should capture hashes into consolidated state managed_files."""
-        from quickscale_cli.commands.apply_command import (
+        from quickscale_cli.commands._state import (
             _capture_managed_file_hashes_after_apply,
         )
         from quickscale_core.schema.state_schema import QuickScaleState, ProjectState
@@ -1473,9 +1469,7 @@ class TestApplyDriftDetection:
 
     def test_resolve_managed_wiring_paths_uses_package(self, tmp_path):
         """The default managed wiring paths are anchored at the package dir."""
-        from quickscale_cli.commands.apply_command import (
-            _resolve_managed_wiring_paths,
-        )
+        from quickscale_cli.commands._state import _resolve_managed_wiring_paths
 
         config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
 
@@ -1503,9 +1497,7 @@ class TestApplyAF5ResumeCheckpointPreserved:
             ProjectState,
             QuickScaleState,
         )
-        from quickscale_cli.commands.apply_command import (
-            _save_apply_recovery_state,
-        )
+        from quickscale_cli.commands._state import _save_apply_recovery_state
 
         project = tmp_path / "myapp"
         project.mkdir()
@@ -1595,9 +1587,7 @@ class TestApplyAF5ResumeCheckpointPreserved:
             ProjectState,
             QuickScaleState,
         )
-        from quickscale_cli.commands.apply_command import (
-            _save_apply_recovery_state,
-        )
+        from quickscale_cli.commands._state import _save_apply_recovery_state
 
         project = tmp_path / "myapp"
         project.mkdir()

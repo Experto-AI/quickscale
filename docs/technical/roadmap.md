@@ -24,11 +24,10 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA234 | Retarget test patches to defining modules and remove facade back-imports | post-v88 | 2 | — | Deferred |
 | SA235 | Declare module UI paths in manifests and render host routes from discovery | post-v88 | 1 | — | Deferred |
 | SA236 | Make settings snapshots private and guard optional senders on `is_enabled()` | post-v88 | 3 | — | Deferred |
 | SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
-| SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | SA234 | Deferred |
+| SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | — | Deferred |
 | SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215, SA235, SA236, SA237, SA238 | Deferred |
@@ -41,7 +40,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA234 ──► SA237
+Track 2: SA237
 Track 3: SA215 (closing pass, in progress) ──► SA236 ──► SA238 ──► SA216
      critical path: SA234 → SA238 → SA191 → SA153
 ```
@@ -71,7 +70,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA235 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA234 | yes | yes | yes | **yes** | no |
+| 2 | SA237 | yes | yes | yes | **yes** | no |
 | 3 | SA215 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -128,32 +127,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA233 — Key the quality ratchet by qualified name and retire the rename waivers.**
 
-- [ ] **SA234 — Retarget test patches to defining modules and remove facade back-imports.**
-
-  **Context:** to keep the existing test patch targets, the SA231/SA232 splits made 51 private
-  modules import their own facade and call their collaborators through it (CLI 32, `dr_engine` 9,
-  billing 10). The facades are now import cycles, and 381 names, 197 of them private, are pinned
-  surface. A helper that binds a name directly turns a facade patch into a silent no-op
-  (`36075de9`). No decision states this contract (arch audit `split-facades-patch-coupled`,
-  option 1 with option 3's guard).
-
-  **Scope:** first a decision entry: a test's seam is the module that defines the name (or an
-  injected collaborator), never the re-export path; private modules import siblings, never their
-  own facade; a facade re-exports public names only. Then package by package, starting with
-  `apply_command` because SA191 edits it next: codemod `patch("<facade>.X")` targets to the defining
-  module, replace `_facade.name` lookups with direct imports, and trim the facade and its surface
-  test to public names. After that come `module_commands`, the other CLI facades, `dr_engine`, and
-  billing.
-
-  **Acceptance:** no `_*.py` module in the CLI, `dr_engine`, or billing imports its own package's
-  facade; a registered gate fails when one does, with a control case. The facade-surface tests pin
-  no private or incidental names (`re`, `Any`, `annotations`), and billing and the CLI split
-  facades gain one. Public import paths are unchanged. The full suites pass, and none of their
-  patches targets a re-export.
-
-  **Surfaces:** the CLI command facades and their private modules and tests; `dr_engine`;
-  billing's `services.py` facade and its private modules and tests; the new gate and its registry
-  row (a Track 1 surface, through the serialized merge queue); decisions.
+- [x] **SA234 — Retarget test patches to defining modules and remove facade back-imports.**
 
 - [ ] **SA235 — Declare module UI paths in manifests and render host routes from discovery.**
 

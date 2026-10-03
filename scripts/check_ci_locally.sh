@@ -510,6 +510,11 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ Every covered Module Conventions rule passes"
             LOCAL_GATE_FAILURE_LABEL="Module Conventions Gate"
             ;;
+        check-split-facade-imports)
+            LOCAL_GATE_DESCRIPTION="Running split-facade import gate..."
+            LOCAL_GATE_SUCCESS="✓ No private module imports its package's facade"
+            LOCAL_GATE_FAILURE_LABEL="Split-Facade Import Gate"
+            ;;
         quality)
             LOCAL_GATE_DESCRIPTION="Running quality ratchet gate..."
             LOCAL_GATE_SUCCESS="✓ Quality ratchet gate passed"

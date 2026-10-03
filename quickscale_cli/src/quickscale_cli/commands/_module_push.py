@@ -10,7 +10,11 @@ from pathlib import Path
 import click
 
 from quickscale_cli.commands._module_shared import _LazyModuleChoice
-import quickscale_cli.commands.module_commands as _module_commands
+
+import quickscale_core.utils.git_errors as _git_errors
+import quickscale_core.project_state_manager as _project_state_manager
+import quickscale_core.utils.git_subtree as _git_subtree
+import quickscale_core.utils.git_repo as _git_repo
 
 
 @click.command()
@@ -51,7 +55,7 @@ def push(module: str, branch: str, remote: str) -> None:
     """
     try:
         # Validate git repository
-        if not _module_commands.is_git_repo():
+        if not _git_repo.is_git_repo():
             click.secho("❌ Error: Not a git repository", fg="red", err=True)
             raise click.Abort()
 
@@ -60,7 +64,7 @@ def push(module: str, branch: str, remote: str) -> None:
         # legacy config.yml tracking fields when state.yml lacks consolidated
         # tracking metadata, so this works for both new and legacy projects.
         project_path = Path.cwd()
-        manager = _module_commands.ProjectStateManager(project_path)
+        manager = _project_state_manager.ProjectStateManager(project_path)
         try:
             state = manager.load_state()
         except Exception as error:
@@ -119,9 +123,7 @@ def push(module: str, branch: str, remote: str) -> None:
 
         # Push subtree
         click.echo(f"\n🚀 Pushing to {branch}...")
-        _module_commands.run_git_subtree_push(
-            prefix=prefix, remote=remote, branch=branch
-        )
+        _git_subtree.run_git_subtree_push(prefix=prefix, remote=remote, branch=branch)
 
         # Success message
         click.secho("\n✅ Changes pushed successfully!", fg="green", bold=True)
@@ -131,7 +133,7 @@ def push(module: str, branch: str, remote: str) -> None:
         click.echo("  2. Describe your changes and submit for review")
         click.echo("  3. After merge, the split branch will auto-update")
 
-    except _module_commands.GitError as e:
+    except _git_errors.GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
         click.echo(
             "\n💡 Tip: Make sure you have write access to the repository", err=True

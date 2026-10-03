@@ -10,7 +10,11 @@ from quickscale_core.dr_engine.primitives import BackupError
 from quickscale_core.dr_engine.primitives import BackupPolicySnapshot
 from typing import Any
 
-import quickscale_core.dr_engine.orchestration as _orchestration
+
+import quickscale_core.dr_engine.persistence as _persistence
+import quickscale_core.dr_engine._remote as _remote
+import quickscale_core.dr_engine.primitives as _primitives
+import django.utils.timezone as _django_timezone
 
 
 def _mark_snapshot_failed(
@@ -26,7 +30,7 @@ def _mark_snapshot_failed(
     if child_descriptors_json is not None:
         snapshot.child_descriptors_json = child_descriptors_json
         update_fields.append("child_descriptors_json")
-    _orchestration.save_snapshot(snapshot, update_fields=update_fields)
+    _persistence.save_snapshot(snapshot, update_fields=update_fields)
 
 
 def _mark_remote_upload_failure(
@@ -43,9 +47,9 @@ def _mark_remote_upload_failure(
     artifact.metadata_json = {
         **artifact.metadata_json,
         "remote_upload_error": str(error),
-        "remote_upload_failed_at": _orchestration.django_timezone.now().isoformat(),
+        "remote_upload_failed_at": _django_timezone.now().isoformat(),
     }
-    _orchestration.save_artifact(
+    _persistence.save_artifact(
         artifact,
         update_fields=[
             "local_path",
@@ -66,11 +70,11 @@ def _rollback_remote_upload_after_persistence_failure(
     remote_deleter: _RemoteDeleter | None = None,
 ) -> str | None:
     """Best-effort delete a remote object uploaded before metadata persistence failed."""
-    deleter = remote_deleter or _orchestration._delete_private_remote_key
+    deleter = remote_deleter or _remote._delete_private_remote_key
     try:
         deleter(
             remote_key,
-            _orchestration._resolve_artifact_remote_policy(artifact, policy),
+            _resolve_artifact_remote_policy(artifact, policy),
         )
     except Exception as exc:
         return str(exc)
@@ -89,11 +93,11 @@ def _record_prune_failure_without_masking_success(
     artifact.metadata_json = {
         **artifact.metadata_json,
         "prune_error": str(error),
-        "prune_failed_at": _orchestration.django_timezone.now().isoformat(),
+        "prune_failed_at": _django_timezone.now().isoformat(),
     }
 
     try:
-        _orchestration.save_artifact(
+        _persistence.save_artifact(
             artifact,
             update_fields=["validation_notes", "metadata_json", "updated_at"],
         )
@@ -123,7 +127,7 @@ def _persist_snapshot_metadata_on_artifact(
             f"{existing_notes}; {note}" if existing_notes else note
         )
         update_fields.append("validation_notes")
-    _orchestration.save_artifact(artifact, update_fields=update_fields)
+    _persistence.save_artifact(artifact, update_fields=update_fields)
 
 
 def _clear_appended_artifact_note(artifact: Any, note: str) -> bool:
@@ -154,7 +158,7 @@ def _resolve_snapshot_database_local_path(
         return Path(str(artifact.local_path))
     return (
         Path(str(snapshot.local_root_path))
-        / _orchestration._SNAPSHOT_DATABASE_DIRECTORY_NAME
+        / _primitives._SNAPSHOT_DATABASE_DIRECTORY_NAME
         / str(artifact.filename)
     )
 
@@ -184,7 +188,7 @@ def _get_authoritative_snapshot_for_artifact(
 
     SA89b Phase 1: delegates to the persistence provider.
     """
-    return _orchestration.get_authoritative_snapshot_for_artifact(artifact)
+    return _persistence.get_authoritative_snapshot_for_artifact(artifact)
 
 
 def _resolve_artifact_remote_policy(
@@ -195,7 +199,7 @@ def _resolve_artifact_remote_policy(
     if artifact.storage_target != "private_remote":
         return fallback_policy
 
-    return _orchestration.BackupPolicySnapshot(
+    return _primitives.BackupPolicySnapshot(
         retention_days=fallback_policy.retention_days,
         naming_prefix=fallback_policy.naming_prefix,
         target_mode="private_remote",
@@ -224,4 +228,4 @@ def get_backup_snapshot(snapshot_id: str) -> Any:
 
     SA89b Phase 1: delegates to the persistence provider.
     """
-    return _orchestration._get_backup_snapshot_from_persistence(snapshot_id)
+    return _persistence.get_backup_snapshot(snapshot_id)

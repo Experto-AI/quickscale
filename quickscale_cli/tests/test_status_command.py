@@ -7,7 +7,9 @@ from pathlib import Path
 import yaml
 from click.testing import CliRunner
 
-from quickscale_cli.commands.status_command import status
+from quickscale_cli.commands.status_command import (
+    status,
+)
 
 
 class TestStatusCommandBasic:

@@ -14,8 +14,8 @@ from typing import Any
 import click
 
 from quickscale_cli.commands._dr_context import DisasterRecoveryContext
-import quickscale_cli.commands.dr_commands as _dr_commands
 
+import quickscale_core.dr_engine.primitives as _primitives
 
 _DR_EXECUTE_SURFACES = ("env_vars", "database", "media")
 _DR_EXECUTE_RETRYABLE_STATUSES = {
@@ -35,7 +35,7 @@ def _build_plan_payload(
     env_sync_plan: dict[str, Any],
 ) -> dict[str, Any]:
     sidecar_payloads = snapshot_report.get("sidecar_payloads") or {}
-    release_metadata = sidecar_payloads.get(_dr_commands._RELEASE_METADATA_FILENAME, {})
+    release_metadata = sidecar_payloads.get(_primitives._RELEASE_METADATA_FILENAME, {})
     manual_actions = [
         item["name"] for item in env_sync_plan.get("manual_requirements", [])
     ] + [item["name"] for item in env_sync_plan.get("portable_conflicts", [])]
@@ -74,7 +74,7 @@ def _latest_route_phase_record(
     phase: str,
 ) -> dict[str, Any] | None:
     """Return the latest stored route record for one verification phase."""
-    route_report = _dr_commands._build_route_report(snapshot_report, route=route)
+    route_report = _build_route_report(snapshot_report, route=route)
     latest_records = route_report.get("latest_records", {})
     if not isinstance(latest_records, dict):
         return None
@@ -95,7 +95,7 @@ def _latest_execute_surface_statuses(
         return {}
 
     statuses: dict[str, str] = {}
-    for surface_name in _dr_commands._DR_EXECUTE_SURFACES:
+    for surface_name in _DR_EXECUTE_SURFACES:
         surface_payload = payload.get(surface_name)
         if not isinstance(surface_payload, dict):
             continue
@@ -115,7 +115,7 @@ def _latest_execute_surface_payloads(
         return {}
 
     carried_payloads: dict[str, dict[str, Any]] = {}
-    for surface_name in _dr_commands._DR_EXECUTE_SURFACES:
+    for surface_name in _DR_EXECUTE_SURFACES:
         surface_payload = payload.get(surface_name)
         if isinstance(surface_payload, dict):
             carried_payloads[surface_name] = deepcopy(surface_payload)
@@ -161,10 +161,10 @@ def _resolve_execute_surface_selection(
 
     return tuple(
         surface_name
-        for surface_name in _dr_commands._DR_EXECUTE_SURFACES
+        for surface_name in _DR_EXECUTE_SURFACES
         if isinstance(payload.get(surface_name), dict)
         and str(payload[surface_name].get("status") or "").strip()
-        in _dr_commands._DR_EXECUTE_RETRYABLE_STATUSES
+        in _DR_EXECUTE_RETRYABLE_STATUSES
     )
 
 
@@ -172,7 +172,7 @@ def _surface_result_requires_follow_up(surface_payload: dict[str, Any]) -> bool:
     """Return whether one execute surface still needs additional work."""
     return (
         str(surface_payload.get("status") or "").strip()
-        in _dr_commands._DR_EXECUTE_RETRYABLE_STATUSES
+        in _DR_EXECUTE_RETRYABLE_STATUSES
     )
 
 
@@ -183,7 +183,7 @@ def _build_route_report(
 ) -> dict[str, Any]:
     payloads = snapshot_report.get("sidecar_payloads") or {}
     verification_payload = payloads.get(
-        _dr_commands._PROMOTION_VERIFICATION_FILENAME, {}
+        _primitives._PROMOTION_VERIFICATION_FILENAME, {}
     )
     records = verification_payload.get("reports", [])
     route_records = [

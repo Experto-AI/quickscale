@@ -5,7 +5,9 @@ import os
 import yaml
 from click.testing import CliRunner
 
-from quickscale_cli.commands.plan_command import plan
+from quickscale_cli.commands.plan_command import (
+    plan,
+)
 from quickscale_core.contracts.module_catalog import (
     get_discovered_module_entries,
     get_discovered_module_names,

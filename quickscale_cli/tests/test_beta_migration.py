@@ -3466,9 +3466,7 @@ def test_module_dependency_sync_write_validated_toml_accepts_valid_content(
     tmp_path: Path,
 ) -> None:
     """The module-dependency-sync validated writer should accept valid TOML."""
-    from quickscale_cli.utils.module_dependency_sync import (
-        _write_validated_toml,
-    )
+    from quickscale_cli.utils._dependency_write import _write_validated_toml
 
     target = tmp_path / "pyproject.toml"
     valid_content = (
@@ -3491,10 +3489,8 @@ def test_module_dependency_sync_write_validated_toml_rejects_invalid_content(
     before touching disk — exactly like _append_dependency_entries and
     _update_dependency_entries.
     """
-    from quickscale_cli.utils.module_dependency_sync import (
-        DependencySyncError,
-        _write_validated_toml,
-    )
+    from quickscale_cli.utils._dependency_io import DependencySyncError
+    from quickscale_cli.utils._dependency_write import _write_validated_toml
 
     target = tmp_path / "pyproject.toml"
     # Unquoted version string is invalid TOML — same pattern as the existing
@@ -3511,9 +3507,7 @@ def test_patch_module_path_dependencies_replaces_path_with_version(
     """SA62 regression: _patch_module_path_dependencies should replace non-existent
     path dependencies with version constraints from the module manifest when the
     splice produces valid TOML, exercising the validated-writer route."""
-    from quickscale_cli.utils.module_dependency_sync import (
-        _patch_module_path_dependencies,
-    )
+    from quickscale_cli.utils._dependency_write import _patch_module_path_dependencies
 
     project = tmp_path / "project"
     project.mkdir()
@@ -3565,10 +3559,8 @@ def test_patch_module_path_dependencies_rejects_invalid_splice(
     unparseable TOML.  _write_validated_toml catches the malformed
     document and raises DependencySyncError before anything touches disk.
     """
-    from quickscale_cli.utils.module_dependency_sync import (
-        DependencySyncError,
-        _patch_module_path_dependencies,
-    )
+    from quickscale_cli.utils._dependency_io import DependencySyncError
+    from quickscale_cli.utils._dependency_write import _patch_module_path_dependencies
 
     project = tmp_path / "project"
     project.mkdir()

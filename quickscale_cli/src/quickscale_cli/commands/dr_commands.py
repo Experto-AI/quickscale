@@ -6,44 +6,23 @@ F5.3: All DR operations now call the explicit typed adapter
 docker-exec/management-command/env-var/stdout-JSON protocol.
 
 The implementation lives in private sibling modules grouped by concern
-(``_dr_context``, ``_dr_adapter``, ``_dr_env_sync``, ``_dr_report``); this
-module owns the public command surface and re-exports every name that
-previously lived here (Module Conventions rule 28), so existing
-``quickscale_cli.commands.dr_commands`` imports and test patch targets keep
-working unchanged.
+(``_dr_context``, ``_dr_adapter``, ``_dr_env_sync``, ``_dr_report``); this module owns the public command surface, re-exports public names for
+unchanged import paths, and resolves collaborators through the sibling modules
+that define them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
 
-from copy import deepcopy as deepcopy
-import json as json
-import subprocess as subprocess
-from dataclasses import dataclass as dataclass
-from pathlib import Path as Path
-from typing import Any as Any
+from typing import Any
 
 import click as click
 
-from quickscale_cli.commands.development_commands import (
-    _validate_project_and_docker as _validate_project_and_docker,
-)
-from quickscale_cli.commands.dr_output import (
-    _echo_capture_summary as _echo_capture_summary,
-    _echo_execute_summary as _echo_execute_summary,
-    _echo_plan_summary as _echo_plan_summary,
-    _echo_report_summary as _echo_report_summary,
-)
 from quickscale_core.contracts.module_options import (
     get_env_var_portability as get_env_var_portability,
 )
 from quickscale_core.utils.theme_validation import (
     ThemeValidationError as ThemeValidationError,
     validate_theme_preflight as validate_theme_preflight,
-)
-from quickscale_core.dr_engine.primitives import (
-    _ENV_VAR_MANIFEST_FILENAME as _ENV_VAR_MANIFEST_FILENAME,
-    _PROMOTION_VERIFICATION_FILENAME as _PROMOTION_VERIFICATION_FILENAME,
-    _RELEASE_METADATA_FILENAME as _RELEASE_METADATA_FILENAME,
 )
 from quickscale_core.utils.project_identity import (
     ProjectIdentity as ProjectIdentity,
@@ -59,46 +38,17 @@ from quickscale_cli.utils.railway_utils import (
 from quickscale_cli.commands._dr_context import (
     DisasterRecoveryContext as DisasterRecoveryContext,
     DrRouteSpec as DrRouteSpec,
-    _DR_ROUTES as _DR_ROUTES,
-    _ROUTE_CHOICE as _ROUTE_CHOICE,
-    _build_context as _build_context,
-    _fetch_railway_runtime_variables as _fetch_railway_runtime_variables,
-    _resolve_project_identity as _resolve_project_identity,
-    _resolve_route as _resolve_route,
-    _validate_route_services as _validate_route_services,
 )
-from quickscale_cli.commands._dr_adapter import (
-    _build_database_plan as _build_database_plan,
-    _call_adapter as _call_adapter,
-    _capture_snapshot_report as _capture_snapshot_report,
-    _execute_database_restore as _execute_database_restore,
-    _fetch_snapshot_report as _fetch_snapshot_report,
-    _load_source_live_variables as _load_source_live_variables,
-    _record_verification as _record_verification,
-    _run_media_sync as _run_media_sync,
-    _set_rollback_pin as _set_rollback_pin,
-)
-from quickscale_cli.commands._dr_env_sync import (
-    _build_env_sync_plan as _build_env_sync_plan,
-    _classify_env_var as _classify_env_var,
-    _execute_portable_env_sync as _execute_portable_env_sync,
-)
-from quickscale_cli.commands._dr_report import (
-    _DR_EXECUTE_RETRYABLE_STATUSES as _DR_EXECUTE_RETRYABLE_STATUSES,
-    _DR_EXECUTE_SURFACES as _DR_EXECUTE_SURFACES,
-    _build_plan_payload as _build_plan_payload,
-    _build_route_report as _build_route_report,
-    _echo_json as _echo_json,
-    _latest_execute_surface_payloads as _latest_execute_surface_payloads,
-    _latest_execute_surface_statuses as _latest_execute_surface_statuses,
-    _latest_route_phase_record as _latest_route_phase_record,
-    _resolve_execute_surface_selection as _resolve_execute_surface_selection,
-    _surface_result_requires_follow_up as _surface_result_requires_follow_up,
-)
+import quickscale_cli.commands.dr_output as _dr_output
+import quickscale_core.dr_engine.primitives as _primitives
+import quickscale_cli.commands._dr_context as _dr_context
+import quickscale_cli.commands._dr_adapter as _dr_adapter
+import quickscale_cli.commands._dr_env_sync as _dr_env_sync
+import quickscale_cli.commands._dr_report as _dr_report
 
 # Sidecar filename constant used by env-sync planning (maps to
 # _ENV_VAR_MANIFEST_FILENAME in primitives.py).
-_ENV_MANIFEST_FILENAME = _ENV_VAR_MANIFEST_FILENAME
+_ENV_MANIFEST_FILENAME = _primitives._ENV_VAR_MANIFEST_FILENAME
 
 
 @click.group()
@@ -107,7 +57,7 @@ def dr() -> None:
 
 
 @dr.command()
-@click.option("--route", type=_ROUTE_CHOICE, required=True)
+@click.option("--route", type=_dr_context._ROUTE_CHOICE, required=True)
 @click.option("--source-service")
 @click.option("--source-railway-environment")
 @click.option("--resume", "resume_snapshot_id")
@@ -120,7 +70,7 @@ def capture(
     as_json: bool,
 ) -> None:
     """Capture a stored snapshot for one DR route source."""
-    context = _build_context(
+    context = _dr_context._build_context(
         route,
         source_service=source_service,
         target_service=None,
@@ -128,18 +78,20 @@ def capture(
         target_railway_environment=None,
         include_target=False,
     )
-    snapshot_report = _capture_snapshot_report(
+    snapshot_report = _dr_adapter._capture_snapshot_report(
         context,
         resume_snapshot_id=str(resume_snapshot_id or "").strip() or None,
     )
     if as_json:
-        _echo_json({"route": context.route.label, "snapshot": snapshot_report})
+        _dr_report._echo_json(
+            {"route": context.route.label, "snapshot": snapshot_report}
+        )
         return
-    _echo_capture_summary(context, snapshot_report)
+    _dr_output._echo_capture_summary(context, snapshot_report)
 
 
 @dr.command()
-@click.option("--route", type=_ROUTE_CHOICE, required=True)
+@click.option("--route", type=_dr_context._ROUTE_CHOICE, required=True)
 @click.option("--snapshot-id", required=True)
 @click.option("--source-service")
 @click.option("--target-service")
@@ -156,7 +108,7 @@ def plan(
     as_json: bool,
 ) -> None:
     """Build and persist a dry-run DR plan for one stored snapshot."""
-    context = _build_context(
+    context = _dr_context._build_context(
         route,
         source_service=source_service,
         target_service=target_service,
@@ -164,26 +116,28 @@ def plan(
         target_railway_environment=target_railway_environment,
         include_target=True,
     )
-    snapshot_report = _fetch_snapshot_report(
+    snapshot_report = _dr_adapter._fetch_snapshot_report(
         context,
         snapshot_id=snapshot_id,
         sidecar_payloads=(
             _ENV_MANIFEST_FILENAME,
-            _PROMOTION_VERIFICATION_FILENAME,
-            _RELEASE_METADATA_FILENAME,
+            _primitives._PROMOTION_VERIFICATION_FILENAME,
+            _primitives._RELEASE_METADATA_FILENAME,
         ),
     )
-    database_plan = _build_database_plan(context, snapshot_report)
-    media_plan = _run_media_sync(context, snapshot_id=snapshot_id, dry_run=True)
-    env_sync_plan = _build_env_sync_plan(context, snapshot_report)
-    plan_payload = _build_plan_payload(
+    database_plan = _dr_adapter._build_database_plan(context, snapshot_report)
+    media_plan = _dr_adapter._run_media_sync(
+        context, snapshot_id=snapshot_id, dry_run=True
+    )
+    env_sync_plan = _dr_env_sync._build_env_sync_plan(context, snapshot_report)
+    plan_payload = _dr_report._build_plan_payload(
         context,
         snapshot_report,
         database_plan=database_plan,
         media_plan=media_plan,
         env_sync_plan=env_sync_plan,
     )
-    _record_verification(
+    _dr_adapter._record_verification(
         context,
         snapshot_id=snapshot_id,
         phase="plan",
@@ -191,13 +145,13 @@ def plan(
         payload=plan_payload,
     )
     if as_json:
-        _echo_json(plan_payload)
+        _dr_report._echo_json(plan_payload)
         return
-    _echo_plan_summary(plan_payload)
+    _dr_output._echo_plan_summary(plan_payload)
 
 
 @dr.command()
-@click.option("--route", type=_ROUTE_CHOICE, required=True)
+@click.option("--route", type=_dr_context._ROUTE_CHOICE, required=True)
 @click.option("--snapshot-id", required=True)
 @click.option("--source-service")
 @click.option("--target-service")
@@ -231,7 +185,7 @@ def execute(
             "Choose at least one operational surface: --database, --media, or --env-vars."
         )
 
-    context = _build_context(
+    context = _dr_context._build_context(
         route,
         source_service=source_service,
         target_service=target_service,
@@ -245,17 +199,17 @@ def execute(
                 "Routes involving Railway production require --rollback-pin-hours and --rollback-pin-reason before execution."
             )
 
-    snapshot_report = _fetch_snapshot_report(
+    snapshot_report = _dr_adapter._fetch_snapshot_report(
         context,
         snapshot_id=snapshot_id,
         sidecar_payloads=(
             _ENV_MANIFEST_FILENAME,
-            _PROMOTION_VERIFICATION_FILENAME,
-            _RELEASE_METADATA_FILENAME,
+            _primitives._PROMOTION_VERIFICATION_FILENAME,
+            _primitives._RELEASE_METADATA_FILENAME,
         ),
     )
     latest_execute_record = (
-        _latest_route_phase_record(
+        _dr_report._latest_route_phase_record(
             snapshot_report,
             route=context.route.label,
             phase="execute",
@@ -267,7 +221,7 @@ def execute(
         raise click.ClickException(
             "Cannot resume execute because no prior execute record is stored for this route and snapshot."
         )
-    selected_surfaces = _resolve_execute_surface_selection(
+    selected_surfaces = _dr_report._resolve_execute_surface_selection(
         latest_execute_record=latest_execute_record,
         database=database,
         media=media,
@@ -291,11 +245,11 @@ def execute(
                     "Routes involving Railway production require --rollback-pin-hours and --rollback-pin-reason before execution."
                 )
 
-    env_sync_plan = _build_env_sync_plan(context, snapshot_report)
+    env_sync_plan = _dr_env_sync._build_env_sync_plan(context, snapshot_report)
 
     rollback_pin: dict[str, Any] | None = existing_rollback_pin
     if rollback_pin_hours is not None and str(rollback_pin_reason or "").strip():
-        rollback_report = _set_rollback_pin(
+        rollback_report = _dr_adapter._set_rollback_pin(
             context,
             snapshot_id=snapshot_id,
             hours=rollback_pin_hours,
@@ -322,11 +276,15 @@ def execute(
         "database": {"status": "skipped"},
         "media": {"status": "skipped"},
     }
-    execute_payload.update(_latest_execute_surface_payloads(latest_execute_record))
+    execute_payload.update(
+        _dr_report._latest_execute_surface_payloads(latest_execute_record)
+    )
 
-    latest_surface_statuses = _latest_execute_surface_statuses(latest_execute_record)
+    latest_surface_statuses = _dr_report._latest_execute_surface_statuses(
+        latest_execute_record
+    )
     surface_failure = False
-    for surface_name in _DR_EXECUTE_SURFACES:
+    for surface_name in _dr_report._DR_EXECUTE_SURFACES:
         if surface_name not in selected_surfaces:
             continue
 
@@ -346,17 +304,17 @@ def execute(
 
         try:
             if surface_name == "env_vars":
-                execute_payload[surface_name] = _execute_portable_env_sync(
+                execute_payload[surface_name] = _dr_env_sync._execute_portable_env_sync(
                     context,
                     env_sync_plan,
                 )
             elif surface_name == "database":
-                execute_payload[surface_name] = _execute_database_restore(
+                execute_payload[surface_name] = _dr_adapter._execute_database_restore(
                     context,
                     snapshot_report,
                 )
             else:
-                execute_payload[surface_name] = _run_media_sync(
+                execute_payload[surface_name] = _dr_adapter._run_media_sync(
                     context,
                     snapshot_id=snapshot_id,
                     dry_run=False,
@@ -377,7 +335,7 @@ def execute(
             surface_failure = True
 
     if any(
-        _surface_result_requires_follow_up(surface)
+        _dr_report._surface_result_requires_follow_up(surface)
         for surface in (
             execute_payload["env_vars"],
             execute_payload["database"],
@@ -387,7 +345,7 @@ def execute(
     ):
         execute_payload["status"] = "partial"
 
-    _record_verification(
+    _dr_adapter._record_verification(
         context,
         snapshot_id=snapshot_id,
         phase="execute",
@@ -395,13 +353,13 @@ def execute(
         payload=execute_payload,
     )
     if as_json:
-        _echo_json(execute_payload)
+        _dr_report._echo_json(execute_payload)
         return
-    _echo_execute_summary(execute_payload)
+    _dr_output._echo_execute_summary(execute_payload)
 
 
 @dr.command()
-@click.option("--route", type=_ROUTE_CHOICE, required=True)
+@click.option("--route", type=_dr_context._ROUTE_CHOICE, required=True)
 @click.option("--snapshot-id", required=True)
 @click.option("--source-service")
 @click.option("--source-railway-environment")
@@ -414,7 +372,7 @@ def report(
     as_json: bool,
 ) -> None:
     """Show the stored plan/execute report state for one route and snapshot."""
-    context = _build_context(
+    context = _dr_context._build_context(
         route,
         source_service=source_service,
         target_service=None,
@@ -422,13 +380,15 @@ def report(
         target_railway_environment=None,
         include_target=False,
     )
-    snapshot_report = _fetch_snapshot_report(
+    snapshot_report = _dr_adapter._fetch_snapshot_report(
         context,
         snapshot_id=snapshot_id,
-        sidecar_payloads=(_PROMOTION_VERIFICATION_FILENAME,),
+        sidecar_payloads=(_primitives._PROMOTION_VERIFICATION_FILENAME,),
     )
-    route_report = _build_route_report(snapshot_report, route=context.route.label)
+    route_report = _dr_report._build_route_report(
+        snapshot_report, route=context.route.label
+    )
     if as_json:
-        _echo_json(route_report)
+        _dr_report._echo_json(route_report)
         return
-    _echo_report_summary(route_report)
+    _dr_output._echo_report_summary(route_report)

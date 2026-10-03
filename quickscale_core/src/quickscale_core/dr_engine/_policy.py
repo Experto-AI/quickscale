@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from quickscale_core.dr_engine.persistence import PersistedBackupPolicy
 
-import quickscale_core.dr_engine.orchestration as _orchestration
+
+import quickscale_core.dr_engine.persistence as _persistence
+import quickscale_core.dr_engine.primitives as _primitives
 
 
 def _validate_policy_snapshot_internal(policy: BackupPolicySnapshot) -> list[str]:
@@ -76,7 +78,7 @@ def _load_active_policy_snapshot(
         has_any_policy,
     )
 
-    settings_snapshot = _orchestration.settings_policy_snapshot()
+    settings_snapshot = _persistence.settings_policy_snapshot()
     if not has_any_policy():
         return settings_snapshot
 
@@ -98,7 +100,7 @@ def _ensure_default_policy_internal() -> PersistedBackupPolicy:
 
 def _build_policy_snapshot_from_model(policy: Any) -> BackupPolicySnapshot:
     """Create a BackupPolicySnapshot from a database policy record."""
-    return _orchestration.BackupPolicySnapshot(
+    return _primitives.BackupPolicySnapshot(
         retention_days=policy.retention_days,
         naming_prefix=policy.naming_prefix,
         target_mode=policy.target_mode,

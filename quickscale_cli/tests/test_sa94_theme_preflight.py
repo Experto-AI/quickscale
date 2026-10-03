@@ -160,7 +160,7 @@ class TestPlanPreflight:
         self, html_project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """_handle_reconfigure must raise click.Abort for HTML."""
-        from quickscale_cli.commands.plan_command import _handle_reconfigure
+        from quickscale_cli.commands._plan_reconfigure import _handle_reconfigure
 
         with monkeypatch.context() as mp:
             mp.setattr("click.confirm", lambda *a, **kw: True)
@@ -172,7 +172,7 @@ class TestPlanPreflight:
         self, html_project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """_handle_add_modules must raise click.Abort for HTML."""
-        from quickscale_cli.commands.plan_command import _handle_add_modules
+        from quickscale_cli.commands._plan_add import _handle_add_modules
 
         with monkeypatch.context() as mp:
             mp.setattr("click.confirm", lambda *a, **kw: True)
@@ -184,7 +184,7 @@ class TestPlanPreflight:
         self, react_project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """_handle_reconfigure for React passes preflight (fails later on context)."""
-        from quickscale_cli.commands.plan_command import _handle_reconfigure
+        from quickscale_cli.commands._plan_reconfigure import _handle_reconfigure
 
         with monkeypatch.context() as mp:
             mp.setattr("click.confirm", lambda *a, **kw: True)
@@ -211,7 +211,9 @@ class TestApplyPreflight:
 
     def test_apply_html_rejected(self, html_project: Path) -> None:
         """apply() must fail with theme validation for HTML."""
-        from quickscale_cli.commands.apply_command import apply
+        from quickscale_cli.commands.apply_command import (
+            apply,
+        )
 
         runner = CliRunner()
         config_path = html_project / "quickscale.yml"
@@ -270,11 +272,11 @@ class TestDrPreflight:
         self, html_project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """_build_context must raise click.ClickException for HTML."""
-        from quickscale_cli.commands.dr_commands import _build_context
+        from quickscale_cli.commands._dr_context import _build_context
 
         with monkeypatch.context() as mp:
             mp.setattr(
-                "quickscale_cli.commands.dr_commands.Path.cwd",
+                "pathlib.Path.cwd",
                 lambda: html_project,
             )
             with pytest.raises(click.ClickException) as exc:
@@ -292,11 +294,11 @@ class TestDrPreflight:
         self, react_project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """_build_context with React passes preflight (fails on Docker later)."""
-        from quickscale_cli.commands.dr_commands import _build_context
+        from quickscale_cli.commands._dr_context import _build_context
 
         with monkeypatch.context() as mp:
             mp.setattr(
-                "quickscale_cli.commands.dr_commands.Path.cwd",
+                "pathlib.Path.cwd",
                 lambda: react_project,
             )
             with pytest.raises(SystemExit) as exc:
@@ -317,16 +319,16 @@ class TestDrPreflight:
         self, null_project: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """_build_context must reject null theme before any Docker probe."""
-        from quickscale_cli.commands.dr_commands import _build_context
+        from quickscale_cli.commands._dr_context import _build_context
 
         mock_docker = Mock()
         with monkeypatch.context() as mp:
             mp.setattr(
-                "quickscale_cli.commands.dr_commands.Path.cwd",
+                "pathlib.Path.cwd",
                 lambda: null_project,
             )
             mp.setattr(
-                "quickscale_cli.commands.dr_commands._validate_project_and_docker",
+                "quickscale_cli.commands.development_commands._validate_project_and_docker",
                 mock_docker,
             )
             with pytest.raises(click.ClickException) as exc:
@@ -503,7 +505,9 @@ class TestApplyCustomConfigPreflight:
         self, html_project: Path
     ) -> None:
         """Apply with a custom-named config file must still reject HTML."""
-        from quickscale_cli.commands.apply_command import apply
+        from quickscale_cli.commands.apply_command import (
+            apply,
+        )
 
         # Create a custom-named config (not quickscale.yml) with HTML theme
         custom_config = html_project / "my-custom-config.yml"
@@ -522,7 +526,9 @@ class TestApplyCustomConfigPreflight:
         """Apply must check output-root state even when the supplied
         config itself is valid React.  The output root is determined by
         the project slug, not by the config file location."""
-        from quickscale_cli.commands.apply_command import apply
+        from quickscale_cli.commands.apply_command import (
+            apply,
+        )
 
         # Mock CWD to tmp_path so output_root = tmp_path/slug
         monkeypatch.chdir(tmp_path)
@@ -585,10 +591,10 @@ class TestStandaloneEmbedPreflight:
 
     def test_embed_module_html_rejected(self, html_project: Path) -> None:
         """Standalone embed_module must reject HTML before any git ops."""
-        from quickscale_cli.commands.module_commands import embed_module
+        from quickscale_cli.commands._module_embed import embed_module
 
         with patch(
-            "quickscale_cli.commands.module_commands._validate_git_environment"
+            "quickscale_cli.commands._module_shared._validate_git_environment"
         ) as mock_git:
             result = embed_module(
                 module="auth",
@@ -602,10 +608,10 @@ class TestStandaloneEmbedPreflight:
     def test_embed_module_react_accepted(self, react_project: Path) -> None:
         """Standalone embed_module with React passes preflight (fails on
         later git validation, not theme)."""
-        from quickscale_cli.commands.module_commands import embed_module
+        from quickscale_cli.commands._module_embed import embed_module
 
         with patch(
-            "quickscale_cli.commands.module_commands._validate_git_environment",
+            "quickscale_cli.commands._module_shared._validate_git_environment",
             return_value=False,
         ) as mock_git:
             result = embed_module(

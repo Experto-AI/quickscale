@@ -7,11 +7,11 @@ from unittest.mock import Mock, patch
 import pytest
 from click.testing import CliRunner
 
+from quickscale_cli.commands._deploy_service_config import _existing_service_variables
 from quickscale_cli.commands.deployment_commands import (
-    _existing_service_variables,
     railway,
 )
-from quickscale_cli.utils.railway_utils import get_railway_variables
+from quickscale_cli.utils._railway_project import get_railway_variables
 
 
 @pytest.fixture(autouse=True)
@@ -19,11 +19,11 @@ def _no_live_variable_read():
     """Keep pre- and post-deploy variable reads off the real Railway CLI."""
     with (
         patch(
-            "quickscale_cli.commands.deployment_commands._existing_service_variables",
+            "quickscale_cli.commands._deploy_service_config._existing_service_variables",
             return_value={},
         ),
         patch(
-            "quickscale_cli.commands.deployment_commands.get_railway_variables",
+            "quickscale_cli.utils._railway_project.get_railway_variables",
             return_value={
                 "DATABASE_URL": "postgresql://database",
                 "SECRET_KEY": "secret",
@@ -40,19 +40,19 @@ def _no_live_variable_read():
 def mock_preflight_checks(has_changes=False, all_valid=True):
     """Context manager to mock all pre-flight check functions."""
     with patch(
-        "quickscale_cli.commands.deployment_commands.check_uncommitted_changes"
+        "quickscale_cli.utils._railway_project.check_uncommitted_changes"
     ) as mock_git:
         with patch(
-            "quickscale_cli.commands.deployment_commands.verify_railway_json"
+            "quickscale_cli.utils._railway_project.verify_railway_json"
         ) as mock_railway_json:
             with patch(
-                "quickscale_cli.commands.deployment_commands.verify_dockerfile"
+                "quickscale_cli.utils._railway_project.verify_dockerfile"
             ) as mock_dockerfile:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.verify_railway_dependencies"
+                    "quickscale_cli.utils._railway_project.verify_railway_dependencies"
                 ) as mock_deps:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.check_poetry_lock_consistency"
+                        "quickscale_cli.utils._railway_project.check_poetry_lock_consistency"
                     ) as mock_poetry_lock:
                         with patch.object(
                             Path, "cwd", return_value=Path("/tmp/quickscale-test/myapp")
@@ -91,10 +91,10 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_npm_installed"
+                    "quickscale_cli.utils._railway_cli.is_npm_installed"
                 ) as mock_npm:
                     mock_installed.return_value = False
                     mock_npm.return_value = False
@@ -110,13 +110,13 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.login_railway_cli_browserless"
+                        "quickscale_cli.utils._railway_cli.login_railway_cli_browserless"
                     ) as mock_login:
                         mock_installed.return_value = True
                         mock_auth.return_value = False
@@ -133,28 +133,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True
@@ -191,28 +191,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True
@@ -245,28 +245,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True
@@ -302,31 +302,31 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             with patch(
-                                                "quickscale_cli.commands.deployment_commands.get_railway_variables"
+                                                "quickscale_cli.utils._railway_project.get_railway_variables"
                                             ) as mock_vars:
                                                 mock_installed.return_value = True
                                                 mock_auth.return_value = True
@@ -368,28 +368,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True
@@ -430,28 +430,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True
@@ -488,28 +488,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True
@@ -540,16 +540,16 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             mock_installed.return_value = True
                             mock_auth.return_value = True
@@ -571,28 +571,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True
@@ -643,28 +643,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True
@@ -694,7 +694,7 @@ class TestRailwayCommand:
         runner = CliRunner()
 
         with patch(
-            "quickscale_cli.commands.deployment_commands.check_uncommitted_changes"
+            "quickscale_cli.utils._railway_project.check_uncommitted_changes"
         ) as mock_git:
             mock_git.return_value = (True, "M some_file.py")
 
@@ -709,10 +709,10 @@ class TestRailwayCommand:
         runner = CliRunner()
 
         with patch(
-            "quickscale_cli.commands.deployment_commands.check_uncommitted_changes"
+            "quickscale_cli.utils._railway_project.check_uncommitted_changes"
         ) as mock_git:
             with patch(
-                "quickscale_cli.commands.deployment_commands.verify_railway_json"
+                "quickscale_cli.utils._railway_project.verify_railway_json"
             ) as mock_railway_json:
                 mock_git.return_value = (False, "")
                 mock_railway_json.return_value = (
@@ -730,13 +730,13 @@ class TestRailwayCommand:
         runner = CliRunner()
 
         with patch(
-            "quickscale_cli.commands.deployment_commands.check_uncommitted_changes"
+            "quickscale_cli.utils._railway_project.check_uncommitted_changes"
         ) as mock_git:
             with patch(
-                "quickscale_cli.commands.deployment_commands.verify_railway_json"
+                "quickscale_cli.utils._railway_project.verify_railway_json"
             ) as mock_railway_json:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.verify_dockerfile"
+                    "quickscale_cli.utils._railway_project.verify_dockerfile"
                 ) as mock_dockerfile:
                     mock_git.return_value = (False, "")
                     mock_railway_json.return_value = (True, "")
@@ -755,16 +755,16 @@ class TestRailwayCommand:
         runner = CliRunner()
 
         with patch(
-            "quickscale_cli.commands.deployment_commands.check_uncommitted_changes"
+            "quickscale_cli.utils._railway_project.check_uncommitted_changes"
         ) as mock_git:
             with patch(
-                "quickscale_cli.commands.deployment_commands.verify_railway_json"
+                "quickscale_cli.utils._railway_project.verify_railway_json"
             ) as mock_railway_json:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.verify_dockerfile"
+                    "quickscale_cli.utils._railway_project.verify_dockerfile"
                 ) as mock_dockerfile:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.verify_railway_dependencies"
+                        "quickscale_cli.utils._railway_project.verify_railway_dependencies"
                     ) as mock_deps:
                         mock_git.return_value = (False, "")
                         mock_railway_json.return_value = (True, "")
@@ -789,34 +789,34 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.check_poetry_lock_consistency"
+                "quickscale_cli.utils._railway_project.check_poetry_lock_consistency"
             ) as mock_poetry_check:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.fix_poetry_lock"
+                    "quickscale_cli.utils._railway_project.fix_poetry_lock"
                 ) as mock_fix:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                        "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
                     ) as mock_installed:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                            "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                         ) as mock_auth:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                                "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                             ) as mock_project_init:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.run_railway_command"
+                                    "quickscale_cli.utils._railway_cli.run_railway_command"
                                 ) as mock_run:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                        "quickscale_cli.utils._railway_cli.deploy_railway_service"
                                     ) as mock_deploy:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                            "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                         ) as mock_batch_set:
                                             with patch(
-                                                "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                                "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                             ) as mock_secret:
                                                 with patch(
-                                                    "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                                    "quickscale_cli.utils._railway_project.generate_railway_domain"
                                                 ) as mock_domain:
                                                     mock_poetry_check.return_value = (
                                                         False,
@@ -867,7 +867,7 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.check_poetry_lock_consistency"
+                "quickscale_cli.utils._railway_project.check_poetry_lock_consistency"
             ) as mock_poetry_check:
                 mock_poetry_check.return_value = (False, "poetry.lock is inconsistent")
 
@@ -883,34 +883,34 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_npm_installed"
+                    "quickscale_cli.utils._railway_cli.is_npm_installed"
                 ) as mock_npm:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.install_railway_cli"
+                        "quickscale_cli.utils._railway_cli.install_railway_cli"
                     ) as mock_install:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                            "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                         ) as mock_auth:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                                "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                             ) as mock_project_init:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.run_railway_command"
+                                    "quickscale_cli.utils._railway_cli.run_railway_command"
                                 ) as mock_run:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                        "quickscale_cli.utils._railway_cli.deploy_railway_service"
                                     ) as mock_deploy:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                            "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                         ) as mock_batch_set:
                                             with patch(
-                                                "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                                "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                             ) as mock_secret:
                                                 with patch(
-                                                    "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                                    "quickscale_cli.utils._railway_project.generate_railway_domain"
                                                 ) as mock_domain:
                                                     mock_installed.return_value = False
                                                     mock_npm.return_value = True
@@ -953,37 +953,37 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.get_railway_cli_version"
+                    "quickscale_cli.utils._railway_cli.get_railway_cli_version"
                 ) as mock_version:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.check_railway_cli_version"
+                        "quickscale_cli.utils._railway_cli.check_railway_cli_version"
                     ) as mock_check_version:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.upgrade_railway_cli"
+                            "quickscale_cli.utils._railway_cli.upgrade_railway_cli"
                         ) as mock_upgrade:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                                "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                             ) as mock_auth:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                                    "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                                 ) as mock_project_init:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.run_railway_command"
+                                        "quickscale_cli.utils._railway_cli.run_railway_command"
                                     ) as mock_run:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                            "quickscale_cli.utils._railway_cli.deploy_railway_service"
                                         ) as mock_deploy:
                                             with patch(
-                                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                                "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                             ) as mock_batch_set:
                                                 with patch(
-                                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                                    "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                                 ) as mock_secret:
                                                     with patch(
-                                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                                        "quickscale_cli.utils._railway_project.generate_railway_domain"
                                                     ) as mock_domain:
                                                         mock_installed.return_value = (
                                                             True
@@ -1030,28 +1030,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True
@@ -1088,28 +1088,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True
@@ -1159,44 +1159,42 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with (
+                patch("quickscale_cli.commands._deploy_steps._ensure_railway_cli_step"),
                 patch(
-                    "quickscale_cli.commands.deployment_commands._ensure_railway_cli_step"
+                    "quickscale_cli.commands._deploy_steps._ensure_railway_auth_step"
                 ),
                 patch(
-                    "quickscale_cli.commands.deployment_commands._ensure_railway_auth_step"
+                    "quickscale_cli.commands._deploy_steps._init_railway_project_step"
                 ),
                 patch(
-                    "quickscale_cli.commands.deployment_commands._init_railway_project_step"
-                ),
-                patch(
-                    "quickscale_cli.commands.deployment_commands._app_service_exists_step",
+                    "quickscale_cli.commands._deploy_steps._app_service_exists_step",
                     return_value=True,
                 ),
                 patch(
-                    "quickscale_cli.commands.deployment_commands._setup_postgres_step",
+                    "quickscale_cli.commands._deploy_steps._setup_postgres_step",
                     return_value="Postgres",
                 ) as mock_setup,
                 patch(
-                    "quickscale_cli.commands.deployment_commands._create_app_service_step"
+                    "quickscale_cli.commands._deploy_steps._create_app_service_step"
                 ) as mock_create,
                 patch(
-                    "quickscale_cli.commands.deployment_commands._link_database_step",
+                    "quickscale_cli.commands._deploy_steps._link_database_step",
                     return_value=True,
                 ) as mock_link_step,
                 patch(
-                    "quickscale_cli.commands.deployment_commands._generate_domain_step",
+                    "quickscale_cli.commands._deploy_steps._generate_domain_step",
                     return_value="myapp.up.railway.app",
                 ) as mock_domain_step,
                 patch(
-                    "quickscale_cli.commands.deployment_commands._existing_service_variables",
+                    "quickscale_cli.commands._deploy_service_config._existing_service_variables",
                     side_effect=_existing_service_variables,
                 ),
                 patch(
-                    "quickscale_cli.commands.deployment_commands.get_railway_variables",
+                    "quickscale_cli.utils._railway_project.get_railway_variables",
                     side_effect=get_railway_variables,
                 ),
                 patch(
-                    "quickscale_cli.utils.railway_utils.run_railway_command",
+                    "quickscale_cli.utils._railway_cli.run_railway_command",
                     return_value=Mock(
                         returncode=0,
                         stdout=(
@@ -1207,13 +1205,13 @@ class TestRailwayCommand:
                     ),
                 ),
                 patch(
-                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                 ) as mock_batch_set,
                 patch(
-                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                    "quickscale_cli.utils._railway_project.generate_django_secret_key"
                 ) as mock_secret,
                 patch(
-                    "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                    "quickscale_cli.utils._railway_cli.deploy_railway_service"
                 ) as mock_deploy,
             ):
                 result = runner.invoke(railway)
@@ -1235,31 +1233,31 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.login_railway_cli_browserless"
+                        "quickscale_cli.utils._railway_cli.login_railway_cli_browserless"
                     ) as mock_login:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                            "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                         ) as mock_project_init:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.run_railway_command"
+                                "quickscale_cli.utils._railway_cli.run_railway_command"
                             ) as mock_run:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                    "quickscale_cli.utils._railway_cli.deploy_railway_service"
                                 ) as mock_deploy:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                        "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                     ) as mock_batch_set:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                            "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                         ) as mock_secret:
                                             with patch(
-                                                "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                                "quickscale_cli.utils._railway_project.generate_railway_domain"
                                             ) as mock_domain:
                                                 mock_installed.return_value = True
                                                 mock_auth.return_value = False
@@ -1296,31 +1294,31 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.link_database_to_service"
+                                    "quickscale_cli.utils._railway_project.link_database_to_service"
                                 ) as mock_link:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                        "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                     ) as mock_batch_set:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                            "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                         ) as mock_secret:
                                             with patch(
-                                                "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                                "quickscale_cli.utils._railway_project.generate_railway_domain"
                                             ) as mock_domain:
                                                 mock_installed.return_value = True
                                                 mock_auth.return_value = True
@@ -1369,31 +1367,31 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.link_database_to_service"
+                                    "quickscale_cli.utils._railway_project.link_database_to_service"
                                 ) as mock_link:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                        "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                     ) as mock_batch_set:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                            "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                         ) as mock_secret:
                                             with patch(
-                                                "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                                "quickscale_cli.utils._railway_project.generate_railway_domain"
                                             ) as mock_domain:
                                                 mock_installed.return_value = True
                                                 mock_auth.return_value = True
@@ -1422,7 +1420,7 @@ class TestRailwayCommand:
                                                 mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                                 with patch(
-                                                    "quickscale_cli.commands.deployment_commands.get_railway_variables",
+                                                    "quickscale_cli.utils._railway_project.get_railway_variables",
                                                     return_value={
                                                         "DATABASE_URL": "postgresql://old-host/old-db",
                                                         "SECRET_KEY": "secret",
@@ -1468,19 +1466,19 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.link_database_to_service"
+                                "quickscale_cli.utils._railway_project.link_database_to_service"
                             ) as mock_link:
                                 mock_installed.return_value = True
                                 mock_auth.return_value = True
@@ -1509,28 +1507,28 @@ class TestRailwayCommand:
 
         with mock_preflight_checks():
             with patch(
-                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed"
             ) as mock_installed:
                 with patch(
-                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                    "quickscale_cli.utils._railway_cli.is_railway_authenticated"
                 ) as mock_auth:
                     with patch(
-                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                        "quickscale_cli.utils._railway_cli.is_railway_project_initialized"
                     ) as mock_project_init:
                         with patch(
-                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                            "quickscale_cli.utils._railway_cli.run_railway_command"
                         ) as mock_run:
                             with patch(
-                                "quickscale_cli.commands.deployment_commands.deploy_railway_service"
+                                "quickscale_cli.utils._railway_cli.deploy_railway_service"
                             ) as mock_deploy:
                                 with patch(
-                                    "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                                    "quickscale_cli.utils._railway_cli.set_railway_variables_batch"
                                 ) as mock_batch_set:
                                     with patch(
-                                        "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                        "quickscale_cli.utils._railway_project.generate_django_secret_key"
                                     ) as mock_secret:
                                         with patch(
-                                            "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                            "quickscale_cli.utils._railway_project.generate_railway_domain"
                                         ) as mock_domain:
                                             mock_installed.return_value = True
                                             mock_auth.return_value = True

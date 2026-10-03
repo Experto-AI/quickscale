@@ -1,36 +1,39 @@
 """Tests for railway_utils module."""
 
 import os
+import quickscale_cli.utils._railway_cli as _railway_cli
+import quickscale_cli.utils._railway_project as _railway_project
 import subprocess
 from unittest.mock import Mock, patch
 
 import pytest
 
-from quickscale_cli.utils import railway_utils
-from quickscale_cli.utils.railway_utils import (
+from quickscale_cli.utils._railway_cli import (
     _compare_versions,
-    check_poetry_lock_consistency,
     check_railway_cli_version,
-    check_uncommitted_changes,
     deploy_railway_service,
-    fix_poetry_lock,
-    generate_django_secret_key,
-    get_app_service_name,
-    get_deployment_url,
     get_railway_cli_version,
     get_railway_project_info,
-    get_railway_variables,
     install_railway_cli,
     is_npm_installed,
     is_railway_authenticated,
     is_railway_cli_installed,
     is_railway_project_initialized,
-    link_database_to_service,
     login_railway_cli_browserless,
     run_railway_command,
     set_railway_variable,
     set_railway_variables_batch,
     upgrade_railway_cli,
+)
+from quickscale_cli.utils._railway_project import (
+    check_poetry_lock_consistency,
+    check_uncommitted_changes,
+    fix_poetry_lock,
+    generate_django_secret_key,
+    get_app_service_name,
+    get_deployment_url,
+    get_railway_variables,
+    link_database_to_service,
     verify_dockerfile,
     verify_railway_dependencies,
     verify_railway_json,
@@ -221,7 +224,7 @@ class TestRunRailwayCommand:
 
     def test_interactive_command_execution(self):
         """Test interactive Railway command execution without output capture."""
-        with patch("quickscale_cli.utils.railway_utils.subprocess.run") as mock_run:
+        with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0)
             result = run_railway_command(["init"], interactive=True)
 
@@ -281,9 +284,7 @@ class TestDeployRailwayService:
 
     def test_successful_deploy(self, tmp_path):
         """Test successful deployment via deploy_railway_service."""
-        with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command"
-        ) as mock_run:
+        with patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="Deployment started")
             result = deploy_railway_service(
                 project_path=str(tmp_path),
@@ -299,9 +300,7 @@ class TestDeployRailwayService:
 
     def test_custom_timeout(self, tmp_path):
         """Test deploy_railway_service with custom timeout."""
-        with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command"
-        ) as mock_run:
+        with patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run:
             mock_run.return_value = Mock(returncode=0)
             deploy_railway_service(
                 project_path=str(tmp_path),
@@ -317,9 +316,7 @@ class TestDeployRailwayService:
 
     def test_deploy_failure(self, tmp_path):
         """Test deploy failure returns non-zero returncode."""
-        with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command"
-        ) as mock_run:
+        with patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run:
             mock_run.return_value = Mock(returncode=1, stdout="", stderr="Build failed")
             result = deploy_railway_service(
                 project_path=str(tmp_path),
@@ -331,9 +328,7 @@ class TestDeployRailwayService:
 
     def test_uses_explicit_project_path(self, tmp_path):
         """Verify that cwd is passed as the explicit project path, not CWD."""
-        with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command"
-        ) as mock_run:
+        with patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run:
             mock_run.return_value = Mock(returncode=0)
             explicit_path = tmp_path / "some" / "nested" / "project"
             deploy_railway_service(
@@ -349,9 +344,7 @@ class TestDeployRailwayService:
 
     def test_timeout_propagates(self, tmp_path):
         """Test that TimeoutError from run_railway_command propagates."""
-        with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command"
-        ) as mock_run:
+        with patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run:
             mock_run.side_effect = TimeoutError("Railway command timed out")
             with pytest.raises(TimeoutError, match="Railway command timed out"):
                 deploy_railway_service(
@@ -361,9 +354,7 @@ class TestDeployRailwayService:
 
     def test_cli_not_found_propagates(self, tmp_path):
         """Test that FileNotFoundError from run_railway_command propagates."""
-        with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command"
-        ) as mock_run:
+        with patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run:
             mock_run.side_effect = FileNotFoundError(
                 "Railway CLI not found. Install with: npm install -g @railway/cli"
             )
@@ -380,7 +371,7 @@ class TestSetRailwayVariable:
     def test_successful_variable_set(self):
         """Test successful environment variable setting via stdin."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.return_value = Mock(returncode=0)
             result = set_railway_variable("KEY", "value")
@@ -395,7 +386,7 @@ class TestSetRailwayVariable:
     def test_successful_variable_set_with_service_and_environment(self):
         """Test successful variable setting with service and environment params."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.return_value = Mock(returncode=0)
             result = set_railway_variable(
@@ -424,7 +415,7 @@ class TestSetRailwayVariable:
     def test_successful_variable_set_with_skip_deploy(self):
         """Test successful variable setting with skip_deploy flag."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.return_value = Mock(returncode=0)
             result = set_railway_variable(
@@ -452,7 +443,7 @@ class TestSetRailwayVariable:
     def test_failed_variable_set(self):
         """Test failed environment variable setting."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.return_value = Mock(returncode=1)
             result = set_railway_variable("KEY", "value")
@@ -462,7 +453,7 @@ class TestSetRailwayVariable:
     def test_exception_during_variable_set(self):
         """Test that exceptions are handled gracefully."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.side_effect = Exception("Unknown error")
             result = set_railway_variable("KEY", "value")
@@ -482,7 +473,7 @@ class TestSetRailwayVariablesBatch:
     def test_successful_batch_set(self):
         """Test successful per-variable batch setting via stdin."""
         with patch(
-            "quickscale_cli.utils.railway_utils.set_railway_variable",
+            "quickscale_cli.utils._railway_cli.set_railway_variable",
         ) as mock_set:
             mock_set.return_value = True
             variables = {"KEY1": "value1", "KEY2": "value2", "KEY3": "value3"}
@@ -503,7 +494,7 @@ class TestSetRailwayVariablesBatch:
     def test_successful_batch_set_with_service_and_environment(self):
         """Test per-variable batch setting with service and environment."""
         with patch(
-            "quickscale_cli.utils.railway_utils.set_railway_variable",
+            "quickscale_cli.utils._railway_cli.set_railway_variable",
         ) as mock_set:
             mock_set.return_value = True
             variables = {"KEY1": "value1", "KEY2": "value2"}
@@ -538,7 +529,7 @@ class TestSetRailwayVariablesBatch:
     def test_partial_failure_returns_failed_keys(self):
         """Test partial failure when some individual variable sets fail."""
         with patch(
-            "quickscale_cli.utils.railway_utils.set_railway_variable",
+            "quickscale_cli.utils._railway_cli.set_railway_variable",
         ) as mock_set:
             mock_set.side_effect = [True, False, True]
             variables = {"KEY1": "value1", "KEY2": "value2", "KEY3": "value3"}
@@ -550,7 +541,7 @@ class TestSetRailwayVariablesBatch:
     def test_all_failures_returns_all_keys(self):
         """Test all failures returns all keys as failed."""
         with patch(
-            "quickscale_cli.utils.railway_utils.set_railway_variable",
+            "quickscale_cli.utils._railway_cli.set_railway_variable",
         ) as mock_set:
             mock_set.return_value = False
             variables = {"KEY1": "value1", "KEY2": "value2", "KEY3": "value3"}
@@ -562,7 +553,7 @@ class TestSetRailwayVariablesBatch:
     def test_batch_set_single_variable(self):
         """Test batch set with single variable."""
         with patch(
-            "quickscale_cli.utils.railway_utils.set_railway_variable",
+            "quickscale_cli.utils._railway_cli.set_railway_variable",
         ) as mock_set:
             mock_set.return_value = True
             variables = {"SECRET_KEY": "my-secret"}
@@ -618,7 +609,7 @@ class TestGenerateDjangoSecretKey:
 
             importlib.reload(railway_utils)
 
-            secret_key = railway_utils.generate_django_secret_key()
+            secret_key = _railway_project.generate_django_secret_key()
 
             assert isinstance(secret_key, str)
             assert len(secret_key) == 50
@@ -720,7 +711,7 @@ class TestGenerateRailwayDomain:
                 stdout="Generated domain: https://myapp-production-abc123.up.railway.app",
             )
 
-            from quickscale_cli.utils.railway_utils import generate_railway_domain
+            from quickscale_cli.utils._railway_project import generate_railway_domain
 
             domain = generate_railway_domain("my-service")
 
@@ -734,7 +725,7 @@ class TestGenerateRailwayDomain:
                 stdout="https://myapp.up.railway.app",
             )
 
-            from quickscale_cli.utils.railway_utils import generate_railway_domain
+            from quickscale_cli.utils._railway_project import generate_railway_domain
 
             domain = generate_railway_domain("my-service")
 
@@ -748,7 +739,7 @@ class TestGenerateRailwayDomain:
                 stdout="No domain generated",
             )
 
-            from quickscale_cli.utils.railway_utils import generate_railway_domain
+            from quickscale_cli.utils._railway_project import generate_railway_domain
 
             domain = generate_railway_domain("my-service")
 
@@ -762,7 +753,7 @@ class TestGenerateRailwayDomain:
                 stdout="",
             )
 
-            from quickscale_cli.utils.railway_utils import generate_railway_domain
+            from quickscale_cli.utils._railway_project import generate_railway_domain
 
             domain = generate_railway_domain("my-service")
 
@@ -773,7 +764,7 @@ class TestGenerateRailwayDomain:
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = Exception("Unexpected Railway CLI crash")
 
-            from quickscale_cli.utils.railway_utils import generate_railway_domain
+            from quickscale_cli.utils._railway_project import generate_railway_domain
 
             with pytest.raises(Exception, match="Unexpected Railway CLI crash"):
                 generate_railway_domain("my-service")
@@ -786,7 +777,7 @@ class TestGenerateRailwayDomain:
                 stdout="Some text https://myapp_production.up.railway.app extra",
             )
 
-            from quickscale_cli.utils.railway_utils import generate_railway_domain
+            from quickscale_cli.utils._railway_project import generate_railway_domain
 
             with pytest.raises(
                 ValueError, match="Found Railway domain pattern in status output"
@@ -801,7 +792,7 @@ class TestGenerateRailwayDomain:
                 stdout="No domain generated",
             )
 
-            from quickscale_cli.utils.railway_utils import generate_railway_domain
+            from quickscale_cli.utils._railway_project import generate_railway_domain
 
             domain = generate_railway_domain("my-service")
             assert domain is None
@@ -811,7 +802,7 @@ class TestGenerateRailwayDomain:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="")
 
-            from quickscale_cli.utils.railway_utils import generate_railway_domain
+            from quickscale_cli.utils._railway_project import generate_railway_domain
 
             domain = generate_railway_domain("my-service")
             assert domain is None
@@ -824,7 +815,7 @@ class TestGetRailwayVariables:
         """Test that JSON path returns parsed variables."""
         with (
             patch(
-                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+                "quickscale_cli.utils._railway_project._get_railway_variables_json",
             ) as mock_json,
         ):
             mock_json.return_value = {"KEY1": "value1", "KEY2": "value2"}
@@ -837,10 +828,10 @@ class TestGetRailwayVariables:
         """Test that text fallback returns parsed variables when JSON returns None."""
         with (
             patch(
-                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+                "quickscale_cli.utils._railway_project._get_railway_variables_json",
             ) as mock_json,
             patch(
-                "quickscale_cli.utils.railway_utils.run_railway_command",
+                "quickscale_cli.utils._railway_cli.run_railway_command",
             ) as mock_run,
         ):
             mock_json.return_value = None
@@ -856,10 +847,10 @@ class TestGetRailwayVariables:
         """Test that function returns None when both JSON and text paths fail."""
         with (
             patch(
-                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+                "quickscale_cli.utils._railway_project._get_railway_variables_json",
             ) as mock_json,
             patch(
-                "quickscale_cli.utils.railway_utils.run_railway_command",
+                "quickscale_cli.utils._railway_cli.run_railway_command",
             ) as mock_run,
         ):
             mock_json.return_value = None
@@ -872,10 +863,10 @@ class TestGetRailwayVariables:
         """Test that function returns None on TimeoutError (expected failure)."""
         with (
             patch(
-                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+                "quickscale_cli.utils._railway_project._get_railway_variables_json",
             ) as mock_json,
             patch(
-                "quickscale_cli.utils.railway_utils.run_railway_command",
+                "quickscale_cli.utils._railway_cli.run_railway_command",
             ) as mock_run,
         ):
             mock_json.return_value = None
@@ -888,10 +879,10 @@ class TestGetRailwayVariables:
         """Test that function returns None on FileNotFoundError (CLI not installed)."""
         with (
             patch(
-                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+                "quickscale_cli.utils._railway_project._get_railway_variables_json",
             ) as mock_json,
             patch(
-                "quickscale_cli.utils.railway_utils.run_railway_command",
+                "quickscale_cli.utils._railway_cli.run_railway_command",
             ) as mock_run,
         ):
             mock_json.return_value = None
@@ -904,10 +895,10 @@ class TestGetRailwayVariables:
         """Test that unexpected exceptions propagate instead of being swallowed."""
         with (
             patch(
-                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+                "quickscale_cli.utils._railway_project._get_railway_variables_json",
             ) as mock_json,
             patch(
-                "quickscale_cli.utils.railway_utils.run_railway_command",
+                "quickscale_cli.utils._railway_cli.run_railway_command",
             ) as mock_run,
         ):
             mock_json.return_value = None
@@ -919,7 +910,7 @@ class TestGetRailwayVariables:
         """Test that JSON decode error in _get_railway_variables_json propagates as ValueError."""
         with (
             patch(
-                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+                "quickscale_cli.utils._railway_project._get_railway_variables_json",
             ) as mock_json,
         ):
             mock_json.side_effect = ValueError(
@@ -939,10 +930,10 @@ class TestGetRailwayVariables:
         """
         with (
             patch(
-                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+                "quickscale_cli.utils._railway_project._get_railway_variables_json",
             ) as mock_json,
             patch(
-                "quickscale_cli.utils.railway_utils.run_railway_command",
+                "quickscale_cli.utils._railway_cli.run_railway_command",
             ) as mock_run,
         ):
             mock_json.return_value = None
@@ -960,10 +951,10 @@ class TestGetRailwayVariables:
         """Test that truly empty text stdout still returns {} (no variables set)."""
         with (
             patch(
-                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+                "quickscale_cli.utils._railway_project._get_railway_variables_json",
             ) as mock_json,
             patch(
-                "quickscale_cli.utils.railway_utils.run_railway_command",
+                "quickscale_cli.utils._railway_cli.run_railway_command",
             ) as mock_run,
         ):
             mock_json.return_value = None
@@ -975,10 +966,10 @@ class TestGetRailwayVariables:
         """Test that whitespace-only text stdout returns {} (no variables set)."""
         with (
             patch(
-                "quickscale_cli.utils.railway_utils._get_railway_variables_json",
+                "quickscale_cli.utils._railway_project._get_railway_variables_json",
             ) as mock_json,
             patch(
-                "quickscale_cli.utils.railway_utils.run_railway_command",
+                "quickscale_cli.utils._railway_cli.run_railway_command",
             ) as mock_run,
         ):
             mock_json.return_value = None
@@ -993,10 +984,10 @@ class TestGetRailwayVariablesJson:
     def test_json_decode_error_propagates(self):
         """Test that json.JSONDecodeError propagates instead of being swallowed."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="not valid json{")
-            from quickscale_cli.utils.railway_utils import (
+            from quickscale_cli.utils._railway_project import (
                 _get_railway_variables_json,
             )
 
@@ -1006,10 +997,10 @@ class TestGetRailwayVariablesJson:
     def test_unexpected_json_type_raises_value_error(self):
         """Test that unexpected JSON type (e.g. string) raises ValueError."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout='"just_a_string"')
-            from quickscale_cli.utils.railway_utils import (
+            from quickscale_cli.utils._railway_project import (
                 _get_railway_variables_json,
             )
 
@@ -1019,10 +1010,10 @@ class TestGetRailwayVariablesJson:
     def test_empty_json_list_returns_empty_dict(self):
         """Test that empty JSON list returns {} (no variables set, benign)."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="[]")
-            from quickscale_cli.utils.railway_utils import (
+            from quickscale_cli.utils._railway_project import (
                 _get_railway_variables_json,
             )
 
@@ -1039,10 +1030,10 @@ class TestGetRailwayVariablesJson:
     def test_non_empty_json_list_with_unrecognized_entries_fails(self, payload):
         """Malformed or partially recognized live state cannot become empty state."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout=payload)
-            from quickscale_cli.utils.railway_utils import (
+            from quickscale_cli.utils._railway_project import (
                 _get_railway_variables_json,
             )
 
@@ -1053,12 +1044,12 @@ class TestGetRailwayVariablesJson:
     def test_valid_json_returns_dict(self):
         """Test that valid JSON dict returns parsed variables."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.return_value = Mock(
                 returncode=0, stdout='{"KEY1": "value1", "KEY2": "value2"}'
             )
-            from quickscale_cli.utils.railway_utils import (
+            from quickscale_cli.utils._railway_project import (
                 _get_railway_variables_json,
             )
 
@@ -1068,10 +1059,10 @@ class TestGetRailwayVariablesJson:
     def test_non_zero_return_returns_none(self):
         """Test that non-zero returncode returns None (CLI doesn't support --json)."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.return_value = Mock(returncode=1, stdout="")
-            from quickscale_cli.utils.railway_utils import (
+            from quickscale_cli.utils._railway_project import (
                 _get_railway_variables_json,
             )
 
@@ -1081,10 +1072,10 @@ class TestGetRailwayVariablesJson:
     def test_timeout_returns_none(self):
         """Test that TimeoutError returns None (expected failure)."""
         with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command",
+            "quickscale_cli.utils._railway_cli.run_railway_command",
         ) as mock_run:
             mock_run.side_effect = TimeoutError("timed out")
-            from quickscale_cli.utils.railway_utils import (
+            from quickscale_cli.utils._railway_project import (
                 _get_railway_variables_json,
             )
 
@@ -1578,9 +1569,7 @@ class TestLinkDatabaseToService:
 
     def test_successful_link_with_postgres_name(self):
         """Test successful DATABASE_URL link using Postgres service name."""
-        with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command"
-        ) as mock_run:
+        with patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
             success, message = link_database_to_service("myapp", "Postgres")
 
@@ -1600,9 +1589,7 @@ class TestLinkDatabaseToService:
 
     def test_uses_exact_selected_database_service_name(self):
         """Test the selected custom PostgreSQL service reaches the reference."""
-        with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command"
-        ) as mock_run:
+        with patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
             success, message = link_database_to_service("myapp", "primary-db")
 
@@ -1616,11 +1603,11 @@ class TestLinkDatabaseToService:
     def test_retries_until_postgres_reference_is_ready(self):
         """Test retries when PostgreSQL service is still provisioning."""
         with (
-            patch("quickscale_cli.utils.railway_utils.run_railway_command") as mock_run,
+            patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run,
             patch(
-                "quickscale_cli.utils.railway_utils.get_railway_variables"
+                "quickscale_cli.utils._railway_project.get_railway_variables"
             ) as mock_vars,
-            patch("quickscale_cli.utils.railway_utils.time.sleep") as mock_sleep,
+            patch("time.sleep") as mock_sleep,
         ):
             mock_run.side_effect = [
                 TimeoutError("timed out"),
@@ -1641,11 +1628,11 @@ class TestLinkDatabaseToService:
     def test_link_fails_after_all_retries(self):
         """Test function returns helpful failure after exhausting retries."""
         with (
-            patch("quickscale_cli.utils.railway_utils.run_railway_command") as mock_run,
+            patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run,
             patch(
-                "quickscale_cli.utils.railway_utils.get_railway_variables"
+                "quickscale_cli.utils._railway_project.get_railway_variables"
             ) as mock_vars,
-            patch("quickscale_cli.utils.railway_utils.time.sleep"),
+            patch("time.sleep"),
         ):
             mock_run.return_value = Mock(
                 returncode=1,
@@ -1663,11 +1650,11 @@ class TestLinkDatabaseToService:
     def test_old_database_url_does_not_confirm_selected_service_link(self):
         """A stale URL cannot prove that the selected database was linked."""
         with (
-            patch("quickscale_cli.utils.railway_utils.run_railway_command") as mock_run,
+            patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run,
             patch(
-                "quickscale_cli.utils.railway_utils.get_railway_variables"
+                "quickscale_cli.utils._railway_project.get_railway_variables"
             ) as mock_vars,
-            patch("quickscale_cli.utils.railway_utils.time.sleep"),
+            patch("time.sleep"),
         ):
             mock_run.return_value = Mock(
                 returncode=1,
@@ -1685,9 +1672,7 @@ class TestLinkDatabaseToService:
 
     def test_link_fails_fast_for_non_retryable_errors(self):
         """Test function does not retry authentication/permission errors."""
-        with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command"
-        ) as mock_run:
+        with patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run:
             mock_run.return_value = Mock(
                 returncode=1,
                 stdout="",
@@ -1702,9 +1687,7 @@ class TestLinkDatabaseToService:
 
     def test_link_with_different_service_name(self):
         """Test linking with a different service name."""
-        with patch(
-            "quickscale_cli.utils.railway_utils.run_railway_command"
-        ) as mock_run:
+        with patch("quickscale_cli.utils._railway_cli.run_railway_command") as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
             success, _ = link_database_to_service("custom-app-123", "Postgres")
 
@@ -1719,10 +1702,8 @@ class TestFacadePatchTargets:
 
     def test_patched_subprocess_flows_through_npm_probe(self) -> None:
         """Patching the facade subprocess binding reaches the npm probe."""
-        with patch.object(
-            railway_utils.subprocess, "run", return_value=Mock(returncode=0)
-        ) as runner:
-            assert railway_utils.is_npm_installed() is True
+        with patch("subprocess.run", return_value=Mock(returncode=0)) as runner:
+            assert _railway_cli.is_npm_installed() is True
 
         runner.assert_called_once()
 
@@ -1732,9 +1713,9 @@ class TestFacadePatchTargets:
             returncode=0, stdout="Generated domain: https://myapp.up.railway.app"
         )
         with patch.object(
-            railway_utils, "run_railway_command", return_value=completed
+            _railway_cli, "run_railway_command", return_value=completed
         ) as runner:
-            domain = railway_utils.generate_railway_domain("svc")
+            domain = _railway_project.generate_railway_domain("svc")
 
         runner.assert_called_once_with(["domain", "--service", "svc"], timeout=30)
         assert domain == "https://myapp.up.railway.app"
@@ -1742,9 +1723,9 @@ class TestFacadePatchTargets:
     def test_patched_variable_setter_flows_through_batch(self) -> None:
         """Patching the facade variable setter reaches the batch wrapper."""
         with patch.object(
-            railway_utils, "set_railway_variable", return_value=True
+            _railway_cli, "set_railway_variable", return_value=True
         ) as setter:
-            assert railway_utils.set_railway_variables_batch({"A": "1"}) == (True, [])
+            assert _railway_cli.set_railway_variables_batch({"A": "1"}) == (True, [])
 
         setter.assert_called_once_with(
             "A", "1", service=None, environment=None, skip_deploy=True
@@ -1753,10 +1734,10 @@ class TestFacadePatchTargets:
     def test_patched_json_reader_flows_through_variables(self) -> None:
         """Patching the facade JSON reader reaches variable retrieval."""
         with patch.object(
-            railway_utils,
+            _railway_project,
             "_get_railway_variables_json",
             return_value={"K": "V"},
         ) as reader:
-            assert railway_utils.get_railway_variables("svc") == {"K": "V"}
+            assert _railway_project.get_railway_variables("svc") == {"K": "V"}
 
         reader.assert_called_once_with(["variables", "--service", "svc"])

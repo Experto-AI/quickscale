@@ -1,9 +1,8 @@
 """Git index checkpointing, staging, and pre-embed dirty-tree checks.
 
 Implementation detail of :mod:`quickscale_cli.commands.apply_command`;
-that module re-exports every name defined here (Module Conventions
-rule 28), so existing import paths and test patch targets keep
-working.
+collaborators are resolved through the sibling modules that define
+them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -16,7 +15,9 @@ import click
 
 # AF6 Phase 2 — core step bodies
 from quickscale_cli.commands._types import _GitIndexTreeSnapshot
-import quickscale_cli.commands.apply_command as _apply_command
+
+import quickscale_cli.commands._types as _types
+import quickscale_core.utils.git_repo as _git_repo
 
 
 def _capture_git_index_snapshot(project_path: Path) -> _GitIndexTreeSnapshot | None:
@@ -55,7 +56,7 @@ def _capture_git_index_snapshot(project_path: Path) -> _GitIndexTreeSnapshot | N
         )
         return None
 
-    return _apply_command._GitIndexTreeSnapshot(tree_id=tree_id)
+    return _types._GitIndexTreeSnapshot(tree_id=tree_id)
 
 
 def _restore_git_index_snapshot(
@@ -96,7 +97,7 @@ def _restore_failed_apply_checkpoint(
     snapshot: _GitIndexTreeSnapshot,
 ) -> None:
     """Best-effort index restore for failed apply-owned checkpoint commands."""
-    if _apply_command._restore_git_index_snapshot(project_path, snapshot):
+    if _restore_git_index_snapshot(project_path, snapshot):
         return
 
     click.secho(
@@ -115,22 +116,20 @@ def _stage_and_commit_with_index_restore(
     commit_description: str,
 ) -> bool:
     """Run an apply-owned stage/commit pair and restore the prior index on failure."""
-    snapshot = _apply_command._capture_git_index_snapshot(project_path)
+    snapshot = _capture_git_index_snapshot(project_path)
     if snapshot is None:
         return False
 
-    staged, _ = _apply_command._run_command(stage_cmd, project_path, stage_description)
+    staged, _ = _run_command(stage_cmd, project_path, stage_description)
     if not staged:
-        _apply_command._restore_failed_apply_checkpoint(project_path, snapshot)
+        _restore_failed_apply_checkpoint(project_path, snapshot)
         return False
 
-    committed, _ = _apply_command._run_command(
-        commit_cmd, project_path, commit_description
-    )
+    committed, _ = _run_command(commit_cmd, project_path, commit_description)
     if committed:
         return True
 
-    _apply_command._restore_failed_apply_checkpoint(project_path, snapshot)
+    _restore_failed_apply_checkpoint(project_path, snapshot)
     return False
 
 
@@ -184,7 +183,7 @@ def _run_command(
 
 def _init_git(project_path: Path) -> bool:
     """Initialize git repository"""
-    success, _ = _apply_command._run_command(
+    success, _ = _run_command(
         ["git", "init"],
         project_path,
         "Initializing git repository",
@@ -194,7 +193,7 @@ def _init_git(project_path: Path) -> bool:
 
 def _git_commit(project_path: Path, message: str) -> bool:
     """Create a git commit"""
-    return _apply_command._stage_and_commit_with_index_restore(
+    return _stage_and_commit_with_index_restore(
         project_path,
         stage_cmd=["git", "add", "-A"],
         stage_description=f"Staging files for: {message}",
@@ -205,7 +204,7 @@ def _git_commit(project_path: Path, message: str) -> bool:
 
 def _init_git_with_config(output_path: Path) -> None:
     """Initialize git repository with configuration."""
-    if not _apply_command._init_git(output_path):
+    if not _init_git(output_path):
         click.secho("⚠️  Git initialization failed, continuing...", fg="yellow")
         return
 
@@ -220,7 +219,7 @@ def _init_git_with_config(output_path: Path) -> None:
         capture_output=True,
     )
 
-    if not _apply_command._git_commit(output_path, "Initial project structure"):
+    if not _git_commit(output_path, "Initial project structure"):
         click.secho("⚠️  Initial commit failed, continuing...", fg="yellow")
 
 
@@ -262,20 +261,20 @@ def _commit_pending_config_changes(output_path: Path) -> None:
         output_path: Path to the project directory
 
     """
-    if _apply_command.is_working_directory_clean(output_path):
+    if _git_repo.is_working_directory_clean(output_path):
         return
 
-    staged_paths = _apply_command._list_git_changed_paths(
+    staged_paths = _list_git_changed_paths(
         output_path,
         ["diff", "--cached", "--name-only"],
         description="staged changes",
     )
-    unstaged_paths = _apply_command._list_git_changed_paths(
+    unstaged_paths = _list_git_changed_paths(
         output_path,
         ["diff", "--name-only"],
         description="unstaged changes",
     )
-    untracked_paths = _apply_command._list_git_changed_paths(
+    untracked_paths = _list_git_changed_paths(
         output_path,
         ["ls-files", "--others", "--exclude-standard"],
         description="untracked files",
@@ -285,9 +284,9 @@ def _commit_pending_config_changes(output_path: Path) -> None:
     unrelated_dirty_paths = [
         path
         for path in dirty_paths
-        if not _apply_command._is_pre_embed_allowed_dirty_path(path)
+        if not _types._is_pre_embed_allowed_dirty_path(path)
     ]
-    checkpoint_paths = _apply_command._get_pre_embed_checkpoint_paths(dirty_paths)
+    checkpoint_paths = _types._get_pre_embed_checkpoint_paths(dirty_paths)
 
     if unrelated_dirty_paths:
         click.secho(
@@ -306,7 +305,7 @@ def _commit_pending_config_changes(output_path: Path) -> None:
     if not checkpoint_paths:
         return
 
-    if _apply_command._stage_and_commit_with_index_restore(
+    if _stage_and_commit_with_index_restore(
         output_path,
         stage_cmd=["git", "add", "--", *checkpoint_paths],
         stage_description="Staging pending QuickScale configuration changes",

@@ -3051,13 +3051,12 @@ class TestBackupPolicyAdminStaleRestore:
 
         with (
             patch(
-                ("quickscale_core.dr_engine.orchestration._stage_admin_restore_upload"),
+                ("quickscale_core.dr_engine._restore._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_core.dr_engine.orchestration."
-                    "_resolve_admin_uploaded_restore_artifact"
+                    "quickscale_core.dr_engine._restore._resolve_admin_uploaded_restore_artifact"
                 ),
                 return_value=postgresql_backup_artifact,
             ),
@@ -3113,13 +3112,12 @@ class TestBackupPolicyAdminStaleRestore:
 
         with (
             patch(
-                ("quickscale_core.dr_engine.orchestration._stage_admin_restore_upload"),
+                ("quickscale_core.dr_engine._restore._stage_admin_restore_upload"),
                 return_value=staged,
             ),
             patch(
                 (
-                    "quickscale_core.dr_engine.orchestration."
-                    "_resolve_admin_uploaded_restore_artifact"
+                    "quickscale_core.dr_engine._restore._resolve_admin_uploaded_restore_artifact"
                 ),
                 return_value=postgresql_backup_artifact,
             ),

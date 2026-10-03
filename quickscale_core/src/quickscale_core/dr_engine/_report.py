@@ -11,7 +11,16 @@ from quickscale_core.dr_engine._types import _RemoteUploader
 from quickscale_core.dr_engine.primitives import BackupPolicySnapshot
 from typing import Any
 
-import quickscale_core.dr_engine.orchestration as _orchestration
+
+import quickscale_core.dr_engine.primitives as _primitives
+import quickscale_core.dr_engine._paths as _paths
+import quickscale_core.dr_engine._state as _state
+import quickscale_core.dr_engine.verification as _verification
+import quickscale_core.dr_engine._sidecar as _sidecar
+import quickscale_core.dr_engine.recovery as _recovery
+import quickscale_core.dr_engine.persistence as _persistence
+import django.utils.timezone as _django_timezone
+import quickscale_core.dr_engine._metadata as _metadata
 
 
 def _resolve_snapshot_provenance_value(
@@ -47,10 +56,8 @@ def _build_snapshot_full_backup_contract(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Build the canonical full-backup completeness/provenance contract."""
-    evaluated_at = now or _orchestration.django_timezone.now()
-    _, database_descriptor, sidecars = _orchestration._get_snapshot_report_children(
-        snapshot
-    )
+    evaluated_at = now or _django_timezone.now()
+    _, database_descriptor, sidecars = _paths._get_snapshot_report_children(snapshot)
 
     completeness_issues: list[str] = []
     provenance_issues: list[str] = []
@@ -69,7 +76,7 @@ def _build_snapshot_full_backup_contract(
     if authoritative_dump is None:
         completeness_issues.append("authoritative database dump is missing")
     else:
-        database_local_path = _orchestration._resolve_snapshot_database_local_path(
+        database_local_path = _state._resolve_snapshot_database_local_path(
             snapshot,
             authoritative_dump,
         )
@@ -94,7 +101,7 @@ def _build_snapshot_full_backup_contract(
             "database_name": authoritative_dump.database_name,
             "checksum_sha256": authoritative_dump.checksum_sha256,
             "size_bytes": authoritative_dump.size_bytes,
-            "module_versions": _orchestration._collect_artifact_module_versions(
+            "module_versions": _recovery._collect_artifact_module_versions(
                 authoritative_dump
             )
             or {},
@@ -103,12 +110,12 @@ def _build_snapshot_full_backup_contract(
     required_sidecars: dict[str, dict[str, Any]] = {}
     loaded_sidecar_payloads: dict[str, dict[str, Any]] = {}
     expected_manifest_statuses = {
-        _orchestration._MEDIA_SYNC_MANIFEST_FILENAME: "ready",
-        _orchestration._ENV_VAR_MANIFEST_FILENAME: "ready",
-        _orchestration._RELEASE_METADATA_FILENAME: "ready",
+        _primitives._MEDIA_SYNC_MANIFEST_FILENAME: "ready",
+        _primitives._ENV_VAR_MANIFEST_FILENAME: "ready",
+        _primitives._RELEASE_METADATA_FILENAME: "ready",
     }
 
-    for filename in _orchestration._REQUIRED_SNAPSHOT_SIDECAR_FILENAMES:
+    for filename in _primitives._REQUIRED_SNAPSHOT_SIDECAR_FILENAMES:
         raw_descriptor = sidecars.get(filename)
         descriptor = raw_descriptor if isinstance(raw_descriptor, dict) else {}
         sidecar_status = str(descriptor.get("status", "")).strip() or "missing"
@@ -121,7 +128,7 @@ def _build_snapshot_full_backup_contract(
         local_path = (
             Path(local_path_text)
             if local_path_text
-            else _orchestration._snapshot_sidecar_path(snapshot, filename)
+            else _paths._snapshot_sidecar_path(snapshot, filename)
         )
         local_available = local_path.exists()
         remote_available = bool(str(descriptor.get("remote_key", "")).strip())
@@ -154,12 +161,12 @@ def _build_snapshot_full_backup_contract(
         if local_available:
             try:
                 loaded_sidecar_payloads[filename] = (
-                    _orchestration._load_snapshot_sidecar_payload(
+                    _sidecar._load_snapshot_sidecar_payload(
                         snapshot,
                         filename,
                     )
                 )
-            except _orchestration.BackupError as exc:
+            except _primitives.BackupError as exc:
                 provenance_issues.append(
                     f"{filename} could not be loaded for provenance validation: {exc}"
                 )
@@ -191,19 +198,19 @@ def _build_snapshot_full_backup_contract(
             str(captured_at).strip() if captured_at is not None else None
         )
 
-    project_slug = _orchestration._resolve_snapshot_provenance_value(
+    project_slug = _resolve_snapshot_provenance_value(
         field_name="project_slug",
         candidates=project_slug_candidates,
         issues=provenance_issues,
     )
-    source_environment = _orchestration._resolve_snapshot_provenance_value(
+    source_environment = _resolve_snapshot_provenance_value(
         field_name="source_environment",
         candidates=source_environment_candidates,
         issues=provenance_issues,
     )
 
     release_payload = loaded_sidecar_payloads.get(
-        _orchestration._RELEASE_METADATA_FILENAME, {}
+        _primitives._RELEASE_METADATA_FILENAME, {}
     )
     module_versions = release_payload.get("module_versions", {})
     release_summary = {
@@ -255,11 +262,9 @@ def build_backup_snapshot_report(
     sidecar_payloads: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Build a structured report for one stored snapshot."""
-    report_time = now or _orchestration.django_timezone.now()
-    _, database_descriptor, sidecars = _orchestration._get_snapshot_report_children(
-        snapshot
-    )
-    full_backup_contract = _orchestration._build_snapshot_full_backup_contract(
+    report_time = now or _django_timezone.now()
+    _, database_descriptor, sidecars = _paths._get_snapshot_report_children(snapshot)
+    full_backup_contract = _build_snapshot_full_backup_contract(
         snapshot,
         now=report_time,
     )
@@ -279,7 +284,7 @@ def build_backup_snapshot_report(
             "remote_key": authoritative_dump.remote_key,
             "checksum_sha256": authoritative_dump.checksum_sha256,
             "size_bytes": authoritative_dump.size_bytes,
-            "module_versions": _orchestration._collect_artifact_module_versions(
+            "module_versions": _recovery._collect_artifact_module_versions(
                 authoritative_dump
             )
             or {},
@@ -312,12 +317,12 @@ def build_backup_snapshot_report(
     for filename in requested_sidecar_payloads:
         try:
             included_sidecar_payloads[filename] = (
-                _orchestration._load_snapshot_sidecar_payload(
+                _sidecar._load_snapshot_sidecar_payload(
                     snapshot,
                     filename,
                 )
             )
-        except _orchestration.BackupError as exc:
+        except _primitives.BackupError as exc:
             sidecar_payload_errors[filename] = str(exc)
 
     return {
@@ -360,8 +365,8 @@ def report_backup_snapshot(
     sidecar_payloads: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Return a structured report for one stored snapshot id."""
-    snapshot = _orchestration.get_backup_snapshot(snapshot_id)
-    return _orchestration.build_backup_snapshot_report(
+    snapshot = _state.get_backup_snapshot(snapshot_id)
+    return build_backup_snapshot_report(
         snapshot,
         now=now,
         sidecar_payloads=sidecar_payloads,
@@ -387,33 +392,33 @@ def record_backup_snapshot_verification(
     normalized_route = route.strip()
     normalized_phase = phase.strip()
     normalized_status = status.strip()
-    _orchestration._validate_verification_inputs(
+    _verification._validate_verification_inputs(
         route=normalized_route,
         phase=normalized_phase,
         status=normalized_status,
     )
 
-    snapshot = _orchestration.get_backup_snapshot(snapshot_id)
-    recorded_at = now or _orchestration.django_timezone.now()
-    full_backup_contract = _orchestration._build_snapshot_full_backup_contract(
+    snapshot = _state.get_backup_snapshot(snapshot_id)
+    recorded_at = now or _django_timezone.now()
+    full_backup_contract = _build_snapshot_full_backup_contract(
         snapshot,
         now=recorded_at,
     )
     try:
-        verification_payload = _orchestration._load_snapshot_sidecar_payload(
+        verification_payload = _sidecar._load_snapshot_sidecar_payload(
             snapshot,
-            _orchestration._PROMOTION_VERIFICATION_FILENAME,
+            _primitives._PROMOTION_VERIFICATION_FILENAME,
         )
-    except _orchestration.BackupError:
+    except _primitives.BackupError:
         verification_payload = {}
 
     existing_reports = verification_payload.get("reports")
     if not isinstance(existing_reports, list):
         existing_reports = []
 
-    verification_payload = _orchestration._build_verification_payload(
+    verification_payload = _verification._build_verification_payload(
         snapshot_id=snapshot.snapshot_id,
-        project_slug=_orchestration._get_project_slug(),
+        project_slug=_metadata._get_project_slug(),
         source_environment=snapshot.source_environment,
         captured_at=verification_payload.get(
             "captured_at",
@@ -438,35 +443,35 @@ def record_backup_snapshot_verification(
         phase=normalized_phase,
         payload=payload,
     )
-    _orchestration._persist_snapshot_sidecar_payload(
+    _sidecar._persist_snapshot_sidecar_payload(
         snapshot,
-        filename=_orchestration._PROMOTION_VERIFICATION_FILENAME,
+        filename=_primitives._PROMOTION_VERIFICATION_FILENAME,
         kind="promotion_verification",
         payload=verification_payload,
         policy=policy,
         remote_uploader=remote_uploader,
     )
-    return _orchestration.build_backup_snapshot_report(
+    return build_backup_snapshot_report(
         snapshot,
         now=recorded_at,
-        sidecar_payloads=[_orchestration._PROMOTION_VERIFICATION_FILENAME],
+        sidecar_payloads=[_primitives._PROMOTION_VERIFICATION_FILENAME],
     )
 
 
 def validate_backup_artifact(artifact: Any) -> list[str]:
     """Validate artifact integrity and update its validation status."""
     local_path = Path(artifact.local_path) if artifact.local_path else None
-    issues = _orchestration._collect_local_backup_validation_issues(
+    issues = _recovery._collect_local_backup_validation_issues(
         local_path,
         backup_format=artifact.backup_format,
         expected_checksum=artifact.checksum_sha256,
         expected_size=artifact.size_bytes,
     )
 
-    artifact.validated_at = _orchestration.django_timezone.now()
+    artifact.validated_at = _django_timezone.now()
     artifact.validation_notes = "; ".join(issues)
     artifact.status = "failed" if issues else "validated"
-    _orchestration.save_artifact(
+    _persistence.save_artifact(
         artifact,
         update_fields=["validated_at", "validation_notes", "status", "updated_at"],
     )
@@ -481,25 +486,25 @@ def set_backup_snapshot_rollback_pin(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Set or refresh a time-bounded rollback pin on one stored snapshot."""
-    snapshot = _orchestration.get_backup_snapshot(snapshot_id)
+    snapshot = _state.get_backup_snapshot(snapshot_id)
     if snapshot.status == "deleted":
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             f"Backup snapshot '{snapshot.snapshot_id}' has already been deleted"
         )
     if snapshot.authoritative_dump is None:
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             f"Backup snapshot '{snapshot.snapshot_id}' does not have an authoritative dump"
         )
 
-    pinned_at = now or _orchestration.django_timezone.now()
-    fields = _orchestration._compute_rollback_pin_fields(
+    pinned_at = now or _django_timezone.now()
+    fields = _verification._compute_rollback_pin_fields(
         ttl_hours=ttl_hours,
         reason=reason,
         now=pinned_at,
     )
     snapshot.rollback_pin_expires_at = fields["rollback_pin_expires_at"]
     snapshot.rollback_pin_reason = fields["rollback_pin_reason"]
-    _orchestration.save_snapshot(
+    _persistence.save_snapshot(
         snapshot,
         update_fields=[
             "rollback_pin_expires_at",
@@ -507,7 +512,7 @@ def set_backup_snapshot_rollback_pin(
             "updated_at",
         ],
     )
-    return _orchestration.build_backup_snapshot_report(snapshot, now=pinned_at)
+    return build_backup_snapshot_report(snapshot, now=pinned_at)
 
 
 def clear_backup_snapshot_rollback_pin(
@@ -516,17 +521,17 @@ def clear_backup_snapshot_rollback_pin(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Clear any active rollback pin on one stored snapshot."""
-    snapshot = _orchestration.get_backup_snapshot(snapshot_id)
+    snapshot = _state.get_backup_snapshot(snapshot_id)
     if snapshot.status == "deleted":
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             f"Backup snapshot '{snapshot.snapshot_id}' has already been deleted"
         )
 
-    cleared_at = now or _orchestration.django_timezone.now()
-    fields = _orchestration._build_clear_rollback_pin_fields()
+    cleared_at = now or _django_timezone.now()
+    fields = _verification._build_clear_rollback_pin_fields()
     snapshot.rollback_pin_expires_at = fields["rollback_pin_expires_at"]
     snapshot.rollback_pin_reason = fields["rollback_pin_reason"]
-    _orchestration.save_snapshot(
+    _persistence.save_snapshot(
         snapshot,
         update_fields=[
             "rollback_pin_expires_at",
@@ -534,4 +539,4 @@ def clear_backup_snapshot_rollback_pin(
             "updated_at",
         ],
     )
-    return _orchestration.build_backup_snapshot_report(snapshot, now=cleared_at)
+    return build_backup_snapshot_report(snapshot, now=cleared_at)

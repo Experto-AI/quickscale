@@ -92,11 +92,11 @@ def _mock_postgresql_18_contract(
         return resolved_tool_versions[executable]
 
     monkeypatch.setattr(
-        "quickscale_core.dr_engine.orchestration._get_database_server_version",
+        "quickscale_core.dr_engine._metadata._get_database_server_version",
         fake_get_database_server_version,
     )
     monkeypatch.setattr(
-        "quickscale_core.dr_engine.orchestration._get_postgresql_tool_version",
+        "quickscale_core.dr_engine.primitives._get_postgresql_tool_version",
         fake_get_postgresql_tool_version,
     )
 
@@ -436,7 +436,7 @@ class TestBackupLifecycle:
             "test.sqlite3",
         )
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._get_database_server_version",
+            "quickscale_core.dr_engine._metadata._get_database_server_version",
             lambda _engine: "3.45.0",
         )
 
@@ -1092,7 +1092,7 @@ class TestBackupLifecycle:
             raise BackupError("prune exploded")
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.prune_expired_backups",
+            "quickscale_core.dr_engine._prune.prune_expired_backups",
             failing_prune,
         )
 
@@ -1119,7 +1119,7 @@ class TestBackupLifecycle:
             raise BackupError("release metadata exploded")
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._build_release_metadata",
+            "quickscale_core.dr_engine._metadata._build_release_metadata",
             failing_release_metadata,
         )
 
@@ -1161,7 +1161,7 @@ class TestBackupLifecycle:
             return original_builder(captured_at=captured_at)  # type: ignore[no-any-return]
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._build_release_metadata",
+            "quickscale_core.dr_engine._metadata._build_release_metadata",
             flaky_release_metadata,
         )
 
@@ -1257,7 +1257,7 @@ class TestBackupLifecycle:
             return "18.3 (Debian 18.3-1)"
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._get_database_server_version",
+            "quickscale_core.dr_engine._metadata._get_database_server_version",
             fake_get_database_server_version,
         )
 
@@ -1265,9 +1265,7 @@ class TestBackupLifecycle:
             del args, kwargs
             raise FileNotFoundError("pg_dump")
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", missing_pg_dump
-        )
+        monkeypatch.setattr("subprocess.run", missing_pg_dump)
 
         with pytest.raises(
             BackupError,
@@ -1401,7 +1399,7 @@ class TestBackupLifecycle:
             return "18.3 (Debian 18.3-1)"
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._get_database_server_version",
+            "quickscale_core.dr_engine._metadata._get_database_server_version",
             fake_get_database_server_version,
         )
         monkeypatch.setenv("RAILWAY_ENVIRONMENT_ID", "env-local-test")
@@ -1410,9 +1408,7 @@ class TestBackupLifecycle:
             del args, kwargs
             raise FileNotFoundError("pg_dump")
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", missing_pg_dump
-        )
+        monkeypatch.setattr("subprocess.run", missing_pg_dump)
 
         with pytest.raises(
             BackupError,
@@ -1456,7 +1452,7 @@ class TestBackupLifecycle:
             return "18.3 (Debian 18.3-1)"
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._get_database_server_version",
+            "quickscale_core.dr_engine._metadata._get_database_server_version",
             fake_get_database_server_version,
         )
 
@@ -1464,9 +1460,7 @@ class TestBackupLifecycle:
             del args, kwargs
             raise FileNotFoundError("pg_dump")
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", missing_pg_dump
-        )
+        monkeypatch.setattr("subprocess.run", missing_pg_dump)
 
         with pytest.raises(
             BackupError,
@@ -2037,7 +2031,7 @@ class TestBackupLifecycle:
             )
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._execute_restore_for_resolved_source",
+            "quickscale_core.dr_engine._restore._execute_restore_for_resolved_source",
             fake_execute,
         )
 
@@ -2087,12 +2081,10 @@ class TestBackupLifecycle:
 
         original_rmtree = shutil.rmtree
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._execute_restore_for_resolved_source",
+            "quickscale_core.dr_engine._restore._execute_restore_for_resolved_source",
             fake_execute,
         )
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.shutil.rmtree", failing_rmtree
-        )
+        monkeypatch.setattr("shutil.rmtree", failing_rmtree)
 
         result = restore_admin_uploaded_backup(
             SimpleUploadedFile("operator-upload.dump", original_path.read_bytes()),
@@ -2988,7 +2980,7 @@ class TestBackupServiceHelpers:
             )
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._load_storage_helpers",
+            "quickscale_core.dr_engine._metadata._load_storage_helpers",
             missing_module,
         )
 
@@ -3018,7 +3010,7 @@ class TestBackupServiceHelpers:
             )
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._load_storage_helpers",
+            "quickscale_core.dr_engine._metadata._load_storage_helpers",
             loaded_helpers,
         )
 
@@ -3046,7 +3038,7 @@ class TestBackupServiceHelpers:
             )
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._load_storage_helpers",
+            "quickscale_core.dr_engine._metadata._load_storage_helpers",
             broken_helper_import,
         )
 
@@ -3065,7 +3057,7 @@ class TestBackupServiceHelpers:
     ) -> None:
         """A ModuleNotFoundError for a sub-dependency (broken installed helper)
         must raise BackupConfigurationError — not silently fall back to local."""
-        from quickscale_core.dr_engine.orchestration import _resolve_media_runtime
+        from quickscale_core.dr_engine._media import _resolve_media_runtime
 
         def broken_helper_import() -> object:
             raise ModuleNotFoundError(
@@ -3074,7 +3066,7 @@ class TestBackupServiceHelpers:
             )
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._load_storage_helpers",
+            "quickscale_core.dr_engine._metadata._load_storage_helpers",
             broken_helper_import,
         )
 
@@ -3110,7 +3102,7 @@ class TestBackupServiceHelpers:
             raise RuntimeError("S3 endpoint unreachable")
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.import_module",
+            "importlib.import_module",
             lambda _module_name: SimpleNamespace(
                 select_storage_backend=fake_select_storage_backend,
                 list_s3_compatible_media_inventory=failing_inventory,
@@ -3143,7 +3135,7 @@ class TestBackupServiceHelpers:
             )
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.import_module",
+            "importlib.import_module",
             lambda _module_name: SimpleNamespace(
                 select_storage_backend=fake_select_storage_backend,
                 list_s3_compatible_media_inventory=lambda _settings_obj: [],
@@ -3180,7 +3172,7 @@ class TestBackupServiceHelpers:
         media_file.write_text("not-a-directory", encoding="utf-8")
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.import_module",
+            "importlib.import_module",
             lambda _module_name: SimpleNamespace(
                 select_storage_backend=fake_select_storage_backend,
                 list_s3_compatible_media_inventory=lambda _settings_obj: [],
@@ -3303,9 +3295,7 @@ class TestBackupServiceHelpers:
             recorded_envs.append(cast(dict[str, str], kwargs["env"]))
             return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", successful_run
-        )
+        monkeypatch.setattr("subprocess.run", successful_run)
         backup_services._run_shell_command(["echo", "ok"], env={"PGPASSWORD": "pw"})
         assert recorded_envs and recorded_envs[0]["PGPASSWORD"] == "pw"
 
@@ -3313,9 +3303,7 @@ class TestBackupServiceHelpers:
             del args, kwargs
             return SimpleNamespace(returncode=1, stdout="boom", stderr="")
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", failing_run
-        )
+        monkeypatch.setattr("subprocess.run", failing_run)
         with pytest.raises(BackupError, match="Command failed: echo ok :: boom"):
             backup_services._run_shell_command(["echo", "ok"])
 
@@ -3327,9 +3315,7 @@ class TestBackupServiceHelpers:
             del args, kwargs
             raise FileNotFoundError("pg_restore")
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", missing_binary
-        )
+        monkeypatch.setattr("subprocess.run", missing_binary)
 
         with pytest.raises(
             BackupError,
@@ -3537,9 +3523,7 @@ class TestBackupServiceHelpers:
                 stderr="version probe failed",
             )
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", failing_run
-        )
+        monkeypatch.setattr("subprocess.run", failing_run)
         with pytest.raises(BackupError, match="version probe failed"):
             backup_services._get_postgresql_tool_version("pg_dump")
 
@@ -3547,9 +3531,7 @@ class TestBackupServiceHelpers:
             del args, kwargs
             return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", empty_run
-        )
+        monkeypatch.setattr("subprocess.run", empty_run)
         with pytest.raises(BackupError, match="command returned no output"):
             backup_services._get_postgresql_tool_version("pg_restore")
 
@@ -3704,7 +3686,7 @@ class TestBackupServiceHelpers:
             raise BackupError("pg_restore 18 tooling missing")
 
         monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration._require_postgresql_18_contract",
+            "quickscale_core.dr_engine._metadata._require_postgresql_18_contract",
             failing_contract,
         )
 
@@ -3874,9 +3856,7 @@ class TestBackupServiceUtilities:
         def fake_run(*args: Any, **kwargs: Any) -> SimpleNamespace:
             return SimpleNamespace(returncode=0, stdout="abc123def\n", stderr="")
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", fake_run
-        )
+        monkeypatch.setattr("subprocess.run", fake_run)
         result = backup_services._get_git_revision()
         assert result == "abc123def"
 
@@ -3888,9 +3868,7 @@ class TestBackupServiceUtilities:
         def failing_run(*args: Any, **kwargs: Any) -> None:
             raise OSError("git not found")
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", failing_run
-        )
+        monkeypatch.setattr("subprocess.run", failing_run)
         result = backup_services._get_git_revision()
         assert result is None
 
@@ -3903,9 +3881,7 @@ class TestBackupServiceUtilities:
         def fake_run(*args: Any, **kwargs: Any) -> SimpleNamespace:
             return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-        monkeypatch.setattr(
-            "quickscale_core.dr_engine.orchestration.subprocess.run", fake_run
-        )
+        monkeypatch.setattr("subprocess.run", fake_run)
         result = backup_services._get_git_revision()
         assert result is None
 

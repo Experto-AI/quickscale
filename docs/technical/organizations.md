@@ -408,6 +408,7 @@ Views check feature access via a decorator:
 ```python
 from quickscale_modules_billing.services import require_org_feature
 
+
 @require_org_feature("crm")
 def crm_index(request): ...
 ```

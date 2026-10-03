@@ -12,17 +12,25 @@ from typing import Any
 from quickscale_core.contracts.module_catalog import ModuleCatalogEntry
 from quickscale_core.schema.config_schema import QuickScaleConfig
 from quickscale_core.schema.state_schema import QuickScaleState
-import quickscale_cli.commands.plan_command as _plan_command
+
+import quickscale_cli.commands.plan_selection as _plan_selection
+import quickscale_cli.commands._plan_shared as _plan_shared
+import quickscale_core.schema.config_schema as _config_schema
+import quickscale_core.utils.theme_validation as _theme_validation
+import quickscale_core.schema.state_schema as _state_schema
+import quickscale_cli.commands._plan_validation as _plan_validation
+import click
+import quickscale_core.contracts.module_catalog as _module_catalog
 
 
 def _display_current_modules(existing_modules: list[str]) -> None:
     """Display currently installed modules"""
-    _plan_command.click.echo("\n📦 Current Modules:")
+    click.echo("\n📦 Current Modules:")
     if existing_modules:
         for module in existing_modules:
-            _plan_command.click.secho(f"   ✓ {module} (installed)", fg="green")
+            click.secho(f"   ✓ {module} (installed)", fg="green")
     else:
-        _plan_command.click.echo("   (none installed)")
+        click.echo("   (none installed)")
 
 
 def _get_available_modules(
@@ -36,7 +44,7 @@ def _get_available_modules(
         List of (module_id, description) tuples for available modules
     """
     available: list[ModuleCatalogEntry] = []
-    for entry in _plan_command._get_module_choices(
+    for entry in _plan_selection._get_module_choices(
         include_experimental=include_experimental
     ):
         if entry.name not in existing_modules:
@@ -46,9 +54,9 @@ def _get_available_modules(
 
 def _display_available_modules(available: list[ModuleCatalogEntry]) -> None:
     """Display available modules for adding"""
-    _plan_command.click.echo("\n📦 Available Modules to Add:")
+    click.echo("\n📦 Available Modules to Add:")
     for i, entry in enumerate(available, start=1):
-        _plan_command.click.echo(f"  {i}. {_plan_command._format_module_choice(entry)}")
+        click.echo(f"  {i}. {_plan_selection._format_module_choice(entry)}")
 
 
 def _get_module_by_index_from_available(
@@ -90,22 +98,20 @@ def _parse_add_module_selection(
     for part in parts:
         selected_entry = None
         if part.isdigit():
-            selected_entry = _plan_command._get_module_by_index_from_available(
+            selected_entry = _get_module_by_index_from_available(
                 int(part) - 1, available
             )
             if selected_entry is None:
                 raise ValueError(f"Invalid number: {part}")
         else:
-            selected_entry = _plan_command._get_module_by_name_from_available(
-                part, available
-            )
+            selected_entry = _get_module_by_name_from_available(part, available)
             if selected_entry is None:
                 raise ValueError(f"Unknown or already installed module: {part}")
 
         assert selected_entry is not None  # noqa: S101 - internal invariant guaranteed by the caller
         if not selected_entry.ready:
             raise ValueError(
-                _plan_command.get_module_readiness_reason(selected_entry.name)
+                _module_catalog.get_module_readiness_reason(selected_entry.name)
                 or f"Unknown or already installed module: {part}"
             )
 
@@ -132,37 +138,35 @@ def _select_modules_to_add(
         List of newly selected module names
 
     """
-    _plan_command._display_current_modules(existing_modules)
+    _display_current_modules(existing_modules)
 
-    available = _plan_command._get_available_modules(
+    available = _get_available_modules(
         existing_modules,
         include_experimental=include_experimental,
     )
 
     if not available:
-        _plan_command.click.echo("\n📦 Available Modules to Add:")
-        _plan_command.click.echo("   All modules are already installed!")
+        click.echo("\n📦 Available Modules to Add:")
+        click.echo("   All modules are already installed!")
         return []
 
-    _plan_command._display_available_modules(available)
+    _display_available_modules(available)
 
-    _plan_command.click.echo(
+    click.echo(
         "\n  Enter numbers separated by commas (e.g., 1,3), or press Enter to skip"
     )
 
     while True:
-        choice = _plan_command.click.prompt(
+        choice = click.prompt(
             "Select modules to add",
             default="",
             show_default=False,
         )
 
         try:
-            return _plan_command._parse_add_module_selection(choice, available)
+            return _parse_add_module_selection(choice, available)
         except ValueError as e:
-            _plan_command.click.secho(
-                f"Invalid selection: {e}. Please try again.", fg="red"
-            )
+            click.secho(f"Invalid selection: {e}. Please try again.", fg="red")
 
 
 def _prepare_added_module_data(
@@ -174,14 +178,14 @@ def _prepare_added_module_data(
     configure_modules: bool,
 ) -> tuple[list[str], dict[str, dict[str, Any]], list[str]]:
     """Prepare module options and required modules for add mode."""
-    existing_options = _plan_command._get_existing_module_options(
+    existing_options = _plan_shared._get_existing_module_options(
         project_path, existing_config
     )
-    all_modules = _plan_command._merge_module_names(all_existing, new_modules)
+    all_modules = _plan_shared._merge_module_names(all_existing, new_modules)
 
     if configure_modules:
         existing_options.update(
-            _plan_command._configure_selected_modules(
+            _plan_shared._configure_selected_modules(
                 new_modules,
                 existing_options,
                 new_modules=set(new_modules),
@@ -192,19 +196,19 @@ def _prepare_added_module_data(
             existing_options.setdefault(module_name, {})
 
     all_modules, existing_options, required_modules = (
-        _plan_command._materialize_required_module_configs(
+        _plan_shared._materialize_required_module_configs(
             all_modules,
             existing_options,
         )
     )
     if required_modules:
-        new_modules = _plan_command._merge_module_names(new_modules, required_modules)
+        new_modules = _plan_shared._merge_module_names(new_modules, required_modules)
         # Run required modules through registry-backed configurators so that
         # billing/CRM planner flows invoke configurators for required
         # notifications/orgs in the same planning pass.
         if configure_modules:
             existing_options.update(
-                _plan_command._configure_selected_modules(
+                _plan_shared._configure_selected_modules(
                     required_modules,
                     existing_options,
                     new_modules=set(required_modules),
@@ -226,19 +230,19 @@ def _build_add_config(
         project_config = existing_config.project
     else:
         assert state is not None  # noqa: S101 - internal invariant guaranteed by the caller
-        docker_config = _plan_command.DockerConfig(
+        docker_config = _config_schema.DockerConfig(
             start=False, build=False, create_superuser=False
         )
-        project_config = _plan_command.ProjectConfig(
+        project_config = _config_schema.ProjectConfig(
             slug=state.project.slug,
             package=state.project.package,
             theme=state.project.theme,
         )
 
-    return _plan_command.QuickScaleConfig(
+    return _config_schema.QuickScaleConfig(
         version="1",
         project=project_config,
-        modules=_plan_command._build_module_configs(all_modules, module_options),
+        modules=_plan_shared._build_module_configs(all_modules, module_options),
         docker=docker_config,
     )
 
@@ -249,34 +253,28 @@ def _preview_and_save_added_config(
     new_modules: list[str],
 ) -> None:
     """Preview and save the updated configuration for add mode."""
-    _plan_command.click.echo("\n" + "=" * 50)
-    _plan_command.click.echo("📋 Updated Configuration:")
-    _plan_command.click.echo("=" * 50)
-    _plan_command.click.echo(yaml_content)
-    _plan_command.click.echo("=" * 50)
+    click.echo("\n" + "=" * 50)
+    click.echo("📋 Updated Configuration:")
+    click.echo("=" * 50)
+    click.echo(yaml_content)
+    click.echo("=" * 50)
 
-    _plan_command.click.echo("\n🆕 New modules to add:")
+    click.echo("\n🆕 New modules to add:")
     for module in new_modules:
-        _plan_command.click.secho(f"   + {module}", fg="green")
+        click.secho(f"   + {module}", fg="green")
 
-    if not _plan_command.click.confirm(
-        "\n💾 Save updated configuration?", default=True
-    ):
-        _plan_command.click.echo("❌ Cancelled")
-        raise _plan_command.click.Abort()
+    if not click.confirm("\n💾 Save updated configuration?", default=True):
+        click.echo("❌ Cancelled")
+        raise click.Abort()
 
     config_path = project_path / "quickscale.yml"
     with open(config_path, "w") as f:
         f.write(yaml_content)
 
-    _plan_command.click.secho(
-        f"\n✅ Configuration updated: {config_path}", fg="green", bold=True
-    )
+    click.secho(f"\n✅ Configuration updated: {config_path}", fg="green", bold=True)
 
-    _plan_command.click.echo("\n📋 Next steps:")
-    _plan_command.click.echo(
-        "  quickscale apply     # Apply configuration to add modules"
-    )
+    click.echo("\n📋 Next steps:")
+    click.echo("  quickscale apply     # Apply configuration to add modules")
 
 
 def _handle_add_modules(
@@ -295,67 +293,61 @@ def _handle_add_modules(
     """
     # Run read-only theme preflight before any mutation.
     try:
-        _plan_command.validate_theme_preflight(project_path)
-    except _plan_command.ThemeValidationError as exc:
-        _plan_command.click.secho(
+        _theme_validation.validate_theme_preflight(project_path)
+    except _theme_validation.ThemeValidationError as exc:
+        click.secho(
             "\n❌ Theme validation failed before module add:",
             fg="red",
             err=True,
             bold=True,
         )
         for line in str(exc).splitlines():
-            _plan_command.click.echo(f"  • {line}", err=True)
-        _plan_command.click.echo(
+            click.echo(f"  • {line}", err=True)
+        click.echo(
             "\n💡 Only 'showcase_react' is supported. "
             "Update project.theme in quickscale.yml to 'showcase_react'.",
             err=True,
         )
-        raise _plan_command.click.Abort()
+        raise click.Abort()
 
-    _plan_command.click.echo("\n🔧 Adding modules to existing project")
-    _plan_command.click.echo(f"   Project: {project_path}")
+    click.echo("\n🔧 Adding modules to existing project")
+    click.echo(f"   Project: {project_path}")
 
-    all_existing = _plan_command._collect_existing_modules(
-        project_path, existing_config
-    )
+    all_existing = _plan_shared._collect_existing_modules(project_path, existing_config)
 
     # Select new modules to add
-    new_modules = _plan_command._select_modules_to_add(
+    new_modules = _select_modules_to_add(
         all_existing,
         include_experimental=include_experimental,
     )
 
     if not new_modules:
-        _plan_command.click.echo("\n✅ No new modules selected")
+        click.echo("\n✅ No new modules selected")
         return
 
-    state_manager = _plan_command.StateManager(project_path)
+    state_manager = _state_schema.StateManager(project_path)
     state = state_manager.load()
     if existing_config is None and state is None:
-        _plan_command.click.secho(
+        click.secho(
             "\n❌ Cannot add modules: No configuration or state found",
             fg="red",
             err=True,
         )
-        raise _plan_command.click.Abort()
+        raise click.Abort()
 
-    all_modules, existing_options, new_modules = (
-        _plan_command._prepare_added_module_data(
-            project_path,
-            all_existing,
-            new_modules,
-            existing_config,
-            configure_modules=configure_modules,
-        )
+    all_modules, existing_options, new_modules = _prepare_added_module_data(
+        project_path,
+        all_existing,
+        new_modules,
+        existing_config,
+        configure_modules=configure_modules,
     )
-    config = _plan_command._build_add_config(
+    config = _build_add_config(
         existing_config,
         state,
         all_modules,
         existing_options,
     )
 
-    yaml_content = _plan_command._validate_existing_project_config_or_abort(config)
-    _plan_command._preview_and_save_added_config(
-        project_path, yaml_content, new_modules
-    )
+    yaml_content = _plan_validation._validate_existing_project_config_or_abort(config)
+    _preview_and_save_added_config(project_path, yaml_content, new_modules)

@@ -2,24 +2,11 @@
 
 The implementation lives in private sibling modules grouped by concern
 (``_module_shared``, ``_module_embed``, ``_module_update``,
-``_module_update_io``, ``_module_push``); this module re-exports every name
-that previously lived here (Module Conventions rule 28), so existing
-``quickscale_cli.commands.module_commands`` imports and test patch targets
-keep working unchanged.
+``_module_update_io``, ``_module_push``); this module owns the public command surface, re-exports public names for
+unchanged import paths, and resolves collaborators through the sibling modules
+that define them (decisions.md, Split-Facade Seams).
 """
 
-import shutil as shutil
-import subprocess as subprocess
-from dataclasses import dataclass as dataclass
-from datetime import datetime as datetime
-from collections.abc import Callable as Callable
-from pathlib import Path as Path
-from tempfile import TemporaryDirectory as TemporaryDirectory
-from typing import (
-    Any as Any,
-    Literal as Literal,
-)
-import click as click
 from quickscale_core import __version__ as quickscale_version  # noqa: F401
 from quickscale_core.contracts.module_catalog import (
     get_module_readiness_reason as get_module_readiness_reason,
@@ -32,7 +19,6 @@ from quickscale_core.schema.state_schema import (
 )
 from quickscale_cli.utils.module_dependency_sync import (
     DependencySyncError as DependencySyncError,
-    resolve_embedded_module_install_path as _resolve_install_path_from_dependency_sync,  # noqa: F401
     sync_project_module_dependencies as sync_project_module_dependencies,
 )
 from quickscale_cli.utils.auth_migration import (
@@ -92,65 +78,17 @@ from .contract_vintage import (
     enforce_shipped_contract_vintage as enforce_shipped_contract_vintage,
     record_contract_adoption as record_contract_adoption,
 )
-from .module_output import (
-    _print_installation_error as _print_installation_error,
-    _report_local_pre_pull_guard_block as _report_local_pre_pull_guard_block,
-    _report_missing_split_tag as _report_missing_split_tag,
-    _report_split_ref_override as _report_split_ref_override,
-    _resolve_embed_source_ref as _resolve_embed_source_ref,
-    _validate_embed_theme as _validate_embed_theme,
-)
 from quickscale_cli.commands._module_shared import (
     ModuleExecutionMode as ModuleExecutionMode,
     STANDALONE_MODULE_EXECUTION_MODE as STANDALONE_MODULE_EXECUTION_MODE,
     APPLY_MODULE_EXECUTION_MODE as APPLY_MODULE_EXECUTION_MODE,
-    _LazyModuleChoice as _LazyModuleChoice,
-    _UpdatePathSnapshot as _UpdatePathSnapshot,
     ModuleEmbedProvenance as ModuleEmbedProvenance,
-    _validate_git_environment as _validate_git_environment,
-    _validate_module_not_exists as _validate_module_not_exists,
-    _validate_remote_branch as _validate_remote_branch,
-    _check_auth_module_migrations as _check_auth_module_migrations,
-    _resolve_embedded_module_install_path as _resolve_embedded_module_install_path,
-    _read_embedded_module_version as _read_embedded_module_version,
-    _sync_state_module_version as _sync_state_module_version,
-    _warn_version_drift_for_update as _warn_version_drift_for_update,
-    _validate_module_readiness as _validate_module_readiness,
-    _validate_update_environment as _validate_update_environment,
 )
 from quickscale_cli.commands._module_embed import (
-    _cleanup_failed_apply_embed as _cleanup_failed_apply_embed,
-    _record_embed_provenance as _record_embed_provenance,
-    _cleanup_failed_apply_embed_if_needed as _cleanup_failed_apply_embed_if_needed,
-    _perform_module_embed as _perform_module_embed,
     embed_module as embed_module,
-    _install_module_dependencies as _install_module_dependencies,
-    _sync_module_dependencies as _sync_module_dependencies,
 )
 from quickscale_cli.commands._module_update import (
-    _ensure_authoritative_state_for_update as _ensure_authoritative_state_for_update,
-    _load_update_recovery_state as _load_update_recovery_state,
-    _check_local_pre_pull_guard as _check_local_pre_pull_guard,
-    _rollback_failed_module_update as _rollback_failed_module_update,
-    _report_module_update_error as _report_module_update_error,
-    _update_single_module as _update_single_module,
     update as update,
-)
-from quickscale_cli.commands._module_update_io import (
-    _remove_update_path as _remove_update_path,
-    _snapshot_update_path as _snapshot_update_path,
-    _restore_update_snapshot as _restore_update_snapshot,
-    _restore_update_snapshots as _restore_update_snapshots,
-    _record_update_mutation_snapshots as _record_update_mutation_snapshots,
-    _refresh_git_index_after_update_rollback as _refresh_git_index_after_update_rollback,
-    _commit_contract_adoption as _commit_contract_adoption,
-    _regenerate_and_record_managed_wiring as _regenerate_and_record_managed_wiring,
-    _record_managed_wiring_hashes as _record_managed_wiring_hashes,
-    _git_tracks_path as _git_tracks_path,
-    _path_in_commit as _path_in_commit,
-    _commit_regenerated_managed_wiring as _commit_regenerated_managed_wiring,
-    _roll_back_partial_module_update as _roll_back_partial_module_update,
-    _commit_module_update as _commit_module_update,
 )
 from quickscale_cli.commands._module_push import (
     push as push,

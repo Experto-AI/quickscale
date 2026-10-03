@@ -10,22 +10,24 @@ from typing import Any
 
 
 from quickscale_core.schema.config_schema import QuickScaleConfig
-import quickscale_cli.commands.plan_command as _plan_command
+
+import quickscale_core.utils.file_utils as _file_utils
+import quickscale_cli.commands._plan_shared as _plan_shared
+import quickscale_core.schema.config_schema as _config_schema
+import click
+import keyword
+import pathlib as _pathlib
+import quickscale_core.utils.theme_validation as _theme_validation
+import re
 
 
 def _configure_docker() -> tuple[bool, bool, bool]:
     """Interactive Docker configuration"""
-    _plan_command.click.echo("\n🐳 Docker Configuration:")
-    start = _plan_command.click.confirm(
-        "  Start Docker services after apply?", default=True
-    )
-    build = (
-        _plan_command.click.confirm("  Build Docker images?", default=True)
-        if start
-        else False
-    )
+    click.echo("\n🐳 Docker Configuration:")
+    start = click.confirm("  Start Docker services after apply?", default=True)
+    build = click.confirm("  Build Docker images?", default=True) if start else False
     create_superuser = (
-        _plan_command.click.confirm(
+        click.confirm(
             "  Create Django superuser on first startup?",
             default=False,
         )
@@ -45,32 +47,32 @@ def _validate_new_project_slug(slug: str | None) -> str:
         _plan_command.click.Abort: If name is invalid
     """
     if not slug:
-        _plan_command.click.secho(
+        click.secho(
             "\n❌ Error: PROJECT_SLUG is required for new projects",
             fg="red",
             err=True,
         )
-        _plan_command.click.echo("\n💡 Usage examples:", err=True)
-        _plan_command.click.echo(
+        click.echo("\n💡 Usage examples:", err=True)
+        click.echo(
             "   quickscale plan myapp              # Create new project", err=True
         )
-        _plan_command.click.echo(
+        click.echo(
             "   quickscale plan --add              # Add modules to existing", err=True
         )
-        _plan_command.click.echo(
+        click.echo(
             "   quickscale plan --reconfigure      # Reconfigure existing", err=True
         )
-        raise _plan_command.click.Abort()
+        raise click.Abort()
 
-    is_valid, error_message = _plan_command.validate_project_name(slug)
+    is_valid, error_message = _file_utils.validate_project_name(slug)
     if not is_valid:
-        _plan_command.click.secho(
+        click.secho(
             f"\n❌ Error: '{slug}' is not a valid project slug",
             fg="red",
             err=True,
         )
-        _plan_command.click.echo(f"   {error_message}", err=True)
-        raise _plan_command.click.Abort()
+        click.echo(f"   {error_message}", err=True)
+        raise click.Abort()
 
     return slug
 
@@ -81,9 +83,9 @@ def _validate_package_name(package_name: str) -> None:
         raise ValueError("Package name cannot be empty")
     if not package_name.isidentifier():
         raise ValueError("Package name must be a valid Python identifier")
-    if _plan_command.keyword.iskeyword(package_name):
+    if keyword.iskeyword(package_name):
         raise ValueError(f"'{package_name}' is a Python keyword and cannot be used")
-    if not _plan_command.re.match(r"^[a-z][a-z0-9_]*$", package_name):
+    if not re.match(r"^[a-z][a-z0-9_]*$", package_name):
         raise ValueError(
             "Package name must start with a lowercase letter and use only lowercase "
             "letters, numbers, and underscores"
@@ -95,25 +97,25 @@ def _resolve_project_package(slug: str, explicit_package: str | None) -> str:
     default_package = slug.replace("-", "_")
     package_name = explicit_package
     if package_name is None:
-        package_name = _plan_command.click.prompt(
+        package_name = click.prompt(
             "\nPython package name",
             default=default_package,
             show_default=True,
         )
 
     try:
-        _plan_command._validate_package_name(package_name)
+        _validate_package_name(package_name)
     except ValueError as e:
-        _plan_command.click.secho(f"\n❌ Error: {e}", fg="red", err=True)
-        raise _plan_command.click.Abort() from e
+        click.secho(f"\n❌ Error: {e}", fg="red", err=True)
+        raise click.Abort() from e
     return package_name
 
 
 def _determine_output_path_for_plan(slug: str, output: str | None) -> Path:
     """Determine output path for configuration file."""
     if output:
-        return _plan_command.Path(output)
-    return _plan_command.Path.cwd() / slug / "quickscale.yml"
+        return _pathlib.Path(output)
+    return _pathlib.Path.cwd() / slug / "quickscale.yml"
 
 
 def _check_output_path_exists(output_path: Path) -> None:
@@ -121,24 +123,22 @@ def _check_output_path_exists(output_path: Path) -> None:
     if not output_path.exists():
         return
 
-    _plan_command.click.secho(
+    click.secho(
         f"\n⚠️  Configuration file already exists: {output_path}",
         fg="yellow",
     )
-    if not _plan_command.click.confirm("Overwrite?", default=False):
-        _plan_command.click.echo("❌ Cancelled")
-        raise _plan_command.click.Abort()
+    if not click.confirm("Overwrite?", default=False):
+        click.echo("❌ Cancelled")
+        raise click.Abort()
 
 
 def _save_config_with_validation(yaml_content: str, output_path: Path) -> None:
     """Validate and save configuration."""
     try:
-        _plan_command.validate_config(yaml_content)
+        _config_schema.validate_config(yaml_content)
     except Exception as e:
-        _plan_command.click.secho(
-            f"\n❌ Configuration validation failed: {e}", fg="red", err=True
-        )
-        raise _plan_command.click.Abort()
+        click.secho(f"\n❌ Configuration validation failed: {e}", fg="red", err=True)
+        raise click.Abort()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -163,7 +163,7 @@ def _build_new_project_config(
     }
     if configure_modules:
         module_options.update(
-            _plan_command._configure_selected_modules(
+            _plan_shared._configure_selected_modules(
                 selected_modules,
                 module_options,
                 new_modules=set(selected_modules),
@@ -171,7 +171,7 @@ def _build_new_project_config(
         )
 
     selected_modules, module_options, required_modules = (
-        _plan_command._materialize_required_module_configs(
+        _plan_shared._materialize_required_module_configs(
             selected_modules,
             module_options,
         )
@@ -181,22 +181,22 @@ def _build_new_project_config(
     # in the same planning pass.
     if configure_modules and required_modules:
         module_options.update(
-            _plan_command._configure_selected_modules(
+            _plan_shared._configure_selected_modules(
                 required_modules,
                 module_options,
                 new_modules=set(required_modules),
             )
         )
 
-    return _plan_command.QuickScaleConfig(
+    return _config_schema.QuickScaleConfig(
         version="1",
-        project=_plan_command.ProjectConfig(
+        project=_config_schema.ProjectConfig(
             slug=validated_slug,
             package=resolved_package,
             theme=theme,
         ),
-        modules=_plan_command._build_module_configs(selected_modules, module_options),
-        docker=_plan_command.DockerConfig(
+        modules=_plan_shared._build_module_configs(selected_modules, module_options),
+        docker=_config_schema.DockerConfig(
             start=docker_start,
             build=docker_build,
             create_superuser=docker_create_superuser,
@@ -210,15 +210,15 @@ def _preview_and_save_new_config(
     yaml_content: str,
 ) -> None:
     """Preview, preflight, and save a new-project configuration."""
-    _plan_command.click.echo("\n" + "=" * 50)
-    _plan_command.click.echo("📋 Configuration Preview:")
-    _plan_command.click.echo("=" * 50)
-    _plan_command.click.echo(yaml_content)
-    _plan_command.click.echo("=" * 50)
+    click.echo("\n" + "=" * 50)
+    click.echo("📋 Configuration Preview:")
+    click.echo("=" * 50)
+    click.echo(yaml_content)
+    click.echo("=" * 50)
 
-    if not _plan_command.click.confirm("\n💾 Save configuration?", default=True):
-        _plan_command.click.echo("❌ Cancelled")
-        raise _plan_command.click.Abort()
+    if not click.confirm("\n💾 Save configuration?", default=True):
+        click.echo("❌ Cancelled")
+        raise click.Abort()
 
     # Run read-only theme preflight before saving (checks state/recovery
     # files only — the config file is about to be written/overwritten so
@@ -228,27 +228,25 @@ def _preview_and_save_new_config(
     recovery_path = project_root / ".quickscale" / "apply-recovery.yml"
     if state_path.exists() or recovery_path.exists():
         try:
-            _plan_command.validate_theme_preflight(project_root)
-        except _plan_command.ThemeValidationError as exc:
-            _plan_command.click.secho(
+            _theme_validation.validate_theme_preflight(project_root)
+        except _theme_validation.ThemeValidationError as exc:
+            click.secho(
                 "\n❌ Theme validation failed before saving configuration:",
                 fg="red",
                 err=True,
                 bold=True,
             )
             for line in str(exc).splitlines():
-                _plan_command.click.echo(f"  • {line}", err=True)
-            raise _plan_command.click.Abort()
+                click.echo(f"  • {line}", err=True)
+            raise click.Abort()
 
-    _plan_command._save_config_with_validation(yaml_content, output_path)
+    _save_config_with_validation(yaml_content, output_path)
 
-    _plan_command.click.secho(
-        f"\n✅ Configuration saved to {output_path}", fg="green", bold=True
-    )
+    click.secho(f"\n✅ Configuration saved to {output_path}", fg="green", bold=True)
 
-    _plan_command.click.echo("\n📋 Next steps:")
+    click.echo("\n📋 Next steps:")
     if output_path.parent.name == validated_slug:
-        _plan_command.click.echo(f"  cd {validated_slug}")
-        _plan_command.click.echo("  quickscale apply")
+        click.echo(f"  cd {validated_slug}")
+        click.echo("  quickscale apply")
     else:
-        _plan_command.click.echo(f"  quickscale apply {output_path}")
+        click.echo(f"  quickscale apply {output_path}")

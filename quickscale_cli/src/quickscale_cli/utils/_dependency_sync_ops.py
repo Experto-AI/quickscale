@@ -12,8 +12,11 @@ import re
 from pathlib import Path
 from typing import Any, Mapping
 
-import quickscale_cli.utils.module_dependency_sync as _module_dependency_sync
 from quickscale_cli.utils._dependency_io import ProjectDependencySyncResult
+import quickscale_cli.utils._dependency_io as _dependency_io
+import quickscale_cli.utils._dependency_write as _dependency_write
+import quickscale_core.manifest.loader as _loader
+import quickscale_core.manifest.loader_errors as _loader_errors
 
 
 def _resolve_declared_dependency_value(
@@ -31,7 +34,7 @@ def _resolve_declared_dependency_value(
     developer-only path entry.
     """
     if dependency_name not in module_poetry_dependencies:
-        raise _module_dependency_sync.DependencySyncError(
+        raise _dependency_io.DependencySyncError(
             "Embedded module pyproject.toml is missing the Poetry dependency "
             f"version for {module_name}.{dependency_name}"
         )
@@ -54,7 +57,7 @@ def _merge_preferred_dependency(
     iteration order (SA9.1-REV-004).
     """
     if dependency_name in pending:
-        pending[dependency_name] = _module_dependency_sync._prefer_dependency_value(
+        pending[dependency_name] = _dependency_write._prefer_dependency_value(
             pending[dependency_name],
             dependency_value,
         )
@@ -75,15 +78,13 @@ def _record_repin_update(
     The comparison against current project values happens once after the
     full module loop.
     """
-    desired_value = _module_dependency_sync._resolve_declared_dependency_value(
+    desired_value = _resolve_declared_dependency_value(
         module_name=module_name,
         dependency_name=dependency_name,
         requirement=requirement,
         module_poetry_dependencies=module_poetry_dependencies,
     )
-    _module_dependency_sync._merge_preferred_dependency(
-        pending_package_updates, dependency_name, desired_value
-    )
+    _merge_preferred_dependency(pending_package_updates, dependency_name, desired_value)
 
 
 def _apply_pending_dependency_updates(
@@ -105,9 +106,7 @@ def _apply_pending_dependency_updates(
         or project_dependencies[dep_name] != dep_value
     }
     if filtered_updates:
-        _module_dependency_sync._update_dependency_entries(
-            pyproject_path, filtered_updates
-        )
+        _dependency_write._update_dependency_entries(pyproject_path, filtered_updates)
     return filtered_updates
 
 
@@ -161,8 +160,8 @@ def sync_project_core_dependency(
     if not pyproject_path.exists():
         return False
 
-    project_pyproject = _module_dependency_sync._load_toml_file(pyproject_path)
-    project_dependencies = _module_dependency_sync._load_poetry_dependencies(
+    project_pyproject = _dependency_io._load_toml_file(pyproject_path)
+    project_dependencies = _dependency_io._load_poetry_dependencies(
         pyproject_path, project_pyproject
     )
     if "quickscale-core" not in project_dependencies:
@@ -175,9 +174,9 @@ def sync_project_core_dependency(
     resolved_wheelhouse = (
         wheelhouse
         if wheelhouse is not None
-        else _module_dependency_sync._resolve_wheelhouse_dir()
+        else _dependency_io._resolve_wheelhouse_dir()
     )
-    local_wheel = _module_dependency_sync._resolve_local_wheel_dependency(
+    local_wheel = _dependency_io._resolve_local_wheel_dependency(
         project_path,
         project_path,
         "quickscale-core",
@@ -188,21 +187,18 @@ def sync_project_core_dependency(
 
     declared_pin = project_dependencies["quickscale-core"]
     wheel_filename = Path(str(local_wheel.get("path", ""))).name
-    wheel_version = _module_dependency_sync._wheel_distribution_version(wheel_filename)
-    if (
-        wheel_version is None
-        or not _module_dependency_sync._version_satisfies_bounded_pin(
-            wheel_version, str(declared_pin)
-        )
+    wheel_version = _wheel_distribution_version(wheel_filename)
+    if wheel_version is None or not _version_satisfies_bounded_pin(
+        wheel_version, str(declared_pin)
     ):
-        raise _module_dependency_sync.DependencySyncError(
+        raise _dependency_io.DependencySyncError(
             f"Local quickscale-core wheel {wheel_filename!r} does not satisfy the "
             f"project's lockstep pin {declared_pin!r}. Build the wheel from the "
             "matching VERSION, or unset QUICKSCALE_LOCAL_WHEELHOUSE to resolve the "
             "pin from an index."
         )
 
-    _module_dependency_sync._update_dependency_entries(
+    _dependency_write._update_dependency_entries(
         pyproject_path, {"quickscale-core": local_wheel}
     )
     return True
@@ -225,17 +221,17 @@ def sync_project_module_dependencies(
     compatible version range.
     """
     if not module_options_by_name:
-        return _module_dependency_sync.ProjectDependencySyncResult()
+        return _dependency_io.ProjectDependencySyncResult()
 
     # Validate an explicit wheelhouse at the dependency-sync boundary, before
     # inspecting module dependencies.  This keeps malformed explicit input
     # fail-hard even when the selected modules have only public dependencies,
     # while preserving the intentional no-module no-op above.
-    wheelhouse = _module_dependency_sync._resolve_wheelhouse_dir()
+    wheelhouse = _dependency_io._resolve_wheelhouse_dir()
 
     pyproject_path = project_path / "pyproject.toml"
-    project_pyproject = _module_dependency_sync._load_toml_file(pyproject_path)
-    project_dependencies = _module_dependency_sync._load_poetry_dependencies(
+    project_pyproject = _dependency_io._load_toml_file(pyproject_path)
+    project_dependencies = _dependency_io._load_poetry_dependencies(
         pyproject_path, project_pyproject
     )
     existing_dependency_names = set(project_dependencies.keys())
@@ -246,22 +242,20 @@ def sync_project_module_dependencies(
 
     for module_name in sorted(module_options_by_name):
         module_options = module_options_by_name.get(module_name) or {}
-        install_path = _module_dependency_sync.resolve_embedded_module_install_path(
+        install_path = _dependency_io.resolve_embedded_module_install_path(
             project_path, module_name
         )
         if install_path is None:
             continue
 
         module_pyproject_path = install_path / "pyproject.toml"
-        module_pyproject = _module_dependency_sync._load_toml_file(
-            module_pyproject_path
-        )
-        module_package_name = _module_dependency_sync._load_project_name(
+        module_pyproject = _dependency_io._load_toml_file(module_pyproject_path)
+        module_package_name = _dependency_io._load_project_name(
             module_pyproject_path,
             module_pyproject,
             module_name,
         )
-        module_poetry_dependencies = _module_dependency_sync._load_poetry_dependencies(
+        module_poetry_dependencies = _dependency_io._load_poetry_dependencies(
             module_pyproject_path,
             module_pyproject,
         )
@@ -272,33 +266,33 @@ def sync_project_module_dependencies(
         ):
             relative_install_path = install_path.relative_to(project_path).as_posix()
             pending_path_dependencies[module_package_name] = (
-                _module_dependency_sync._build_module_path_dependency_value(
+                _dependency_io._build_module_path_dependency_value(
                     module_name,
                     relative_install_path,
                     module_options,
                 )
             )
 
-        manifest = _module_dependency_sync.get_manifest_for_module(
+        manifest = _loader.get_manifest_for_module(
             project_path, module_name, strict=True
         )
         if manifest is None:
-            raise _module_dependency_sync.ManifestError(
+            raise _loader_errors.ManifestError(
                 f"Manifest file not found: {project_path / 'modules' / module_name / 'module.yml'}",
                 module_name,
             )
 
         for requirement in manifest.dependencies:
-            dependency_name = _module_dependency_sync._extract_dependency_name(
+            dependency_name = _dependency_io._extract_dependency_name(
                 requirement, module_name
             )
 
-            if _module_dependency_sync._should_skip_manifest_dependency(
+            if _dependency_io._should_skip_manifest_dependency(
                 module_name, dependency_name, module_options
             ):
                 continue
 
-            local_wheel = _module_dependency_sync._resolve_local_wheel_dependency(
+            local_wheel = _dependency_io._resolve_local_wheel_dependency(
                 project_path,
                 project_path,
                 dependency_name,
@@ -315,7 +309,7 @@ def sync_project_module_dependencies(
                 # Repin mode: replace existing entries that differ from the
                 # manifest-derived bounded range.
                 if repin_existing:
-                    _module_dependency_sync._record_repin_update(
+                    _record_repin_update(
                         pending_package_updates,
                         module_name=module_name,
                         dependency_name=dependency_name,
@@ -324,25 +318,23 @@ def sync_project_module_dependencies(
                     )
                 continue
 
-            dependency_value = (
-                _module_dependency_sync._resolve_declared_dependency_value(
-                    module_name=module_name,
-                    dependency_name=dependency_name,
-                    requirement=requirement,
-                    module_poetry_dependencies=module_poetry_dependencies,
-                )
+            dependency_value = _resolve_declared_dependency_value(
+                module_name=module_name,
+                dependency_name=dependency_name,
+                requirement=requirement,
+                module_poetry_dependencies=module_poetry_dependencies,
             )
             if local_wheel is not None:
                 dependency_value = local_wheel
 
-            _module_dependency_sync._merge_preferred_dependency(
+            _merge_preferred_dependency(
                 pending_package_dependencies, dependency_name, dependency_value
             )
 
     # Apply updates to existing entries (repin mode) before appending new ones.
     # Entries whose cross-module maximum already matches the current project
     # value are filtered out to avoid unnecessary rewrites (SA9.1-REV-004).
-    pending_package_updates = _module_dependency_sync._apply_pending_dependency_updates(
+    pending_package_updates = _apply_pending_dependency_updates(
         pyproject_path,
         project_dependencies,
         pending_package_updates,
@@ -356,7 +348,7 @@ def sync_project_module_dependencies(
         (dependency_name, pending_path_dependencies[dependency_name])
         for dependency_name in sorted(pending_path_dependencies)
     )
-    _module_dependency_sync._append_dependency_entries(pyproject_path, entries_to_add)
+    _dependency_write._append_dependency_entries(pyproject_path, entries_to_add)
 
     # Patch module pyproject.toml files: replace path-style dependencies
     # that point to non-existent locations with version constraints from
@@ -364,11 +356,11 @@ def sync_project_module_dependencies(
     # when a module's pyproject.toml references a monorepo-local path
     # (e.g. quickscale-core = {path = "../../quickscale_core"}) that
     # doesn't exist in the generated project's isolated tree.
-    _module_dependency_sync._patch_module_path_dependencies(
+    _dependency_write._patch_module_path_dependencies(
         project_path, module_options_by_name, wheelhouse
     )
 
-    return _module_dependency_sync.ProjectDependencySyncResult(
+    return _dependency_io.ProjectDependencySyncResult(
         added_path_dependencies=sorted(pending_path_dependencies),
         added_package_dependencies=sorted(pending_package_dependencies),
         updated_package_dependencies=sorted(pending_package_updates),

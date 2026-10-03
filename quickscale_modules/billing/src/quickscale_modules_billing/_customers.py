@@ -12,7 +12,6 @@ from typing import Any
 from django.apps import apps
 from django.db import IntegrityError, transaction
 
-import quickscale_modules_billing.services as _services
 from quickscale_modules_billing._payload import (
     _build_customer_create_idempotency_key as _build_customer_create_idempotency_key,
 )
@@ -43,6 +42,8 @@ from quickscale_modules_billing.exceptions import (
 from quickscale_modules_billing.models import (
     Subscription,
 )
+import quickscale_modules_billing._stripe_client as _stripe_client
+import quickscale_modules_billing._locks as _locks
 
 
 @_translate_stripe_errors("Stripe customer resolution failed.")
@@ -63,7 +64,7 @@ def get_or_create_stripe_customer(
     if existing_customer_id:
         return existing_customer_id, False
 
-    resolved_client = stripe_client or _services.get_stripe_client(
+    resolved_client = stripe_client or _stripe_client.get_stripe_client(
         settings_snapshot=snapshot
     )
     customer_metadata = _build_customer_metadata(user, organization=organization)
@@ -121,6 +122,9 @@ def _resolve_organization_from_reference(organization_reference: str) -> Any | N
 
 
 def _resolve_authoritative_organization_customer_id(*, organization: Any) -> str:
+    # Imported lazily: _subscription_checkout imports this module at load time.
+    import quickscale_modules_billing._subscription_checkout as _subscription_checkout
+
     existing_customer_id = str(
         getattr(organization, "stripe_customer_id", "") or ""
     ).strip()
@@ -128,7 +132,7 @@ def _resolve_authoritative_organization_customer_id(*, organization: Any) -> str
         return existing_customer_id
 
     authoritative_subscription = (
-        _services._resolve_authoritative_subscription_reservation(
+        _subscription_checkout._resolve_authoritative_subscription_reservation(
             organization=organization,
         )
     )
@@ -167,7 +171,7 @@ def _sync_organization_customer_id(organization: Any, customer_id: str) -> None:
 
     try:
         with transaction.atomic():
-            locked_organization = _services._lock_organization_for_billing_mutation(
+            locked_organization = _locks._lock_organization_for_billing_mutation(
                 organization
             )
             existing_customer_id = str(

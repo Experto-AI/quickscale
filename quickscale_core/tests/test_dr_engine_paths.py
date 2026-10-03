@@ -82,7 +82,7 @@ def _make_artifact(**attrs: object) -> SimpleNamespace:
 
 
 class TestBuildBackupFilename:
-    _SLUG_PATCH = "quickscale_core.dr_engine.orchestration._get_project_slug"
+    _SLUG_PATCH = "quickscale_core.dr_engine._metadata._get_project_slug"
 
     def test_basic_format(self) -> None:
         """Produces a deterministic filename with naming-prefix, slug, env, timestamp."""
@@ -345,7 +345,7 @@ class TestBuildSnapshotCaptureResumePolicy:
             target_mode="private_remote", remote_bucket_name="resolved"
         )
         with patch(
-            "quickscale_core.dr_engine.orchestration._resolve_artifact_remote_policy",
+            "quickscale_core.dr_engine._state._resolve_artifact_remote_policy",
             return_value=expected_policy,
         ):
             result = _build_snapshot_capture_resume_policy(snapshot, policy)

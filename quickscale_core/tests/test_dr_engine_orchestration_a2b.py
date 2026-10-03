@@ -1,6 +1,7 @@
 """Pure-mock A-II coverage for restore, admin upload, verification, and pins."""
 
 from __future__ import annotations
+import quickscale_core.dr_engine._restore as _restore
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -10,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quickscale_core.dr_engine import orchestration as orch
 from quickscale_core.dr_engine.primitives import (
     BackupError,
     ShellCommandRunner,
@@ -76,7 +76,7 @@ class TestRestoreResolutionAndGuards:
         artifact = _artifact()
         with (
             patch(
-                f"{_ORCH}.django.db",
+                "django.db",
                 SimpleNamespace(
                     connections={
                         "default": SimpleNamespace(settings_dict={"ENGINE": "sqlite"})
@@ -84,15 +84,15 @@ class TestRestoreResolutionAndGuards:
                 ),
             ),
             patch(
-                f"{_ORCH}._collect_module_versions",
+                "quickscale_core.dr_engine._metadata._collect_module_versions",
                 return_value={"quickscale_modules_auth": "2.0"},
             ),
             patch(
-                f"{_ORCH}._core_get_restore_compatibility_issues",
+                "quickscale_core.dr_engine.recovery._get_restore_compatibility_issues",
                 return_value=["issue"],
             ) as checker,
         ):
-            result = orch._get_restore_compatibility_issues(artifact)
+            result = _restore._get_restore_compatibility_issues(artifact)
         assert result == ["issue"]
         checker.assert_called_once_with(
             artifact,
@@ -110,26 +110,33 @@ class TestRestoreResolutionAndGuards:
     def test_resolve_authoritative_snapshot_dump_rejects_unusable_snapshots(
         self, snapshot: SimpleNamespace, message: str
     ) -> None:
-        with patch(f"{_ORCH}.get_backup_snapshot", return_value=snapshot):
+        with patch(
+            "quickscale_core.dr_engine._state.get_backup_snapshot",
+            return_value=snapshot,
+        ):
             with pytest.raises(BackupRestoreBlocked, match=message):
-                orch._resolve_authoritative_snapshot_dump("snap-b2")
+                _restore._resolve_authoritative_snapshot_dump("snap-b2")
 
     def test_resolve_authoritative_snapshot_dump_returns_trusted_artifact(self) -> None:
         artifact = _artifact()
         with patch(
-            f"{_ORCH}.get_backup_snapshot",
+            "quickscale_core.dr_engine._state.get_backup_snapshot",
             return_value=_snapshot(authoritative_dump=artifact),
         ):
-            assert orch._resolve_authoritative_snapshot_dump("snap-b2") is artifact
+            assert _restore._resolve_authoritative_snapshot_dump("snap-b2") is artifact
 
     def test_runtime_wrapper_provides_django_contract_checker(self) -> None:
         with (
-            patch(f"{_ORCH}._require_postgresql_18_contract") as contract,
+            patch(
+                "quickscale_core.dr_engine._metadata._require_postgresql_18_contract"
+            ) as contract,
             patch(
                 "quickscale_core.dr_engine.recovery._ensure_postgresql_18_restore_runtime"
             ) as core,
         ):
-            orch._ensure_postgresql_18_restore_runtime("django.db.backends.postgresql")
+            _restore._ensure_postgresql_18_restore_runtime(
+                "django.db.backends.postgresql"
+            )
         core.assert_called_once_with(
             "django.db.backends.postgresql",
             require_contract=contract,
@@ -137,12 +144,13 @@ class TestRestoreResolutionAndGuards:
 
     def test_restore_execution_allowed_delegates_debug_setting(self) -> None:
         with (
-            patch(f"{_ORCH}.settings", SimpleNamespace(DEBUG=False)),
+            patch("django.conf.settings", SimpleNamespace(DEBUG=False)),
             patch(
-                f"{_ORCH}._core_restore_execution_allowed", return_value=False
+                "quickscale_core.dr_engine.recovery._restore_execution_allowed",
+                return_value=False,
             ) as allowed,
         ):
-            assert orch._restore_execution_allowed() is False
+            assert _restore._restore_execution_allowed() is False
         allowed.assert_called_once_with(is_debug=False)
 
     def test_resolve_restore_source_wrapper_passes_snapshot_and_materializer(
@@ -150,14 +158,17 @@ class TestRestoreResolutionAndGuards:
     ) -> None:
         artifact = _artifact(local_path="/tmp/source.dump")
         with (
-            patch(f"{_ORCH}._core_resolve_restore_source") as core,
-            patch(f"{_ORCH}._load_active_policy_snapshot", return_value="policy"),
+            patch("quickscale_core.dr_engine.recovery._resolve_restore_source") as core,
+            patch(
+                "quickscale_core.dr_engine._policy._load_active_policy_snapshot",
+                return_value="policy",
+            ),
         ):
             core.return_value.__enter__.return_value = _source(
                 Path("/tmp/source.dump"), artifact
             )
             core.return_value.__exit__.return_value = None
-            with orch._resolve_restore_source(snapshot_id="snap-b2") as result:
+            with _restore._resolve_restore_source(snapshot_id="snap-b2") as result:
                 assert result.artifact is artifact
         kwargs = core.call_args.kwargs
         assert kwargs["snapshot_id"] == "snap-b2"
@@ -174,27 +185,31 @@ class TestRestoreResolutionAndGuards:
         ordered = MagicMock()
         with (
             patch(
-                f"{_ORCH}.django.db",
+                "django.db",
                 SimpleNamespace(
                     connections={
                         "default": SimpleNamespace(settings_dict={"ENGINE": "pg"})
                     }
                 ),
             ),
-            patch(f"{_ORCH}.settings", SimpleNamespace(DEBUG=True)),
-            patch(f"{_ORCH}._collect_module_versions", return_value={}),
+            patch("django.conf.settings", SimpleNamespace(DEBUG=True)),
             patch(
-                f"{_ORCH}._core_execute_restore_for_resolved_source",
+                "quickscale_core.dr_engine._metadata._collect_module_versions",
+                return_value={},
+            ),
+            patch(
+                "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
                 return_value=result,
             ) as core,
             patch(
-                f"{_ORCH}._persist_restore_artifact_metadata", return_value=(warning,)
+                "quickscale_core.dr_engine._restore._persist_restore_artifact_metadata",
+                return_value=(warning,),
             ) as persist,
-            patch(f"{_ORCH}.django_timezone.now", return_value=_NOW),
+            patch("django.utils.timezone.now", return_value=_NOW),
         ):
             ordered.attach_mock(core, "core")
             ordered.attach_mock(persist, "persist")
-            executed = orch._execute_restore_for_resolved_source(
+            executed = _restore._execute_restore_for_resolved_source(
                 source,
                 confirmation="trusted.dump",
                 dry_run=False,
@@ -214,21 +229,26 @@ class TestRestoreResolutionAndGuards:
         result = RestoreResult(executed=False, dry_run=True, message="dry")
         with (
             patch(
-                f"{_ORCH}.django.db",
+                "django.db",
                 SimpleNamespace(
                     connections={"default": SimpleNamespace(settings_dict={})}
                 ),
             ),
-            patch(f"{_ORCH}.settings", SimpleNamespace(DEBUG=True)),
-            patch(f"{_ORCH}._collect_module_versions", return_value={}),
+            patch("django.conf.settings", SimpleNamespace(DEBUG=True)),
             patch(
-                f"{_ORCH}._core_execute_restore_for_resolved_source",
+                "quickscale_core.dr_engine._metadata._collect_module_versions",
+                return_value={},
+            ),
+            patch(
+                "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
                 return_value=result,
             ),
-            patch(f"{_ORCH}._persist_restore_artifact_metadata") as persist,
+            patch(
+                "quickscale_core.dr_engine._restore._persist_restore_artifact_metadata"
+            ) as persist,
         ):
             assert (
-                orch._execute_restore_for_resolved_source(
+                _restore._execute_restore_for_resolved_source(
                     source,
                     confirmation="trusted.dump",
                     dry_run=True,
@@ -246,24 +266,24 @@ class TestRestoreResolutionAndGuards:
         result = RestoreResult(executed=False, dry_run=True, message="dry")
         with (
             patch(
-                f"{_ORCH}.django.db",
+                "django.db",
                 SimpleNamespace(
                     connections={
                         "default": SimpleNamespace(settings_dict={"ENGINE": "pg"})
                     }
                 ),
             ),
-            patch(f"{_ORCH}.settings", SimpleNamespace(DEBUG=True)),
+            patch("django.conf.settings", SimpleNamespace(DEBUG=True)),
             patch(
-                f"{_ORCH}._collect_module_versions",
+                "quickscale_core.dr_engine._metadata._collect_module_versions",
                 return_value={"quickscale_modules_auth": "2.0"},
             ),
             patch(
-                f"{_ORCH}._core_execute_restore_for_resolved_source",
+                "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
                 return_value=result,
             ) as core,
         ):
-            orch._execute_restore_for_resolved_source(
+            _restore._execute_restore_for_resolved_source(
                 source,
                 confirmation="trusted.dump",
                 dry_run=True,
@@ -278,15 +298,18 @@ class TestRestoreResolutionAndGuards:
         source = _source(Path("/tmp/file.dump"))
         result = RestoreResult(executed=False, dry_run=True, message="ok")
         with (
-            patch(f"{_ORCH}._resolve_restore_source") as resolver,
             patch(
-                f"{_ORCH}._execute_restore_for_resolved_source", return_value=result
+                "quickscale_core.dr_engine._restore._resolve_restore_source"
+            ) as resolver,
+            patch(
+                "quickscale_core.dr_engine._restore._execute_restore_for_resolved_source",
+                return_value=result,
             ) as execute,
         ):
             resolver.return_value.__enter__.return_value = source
             resolver.return_value.__exit__.return_value = None
             assert (
-                orch.restore_backup_source(
+                _restore.restore_backup_source(
                     file_path="/tmp/file.dump",
                     confirmation="file.dump",
                     dry_run=True,
@@ -308,14 +331,17 @@ class TestRestoreResolutionAndGuards:
         source = _source(Path("/tmp/file.dump"))
         result = RestoreResult(executed=False, dry_run=True, message="ok")
         with (
-            patch(f"{_ORCH}._resolve_restore_source") as resolver,
             patch(
-                f"{_ORCH}._execute_restore_for_resolved_source", return_value=result
+                "quickscale_core.dr_engine._restore._resolve_restore_source"
+            ) as resolver,
+            patch(
+                "quickscale_core.dr_engine._restore._execute_restore_for_resolved_source",
+                return_value=result,
             ) as execute,
         ):
             resolver.return_value.__enter__.return_value = source
             resolver.return_value.__exit__.return_value = None
-            orch.restore_backup_source(
+            _restore.restore_backup_source(
                 file_path="/tmp/file.dump",
                 confirmation="file.dump",
                 dry_run=True,
@@ -328,9 +354,12 @@ class TestRestoreResolutionAndGuards:
     def test_restore_backup_artifact_is_thin_source_wrapper(self) -> None:
         artifact = _artifact()
         result = RestoreResult(executed=False, dry_run=True, message="ok")
-        with patch(f"{_ORCH}.restore_backup_source", return_value=result) as restore:
+        with patch(
+            "quickscale_core.dr_engine._restore.restore_backup_source",
+            return_value=result,
+        ) as restore:
             assert (
-                orch.restore_backup_artifact(artifact, confirmation="trusted.dump")
+                _restore.restore_backup_artifact(artifact, confirmation="trusted.dump")
                 is result
             )
         assert restore.call_args.kwargs["artifact"] is artifact
@@ -344,7 +373,7 @@ class TestAdminUploadStaging:
         uploaded = SimpleNamespace(
             chunks=lambda: [b"one", bytearray(b"two")], read=MagicMock()
         )
-        assert list(orch._iter_admin_restore_upload_chunks(uploaded)) == [
+        assert list(_restore._iter_admin_restore_upload_chunks(uploaded)) == [
             b"one",
             b"two",
         ]
@@ -354,7 +383,9 @@ class TestAdminUploadStaging:
         uploaded = SimpleNamespace(
             chunks=lambda: [], read=MagicMock(return_value="payload")
         )
-        assert list(orch._iter_admin_restore_upload_chunks(uploaded)) == [b"payload"]
+        assert list(_restore._iter_admin_restore_upload_chunks(uploaded)) == [
+            b"payload"
+        ]
 
     @pytest.mark.parametrize(
         "uploaded",
@@ -364,7 +395,7 @@ class TestAdminUploadStaging:
         self, uploaded: object
     ) -> None:
         with pytest.raises(BackupError, match="readable|bytes"):
-            list(orch._iter_admin_restore_upload_chunks(uploaded))
+            list(_restore._iter_admin_restore_upload_chunks(uploaded))
 
     def test_stage_upload_sanitizes_name_and_returns_deterministic_fingerprint(
         self, tmp_path: Path
@@ -372,7 +403,9 @@ class TestAdminUploadStaging:
         uploaded = SimpleNamespace(
             name="../../unsafe.dump", chunks=lambda: [b"ab", b"cd"]
         )
-        staged = orch._stage_admin_restore_upload(uploaded, staging_directory=tmp_path)
+        staged = _restore._stage_admin_restore_upload(
+            uploaded, staging_directory=tmp_path
+        )
         assert staged.local_path == tmp_path / "unsafe.dump"
         assert staged.local_path.read_bytes() == b"abcd"
         assert staged.size_bytes == 4
@@ -382,7 +415,7 @@ class TestAdminUploadStaging:
 
     def test_stage_upload_rejects_empty_payload(self, tmp_path: Path) -> None:
         with pytest.raises(BackupRestoreBlocked, match="empty"):
-            orch._stage_admin_restore_upload(
+            _restore._stage_admin_restore_upload(
                 SimpleNamespace(name="empty.dump", chunks=lambda: [b"", b""]),
                 staging_directory=tmp_path,
             )
@@ -392,10 +425,10 @@ class TestAdminUploadStaging:
     ) -> None:
         directory = tmp_path / "stage"
         directory.mkdir()
-        assert orch._cleanup_admin_restore_upload_directory(directory) is None
-        assert orch._cleanup_admin_restore_upload_directory(directory) is None
+        assert _restore._cleanup_admin_restore_upload_directory(directory) is None
+        assert _restore._cleanup_admin_restore_upload_directory(directory) is None
         with patch("shutil.rmtree", side_effect=OSError("busy")):
-            assert orch._cleanup_admin_restore_upload_directory(directory) == "busy"
+            assert _restore._cleanup_admin_restore_upload_directory(directory) == "busy"
 
     def test_admin_artifact_resolution_and_metadata_delegate_to_persistence(
         self,
@@ -404,20 +437,21 @@ class TestAdminUploadStaging:
         warning = RestoreWarning(code="w", message="warning")
         with (
             patch(
-                f"{_ORCH}.resolve_admin_uploaded_restore_artifact",
+                "quickscale_core.dr_engine.persistence.resolve_admin_uploaded_restore_artifact",
                 return_value=artifact,
             ) as resolve,
             patch(
-                f"{_ORCH}.update_artifact_after_restore", return_value=(warning,)
+                "quickscale_core.dr_engine.persistence.update_artifact_after_restore",
+                return_value=(warning,),
             ) as persist,
         ):
             assert (
-                orch._resolve_admin_uploaded_restore_artifact(
+                _restore._resolve_admin_uploaded_restore_artifact(
                     checksum_sha256="sum", size_bytes=4
                 )
                 is artifact
             )
-            assert orch._persist_restore_artifact_metadata(
+            assert _restore._persist_restore_artifact_metadata(
                 artifact, restored_at=_NOW
             ) == (warning,)
         resolve.assert_called_once_with(checksum_sha256="sum", size_bytes=4)
@@ -441,23 +475,28 @@ class TestAdminUploadRestore:
         stage_dir = tmp_path / "stage"
         ordered = MagicMock()
         with (
-            patch(f"{_ORCH}.mkdtemp", return_value=str(stage_dir)),
-            patch(f"{_ORCH}._stage_admin_restore_upload", return_value=staged),
+            patch("tempfile.mkdtemp", return_value=str(stage_dir)),
             patch(
-                f"{_ORCH}._resolve_admin_uploaded_restore_artifact",
+                "quickscale_core.dr_engine._restore._stage_admin_restore_upload",
+                return_value=staged,
+            ),
+            patch(
+                "quickscale_core.dr_engine._restore._resolve_admin_uploaded_restore_artifact",
                 return_value=artifact,
             ),
             patch(
-                f"{_ORCH}._execute_restore_for_resolved_source", return_value=result
+                "quickscale_core.dr_engine._restore._execute_restore_for_resolved_source",
+                return_value=result,
             ) as execute,
             patch(
-                f"{_ORCH}._cleanup_admin_restore_upload_directory", return_value=None
+                "quickscale_core.dr_engine._restore._cleanup_admin_restore_upload_directory",
+                return_value=None,
             ) as cleanup,
         ):
             ordered.attach_mock(execute, "execute")
             ordered.attach_mock(cleanup, "cleanup")
             assert (
-                orch.restore_admin_uploaded_backup(
+                _restore.restore_admin_uploaded_backup(
                     SimpleNamespace(), confirmation="canonical.dump", dry_run=True
                 )
                 is result
@@ -478,19 +517,23 @@ class TestAdminUploadRestore:
         staged = self._staged(tmp_path)
         expected = "stale" if minutes_old else "currently being"
         with (
-            patch(f"{_ORCH}.mkdtemp", return_value=str(tmp_path / "stage")),
-            patch(f"{_ORCH}._stage_admin_restore_upload", return_value=staged),
+            patch("tempfile.mkdtemp", return_value=str(tmp_path / "stage")),
             patch(
-                f"{_ORCH}._resolve_admin_uploaded_restore_artifact",
+                "quickscale_core.dr_engine._restore._stage_admin_restore_upload",
+                return_value=staged,
+            ),
+            patch(
+                "quickscale_core.dr_engine._restore._resolve_admin_uploaded_restore_artifact",
                 return_value=artifact,
             ),
-            patch(f"{_ORCH}.django_timezone.now", return_value=_NOW),
+            patch("django.utils.timezone.now", return_value=_NOW),
             patch(
-                f"{_ORCH}._cleanup_admin_restore_upload_directory", return_value=None
+                "quickscale_core.dr_engine._restore._cleanup_admin_restore_upload_directory",
+                return_value=None,
             ) as cleanup,
         ):
             with pytest.raises(BackupRestoreBlocked, match=expected):
-                orch.restore_admin_uploaded_backup(
+                _restore.restore_admin_uploaded_backup(
                     SimpleNamespace(), confirmation="canonical.dump"
                 )
         cleanup.assert_called_once()
@@ -500,24 +543,28 @@ class TestAdminUploadRestore:
         artifact = _artifact()
         ordered = MagicMock()
         with (
-            patch(f"{_ORCH}.mkdtemp", return_value=str(tmp_path / "stage")),
-            patch(f"{_ORCH}._stage_admin_restore_upload", return_value=staged),
+            patch("tempfile.mkdtemp", return_value=str(tmp_path / "stage")),
             patch(
-                f"{_ORCH}._resolve_admin_uploaded_restore_artifact",
+                "quickscale_core.dr_engine._restore._stage_admin_restore_upload",
+                return_value=staged,
+            ),
+            patch(
+                "quickscale_core.dr_engine._restore._resolve_admin_uploaded_restore_artifact",
                 return_value=artifact,
             ),
             patch(
-                f"{_ORCH}._execute_restore_for_resolved_source",
+                "quickscale_core.dr_engine._restore._execute_restore_for_resolved_source",
                 side_effect=BackupError("blocked"),
             ) as execute,
             patch(
-                f"{_ORCH}._cleanup_admin_restore_upload_directory", return_value=None
+                "quickscale_core.dr_engine._restore._cleanup_admin_restore_upload_directory",
+                return_value=None,
             ) as cleanup,
         ):
             ordered.attach_mock(execute, "execute")
             ordered.attach_mock(cleanup, "cleanup")
             with pytest.raises(BackupError, match="blocked"):
-                orch.restore_admin_uploaded_backup(
+                _restore.restore_admin_uploaded_backup(
                     SimpleNamespace(), confirmation="trusted.dump"
                 )
         cleanup.assert_called_once()
@@ -530,19 +577,25 @@ class TestAdminUploadRestore:
         artifact = _artifact()
         result = RestoreResult(executed=True, dry_run=False, message="done")
         with (
-            patch(f"{_ORCH}.mkdtemp", return_value=str(tmp_path / "stage")),
-            patch(f"{_ORCH}._stage_admin_restore_upload", return_value=staged),
+            patch("tempfile.mkdtemp", return_value=str(tmp_path / "stage")),
             patch(
-                f"{_ORCH}._resolve_admin_uploaded_restore_artifact",
+                "quickscale_core.dr_engine._restore._stage_admin_restore_upload",
+                return_value=staged,
+            ),
+            patch(
+                "quickscale_core.dr_engine._restore._resolve_admin_uploaded_restore_artifact",
                 return_value=artifact,
             ),
-            patch(f"{_ORCH}._execute_restore_for_resolved_source", return_value=result),
             patch(
-                f"{_ORCH}._cleanup_admin_restore_upload_directory",
+                "quickscale_core.dr_engine._restore._execute_restore_for_resolved_source",
+                return_value=result,
+            ),
+            patch(
+                "quickscale_core.dr_engine._restore._cleanup_admin_restore_upload_directory",
                 return_value="permission denied",
             ),
         ):
-            returned = orch.restore_admin_uploaded_backup(
+            returned = _restore.restore_admin_uploaded_backup(
                 SimpleNamespace(), confirmation="trusted.dump"
             )
         assert returned.warnings[0].code == "admin_restore_upload_cleanup_failed"

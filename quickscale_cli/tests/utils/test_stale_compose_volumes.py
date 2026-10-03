@@ -256,31 +256,34 @@ class TestApplyStaleVolumePreflight:
     """`quickscale apply` refuses to start a new project on an old database."""
 
     def _patch_apply(self, monkeypatch, stale, removed=None, failed=None):
-        module = "quickscale_cli.commands.apply_command"
         # The suite-wide destructive-confirm bypass would skip the prompt.
-        monkeypatch.setattr(f"{module}._AF5_DESTRUCTIVE_CONFIRM_BYPASS", False)
-        monkeypatch.setattr(f"{module}.find_stale_project_volumes", lambda path: stale)
+        monkeypatch.setattr(
+            "quickscale_cli.commands._types._AF5_DESTRUCTIVE_CONFIRM_BYPASS", False
+        )
+        monkeypatch.setattr(
+            "quickscale_cli.utils.docker_utils.find_stale_project_volumes",
+            lambda path: stale,
+        )
         self.compose_down_calls = []
         monkeypatch.setattr(
-            f"{module}.compose_down",
+            "quickscale_cli.utils.docker_utils.compose_down",
             lambda path: self.compose_down_calls.append(path) or True,
         )
         monkeypatch.setattr(
-            f"{module}.remove_volumes",
+            "quickscale_cli.utils.docker_utils.remove_volumes",
             lambda names: (removed if removed is not None else names, failed or []),
         )
-        return module
 
     def test_bypass_mode_warns_without_prompting(self, tmp_path, monkeypatch, capsys):
         """Non-interactive test mode reports the leftovers but never deletes."""
         import click
 
-        from quickscale_cli.commands.apply_command import (
-            _preflight_stale_docker_volumes,
-        )
+        from quickscale_cli.commands._runtime import _preflight_stale_docker_volumes
 
-        module = self._patch_apply(monkeypatch, ["test87_postgres_data"])
-        monkeypatch.setattr(f"{module}._AF5_DESTRUCTIVE_CONFIRM_BYPASS", True)
+        self._patch_apply(monkeypatch, ["test87_postgres_data"])
+        monkeypatch.setattr(
+            "quickscale_cli.commands._types._AF5_DESTRUCTIVE_CONFIRM_BYPASS", True
+        )
 
         def _no_prompt(*args, **kwargs):  # pragma: no cover - must not be called
             raise AssertionError("bypass mode must not prompt")
@@ -291,9 +294,7 @@ class TestApplyStaleVolumePreflight:
         assert "Leftover Docker volumes" in capsys.readouterr().out
 
     def test_clean_machine_passes_silently(self, tmp_path, monkeypatch, capsys):
-        from quickscale_cli.commands.apply_command import (
-            _preflight_stale_docker_volumes,
-        )
+        from quickscale_cli.commands._runtime import _preflight_stale_docker_volumes
 
         self._patch_apply(monkeypatch, [])
         assert _preflight_stale_docker_volumes(tmp_path) is True
@@ -302,9 +303,7 @@ class TestApplyStaleVolumePreflight:
     def test_removes_volumes_when_confirmed(self, tmp_path, monkeypatch, capsys):
         import click
 
-        from quickscale_cli.commands.apply_command import (
-            _preflight_stale_docker_volumes,
-        )
+        from quickscale_cli.commands._runtime import _preflight_stale_docker_volumes
 
         self._patch_apply(monkeypatch, ["test87_postgres_data"])
         monkeypatch.setattr(click, "confirm", lambda *args, **kwargs: True)
@@ -319,9 +318,7 @@ class TestApplyStaleVolumePreflight:
     ):
         import click
 
-        from quickscale_cli.commands.apply_command import (
-            _preflight_stale_docker_volumes,
-        )
+        from quickscale_cli.commands._runtime import _preflight_stale_docker_volumes
 
         self._patch_apply(monkeypatch, ["test87_postgres_data", "test87_media_volume"])
         monkeypatch.setattr(click, "confirm", lambda *args, **kwargs: False)
@@ -334,9 +331,7 @@ class TestApplyStaleVolumePreflight:
     def test_failed_removal_stops_the_apply(self, tmp_path, monkeypatch, capsys):
         import click
 
-        from quickscale_cli.commands.apply_command import (
-            _preflight_stale_docker_volumes,
-        )
+        from quickscale_cli.commands._runtime import _preflight_stale_docker_volumes
 
         self._patch_apply(
             monkeypatch,
@@ -355,7 +350,7 @@ class TestStaleVolumeCheckScope:
     """Which applies run the stale-volume preflight."""
 
     def _ctx(self, *, had_existing_state: bool, existing_state):
-        from quickscale_cli.commands.apply_command import _should_check_stale_volumes
+        from quickscale_cli.commands._runtime import _should_check_stale_volumes
 
         class _Ctx:
             pass
@@ -386,9 +381,7 @@ class TestComposeDown:
         """`docker compose down` runs first, or removal fails on in-use volumes."""
         import click
 
-        from quickscale_cli.commands.apply_command import (
-            _preflight_stale_docker_volumes,
-        )
+        from quickscale_cli.commands._runtime import _preflight_stale_docker_volumes
 
         helper = TestApplyStaleVolumePreflight()
         helper._patch_apply(monkeypatch, ["test87_postgres_data"])

@@ -151,12 +151,10 @@ def test_org_removal_adapter_returns_only_provider_expired_checkout(
 
     with (
         patch(
-            "quickscale_modules_billing.services."
-            "reconcile_purchase_checkouts_for_removal"
+            "quickscale_modules_billing._removal.reconcile_purchase_checkouts_for_removal"
         ) as reconcile_purchases,
         patch(
-            "quickscale_modules_billing.services."
-            "reconcile_organization_removal_subscription_checkout",
+            "quickscale_modules_billing._subscription_checkout.reconcile_organization_removal_subscription_checkout",
             return_value=result,
         ) as reconcile,
     ):
@@ -181,8 +179,7 @@ def test_account_deletion_adapter_delegates_provider_reconciliation() -> None:
     )
 
     with patch(
-        "quickscale_modules_billing.services."
-        "reconcile_account_deletion_subscription_checkout"
+        "quickscale_modules_billing._subscription_checkout.reconcile_account_deletion_subscription_checkout"
     ) as reconcile:
         result = config.reconcile_account_deletion_provider_state("org-2")
 
@@ -201,7 +198,7 @@ def test_account_deletion_adapter_delegates_purchase_reconciliation() -> None:
     )
 
     with patch(
-        "quickscale_modules_billing.services.reconcile_purchase_checkouts_for_removal"
+        "quickscale_modules_billing._removal.reconcile_purchase_checkouts_for_removal"
     ) as reconcile:
         result = config.reconcile_account_deletion_purchase_provider_state(
             "org-2",
@@ -227,7 +224,7 @@ def test_account_deletion_adapter_delegates_user_reference_detachment() -> None:
     )
 
     with patch(
-        "quickscale_modules_billing.services.detach_account_deletion_user_references",
+        "quickscale_modules_billing._removal.detach_account_deletion_user_references",
         return_value=2,
     ) as detach:
         result = config.detach_account_deletion_user_references(
@@ -250,8 +247,7 @@ def test_account_deletion_adapter_delegates_user_reference_discovery() -> None:
     )
 
     with patch(
-        "quickscale_modules_billing.services."
-        "account_deletion_user_reference_organization_ids",
+        "quickscale_modules_billing._removal.account_deletion_user_reference_organization_ids",
         return_value=["org-1", "org-2"],
     ) as discover:
         result = config.account_deletion_user_reference_organization_ids("user-1")
@@ -309,7 +305,7 @@ def test_account_deletion_adapter_delegates_mutation_lock() -> None:
     )
 
     with patch(
-        "quickscale_modules_billing.services.subscription_provider_mutation_lock",
+        "quickscale_modules_billing._locks.subscription_provider_mutation_lock",
         return_value="lock",
     ) as lock:
         result = config.account_deletion_subscription_mutation_lock("org-1")
@@ -329,7 +325,7 @@ def test_account_deletion_adapter_delegates_cancellation() -> None:
     )
 
     with patch(
-        "quickscale_modules_billing.services.cancel_current_subscription",
+        "quickscale_modules_billing._subscription_mutations.cancel_current_subscription",
         return_value="transition",
     ) as cancel:
         result = config.cancel_account_deletion_subscription("user-1", "org-1")
@@ -346,7 +342,7 @@ def test_app_config_declares_organization_pricing_url_capability() -> None:
     """Rule 4: billing declares the org-creation pricing URL on its config."""
     from quickscale_core.runtime import collect_capabilities
     from quickscale_modules_billing.apps import QuickscaleBillingConfig
-    from quickscale_modules_billing.services import organization_pricing_page_url
+    from quickscale_modules_billing._settings import organization_pricing_page_url
 
     config = QuickscaleBillingConfig(
         "quickscale_modules_billing",
@@ -374,7 +370,7 @@ def test_app_config_declares_no_pricing_url_when_switched_off(settings) -> None:
 
 def test_organization_pricing_page_url_resolves_the_pricing_route() -> None:
     """The published hook answers billing's real flat pricing route."""
-    from quickscale_modules_billing.services import organization_pricing_page_url
+    from quickscale_modules_billing._settings import organization_pricing_page_url
 
     assert organization_pricing_page_url(None) == "/billing/pricing/"
 
@@ -383,7 +379,7 @@ def test_organization_pricing_page_url_resolves_the_pricing_route() -> None:
 def test_organization_pricing_page_url_raises_when_route_is_not_mounted() -> None:
     """Rule 23: an enabled billing that cannot answer raises, never ``None``."""
     from quickscale_modules_billing.exceptions import BillingConfigurationError
-    from quickscale_modules_billing.services import organization_pricing_page_url
+    from quickscale_modules_billing._settings import organization_pricing_page_url
 
     with pytest.raises(BillingConfigurationError, match="pricing route"):
         organization_pricing_page_url(None)
@@ -400,7 +396,7 @@ def test_account_deletion_adapter_delegates_resumption() -> None:
     )
 
     with patch(
-        "quickscale_modules_billing.services.resume_current_subscription",
+        "quickscale_modules_billing._subscription_mutations.resume_current_subscription",
         return_value="subscription",
     ) as resume:
         result = config.resume_account_deletion_subscription(

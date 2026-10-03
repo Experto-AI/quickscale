@@ -205,11 +205,11 @@ validated resources; preserve the runners' exact-scope cleanup contracts.
 
 ### Registered script-gate and isolation execution
 
-The registry-derived local and hosted conformance flow includes sixteen registered hosted
+The registry-derived local and hosted conformance flow includes seventeen registered hosted
 gates, including the CSRF-exempt contract, behavioural-commit testimony, generated-project
 contract-vintage coupling, blocking Trivy dependency-vulnerability, Bandit static-security,
-zizmor workflow-security, gitleaks secret-scanning, and module-conventions rule 40 conformance
-gates. `make check-gate-suites` is the owning execution context for all current
+zizmor workflow-security, gitleaks secret-scanning, module-conventions rule 40 conformance, and
+split-facade import gates. `make check-gate-suites` is the owning execution context for all current
 `scripts/test_*.py` suites and invokes exactly:
 
 ```text
@@ -218,7 +218,7 @@ $(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
 
 The scripts directory remains outside `.coveragerc`; the product coverage source list
 and `fail_under = 90` are unchanged. The hosted CI job set also contains seven
-separately justified unowned jobs, for twenty-three jobs total. Sixteen registered gates run
+separately justified unowned jobs, for twenty-four jobs total. Seventeen registered gates run
 locally across stages 3–7. `isolation-conformance`
 and the reusable `bypassrls` suite are hosted-unowned jobs: Make exposes both runners for local verification,
 but local execution uses the owned PostgreSQL 18 lifecycle described by

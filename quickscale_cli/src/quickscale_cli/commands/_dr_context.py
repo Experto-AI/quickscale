@@ -13,7 +13,12 @@ import click
 
 from quickscale_core.utils.project_identity import ProjectIdentity
 from quickscale_core.utils.theme_validation import ThemeValidationError
-import quickscale_cli.commands.dr_commands as _dr_commands
+
+import quickscale_cli.commands.development_commands as _development_commands
+import quickscale_core.utils.project_identity as _project_identity
+import quickscale_cli.utils._railway_project as _railway_project
+import quickscale_core.utils.theme_validation as _theme_validation
+import pathlib as _pathlib
 
 
 @dataclass(frozen=True)
@@ -80,12 +85,12 @@ _ROUTE_CHOICE = click.Choice(tuple(_DR_ROUTES), case_sensitive=True)
 
 
 def _resolve_route(route: str) -> DrRouteSpec:
-    return _dr_commands._DR_ROUTES[route]
+    return _DR_ROUTES[route]
 
 
 def _resolve_project_identity() -> ProjectIdentity:
     try:
-        return _dr_commands.resolve_project_identity(_dr_commands.Path.cwd())
+        return _project_identity.resolve_project_identity(_pathlib.Path.cwd())
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -114,7 +119,7 @@ def _fetch_railway_runtime_variables(
     role: str,
 ) -> dict[str, str]:
     try:
-        variables = _dr_commands.get_railway_variables(
+        variables = _railway_project.get_railway_variables(
             service=service,
             environment=railway_environment,
         )
@@ -146,7 +151,7 @@ def _build_context(
 ) -> DisasterRecoveryContext:
     # Run read-only theme preflight before any validation or probe.
     try:
-        _dr_commands.validate_theme_preflight(_dr_commands.Path.cwd())
+        _theme_validation.validate_theme_preflight(_pathlib.Path.cwd())
     except ThemeValidationError as exc:
         raise click.ClickException(
             "Theme validation failed for DR command:\n"
@@ -156,20 +161,20 @@ def _build_context(
             "configuration files before running DR commands."
         ) from exc
 
-    _dr_commands._validate_project_and_docker()
-    route = _dr_commands._resolve_route(route_label)
-    _dr_commands._validate_route_services(
+    _development_commands._validate_project_and_docker()
+    route = _resolve_route(route_label)
+    _validate_route_services(
         route,
         source_service=source_service,
         target_service=target_service,
         include_target=include_target,
     )
-    identity = _dr_commands._resolve_project_identity()
+    identity = _resolve_project_identity()
 
     source_runtime_variables: dict[str, str] = {}
     if route.source_requires_service():
         assert source_service is not None  # noqa: S101 - internal invariant guaranteed by the caller
-        source_runtime_variables = _dr_commands._fetch_railway_runtime_variables(
+        source_runtime_variables = _fetch_railway_runtime_variables(
             service=source_service,
             railway_environment=source_railway_environment,
             role="source",
@@ -178,7 +183,7 @@ def _build_context(
     target_runtime_variables: dict[str, str] = {}
     if include_target and route.target_requires_service():
         assert target_service is not None  # noqa: S101 - internal invariant guaranteed by the caller
-        target_runtime_variables = _dr_commands._fetch_railway_runtime_variables(
+        target_runtime_variables = _fetch_railway_runtime_variables(
             service=target_service,
             railway_environment=target_railway_environment,
             role="target",

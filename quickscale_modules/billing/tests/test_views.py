@@ -20,14 +20,14 @@ from quickscale_modules_billing.models import (
     Plan,
     Subscription,
 )
-from quickscale_modules_billing.services import (
+from quickscale_modules_billing.exceptions import (
     BillingConfigurationError,
     BillingDisabledError,
     BillingValidationError,
     BillingWebhookError,
     BillingWebhookSignatureError,
-    StripeWebhookResult,
 )
+from quickscale_modules_billing._settings import StripeWebhookResult
 from quickscale_modules_billing.views import (
     BillingPortalReturnView,
     CreateCheckoutSessionView,
@@ -1328,7 +1328,9 @@ def test_cancel_subscription_view_preserves_concurrent_provider_replacement(
     mock_org_resolution,
 ) -> None:
     """The default view path fails loud instead of writing A over newer B."""
-    from quickscale_modules_billing.services import cancel_current_subscription
+    from quickscale_modules_billing._subscription_mutations import (
+        cancel_current_subscription,
+    )
 
     plan = _create_recurring_plan(price_id="price_view_cancel_identity")
     subscription = Subscription.all_objects.create(

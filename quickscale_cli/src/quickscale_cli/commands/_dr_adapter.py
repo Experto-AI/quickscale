@@ -14,7 +14,8 @@ from typing import Any
 import click
 
 from quickscale_cli.commands._dr_context import DisasterRecoveryContext
-import quickscale_cli.commands.dr_commands as _dr_commands
+
+import quickscale_cli.utils.project_manager as _project_manager
 
 
 def _call_adapter(
@@ -33,7 +34,7 @@ def _call_adapter(
         "docker",
         "exec",
         "-i",
-        _dr_commands.get_backend_container_name(),
+        _project_manager.get_backend_container_name(),
         "python",
         "manage.py",
         "quickscale_backups_dr_adapter_call",
@@ -70,7 +71,7 @@ def _fetch_snapshot_report(
     snapshot_id: str,
     sidecar_payloads: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    return _dr_commands._call_adapter(
+    return _call_adapter(
         "fetch_snapshot_report",
         snapshot_id=snapshot_id,
         sidecar_payloads=list(sidecar_payloads),
@@ -82,7 +83,7 @@ def _capture_snapshot_report(
     *,
     resume_snapshot_id: str | None = None,
 ) -> dict[str, Any]:
-    return _dr_commands._call_adapter(
+    return _call_adapter(
         "capture_snapshot",
         trigger="manual",
         resume_snapshot_id=resume_snapshot_id,
@@ -97,7 +98,7 @@ def _record_verification(
     status: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    return _dr_commands._call_adapter(
+    return _call_adapter(
         "record_verification",
         snapshot_id=snapshot_id,
         route=context.route.label,
@@ -114,7 +115,7 @@ def _set_rollback_pin(
     hours: int,
     reason: str,
 ) -> dict[str, Any]:
-    return _dr_commands._call_adapter(
+    return _call_adapter(
         "set_rollback_pin",
         snapshot_id=snapshot_id,
         hours=hours,
@@ -131,7 +132,7 @@ def _run_media_sync(
     """Run media sync via the adapter, carrying route kind for Railway-target guard."""
     target_settings = dict(context.target_runtime_variables)
     target_settings["ROUTE_KIND"] = context.route.target_kind
-    return _dr_commands._call_adapter(
+    return _call_adapter(
         "sync_media",
         snapshot_id=snapshot_id,
         dry_run=dry_run,
@@ -143,7 +144,7 @@ def _build_database_plan(
     context: DisasterRecoveryContext,
     snapshot_report: dict[str, Any],
 ) -> dict[str, Any]:
-    return _dr_commands._call_adapter(
+    return _call_adapter(
         "build_database_plan",
         snapshot_report=snapshot_report,
     )
@@ -154,7 +155,7 @@ def _execute_database_restore(
     snapshot_report: dict[str, Any],
 ) -> dict[str, Any]:
     allow_production = context.route.target_environment == "railway-production"
-    return _dr_commands._call_adapter(
+    return _call_adapter(
         "execute_database_restore",
         snapshot_report=snapshot_report,
         allow_production=allow_production,
@@ -168,7 +169,7 @@ def _load_source_live_variables(context: DisasterRecoveryContext) -> dict[str, s
     docker_command = [
         "docker",
         "exec",
-        _dr_commands.get_backend_container_name(),
+        _project_manager.get_backend_container_name(),
         "env",
     ]
     result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled

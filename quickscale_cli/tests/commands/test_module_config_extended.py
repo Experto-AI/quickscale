@@ -4,6 +4,10 @@ Covers CRM, listings apply, auth apply, and edge cases.
 """
 
 import tomllib
+import quickscale_cli.utils._dependency_io as _dependency_io
+import quickscale_cli.utils._dependency_write as _dependency_write
+import quickscale_core.manifest.loader as _loader
+import quickscale_cli.utils._dependency_sync_ops as _dependency_sync_ops
 from pathlib import Path
 from unittest.mock import patch
 
@@ -32,21 +36,22 @@ from quickscale_core.contracts.module_options import (
     STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
 )
-from quickscale_cli.utils import module_dependency_sync
-from quickscale_cli.utils.module_dependency_sync import sync_project_module_dependencies
-from quickscale_cli.utils.module_dependency_sync import (
+from quickscale_cli.utils._dependency_sync_ops import sync_project_module_dependencies
+from quickscale_cli.utils._dependency_io import (
     DependencySyncError,
     ProjectDependencySyncResult,
-    _append_dependency_entries,
     _extract_dependency_name,
-    _extract_version_tuple,
     _load_poetry_dependencies,
     _load_project_name,
     _load_toml_file,
+    resolve_embedded_module_install_path,
+)
+from quickscale_cli.utils._dependency_write import (
+    _append_dependency_entries,
+    _extract_version_tuple,
     _prefer_dependency_value,
     _render_toml_literal,
     _update_dependency_entries,
-    resolve_embedded_module_install_path,
 )
 from quickscale_core.module_wiring import collect_wiring
 
@@ -406,7 +411,7 @@ class TestSharedModuleDependencySyncHelpers:
         pyproject.write_text(original)
 
         with patch(
-            "quickscale_cli.utils.module_dependency_sync.tomllib.loads",
+            "tomllib.loads",
             side_effect=tomllib.TOMLDecodeError("bad toml", original, 0),
         ):
             with pytest.raises(
@@ -454,7 +459,7 @@ class TestUnpublishedCoreWheelhouseRegression:
         """Without any wheelhouse the manifest range is used (published path)."""
         monkeypatch.delenv("QUICKSCALE_LOCAL_WHEELHOUSE", raising=False)
         monkeypatch.setattr(
-            "quickscale_cli.utils.module_dependency_sync.sys.prefix",
+            "sys.prefix",
             str(tmp_path / "no-wheelhouse"),
         )
         project = _make_project(tmp_path)
@@ -477,7 +482,7 @@ class TestUnpublishedCoreWheelhouseRegression:
         wheelhouse.mkdir(parents=True)
         (wheelhouse / "quickscale_core-0.87.0-py3-none-any.whl").write_bytes(b"wheel")
         monkeypatch.setattr(
-            "quickscale_cli.utils.module_dependency_sync.sys.prefix",
+            "sys.prefix",
             str(install_prefix),
         )
 
@@ -517,7 +522,7 @@ class TestUnpublishedCoreWheelhouseRegression:
 
         monkeypatch.setenv("QUICKSCALE_LOCAL_WHEELHOUSE", str(env_wheelhouse))
         monkeypatch.setattr(
-            "quickscale_cli.utils.module_dependency_sync.sys.prefix",
+            "sys.prefix",
             str(install_prefix),
         )
 
@@ -644,7 +649,7 @@ class TestUnpublishedCoreWheelhouseRegression:
         self._write_backups(project)
 
         with patch(
-            "quickscale_cli.utils.module_dependency_sync._resolve_wheelhouse_dir",
+            "quickscale_cli.utils._dependency_io._resolve_wheelhouse_dir",
             return_value=wheelhouse,
         ) as resolve_wheelhouse:
             sync_project_module_dependencies(project, {"backups": {}})
@@ -2422,9 +2427,9 @@ class TestFacadePatchTargets:
         """Patching the facade wheelhouse resolver reaches dependency sync."""
         (tmp_path / "pyproject.toml").write_text("[tool.poetry.dependencies]\n")
         with patch.object(
-            module_dependency_sync, "_resolve_wheelhouse_dir", return_value=None
+            _dependency_io, "_resolve_wheelhouse_dir", return_value=None
         ) as resolver:
-            result = module_dependency_sync.sync_project_module_dependencies(
+            result = _dependency_sync_ops.sync_project_module_dependencies(
                 tmp_path, {"auth": {}}
             )
 
@@ -2432,12 +2437,10 @@ class TestFacadePatchTargets:
         assert result.changed is False
 
     def test_patched_tomllib_flows_through_validated_write(self, tmp_path) -> None:
-        """Patching the facade tomllib binding reaches TOML validation."""
+        """Patching the shared tomllib binding reaches TOML validation."""
         target = tmp_path / "out.toml"
-        with patch.object(
-            module_dependency_sync.tomllib, "loads", return_value={}
-        ) as loads:
-            module_dependency_sync._write_validated_toml(target, "key = 1")
+        with patch("tomllib.loads", return_value={}) as loads:
+            _dependency_write._write_validated_toml(target, "key = 1")
 
         loads.assert_called_once_with("key = 1")
         assert target.read_text() == "key = 1"
@@ -2445,11 +2448,11 @@ class TestFacadePatchTargets:
     def test_patched_sys_prefix_flows_through_wheelhouse_resolver(
         self, tmp_path, monkeypatch
     ) -> None:
-        """Patching the facade sys binding reaches wheelhouse resolution."""
+        """Patching the shared sys prefix reaches wheelhouse resolution."""
         monkeypatch.delenv("QUICKSCALE_LOCAL_WHEELHOUSE", raising=False)
         (tmp_path / "quickscale_wheels").mkdir()
-        with patch.object(module_dependency_sync.sys, "prefix", str(tmp_path)):
-            resolved = module_dependency_sync._resolve_wheelhouse_dir()
+        with patch("sys.prefix", str(tmp_path)):
+            resolved = _dependency_io._resolve_wheelhouse_dir()
 
         assert resolved == tmp_path / "quickscale_wheels"
 
@@ -2457,14 +2460,10 @@ class TestFacadePatchTargets:
         """Patching the facade entry writer reaches the sync entry point."""
         (tmp_path / "pyproject.toml").write_text("[tool.poetry.dependencies]\n")
         with (
-            patch.object(
-                module_dependency_sync, "_resolve_wheelhouse_dir", return_value=None
-            ),
-            patch.object(
-                module_dependency_sync, "_append_dependency_entries"
-            ) as appender,
+            patch.object(_dependency_io, "_resolve_wheelhouse_dir", return_value=None),
+            patch.object(_dependency_write, "_append_dependency_entries") as appender,
         ):
-            result = module_dependency_sync.sync_project_module_dependencies(
+            result = _dependency_sync_ops.sync_project_module_dependencies(
                 tmp_path, {"auth": {}}
             )
 
@@ -2485,10 +2484,8 @@ class TestFacadePatchTargets:
             'quickscale-core = { path = "../../missing", develop = true }\n'
         )
         with patch.object(
-            module_dependency_sync, "get_manifest_for_module", return_value=None
+            _loader, "get_manifest_for_module", return_value=None
         ) as loader:
-            module_dependency_sync._patch_module_path_dependencies(
-                tmp_path, {"auth": {}}
-            )
+            _dependency_write._patch_module_path_dependencies(tmp_path, {"auth": {}})
 
         loader.assert_called_once_with(tmp_path, "auth", strict=True)

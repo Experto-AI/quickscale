@@ -102,9 +102,7 @@ def pin_generated_project_core(local_core_wheelhouse: Path):
     or install a generated project directly must apply the same local-artifact
     pin themselves.
     """
-    from quickscale_cli.utils.module_dependency_sync import (
-        sync_project_core_dependency,
-    )
+    from quickscale_cli.utils._dependency_sync_ops import sync_project_core_dependency
 
     def _pin(project_path: Path) -> None:
         assert sync_project_core_dependency(project_path, local_core_wheelhouse), (

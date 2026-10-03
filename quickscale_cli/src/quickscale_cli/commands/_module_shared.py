@@ -11,8 +11,17 @@ from typing import Any, Literal
 
 import click
 
-import quickscale_cli.commands.module_commands as _module_commands
 
+import quickscale_cli.utils.auth_migration as _auth_migration
+import quickscale_cli.utils._dependency_io as _dependency_io
+import quickscale_core.manifest.loader as _loader
+import quickscale_core.config as _config
+import quickscale_core.schema.state_schema as _state_schema
+import quickscale_core.project_state_manager as _project_state_manager
+import quickscale_core.project_state_drift as _project_state_drift
+import quickscale_core.contracts.module_catalog as _module_catalog
+import quickscale_core.utils.git_repo as _git_repo
+import datetime as _datetime
 
 ModuleExecutionMode = Literal["standalone", "apply"]
 
@@ -95,12 +104,12 @@ def _validate_git_environment() -> bool:
     Returns:
         True if valid, False otherwise
     """
-    if not _module_commands.is_git_repo():
+    if not _git_repo.is_git_repo():
         click.secho("❌ Error: Not a git repository", fg="red", err=True)
         click.echo("\n💡 Tip: Run 'git init' to initialize a git repository", err=True)
         return False
 
-    if not _module_commands.is_working_directory_clean():
+    if not _git_repo.is_working_directory_clean():
         click.secho(
             "❌ Error: Working directory has uncommitted changes",
             fg="red",
@@ -141,7 +150,7 @@ def _validate_remote_branch(remote: str, branch: str, module: str) -> bool:
     private helper, so keep its historical diagnostic behavior isolated here.
     """
     click.echo(f"🔍 Checking if {branch} exists on remote...")
-    if not _module_commands.check_remote_branch_exists(remote, branch):
+    if not _git_repo.check_remote_branch_exists(remote, branch):
         click.secho(
             f"❌ Error: Module '{module}' is not yet implemented",
             fg="red",
@@ -165,7 +174,7 @@ def _check_auth_module_migrations(
     Returns:
         True if safe to proceed, False if blocked
     """
-    assessment = _module_commands.assess_auth_migration_state(project_path)
+    assessment = _auth_migration.assess_auth_migration_state(project_path)
     if assessment.compatible:
         return True
 
@@ -185,7 +194,7 @@ def _check_auth_module_migrations(
             "contenttypes migrations, a destructive reset may still be required."
         )
         click.echo("")
-        click.echo(_module_commands.format_auth_migration_remediation(project_path))
+        click.echo(_auth_migration.format_auth_migration_remediation(project_path))
         return True
 
     click.secho(
@@ -199,7 +208,7 @@ def _check_auth_module_migrations(
         "incompatible baseline migrations."
     )
     click.echo("")
-    click.echo(_module_commands.format_auth_migration_remediation(project_path))
+    click.echo(_auth_migration.format_auth_migration_remediation(project_path))
 
     if non_interactive:
         click.secho(
@@ -225,9 +234,7 @@ def _resolve_embedded_module_install_path(
     module: str,
 ) -> Path | None:
     """Return the installable package path for an embedded module, if any."""
-    return _module_commands._resolve_install_path_from_dependency_sync(
-        project_path, module
-    )
+    return _dependency_io.resolve_embedded_module_install_path(project_path, module)
 
 
 def _read_embedded_module_version(project_path: Path, module: str) -> str:
@@ -238,12 +245,10 @@ def _read_embedded_module_version(project_path: Path, module: str) -> str:
         ModuleVersionMismatchError: If the manifest version is older than the
             current core version.
     """
-    manifest = _module_commands.get_manifest_for_module(
-        project_path, module, strict=True
-    )
+    manifest = _loader.get_manifest_for_module(project_path, module, strict=True)
     assert manifest is not None  # noqa: S101 - internal invariant guaranteed by the caller
-    _module_commands.assert_manifest_version_matches_core(manifest.version, module)
-    normalized = _module_commands.normalize_installed_version(manifest.version)
+    _loader.assert_manifest_version_matches_core(manifest.version, module)
+    normalized = _config.normalize_installed_version(manifest.version)
     return normalized or manifest.version
 
 
@@ -264,7 +269,7 @@ def _sync_state_module_version(
     modules absent from state are silently skipped (callers should ensure
     state is materialized first).
     """
-    state_manager = _module_commands.StateManager(project_path)
+    state_manager = _state_schema.StateManager(project_path)
     state = state_manager.load()
     if state is None or module not in state.modules:
         return
@@ -272,7 +277,7 @@ def _sync_state_module_version(
     state.modules[module].version = version
     if commit_sha is not None:
         state.modules[module].commit_sha = commit_sha
-    state.modules[module].embedded_at = _module_commands.datetime.now().isoformat()
+    state.modules[module].embedded_at = _datetime.datetime.now().isoformat()
     state_manager.save(state)
 
 
@@ -287,17 +292,17 @@ def _warn_version_drift_for_update(
     are informational. They signal that an external process changed
     ``config.yml`` after the last apply.
     """
-    manager = _module_commands.ProjectStateManager(project_path)
+    manager = _project_state_manager.ProjectStateManager(project_path)
     try:
         state = manager.load_state()
-    except _module_commands.StateError as error:
+    except _state_schema.StateError as error:
         click.secho(
             f"⚠️  Could not read .quickscale/state.yml for drift check: {error}",
             fg="yellow",
         )
         return []
 
-    drift = _module_commands.check_version_drift(state, config)
+    drift = _project_state_drift.check_version_drift(state, config)
     if not drift:
         return []
 
@@ -322,7 +327,7 @@ def _validate_module_readiness(
     execution_mode: ModuleExecutionMode = STANDALONE_MODULE_EXECUTION_MODE,
 ) -> bool:
     """Reject non-public modules from standalone embed/update flows."""
-    readiness_reason = _module_commands.get_module_readiness_reason(module)
+    readiness_reason = _module_catalog.get_module_readiness_reason(module)
     if readiness_reason is None:
         return True
 
@@ -341,12 +346,12 @@ def _validate_update_environment() -> None:
     Raises:
         click.Abort: If validation fails
     """
-    if not _module_commands.is_git_repo():
+    if not _git_repo.is_git_repo():
         click.secho("❌ Error: Not a git repository", fg="red", err=True)
         click.echo("\n💡 Tip: This command must be run from a git repository", err=True)
         raise click.Abort()
 
-    if not _module_commands.is_working_directory_clean():
+    if not _git_repo.is_working_directory_clean():
         click.secho(
             "❌ Error: Working directory has uncommitted changes",
             fg="red",

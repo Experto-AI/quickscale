@@ -12,12 +12,14 @@ import sys
 
 import click
 
-import quickscale_cli.commands.deployment_commands as _deployment_commands
+
+import quickscale_cli.utils._railway_project as _railway_project
+import quickscale_cli.utils._railway_cli as _railway_cli
 
 
 def _check_uncommitted_changes_step() -> None:
     """Check for uncommitted git changes."""
-    has_changes, status_output = _deployment_commands.check_uncommitted_changes()
+    has_changes, status_output = _railway_project.check_uncommitted_changes()
     if has_changes:
         click.secho("⚠️  Warning: You have uncommitted changes:", fg="yellow")
         click.echo(status_output)
@@ -31,14 +33,14 @@ def _check_uncommitted_changes_step() -> None:
 
 def _verify_railway_files_step() -> None:
     """Verify railway.json and Dockerfile exist."""
-    is_valid, error_msg = _deployment_commands.verify_railway_json()
+    is_valid, error_msg = _railway_project.verify_railway_json()
     if not is_valid:
         click.secho(f"❌ Error: {error_msg}", fg="red", err=True)
         click.echo("💡 Railway needs railway.json to configure deployment", err=True)
         sys.exit(1)
     click.secho("✅ railway.json is valid", fg="green")
 
-    dockerfile_exists, error_msg = _deployment_commands.verify_dockerfile()
+    dockerfile_exists, error_msg = _railway_project.verify_dockerfile()
     if not dockerfile_exists:
         click.secho(f"❌ Error: {error_msg}", fg="red", err=True)
         click.echo("💡 Railway uses Dockerfile to build your application", err=True)
@@ -48,7 +50,7 @@ def _verify_railway_files_step() -> None:
 
 def _verify_dependencies_step() -> None:
     """Verify required Railway dependencies are present."""
-    deps_ok, missing_deps = _deployment_commands.verify_railway_dependencies()
+    deps_ok, missing_deps = _railway_project.verify_railway_dependencies()
     if not deps_ok:
         click.secho("⚠️  Warning: Missing required Railway dependencies:", fg="yellow")
         for dep in missing_deps:
@@ -67,7 +69,7 @@ def _verify_dependencies_step() -> None:
 
 def _check_poetry_lock_step() -> None:
     """Check poetry.lock consistency and offer to fix."""
-    is_consistent, lock_message = _deployment_commands.check_poetry_lock_consistency()
+    is_consistent, lock_message = _railway_project.check_poetry_lock_consistency()
     if not is_consistent:
         click.secho(f"⚠️  Warning: {lock_message}", fg="yellow")
         if "not found" not in lock_message.lower():
@@ -76,7 +78,7 @@ def _check_poetry_lock_step() -> None:
             )
             if click.confirm("Run 'poetry lock' to fix?", default=True):
                 click.echo("🔄 Updating poetry.lock...")
-                success, fix_message = _deployment_commands.fix_poetry_lock()
+                success, fix_message = _railway_project.fix_poetry_lock()
                 if success:
                     click.secho(f"✅ {fix_message}", fg="green")
                 else:
@@ -101,10 +103,10 @@ def _check_poetry_lock_step() -> None:
 
 def _ensure_railway_cli_step() -> None:
     """Ensure Railway CLI is installed and up to date."""
-    if not _deployment_commands.is_railway_cli_installed():
+    if not _railway_cli.is_railway_cli_installed():
         click.secho("⚠️  Railway CLI is not installed", fg="yellow")
 
-        if not _deployment_commands.is_npm_installed():
+        if not _railway_cli.is_npm_installed():
             click.secho("❌ Error: npm is not installed", fg="red", err=True)
             click.echo("\n💡 Install Node.js and npm first:", err=True)
             click.echo("   https://nodejs.org/", err=True)
@@ -115,7 +117,7 @@ def _ensure_railway_cli_step() -> None:
 
         click.echo("📦 Installing Railway CLI via npm...")
         click.echo("   This may take a minute...")
-        if _deployment_commands.install_railway_cli():
+        if _railway_cli.install_railway_cli():
             click.secho("✅ Railway CLI installed successfully", fg="green")
         else:
             click.secho("❌ Error: Failed to install Railway CLI", fg="red", err=True)
@@ -125,16 +127,16 @@ def _ensure_railway_cli_step() -> None:
             sys.exit(1)
     else:
         click.secho("✅ Railway CLI is installed", fg="green")
-        _deployment_commands._check_and_upgrade_railway_cli()
+        _check_and_upgrade_railway_cli()
 
 
 def _check_and_upgrade_railway_cli() -> None:
     """Check Railway CLI version and upgrade if needed."""
-    current_version = _deployment_commands.get_railway_cli_version()
+    current_version = _railway_cli.get_railway_cli_version()
     if current_version:
         click.echo(f"   Current version: {current_version}")
 
-        if not _deployment_commands.check_railway_cli_version("4.0.0"):
+        if not _railway_cli.check_railway_cli_version("4.0.0"):
             click.secho(
                 f"⚠️  Railway CLI version {current_version} is outdated (need 4.0.0+)",
                 fg="yellow",
@@ -142,8 +144,8 @@ def _check_and_upgrade_railway_cli() -> None:
             click.echo("📦 Upgrading Railway CLI via npm...")
             click.echo("   This may take a minute...")
 
-            if _deployment_commands.upgrade_railway_cli():
-                new_version = _deployment_commands.get_railway_cli_version()
+            if _railway_cli.upgrade_railway_cli():
+                new_version = _railway_cli.get_railway_cli_version()
                 click.secho(f"✅ Railway CLI upgraded to {new_version}", fg="green")
             else:
                 click.secho("⚠️  Warning: Failed to upgrade Railway CLI", fg="yellow")
@@ -157,14 +159,14 @@ def _check_and_upgrade_railway_cli() -> None:
 
 def _ensure_railway_auth_step() -> None:
     """Ensure Railway CLI is authenticated."""
-    if not _deployment_commands.is_railway_authenticated():
+    if not _railway_cli.is_railway_authenticated():
         click.secho("⚠️  Not authenticated with Railway", fg="yellow")
         click.echo("\n🌐 Starting browserless authentication...")
         click.echo("   You will receive a URL and pairing code")
         click.echo("   Visit the URL in your browser and enter the code")
         click.echo("")
 
-        if _deployment_commands.login_railway_cli_browserless():
+        if _railway_cli.login_railway_cli_browserless():
             click.secho("✅ Successfully authenticated with Railway", fg="green")
         else:
             click.secho("❌ Error: Authentication failed", fg="red", err=True)
@@ -181,12 +183,12 @@ def _ensure_railway_auth_step() -> None:
 
 def _init_railway_project_step() -> None:
     """Initialize Railway project if needed."""
-    if not _deployment_commands.is_railway_project_initialized():
+    if not _railway_cli.is_railway_project_initialized():
         click.echo("\n📦 Initializing Railway project...")
         click.echo("💡 You can create a new project or link to an existing one")
 
         try:
-            result = _deployment_commands.run_railway_command(
+            result = _railway_cli.run_railway_command(
                 ["init"], timeout=60, interactive=True
             )
 
@@ -211,9 +213,7 @@ def _list_railway_services() -> list[dict[str, object]]:
     deprecated interactive link prompt: once a project has services it waits
     for a selection and only ends at the command timeout.
     """
-    result = _deployment_commands.run_railway_command(
-        ["service", "list", "--json"], timeout=30
-    )
+    result = _railway_cli.run_railway_command(["service", "list", "--json"], timeout=30)
     if result.returncode != 0:
         raise RuntimeError(
             f"railway service list failed: {(result.stderr or result.stdout).strip()}"
@@ -228,10 +228,7 @@ def _list_railway_services() -> list[dict[str, object]]:
 
 def _list_railway_service_names() -> list[str]:
     """Return the service names in the linked Railway environment."""
-    return [
-        str(service.get("name", ""))
-        for service in _deployment_commands._list_railway_services()
-    ]
+    return [str(service.get("name", "")) for service in _list_railway_services()]
 
 
 def _postgres_service_matches(services: list[dict[str, object]]) -> list[str]:
@@ -260,15 +257,13 @@ def _postgres_service_matches(services: list[dict[str, object]]) -> list[str]:
 def _setup_postgres_step() -> str:
     """Return the one unambiguous PostgreSQL service name."""
     try:
-        matches = _deployment_commands._postgres_service_matches(
-            _deployment_commands._list_railway_services()
-        )
+        matches = _postgres_service_matches(_list_railway_services())
     except Exception as exc:
         raise click.ClickException(f"Unable to list Railway services: {exc}") from exc
 
     if not matches:
         click.echo("Adding PostgreSQL service...")
-        result = _deployment_commands.run_railway_command(
+        result = _railway_cli.run_railway_command(
             ["add", "--database", "postgres"], timeout=30
         )
         if result.returncode != 0:
@@ -277,9 +272,7 @@ def _setup_postgres_step() -> str:
                 f"Unable to add a PostgreSQL service: {detail or 'unknown error'}"
             )
         try:
-            matches = _deployment_commands._postgres_service_matches(
-                _deployment_commands._list_railway_services()
-            )
+            matches = _postgres_service_matches(_list_railway_services())
         except Exception as exc:
             raise click.ClickException(
                 f"Unable to confirm the PostgreSQL service: {exc}"
@@ -300,7 +293,7 @@ def _setup_postgres_step() -> str:
 def _app_service_exists_step(app_service: str) -> bool:
     """Return whether the app service already exists, failing on unreadable state."""
     try:
-        names = _deployment_commands._list_railway_service_names()
+        names = _list_railway_service_names()
     except Exception as exc:
         raise click.ClickException(f"Unable to list Railway services: {exc}") from exc
     exists = app_service.casefold() in (name.casefold() for name in names)
@@ -312,7 +305,7 @@ def _app_service_exists_step(app_service: str) -> bool:
 def _create_app_service_step(app_service: str) -> None:
     """Create application service."""
     try:
-        names = _deployment_commands._list_railway_service_names()
+        names = _list_railway_service_names()
 
         if app_service.lower() in (name.lower() for name in names):
             click.echo(f"✅ Service '{app_service}' already exists")
@@ -320,7 +313,7 @@ def _create_app_service_step(app_service: str) -> None:
             # Railway CLI 5.x prompts ("What do you need?", "Enter a variable")
             # whenever it sees a TTY, even with --service, and its TUI leaves the
             # terminal in raw mode on timeout. Run without a TTY so it never prompts.
-            result = _deployment_commands.run_railway_command(
+            result = _railway_cli.run_railway_command(
                 ["add", "--service", app_service], timeout=60, input_data=""
             )
 
@@ -341,7 +334,7 @@ def _create_app_service_step(app_service: str) -> None:
 def _link_database_step(app_service: str, postgres_service: str) -> bool:
     """Link DATABASE_URL from PostgreSQL to app service."""
     try:
-        link_success, link_message = _deployment_commands.link_database_to_service(
+        link_success, link_message = _railway_project.link_database_to_service(
             app_service, postgres_service
         )
     except ValueError as exc:
@@ -369,7 +362,7 @@ def _link_database_step(app_service: str, postgres_service: str) -> bool:
 def _generate_domain_step(app_service: str) -> str | None:
     """Generate public domain and return the domain name."""
     try:
-        domain_url = _deployment_commands.generate_railway_domain(app_service)
+        domain_url = _railway_project.generate_railway_domain(app_service)
     except ValueError as exc:
         click.secho(f"❌ Error: {exc}", fg="red", err=True)
         sys.exit(1)

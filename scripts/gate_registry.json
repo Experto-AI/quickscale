@@ -368,6 +368,23 @@
             "trigger_inputs": []
         },
         {
+            "id": "check-split-facade-imports",
+            "description": "SA234 split-facade gate: no private module imports its own package's facade",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-split-facade-imports",
+                "ci_job": "split-facade-gate",
+                "local_ci_stage": 7
+            },
+            "depends_on": [],
+            "trigger_inputs": []
+        },
+        {
             "id": "quality",
             "description": "Quality ratchet: no new or worsened dead code, complexity, duplication, or file at or above 800 lines against the scripts/quality_baseline.json baseline",
             "required_contexts": [

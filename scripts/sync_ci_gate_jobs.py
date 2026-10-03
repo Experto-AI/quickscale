@@ -74,6 +74,7 @@ HOSTED_GATE_ORDER = (
     "check-workflow-security",
     "check-secret-scanning",
     "check-module-conventions",
+    "check-split-facade-imports",
 )
 
 # SA202 pins every generated job's third-party action to a full commit SHA with
@@ -211,6 +212,10 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
     "check-module-conventions": HostedJobSpec(
         "Module Conventions Gate (rule 40)",
         "Run module conventions conformance check",
+    ),
+    "check-split-facade-imports": HostedJobSpec(
+        "Split-Facade Import Gate (SA234)",
+        "Reject a private module importing its own package's facade",
     ),
 }
 

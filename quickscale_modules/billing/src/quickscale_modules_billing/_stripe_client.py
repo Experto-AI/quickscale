@@ -22,6 +22,9 @@ from quickscale_modules_billing._settings import (
     _ORG_REFERENCE_METADATA_KEY as _ORG_REFERENCE_METADATA_KEY,
 )
 from quickscale_modules_billing._settings import (
+    BillingSettingsSnapshot as BillingSettingsSnapshot,
+)
+from quickscale_modules_billing._settings import (
     _USER_METADATA_KEY as _USER_METADATA_KEY,
 )
 from quickscale_modules_billing._settings import (
@@ -356,3 +359,23 @@ def _translate_stripe_errors(
         return wrapper
 
     return decorator
+
+
+def get_stripe_client(
+    *,
+    settings_snapshot: BillingSettingsSnapshot | None = None,
+) -> StripeClient:
+    """Return a configured Stripe client for the current runtime settings."""
+    snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
+    secret_key = snapshot.resolve_secret_key()
+    if not secret_key:
+        raise BillingConfigurationError(
+            "Stripe secret key is not configured in the runtime settings."
+        )
+    try:
+        stripe_module = import_module("stripe")
+    except ImportError as exc:
+        raise BillingConfigurationError(
+            "Stripe SDK is not installed in this environment."
+        ) from exc
+    return StripeClient(stripe_module=stripe_module, api_key=secret_key)
