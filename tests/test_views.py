@@ -294,8 +294,8 @@ class TestFormSubmitAPIView:
             mock_capture_event,
         )
         monkeypatch.setattr(
-            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
-            Mock(return_value=Mock(enabled=True)),
+            "quickscale_modules_analytics.services.is_enabled",
+            Mock(return_value=True),
         )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
@@ -345,8 +345,8 @@ class TestFormSubmitAPIView:
             mock_capture,
         )
         monkeypatch.setattr(
-            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
-            Mock(return_value=Mock(enabled=False)),
+            "quickscale_modules_analytics.services.is_enabled",
+            Mock(return_value=False),
         )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
@@ -461,8 +461,8 @@ class TestFormSubmitAPIView:
             mock_capture_event,
         )
         monkeypatch.setattr(
-            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
-            Mock(return_value=Mock(enabled=True)),
+            "quickscale_modules_analytics.services.is_enabled",
+            Mock(return_value=True),
         )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
@@ -2149,8 +2149,8 @@ class TestPostCommitTransactionBoundary:
             ),
         )
         monkeypatch.setattr(
-            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
-            Mock(return_value=Mock(enabled=True)),
+            "quickscale_modules_analytics.services.is_enabled",
+            Mock(return_value=True),
         )
         monkeypatch.setattr(
             "quickscale_modules_forms.views._emit_submission_event",
@@ -2254,8 +2254,8 @@ class TestSubmissionRollbackEffects:
             mock_capture_event,
         )
         monkeypatch.setattr(
-            "quickscale_modules_analytics.services.get_analytics_runtime_settings",
-            Mock(return_value=Mock(enabled=True)),
+            "quickscale_modules_analytics.services.is_enabled",
+            Mock(return_value=True),
         )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
