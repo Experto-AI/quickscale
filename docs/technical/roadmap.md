@@ -6,8 +6,8 @@
 ## Goal and finish line
 
 The immediate goal is one convention across all modules, as recorded in
-[decisions.md § Module Conventions](decisions.md#module-conventions), finished by SA234, SA235,
-SA237, and SA238. `bap-web` is then ported once, onto the
+[decisions.md § Module Conventions](decisions.md#module-conventions), finished by SA237 and
+SA238. `bap-web` is then ported once, onto the
 standardized names (SA191), and carries the first property portal in a project-owned extension
 (SA153). Capabilities are generalized only after that project proves their value.
 
@@ -24,11 +24,10 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA235 | Declare module UI paths in manifests and render host routes from discovery | post-v88 | 1 | — | Deferred |
 | SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
 | SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA235, SA237, SA238 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA237, SA238 | Deferred |
 | SA241 | Record the React-frontend and public-page prerender decisions for SA153 | post-v88 | 3 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191, SA241 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
@@ -38,7 +37,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA237
 Track 3: SA238 ──► SA241 ──► SA216
      critical path: SA238 → SA191 → SA153
@@ -57,10 +56,17 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** SA235 (Track 1) and SA237 (Track 2) are in progress. SA238 (Track 3) can start
-now; SA241 follows it on Track 3 and lands before SA153, then SA216. SA235, SA237, and SA238 each record their proposed rule (41, 44–46 in the
-[inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and close
-their own item, harness clause, and inventory section; SA191 waits for all of them.
+**Parallel start.** SA237 (Track 2) and SA238 (Track 3) can start now; SA241 follows SA238 on
+Track 3 and lands before SA153, then SA216. SA235 closed rule 41 and `mount-path-copies` with the
+two cells the seventh pass corrected (rules 31, 37, and 41), and SA240's org-creation command
+landed for SA191's cutover; SA215's closing pass closed inventory sections 1–41. The seventh
+pass's remaining items, rules 44–46, rest with SA237 and SA238 (SA236 closed rules 42–43); each
+records its decision (proposed rules 44–46 in the
+[inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
+its own item, harness clause, and inventory section. SA191 waits on SA237 and SA238.
+
+**Off the critical path.** SA216 follows SA215 because both change auth's views, orgs' removal
+path, and the user-referencing models.
 
 ### Track states
 
@@ -68,7 +74,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA235 | yes | yes | yes | **yes** | **yes** |
+| 1 | SA191 | no | no | yes | no | **yes** |
 | 2 | SA237 | yes | yes | yes | **yes** | no |
 | 3 | SA238 | yes | yes | yes | **yes** | **yes** |
 
@@ -104,9 +110,10 @@ A track is **truly green** only when all three states are yes.
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row.
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
-  a ticket that does lands through the serialized merge queue. The convention tickets cross
-  tracks: each adds its own harness clause (a Track 3 surface), and SA235 touches orgs'
-  `TenantMiddleware`.
+  a ticket that does lands through the serialized merge queue. SA215 touches every module and crosses every
+  track, so it lands in module-sized slices through that queue, merging `v89` before each slice.
+  The remaining seventh-pass convention tickets (SA237 and SA238) also cross tracks: each adds its
+  own harness clause (a Track 3 surface). They land through the same queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md). Each track resolves the shared set at its
@@ -123,46 +130,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA235 — Declare module UI paths in manifests and render host routes from discovery.**
+- [x] **SA233 — Key the quality ratchet by qualified name and retire the rename waivers.**
 
-  **Context:** the generated `urls.py.j2` puts React shell routes for `blog/`, `listings/`,
-  `forms/`, and `crm/` before the modules' own mounts. As a result, `reverse("quickscale_blog:post_list")`
-  and `reverse("quickscale_listings:listing_list")` resolve to the shell, and the routes ignore each
-  module's `_ENABLED` switch. Module paths are also repeated as literals in the generator
-  templates, the theme's social pages (which hand-write the seam), `base.html.j2`, and orgs'
-  `TenantMiddleware` (coherence D43 `mount-path-copies`, with prior items `theme-module-presence`
-  and `module-lists-outside-members`; tech audit §9). Once `bap-web` ports, a URL move becomes a
-  one-way door, so this lands before SA191.
+- [x] **SA234 — Retarget test patches to defining modules and remove facade back-imports.**
 
-  **Scope:** record rule 41 (D43, recommended option A) after the maintainer decides whether the
-  modules' server-rendered indexes stay reachable. Each module with a React surface declares
-  `spa_routes` in its manifest. The generator renders them after the module's own includes, and
-  only for installed and enabled modules. Project-namespace route names become
-  `quickscale_<module>:<name>`. The social seam pages render through `generator/seam.py`.
-  `TenantMiddleware` reads its prefixes from orgs' URL names. Rule 40's detectors for rules 7, 31,
-  and 37 read `generator/templates/**/*.j2` too (enforcement gap 13).
-
-  **Acceptance:** a generated-project test proves that every module root URL name resolves to its
-  own view, and a `^blog/?$` shell control fails it. No module path literal remains in the
-  generator or theme templates or in another module, and the harness rejects one in a `.j2` file.
-  `frontend.md` § URL ownership matches the code. The release notes give the user-owned `urls.py`
-  step for each moved route.
-
-  **Surfaces:** module manifests (`spa_routes`); `urls.py.j2`, the social seam pages,
-  `base.html.j2`, `generator/seam.py`; orgs' `TenantMiddleware`; the harness; `frontend.md`;
-  decisions.
-
-  **Progress (SA235).** Rule 41 is recorded with option A (the module indexes stay reachable).
-  The three flat modules (blog, listings, crm) declare `spa_routes`, which `apply` renders after
-  the module includes and each adapter drops when its module is off; their shadowing shell
-  reservations left `urls.py.j2`. The seam, both public social pages, `base.html.j2`, and
-  `TenantMiddleware` read routes or paths by name; the harness's rules 7, 31, and 37 now read
-  `generator/templates/**/*.j2` with controls; a generated-project test proves the module root
-  URL names resolve to their own views. Remaining: social's and orgs' React surfaces do not yet
-  declare manifest `spa_routes` (orgs' mode-inverted `/orgs*` reservations stay host-rendered and
-  social's public pages stay host routes), forms' entrypoint renders only an inert mount-point div
-  so its shallow paths keep a host reservation and it declares no `spa_routes`, and billing's
-  `/billing/...` copies in `context_processors.py.j2` remain.
+- [x] **SA235 — Declare module UI paths in manifests and render host routes from discovery.**
 
 - [ ] **SA237 — One org-role check and root-only type-stub exemptions.**
 
@@ -381,8 +353,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   entry chooses the prerender or server-render mechanism for catalog and detail pages, compares the
   options considered, and adds any new frontend dependency under the approved-stack rule.
 
-  **Surfaces:** decisions; `frontend.md` where it states the frontend split (SA235 also edits it,
-  so whichever lands second resolves it at merge).
+  **Surfaces:** decisions; `frontend.md` where it states the frontend split.
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 

@@ -607,6 +607,26 @@ def test_url_mount_template_literal_control() -> None:
         "mount 'demo/' is written as a literal" in violation
         for violation in checker.rule_7_urls(html_literal)
     )
+    # A quoted path beneath the mount repeats the mount too.
+    html_subpath_literal = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": ('<a href="/demo/thanks/">Thanks</a>\n')
+        },
+    )
+    assert any(
+        "mount 'demo/' is written as a literal" in violation
+        for violation in checker.rule_7_urls(html_subpath_literal)
+    )
+    quoted_longer_prefix = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": (
+                '<a href="/demographics/list/">Demographics</a>\n'
+            )
+        },
+    )
+    assert checker.rule_7_urls(quoted_longer_prefix) == []
 
 
 def test_template_page_control() -> None:
@@ -5783,8 +5803,8 @@ def test_layer_table_mirrors_the_shipped_modules() -> None:
 
 
 # Rules the harness must cover or record as open.  SA215 covered 1-39;
-# SA236 adds 42-43.  Rule 41 and rules 44-46 land with SA235, SA237, and
-# SA238, which extend this set.
+# SA236 adds 42-43; SA235's rule 41 clauses live in rules 7, 31, and 37.
+# Rules 44-46 land with SA237 and SA238, which extend this set.
 RECORDED_RULE_NUMBERS = frozenset({*range(1, 40), 42, 43})
 
 
