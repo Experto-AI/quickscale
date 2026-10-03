@@ -6,10 +6,10 @@ from typing import Any
 
 from django.views.generic import TemplateView
 
-from quickscale_modules_analytics.services import (
+from quickscale_modules_analytics._settings import (
     get_analytics_runtime_settings,
-    is_analytics_active,
 )
+from quickscale_modules_analytics.services import is_analytics_active
 
 
 class AnalyticsDashboardView(TemplateView):

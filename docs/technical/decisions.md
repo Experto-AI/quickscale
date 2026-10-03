@@ -564,8 +564,10 @@ settings read but never declared, and every default written twice. Renames are a
   per-module names; the schema comes from the project.
 - ✅ Module test settings define every declared setting; they may be generated from the manifest.
 - ✅ Database-backed settings (backups' `BackupPolicy`, notifications' `NotificationSettings`) keep
-  their models; only their initial values come from settings.
-- ❌ `getattr(settings, NAME, default)`, per-module settings readers, or defaults written in code.
+  their models as read-only mirrors of settings; settings are the only switch (rule 20), and the
+  models' initial values come from settings.
+- ❌ `getattr(settings, NAME, default)`, a settings reader that defaults or coerces, or defaults
+  written in code.
 - ❌ Reading a setting the module's manifest does not declare, or another module's setting.
 - ❌ A runtime accessor, generated per-module settings file, or Pydantic-style second schema.
 
@@ -861,9 +863,10 @@ public surface is `services.py` (rule 4).
 - ✅ Every email a module sends goes through notifications' `send_notification`; a module that
   emails lists `notifications` in `required_modules` (orgs' `implies: notifications` becomes a
   requirement). Listed exception: auth's django-allauth mail.
-- ✅ Notifications can still be off at runtime (its `NotificationSettings` row); `send_notification`
+- ✅ Notifications can still be off at runtime; `QUICKSCALE_NOTIFICATIONS_ENABLED` is the only
+  switch (its `NotificationSettings` row is a read-only mirror, not a switch). `send_notification`
   then raises `NotificationDisabledError` (rule 23), and a sender for which email is optional checks
-  `is_enabled()` first instead of catching it.
+  `is_enabled()` first instead of catching it (rule 43).
 - ❌ A module's own `EmailMessage` / `send_mail` path, or a fallback sender when notifications is
   absent or off.
 
@@ -1067,9 +1070,9 @@ headings.
   is a requirement under rule 20).
 
 **40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
-and the CLI's option handling fails on each of rules 1–39 (rule 21 stays a review rule with each
-module's write-effect rollback test; rule 27 through the user-FK conformance gate; rule 30 in
-`apply` itself): names, suffixes and types, `_ENABLED`
+and the CLI's option handling fails on each of rules 1–39 and 42–43 (rule 21 stays a review rule
+with each module's write-effect rollback test; rule 27 through the user-FK conformance gate; rule 30
+in `apply` itself): names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
 names, template and static paths, non-DRF JSON and hand-built error bodies, checks outside
@@ -1089,9 +1092,26 @@ and `RunSQL` tables, database function and advisory-lock names,
 stems in shared namespaces, references by name against the layers, `os.getenv` in module code, the
 root `mypy.ini` module sections and any per-module `[tool.mypy]`, literal module lists outside the
 modules, option keys and command names in READMEs, and `required_modules` specifiers and
-`implies` — with a control case proving each rule rejects a violation. The layer table, each
+`implies`, settings snapshots outside `_settings.py` or in `__all__` and cross-module settings
+objects, and `except Exception` around another module's service call — with a control case proving
+each rule rejects a violation. The layer table, each
 foundation's published extension bases, and every listed exception live in one test-owned
 mapping that mirrors this section.
+
+**42. Settings snapshots.**
+- ✅ A module that needs one consistent view of several of its own settings builds it in its private
+  `_settings.py` as a frozen dataclass with a `from_settings()` classmethod, reading each setting
+  directly, with no default and no coercion. It stays private; callers outside the module ask
+  `is_enabled()` or a `services.py` function.
+- ❌ A settings snapshot defined outside `_settings.py`, named in `__all__`, or read by another
+  module; a snapshot that defaults, coerces, or reads another module's settings.
+
+**43. Optional senders.**
+- ✅ A sender guards an optional module with `apps.is_installed(...)` and that module's
+  `services.is_enabled()`, and catches only that module's `<Module>Error` where its failure is
+  tolerable.
+- ❌ Reading another module's settings object; `except Exception` around another module's service
+  call (rule 23's listed analytics best-effort exception aside).
 
 ---
 
@@ -2354,7 +2374,7 @@ or a new decision waives it.
 **Architecture & Patterns:**
 - ❌ Runtime dynamic `INSTALLED_APPS` modifications
 - ❌ DI frameworks or service registries (direct imports in production); `AppConfig`-declared capabilities collected by one core helper and the listed core ports are the allowed forms — see §[Module Conventions](#module-conventions)
-- ❌ Module settings read with a code default, a per-module reader, or across modules; module-to-module imports outside the target's public surface or against the layer order — see §[Module Conventions](#module-conventions)
+- ❌ Module settings read with a code default or a reader that defaults or coerces, another module's settings, or a settings snapshot outside the private `_settings.py`; module-to-module imports outside the target's public surface or against the layer order — see §[Module Conventions](#module-conventions)
 - ❌ Custom abstract provider interfaces or app-defined multi-provider contracts (use Django's email path plus `django-anymail` for the approved provider rather than building a generic provider layer)
 - ❌ Custom database table naming (use Django's `app_label` default)
 - ❌ Core fallback adapters, compat shims, or silent degradation paths — see §[Fail-Hard Principle](#fail-hard-principle). This includes any "compatibility fallback" wiring path for bundled/installed contexts: an unimportable managed adapter raises, it does not degrade (AF7 **G4**)

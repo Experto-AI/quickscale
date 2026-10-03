@@ -453,6 +453,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     paths map Pillow's validated format to a fixed extension (JPEG→`.jpg`, PNG→`.png`,
     WEBP→`.webp`, GIF→`.gif`), so a valid image named with another extension is stored and served
     under its image type instead of the client's suffix.
+  - **Module settings snapshots stay private and optional senders fail loudly.** Each module builds
+    its settings snapshot in a private `_settings.py` with `from_settings()` and no defaults, keeps
+    it out of the public service surface, and an optional sender guards with `is_enabled()` and
+    catches only the module's own error class; notifications' `send_notification` no longer accepts
+    `dispatch_after_commit`.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

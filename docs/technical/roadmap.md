@@ -26,11 +26,10 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 |---|---|---|---|---|---|
 | SA234 | Retarget test patches to defining modules and remove facade back-imports | post-v88 | 2 | — | Deferred |
 | SA235 | Declare module UI paths in manifests and render host routes from discovery | post-v88 | 1 | — | Deferred |
-| SA236 | Make settings snapshots private and guard optional senders on `is_enabled()` | post-v88 | 3 | — | Deferred |
 | SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
 | SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | SA234 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA235, SA236, SA237, SA238 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA235, SA237, SA238 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
@@ -41,7 +40,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA234 ──► SA237
-Track 3: SA236 ──► SA238 ──► SA216
+Track 3: SA238 ──► SA216
      critical path: SA234 → SA238 → SA191 → SA153
 ```
 
@@ -53,11 +52,11 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** All three tracks can start now: SA235 (Track 1), SA234 (Track 2), and SA236
-(Track 3). SA215's closing pass landed and closed inventory sections 1–41 (the two cells the
+**Parallel start.** SA235 (Track 1) and SA234 (Track 2) can start now; SA238 (Track 3) waits on
+SA234. SA215's closing pass landed and closed inventory sections 1–41 (the two cells the
 seventh pass corrected are carried by SA235). The coherence audit's
-seventh pass (sections 42–47, D43–D48) is carried by SA235–SA238. Each begins by recording its
-decision (proposed rules 41–46 in the
+seventh pass (sections 42–47, D43–D48) is carried by SA235, SA237, and SA238 (SA236 closed rules
+42–43). Each begins by recording its decision (proposed rules 41 and 44–46 in the
 [inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
 its own item, harness clause, and inventory section, and SA191 waits for all of them.
 
@@ -72,7 +71,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA235 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA234 | yes | yes | yes | **yes** | no |
-| 3 | SA236 | yes | yes | yes | **yes** | no |
+| 3 | SA238 | no | no | yes | no | **yes** |
 
 ### Ownership and merge coordination
 
@@ -184,28 +183,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `base.html.j2`, `generator/seam.py`; orgs' `TenantMiddleware`; the harness; `frontend.md`;
   decisions.
 
-- [ ] **SA236 — Make settings snapshots private and guard optional senders on `is_enabled()`.**
-
-  **Context:** rule 3 forbids per-module settings readers, yet five modules (analytics, backups,
-  billing, notifications, social) each hold a frozen settings snapshot, in three shapes. Orgs reads
-  notifications' snapshot. Forms wraps its notification send in `except Exception`, which swallows
-  configuration errors. Rules 3 and 20 still describe notifications' admin row as a runtime switch,
-  but the code made it a read-only mirror of settings. Notifications also has no rollback test and
-  keeps an unused `dispatch_after_commit=False` hazard (coherence D44 `settings-snapshot-readers`,
-  D45 `optional-sender-guard`, and the prior item `write-effects-on-commit`).
-
-  **Scope:** record rules 42 and 43 (recommended option A for each) and reword rules 3 and 20.
-  Move every snapshot into a private `_settings.py` built by `from_settings()` with no defaults,
-  and keep it out of `__all__`. Orgs calls `notifications.services.is_enabled()`. Forms catches
-  only `NotificationError`. Remove the `dispatch_after_commit` parameter and add a notifications
-  rollback test.
-
-  **Acceptance:** the harness rejects a settings class outside `_settings.py` or in `__all__`,
-  another module's `Settings`/`Snapshot` attribute, and `except Exception` around another
-  module's service call, each with a control case. A rolled-back write sends no notification.
-
-  **Surfaces:** analytics, backups, billing (a Track 2 surface), notifications, social, orgs'
-  sender, and forms' `_email.py`; the harness; decisions.
+- [x] **SA236 — Make settings snapshots private and guard optional senders on `is_enabled()`.**
 
 - [ ] **SA237 — One org-role check and root-only type-stub exemptions.**
 
