@@ -1136,6 +1136,14 @@ mapping that mirrors this section.
 - ❌ Reading another module's settings object; `except Exception` around another module's service
   call (rule 23's listed analytics best-effort exception aside).
 
+**46. Splits (D48).**
+- ✅ A split keeps its facade's public import path and its log channel: the private files log on
+  the facade's logger; the facade re-exports public names only and its tests patch the defining
+  module (§[Split-Facade Seams](#split-facade-seams)).
+- ✅ Rule 19 finds view code by content, not by file name: a Django or DRF view subclass, or a
+  function that takes `request`.
+- ❌ A moved log channel without a release-notes line.
+
 ---
 
 ### Split-Facade Seams (SA234) {#split-facade-seams}

@@ -246,6 +246,12 @@ to `quickscale_modules_billing.services`; project code that imports the decorato
 import path. `quickscale_modules_orgs.permissions.resolve_request_org` is the public name of the
 request-organization resolver the gate uses, replacing the private `_resolve_request_org`.
 
+**Moved log channels.** Two module log channels change name in this release: forms' submission
+notification logging moves from `quickscale_modules_forms.notifications` to
+`quickscale_modules_forms.views`, and orgs' VIEW-AS debug-helper logging moves from
+`quickscale_modules_orgs.debug_helpers` to `quickscale_modules_orgs.debug_views`. The operator
+step is to update log filters, handlers, and alert rules keyed on the retired channel names.
+
 ## Delivery provenance
 
 The SA195/SA192 delivery was synchronized with `v89` at
