@@ -1906,7 +1906,7 @@ beta-migrate-in-place``, ``--continue-after-checkpoint``, its infrastructure
 copy/apply continuation, and the ``IN_PLACE_*`` taxonomy entries) was removed
 when fresh-first became the only migration path.  The remaining taxonomy
 classifies every emitted file against that single path, and the smoke gate
-exercises fresh-first only.
+exercises the fresh-first path, including one iterate regeneration case.
 
 **Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../others/arch-audit.md) (generated-file ownership finding, if currently open)
 

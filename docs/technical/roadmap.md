@@ -51,23 +51,14 @@ handoff note (what landed, what is next, what to watch) committed with the work.
 when its last slice lands; slices are not scheduled.
 
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
-ported, and SA204 has not frozen the migration history. SA234 untangled the split facades
-before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract, so the facade work
-runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
-SA154 is an inventory, not work.
+ported, and SA204 has not frozen the migration history. SA204 freezes migration history before
+any post-SA153 module schema change. SA154 is an inventory, not work.
 
-**Parallel start.** SA214 (Track 1), SA237 (Track 2), and SA238 (Track 3) can start now; SA214
-runs ahead of SA191 on Track 1 against a pinned pre-SA191 `bap-web` donor; SA241 follows SA238 on
-Track 3 and lands before SA153, then SA216. SA235 closed rule 41 and `mount-path-copies` with the
-two cells the seventh pass corrected (rules 31, 37, and 41), and SA240's org-creation command
-landed for SA191's cutover; SA215's closing pass closed inventory sections 1–41. The seventh
-pass's remaining items, rules 44–46, rest with SA237 and SA238 (SA236 closed rules 42–43); each
-records its decision (proposed rules 44–46 in the
-[inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
-its own item, harness clause, and inventory section. SA191 waits on SA237 and SA238.
-
-**Off the critical path.** SA216 follows SA215 because both change auth's views, orgs' removal
-path, and the user-referencing models.
+**Parallel start.** SA214 runs ahead of SA191 on Track 1 against a pinned pre-SA191 `bap-web`
+donor. SA237 and SA238 each record their rule (proposed rules 44–46 in the
+[inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and close
+their own item, harness clause, and inventory section. SA241 follows SA238 on Track 3 and lands
+before SA153, then SA216.
 
 ### Track states
 
@@ -111,10 +102,8 @@ A track is **truly green** only when all three states are yes.
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row.
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
-  a ticket that does lands through the serialized merge queue. SA215 touches every module and crosses every
-  track, so it lands in module-sized slices through that queue, merging `v89` before each slice.
-  The remaining seventh-pass convention tickets (SA237 and SA238) also cross tracks: each adds its
-  own harness clause (a Track 3 surface). They land through the same queue.
+  a ticket that does lands through the serialized merge queue. SA237 and SA238 also cross tracks:
+  each adds its own harness clause (a Track 3 surface).
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md). Each track resolves the shared set at its
@@ -130,12 +119,6 @@ reset/checkout destructively. Merge `v89` into the worktree, resolve there, run 
 suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
-
-- [x] **SA233 — Key the quality ratchet by qualified name and retire the rename waivers.**
-
-- [x] **SA234 — Retarget test patches to defining modules and remove facade back-imports.**
-
-- [x] **SA235 — Declare module UI paths in manifests and render host routes from discovery.**
 
 - [ ] **SA237 — One org-role check and root-only type-stub exemptions.**
 
@@ -162,10 +145,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   in three different forms, follow two re-export policies, and handle loggers two ways. Billing's
   logger moved silently from `…billing.services` to `…billing._subscription_mutations`. Rule 19's
   scan finds views by file name, so a third naming form would escape it (coherence D48
-  `split-facade-conventions`). SA234 sets the re-export contract this ticket applies to modules.
+  `split-facade-conventions`).
 
   **Scope:** record rule 46. Private files in a split module log on the facade's channel. Module
-  facades re-export public names only, under SA234's decision, and their tests patch the defining
+  facades re-export public names only, under the split-facade seams decision, and their tests patch the defining
   module. Rule 19 finds view code by content: a Django or DRF view subclass, or a function that
   takes `request`.
 
@@ -409,8 +392,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     and refused at preflight).
 
   **Slices:**
-  - [ ] (a) `make beta-migrate-iterate`: one non-interactive iteration driven by the donor's
-    `quickscale.yml`.
+  - [x] (a) `make beta-migrate-iterate`: one non-interactive iteration driven by the donor's
+    `quickscale.yml`. Handoff: the target reads slug, package, theme, and modules from the donor
+    config, regenerates through a staging directory and `quickscale apply --split-refs-from-branches`,
+    then runs fresh-first; next are G-001 and slices (b)–(f); watch the apply confirmation input and
+    the fail-closed recipient and stage guards.
   - [ ] (b) Classification of every donor file, with unclassified files as blockers.
   - [ ] (c) Project-owned apps (copy, register, mount, regenerate migrations) and frontend
     dependency merge.

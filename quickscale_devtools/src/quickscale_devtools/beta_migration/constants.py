@@ -274,42 +274,63 @@ COMMON_REQUIRED_SPECS = {
 }
 
 
+_FRESH_FIRST_MODE_REQUIRED_SPECS: dict[str, tuple[RequiredPathSpec, ...]] = {
+    "donor": (
+        RequiredPathSpec("frontend/src/App.tsx", "file", "custom router source"),
+        RequiredPathSpec("frontend/src/pages", "dir", "custom page directory"),
+        RequiredPathSpec(
+            "frontend/src/components", "dir", "custom component directory"
+        ),
+    ),
+    "recipient": (
+        RequiredPathSpec("manage.py", "file", "Django manage.py entrypoint"),
+        RequiredPathSpec("Dockerfile", "file", "fresh scaffold Dockerfile"),
+        RequiredPathSpec("docker-compose.yml", "file", "fresh scaffold compose file"),
+        RequiredPathSpec("start.sh", "file", "fresh scaffold runtime launcher"),
+        RequiredPathSpec("railway.json", "file", "fresh scaffold Railway metadata"),
+        RequiredPathSpec(
+            "frontend/src/App.tsx", "file", "fresh scaffold router source"
+        ),
+        RequiredPathSpec("frontend/src/pages", "dir", "fresh scaffold page directory"),
+        RequiredPathSpec(
+            "frontend/src/components", "dir", "fresh scaffold component directory"
+        ),
+        RequiredPathSpec(
+            "frontend/src/hooks/useModules.ts",
+            "file",
+            "fresh scaffold managed modules hook",
+        ),
+    ),
+}
+
+
 MODE_REQUIRED_SPECS: dict[
     BetaMigrationMode, dict[str, tuple[RequiredPathSpec, ...]]
 ] = {
-    "fresh-first": {
-        "donor": (
-            RequiredPathSpec("frontend/src/App.tsx", "file", "custom router source"),
-            RequiredPathSpec("frontend/src/pages", "dir", "custom page directory"),
-            RequiredPathSpec(
-                "frontend/src/components", "dir", "custom component directory"
-            ),
-        ),
-        "recipient": (
-            RequiredPathSpec("manage.py", "file", "Django manage.py entrypoint"),
-            RequiredPathSpec("Dockerfile", "file", "fresh scaffold Dockerfile"),
-            RequiredPathSpec(
-                "docker-compose.yml", "file", "fresh scaffold compose file"
-            ),
-            RequiredPathSpec("start.sh", "file", "fresh scaffold runtime launcher"),
-            RequiredPathSpec("railway.json", "file", "fresh scaffold Railway metadata"),
-            RequiredPathSpec(
-                "frontend/src/App.tsx", "file", "fresh scaffold router source"
-            ),
-            RequiredPathSpec(
-                "frontend/src/pages", "dir", "fresh scaffold page directory"
-            ),
-            RequiredPathSpec(
-                "frontend/src/components", "dir", "fresh scaffold component directory"
-            ),
-            RequiredPathSpec(
-                "frontend/src/hooks/useModules.ts",
-                "file",
-                "fresh scaffold managed modules hook",
-            ),
-        ),
-    },
+    # The iterate mode regenerates the recipient from the donor's quickscale.yml
+    # and then runs the same fresh-first mutation, so both modes require the
+    # same donor and recipient surfaces.
+    "fresh-first": _FRESH_FIRST_MODE_REQUIRED_SPECS,
+    "iterate": _FRESH_FIRST_MODE_REQUIRED_SPECS,
 }
+
+
+# The recipient regeneration step runs the shipped apply command from a staging
+# directory named after the slug, exactly as the migration playbook does. A
+# fresh project with --no-docker still asks two confirmation questions: the
+# apply gate and the destructive/remote-phase gate. Answer both with "yes" so
+# the target stays non-interactive; any further prompt reaches EOF and aborts,
+# so the workflow fails closed instead of guessing.
+REGENERATION_APPLY_ARGV = (
+    "quickscale",
+    "apply",
+    "--split-refs-from-branches",
+    "--no-docker",
+)
+
+REGENERATION_APPLY_STDIN = "y\ny\n"
+
+REGENERATION_APPLY_TIMEOUT_SECONDS = 1800
 
 
 VERIFICATION_COMMAND_SPECS = (

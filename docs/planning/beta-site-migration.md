@@ -11,10 +11,12 @@ This playbook documents the beta-site-only maintainer workflow introduced in v0.
 
 ```bash
 make beta-migrate-fresh DONOR=/abs/path/to/existing-beta-site RECIPIENT=/abs/path/to/fresh-scaffold
+make beta-migrate-iterate DONOR=/abs/path/to/existing-beta-site RECIPIENT=/abs/path/to/throwaway-recipient
 ```
 
 Rules for the current maintainer tool:
 - `make beta-migrate-fresh` runs deterministic file mutation on the throwaway recipient and executes the local verification stack by default; add `DRY_RUN=1` to emit the plan/report without mutating files
+- `make beta-migrate-iterate` runs one migration iteration: it reads slug, package, theme, and modules from the donor's `quickscale.yml`, regenerates the throwaway recipient through the staging sequence below and `quickscale apply --split-refs-from-branches`, then runs the fresh-first workflow against it; `DRY_RUN=1` plans the regeneration only
 - implemented in `quickscale_devtools.beta_migration`; `scripts/beta_migrate.py` is only the thin maintainer wrapper, not a QuickScale module or public `quickscale` CLI command
 - reports which project's `settings/production.py`, `start.sh`, and `Dockerfile` form the effective runtime, rejects unresolved command settings or launcher/package skew before mutation, and keeps fresh-first `.quickscale/state.yml` identity metadata aligned with the reconciled scaffold
 - a run that completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient — what was migrated, every remaining manual action with its paths and governing rule, the hard constraints, and the done criteria — for a coding assistant to complete the remainder; dry runs and runs blocked before or during execution write no prompt
@@ -70,8 +72,11 @@ make beta-migrate-fresh DONOR=/home/victor/code/bap-web RECIPIENT="$RECIPIENT"
 
 Check the iteration by the run report, the remaining items in `$RECIPIENT/MIGRATION_PROMPT.md`,
 and the donor's pytest and Vitest suites run in the recipient. Live-site Playwright and screenshot
-parity run in the final iteration only. SA214 replaces this block with one non-interactive
-`make beta-migrate-iterate` target.
+parity run in the final iteration only. The automated form of this block is one non-interactive
+target, `make beta-migrate-iterate DONOR=/home/victor/code/bap-web RECIPIENT="$RECIPIENT"`: it
+reads slug, package, theme, and modules from the donor's `quickscale.yml`, performs the staging
+regeneration above, and then runs the fresh-first workflow. The snippets above remain its reference
+implementation until the SA214 loop closes.
 
 ### After a fix
 
