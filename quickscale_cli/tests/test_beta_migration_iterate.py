@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import click
 import pytest
 from click.testing import CliRunner
+from quickscale_cli.commands import _types
 from quickscale_cli.commands._finalize import _confirm_destructive_remote_phase
 from quickscale_cli.commands.apply_support import _confirm_apply
 from quickscale_core.generator import ProjectGenerator
@@ -178,13 +179,17 @@ def test_iterate_mode_requires_the_fresh_first_surfaces() -> None:
     assert MODE_REQUIRED_SPECS["iterate"] == MODE_REQUIRED_SPECS["fresh-first"]
 
 
-def test_regeneration_stdin_satisfies_the_shipped_apply_confirmations() -> None:
+def test_regeneration_stdin_satisfies_the_shipped_apply_confirmations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Pin the confirmation sequence against the real apply helpers.
 
     A fresh staged apply with ``--no-docker`` asks the apply gate and then the
     destructive/remote-phase gate. Feeding the regeneration stdin must clear
-    both; a new prompt would hit EOF and abort, so this fails closed.
+    both; a new prompt would hit EOF and abort, so this fails closed. The
+    bypass flag is pinned because other CLI test modules set it at import time.
     """
+    monkeypatch.setattr(_types, "_AF5_DESTRUCTIVE_CONFIRM_BYPASS", False)
 
     @click.command()
     def confirmation_probe() -> None:
