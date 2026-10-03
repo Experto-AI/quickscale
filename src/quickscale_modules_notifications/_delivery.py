@@ -29,7 +29,8 @@ from quickscale_modules_notifications.models import (
     NotificationMessage,
 )
 
-logger = logging.getLogger(__name__)
+# Module Conventions rule 46: a private file logs on its facade's channel.
+logger = logging.getLogger("quickscale_modules_notifications.services")
 
 
 class DeliveryMailer(Protocol):
