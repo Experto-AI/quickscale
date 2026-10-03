@@ -2,9 +2,9 @@
 
 ``BackupArtifactAdmin`` is defined and registered in
 ``quickscale_modules_backups.admin``, which subclasses
-:class:`BackupArtifactAdminBase` here. The download-seam methods stay on the
-registered subclass so the ``quickscale_modules_backups.admin`` module remains
-the lookup site for the download service.
+:class:`BackupArtifactAdminBase` here. The service-call methods resolve their
+collaborators through ``quickscale_modules_backups.services`` at call time, so
+the service module stays the lookup site for tests.
 """
 
 from __future__ import annotations
@@ -292,7 +292,7 @@ class BackupArtifactAdminBase(admin.ModelAdmin):
         """Return whether the admin can still offer a local download action.
 
         Implemented on the registered subclass, which keeps the
-        ``download_backup_path`` lookup on the admin facade.
+        ``download_backup_path`` lookup on the services module.
         """
         raise NotImplementedError
 
@@ -304,39 +304,39 @@ class BackupArtifactAdminBase(admin.ModelAdmin):
         """Stream a local backup file to authenticated staff users.
 
         Implemented on the registered subclass, which keeps the
-        ``download_backup_path`` lookup on the admin facade.
+        ``download_backup_path`` lookup on the services module.
         """
         raise NotImplementedError
 
     def _is_restore_stale(self, artifact: BackupArtifact) -> bool:
         """Return whether the artifact's restore is stale.
 
-        Implemented on the registered subclass, which keeps the service
-        lookup on the admin facade.
+        Implemented on the registered subclass, which keeps the         service
+        lookup on the services module.
         """
         raise NotImplementedError
 
     def _reset_stale_restore(self, artifact: BackupArtifact) -> None:
         """Reset one stranded restore to ``Status.FAILED``.
 
-        Implemented on the registered subclass, which keeps the service
-        lookup on the admin facade.
+        Implemented on the registered subclass, which keeps the         service
+        lookup on the services module.
         """
         raise NotImplementedError
 
     def _validate_backup_artifact(self, artifact: BackupArtifact) -> Any:
         """Validate one artifact and return its issues.
 
-        Implemented on the registered subclass, which keeps the service
-        lookup on the admin facade.
+        Implemented on the registered subclass, which keeps the         service
+        lookup on the services module.
         """
         raise NotImplementedError
 
     def _delete_artifact_files(self, artifact: BackupArtifact) -> None:
         """Delete one artifact's local and remote files.
 
-        Implemented on the registered subclass, which keeps the service
-        lookup on the admin facade.
+        Implemented on the registered subclass, which keeps the         service
+        lookup on the services module.
         """
         raise NotImplementedError
 
