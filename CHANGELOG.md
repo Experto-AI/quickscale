@@ -467,6 +467,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     installed and enabled, so `/blog/` and `/listings/` serve the blog and listings views, the CRM
     shell route reverses as `quickscale_crm_shell`, and the two public social pages render the
     shared `window.__QUICKSCALE__` seam.
+  - **Billing template links resolve by route name.** A generated project's `modules.billing.url`
+    template value reverses billing's pricing and dashboard routes, so its links follow the
+    module's paths in both deployment modes and the retired organization-scoped billing URL is
+    gone.
   - **A site organization is created once.** `quickscale_orgs_create_site_org <slug> <name>`
     creates an organization for a deploy step, is a no-op on a rerun with the same arguments, and
     refuses a slug that already exists under a different name or is reserved (`api`,

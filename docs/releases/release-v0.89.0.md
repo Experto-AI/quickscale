@@ -233,6 +233,14 @@ from each installed and enabled module's manifest, so a switched-off module cont
 route. The operator step is the `<package>/urls.py` adoption above; projects that had customized
 the shadowing reservations must remove them or their module indexes stay unreachable.
 
+**Billing template links.** The generated `<package>/context_processors.py` resolves
+`modules.billing.url` by reversing billing's `pricing_page` and `dashboard` routes instead of
+repeating `/billing/...` path strings, so the value follows the module's paths in both deployment
+modes; the retired organization-scoped `/orgs/<slug>/billing/pricing/` value is gone because no
+organization-scoped billing URL tree exists, and while billing is absent or switched off the value
+is `None`. Existing projects compare and manually adopt the current
+`<package>/context_processors.py`.
+
 **Analytics events and email.** Forms' submission event is renamed from `form_submit` to
 `quickscale_forms_submitted`, and analytics no longer exposes per-event helpers
 (`capture_form_submit`, `capture_social_link_click`). The operator step is to update PostHog

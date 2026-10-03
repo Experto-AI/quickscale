@@ -28,7 +28,15 @@ from pathlib import Path
 import pytest
 from django.conf import settings as django_settings
 from django.http import HttpRequest, HttpResponse
-from django.urls import clear_url_caches, path, re_path, resolve, reverse, set_urlconf
+from django.urls import (
+    clear_url_caches,
+    include,
+    path,
+    re_path,
+    resolve,
+    reverse,
+    set_urlconf,
+)
 
 from quickscale_core.generator.generator import ProjectGenerator
 from quickscale_core.module_wiring import ModuleWiringSpec, render_urls_modules_py
@@ -193,6 +201,114 @@ def test_module_root_url_names_resolve_to_their_own_views(
         assert resolve("/crm/").func is _shell_view
         assert resolve("/crm/dashboard/").func is _crm_dashboard_view
     finally:
+        set_urlconf(None)
+        clear_url_caches()
+
+
+def test_generated_context_processor_billing_url_follows_routes_and_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The generated context processor reverses billing's routes and gates on enabled.
+
+    Anonymous visitors get billing's pricing page and authenticated users its
+    dashboard, in either deployment mode and at whatever prefix the project
+    mounts.  Billing keeps its URL patterns mounted while switched off but
+    answers as disabled (rule 1), so the projected enabled setting yields
+    ``None``, as it does while billing is absent and no namespace resolves.
+    """
+    if not django_settings.configured:
+        django_settings.configure(
+            DEBUG=False,
+            SECRET_KEY="quickscale-test-key",
+            USE_I18N=False,
+            USE_TZ=False,
+            ROOT_URLCONF=__name__,
+        )
+
+    generator = ProjectGenerator(theme="showcase_react")
+    project_name = "context_processor_billing"
+    output_path = tmp_path / project_name
+    generator.generate(project_name, output_path)
+    source = (output_path / project_name / "context_processors.py").read_text()
+
+    module = types.ModuleType("qs_test_context_processors")
+    exec(compile(source, "<context_processors>", "exec"), module.__dict__)
+
+    billing_patterns = [
+        path("pricing/", _shell_view, name="pricing_page"),
+        path("dashboard/", _shell_view, name="dashboard"),
+    ]
+    mounted_root = types.ModuleType("qs_test_billing_root")
+    mounted_root.urlpatterns = [
+        path(
+            "billing/",
+            include(
+                (billing_patterns, "quickscale_billing"),
+                namespace="quickscale_billing",
+            ),
+        )
+    ]
+    remounted_root = types.ModuleType("qs_test_remounted_billing_root")
+    remounted_root.urlpatterns = [
+        path(
+            "payments/",
+            include(
+                (billing_patterns, "quickscale_billing"),
+                namespace="quickscale_billing",
+            ),
+        )
+    ]
+    empty_root = types.ModuleType("qs_test_no_billing_root")
+    empty_root.urlpatterns = []
+    sys.modules[mounted_root.__name__] = mounted_root
+    sys.modules[remounted_root.__name__] = remounted_root
+    sys.modules[empty_root.__name__] = empty_root
+
+    anonymous = types.SimpleNamespace(
+        user=types.SimpleNamespace(is_authenticated=False)
+    )
+    authenticated = types.SimpleNamespace(
+        user=types.SimpleNamespace(is_authenticated=True)
+    )
+    monkeypatch.setattr(
+        django_settings, "QUICKSCALE_BILLING_ENABLED", True, raising=False
+    )
+
+    def billing_url(request: object) -> object:
+        return module.installed_modules(request)["modules"]["billing"]["url"]
+
+    try:
+        set_urlconf(mounted_root)
+        clear_url_caches()
+        for mode in ("solo", "saas"):
+            monkeypatch.setattr(
+                django_settings, "QUICKSCALE_ORGS_MODE", mode, raising=False
+            )
+            assert billing_url(anonymous) == "/billing/pricing/"
+            assert billing_url(authenticated) == "/billing/dashboard/"
+
+        monkeypatch.setattr(
+            django_settings, "QUICKSCALE_BILLING_ENABLED", False, raising=False
+        )
+        assert billing_url(anonymous) is None
+        assert billing_url(authenticated) is None
+
+        monkeypatch.setattr(
+            django_settings, "QUICKSCALE_BILLING_ENABLED", True, raising=False
+        )
+        set_urlconf(remounted_root)
+        clear_url_caches()
+        assert billing_url(anonymous) == "/payments/pricing/"
+        assert billing_url(authenticated) == "/payments/dashboard/"
+
+        set_urlconf(empty_root)
+        clear_url_caches()
+        assert billing_url(anonymous) is None
+        assert billing_url(authenticated) is None
+    finally:
+        sys.modules.pop(mounted_root.__name__, None)
+        sys.modules.pop(remounted_root.__name__, None)
+        sys.modules.pop(empty_root.__name__, None)
         set_urlconf(None)
         clear_url_caches()
 

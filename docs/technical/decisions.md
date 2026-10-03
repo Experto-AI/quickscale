@@ -1118,9 +1118,12 @@ mapping that mirrors this section.
   tenancy mode decides which side owns the path (solo mounts orgs before home, saas after);
   forms' shallow reservations (`/forms`, `/forms/<slug>/`) stay host-rendered until its module
   entrypoint hydrates, because that entrypoint currently renders only a mount-point div;
-  `TenantMiddleware`'s exempt prefixes (`/accounts/`, `/admin/`, `/healthcheck/`) are not orgs
-  paths; and the generated 404 hint's path tests are diagnostics against a requested path, not
-  route declarations.
+  social's public `/social` and `/social/embeds` pages are the theme's host-rendered pages
+  (flat route names `social-link-tree` and `social-embeds`), not a module mount: the manifest
+  declares social's `_quickscale/social/` transport include, and the project owns those public
+  theme routes; `TenantMiddleware`'s exempt prefixes (`/accounts/`, `/admin/`, `/healthcheck/`)
+  are not orgs paths; and the generated 404 hint's path tests are diagnostics against a
+  requested path, not route declarations.
 **42. Settings snapshots.**
 - ✅ A module that needs one consistent view of several of its own settings builds it in its private
   `_settings.py` as a frozen dataclass with a `from_settings()` classmethod, reading each setting
