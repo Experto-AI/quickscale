@@ -168,7 +168,7 @@ The enforcement gaps the audit recorded are closed or accepted:
   `TENANT_TABLE_REGISTRY` is test-owned.
 - Gap 3 (the user-FK gate sees only its suite's apps) is accepted, as recorded in decisions.md
   rule 27.
-- Four residuals are accepted as properties of the fixed checks: a module's `test_isolation.py` is
+- Four residuals are accepted alongside the fixed checks: a module's `test_isolation.py` is
   invoked explicitly by the PostgreSQL gate and does not self-enroll; rule 38's README match is a
   substring anywhere in the file (a floor, as D41 records); rule 19's detector follows the
   view-module names (`views.py`, `debug_views.py`, `_view*.py`, `*_views.py`), so view code a rule 28
