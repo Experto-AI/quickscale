@@ -130,7 +130,6 @@ dropped, and lockfiles, `*.md`, JSON, `module.yml`, version files, and test path
 | Rank | ID | Title | Horizon | Confidence | Size | Reversibility | Problem in one line |
 |---:|---|---|---|---|---|---|---|
 | 1 | `clean-break-schema-no-data-path` | Upgrades rewrite schema history with no data carry path | SA153 go-live | High | M | one-way door | Each release rewrites every module's only migration and nothing carries a deployed project's data across it; SA153 brings the first data that cannot be reseeded. |
-| 2 | `split-facades-patch-coupled` | God-module splits route through their facades to keep test patches working | now | High | M | two-way door | Tests patch by module attribute, so every split helper must look its collaborators up through the facade it was split from; the god module became a facade-plus-cycle whose private names are pinned surface. |
 
 ## Machine-readable index
 
@@ -145,7 +144,7 @@ items:
      anchors: [docs/technical/decisions.md, quickscale_core/src/quickscale_core/dr_engine/recovery.py,
                quickscale_devtools/src/quickscale_devtools/beta_migration.py],
      first_seen: 2026-09-23, last_verified: 2026-10-03}
-  - {id: split-facades-patch-coupled, status: open, rank: 2,
+  - {id: split-facades-patch-coupled, status: closed,
      title: "God-module splits route through their facades to keep test patches working",
      lenses: [III, VIII, IX, XII, XV], horizon: now, confidence: High, size: M,
      reversibility: two-way door, depends_on: [], amplifies: [],
@@ -228,113 +227,12 @@ shaped renames still pending (SA215 rules) **before** the freeze, because they a
 
 ---
 
-## Finding 2: God-module splits route through their facades to keep test patches working
+## Finding 2: God-module splits route through their facades (closed)
 
-- **ID:** `split-facades-patch-coupled`
-- **Rank rationale:** Medium × High, steep. The blast radius is the CLI apply/update/plan/DR
-  paths, billing, and DR orchestration, so one subsystem family, but it includes code shipped into
-  generated projects (billing, `dr_engine`). The trigger is already firing: SA231's closing batch
-  and every SA191 edit touch these packages. The population went from 0 to 51 back-importing modules,
-  and the waivers from 0 to 55, in 9 days.
-- **Horizon & trigger:** `now`. The trigger is the next split, or any SA191 edit to `apply`.
-- **Partly fixed:** SA233 keyed the quality ratchet by qualified name and retired the 55 rename
-  waivers. Still open: the back-imports and the private-name surface pins (SA234).
-- **Confidence:** High. The mechanism was read in code and tests, censused, and no enforcer was
-  found (below).
-- **Context dependence:** `wrong-regardless` for the cycle. Its severity scales with cadence,
-  which is currently about 20 commits a day.
-
-**Problem:** the test suite binds to implementation by module-attribute patching (1,047 patch sites
-on the four CLI facades alone). SA231/SA232 preserved those patch targets instead of moving them.
-So every private module split out of a god module imports **its own facade** and calls its
-collaborators as `_facade.name` at call time. The split turned one god module into a facade plus a
-circular web, and its private helpers are now pinned public surface.
-
-**Evidence** (newly established this pass):
-- **The pattern, stated in code.** `_split_refs.py:1-17`: "that module re-exports every name
-  defined here …, so existing import paths and **test patch targets** keep working", followed by
-  `import quickscale_cli.commands.apply_command as _apply_command` and calls such as
-  `_apply_command.validate_module_name(...)`. The billing modules do the same:
-  `_webhooks_invoice.py:15` (`import quickscale_modules_billing.services as _services`, 14
-  lookups through it) and `_subscription_checkout.py` (15). So does `test_dr_engine_orchestration_facade.py:1-5`:
-  "every test patch target on that path must keep propagating into the moved definitions."
-- **Census:** 51 private modules hold a back-import to their facade (CLI 32, `dr_engine` 9,
-  billing 10). There were 0 at `cdb6223f`.
-- **A silent-miss hazard, already met once.** `36075de9` exists because `_sync_state_module_version`
-  must resolve `module_commands.datetime` through the facade. A helper that imports `datetime`
-  directly makes a facade patch a silent no-op, and the test then asserts nothing about production.
-  This pass found no gate for that rule, only a single regression test.
-- **Private names pinned as API:** five hand-enumerated `EXPECTED_MODULE_SURFACE` sets pin 381
-  names. 197 are private, and 17 are incidental imports, e.g. `test_manifest_resolver_facade_surface.py:19-60`
-  pins `"re"`, `"Any"`, `"annotations"`, and 22 `_`-names. The billing and CLI split facades
-  have no surface test at all, so the gate is both over-tight and incomplete.
-- **The ratchet reads moves as regressions:** `quality_baseline.json` keys complexity by file path,
-  so each moved function needed a waiver. There are 55 (`quality_waivers.json`), every reason is
-  "path changes, so the baseline key is a rename", and all expire on 2027-03-31.
-- **Split merges are fragile:** `093489e6` restored an auth mixin that a split merge silently
-  dropped from `_view_invitation.py`. It was caught only because rule 19 happened to scan the
-  facade's re-export.
-- **No decision record.** Rule 28 (`decisions.md:941-949`), which the facades cite, governs file
-  *names*, not re-export or patch propagation. No decision entry states the patch-through-facade
-  contract. That is §5.IX drift.
-
-**Counter-evidence:** searched `check_module_conventions.py` (only `:1075` follows re-exports, and
-it resolves service functions rather than checking for cycles), the SA228 import-layer test (it is
-module-to-module, not intra-package), `check_quality.sh` (warn-only), and the roadmap. SA231's
-closing batch plans to re-tighten the baseline (`roadmap.md:136-138`), which will retire the
-waivers by re-keying, but it states "Public import paths **and existing tests** stay unchanged".
-That is the decision that keeps the cycle. Found: the partial surface gates above and the one
-clock regression test.
-
-**Why it compounds:** the growth variable is **split modules × facade-patching tests**. Every
-further extraction from these facades (SA231 continues, and SA191/SA153 edit `apply`) must:
-1. add re-exports to the facade;
-2. route each collaborator call through `_facade.`;
-3. extend a hand-listed surface set, where one exists;
-4. re-key or waive the ratchet entry.
-
-Every new test written against the facade path deepens the pin. Already built on top: 1,047 CLI
-patch sites, the billing and `dr_engine` test suites, and 7 facade tests.
-
-**Detection signal:** a test that passes while production code ignores its patch (the
-`36075de9` class of bug); a split merge that drops behaviour (`093489e6`); a burst of waivers on the
-next split; `make quality` failing en masse on 2027-03-31 if the re-key slips.
-
-**Steelman:** the splits were behaviour-preserving refactors of 4,000-line files, done fast by one
-maintainer. Keeping 1,047 patch sites working avoided rewriting the test suite in the same commits,
-and the indirection is cheap at runtime. If the split packages now stay stable, the cost is flat.
-Accept it if no further extraction or new facade-patching tests are planned.
-
-**Correct shape:** a test's seam is a declared dependency (an injected collaborator, a port, or the
-module where the name is *defined*), never the re-export path. Private modules depend on siblings
-and never on their own facade. The facade is a one-way re-export of public names only.
-
-**Do-nothing cost:** over the next 12 months, every edit to apply/plan/module/DR/billing code pays
-the four-station tax above. Each new helper is a chance for a silent no-op patch. The 55 waivers
-must be re-keyed by hand, and the next split mints more.
-
-**Options:**
-1. **Retarget patches to the defining module, then delete the back-imports.** Do it package by
-   package. A codemod can rewrite `patch("…apply_command.X")` to the module that defines `X`. Then
-   private modules import their siblings directly, the facade keeps only public names, and the
-   surface tests drop their `_`-names. It removes the cycle and the pin. Effort M, low risk, and it
-   lands incrementally.
-2. **Inject the volatile collaborators** (clock, git, subprocess, Stripe client) through a context
-   object (the CLI already has `ApplyContext`). Tests stop patching module globals. This removes
-   more coupling but is larger (L), and it changes signatures.
-3. **Accept and document.** Write a decision entry for the patch-through-facade contract, add a gate
-   that fails when a private module binds a facade-re-exported name directly, and key the ratchet
-   by qualified name, not path. This contains the risk without removing the cycle. Revoke it at
-   the next split.
-
-**Recommendation:** option 1 per package, starting with `apply_command` before SA191 (SA234).
-- **Size:** `M`.
-- **Reversibility:** `two-way door`. Only test targets and intra-package imports change; public
-  import paths stay.
-- **Guard:** an import-cycle check (for example an import-linter `independence`/no-cycle contract,
-  or an AST check) that fails when a `_*.py` module imports its own package's facade, plus a
-  quality baseline keyed by `module.qualname`.
-- **First step:** SA234's decision entry, then the `apply_command` codemod.
+- **ID:** `split-facades-patch-coupled`. **Closed** by SA234: private modules resolve
+  collaborators through their defining modules, test patches target those modules, and a gate
+  rejects a `_*.py` module that imports its own facade
+  ([decisions.md § Split-Facade Seams](../technical/decisions.md#split-facade-seams)).
 
 ---
 
@@ -361,7 +259,7 @@ stations have no tool. **Verdict: finding 1 evidence.**
 3. a `_apply_command.` lookup in the callers, or a silent patch miss;
 4. a waiver or re-key, if the helper is moved later.
 
-That is 4 stations, with nothing holding 2 and 3 consistent. **Verdict: finding 2 evidence.**
+That was 4 stations; SA234 gated 2 and 3 and removed the routed lookups. **Verdict: exonerated.**
 
 **Probe C: add a module option.** The stations are the manifest (mirrored by
 `sync_module_manifests.py`, which is gated), the adapter, and an optional retired-name check.
@@ -383,9 +281,7 @@ That is 4 stations, with nothing holding 2 and 3 consistent. **Verdict: finding 
 
 ## Fix order and interactions
 
-- Finding 2's remaining work (SA234) lands before SA191 edits `apply`.
 - Finding 1's freeze (SA204) must land before any post-SA153 module schema change.
-- The two findings are otherwise independent and can run in parallel.
 
 ## Sound load-bearing decisions
 
@@ -435,6 +331,8 @@ That is 4 stations, with nothing holding 2 and 3 consistent. **Verdict: finding 
 
 - 2026-10-03 — `clean-break-schema-no-data-path`: **still-open**, rank 1. The census grew (22
   rewrites in the delta); SA204 is still deferred after SA153.
+- 2026-10-03 — `split-facades-patch-coupled`: **closed** by SA234 (back-imports removed, seam
+  gated).
 - 2026-10-03 — `split-facades-patch-coupled`: **partly fixed** by SA233 (ratchet keyed by
   qualified name, rename waivers retired); the back-imports remain under SA234.
 - 2026-10-03 — `split-facades-patch-coupled`: **new**, rank 2. It was minted by SA231/SA232's
