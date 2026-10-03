@@ -29,21 +29,19 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
 | SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | SA234 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
-| SA240 | Add the idempotent `quickscale_orgs_create_site_org` command for SA191's cutover | post-v88 | 3 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA235, SA237, SA238, SA240 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA235, SA237, SA238 | Deferred |
 | SA241 | Record the React-frontend and public-page prerender decisions for SA153 | post-v88 | 2 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191, SA241 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
-| SA242 | Inventory every personal-data field about a user behind a failing test | post-v88 | 3 | — | Deferred |
-| SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | SA242 | Deferred |
+| SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA234 ──► SA237 ──► SA241
-Track 3: SA240 ──► SA238 ──► SA242 ──► SA216
+Track 3: SA238 ──► SA216
      critical path: SA234 → SA238 → SA191 → SA153
 ```
 
@@ -61,8 +59,8 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** SA235 (Track 1), SA234 (Track 2), and SA240 (Track 3) can start now; SA238
-(Track 3) waits on SA234, and SA242 may fill Track 3 while it waits. SA241 (Track 2) follows
+**Parallel start.** SA235 (Track 1) and SA234 (Track 2) can start now; SA238 (Track 3) waits on
+SA234, and SA216 may fill Track 3 while it waits. SA241 (Track 2) follows
 SA237 and must land before SA153. SA215's closing pass landed and closed inventory sections 1–41
 (the two cells the seventh pass corrected are carried by SA235). The coherence audit's
 seventh pass (sections 42–47, D43–D48) is carried by SA235, SA237, and SA238 (SA236 closed rules
@@ -81,7 +79,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA235 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA234 | yes | yes | yes | **yes** | no |
-| 3 | SA240 | yes | yes | yes | **yes** | **yes** |
+| 3 | SA238 | no | no | yes | no | **yes** |
 
 ### Ownership and merge coordination
 
@@ -526,11 +524,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   | django-allauth `EmailAddress` | the person's email addresses and their verified state | delete (rows exist only for login) |
   | Django sessions | active logins | delete |
   | blog `AuthorProfile` | `bio`, `avatar` file | blank the bio; delete the file through storage |
-  | orgs `OrganizationMembership` | membership, role | delete (the person leaves every organization; the last-owner guard still applies) |
-  | orgs `OrganizationInvitation` | invitations *sent* (`invited_by`); pending invitations *to* their `email` | withdraw both |
-  | notifications `NotificationMessage` / `NotificationDelivery` | `recipient_email`, rendered text and context sent to them (matched by address; there is no user link) | scrub the address and the rendered body; keep status for delivery statistics |
-  | billing `Subscription`, `CreditBalance`, `CreditTransaction`, `PurchaseCheckout` | the user as actor | keep the link (it now points at "Deleted user"); the organization's Stripe customer email belongs to the org owner and changes only with ownership |
-  | crm `ContactNote` / `DealNote`, `Deal.owner`, forms `Form.created_by`, blog `Post.author`, backups actor | the user as actor | keep the link; nothing to scrub on the row |
+  | orgs `OrganizationMembership` | membership, role; `invited_by` on surviving rows | delete the person's memberships (the last-owner guard still applies); surviving rows keep the inviter link |
+  | orgs `OrganizationInvitation` | invitations *sent* (`invited_by`); the recipient `email` on pending, accepted, and expired invitations | pending invitations withdrawn; accepted and expired rows keep the sender link and have the address scrubbed |
+  | notifications `NotificationMessage` / `NotificationDelivery` / `NotificationDeliveryEvent` | `recipient_email`, rendered subject, text, and context sent to them, provider failure text, and the stored provider payload (matched by address; there is no user link) | scrub the address, the rendered body, and provider-carried text; keep status for delivery statistics |
+  | billing `Subscription`, `CreditBalance`, `CreditTransaction`, `PurchaseCheckout`, `WebhookEvent` | the user as actor; customer email and name inside the stored Stripe event payload | keep the link; scrub customer email and name from the webhook payload; the organization's Stripe customer email belongs to the org owner and changes only with ownership |
+  | crm `ContactNote` / `DealNote`, `Deal.owner`, forms `Form.created_by`, blog `Post.author` / `BlogMediaAsset.uploaded_by`, backups actor | the user as actor | keep the link; nothing to scrub on the row |
   | analytics (PostHog) | events under the user's `distinct_id` | outside the database: documented as the operator's deletion step |
 
   Out of scope: data about people who are *not* users (crm `Contact`, forms submissions with their
@@ -578,23 +576,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [ ] (c) Remove the account-deletion lookup and turn `ACCOUNT_DELETE` into the anonymize
     boundary; decisions, organizations.md, and auth's README.
 
-- [ ] **SA242 — Inventory every personal-data field about a user behind a failing test.**
-
-  **Context:** SA216's scrub is only as complete as its list of personal data. Split out of SA216
-  so the list is confirmed, including third-party tables, while Track 3 waits on SA234.
-
-  **Scope:** turn SA216's table into a checked-in inventory, one entry per model field that holds
-  personal data about a user, across modules and installed third-party apps, each with its
-  treatment. A test walks every installed model and fails on a candidate field — a user foreign
-  key, an `EmailField`, a `GenericIPAddressField`, a file field, or a free-text field on a model
-  that references a user — that is neither listed nor explicitly excluded with a reason. It runs in
-  orgs' test settings, the cross-module harness the user-FK conformance gate
-  (`orgs/tests/test_user_fk_conformance.py`) already uses.
-
-  **Acceptance:** the test passes on `v89`, fails with a control case for an unlisted field, and
-  any difference from SA216's table is corrected in that table.
-
-  **Surfaces:** the inventory and its test in orgs' tests; SA216's table.
+- [x] **SA242 — Inventory every personal-data field about a user behind a failing test.**
 
 ## Deferred constraints and references
 
