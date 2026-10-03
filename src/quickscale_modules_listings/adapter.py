@@ -37,6 +37,7 @@ def _listings_post_hook(
             settings=settings,
             pre_home_url_includes=(),
             url_includes=editor_includes,
+            spa_routes=(),
             managed_files=spec.managed_files,
         )
     return ModuleWiringSpec(
@@ -45,6 +46,7 @@ def _listings_post_hook(
         settings=settings,
         pre_home_url_includes=spec.pre_home_url_includes,
         url_includes=spec.url_includes,
+        spa_routes=spec.spa_routes,
         managed_files=spec.managed_files,
     )
 
