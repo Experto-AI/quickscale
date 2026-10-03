@@ -3753,7 +3753,7 @@ def test_handoff_prompt_write_does_not_reach_a_linked_target(
         package="beta_site",
         marker="recipient",
     )
-    donor_target = donor / "notes.txt"
+    donor_target = donor / "frontend" / "notes.txt"
     donor_target.write_text("donor-owned\n")
     prompt_path = recipient / "MIGRATION_PROMPT.md"
     if link_kind == "symlink":

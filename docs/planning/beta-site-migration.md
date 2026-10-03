@@ -16,6 +16,7 @@ make beta-migrate-iterate DONOR=/abs/path/to/existing-beta-site RECIPIENT=/abs/p
 
 Rules for the current maintainer tool:
 - `make beta-migrate-fresh` runs deterministic file mutation on the throwaway recipient and executes the local verification stack by default; add `DRY_RUN=1` to emit the plan/report without mutating files
+- before any mutation every donor file is classified — generated-untouched, generated-customized, project-owned, module-edited, or build artifact — and a donor file that matches no class blocks the run and is named in the report
 - `make beta-migrate-iterate` runs one migration iteration: it reads slug, package, theme, and modules from the donor's `quickscale.yml`, regenerates the throwaway recipient through the staging sequence below and `quickscale apply --split-refs-from-branches`, then runs the fresh-first workflow against it; `DRY_RUN=1` plans the regeneration only
 - implemented in `quickscale_devtools.beta_migration`; `scripts/beta_migrate.py` is only the thin maintainer wrapper, not a QuickScale module or public `quickscale` CLI command
 - reports which project's `settings/production.py`, `start.sh`, and `Dockerfile` form the effective runtime, rejects unresolved command settings or launcher/package skew before mutation, and keeps fresh-first `.quickscale/state.yml` identity metadata aligned with the reconciled scaffold

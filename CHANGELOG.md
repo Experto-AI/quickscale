@@ -52,6 +52,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient with what was
     migrated, the remaining manual actions and their paths and governing rules, the hard
     constraints, and the done criteria.
+  - **Beta migration classifies every donor file before mutation.** The maintainer tool sorts
+    each donor file into generated-untouched, generated-customized, project-owned, module-edited,
+    or build-artifact and blocks the run, naming the file, when one matches no class.
   - **Runtime database role provisioning is consistent.** Generated local setup, Railway deployment, and `OPERATIONS.md` use the shared `quickscale_runtime` name and one grant set that includes database `CONNECT`.
   - **Module pages share the project shell and design tokens, and their tests share one stub.** Auth, billing, blog, listings, and CRM Django pages use the generated React theme's tokens — the live Vite `frontend/src/index.css` in DEBUG, the compiled stylesheet otherwise — and Vite accepts only the exact browser-visible Host derived from `QUICKSCALE_FRONTEND_HOST_PORT` or `QUICKSCALE_FRONTEND_ORIGIN`. The blog, CRM, listings, and analytics module test settings point at one repository-owned test `base.html`, while auth and billing keep local stubs that preserve their older shell assertions.
   - **Payment-path transaction boundaries and Stripe query safety.** Account deletion runs its

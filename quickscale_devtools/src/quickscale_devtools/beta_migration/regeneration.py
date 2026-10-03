@@ -8,6 +8,7 @@ named after the slug, and move the fully applied project to the recipient
 path. The fresh-first workflow then runs against that regenerated recipient.
 """
 
+from .classification import _audit_donor_inventory
 from .constants import (
     DRY_RUN_REASON,
     PHASE_BOUNDARY_REASON,
@@ -363,9 +364,16 @@ def _plan_beta_migration_iterate(
                     f"modules={sorted(donor_config.modules) or ['(none)']}."
                 ),
             )
-            report.planned_actions = _iterate_planned_actions(
-                donor_config, inputs.donor, inputs.recipient
+            _audit_donor_inventory(
+                report,
+                donor_path=inputs.donor,
+                package=donor_config.project.package,
+                theme=donor_config.project.theme,
             )
+            if not report.blockers:
+                report.planned_actions = _iterate_planned_actions(
+                    donor_config, inputs.donor, inputs.recipient
+                )
 
     if inputs.dry_run or execution_intent == "plan":
         boundary_reason = DRY_RUN_REASON if inputs.dry_run else PHASE_BOUNDARY_REASON
