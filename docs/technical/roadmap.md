@@ -24,8 +24,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA233 | Key the quality ratchet by qualified name and retire the rename waivers | post-v88 | 1 | — | Deferred |
-| SA234 | Retarget test patches to defining modules and remove facade back-imports | post-v88 | 2 | SA233 | Deferred |
+| SA234 | Retarget test patches to defining modules and remove facade back-imports | post-v88 | 2 | — | Deferred |
 | SA235 | Declare module UI paths in manifests and render host routes from discovery | post-v88 | 1 | — | Deferred |
 | SA236 | Make settings snapshots private and guard optional senders on `is_enabled()` | post-v88 | 3 | — | Deferred |
 | SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
@@ -41,10 +40,10 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA233 ──► SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA234 ──► SA237
 Track 3: SA215 (closing pass, in progress) ──► SA236 ──► SA238 ──► SA216
-     critical path: SA233 → SA234 → SA238 → SA191 → SA153
+     critical path: SA234 → SA238 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -55,7 +54,7 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** All three tracks can start now: SA233 (Track 1), SA234 (Track 2), and SA215
+**Parallel start.** All three tracks can start now: SA235 (Track 1), SA234 (Track 2), and SA215
 (Track 3, resuming its closing pass). SA215 closes inventory sections 1–41. The coherence audit's
 seventh pass (sections 42–47, D43–D48) is carried by SA235–SA238. Each begins by recording its
 decision (proposed rules 41–46 in the
@@ -71,7 +70,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA233 | yes | yes | yes | **yes** | **yes** |
+| 1 | SA235 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA234 | yes | yes | yes | **yes** | no |
 | 3 | SA215 | yes | yes | yes | **yes** | no |
 
@@ -127,22 +126,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA233 — Key the quality ratchet by qualified name and retire the rename waivers.**
-
-  **Context:** `quality_baseline.json` keys complexity by file path, so every function SA231/SA232
-  moved needed a waiver whose only reason is "path changes, so the baseline key is a rename" (55
-  entries, all expiring 2027-03-31). `make quality` now fails, so each further split mints more
-  waivers, and the waivers lapse in a single batch on that expiry date (arch audit
-  `split-facades-patch-coupled`, first step).
-
-  **Acceptance:** complexity entries are keyed by `module.qualname`, so moving a function between
-  files neither regresses nor needs a waiver; file-length entries stay keyed by path. Every rename
-  waiver is deleted, and the remaining waivers carry a real reason. The monotonicity check rejects a
-  worsened qualname and accepts a pure move, with a control for each. `quality_tools.md` describes
-  the key.
-
-  **Surfaces:** `scripts/check_quality.sh`, `quality_baseline.json`, `quality_waivers.json`,
-  `check_quality_baseline_monotonicity.py` and its tests, and `quality_tools.md`.
+- [x] **SA233 — Key the quality ratchet by qualified name and retire the rename waivers.**
 
 - [ ] **SA234 — Retarget test patches to defining modules and remove facade back-imports.**
 

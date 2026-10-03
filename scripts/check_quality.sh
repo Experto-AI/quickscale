@@ -250,6 +250,16 @@ analyze_complexity() {
     # Save JSON output
     echo "$cc_output" > "$OUTPUT_DIR/complexity_cc.json"
 
+    # SA233: full function inventory (every grade) so the baseline comparison
+    # can tell a moved function from one reduced below the reporting threshold.
+    local inventory_output
+    inventory_output=$(poetry run radon cc \
+        $module_paths \
+        --show-complexity \
+        --json 2>&1 || echo "{}")
+
+    echo "$inventory_output" > "$OUTPUT_DIR/complexity_inventory.json"
+
     # Count high complexity functions (C and above)
     local high_complexity_count
     high_complexity_count=$(echo "$cc_output" | python3 -c "
@@ -484,6 +494,67 @@ def require_non_negative_int(value, label):
     return value
 
 
+_IDENTIFIER_SEGMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def require_dotted_identifier(value, label):
+    value = require_string(value, label)
+    if any(
+        not _IDENTIFIER_SEGMENT.fullmatch(segment) for segment in value.split(".")
+    ):
+        raise ValueError(f"{label} must be a dotted Python identifier path")
+    return value
+
+
+def module_from_repo_path(rel_path):
+    """Derive the defining module path from a repo-relative ``.py`` path."""
+    parts = rel_path.split("/")
+    if "src" not in parts:
+        raise ValueError(f"complexity file path must sit under a src/ root: {rel_path}")
+    module_parts = parts[parts.index("src") + 1 :]
+    if not module_parts or not module_parts[-1].endswith(".py"):
+        raise ValueError(f"complexity file path must name a Python source file: {rel_path}")
+    module_parts[-1] = module_parts[-1][: -len(".py")]
+    if module_parts[-1] == "__init__":
+        module_parts = module_parts[:-1]
+    if not module_parts:
+        raise ValueError(f"complexity file path does not name a module: {rel_path}")
+    return ".".join(module_parts)
+
+
+def shared_module_prefix_length(module_a, module_b):
+    """Count the leading dotted segments two module paths share."""
+    shared = 0
+    for left, right in zip(module_a.split("."), module_b.split(".")):
+        if left != right:
+            break
+        shared += 1
+    return shared
+
+
+def complexity_identity_keys(radon_data):
+    """Return every module.qualname key a radon run reports."""
+    keys = set()
+    for file_path, entries in radon_data.items():
+        if not isinstance(entries, list):
+            continue
+        rel_file = relative_path(file_path)
+        try:
+            module = module_from_repo_path(rel_file)
+        except ValueError:
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            class_name = entry.get("classname")
+            symbol = f"{class_name}.{name}" if class_name else name
+            keys.add(f"{module}.{symbol}")
+    return keys
+
+
 def normalize_dead_code(line):
     stripped = confidence_suffix.sub("", line.strip())
     match = dead_code_identity.match(stripped)
@@ -567,17 +638,21 @@ def validate_baseline(data):
     for key, entry in allowed_functions_raw.items():
         require_string(key, "complexity.allowed_functions key")
         item = require_mapping(entry, f"complexity.allowed_functions[{key}]")
-        file_path = require_string(item.get("file"), f"complexity.allowed_functions[{key}].file")
-        symbol = require_string(item.get("symbol"), f"complexity.allowed_functions[{key}].symbol")
+        module = require_dotted_identifier(
+            item.get("module"), f"complexity.allowed_functions[{key}].module"
+        )
+        qualname = require_dotted_identifier(
+            item.get("qualname"), f"complexity.allowed_functions[{key}].qualname"
+        )
         entry_type = require_string(item.get("type"), f"complexity.allowed_functions[{key}].type")
         max_complexity = require_non_negative_int(
             item.get("max_complexity"),
             f"complexity.allowed_functions[{key}].max_complexity",
         )
-        expected_key = f"{file_path}::{symbol}"
+        expected_key = f"{module}.{qualname}"
         if key != expected_key:
             raise ValueError(
-                f"complexity.allowed_functions[{key}] must match file::symbol ({expected_key})"
+                f"complexity.allowed_functions[{key}] must match module.qualname ({expected_key})"
             )
         # SA231: a function at or above the critical CC threshold may be
         # accepted only when the baseline states why it is listed.
@@ -587,8 +662,8 @@ def validate_baseline(data):
                 f"complexity.allowed_functions[{key}].reason",
             )
         allowed_functions[key] = {
-            "file": file_path,
-            "symbol": symbol,
+            "module": module,
+            "qualname": qualname,
             "type": entry_type,
             "max_complexity": max_complexity,
         }
@@ -654,8 +729,8 @@ def regression_sort_key(item):
     severity_order = {"critical": 0, "warning": 1}
     return (
         severity_order.get(item.get("severity"), 2),
-        item.get("file", ""),
-        item.get("symbol", ""),
+        item.get("module", ""),
+        item.get("qualname", ""),
         item.get("message", ""),
     )
 
@@ -687,17 +762,30 @@ for file_path, entries in cyclomatic.items():
             continue
         class_name = entry.get("classname")
         symbol = f"{class_name}.{name}" if class_name else name
-        key = f"{rel_file}::{symbol}"
+        module = module_from_repo_path(rel_file)
+        key = f"{module}.{symbol}"
         actual_complexity[key] = {
             "key": key,
-            "file": rel_file,
-            "symbol": symbol,
+            "module": module,
+            "qualname": symbol,
             "type": entry.get("type", "function"),
             "complexity": complexity_value,
             "rank": entry.get("rank"),
             "lineno": entry.get("lineno"),
             "endline": entry.get("endline"),
         }
+
+# SA233: the full-grade inventory proves a baseline entry still exists in the
+# tree even when it dropped below the reporting threshold; without it, a
+# reduced stationary function would look like a move source. An inventory that
+# cannot see a finding the filtered run reported is a broken run, never a
+# silently more permissive comparison.
+inventory_complexity_keys = complexity_identity_keys(
+    read_json_safe("complexity_inventory.json", {})
+)
+if actual_complexity and not inventory_complexity_keys:
+    raise ValueError("complexity inventory is empty while findings exist")
+present_complexity_keys = set(actual_complexity) | inventory_complexity_keys
 
 large_files_raw = read_text_safe("large_files.txt")
 actual_large_files = {}
@@ -844,17 +932,58 @@ if baseline_data is not None:
         for _ in range(max(0, delta)):
             resolved_dead_code.append(message)
 
+    # SA233: a function that moved between files is matched to its pre-move
+    # baseline entry by qualname, so a pure move is not a regression and a
+    # worsened qualname is reported against the ceiling it carried before.
+    baseline_functions = baseline_data["complexity"]["allowed_functions"]
+    baseline_by_qualname = {}
+    for baseline_key, baseline_entry in baseline_functions.items():
+        baseline_by_qualname.setdefault(baseline_entry["qualname"], []).append(baseline_key)
+
+    def move_source_for(actual_entry, consumed):
+        """Pick the deterministic pre-move baseline entry for a moved function."""
+        candidates = [
+            baseline_key
+            for baseline_key in baseline_by_qualname.get(actual_entry["qualname"], [])
+            if baseline_key not in present_complexity_keys and baseline_key not in consumed
+        ]
+        if not candidates:
+            return None
+        return sorted(
+            candidates,
+            key=lambda baseline_key: (
+                -shared_module_prefix_length(
+                    baseline_functions[baseline_key]["module"], actual_entry["module"]
+                ),
+                -baseline_functions[baseline_key]["max_complexity"],
+                baseline_key,
+            ),
+        )[0]
+
     complexity_regressions = []
-    for key, actual_entry in actual_complexity.items():
-        baseline_entry = baseline_data["complexity"]["allowed_functions"].get(key)
-        if baseline_entry is None:
-            allowed_max = None
-            regression_type = "new"
-        elif actual_entry["complexity"] > baseline_entry["max_complexity"]:
-            allowed_max = baseline_entry["max_complexity"]
-            regression_type = "increased"
+    consumed_move_sources = set()
+    # SA233: destinations are consumed in sorted key order, matching the
+    # monotonicity helper, so analyzer output order cannot change the verdict.
+    for key, actual_entry in sorted(actual_complexity.items()):
+        baseline_entry = baseline_functions.get(key)
+        allowed_max = None
+        regression_type = None
+        if baseline_entry is not None:
+            if actual_entry["complexity"] > baseline_entry["max_complexity"]:
+                allowed_max = baseline_entry["max_complexity"]
+                regression_type = "increased"
+            else:
+                continue
         else:
-            continue
+            move_source = move_source_for(actual_entry, consumed_move_sources)
+            if move_source is None:
+                regression_type = "new"
+            else:
+                consumed_move_sources.add(move_source)
+                allowed_max = baseline_functions[move_source]["max_complexity"]
+                if actual_entry["complexity"] <= allowed_max:
+                    continue  # pure move: the qualname did not worsen
+                regression_type = "increased"
 
         regression = dict(actual_entry)
         regression["severity"] = (
@@ -869,9 +998,11 @@ if baseline_data is not None:
         complexity_regressions.append(regression)
 
     complexity_resolved = []
-    for key, baseline_entry in baseline_data["complexity"]["allowed_functions"].items():
+    for key, baseline_entry in baseline_functions.items():
         if key in actual_complexity:
             continue
+        if key in consumed_move_sources:
+            continue  # the function moved; it is not resolved
         resolved_entry = dict(baseline_entry)
         resolved_entry["key"] = key
         complexity_resolved.append(resolved_entry)
@@ -1192,13 +1323,14 @@ else:
         for entry in regressions["dead_code"]["new_messages"]:
             lines.append(f"- [warning] Dead code: {entry['message']}")
         for entry in regressions["complexity"]["new_or_worse"]:
+            location = f"{entry['module']}.{entry['qualname']}"
             if entry["allowed_max_complexity"] is None:
                 lines.append(
-                    f"- [{entry['severity']}] Complexity: {entry['file']}::{entry['symbol']} is {entry['complexity']} (new above threshold)"
+                    f"- [{entry['severity']}] Complexity: {location} is {entry['complexity']} (new above threshold)"
                 )
             else:
                 lines.append(
-                    f"- [{entry['severity']}] Complexity: {entry['file']}::{entry['symbol']} is {entry['complexity']} (baseline {entry['allowed_max_complexity']})"
+                    f"- [{entry['severity']}] Complexity: {location} is {entry['complexity']} (baseline {entry['allowed_max_complexity']})"
                 )
         for entry in regressions["large_files"]["new_or_grown"]:
             if entry["allowed_max_lines"] is None:
