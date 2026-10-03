@@ -25,6 +25,7 @@ from django.test import override_settings
 from django.utils import timezone as django_timezone
 
 import quickscale_modules_backups.services as backup_services
+from quickscale_modules_backups._settings import build_policy_snapshot_from_settings
 from quickscale_modules_backups.models import (
     BackupArtifact,
     BackupPolicy,
@@ -358,7 +359,7 @@ class TestPolicyValidation:
         assert "schedule is required when automation_enabled is true" in issues
 
     def test_build_backup_filename_uses_prefix_slug_and_timestamp(self) -> None:
-        snapshot = backup_services._build_policy_snapshot_from_settings()
+        snapshot = build_policy_snapshot_from_settings()
         filename = build_backup_filename(
             snapshot,
             now=datetime(2026, 3, 26, 12, 0, tzinfo=timezone.utc),
@@ -1595,7 +1596,7 @@ class TestBackupLifecycle:
         )
 
         deleted_count = prune_expired_backups(
-            policy=backup_services._build_policy_snapshot_from_settings(),
+            policy=build_policy_snapshot_from_settings(),
             now=datetime.now(timezone.utc),
         )
 
@@ -1746,7 +1747,7 @@ class TestBackupLifecycle:
         )
 
         deleted_count = prune_expired_backups(
-            policy=backup_services._build_policy_snapshot_from_settings(),
+            policy=build_policy_snapshot_from_settings(),
             now=datetime.now(timezone.utc),
         )
 
@@ -1761,7 +1762,7 @@ class TestBackupLifecycle:
         )
 
         deleted_count = prune_expired_backups(
-            policy=backup_services._build_policy_snapshot_from_settings(),
+            policy=build_policy_snapshot_from_settings(),
             now=datetime.now(timezone.utc),
         )
 
@@ -3728,7 +3729,7 @@ class TestBackupServiceUtilities:
 
     def test_build_snapshot_local_root(self) -> None:
         """_build_snapshot_local_root resolves snapshot local directory."""
-        policy = backup_services._build_policy_snapshot_from_settings()
+        policy = build_policy_snapshot_from_settings()
         result = backup_services._build_snapshot_local_root(policy, "snap-123")
         assert result.name == "snap-123"
         assert result.parent.name == "snapshots"
@@ -3773,7 +3774,7 @@ class TestBackupServiceUtilities:
 
     def test_replace_policy_remote_prefix(self) -> None:
         """_replace_policy_remote_prefix returns a copy with new prefix."""
-        policy = backup_services._build_policy_snapshot_from_settings()
+        policy = build_policy_snapshot_from_settings()
         updated = backup_services._replace_policy_remote_prefix(policy, "new/prefix")
         assert updated.remote_prefix == "new/prefix"
         assert policy.remote_prefix != "new/prefix"
@@ -3910,7 +3911,7 @@ class TestBackupServiceUtilities:
             remote_endpoint_url="",
             remote_region_name="",
         )
-        policy = backup_services._build_policy_snapshot_from_settings()
+        policy = build_policy_snapshot_from_settings()
         deleted_keys: list[str] = []
 
         def fake_deleter(
@@ -3940,7 +3941,7 @@ class TestBackupServiceUtilities:
             remote_endpoint_url="",
             remote_region_name="",
         )
-        policy = backup_services._build_policy_snapshot_from_settings()
+        policy = build_policy_snapshot_from_settings()
 
         def failing_deleter(
             remote_key: str, resolved_policy: BackupPolicySnapshot
@@ -4950,7 +4951,6 @@ def test_services_publishes_exactly_the_declared_surface() -> None:
         "BackupConfigurationError",
         "BackupError",
         "BackupLockError",
-        "BackupPolicySnapshot",
         "BackupRestoreBlocked",
         "RemoteDeleter",
         "RemoteMaterializer",
