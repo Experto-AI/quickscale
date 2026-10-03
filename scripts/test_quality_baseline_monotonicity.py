@@ -142,6 +142,19 @@ _check = monotonicity_mod
 DEFAULT_BASE_REF = _check._DEFAULT_BASE_REF
 
 
+def _quality_artifacts_dir() -> Path:
+    """Return the per-test quality artifact dir set by the isolation fixture."""
+    return Path(os.environ["QUALITY_OUTPUT_DIR"])
+
+
+@pytest.fixture(autouse=True)
+def _isolate_quality_output_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Keep every test's quality artifacts out of the repository."""
+    output_dir = tmp_path / "quality-artifacts"
+    monkeypatch.setenv("QUALITY_OUTPUT_DIR", str(output_dir))
+    return output_dir
+
+
 def _canonical_record(
     *,
     error_code: str | None = None,
@@ -207,7 +220,7 @@ def _assert_exact_error_envelope(
     }
     assert result.stdout == ""
     assert result.stderr == f"ERROR: {message}\n"
-    policy_path = _REPO_ROOT / ".quickscale" / "quality_baseline_policy.json"
+    policy_path = _quality_artifacts_dir() / "quality_baseline_policy.json"
     assert policy_path.read_text() == json.dumps(expected, indent=2) + "\n"
 
 
@@ -376,6 +389,21 @@ class TestCompareIndexes:
         new_idx = _check._validate_baseline_structure(baseline_snapshot, "new")
         results = _check._compare_indexes(old_idx, new_idx)
         assert len(results) == 0
+
+    def test_file_length_increase_is_fl_rise(self) -> None:
+        """SA231: a new file_length ceiling reports section file_length, FL-RISE."""
+        results = _check._compare_indexes(
+            {}, {"file_length:quickscale_core/src/quickscale_core/big.py": 900}
+        )
+        assert results == [
+            {
+                "section": "file_length",
+                "canonical_key": ("file_length:quickscale_core/src/quickscale_core/big.py"),
+                "old_value": 0,
+                "new_value": 900,
+                "error_code": "FL-RISE",
+            }
+        ]
 
     def test_sa114_increases_detected(
         self, baseline_snapshot: dict, current_baseline_with_increases: dict
@@ -1341,6 +1369,63 @@ class TestValidateBaselineStructure:
             f"large_files must contribute no index keys; got {indexes}"
         )
 
+    def test_file_length_section_is_indexed(self) -> None:
+        """SA231: a file_length entry contributes one max_lines index key."""
+        data = {
+            "schema_version": 1,
+            "dead_code": {"allowed_messages": []},
+            "complexity": {"allowed_functions": {}},
+            "file_length": {
+                "allowed_files": {
+                    "quickscale_core/src/quickscale_core/big.py": {
+                        "max_lines": 900,
+                        "reason": "listed until the split lands",
+                    }
+                }
+            },
+            "duplication": {"allowed_blocks": 0},
+        }
+        indexes = _check._validate_baseline_structure(data, "test")
+        assert indexes == {
+            "file_length:quickscale_core/src/quickscale_core/big.py": 900,
+            "duplication:allowed_blocks": 0,
+        }, f"file_length must contribute its ceiling; got {indexes}"
+
+    def test_file_length_missing_reason_rejected(self) -> None:
+        """SA231: a file_length entry must state why the file is listed."""
+        data = {
+            "schema_version": 1,
+            "dead_code": {"allowed_messages": []},
+            "complexity": {"allowed_functions": {}},
+            "file_length": {"allowed_files": {"big.py": {"max_lines": 900}}},
+            "duplication": {"allowed_blocks": 0},
+        }
+        with pytest.raises(RuntimeError, match="reason"):
+            _check._validate_baseline_structure(data, "test")
+
+    def test_file_length_bool_max_lines_rejected(self) -> None:
+        """SA231: a bool max_lines is rejected like every other strict int."""
+        data = {
+            "schema_version": 1,
+            "dead_code": {"allowed_messages": []},
+            "complexity": {"allowed_functions": {}},
+            "file_length": {"allowed_files": {"big.py": {"max_lines": True, "reason": "why"}}},
+            "duplication": {"allowed_blocks": 0},
+        }
+        with pytest.raises(RuntimeError, match="max_lines"):
+            _check._validate_baseline_structure(data, "test")
+
+    def test_file_length_waiver_entry_key_parses(self) -> None:
+        """SA231: the file_length waiver key format is strict."""
+        key = "file_length:quickscale_core/src/quickscale_core/big.py"
+        section, parsed = _check._parse_entry_key(key)
+        assert section == "file_length"
+        assert parsed == key
+        with pytest.raises(ValueError, match="file_length"):
+            _check._parse_entry_key("file_length:")
+        with pytest.raises(ValueError, match="file_length"):
+            _check._parse_entry_key("file_length:big.py:extra")
+
     def test_bool_allowed_blocks_rejected(self) -> None:
         """A bool allowed_blocks is rejected."""
         data = {
@@ -1898,7 +1983,7 @@ class TestShellIntegration:
 
     def _policy_file(self) -> Path:
         """Return the path to the policy output file."""
-        return _REPO_ROOT / ".quickscale" / "quality_baseline_policy.json"
+        return _quality_artifacts_dir() / "quality_baseline_policy.json"
 
     # ------------------------------------------------------------------
     # Exit code contract
@@ -1908,8 +1993,9 @@ class TestShellIntegration:
         """
         The helper exits 0 when run with the documented default base ref.
 
-        Phase 1 verified that the current baseline has no diff against the
-        merge-base of the default base ref, so the gate should pass cleanly.
+        The re-tightened baseline carries increases against the merge-base of
+        the default base ref, each covered by an active waiver, so the gate
+        passes with verdict ``pass_waived``.
         """
         result = self._run_helper(extra_args=["--base-ref", DEFAULT_BASE_REF])
         assert result.returncode == 0, (
@@ -2154,6 +2240,11 @@ class TestShellIntegration:
     def test_helper_exit_1_stale_base_waiver(self, tmp_path: Path) -> None:
         """A waiver whose ``base_ceiling`` does not match merge-base exits 1."""
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
+        # Isolate the injected increase: the freeze baseline carries waivered
+        # dead-code and file-length entries this scenario's ledger does not cover.
+        current["dead_code"]["allowed_messages"] = []
+        current["file_length"] = {"allowed_files": {}}
+        current["duplication"] = {"allowed_blocks": 0}
         current["complexity"]["allowed_functions"] = {
             "stale_base_test.py::func": {
                 "file": "stale_base_test.py",
@@ -2224,6 +2315,11 @@ class TestShellIntegration:
     def test_helper_exit_1_over_ceiling_waiver(self, tmp_path: Path) -> None:
         """A waiver whose ``ceiling`` is below the observed value exits 1."""
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
+        # Isolate the injected increase: the freeze baseline carries waivered
+        # dead-code and file-length entries this scenario's ledger does not cover.
+        current["dead_code"]["allowed_messages"] = []
+        current["file_length"] = {"allowed_files": {}}
+        current["duplication"] = {"allowed_blocks": 0}
         current["complexity"]["allowed_functions"] = {
             "over_ceiling_test.py::func": {
                 "file": "over_ceiling_test.py",
@@ -2294,6 +2390,11 @@ class TestShellIntegration:
     def test_helper_exit_1_expired_waiver(self, tmp_path: Path) -> None:
         """An expired waiver does not resolve the violation — helper exits 1."""
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
+        # Isolate the injected increase: the freeze baseline carries waivered
+        # dead-code and file-length entries this scenario's ledger does not cover.
+        current["dead_code"]["allowed_messages"] = []
+        current["file_length"] = {"allowed_files": {}}
+        current["duplication"] = {"allowed_blocks": 0}
         current["complexity"]["allowed_functions"] = {
             "expired_test.py::func": {
                 "file": "expired_test.py",
@@ -2368,6 +2469,11 @@ class TestShellIntegration:
     def test_helper_exit_1_duplicate_both_dimensions(self, tmp_path: Path) -> None:
         """Duplicate waiver_id AND entry_key simultaneously — violation unresolved, exit 1."""
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
+        # Isolate the injected increase: the freeze baseline carries waivered
+        # dead-code and file-length entries this scenario's ledger does not cover.
+        current["dead_code"]["allowed_messages"] = []
+        current["file_length"] = {"allowed_files": {}}
+        current["duplication"] = {"allowed_blocks": 0}
         current["complexity"]["allowed_functions"] = {
             "dup_both.py::func": {
                 "file": "dup_both.py",
@@ -4865,32 +4971,16 @@ class TestShellSubprocess:
 
     @pytest.fixture
     def quickscale_backup(self) -> dict[str, str | None]:
-        """Backup key ``.quickscale`` artifacts and return their content."""
-        qs = _REPO_ROOT / ".quickscale"
-        backup: dict[str, str | None] = {}
-        for name in (
-            "quality_report.json",
-            "quality_report.md",
-            "quality_gate_status.json",
-            "quality_baseline_policy.json",
-        ):
-            f = qs / name
-            backup[name] = f.read_text(encoding="utf-8") if f.exists() else None
-        return backup
+        """No-op backup: shell runs write only under ``QUALITY_OUTPUT_DIR``."""
+        return {}
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
     def _restore_quickscale(self, backup: dict[str, str | None]) -> None:
-        """Restore backed-up ``.quickscale`` artifacts."""
-        qs = _REPO_ROOT / ".quickscale"
-        for name, content in backup.items():
-            f = qs / name
-            if content is not None:
-                f.write_text(content, encoding="utf-8")
-            elif f.exists():
-                f.unlink()
+        """No-op: shell runs write only under ``QUALITY_OUTPUT_DIR``."""
+        del backup
 
     def _run_shell(
         self,
@@ -4970,13 +5060,13 @@ class TestShellSubprocess:
             )
 
             # --- 2. Policy preservation ---
-            pf = _REPO_ROOT / ".quickscale" / "quality_baseline_policy.json"
+            pf = _quality_artifacts_dir() / "quality_baseline_policy.json"
             assert pf.exists(), "Policy file must be preserved on failure"
             policy_data = json.loads(pf.read_text())
             assert policy_data.get("verdict") in ("violation",)
 
             # --- 3. Stale artifact removal ---
-            qs = _REPO_ROOT / ".quickscale"
+            qs = _quality_artifacts_dir()
             assert not (qs / "quality_report.json").exists(), (
                 "quality_report.json must be removed on failure"
             )
@@ -5061,7 +5151,7 @@ class TestShellSubprocess:
             )
 
             # --- 2. Policy preservation (complete error envelope) ---
-            pf = _REPO_ROOT / ".quickscale" / "quality_baseline_policy.json"
+            pf = _quality_artifacts_dir() / "quality_baseline_policy.json"
             assert pf.exists(), "Policy file must be preserved on schema error"
             expected_policy = {
                 "schema_version": 1,
@@ -5077,7 +5167,7 @@ class TestShellSubprocess:
             assert pf.read_text() == json.dumps(expected_policy, indent=2) + "\n"
 
             # --- 3. Stale artifact removal ---
-            qs = _REPO_ROOT / ".quickscale"
+            qs = _quality_artifacts_dir()
             assert not (qs / "quality_report.json").exists()
             assert not (qs / "quality_report.md").exists()
             assert not (qs / "quality_gate_status.json").exists()
@@ -5139,7 +5229,7 @@ class TestShellSubprocess:
             )
 
             # --- 2. All three output files exist ---
-            qs = _REPO_ROOT / ".quickscale"
+            qs = _quality_artifacts_dir()
             json_path = qs / "quality_report.json"
             md_path = qs / "quality_report.md"
             status_path = qs / "quality_gate_status.json"
@@ -5297,7 +5387,7 @@ class TestShellSubprocess:
             )
 
             # Policy file preserved
-            pf = _REPO_ROOT / ".quickscale" / "quality_baseline_policy.json"
+            pf = _quality_artifacts_dir() / "quality_baseline_policy.json"
             assert pf.exists(), "Policy file must be preserved on orphan failure"
             policy_data = json.loads(pf.read_text())
 
@@ -5363,7 +5453,7 @@ class TestShellSubprocess:
                 f"Monotonicity gate must pass:\n{result.stdout}"
             )
 
-            qs = _REPO_ROOT / ".quickscale"
+            qs = _quality_artifacts_dir()
             policy = json.loads((qs / "quality_baseline_policy.json").read_text())
             report = json.loads((qs / "quality_report.json").read_text())
             status = json.loads((qs / "quality_gate_status.json").read_text())
@@ -5427,8 +5517,9 @@ class TestShellSubprocess:
         """
         Shell produces NONEMPTY diagnostics on controlled success.
 
-        Uses a temp baseline with three values higher than the default merge-base
-        and matching active waivers.  Helper exits 0 with nonempty diagnostics.
+        Uses a temp baseline with three complexity values higher than the default
+        merge-base and the file-length entry, each with a matching active waiver.
+        Helper exits 0 with nonempty diagnostics.
         The shell continues to produce reports with nonempty diagnostics in
         policy/report/status/Markdown.  The find stub isolates large-file
         analysis from live repository file sizes.
@@ -5443,6 +5534,12 @@ class TestShellSubprocess:
                 (_REPO_ROOT / "scripts" / "quality_baseline.json").read_text()
             )
             higher_baseline = json.loads(json.dumps(real_baseline))
+            # Isolate the fixture difference to the pinned increases: empty the
+            # dead-code and duplication sections whose freeze entries this ledger
+            # does not cover. The file-length entry stays, so the stub's listed
+            # file is accepted.
+            higher_baseline["dead_code"]["allowed_messages"] = []
+            higher_baseline["duplication"] = {"allowed_blocks": 0}
             # Bump the three pinned keys and keep only them, so the fixture
             # difference against the merge base is exactly these three
             # increases, independent of any waivers the repository carries.
@@ -5506,6 +5603,19 @@ class TestShellSubprocess:
                         "expires_on": future,
                         "decision_ref": "quality-baseline-monotonicity",
                     },
+                    {
+                        "waiver_id": "W-NE-FL",
+                        "entry_key": (
+                            "file_length:quickscale_core/src/quickscale_core/"
+                            "dr_engine/orchestration.py"
+                        ),
+                        "base_ceiling": 0,
+                        "ceiling": 2897,
+                        "owner": "test@example.com",
+                        "reason": "Nonempty diagnostic shell test",
+                        "expires_on": future,
+                        "decision_ref": "file-size-metric-policy",
+                    },
                 ],
             }
             temp_waivers = tmp_path / "waivers_nonempty.json"
@@ -5535,7 +5645,7 @@ class TestShellSubprocess:
             )
 
             # --- All three output files exist ---
-            qs = _REPO_ROOT / ".quickscale"
+            qs = _quality_artifacts_dir()
             json_path = qs / "quality_report.json"
             md_path = qs / "quality_report.md"
             status_path = qs / "quality_gate_status.json"
@@ -5552,16 +5662,16 @@ class TestShellSubprocess:
             report_diag = report.get("monotonicity", {}).get("diagnostics", [])
             status_diag = status_data.get("monotonicity_diagnostics", [])
 
-            # Exactly 3 diagnostics entries (one per violation matched with active waiver)
-            assert len(policy_diag) == 3, (
-                f"Expected exactly 3 diagnostics entries in policy, got {len(policy_diag)}:\n"
+            # Exactly 4 diagnostics entries (one per violation matched with active waiver)
+            assert len(policy_diag) == 4, (
+                f"Expected exactly 4 diagnostics entries in policy, got {len(policy_diag)}:\n"
                 f"{json.dumps(policy_diag, indent=2)}"
             )
-            assert len(report_diag) == 3, (
-                f"Expected exactly 3 diagnostics entries in report, got {len(report_diag)}"
+            assert len(report_diag) == 4, (
+                f"Expected exactly 4 diagnostics entries in report, got {len(report_diag)}"
             )
-            assert len(status_diag) == 3, (
-                f"Expected exactly 3 diagnostics entries in status, got {len(status_diag)}"
+            assert len(status_diag) == 4, (
+                f"Expected exactly 4 diagnostics entries in status, got {len(status_diag)}"
             )
 
             # --- Markdown diagnostics ---
@@ -5581,8 +5691,8 @@ class TestShellSubprocess:
             )
             md_json = "\n".join(md_lines[fence_start + 1 : fence_end])
             md_diag = json.loads(md_json)
-            assert len(md_diag) == 3, (
-                f"Expected exactly 3 diagnostics entries in Markdown, got {len(md_diag)}"
+            assert len(md_diag) == 4, (
+                f"Expected exactly 4 diagnostics entries in Markdown, got {len(md_diag)}"
             )
 
             # --- Exact equality across all four artifacts ---

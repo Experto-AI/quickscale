@@ -510,6 +510,11 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ Every covered Module Conventions rule passes"
             LOCAL_GATE_FAILURE_LABEL="Module Conventions Gate"
             ;;
+        quality)
+            LOCAL_GATE_DESCRIPTION="Running quality ratchet gate..."
+            LOCAL_GATE_SUCCESS="✓ Quality ratchet gate passed"
+            LOCAL_GATE_FAILURE_LABEL="Quality Ratchet Gate"
+            ;;
         *)
             LOCAL_GATE_DESCRIPTION="Running $target..."
             LOCAL_GATE_SUCCESS="✓ $target passed"
@@ -721,6 +726,11 @@ report_static_failure_banner() {
         check-module-conventions)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ Module Conventions Gate Failed     ║"
+            echo "╚════════════════════════════════════════╝"
+            ;;
+        quality)
+            echo "╔════════════════════════════════════════╗"
+            echo "║   ✗ Quality Ratchet Gate Failed        ║"
             echo "╚════════════════════════════════════════╝"
             ;;
         typecheck)

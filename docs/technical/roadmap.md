@@ -24,7 +24,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA231 | Split long files and complex functions in batches, then make the quality gate fail | post-v88 | 1 | — | Deferred |
 | SA232 | Split the long CLI command, `dr_engine`, and billing files | post-v88 | 2 | — | Deferred |
 | SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
@@ -37,7 +36,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA231 (closing gate batch) ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA232
 Track 3: SA215 (remaining rules) ──► SA216
      critical path: SA215 → SA191 → SA153
@@ -50,9 +49,9 @@ ported, and SA204 has not frozen the migration history. SA204 freezes migration 
 any post-SA153 module schema change. SA154 is an inventory, not work.
 
 **Off the critical path.** SA215 runs on Track 3, which owns the conformance harness it adds rules
-to. SA231 (Track 1) fills its track until SA215 lands and SA191 can start. SA232 (Track 2) splits
-`dr_engine`; SA231's gate lists SA232's unfinished files in the baseline, and SA232 removes those
-entries. SA216 waits for SA215 because both change auth's views, orgs' removal path, and the
+to. SA231 (Track 1) is closed; SA191 waits for SA215. SA232 (Track 2) splits `dr_engine`; SA231's
+gate lists its unfinished file in the baseline, and SA232 removes that entry and its waiver. SA216
+waits for SA215 because both change auth's views, orgs' removal path, and the
 user-referencing models.
 
 ### Track states
@@ -61,7 +60,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA231 | yes | yes | yes | **yes** | no |
+| 1 | SA191 | no | no | no | no | no |
 | 2 | SA232 | yes | yes | yes | **yes** | no |
 | 3 | SA215 | yes | yes | yes | **yes** | **yes** |
 
@@ -133,23 +132,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the conformance test; release notes; decisions; the inventory.
 
-- [ ] **SA231 — Split long files and complex functions in batches, then make the quality gate fail.**
-
-  **Context:** `make quality` (`scripts/check_quality.sh`) measures radon complexity against a
-  ratchet baseline (`scripts/quality_baseline.json`), but it only warns: no CI stage or registered
-  gate runs it, and file length is not in the baseline. Batch 1 and the module batch have landed;
-  no Track 1 file reaches 800 lines.
-
-  **Scope:** the closing batch: add file length to the baseline ratchet, list each file SA232 has
-  not yet split with its reason, re-tighten the baseline, and register `make quality` as a failing
-  gate. Public import paths and existing tests stay unchanged.
-
-  **Acceptance:** no file reaches 800 lines and no function reaches CC 21 unless the baseline
-  lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
-  a regression, which a control case proves; the gate is registered and runs in local CI.
-
-  **Surfaces:** each batch's files; `scripts/quality_baseline.json`, `scripts/check_quality.sh`;
-  the gate registry and gate documentation.
+- [x] **SA231 — Split long files and complex functions in batches, then make the quality gate fail.**
 
 - [ ] **SA232 — Split the long CLI command, `dr_engine`, and billing files.**
 
@@ -157,8 +140,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `dr_engine/orchestration.py` is 2,897 lines.
 
   **Scope:** SA231's rules for `quickscale_core/dr_engine/`: private modules behind a re-exporting
-  facade, through the serialized merge queue; remove the file's baseline exception if SA231's gate
-  has listed it.
+  facade, through the serialized merge queue; remove the file's baseline entry and its waiver if
+  SA231's gate has listed them.
 
   **Acceptance:** every file in scope is under 800 lines, and no function in scope reaches CC 21
   unless the baseline lists it with a reason; zero regressions against the baseline for these
