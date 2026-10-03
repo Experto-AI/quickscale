@@ -307,7 +307,7 @@ class TestAccountDeleteView:
         )
 
         with patch(
-            "quickscale_modules_billing.services.cancel_current_subscription"
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription"
         ) as mock_cancel:
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
@@ -346,7 +346,7 @@ class TestAccountDeleteView:
         )
 
         with patch(
-            "quickscale_modules_billing.services.cancel_current_subscription"
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription"
         ) as mock_cancel:
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
@@ -393,7 +393,7 @@ class TestAccountDeleteView:
             atomic_depths.append(len(connection.atomic_blocks))
 
         with patch(
-            "quickscale_modules_billing.services.cancel_current_subscription",
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription",
             side_effect=record_atomic_state,
         ):
             response = authenticated_client.post(
@@ -457,11 +457,11 @@ class TestAccountDeleteView:
 
         with (
             patch(
-                "quickscale_modules_billing.services.get_stripe_client",
+                "quickscale_modules_billing._stripe_client.get_stripe_client",
                 return_value=stripe_client,
             ),
             patch(
-                "quickscale_modules_billing.services.cancel_current_subscription"
+                "quickscale_modules_billing._subscription_mutations.cancel_current_subscription"
             ) as mock_cancel,
         ):
             response = authenticated_client.post(
@@ -550,7 +550,7 @@ class TestAccountDeleteView:
         }
 
         with patch(
-            "quickscale_modules_billing.services.get_stripe_client",
+            "quickscale_modules_billing._stripe_client.get_stripe_client",
             return_value=stripe_client,
         ):
             authenticated_client.post(reverse("quickscale_auth:account_delete"))
@@ -610,11 +610,11 @@ class TestAccountDeleteView:
 
         with (
             patch(
-                "quickscale_modules_billing.services.get_stripe_client",
+                "quickscale_modules_billing._stripe_client.get_stripe_client",
                 return_value=stripe_client,
             ),
             patch(
-                "quickscale_modules_billing.services.cancel_current_subscription"
+                "quickscale_modules_billing._subscription_mutations.cancel_current_subscription"
             ) as mock_cancel,
         ):
             response = authenticated_client.post(
@@ -689,7 +689,7 @@ class TestAccountDeleteView:
         }
 
         with patch(
-            "quickscale_modules_billing.services.get_stripe_client",
+            "quickscale_modules_billing._stripe_client.get_stripe_client",
             return_value=stripe_client,
         ):
             response = authenticated_client.post(
@@ -836,7 +836,7 @@ class TestAccountDeleteView:
             events.append(("lock-exit", organization_id))
 
         with patch(
-            "quickscale_modules_billing.services.subscription_provider_mutation_lock",
+            "quickscale_modules_billing._locks.subscription_provider_mutation_lock",
             side_effect=record_provider_lock,
         ):
             response = authenticated_client.post(
@@ -907,16 +907,15 @@ class TestAccountDeleteView:
 
         with (
             patch(
-                "quickscale_modules_billing.services."
-                "subscription_provider_mutation_lock",
+                "quickscale_modules_billing._locks.subscription_provider_mutation_lock",
                 side_effect=record_provider_lock,
             ),
             patch(
-                "quickscale_modules_billing.services.cancel_current_subscription",
+                "quickscale_modules_billing._subscription_mutations.cancel_current_subscription",
                 side_effect=add_concurrent_owner,
             ) as mock_cancel,
             patch(
-                "quickscale_modules_billing.services.resume_current_subscription",
+                "quickscale_modules_billing._subscription_mutations.resume_current_subscription",
                 side_effect=record_resume,
             ) as mock_resume,
         ):
@@ -985,11 +984,11 @@ class TestAccountDeleteView:
 
         with (
             patch(
-                "quickscale_modules_billing.services.cancel_current_subscription",
+                "quickscale_modules_billing._subscription_mutations.cancel_current_subscription",
                 side_effect=preserve_existing_state,
             ),
             patch(
-                "quickscale_modules_billing.services.resume_current_subscription"
+                "quickscale_modules_billing._subscription_mutations.resume_current_subscription"
             ) as mock_resume,
         ):
             response = authenticated_client.post(
@@ -1039,11 +1038,11 @@ class TestAccountDeleteView:
 
         with (
             patch(
-                "quickscale_modules_billing.services.cancel_current_subscription",
+                "quickscale_modules_billing._subscription_mutations.cancel_current_subscription",
                 side_effect=fail_second_cancellation,
             ),
             patch(
-                "quickscale_modules_billing.services.resume_current_subscription"
+                "quickscale_modules_billing._subscription_mutations.resume_current_subscription"
             ) as mock_resume,
             pytest.raises(RuntimeError, match="provider response lost"),
         ):
@@ -1081,11 +1080,11 @@ class TestAccountDeleteView:
 
         with (
             patch(
-                "quickscale_modules_billing.services.cancel_current_subscription",
+                "quickscale_modules_billing._subscription_mutations.cancel_current_subscription",
                 return_value=transition,
             ),
             patch(
-                "quickscale_modules_billing.services.resume_current_subscription"
+                "quickscale_modules_billing._subscription_mutations.resume_current_subscription"
             ) as mock_resume,
             patch.object(
                 type(user), "delete", side_effect=RuntimeError("delete failed")
@@ -1151,11 +1150,11 @@ class TestAccountDeleteView:
         caplog.set_level(logging.ERROR, logger="quickscale_modules_auth.views")
         with (
             patch(
-                "quickscale_modules_billing.services.cancel_current_subscription",
+                "quickscale_modules_billing._subscription_mutations.cancel_current_subscription",
                 side_effect=change_membership,
             ),
             patch(
-                "quickscale_modules_billing.services.resume_current_subscription",
+                "quickscale_modules_billing._subscription_mutations.resume_current_subscription",
                 side_effect=[RuntimeError("resume failed"), None],
             ) as mock_resume,
         ):
@@ -1199,7 +1198,9 @@ class TestAccountDeleteView:
         )
 
         caplog.set_level(logging.INFO, logger="quickscale_modules_auth.views")
-        with patch("quickscale_modules_billing.services.cancel_current_subscription"):
+        with patch(
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription"
+        ):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
             )
@@ -1253,7 +1254,9 @@ class TestAccountDeleteView:
         )
 
         caplog.set_level(logging.INFO, logger="quickscale_modules_auth.views")
-        with patch("quickscale_modules_billing.services.cancel_current_subscription"):
+        with patch(
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription"
+        ):
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
             )
@@ -1359,7 +1362,7 @@ class TestAccountDeleteView:
         )
 
         with patch(
-            "quickscale_modules_billing.services.cancel_current_subscription"
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription"
         ) as mock_cancel:
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
@@ -1416,7 +1419,7 @@ class TestAccountDeleteView:
         )
 
         with patch(
-            "quickscale_modules_billing.services.cancel_current_subscription"
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription"
         ) as mock_cancel:
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
@@ -1500,7 +1503,7 @@ class TestAccountDeleteView:
         )
 
         with patch(
-            "quickscale_modules_billing.services.cancel_current_subscription"
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription"
         ) as mock_cancel:
             response = authenticated_client.post(
                 reverse("quickscale_auth:account_delete")
@@ -1527,7 +1530,7 @@ class TestAccountDeleteView:
 
         from django.contrib import messages as messages_framework
         from django.contrib.auth import get_user_model
-        from quickscale_modules_billing.services import (
+        from quickscale_modules_billing.exceptions import (
             BillingSubscriptionAnomalyError,
         )
         from quickscale_modules_orgs.models import (
@@ -1548,7 +1551,7 @@ class TestAccountDeleteView:
         )
 
         with patch(
-            "quickscale_modules_billing.services.cancel_current_subscription",
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription",
             side_effect=BillingSubscriptionAnomalyError(
                 "Current recurring subscription is missing a Stripe subscription id."
             ),
@@ -1572,9 +1575,7 @@ class TestAccountDeleteView:
 
         from django.contrib import messages as messages_framework
         from django.contrib.auth import get_user_model
-        from quickscale_modules_billing.services import (
-            BillingValidationError,
-        )
+        from quickscale_modules_billing.exceptions import BillingValidationError
         from quickscale_modules_orgs.models import (
             OrgRole,
             Organization,
@@ -1593,7 +1594,7 @@ class TestAccountDeleteView:
         )
 
         with patch(
-            "quickscale_modules_billing.services.cancel_current_subscription",
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription",
             side_effect=BillingValidationError(
                 "Organization does not have a current recurring subscription."
             ),
@@ -1618,7 +1619,7 @@ class TestAccountDeleteView:
         from django.contrib import messages as messages_framework
         from django.contrib.auth import get_user_model
         from quickscale_modules_billing.models import Plan, Subscription
-        from quickscale_modules_billing.services import BillingConfigurationError
+        from quickscale_modules_billing.exceptions import BillingConfigurationError
         from quickscale_modules_orgs.current_org import org_scope
         from quickscale_modules_orgs.models import (
             OrgRole,
@@ -1655,7 +1656,7 @@ class TestAccountDeleteView:
             )
 
         with patch(
-            "quickscale_modules_billing.services.get_stripe_client",
+            "quickscale_modules_billing._stripe_client.get_stripe_client",
             side_effect=BillingConfigurationError("Stripe secret key is missing."),
         ):
             response = authenticated_client.post(
