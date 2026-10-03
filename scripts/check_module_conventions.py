@@ -2462,6 +2462,199 @@ def rule_13_tenant_models(corpus: Corpus) -> list[str]:
     return violations
 
 
+def _file_field_class_names(module: Module) -> set[str]:
+    """
+    Return every file-field class name a module's own package defines.
+
+    Rule 14's filename clause must see an ``upload_to`` registered on the
+    module's own ``FileField``/``ImageField`` subclass, not just Django's base
+    classes, so a custom field stays inside the detector's scan set.
+    """
+    names = {"FileField", "ImageField"}
+    changed = True
+    while changed:
+        changed = False
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            for node in ast.walk(_parse(text)):
+                if not isinstance(node, ast.ClassDef) or node.name in names:
+                    continue
+                if set(_class_names(node)) & names:
+                    names.add(node.name)
+                    changed = True
+    return names
+
+
+def _module_file(
+    parts: tuple[str, ...],
+    module_name: str,
+    package_files: Mapping[str, str],
+) -> str | None:
+    """Return the package file a dotted module path refers to, if it exists."""
+    package = f"quickscale_modules_{module_name}"
+    dotted = ".".join(parts)
+    if not dotted.startswith(f"{package}."):
+        return None
+    rel = dotted[len(package) + 1 :].replace(".", "/") + ".py"
+    return rel if rel in package_files else None
+
+
+def _import_package_parts(node: ast.ImportFrom, module_name: str) -> tuple[str, ...] | None:
+    """
+    Map an own-package ``ImportFrom`` target to its package path (SA239).
+
+    Both the level-1 relative form (``from ._uploads import …``) and the
+    absolute form (``from quickscale_modules_<module>._uploads import …``)
+    resolve to the same package path; a deeper relative level leaves the
+    package and is ignored.
+    """
+    package = f"quickscale_modules_{module_name}"
+    base = (package,)
+    if node.module:
+        if node.level:
+            if node.level != 1:
+                return None
+            return base + tuple(node.module.split("."))
+        parts = tuple(node.module.split("."))
+        if parts[:1] != base:
+            return None
+        return parts
+    if node.level != 1:
+        return None
+    return base
+
+
+def _builder_bindings(
+    tree: ast.Module,
+    module_name: str,
+    package_files: Mapping[str, str],
+) -> dict[str, tuple[str, str | None]]:
+    """
+    Map ``models.py`` bindings to own-package files (SA239).
+
+    A binding is ``(file, function)`` for a function import and
+    ``(file, None)`` for a module import; imports outside the module's own
+    package are ignored.  Resolution stays tied to the import binding, so an
+    unrelated same-named function cannot answer for a registered callable.
+    """
+    bindings: dict[str, tuple[str, str | None]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            base = _import_package_parts(node, module_name)
+            if base is None:
+                continue
+            if node.module is None:
+                for alias in node.names:
+                    target = _module_file(base + (alias.name,), module_name, package_files)
+                    if target:
+                        bindings[alias.asname or alias.name] = (target, None)
+                continue
+            imported_module = _module_file(base, module_name, package_files)
+            for alias in node.names:
+                local = alias.asname or alias.name
+                if imported_module is not None:
+                    bindings[local] = (imported_module, alias.name)
+                else:
+                    target = _module_file(base + (alias.name,), module_name, package_files)
+                    if target:
+                        bindings[local] = (target, None)
+        elif isinstance(node, ast.Import):
+            # An unaliased ``import a.b.c`` binds the package root, so the
+            # attribute chain itself names the file; only ``as`` bindings
+            # point at one specific module.
+            for alias in node.names:
+                if not alias.asname:
+                    continue
+                parts = tuple(alias.name.split("."))
+                target = _module_file(parts, module_name, package_files)
+                if target is not None:
+                    bindings[alias.asname] = (target, None)
+    return bindings
+
+
+def _resolve_upload_to_builder(
+    target: ast.expr | None,
+    local_functions: Mapping[str, ast.FunctionDef],
+    bindings: Mapping[str, tuple[str, str | None]],
+    module_name: str,
+    package_files: Mapping[str, str],
+) -> tuple[str, str] | None:
+    """Resolve one ``upload_to`` target to its ``(file, function)`` (SA239)."""
+    if isinstance(target, ast.Name):
+        if target.id in local_functions:
+            return ("models.py", target.id)
+        binding = bindings.get(target.id)
+        if binding is None:
+            return None
+        file, function = binding
+        if function is None or file not in package_files:
+            return None
+        return (file, function)
+    if isinstance(target, ast.Attribute):
+        chain = _attribute_chain(target)
+        if chain is None or len(chain) < 2:
+            return None
+        # An absolute chain names its own file before any import binding is
+        # consulted, mirroring Python's package-root attribute semantics; a
+        # local alias (``import … as x`` or ``from . import x``) is a binding.
+        file = _module_file(chain[:-1], module_name, package_files)
+        if file is not None:
+            return (file, chain[-1])
+        binding = bindings.get(chain[0])
+        if binding is not None:
+            file, function = binding
+            if function is not None or file not in package_files:
+                return None
+            return (file, chain[-1])
+    return None
+
+
+def _upload_to_builders(
+    module: Module,
+    tree: ast.Module,
+    field_class_names: set[str],
+) -> list[tuple[str, str]]:
+    """Resolve every ``upload_to`` registration to ``(file, function)`` (SA239)."""
+    package_files = {
+        rel: text
+        for rel, text in module.files.items()
+        if rel.endswith(".py") and not rel.startswith("migrations/")
+    }
+    local_functions = {
+        node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+    }
+    bindings = _builder_bindings(tree, module.name, package_files)
+    builders: set[tuple[str, str]] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if _call_func_name(node) not in field_class_names:
+            continue
+        builder = _resolve_upload_to_builder(
+            _keyword(node, "upload_to"),
+            local_functions,
+            bindings,
+            module.name,
+            package_files,
+        )
+        if builder is not None:
+            builders.add(builder)
+    return sorted(builders)
+
+
+def _path_suffix_reads(node: ast.AST) -> list[ast.Attribute]:
+    """Return every ``Path(...).suffix`` read inside one AST subtree (SA239)."""
+    reads: list[ast.Attribute] = []
+    for inner in ast.walk(node):
+        if not isinstance(inner, ast.Attribute) or inner.attr != "suffix":
+            continue
+        value = inner.value
+        if isinstance(value, ast.Call) and _call_func_name(value) == "Path":
+            reads.append(inner)
+    return reads
+
+
 def rule_14_model_basics(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
@@ -2476,6 +2669,21 @@ def rule_14_model_basics(corpus: Corpus) -> list[str]:
         if models is None:
             continue
         tree = _parse(models)
+        field_class_names = _file_field_class_names(module)
+        for builder_source, builder_name in _upload_to_builders(module, tree, field_class_names):
+            source = module.files.get(builder_source)
+            if source is None:
+                continue
+            for node in ast.walk(_parse(source)):
+                if not isinstance(node, ast.FunctionDef) or node.name != builder_name:
+                    continue
+                for suffix_read in _path_suffix_reads(node):
+                    violations.append(
+                        f"rule 14: {module.name}: {builder_source}:{builder_name} "
+                        f"takes the upload extension from the client filename "
+                        f"(line {suffix_read.lineno})"
+                    )
+                break
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign) and isinstance(node.value, (ast.List, ast.Tuple)):
                 for target in node.targets:

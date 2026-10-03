@@ -1237,6 +1237,35 @@ class TestUploadMediaApi:
             assert asset.organization is not None
 
     @pytest.mark.parametrize("storage_missing", STORAGE_PATHS)
+    def test_upload_media_api_stores_the_validated_extension(
+        self,
+        client,
+        staff_user,
+        staff_org,
+        tmp_path,
+        settings,
+        storage_missing,
+        blog_org_scope,
+    ):
+        """A valid PNG named x.html is stored as .png, not as the client suffix."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        _login_with_org(client, staff_user)
+
+        with without_storage_services(storage_missing):
+            response = client.post(
+                reverse("quickscale_blog:api_upload_media"),
+                data={"file": make_uploaded_test_image(filename="x.html")},
+            )
+
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["url"].endswith(".png")
+        with blog_org_scope(staff_org):
+            asset = BlogMediaAsset.all_objects.get(pk=payload["id"])
+            assert asset.file.name.endswith(".png")
+            assert not asset.file.name.endswith(".html")
+
+    @pytest.mark.parametrize("storage_missing", STORAGE_PATHS)
     def test_upload_media_api_rejects_excessive_width_with_or_without_helper(
         self,
         client,

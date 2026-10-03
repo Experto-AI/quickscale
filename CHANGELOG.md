@@ -445,6 +445,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **The quality ratchet gates file length and runs in local CI.** `make quality` fails on any
     new or worsened dead code, complexity, duplication, or file at or above 800 lines, and
     `make ci` runs it as a registered gate.
+  - **Stored media extensions follow the validated image format.** Blog media and storage upload
+    paths map Pillow's validated format to a fixed extension (JPEG→`.jpg`, PNG→`.png`,
+    WEBP→`.webp`, GIF→`.gif`), so a valid image named with another extension is stored and served
+    under its image type instead of the client's suffix.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

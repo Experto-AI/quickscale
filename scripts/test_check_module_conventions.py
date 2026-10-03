@@ -680,6 +680,288 @@ def test_literal_choices_control() -> None:
     )
 
 
+def test_upload_to_extension_control() -> None:
+    module = _golden_module()
+    client_named_models = (
+        "from pathlib import Path\n\n"
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n\n"
+        "def widget_upload_to(instance, filename):\n"
+        '    return f"widgets/{Path(filename).suffix.lower()}"\n\n\n'
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(upload_to=widget_upload_to)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    flagged = _with_files(module, models=client_named_models)
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted_models = client_named_models.replace(
+        '    return f"widgets/{Path(filename).suffix.lower()}"\n',
+        '    return f"widgets/{filename}"\n',
+    )
+    accepted = _with_files(module, models=accepted_models)
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+@pytest.mark.parametrize(
+    "import_line",
+    [
+        "from ._uploads import widget_upload_to",
+        "from quickscale_modules_demo._uploads import widget_upload_to",
+    ],
+)
+def test_upload_to_extension_via_sibling_builder_control(
+    import_line: str,
+) -> None:
+    module = _golden_module()
+    imported_models = (
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n"
+        f"{import_line}\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(upload_to=widget_upload_to)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    flagged = _with_files(
+        module,
+        models=imported_models,
+        **{
+            "_uploads.py": (
+                "from pathlib import Path\n\n\n"
+                "def widget_upload_to(instance, filename):\n"
+                '    return f"widgets/{Path(filename).suffix.lower()}"\n'
+            )
+        },
+    )
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted = _with_files(
+        module,
+        models=imported_models,
+        **{
+            "_uploads.py": (
+                'def widget_upload_to(instance, filename):\n    return f"widgets/{filename}"\n'
+            )
+        },
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+def test_upload_to_extension_via_custom_field_control() -> None:
+    module = _golden_module()
+    custom_field_models = (
+        "from pathlib import Path\n\n"
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n\n"
+        "def widget_upload_to(instance, filename):\n"
+        '    return f"widgets/{Path(filename).suffix.lower()}"\n\n\n'
+        "class WidgetImageField(models.ImageField):\n"
+        "    pass\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = WidgetImageField(upload_to=widget_upload_to)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    flagged = _with_files(module, models=custom_field_models)
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted_models = custom_field_models.replace(
+        '    return f"widgets/{Path(filename).suffix.lower()}"\n',
+        '    return f"widgets/{filename}"\n',
+    )
+    accepted = _with_files(module, models=accepted_models)
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+@pytest.mark.parametrize(
+    "import_line",
+    [
+        "from . import _uploads",
+        "from quickscale_modules_demo import _uploads",
+        "import quickscale_modules_demo._uploads as _uploads",
+    ],
+)
+def test_upload_to_extension_via_qualified_builder_control(
+    import_line: str,
+) -> None:
+    module = _golden_module()
+    qualified_models = (
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n"
+        f"{import_line}\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(upload_to=_uploads.widget_upload_to)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    flagged = _with_files(
+        module,
+        models=qualified_models,
+        **{
+            "_uploads.py": (
+                "from pathlib import Path\n\n\n"
+                "def widget_upload_to(instance, filename):\n"
+                '    return f"widgets/{Path(filename).suffix.lower()}"\n'
+            )
+        },
+    )
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted = _with_files(
+        module,
+        models=qualified_models,
+        **{
+            "_uploads.py": (
+                'def widget_upload_to(instance, filename):\n    return f"widgets/{filename}"\n'
+            )
+        },
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+@pytest.mark.parametrize(
+    "import_line",
+    [
+        "from ._uploads import widget_upload_to as image_path",
+        "from quickscale_modules_demo._uploads import widget_upload_to as image_path",
+    ],
+)
+def test_upload_to_extension_via_function_alias_control(
+    import_line: str,
+) -> None:
+    module = _golden_module()
+    aliased_models = (
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n"
+        f"{import_line}\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(upload_to=image_path)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    flagged = _with_files(
+        module,
+        models=aliased_models,
+        **{
+            "_uploads.py": (
+                "from pathlib import Path\n\n\n"
+                "def widget_upload_to(instance, filename):\n"
+                '    return f"widgets/{Path(filename).suffix.lower()}"\n'
+            )
+        },
+    )
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted = _with_files(
+        module,
+        models=aliased_models,
+        **{
+            "_uploads.py": (
+                'def widget_upload_to(instance, filename):\n    return f"widgets/{filename}"\n'
+            )
+        },
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+def test_upload_to_extension_same_named_decoy_control() -> None:
+    module = _golden_module()
+    qualified_models = (
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n"
+        "from . import _uploads\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(upload_to=_uploads.widget_upload_to)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    accepted = _with_files(
+        module,
+        models=qualified_models,
+        **{
+            "_uploads.py": (
+                'def widget_upload_to(instance, filename):\n    return f"widgets/{filename}"\n'
+            ),
+            "_archive.py": (
+                "from pathlib import Path\n\n\n"
+                "def widget_upload_to(instance, filename):\n"
+                '    return f"archive/{Path(filename).suffix.lower()}"\n'
+            ),
+        },
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+def test_upload_to_extension_unaliased_dotted_import_control() -> None:
+    module = _golden_module()
+    dotted_models = (
+        "import quickscale_modules_demo._uploads\n"
+        "import quickscale_modules_demo._archive\n\n"
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(\n"
+        "        upload_to=quickscale_modules_demo._uploads.widget_upload_to\n"
+        "    )\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    dirty_builder = (
+        "from pathlib import Path\n\n\n"
+        "def widget_upload_to(instance, filename):\n"
+        '    return f"widgets/{Path(filename).suffix.lower()}"\n'
+    )
+    clean_builder = 'def widget_upload_to(instance, filename):\n    return f"widgets/{filename}"\n'
+
+    flagged = _with_files(
+        module,
+        models=dotted_models,
+        **{"_uploads.py": dirty_builder, "_archive.py": clean_builder},
+    )
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted = _with_files(
+        module,
+        models=dotted_models,
+        **{"_uploads.py": clean_builder, "_archive.py": dirty_builder},
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
 def test_package_root_control() -> None:
     module = _golden_module()
     broken = _with_files(

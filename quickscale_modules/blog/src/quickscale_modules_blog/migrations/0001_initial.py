@@ -92,7 +92,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "file",
-                    models.ImageField(
+                    quickscale_modules_blog.models._BlogMediaAssetImageField(
                         upload_to=quickscale_modules_blog.models.blog_media_upload_to
                     ),
                 ),
