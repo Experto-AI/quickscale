@@ -374,6 +374,96 @@
     },
     {
       "waiver_id": "W060",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_capture.py::_complete_capture_after_dump",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W061",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_capture.py::_resume_backup_capture",
+      "base_ceiling": 0,
+      "ceiling": 25,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W062",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_capture.py::create_backup",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W063",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_media.py::_resolve_media_runtime",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W064",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_media.py::sync_backup_snapshot_media",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W065",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_policy.py::_validate_policy_snapshot_internal",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W066",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_remote.py::_delete_snapshot_storage",
+      "base_ceiling": 0,
+      "ceiling": 18,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W067",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_report.py::_build_snapshot_full_backup_contract",
+      "base_ceiling": 0,
+      "ceiling": 35,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase. SA231 closeout raised this ceiling to the measured value.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W068",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_report.py::build_backup_snapshot_report",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase. SA231 closeout raised this ceiling to the measured value.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W069",
       "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_deploy_service_config.py::_configure_env_vars_step",
       "base_ceiling": 0,
       "ceiling": 12,
@@ -383,7 +473,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W061",
+      "waiver_id": "W070",
       "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_module_update_io.py::_roll_back_partial_module_update",
       "base_ceiling": 0,
       "ceiling": 12,
@@ -393,7 +483,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W062",
+      "waiver_id": "W071",
       "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/_status_display.py::_display_contract_vintage",
       "base_ceiling": 0,
       "ceiling": 12,
@@ -403,7 +493,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W063",
+      "waiver_id": "W072",
       "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/apply_command.py::apply",
       "base_ceiling": 0,
       "ceiling": 13,
@@ -413,7 +503,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W064",
+      "waiver_id": "W073",
       "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/contract_vintage.py::check_contract_vintage",
       "base_ceiling": 0,
       "ceiling": 12,
@@ -423,7 +513,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W065",
+      "waiver_id": "W074",
       "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/contract_vintage.py::enforce_contract_vintage",
       "base_ceiling": 0,
       "ceiling": 11,
@@ -433,7 +523,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W066",
+      "waiver_id": "W075",
       "entry_key": "complexity:quickscale_cli/src/quickscale_cli/commands/module_config.py::_prompt_for_manifest_option",
       "base_ceiling": 0,
       "ceiling": 15,
@@ -443,7 +533,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W067",
+      "waiver_id": "W076",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/apply/ledger.py::RecoveryLedger",
       "base_ceiling": 12,
       "ceiling": 13,
@@ -453,7 +543,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W068",
+      "waiver_id": "W077",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/apply/ledger.py::RecoveryLedger.to_dict",
       "base_ceiling": 11,
       "ceiling": 12,
@@ -463,7 +553,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W069",
+      "waiver_id": "W078",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/apply/ledger.py::_parse_applied_state",
       "base_ceiling": 23,
       "ceiling": 29,
@@ -473,7 +563,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W070",
+      "waiver_id": "W079",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/apply/steps/env_sync.py::sync_env_example_blocks",
       "base_ceiling": 0,
       "ceiling": 11,
@@ -483,28 +573,8 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W071",
-      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/orchestration.py::_build_snapshot_full_backup_contract",
-      "base_ceiling": 34,
-      "ceiling": 35,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W072",
-      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/orchestration.py::build_backup_snapshot_report",
-      "base_ceiling": 12,
-      "ceiling": 13,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W073",
-      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/orchestration.py::prune_expired_backups",
+      "waiver_id": "W080",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_prune.py::prune_expired_backups",
       "base_ceiling": 0,
       "ceiling": 13,
       "owner": "QuickScale maintainers",
@@ -513,7 +583,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W074",
+      "waiver_id": "W081",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/primitives.py::_resolve_postgres_connection_parameters",
       "base_ceiling": 0,
       "ceiling": 13,
@@ -523,7 +593,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W075",
+      "waiver_id": "W082",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/recovery.py::_execute_restore_for_resolved_source",
       "base_ceiling": 17,
       "ceiling": 18,
@@ -533,7 +603,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W076",
+      "waiver_id": "W083",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/manifest/option_validation.py::_cross_option_issues",
       "base_ceiling": 0,
       "ceiling": 42,
@@ -543,7 +613,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W077",
+      "waiver_id": "W084",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/manifest/option_validation.py::_single_value_issues",
       "base_ceiling": 0,
       "ceiling": 28,
@@ -553,7 +623,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W078",
+      "waiver_id": "W085",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/manifest/option_validation.py::collect_option_validation_issues",
       "base_ceiling": 0,
       "ceiling": 14,
@@ -563,7 +633,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W079",
+      "waiver_id": "W086",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/runtime/conventions.py::_collect_field_messages",
       "base_ceiling": 0,
       "ceiling": 11,
@@ -573,7 +643,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W080",
+      "waiver_id": "W087",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/runtime/conventions.py::register_module_checks",
       "base_ceiling": 0,
       "ceiling": 17,
@@ -583,7 +653,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W081",
+      "waiver_id": "W088",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/runtime/settings.py::resolve_runtime_database_url",
       "base_ceiling": 0,
       "ceiling": 15,
@@ -593,7 +663,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W082",
+      "waiver_id": "W089",
       "entry_key": "complexity:quickscale_core/src/quickscale_core/schema/state_schema.py::StateManager.load",
       "base_ceiling": 28,
       "ceiling": 34,
@@ -603,7 +673,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W083",
+      "waiver_id": "W090",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/compatibility.py::_dockerfile_final_stage_settings_assignment",
       "base_ceiling": 0,
       "ceiling": 12,
@@ -613,7 +683,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W084",
+      "waiver_id": "W091",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/compatibility.py::_launcher_package_mismatch",
       "base_ceiling": 0,
       "ceiling": 37,
@@ -623,7 +693,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W085",
+      "waiver_id": "W092",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/compatibility.py::_validate_runtime_compatibility",
       "base_ceiling": 0,
       "ceiling": 20,
@@ -633,7 +703,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W086",
+      "waiver_id": "W093",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/dockerfile.py::_docker_segment_command_indexes",
       "base_ceiling": 0,
       "ceiling": 15,
@@ -643,7 +713,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W087",
+      "waiver_id": "W094",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/dockerfile.py::_dockerfile_logical_instructions",
       "base_ceiling": 0,
       "ceiling": 12,
@@ -653,7 +723,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W088",
+      "waiver_id": "W095",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/dockerfile.py::_validate_docker_healthcheck_payload",
       "base_ceiling": 0,
       "ceiling": 13,
@@ -663,7 +733,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W089",
+      "waiver_id": "W096",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/identity.py::_build_identity_reconciliation_plan",
       "base_ceiling": 0,
       "ceiling": 14,
@@ -673,7 +743,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W090",
+      "waiver_id": "W097",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/identity.py::_replace_identity_text_for_path",
       "base_ceiling": 0,
       "ceiling": 14,
@@ -683,7 +753,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W091",
+      "waiver_id": "W098",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/runtime_commands.py::_extract_launcher_runtime_commands",
       "base_ceiling": 0,
       "ceiling": 20,
@@ -693,7 +763,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W092",
+      "waiver_id": "W099",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/runtime_commands.py::_parse_runtime_command_line",
       "base_ceiling": 0,
       "ceiling": 46,
@@ -703,7 +773,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W093",
+      "waiver_id": "W100",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/settings_facade.py::_canonical_read_env_var",
       "base_ceiling": 0,
       "ceiling": 21,
@@ -713,7 +783,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W094",
+      "waiver_id": "W101",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/settings_facade.py::_facade_imports",
       "base_ceiling": 0,
       "ceiling": 18,
@@ -723,7 +793,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W095",
+      "waiver_id": "W102",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/settings_facade.py::_facade_selection_targets_databases",
       "base_ceiling": 0,
       "ceiling": 20,
@@ -733,7 +803,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W096",
+      "waiver_id": "W103",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/settings_facade.py::_static_string_expression",
       "base_ceiling": 0,
       "ceiling": 27,
@@ -743,7 +813,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W097",
+      "waiver_id": "W104",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/shell.py::_active_launcher_line",
       "base_ceiling": 0,
       "ceiling": 14,
@@ -753,7 +823,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W098",
+      "waiver_id": "W105",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/shell.py::_has_dynamic_env_assignment_name",
       "base_ceiling": 0,
       "ceiling": 20,
@@ -763,7 +833,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W099",
+      "waiver_id": "W106",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/shell.py::_validate_persistent_environment_mutation",
       "base_ceiling": 0,
       "ceiling": 46,
@@ -773,7 +843,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W100",
+      "waiver_id": "W107",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/start_sh.py::_start_sh_line_is_unconditional_terminator",
       "base_ceiling": 0,
       "ceiling": 16,
@@ -783,7 +853,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W101",
+      "waiver_id": "W108",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/start_sh.py::_start_sh_logical_lines",
       "base_ceiling": 0,
       "ceiling": 25,
@@ -793,7 +863,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W102",
+      "waiver_id": "W109",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/start_sh.py::_start_sh_reachable_logical_lines",
       "base_ceiling": 0,
       "ceiling": 26,
@@ -803,7 +873,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W103",
+      "waiver_id": "W110",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/start_sh.py::_start_sh_segments",
       "base_ceiling": 0,
       "ceiling": 12,
@@ -813,7 +883,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W104",
+      "waiver_id": "W111",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/start_sh.py::_validate_start_sh_python_command",
       "base_ceiling": 0,
       "ceiling": 16,
@@ -823,7 +893,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W105",
+      "waiver_id": "W112",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/start_sh.py::_validate_start_sh_python_import",
       "base_ceiling": 0,
       "ceiling": 14,
@@ -833,7 +903,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W106",
+      "waiver_id": "W113",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/start_sh.py::_validate_start_sh_python_payload",
       "base_ceiling": 0,
       "ceiling": 13,
@@ -843,7 +913,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W107",
+      "waiver_id": "W114",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/start_sh.py::_validate_start_sh_segment",
       "base_ceiling": 0,
       "ceiling": 30,
@@ -853,7 +923,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W108",
+      "waiver_id": "W115",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/beta_migration/toml_editing.py::_insert_missing_path_dependencies",
       "base_ceiling": 0,
       "ceiling": 11,
@@ -863,7 +933,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W109",
+      "waiver_id": "W116",
       "entry_key": "complexity:quickscale_devtools/src/quickscale_devtools/handoff_prompt.py::render_handoff_prompt",
       "base_ceiling": 0,
       "ceiling": 15,
@@ -873,7 +943,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W110",
+      "waiver_id": "W117",
       "entry_key": "complexity:quickscale_modules/analytics/src/quickscale_modules_analytics/checks.py::check_analytics_settings",
       "base_ceiling": 0,
       "ceiling": 17,
@@ -883,7 +953,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W111",
+      "waiver_id": "W118",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_checkout.py::_create_checkout_session",
       "base_ceiling": 0,
       "ceiling": 11,
@@ -893,7 +963,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W112",
+      "waiver_id": "W119",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_customers.py::_resolve_authoritative_organization_customer_id",
       "base_ceiling": 0,
       "ceiling": 11,
@@ -903,7 +973,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W113",
+      "waiver_id": "W120",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_payload.py::_extract_subscription_period_bounds",
       "base_ceiling": 0,
       "ceiling": 14,
@@ -913,7 +983,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W114",
+      "waiver_id": "W121",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_removal.py::reconcile_purchase_checkouts_for_removal",
       "base_ceiling": 0,
       "ceiling": 14,
@@ -923,7 +993,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W115",
+      "waiver_id": "W122",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_resolution.py::_resolve_checkout_reservation_organization",
       "base_ceiling": 0,
       "ceiling": 19,
@@ -933,7 +1003,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W116",
+      "waiver_id": "W123",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_subscription_checkout.py::_create_subscription_checkout_session",
       "base_ceiling": 0,
       "ceiling": 22,
@@ -943,7 +1013,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W117",
+      "waiver_id": "W124",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_subscription_checkout.py::_reconcile_subscription_checkout",
       "base_ceiling": 0,
       "ceiling": 28,
@@ -953,7 +1023,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W118",
+      "waiver_id": "W125",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_subscription_checkout.py::_reuse_live_subscription_checkout_url",
       "base_ceiling": 0,
       "ceiling": 16,
@@ -963,7 +1033,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W119",
+      "waiver_id": "W126",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_subscription_events.py::_apply_subscription_payload",
       "base_ceiling": 0,
       "ceiling": 31,
@@ -973,7 +1043,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W120",
+      "waiver_id": "W127",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_subscription_mutations.py::_persist_subscription_provider_snapshot",
       "base_ceiling": 0,
       "ceiling": 19,
@@ -983,7 +1053,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W121",
+      "waiver_id": "W128",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_validation.py::_validate_completed_checkout_provider_identity",
       "base_ceiling": 0,
       "ceiling": 13,
@@ -993,7 +1063,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W122",
+      "waiver_id": "W129",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_webhooks.py::_handle_checkout_session_expired_event",
       "base_ceiling": 0,
       "ceiling": 11,
@@ -1003,7 +1073,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W123",
+      "waiver_id": "W130",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_webhooks.py::_resolve_purchase_checkout_for_session",
       "base_ceiling": 0,
       "ceiling": 15,
@@ -1013,7 +1083,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W124",
+      "waiver_id": "W131",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_webhooks.py::_resolve_subscription_checkout_for_session",
       "base_ceiling": 0,
       "ceiling": 15,
@@ -1023,7 +1093,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W125",
+      "waiver_id": "W132",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py::_apply_invoice_payment_failed_event",
       "base_ceiling": 0,
       "ceiling": 23,
@@ -1033,7 +1103,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W126",
+      "waiver_id": "W133",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py::_finalize_invoice_paid_event",
       "base_ceiling": 0,
       "ceiling": 29,
@@ -1043,7 +1113,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W127",
+      "waiver_id": "W134",
       "entry_key": "complexity:quickscale_modules/billing/src/quickscale_modules_billing/_webhooks_invoice.py::_process_invoice_paid_event",
       "base_ceiling": 0,
       "ceiling": 11,
@@ -1053,7 +1123,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W128",
+      "waiver_id": "W135",
       "entry_key": "complexity:quickscale_modules/storage/src/quickscale_modules_storage/checks.py::check_vendor_secrets",
       "base_ceiling": 0,
       "ceiling": 11,
@@ -1063,7 +1133,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W129",
+      "waiver_id": "W136",
       "entry_key": "dead_code:allowed_messages:quickscale_core/src/quickscale_core/runtime/conventions.py: unused variable 'app_configs':multiplicity",
       "base_ceiling": 0,
       "ceiling": 1,
@@ -1073,7 +1143,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W130",
+      "waiver_id": "W137",
       "entry_key": "dead_code:allowed_messages:quickscale_modules/analytics/src/quickscale_modules_analytics/checks.py: unused variable 'app_configs':multiplicity",
       "base_ceiling": 0,
       "ceiling": 1,
@@ -1083,7 +1153,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W131",
+      "waiver_id": "W138",
       "entry_key": "dead_code:allowed_messages:quickscale_modules/backups/src/quickscale_modules_backups/checks.py: unused variable 'app_configs':multiplicity",
       "base_ceiling": 0,
       "ceiling": 1,
@@ -1093,7 +1163,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W132",
+      "waiver_id": "W139",
       "entry_key": "dead_code:allowed_messages:quickscale_modules/billing/src/quickscale_modules_billing/checks.py: unused variable 'app_configs':multiplicity",
       "base_ceiling": 0,
       "ceiling": 1,
@@ -1103,7 +1173,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W133",
+      "waiver_id": "W140",
       "entry_key": "dead_code:allowed_messages:quickscale_modules/blog/src/quickscale_modules_blog/checks.py: unused variable 'app_configs':multiplicity",
       "base_ceiling": 0,
       "ceiling": 1,
@@ -1113,7 +1183,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W134",
+      "waiver_id": "W141",
       "entry_key": "dead_code:allowed_messages:quickscale_modules/notifications/src/quickscale_modules_notifications/checks.py: unused variable 'app_configs':multiplicity",
       "base_ceiling": 0,
       "ceiling": 1,
@@ -1123,7 +1193,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W135",
+      "waiver_id": "W142",
       "entry_key": "dead_code:allowed_messages:quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py: unused variable 'app_configs':multiplicity",
       "base_ceiling": 2,
       "ceiling": 6,
@@ -1133,7 +1203,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W136",
+      "waiver_id": "W143",
       "entry_key": "dead_code:allowed_messages:quickscale_modules/storage/src/quickscale_modules_storage/checks.py: unused variable 'app_configs':multiplicity",
       "base_ceiling": 0,
       "ceiling": 1,
@@ -1143,17 +1213,7 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W137",
-      "entry_key": "file_length:quickscale_core/src/quickscale_core/dr_engine/orchestration.py",
-      "base_ceiling": 0,
-      "ceiling": 2897,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closing batch introduces the per-file line-length ratchet; dr_engine/orchestration.py is the sole unsplit SA232 file, listed with its reason. SA232 removes this waiver together with the baseline entry.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "file-size-metric-policy"
-    },
-    {
-      "waiver_id": "W138",
+      "waiver_id": "W144",
       "entry_key": "duplication:allowed_blocks",
       "base_ceiling": 0,
       "ceiling": 57,

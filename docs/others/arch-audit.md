@@ -342,8 +342,7 @@ SA208's additive check. **Verdict: still exonerated.**
   12 modules, 10 of them migration-bearing.
 - **W4: `trigger_inputs` is a legacy name** for an exact E2E allowlist partition. Trigger: a
   skip keyed on it. **Not fired:** `check_gate_parity.py` is unchanged.
-- **W6: billing `services.py` is the largest module file.** SA209 added about 120 net lines. It
-  doesn't qualify, because status writes are still single-writer. Trigger: a second payment
+- **W6: billing `Subscription.status` has one writer.** It doesn't qualify while that holds. Trigger: a second payment
   provider, or a second writer of `Subscription.status`. **Not fired.**
 - **W7 (new): the Stripe API version literal lives at 5 non-test stations** (`services.py:42`,
   `apply_command.py:2698`, `module_config.py:1055,1066`, the billing manifest and mirror at `:50`,

@@ -399,6 +399,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     former surfaces, while status context/diagnostics/display, deploy pre-flight/service
     configuration, Railway CLI/project helpers, and dependency TOML reading, writing, and sync
     logic live in focused private sibling modules.
+  - **DR engine orchestration keeps its import surface while the implementation splits.** The
+    orchestration module stays the import path every caller uses and re-exports its full former
+    surface, while capture, reporting, restore, prune, media, remote storage, state, policy,
+    metadata, and shared-type logic live in focused private sibling modules.
   - **Modules answer whether they are enabled and declare what they use.** Every module publishes
     `services.is_enabled()` for its own `QUICKSCALE_<MODULE>_ENABLED` setting, and each manifest's
     `required_modules` lists every module its code references. `plan`/`apply` therefore install

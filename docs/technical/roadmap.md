@@ -24,7 +24,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA232 | Split the long CLI command, `dr_engine`, and billing files | post-v88 | 2 | — | Deferred |
 | SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215 | Deferred |
@@ -37,7 +36,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA232
+Track 2: — (queue complete)
 Track 3: SA215 (remaining rules) ──► SA216
      critical path: SA215 → SA191 → SA153
 ```
@@ -49,10 +48,8 @@ ported, and SA204 has not frozen the migration history. SA204 freezes migration 
 any post-SA153 module schema change. SA154 is an inventory, not work.
 
 **Off the critical path.** SA215 runs on Track 3, which owns the conformance harness it adds rules
-to. SA231 (Track 1) is closed; SA191 waits for SA215. SA232 (Track 2) splits `dr_engine`; SA231's
-gate lists its unfinished file in the baseline, and SA232 removes that entry and its waiver. SA216
-waits for SA215 because both change auth's views, orgs' removal path, and the
-user-referencing models.
+to. SA231 (Track 1) is closed; SA191 waits for SA215. SA216 waits for SA215 because both change
+auth's views, orgs' removal path, and the user-referencing models.
 
 ### Track states
 
@@ -61,7 +58,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | no | no | no | no | no |
-| 2 | SA232 | yes | yes | yes | **yes** | no |
+| 2 | — | — | — | — | **yes** | no |
 | 3 | SA215 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
@@ -117,9 +114,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
 
-  **Remaining:** the rules the conformance test does not yet cover, including SA216's
-  write-effect rule; the release notes; decisions' quoted names; the inventory's closing pass.
-
   **Scope:** the conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
   convention ticket fixed is fixed here or recorded as an accepted exception.
@@ -134,22 +128,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA231 — Split long files and complex functions in batches, then make the quality gate fail.**
 
-- [ ] **SA232 — Split the long CLI command, `dr_engine`, and billing files.**
-
-  **Context:** the billing and CLI slices have landed. The `dr_engine` slice remains:
-  `dr_engine/orchestration.py` is 2,897 lines.
-
-  **Scope:** SA231's rules for `quickscale_core/dr_engine/`: private modules behind a re-exporting
-  facade, through the serialized merge queue; remove the file's baseline entry and its waiver if
-  SA231's gate has listed them.
-
-  **Acceptance:** every file in scope is under 800 lines, and no function in scope reaches CC 21
-  unless the baseline lists it with a reason; zero regressions against the baseline for these
-  files; public import paths and existing tests unchanged; each slice re-tightens the baseline for
-  its files.
-
-  **Surfaces:** the files above; their entries in `scripts/quality_baseline.json`, which SA231 also
-  edits, so each slice resolves it at its merge.
+- [x] **SA232 — Split the long CLI command, `dr_engine`, and billing files.**
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 

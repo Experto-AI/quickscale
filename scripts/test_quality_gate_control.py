@@ -28,9 +28,10 @@ _DEFAULT_BASE_REF = "main"
 
 _ORCHESTRATION_FILE = "quickscale_core/src/quickscale_core/dr_engine/orchestration.py"
 _NEW_BIG_FILE = "quickscale_core/src/quickscale_core/new_big.py"
-# The stub reports this many lines for ``_ORCHESTRATION_FILE``; the checked-in
-# baseline lists the file above this value, so the ceiling controls the verdict.
+# The stub reports this many lines for ``_ORCHESTRATION_FILE``; the fixture
+# ceiling controls the verdict.
 _STUB_LINE_COUNT = 2000
+_WAIVER_EXPIRES = "2027-03-31"
 
 _FIND_STUB = (
     "#!/bin/bash\n"
@@ -100,15 +101,62 @@ class TestQualityGateControl:
         stub.chmod(0o755)
         return bin_dir
 
-    def _baseline_with_ceiling(self, tmp_path: Path, max_lines: int) -> Path:
-        """Return a temp copy of the checked-in baseline with one ceiling."""
+    def _temp_inputs(
+        self,
+        tmp_path: Path,
+        *,
+        file_length_entries: dict[str, int],
+        duplication_blocks: int | None = None,
+    ) -> tuple[Path, Path]:
+        """
+        Return a temp baseline and ledger carrying the fixture overrides.
+
+        Every synthetic ``file_length`` entry gets a matching waiver so the
+        monotonicity gate accepts the fixture; the real ledger is used
+        otherwise, minus the duplication waiver when the ceiling is lowered.
+        """
         baseline = json.loads(
             (_REPO_ROOT / "scripts" / "quality_baseline.json").read_text(encoding="utf-8")
         )
-        baseline["file_length"]["allowed_files"][_ORCHESTRATION_FILE]["max_lines"] = max_lines
-        temp_baseline = tmp_path / f"baseline_file_length_{max_lines}.json"
+        baseline["file_length"] = {
+            "allowed_files": {
+                path: {
+                    "max_lines": max_lines,
+                    "reason": "control-case fixture",
+                }
+                for path, max_lines in file_length_entries.items()
+            }
+        }
+        if duplication_blocks is not None:
+            baseline["duplication"] = {"allowed_blocks": duplication_blocks}
+        temp_baseline = tmp_path / "baseline_control.json"
         temp_baseline.write_text(json.dumps(baseline), encoding="utf-8")
-        return temp_baseline
+
+        ledger = json.loads(
+            (_REPO_ROOT / "scripts" / "quality_waivers.json").read_text(encoding="utf-8")
+        )
+        waivers = list(ledger["waivers"])
+        if duplication_blocks == 0:
+            waivers = [
+                waiver for waiver in waivers if waiver["entry_key"] != "duplication:allowed_blocks"
+            ]
+        for index, (path, max_lines) in enumerate(file_length_entries.items()):
+            waivers.append(
+                {
+                    "waiver_id": f"W-CTRL-FL-{index}",
+                    "entry_key": f"file_length:{path}",
+                    "base_ceiling": 0,
+                    "ceiling": max_lines,
+                    "owner": "test@example.com",
+                    "reason": "Control-case fixture for the file-length ratchet",
+                    "expires_on": _WAIVER_EXPIRES,
+                    "decision_ref": "file-size-metric-policy",
+                }
+            )
+        ledger["waivers"] = waivers
+        temp_waivers = tmp_path / "waivers_control.json"
+        temp_waivers.write_text(json.dumps(ledger), encoding="utf-8")
+        return temp_baseline, temp_waivers
 
     def _run_shell(
         self,
@@ -145,13 +193,16 @@ class TestQualityGateControl:
         """A listed file within its ceiling produces no regression."""
         poetry_bin = self._poetry_stub(tmp_path)
         find_bin = self._find_stub(tmp_path)
-        temp_baseline = self._baseline_with_ceiling(tmp_path, _STUB_LINE_COUNT)
+        temp_baseline, temp_waivers = self._temp_inputs(
+            tmp_path, file_length_entries={_ORCHESTRATION_FILE: 2897}
+        )
         result = self._run_shell(
             quality_output_dir,
             stub_dir=poetry_bin,
             find_stub_dir=find_bin,
             extra_env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
                 "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
             },
         )
@@ -177,13 +228,16 @@ class TestQualityGateControl:
         """A file grown past its listed ceiling fails the gate."""
         poetry_bin = self._poetry_stub(tmp_path)
         find_bin = self._find_stub(tmp_path)
-        temp_baseline = self._baseline_with_ceiling(tmp_path, _STUB_LINE_COUNT - 1)
+        temp_baseline, temp_waivers = self._temp_inputs(
+            tmp_path, file_length_entries={_ORCHESTRATION_FILE: _STUB_LINE_COUNT - 1}
+        )
         result = self._run_shell(
             quality_output_dir,
             stub_dir=poetry_bin,
             find_stub_dir=find_bin,
             extra_env={
                 "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
                 "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
             },
         )
@@ -217,11 +271,18 @@ class TestQualityGateControl:
         """A file at or above 800 lines with no baseline entry fails the gate."""
         poetry_bin = self._poetry_stub(tmp_path)
         find_bin = self._find_stub(tmp_path, _FIND_STUB_WITH_NEW_FILE)
+        temp_baseline, temp_waivers = self._temp_inputs(
+            tmp_path, file_length_entries={_ORCHESTRATION_FILE: 2897}
+        )
         result = self._run_shell(
             quality_output_dir,
             stub_dir=poetry_bin,
             find_stub_dir=find_bin,
-            extra_env={"QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF},
+            extra_env={
+                "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
+                "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
+            },
         )
         assert result.returncode == 2, (
             f"Expected exit 2 for an unlisted large file, "
@@ -253,26 +314,11 @@ class TestQualityGateControl:
         """A duplication count above the accepted ceiling fails the gate."""
         poetry_bin = self._poetry_stub(tmp_path, _DUPLICATION_POETRY_STUB)
         find_bin = self._find_stub(tmp_path)
-        # Lower the count ceiling to zero for the control run.  The duplication
-        # waiver is removed from the temp ledger so it cannot be orphaned by the
-        # lowered ceiling; every other freeze waiver still covers its increase.
-        temp_baseline = tmp_path / "baseline_no_duplication.json"
-        baseline = json.loads(
-            (_REPO_ROOT / "scripts" / "quality_baseline.json").read_text(encoding="utf-8")
+        temp_baseline, temp_waivers = self._temp_inputs(
+            tmp_path,
+            file_length_entries={_ORCHESTRATION_FILE: 2897},
+            duplication_blocks=0,
         )
-        baseline["duplication"] = {"allowed_blocks": 0}
-        temp_baseline.write_text(json.dumps(baseline), encoding="utf-8")
-        temp_waivers = tmp_path / "waivers_no_duplication.json"
-        ledger = json.loads(
-            (_REPO_ROOT / "scripts" / "quality_waivers.json").read_text(encoding="utf-8")
-        )
-        ledger["waivers"] = [
-            waiver
-            for waiver in ledger["waivers"]
-            if waiver["entry_key"] != "duplication:allowed_blocks"
-        ]
-        temp_waivers.write_text(json.dumps(ledger), encoding="utf-8")
-
         result = self._run_shell(
             quality_output_dir,
             stub_dir=poetry_bin,

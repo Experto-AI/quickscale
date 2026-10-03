@@ -5015,6 +5015,47 @@ class TestShellSubprocess:
             env=env,
         )
 
+    def _baseline_with_listed_orchestration(self, tmp_path: Path) -> tuple[Path, Path]:
+        """
+        Return a temp baseline/ledger pair listing the find-stub file.
+
+        The checked-in baseline lists no file (none reaches 800 lines), so a
+        success run whose find stub reports a 2,000-line file needs a fixture
+        entry plus its matching waiver.
+        """
+        baseline = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
+        baseline["file_length"] = {
+            "allowed_files": {
+                "quickscale_core/src/quickscale_core/dr_engine/orchestration.py": {
+                    "max_lines": 2897,
+                    "reason": "Shell-subprocess fixture",
+                }
+            }
+        }
+        temp_baseline = tmp_path / "baseline_listed_orchestration.json"
+        temp_baseline.write_text(json.dumps(baseline), encoding="utf-8")
+
+        ledger = json.loads((_REPO_ROOT / "scripts" / "quality_waivers.json").read_text())
+        future = (date.today() + timedelta(days=90)).isoformat()
+        ledger["waivers"] = [
+            *ledger["waivers"],
+            {
+                "waiver_id": "W-SHELL-FL",
+                "entry_key": (
+                    "file_length:quickscale_core/src/quickscale_core/dr_engine/orchestration.py"
+                ),
+                "base_ceiling": 0,
+                "ceiling": 2897,
+                "owner": "test@example.com",
+                "reason": "Shell-subprocess fixture",
+                "expires_on": future,
+                "decision_ref": "file-size-metric-policy",
+            },
+        ]
+        temp_waivers = tmp_path / "waivers_listed_orchestration.json"
+        temp_waivers.write_text(json.dumps(ledger), encoding="utf-8")
+        return temp_baseline, temp_waivers
+
     # ------------------------------------------------------------------
     # Exit 1 — unwaived baseline increases
     # ------------------------------------------------------------------
@@ -5191,6 +5232,7 @@ class TestShellSubprocess:
 
     def test_shell_success_report_parity(
         self,
+        tmp_path: Path,
         poetry_stub: Path,
         find_stub: Path,
         quickscale_backup: dict[str, str | None],
@@ -5205,14 +5247,16 @@ class TestShellSubprocess:
         - All existing report/status keys are preserved
         """
         try:
-            # Run with the actual checked-in baseline (no violations against
-            # default merge-base) and stub analyzers returning empty results.
-            # The find stub prevents native find/wc large-file analysis
-            # from consuming live repository file sizes.
+            # Run with a fixture baseline that lists the find stub's 2,000-line
+            # file (the checked-in baseline lists none) and stub analyzers
+            # returning empty results.
+            temp_baseline, temp_waivers = self._baseline_with_listed_orchestration(tmp_path)
             result = self._run_shell(
                 stub_dir=poetry_stub,
                 find_stub_dir=find_stub,
                 extra_env={
+                    "QUALITY_BASELINE_FILE": str(temp_baseline),
+                    "QUALITY_WAIVERS_FILE": str(temp_waivers),
                     "QUALITY_BASELINE_BASE_REF": DEFAULT_BASE_REF,
                 },
             )
@@ -5425,6 +5469,7 @@ class TestShellSubprocess:
 
     def test_success_diagnostics_cross_artifact_equality(
         self,
+        tmp_path: Path,
         poetry_stub: Path,
         find_stub: Path,
         quickscale_backup: dict[str, str | None],
@@ -5438,10 +5483,15 @@ class TestShellSubprocess:
         4. Parsed fenced JSON block after ``### Diagnostics`` in ``quality_report.md``
         """
         try:
+            temp_baseline, temp_waivers = self._baseline_with_listed_orchestration(tmp_path)
             result = self._run_shell(
                 stub_dir=poetry_stub,
                 find_stub_dir=find_stub,
-                extra_env={"QUALITY_BASELINE_BASE_REF": DEFAULT_BASE_REF},
+                extra_env={
+                    "QUALITY_BASELINE_FILE": str(temp_baseline),
+                    "QUALITY_WAIVERS_FILE": str(temp_waivers),
+                    "QUALITY_BASELINE_BASE_REF": DEFAULT_BASE_REF,
+                },
             )
             # Monotonicity gate must have passed; exit 0 with stubbed
             # analyzers and current complete baseline.
@@ -5536,10 +5586,18 @@ class TestShellSubprocess:
             higher_baseline = json.loads(json.dumps(real_baseline))
             # Isolate the fixture difference to the pinned increases: empty the
             # dead-code and duplication sections whose freeze entries this ledger
-            # does not cover. The file-length entry stays, so the stub's listed
-            # file is accepted.
+            # does not cover. The file-length entry below lists the find stub's
+            # 2,000-line file, with the matching waiver in the ledger.
             higher_baseline["dead_code"]["allowed_messages"] = []
             higher_baseline["duplication"] = {"allowed_blocks": 0}
+            higher_baseline["file_length"] = {
+                "allowed_files": {
+                    "quickscale_core/src/quickscale_core/dr_engine/orchestration.py": {
+                        "max_lines": 2897,
+                        "reason": "Nonempty diagnostic shell test",
+                    }
+                }
+            }
             # Bump the three pinned keys and keep only them, so the fixture
             # difference against the merge base is exactly these three
             # increases, independent of any waivers the repository carries.
