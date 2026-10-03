@@ -26,6 +26,7 @@ from django.apps import apps
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 
+from quickscale_modules_orgs._tenancy_policy import _force_rls_policy_mismatches
 from quickscale_modules_orgs.current_org import (
     reset_current_org_id,
     set_current_org_id,
@@ -33,7 +34,6 @@ from quickscale_modules_orgs.current_org import (
 from quickscale_modules_orgs.managers import TenantManager
 from quickscale_modules_orgs.tenancy import (
     TenantTableStatus,
-    _force_rls_policy_mismatches,
     apply_force_rls,
     get_tenant_models,
     table_has_force_rls,

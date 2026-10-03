@@ -28,11 +28,12 @@ fails when a declared obligation demands an action its boundary has no
 coordinator route for, because only a boundary that bypasses the coordinator
 could satisfy it.
 
-Module Conventions rule 28: this module is a re-exporting facade.  The
-vocabulary records live in ``_removal_types``, declaration validation and
-aggregation in ``_removal_declarations``, provider-ID conformance in
-``_removal_provider_ids``, and the shared coordinator stays here; every prior
-``quickscale_modules_orgs.removal`` name and test patch seam keeps resolving.
+Module Conventions rule 28: this module is a facade over the private
+``_removal_*`` modules.  The vocabulary records live in ``_removal_types``,
+declaration validation and aggregation in ``_removal_declarations``,
+provider-ID conformance in ``_removal_provider_ids``, and the shared
+coordinator stays here; the facade re-exports public names and keeps private
+names on the module that defines them.
 """
 
 from __future__ import annotations
@@ -45,14 +46,10 @@ from typing import Any as Any
 from django.apps import AppConfig as AppConfig, apps as apps
 from django.db import models as models
 
+import quickscale_modules_orgs._removal_declarations as _removal_declarations
+
 from quickscale_modules_orgs._removal_declarations import (
     DeclaredBoundaryGuard as DeclaredBoundaryGuard,
-    _declared_boundary_entries as _declared_boundary_entries,
-    _validate_boundary_guarded_hooks as _validate_boundary_guarded_hooks,
-    _validate_declared_obligations as _validate_declared_obligations,
-    _validate_obligation_actions as _validate_obligation_actions,
-    _validate_obligation_identity as _validate_obligation_identity,
-    _validated_boundary_implementation as _validated_boundary_implementation,
     coordinator_discharge_actions as coordinator_discharge_actions,
     declared_boundary_guards as _declared_boundary_guards,
     declared_removal_obligations as declared_removal_obligations,
@@ -61,13 +58,6 @@ from quickscale_modules_orgs._removal_declarations import (
     removal_boundary_implementations as removal_boundary_implementations,
 )
 from quickscale_modules_orgs._removal_provider_ids import (
-    _ModelClass as _ModelClass,
-    _declared_obligation_fields as _declared_obligation_fields,
-    _model_declaration_mismatches as _model_declaration_mismatches,
-    _provider_id_classification as _provider_id_classification,
-    _provider_id_fields as _provider_id_fields,
-    _provider_mismatch_messages as _provider_mismatch_messages,
-    _structured_provider_id_fields as _structured_provider_id_fields,
     declared_provider_backed_fields as declared_provider_backed_fields,
     external_provider_obligation_mismatches as _external_provider_obligation_mismatches,
 )
@@ -84,7 +74,6 @@ from quickscale_modules_orgs._removal_types import (
     REMOVAL_OBLIGATIONS_ATTRIBUTE as REMOVAL_OBLIGATIONS_ATTRIBUTE,
     SOCIAL_CACHE_STATE as SOCIAL_CACHE_STATE,
     STAGE_EXECUTOR_HOOKS as STAGE_EXECUTOR_HOOKS,
-    _PROVIDER_ID_CLASSIFICATIONS as _PROVIDER_ID_CLASSIFICATIONS,
     BoundaryGuardedHooks as BoundaryGuardedHooks,
     ExternalProviderField as ExternalProviderField,
     OrganizationRemovalObligation as OrganizationRemovalObligation,
@@ -99,21 +88,23 @@ def declared_boundary_guards() -> tuple[DeclaredBoundaryGuard, ...]:
     Entries follow app-label order.  The declarations are validated before
     their hooks are resolved, so a malformed or duplicate declaration fails
     closed instead of being read as an app with nothing to guard.  The
-    aggregate resolves from this module's globals so the
-    ``quickscale_modules_orgs.removal.organization_removal_obligations`` test
-    patch seam keeps intercepting it.
+    aggregate resolves through ``_removal_declarations``, so a patch on
+    ``_removal_declarations.organization_removal_obligations`` reaches it.
     """
-    return _declared_boundary_guards(aggregate=organization_removal_obligations)
+    return _declared_boundary_guards(
+        aggregate=_removal_declarations.organization_removal_obligations
+    )
 
 
 def get_removal_obligation(name: str) -> OrganizationRemovalObligation:
     """Return the uniquely declared organization-removal obligation.
 
-    The aggregate resolves from this module's globals so the
-    ``quickscale_modules_orgs.removal.organization_removal_obligations`` test
-    patch seam keeps intercepting it.
+    The aggregate resolves through ``_removal_declarations``, so a patch on
+    ``_removal_declarations.organization_removal_obligations`` reaches it.
     """
-    return _get_removal_obligation(name, aggregate=organization_removal_obligations)
+    return _get_removal_obligation(
+        name, aggregate=_removal_declarations.organization_removal_obligations
+    )
 
 
 def external_provider_obligation_mismatches(
@@ -124,12 +115,12 @@ def external_provider_obligation_mismatches(
     A non-relational ``*_id`` field is covered when a declared obligation
     covers it or when its model classifies it in
     ``provider_id_classification`` (the project-side declaration).  The
-    aggregate resolves from this module's globals so the
-    ``quickscale_modules_orgs.removal.organization_removal_obligations`` test
-    patch seam keeps intercepting it.
+    aggregate resolves through ``_removal_declarations``, so a patch on
+    ``_removal_declarations.organization_removal_obligations`` reaches it.
     """
     return _external_provider_obligation_mismatches(
-        purged_models, obligations=organization_removal_obligations
+        purged_models,
+        obligations=_removal_declarations.organization_removal_obligations,
     )
 
 
@@ -142,13 +133,13 @@ def declared_refusal_fields(
     refuse-or-reconcile action for *boundary* and the field is not
     ``boundary_guarded``.  The shared refusal guard reads these fields, so a
     declared provider field is enforced without bespoke boundary code.  The
-    function resolves the aggregate from this module's globals so the
-    ``quickscale_modules_orgs.removal.organization_removal_obligations`` test
-    patch seam keeps intercepting it.
+    function resolves the aggregate through ``_removal_declarations``, so a
+    patch on ``_removal_declarations.organization_removal_obligations`` reaches
+    it.
     """
     return tuple(
         provider_field
-        for obligation in organization_removal_obligations()
+        for obligation in _removal_declarations.organization_removal_obligations()
         if obligation.action_for(boundary)
         in {RemovalAction.REFUSE, RemovalAction.RECONCILE}
         for provider_field in obligation.external_provider_fields
@@ -183,7 +174,7 @@ class RemovalCoordinator:
 
     def obligations(self) -> tuple[OrganizationRemovalObligation, ...]:
         """Return the discovered obligations in declaration order."""
-        return organization_removal_obligations()
+        return _removal_declarations.organization_removal_obligations()
 
     def discharge_stage(
         self,

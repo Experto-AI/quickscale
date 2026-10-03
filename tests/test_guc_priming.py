@@ -42,8 +42,8 @@ import pytest
 from django.db import connection
 from django.db import transaction
 
+from quickscale_modules_orgs._current_org_priming import _INSTALLED_MARKER
 from quickscale_modules_orgs.current_org import (
-    _INSTALLED_MARKER,
     get_current_org_id,
     install_priming_wrapper,
     reset_current_org_id,
