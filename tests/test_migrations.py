@@ -745,7 +745,7 @@ def _normalize_pg_expr(expr: str | None) -> str:
     return s
 
 
-# Expected normalized RLS predicates derived from tenancy.py
+# Expected normalized RLS predicates derived from _tenancy_rls.py
 # _FORCE_RLS_FORWARD_SQL as rendered by PostgreSQL 18 pg_policies view.
 _EXPECTED_FORMS_FORALL_QUAL = _normalize_pg_expr(
     "((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = organization_id)"
