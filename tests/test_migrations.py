@@ -436,7 +436,7 @@ def test_crm_tables_have_force_rls_enabled() -> None:
 # ---------------------------------------------------------------------------
 # Canonical RLS predicate normalization (for exact predicate comparison)
 # ---------------------------------------------------------------------------
-# Derived from tenancy.py _FORCE_RLS_FORWARD_SQL template and live
+# Derived from _tenancy_rls.py _FORCE_RLS_FORWARD_SQL template and live
 # PostgreSQL 18 pg_policies output ("orginal" form includes ::text casts
 # that PostgreSQL adds automatically on string literals).
 # ---------------------------------------------------------------------------
@@ -515,7 +515,7 @@ def _normalize_pg_expr(expr: str | None) -> str:
     return s
 
 
-# Expected normalized RLS predicates derived from tenancy.py
+# Expected normalized RLS predicates derived from _tenancy_rls.py
 # _FORCE_RLS_FORWARD_SQL as rendered by PostgreSQL 18 pg_policies view.
 _EXPECTED_CRM_FORALL_QUAL = _normalize_pg_expr(
     "((NULLIF(current_setting('app.current_org_id'::text, true), ''::text))::uuid = organization_id)"
