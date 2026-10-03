@@ -14,7 +14,6 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
-import quickscale_modules_billing.services as _services
 from quickscale_modules_billing._payload import (
     _normalize_mapping as _normalize_mapping,
 )
@@ -32,6 +31,7 @@ from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
 )
+import quickscale_modules_billing._locks as _locks
 
 
 def credit_user(
@@ -52,9 +52,9 @@ def credit_user(
     normalized_reference_data = _normalize_mapping(stripe_reference_data or {})
     try:
         with transaction.atomic():
-            _services._lock_organization_for_billing_mutation(organization)
+            _locks._lock_organization_for_billing_mutation(organization)
             balance, _ = _get_or_create_credit_balance(organization=organization)
-            existing_transaction = _services._find_existing_credit_transaction(
+            existing_transaction = _find_existing_credit_transaction(
                 user=user,
                 organization=organization,
                 transaction_type=transaction_type,
@@ -87,7 +87,7 @@ def credit_user(
         # rolled back (including the balance delta), so re-fetch the row
         # that was committed by the other request.
         with transaction.atomic():
-            _services._lock_organization_for_billing_mutation(organization)
+            _locks._lock_organization_for_billing_mutation(organization)
             existing = CreditTransaction.all_objects.filter(
                 transaction_type=transaction_type,
                 stripe_event_id=stripe_event_id,
@@ -110,7 +110,7 @@ def debit_user(
         raise BillingValidationError("Debit amount must be greater than zero.")
 
     with transaction.atomic():
-        _services._lock_organization_for_billing_mutation(organization)
+        _locks._lock_organization_for_billing_mutation(organization)
         balance = _get_locked_credit_balance(organization=organization)
         if balance is None or int(balance.balance) < amount:
             raise InsufficientCreditsError("Organization does not have enough credits.")

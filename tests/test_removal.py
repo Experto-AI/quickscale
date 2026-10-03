@@ -14,7 +14,7 @@ import pytest
 
 from quickscale_modules_billing.apps import QuickscaleBillingConfig
 from quickscale_modules_billing.models import Plan, Subscription
-from quickscale_modules_billing.services import (
+from quickscale_modules_billing._removal import (
     guard_organization_removal_provider_state,
 )
 from quickscale_modules_orgs.removal import BoundaryGuardedHooks
@@ -53,7 +53,7 @@ def test_removal_obligation_declares_its_boundary_guard_hooks() -> None:
 def test_guard_hook_delegates_to_the_service() -> None:
     """The declared hook runs the billing service, not another module's code."""
     with patch(
-        "quickscale_modules_billing.services.guard_organization_removal_provider_state",
+        "quickscale_modules_billing._removal.guard_organization_removal_provider_state",
         return_value="Cannot purge.",
     ) as guard:
         result = _billing_config().guard_organization_removal_provider_state(

@@ -120,8 +120,10 @@ class QuickscaleBillingConfig(AppConfig):
         persist: bool,
     ) -> str:
         """Inspect checkout state before orgs opens its purge transaction."""
-        from quickscale_modules_billing.services import (
+        from quickscale_modules_billing._removal import (
             reconcile_purchase_checkouts_for_removal,
+        )
+        from quickscale_modules_billing._subscription_checkout import (
             reconcile_organization_removal_subscription_checkout,
         )
 
@@ -142,7 +144,7 @@ class QuickscaleBillingConfig(AppConfig):
         organization_id: Any,
     ) -> None:
         """Require hosted checkout state to be terminal before owner deletion."""
-        from quickscale_modules_billing.services import (
+        from quickscale_modules_billing._subscription_checkout import (
             reconcile_account_deletion_subscription_checkout,
         )
 
@@ -154,7 +156,7 @@ class QuickscaleBillingConfig(AppConfig):
         user_id: Any,
     ) -> None:
         """Require one user's purchase Checkouts to be terminal before deletion."""
-        from quickscale_modules_billing.services import (
+        from quickscale_modules_billing._removal import (
             reconcile_purchase_checkouts_for_removal,
         )
 
@@ -166,7 +168,7 @@ class QuickscaleBillingConfig(AppConfig):
 
     def organization_removal_provider_mutation_lock(self, organization_id: Any) -> Any:
         """Return the billing provider mutex shared with Checkout creation."""
-        from quickscale_modules_billing.services import (
+        from quickscale_modules_billing._locks import (
             subscription_provider_mutation_lock,
         )
 
@@ -179,7 +181,7 @@ class QuickscaleBillingConfig(AppConfig):
         provider_expired_checkout_id: str = "",
     ) -> str:
         """Return billing's purge refusal for live provider state, or an empty string."""
-        from quickscale_modules_billing.services import (
+        from quickscale_modules_billing._removal import (
             guard_organization_removal_provider_state as guard,
         )
 
@@ -194,7 +196,7 @@ class QuickscaleBillingConfig(AppConfig):
         organization_ids: list[Any],
     ) -> int:
         """Clear billing provenance before Django deletes the referenced user."""
-        from quickscale_modules_billing.services import (
+        from quickscale_modules_billing._removal import (
             detach_account_deletion_user_references,
         )
 
@@ -208,7 +210,7 @@ class QuickscaleBillingConfig(AppConfig):
         user_id: Any,
     ) -> list[Any]:
         """Return orgs that retain billing provenance for account deletion."""
-        from quickscale_modules_billing.services import (
+        from quickscale_modules_billing._removal import (
             account_deletion_user_reference_organization_ids,
         )
 
@@ -229,7 +231,7 @@ class QuickscaleBillingConfig(AppConfig):
 
         if not bool(settings.QUICKSCALE_BILLING_ENABLED):
             return ()
-        from quickscale_modules_billing.services import organization_pricing_page_url
+        from quickscale_modules_billing._settings import organization_pricing_page_url
 
         return (organization_pricing_page_url,)
 
@@ -275,7 +277,7 @@ class QuickscaleBillingConfig(AppConfig):
         organization_id: Any,
     ) -> Any:
         """Return the provider mutex held while account deletion mutates state."""
-        from quickscale_modules_billing.services import (
+        from quickscale_modules_billing._locks import (
             subscription_provider_mutation_lock,
         )
 
@@ -287,7 +289,9 @@ class QuickscaleBillingConfig(AppConfig):
         organization: Any,
     ) -> Any:
         """Cancel one organization's subscription, capturing the transition."""
-        from quickscale_modules_billing.services import cancel_current_subscription
+        from quickscale_modules_billing._subscription_mutations import (
+            cancel_current_subscription,
+        )
 
         return cancel_current_subscription(
             user,
@@ -302,7 +306,9 @@ class QuickscaleBillingConfig(AppConfig):
         transition: Any,
     ) -> Any:
         """Restore a captured cancellation when account deletion is rejected."""
-        from quickscale_modules_billing.services import resume_current_subscription
+        from quickscale_modules_billing._subscription_mutations import (
+            resume_current_subscription,
+        )
 
         return resume_current_subscription(
             user,

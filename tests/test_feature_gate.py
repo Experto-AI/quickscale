@@ -8,7 +8,7 @@ from django.http import HttpResponse
 from django.test import RequestFactory
 
 from quickscale_modules_billing.models import Plan, Subscription
-from quickscale_modules_billing.services import require_org_feature
+from quickscale_modules_billing._settings import require_org_feature
 from quickscale_modules_orgs.current_org import (
     clear_current_org,
     reset_current_org_id,

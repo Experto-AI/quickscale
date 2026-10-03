@@ -13,7 +13,6 @@ from typing import Any
 from django.db import transaction
 from quickscale_modules_orgs.current_org import org_scope
 
-import quickscale_modules_billing.services as _services
 from quickscale_modules_billing._credits import (
     credit_user as credit_user,
 )
@@ -86,15 +85,11 @@ from quickscale_modules_billing._settings import (
 from quickscale_modules_billing._settings import (
     StripeWebhookResult as StripeWebhookResult,
 )
-from quickscale_modules_billing._subscription_events import (
-    _handle_subscription_event as _handle_subscription_event,
-)
+import quickscale_modules_billing._subscription_events as _subscription_events
 from quickscale_modules_billing._validation import (
     _validate_completed_checkout_provider_identity as _validate_completed_checkout_provider_identity,
 )
-from quickscale_modules_billing._webhooks_invoice import (
-    _handle_invoice_payment_failed_event as _handle_invoice_payment_failed_event,
-)
+import quickscale_modules_billing._webhooks_invoice as _webhooks_invoice
 from quickscale_modules_billing.exceptions import (
     BillingError,
     BillingWebhookError,
@@ -105,6 +100,7 @@ from quickscale_modules_billing.models import (
     Subscription,
     WebhookEvent,
 )
+import quickscale_modules_billing._locks as _locks
 
 
 def _process_verified_stripe_event(
@@ -140,20 +136,22 @@ def _process_verified_stripe_event(
             _handle_checkout_session_expired_event(event_payload)
             processing_status = "processed"
         elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAID:
-            _services._handle_invoice_paid_event(
+            _webhooks_invoice._handle_invoice_paid_event(
                 event_payload,
                 stripe_client=stripe_client,
             )
             processing_status = "processed"
         elif event_type == STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED:
-            _handle_invoice_payment_failed_event(event_payload)
+            _webhooks_invoice._handle_invoice_payment_failed_event(event_payload)
             processing_status = "processed"
         elif event_type in {
             STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_CREATED,
             STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_UPDATED,
             STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_DELETED,
         }:
-            _handle_subscription_event(event_payload, event_type=event_type)
+            _subscription_events._handle_subscription_event(
+                event_payload, event_type=event_type
+            )
             processing_status = "processed"
         else:
             processing_status = "ignored"
@@ -241,9 +239,9 @@ def _handle_checkout_session_completed_event(
 
     # Phase 3: each handler owns its provider mutex and org scope so purge,
     # account deletion, and Checkout completion observe one serial history.
-    with _services.subscription_provider_mutation_lock(organization):
+    with _locks.subscription_provider_mutation_lock(organization):
         with org_scope(organization):
-            _services._lock_organization_for_billing_mutation(organization)
+            _locks._lock_organization_for_billing_mutation(organization)
             reservation = _resolve_purchase_checkout_for_session(
                 checkout_session_payload=checkout_session_payload,
                 organization=organization,
@@ -320,9 +318,9 @@ def _record_subscription_checkout_completion(
             "Completed subscription checkout is missing its Stripe subscription id."
         )
 
-    with _services.subscription_provider_mutation_lock(organization):
+    with _locks.subscription_provider_mutation_lock(organization):
         with org_scope(organization):
-            locked_organization = _services._lock_organization_for_billing_mutation(
+            locked_organization = _locks._lock_organization_for_billing_mutation(
                 organization
             )
             reservation = _resolve_subscription_checkout_for_session(
@@ -386,9 +384,9 @@ def _handle_checkout_session_expired_event(
     if organization is None:
         return
 
-    with _services.subscription_provider_mutation_lock(organization):
+    with _locks.subscription_provider_mutation_lock(organization):
         with org_scope(organization):
-            _services._lock_organization_for_billing_mutation(organization)
+            _locks._lock_organization_for_billing_mutation(organization)
             reservation = _resolve_purchase_checkout_for_session(
                 checkout_session_payload=checkout_session_payload,
                 organization=organization,
@@ -428,9 +426,9 @@ def _record_subscription_checkout_expiration(
         return
 
     checkout_session_id = str(checkout_session_payload.get("id") or "").strip()
-    with _services.subscription_provider_mutation_lock(organization):
+    with _locks.subscription_provider_mutation_lock(organization):
         with org_scope(organization):
-            locked_organization = _services._lock_organization_for_billing_mutation(
+            locked_organization = _locks._lock_organization_for_billing_mutation(
                 organization
             )
             reservation = _resolve_subscription_checkout_for_session(

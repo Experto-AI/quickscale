@@ -6,6 +6,7 @@ through the installed SDK. No network access is required.
 """
 
 from __future__ import annotations
+import quickscale_modules_billing._payload as _payload
 
 import hashlib
 import hmac
@@ -19,7 +20,6 @@ import pytest
 from django.conf import settings
 import stripe
 
-from quickscale_modules_billing import services as billing_services
 from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
@@ -27,11 +27,11 @@ from quickscale_modules_billing.models import (
     Subscription,
     WebhookEvent,
 )
+from quickscale_modules_billing._settings import STRIPE_API_VERSION
+from quickscale_modules_billing.exceptions import BillingConfigurationError
+from quickscale_modules_billing._stripe_client import StripeClient
+from quickscale_modules_billing._payload import _stripe_named_release
 from quickscale_modules_billing.services import (
-    STRIPE_API_VERSION,
-    BillingConfigurationError,
-    StripeClient,
-    _stripe_named_release,
     handle_stripe_event,
 )
 
@@ -94,8 +94,8 @@ def test_normalize_mapping_keeps_real_sdk_object_identity() -> None:
         TEST_API_KEY,
     )
 
-    assert billing_services._normalize_mapping(session)["id"] == "cs_1"
-    assert billing_services._normalize_mapping(event)["id"] == "evt_1"
+    assert _payload._normalize_mapping(session)["id"] == "cs_1"
+    assert _payload._normalize_mapping(event)["id"] == "evt_1"
 
 
 def test_construct_event_through_real_sdk_keeps_event_id() -> None:
@@ -244,12 +244,8 @@ def test_dahlia_subscription_updated_keeps_item_derived_period_bounds(
         stripe_subscription_id="sub_contract_bounds",
         stripe_customer_id="cus_contract_bounds",
         status=Subscription.Status.ACTIVE,
-        current_period_start=billing_services._stripe_timestamp_to_datetime(
-            1_600_000_000
-        ),
-        current_period_end=billing_services._stripe_timestamp_to_datetime(
-            1_600_086_400
-        ),
+        current_period_start=_payload._stripe_timestamp_to_datetime(1_600_000_000),
+        current_period_end=_payload._stripe_timestamp_to_datetime(1_600_086_400),
     )
     monkeypatch.setattr(settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", WEBHOOK_SECRET)
 
@@ -276,10 +272,10 @@ def test_dahlia_subscription_updated_keeps_item_derived_period_bounds(
 
     assert result.status == "processed"
     assert subscription.current_period_start == (
-        billing_services._stripe_timestamp_to_datetime(1_700_000_000)
+        _payload._stripe_timestamp_to_datetime(1_700_000_000)
     )
     assert subscription.current_period_end == (
-        billing_services._stripe_timestamp_to_datetime(1_700_086_400)
+        _payload._stripe_timestamp_to_datetime(1_700_086_400)
     )
 
     bound_less_event = subscription_event(
@@ -305,10 +301,10 @@ def test_dahlia_subscription_updated_keeps_item_derived_period_bounds(
     subscription.refresh_from_db()
 
     assert subscription.current_period_start == (
-        billing_services._stripe_timestamp_to_datetime(1_700_000_000)
+        _payload._stripe_timestamp_to_datetime(1_700_000_000)
     )
     assert subscription.current_period_end == (
-        billing_services._stripe_timestamp_to_datetime(1_700_086_400)
+        _payload._stripe_timestamp_to_datetime(1_700_086_400)
     )
 
 

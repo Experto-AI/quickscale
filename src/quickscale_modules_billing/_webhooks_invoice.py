@@ -12,7 +12,6 @@ from typing import Any
 
 from quickscale_modules_orgs.current_org import org_scope
 
-import quickscale_modules_billing.services as _services
 from quickscale_modules_billing._credits import (
     credit_user as credit_user,
 )
@@ -54,6 +53,8 @@ from quickscale_modules_billing.models import (
     Plan,
     Subscription,
 )
+import quickscale_modules_billing._resolution as _resolution
+import quickscale_modules_billing._locks as _locks
 
 
 def _handle_invoice_paid_event(
@@ -75,11 +76,11 @@ def _handle_invoice_paid_event(
     if plan is None:
         raise BillingWebhookError(f"No billing plan matches Stripe price {price_id}.")
 
-    resolved_organization = _services._resolve_organization_for_invoice(
+    resolved_organization = _resolution._resolve_organization_for_invoice(
         invoice_payload=invoice_payload,
     )
     if resolved_organization is None:
-        return _services._process_invoice_paid_event(
+        return _process_invoice_paid_event(
             event_payload=event_payload,
             invoice_payload=invoice_payload,
             invoice_id=invoice_id,
@@ -89,8 +90,8 @@ def _handle_invoice_paid_event(
             stripe_client=stripe_client,
             provider_lock_held=False,
         )
-    with _services.subscription_provider_mutation_lock(resolved_organization):
-        return _services._process_invoice_paid_event(
+    with _locks.subscription_provider_mutation_lock(resolved_organization):
+        return _process_invoice_paid_event(
             event_payload=event_payload,
             invoice_payload=invoice_payload,
             invoice_id=invoice_id,
@@ -120,7 +121,7 @@ def _process_invoice_paid_event(
         resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
         subscription_id = _invoice_subscription_id(invoice_payload)
         customer_id = str(invoice_payload.get("customer") or "").strip()
-        subscription = _services._resolve_subscription_for_runtime_event(
+        subscription = _resolution._resolve_subscription_for_runtime_event(
             stripe_subscription_id=subscription_id,
             customer_id=customer_id,
             organization=resolved_organization,
@@ -137,7 +138,7 @@ def _process_invoice_paid_event(
             invoice_payload=invoice_payload,
             stripe_client=stripe_client,
         )
-        payload_organization = _services._resolve_organization_for_subscription(
+        payload_organization = _resolution._resolve_organization_for_subscription(
             subscription_payload=subscription_payload
         )
         mutation_organization = payload_organization or resolved_organization
@@ -146,7 +147,7 @@ def _process_invoice_paid_event(
                 "Could not resolve a local organization for the Stripe subscription."
             )
         if not provider_lock_held:
-            with _services.subscription_provider_mutation_lock(mutation_organization):
+            with _locks.subscription_provider_mutation_lock(mutation_organization):
                 subscription = _upsert_subscription_from_payload(
                     subscription_payload,
                     fallback_user=resolved_user,
@@ -189,7 +190,7 @@ def _process_invoice_paid_event(
     expected_identity = _subscription_provider_identity(subscription)
     expected_customer_id = str(subscription.stripe_customer_id or "").strip()
     if not provider_lock_held:
-        with _services.subscription_provider_mutation_lock(mutation_organization):
+        with _locks.subscription_provider_mutation_lock(mutation_organization):
             return _finalize_invoice_paid_event(
                 event_payload=event_payload,
                 invoice_payload=invoice_payload,
@@ -237,7 +238,7 @@ def _finalize_invoice_paid_event(
 ) -> CreditTransaction:
     """Reload and apply invoice state under the provider and database locks."""
     with org_scope(mutation_organization):
-        mutation_organization = _services._lock_organization_for_billing_mutation(
+        mutation_organization = _locks._lock_organization_for_billing_mutation(
             mutation_organization
         )
         try:
@@ -350,15 +351,15 @@ def _handle_invoice_payment_failed_event(
     if not invoice_id:
         raise BillingWebhookError("Stripe invoice payload is missing an id.")
 
-    resolved_organization = _services._resolve_organization_for_invoice(
+    resolved_organization = _resolution._resolve_organization_for_invoice(
         invoice_payload=invoice_payload,
     )
     if resolved_organization is None:
         raise BillingWebhookError(
             "Could not resolve a local organization for the Stripe invoice."
         )
-    with _services.subscription_provider_mutation_lock(resolved_organization):
-        return _services._apply_invoice_payment_failed_event(
+    with _locks.subscription_provider_mutation_lock(resolved_organization):
+        return _apply_invoice_payment_failed_event(
             invoice_payload=invoice_payload,
             resolved_organization=resolved_organization,
         )
@@ -372,11 +373,11 @@ def _apply_invoice_payment_failed_event(
     """Apply payment failure while the organization's provider mutex is held."""
     # Phase 3: each handler owns its org scope for SET LOCAL support.
     with org_scope(resolved_organization):
-        resolved_organization = _services._lock_organization_for_billing_mutation(
+        resolved_organization = _locks._lock_organization_for_billing_mutation(
             resolved_organization
         )
         resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
-        subscription = _services._resolve_subscription_for_runtime_event(
+        subscription = _resolution._resolve_subscription_for_runtime_event(
             stripe_subscription_id=_invoice_subscription_id(invoice_payload),
             customer_id=str(invoice_payload.get("customer") or "").strip(),
             organization=resolved_organization,

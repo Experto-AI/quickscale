@@ -511,11 +511,11 @@ class TestWebhookEstablishesOrgContextInternally:
 
         with (
             patch(
-                "quickscale_modules_billing.services.BillingSettingsSnapshot.from_settings",
+                "quickscale_modules_billing._settings.BillingSettingsSnapshot.from_settings",
                 return_value=mock_snapshot,
             ),
             patch(
-                "quickscale_modules_billing.services.get_stripe_client",
+                "quickscale_modules_billing._stripe_client.get_stripe_client",
                 return_value=mock_client,
             ),
         ):

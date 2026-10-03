@@ -1,6 +1,8 @@
 """Subscription-domain service tests for the QuickScale billing module."""
 
 from __future__ import annotations
+import quickscale_modules_billing._subscription_checkout as _subscription_checkout
+import quickscale_modules_billing._payload as _payload
 
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -9,7 +11,6 @@ from typing import Any
 
 import pytest
 from django.conf import settings
-import quickscale_modules_billing.services as billing_services
 import stripe
 from django.db import IntegrityError
 from django.utils import timezone
@@ -21,12 +22,16 @@ from quickscale_modules_billing.models import (
     Subscription,
     WebhookEvent,
 )
-from quickscale_modules_billing.services import (
+from quickscale_modules_billing.exceptions import (
     BillingError,
     BillingValidationError,
     BillingWebhookError,
-    StripeClient,
+)
+from quickscale_modules_billing._stripe_client import StripeClient
+from quickscale_modules_billing._subscription_checkout import (
     create_subscription_checkout_session,
+)
+from quickscale_modules_billing.services import (
     handle_stripe_event,
 )
 from quickscale_modules_orgs.current_org import org_scope
@@ -256,7 +261,9 @@ def _simulate_subscription_reservation_conflict(
     organization: Any,
     recovered_reservation: Subscription,
 ) -> None:
-    original_resolve = billing_services._resolve_authoritative_subscription_reservation
+    original_resolve = (
+        _subscription_checkout._resolve_authoritative_subscription_reservation
+    )
     resolve_calls = 0
 
     def create_with_conflict(*args: Any, **kwargs: Any) -> Subscription:
@@ -285,7 +292,7 @@ def _simulate_subscription_reservation_conflict(
     monkeypatch.setattr(Subscription.objects, "create", create_with_conflict)
     monkeypatch.setattr(Subscription.all_objects, "create", create_with_conflict)
     monkeypatch.setattr(
-        billing_services,
+        _subscription_checkout,
         "_resolve_authoritative_subscription_reservation",
         resolve_with_recovered_row,
     )
@@ -339,9 +346,7 @@ def test_create_subscription_checkout_session_retries_blank_reservation_idempote
 
     assert len(fake_client.created_subscription_checkout_payloads) == 2
     first_payload, second_payload = fake_client.created_subscription_checkout_payloads
-    reservation_reference = billing_services._subscription_checkout_reference(
-        reservation
-    )
+    reservation_reference = _payload._subscription_checkout_reference(reservation)
     assert first_payload["idempotency_key"] == second_payload["idempotency_key"]
     assert first_payload["idempotency_key"]
     assert (
@@ -526,9 +531,7 @@ def test_response_lost_subscription_checkout_reconciles_exact_reservation(
 
     reservation = Subscription.all_objects.get(organization=organization)
     created_payload = fake_client.created_subscription_checkout_payloads[0]
-    reservation_reference = billing_services._subscription_checkout_reference(
-        reservation
-    )
+    reservation_reference = _payload._subscription_checkout_reference(reservation)
     assert reservation.status == Subscription.Status.INCOMPLETE
     assert reservation.stripe_checkout_session_id in {None, ""}
     assert created_payload["idempotency_key"]

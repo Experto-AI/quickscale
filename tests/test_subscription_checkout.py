@@ -1,6 +1,8 @@
 """Tests for subscription Checkout creation and provider reconciliation."""
 
 from __future__ import annotations
+import quickscale_modules_billing._subscription_checkout as _subscription_checkout
+import quickscale_modules_billing._settings as _settings
 
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -10,7 +12,6 @@ from typing import Any
 import pytest
 from django.utils import timezone
 
-from quickscale_modules_billing import services as billing_services
 from quickscale_modules_billing.exceptions import (
     BillingError,
     BillingValidationError,
@@ -87,7 +88,7 @@ def test_subscription_checkout_requires_both_urls(
 ) -> None:
     plan = _create_plan()
     with pytest.raises(BillingValidationError, match="URLs are required"):
-        billing_services.create_subscription_checkout_session(
+        _subscription_checkout.create_subscription_checkout_session(
             user,
             plan=plan,
             success_url="",
@@ -114,7 +115,7 @@ def test_subscription_checkout_replaces_an_expired_session(
         created_session={"id": "cs_new", "url": "https://checkout.example.com/new"},
     )
 
-    url = billing_services.create_subscription_checkout_session(
+    url = _subscription_checkout.create_subscription_checkout_session(
         user,
         plan=plan,
         success_url="https://app.example.com/success",
@@ -137,7 +138,7 @@ def test_subscription_checkout_requires_a_provider_session_id(
     )
 
     with pytest.raises(BillingError, match="did not return an id"):
-        billing_services.create_subscription_checkout_session(
+        _subscription_checkout.create_subscription_checkout_session(
             user,
             plan=plan,
             success_url="https://app.example.com/success",
@@ -158,7 +159,7 @@ def test_subscription_checkout_requires_a_provider_url(
     )
 
     with pytest.raises(BillingError, match="did not return a hosted URL"):
-        billing_services.create_subscription_checkout_session(
+        _subscription_checkout.create_subscription_checkout_session(
             user,
             plan=plan,
             success_url="https://app.example.com/success",
@@ -170,8 +171,10 @@ def test_subscription_checkout_requires_a_provider_url(
 
 @pytest.mark.django_db
 def test_account_deletion_reconciliation_without_an_organization() -> None:
-    result = billing_services.reconcile_account_deletion_subscription_checkout(999999)
-    assert result == billing_services.SubscriptionCheckoutReconciliation()
+    result = _subscription_checkout.reconcile_account_deletion_subscription_checkout(
+        999999
+    )
+    assert result == _settings.SubscriptionCheckoutReconciliation()
 
 
 @pytest.mark.django_db
@@ -197,7 +200,7 @@ def test_account_deletion_reconciliation_persists_a_completed_checkout(
     )
 
     with pytest.raises(BillingValidationError, match="completed"):
-        billing_services.reconcile_account_deletion_subscription_checkout(
+        _subscription_checkout.reconcile_account_deletion_subscription_checkout(
             organization.pk,
             stripe_client=client,
         )
@@ -224,7 +227,7 @@ def test_organization_removal_reconciliation_refuses_an_open_checkout(
     )
 
     with pytest.raises(BillingValidationError, match="still open"):
-        billing_services.reconcile_organization_removal_subscription_checkout(
+        _subscription_checkout.reconcile_organization_removal_subscription_checkout(
             organization.pk,
             persist=False,
             stripe_client=client,
@@ -248,7 +251,7 @@ def test_organization_removal_reconciliation_refuses_an_unknown_status(
     )
 
     with pytest.raises(BillingError, match="unsupported or blank status"):
-        billing_services.reconcile_organization_removal_subscription_checkout(
+        _subscription_checkout.reconcile_organization_removal_subscription_checkout(
             organization.pk,
             persist=False,
             stripe_client=client,
@@ -257,7 +260,9 @@ def test_organization_removal_reconciliation_refuses_an_unknown_status(
 
 @pytest.mark.django_db
 def test_authoritative_reservation_requires_a_selector() -> None:
-    assert billing_services._resolve_authoritative_subscription_reservation() is None
+    assert (
+        _subscription_checkout._resolve_authoritative_subscription_reservation() is None
+    )
 
 
 @pytest.mark.django_db
@@ -274,7 +279,9 @@ def test_subscription_reservation_reuse_requires_incomplete_status(
     )
 
     assert (
-        billing_services._subscription_reservation_can_be_reused(reservation, plan=plan)
+        _subscription_checkout._subscription_reservation_can_be_reused(
+            reservation, plan=plan
+        )
         is False
     )
 
@@ -292,7 +299,7 @@ def test_subscription_reservation_without_expiry_is_not_replaced(
     )
 
     assert (
-        billing_services._subscription_reservation_needs_replacement(reservation)
+        _subscription_checkout._subscription_reservation_needs_replacement(reservation)
         is False
     )
 
@@ -304,7 +311,7 @@ def test_conflicting_reservation_recovery_returns_none(
     plan = _create_plan()
 
     assert (
-        billing_services._recover_conflicting_subscription_reservation(
+        _subscription_checkout._recover_conflicting_subscription_reservation(
             user=user,
             organization=organization,
             plan=plan,
@@ -321,7 +328,7 @@ def test_conflicting_reservation_recovery_returns_none(
     )
 
     assert (
-        billing_services._recover_conflicting_subscription_reservation(
+        _subscription_checkout._recover_conflicting_subscription_reservation(
             user=user,
             organization=organization,
             plan=plan,
@@ -343,7 +350,7 @@ def test_prepare_reservation_refuses_a_bound_subscription(
     )
 
     with pytest.raises(BillingValidationError, match="current recurring subscription"):
-        billing_services._prepare_subscription_checkout_reservation(
+        _subscription_checkout._prepare_subscription_checkout_reservation(
             user=user,
             organization=organization,
             plan=plan,
@@ -364,10 +371,12 @@ def test_prepare_reservation_replaces_an_elapsed_checkout(
         stripe_customer_id="cus_keep",
     )
 
-    reservation, created = billing_services._prepare_subscription_checkout_reservation(
-        user=user,
-        organization=organization,
-        plan=plan,
+    reservation, created = (
+        _subscription_checkout._prepare_subscription_checkout_reservation(
+            user=user,
+            organization=organization,
+            plan=plan,
+        )
     )
 
     assert created is False
@@ -390,7 +399,7 @@ def test_reuse_live_checkout_requires_retrieval_support(
     )
 
     with pytest.raises(BillingError, match="retrieval is unavailable"):
-        billing_services._reuse_live_subscription_checkout_url(
+        _subscription_checkout._reuse_live_subscription_checkout_url(
             reservation=reservation,
             stripe_client=SimpleNamespace(),
         )
@@ -412,7 +421,7 @@ def test_reuse_live_checkout_returns_empty_for_an_expired_session(
     )
 
     assert (
-        billing_services._reuse_live_subscription_checkout_url(
+        _subscription_checkout._reuse_live_subscription_checkout_url(
             reservation=reservation,
             stripe_client=client,
         )
@@ -436,7 +445,7 @@ def test_reuse_live_checkout_refuses_an_unknown_status(
     )
 
     with pytest.raises(BillingError, match="unsupported or blank status"):
-        billing_services._reuse_live_subscription_checkout_url(
+        _subscription_checkout._reuse_live_subscription_checkout_url(
             reservation=reservation,
             stripe_client=client,
         )
@@ -458,7 +467,7 @@ def test_reuse_live_checkout_refuses_an_open_session_without_a_url(
     )
 
     with pytest.raises(BillingError, match="did not return a reusable hosted URL"):
-        billing_services._reuse_live_subscription_checkout_url(
+        _subscription_checkout._reuse_live_subscription_checkout_url(
             reservation=reservation,
             stripe_client=client,
         )

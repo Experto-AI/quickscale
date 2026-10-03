@@ -15,7 +15,6 @@ from django.db.models import Q
 from django.utils import timezone
 from quickscale_modules_orgs.current_org import org_scope
 
-import quickscale_modules_billing.services as _services
 from quickscale_modules_billing._customers import (
     get_or_create_stripe_customer as get_or_create_stripe_customer,
 )
@@ -84,6 +83,8 @@ from quickscale_modules_billing.models import (
     Plan,
     Subscription,
 )
+import quickscale_modules_billing._locks as _locks
+import quickscale_modules_billing._stripe_client as _stripe_client
 
 
 def create_subscription_checkout_session(
@@ -98,12 +99,12 @@ def create_subscription_checkout_session(
 ) -> str:
     """Serialize recurring Checkout creation with account deletion mutations."""
     try:
-        with _services.subscription_provider_mutation_lock(organization):
+        with _locks.subscription_provider_mutation_lock(organization):
             user, organization = _require_owner_provider_mutation_authorization(
                 user,
                 organization,
             )
-            return _services._create_subscription_checkout_session(
+            return _create_subscription_checkout_session(
                 user,
                 plan,
                 success_url,
@@ -139,7 +140,7 @@ def _create_subscription_checkout_session(
 
     _validate_recurring_subscription_plan(plan)
 
-    resolved_client = stripe_client or _services.get_stripe_client(
+    resolved_client = stripe_client or _stripe_client.get_stripe_client(
         settings_snapshot=snapshot
     )
     stripe_price = resolved_client.retrieve_price(price_id=plan.stripe_price_id)
@@ -151,7 +152,7 @@ def _create_subscription_checkout_session(
     )
 
     with transaction.atomic():
-        _services._lock_organization_for_billing_mutation(organization)
+        _locks._lock_organization_for_billing_mutation(organization)
         reservation, _ = _prepare_subscription_checkout_reservation(
             user=user,
             organization=organization,
@@ -170,7 +171,7 @@ def _create_subscription_checkout_session(
             settings_snapshot=snapshot,
         )
         with transaction.atomic():
-            _services._lock_organization_for_billing_mutation(organization)
+            _locks._lock_organization_for_billing_mutation(organization)
             reservation = Subscription.all_objects.select_for_update().get(
                 pk=reservation.pk
             )
@@ -188,7 +189,7 @@ def _create_subscription_checkout_session(
 
     if str(reservation.stripe_checkout_session_id or "").strip():
         with transaction.atomic():
-            _services._lock_organization_for_billing_mutation(organization)
+            _locks._lock_organization_for_billing_mutation(organization)
             current_reservation = Subscription.all_objects.select_for_update().get(
                 pk=reservation.pk
             )
@@ -240,7 +241,7 @@ def _create_subscription_checkout_session(
         )
 
     with transaction.atomic():
-        _services._lock_organization_for_billing_mutation(organization)
+        _locks._lock_organization_for_billing_mutation(organization)
         reservation = Subscription.all_objects.select_for_update().get(
             pk=reservation.pk
         )
@@ -359,7 +360,7 @@ def _reconcile_subscription_checkout(
 
     snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
     _ensure_billing_enabled(snapshot)
-    resolved_client = stripe_client or _services.get_stripe_client(
+    resolved_client = stripe_client or _stripe_client.get_stripe_client(
         settings_snapshot=snapshot
     )
     checkout_session_id = str(reservation.stripe_checkout_session_id or "").strip()
@@ -373,7 +374,7 @@ def _reconcile_subscription_checkout(
         persisted_customer_id = str(reservation.stripe_customer_id or "").strip()
         if persist:
             with org_scope(organization):
-                _services._lock_organization_for_billing_mutation(organization)
+                _locks._lock_organization_for_billing_mutation(organization)
                 current_reservation = (
                     Subscription.all_objects.select_for_update()
                     .filter(pk=reservation.pk)
@@ -406,7 +407,7 @@ def _reconcile_subscription_checkout(
         )
         if persist:
             with org_scope(organization):
-                locked_organization = _services._lock_organization_for_billing_mutation(
+                locked_organization = _locks._lock_organization_for_billing_mutation(
                     organization
                 )
                 current_reservation = (
@@ -545,8 +546,8 @@ def _recover_conflicting_subscription_reservation(
     plan: Plan,
 ) -> Subscription | None:
     with transaction.atomic():
-        _services._lock_organization_for_billing_mutation(organization)
-        current_reservation = _services._resolve_authoritative_subscription_reservation(
+        _locks._lock_organization_for_billing_mutation(organization)
+        current_reservation = _resolve_authoritative_subscription_reservation(
             organization=organization,
             for_update=True,
         )
@@ -566,8 +567,8 @@ def _prepare_subscription_checkout_reservation(
     plan: Plan,
     stripe_customer_id: str | None = None,
 ) -> tuple[Subscription, bool]:
-    _services._lock_organization_for_billing_mutation(organization)
-    current_reservation = _services._resolve_authoritative_subscription_reservation(
+    _locks._lock_organization_for_billing_mutation(organization)
+    current_reservation = _resolve_authoritative_subscription_reservation(
         organization=organization,
         for_update=True,
     )
@@ -626,7 +627,7 @@ def _reuse_live_subscription_checkout_url(
             checkout_session.get("subscription")
         )
         with org_scope(reservation.organization):
-            locked_organization = _services._lock_organization_for_billing_mutation(
+            locked_organization = _locks._lock_organization_for_billing_mutation(
                 reservation.organization
             )
             current_reservation = (

@@ -5,9 +5,11 @@ from __future__ import annotations
 import pytest
 
 from quickscale_modules_billing.models import CreditBalance, CreditTransaction
-from quickscale_modules_billing.services import (
+from quickscale_modules_billing.exceptions import (
     BillingValidationError,
     InsufficientCreditsError,
+)
+from quickscale_modules_billing._credits import (
     credit_user,
     debit_user,
 )
