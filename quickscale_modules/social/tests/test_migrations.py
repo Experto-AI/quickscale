@@ -118,7 +118,7 @@ def test_initial_produces_the_modules_tables() -> None:
 
 def test_tenant_tables_carry_the_force_rls_contract() -> None:
     """Each organization-scoped table carries the canonical FORCE-RLS pair."""
-    from quickscale_modules_orgs.tenancy import _force_rls_policy_mismatches
+    from quickscale_modules_orgs._tenancy_policy import _force_rls_policy_mismatches
 
     tenant_models = [
         model

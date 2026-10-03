@@ -15,6 +15,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from quickscale_modules_orgs._tenancy_equality import (
+    _ADD_COMPOSITE_FK_SQL,
+    _ADD_PARENT_UNIQUE_SQL,
+    _EQUALITY_TRIGGER_DROP_SQL,
+    _EQUALITY_TRIGGER_FUNC_SQL,
+    _EQUALITY_TRIGGER_SQL,
+    _REMOVE_COMPOSITE_FK_SQL,
+    _REMOVE_PARENT_UNIQUE_SQL,
+    _child_equality_trigger_name,
+)
+from quickscale_modules_orgs._tenancy_rls import (
+    _FORCE_RLS_FORWARD_SQL,
+    _FORCE_RLS_REVERSE_SQL,
+)
 from quickscale_modules_orgs.current_org import (
     reset_current_org_id,
     set_current_org_id,
@@ -23,16 +37,6 @@ from quickscale_modules_orgs.tenancy import (
     CHILD_PARENT_EQUALITY_FUNC_NAME,
     CHILD_PARENT_EQUALITY_TRIGGER_NAME_PREFIX,
     ORG_ID_COLUMN,
-    _ADD_COMPOSITE_FK_SQL,
-    _ADD_PARENT_UNIQUE_SQL,
-    _EQUALITY_TRIGGER_FUNC_SQL,
-    _EQUALITY_TRIGGER_SQL,
-    _EQUALITY_TRIGGER_DROP_SQL,
-    _FORCE_RLS_FORWARD_SQL,
-    _FORCE_RLS_REVERSE_SQL,
-    _REMOVE_COMPOSITE_FK_SQL,
-    _REMOVE_PARENT_UNIQUE_SQL,
-    _child_equality_trigger_name,
     add_composite_child_fk,
     add_parent_unique_constraint,
     apply_force_rls,

@@ -3,7 +3,7 @@
 ``BackupPolicyAdmin`` in ``quickscale_modules_backups.admin`` mixes this
 implementation in and overrides the service-call seams
 (``_resolve_dry_run_result`` and ``_dispatch_restore``) so the
-``quickscale_modules_backups.admin`` module stays the lookup site for the
+``quickscale_modules_backups.services`` module stays the lookup site for the
 restore service calls.
 """
 
@@ -79,7 +79,7 @@ class RestoreWorkflowAdminMixin(admin.ModelAdmin):
         """Return whether the artifact's restore is stale.
 
         Implemented on the registered admin class, which keeps the service
-        lookup on the admin facade.
+        lookup on the services module.
         """
         raise NotImplementedError
 
@@ -187,7 +187,7 @@ class RestoreWorkflowAdminMixin(admin.ModelAdmin):
         """Call the dry-run restore service for the selected source mode.
 
         Implemented on the registered admin class, which keeps the restore
-        service lookup on the admin facade.
+        service lookup on the services module.
         """
         raise NotImplementedError
 
@@ -225,7 +225,7 @@ class RestoreWorkflowAdminMixin(admin.ModelAdmin):
         """Dispatch the recorded-artifact or uploaded-file restore path.
 
         Implemented on the registered admin class, which keeps the restore
-        service lookup on the admin facade.
+        service lookup on the services module.
         """
         raise NotImplementedError
 

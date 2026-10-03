@@ -1,8 +1,8 @@
 """Direct-column FORCE-RLS SQL templates and migration helpers.
 
-``tenancy.py`` re-exports these names (Module Conventions rule 28); the
-refresh entry point stays on the facade so its ``apply_force_rls`` /
-``revert_force_rls`` test patch seams keep resolving.
+``tenancy.py`` re-exports these names (Module Conventions rule 28); its
+refresh entry point calls ``apply_force_rls`` / ``revert_force_rls`` from this
+module at call time, so tests patch this module's bindings.
 """
 
 from __future__ import annotations
