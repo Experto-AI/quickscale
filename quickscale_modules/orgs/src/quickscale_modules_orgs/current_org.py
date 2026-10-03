@@ -15,9 +15,10 @@ managers can auto-filter without a ``request`` reference.
 
 AF9 Phase 1 adds the connection-layer execute wrapper that primes the
 PostgreSQL GUC ``app.current_org_id`` from the ContextVar on the live
-cursor before tenant SQL executes.  The ContextVar seam and the wrapper live
-in ``_current_org_priming`` and are re-exported here (Module Conventions
-rule 28); the request-scoped scopes, the request/session accessors, the
+cursor before tenant SQL executes.  The ContextVar seam and the wrapper stay
+in ``_current_org_priming``; this facade re-exports their public names and
+keeps private names on the module that defines them (Module Conventions
+rule 28).  The request-scoped scopes, the request/session accessors, the
 canonical client-IP resolver, and the operator-access context manager stay on
 this module, so the ``_get_operator_access``, ``_set_operator_access``,
 ``logger``, and ``set_db_current_org_id`` patch seams keep resolving.
@@ -32,17 +33,9 @@ from collections.abc import Iterator
 from contextvars import ContextVar as ContextVar
 from typing import Any
 
+import quickscale_modules_orgs._current_org_priming as _priming
+
 from quickscale_modules_orgs._current_org_priming import (
-    _GUC_SETTING as _GUC_SETTING,
-    _INSTALLED_MARKER as _INSTALLED_MARKER,
-    _PRIMED_ATOMIC as _PRIMED_ATOMIC,
-    _PRIMED_FOR_TXN as _PRIMED_FOR_TXN,
-    _PRIMING_IN_PROGRESS as _PRIMING_IN_PROGRESS,
-    _SENTINEL as _SENTINEL,
-    _clear_priming_memo as _clear_priming_memo,
-    _current_org_id_var as _current_org_id_var,
-    _issue_set_local as _issue_set_local,
-    _make_priming_execute_wrapper as _make_priming_execute_wrapper,
     get_current_org_id as get_current_org_id,
     install_priming_wrapper as install_priming_wrapper,
     reset_current_org_id as reset_current_org_id,
@@ -109,7 +102,7 @@ def _set_db_current_org_id(org_id: uuid.UUID | str) -> None:
         with connection.cursor() as cursor:
             cursor.execute("SET LOCAL app.current_org_id = %s", [str(org_id)])
     finally:
-        _clear_priming_memo(connection)
+        _priming._clear_priming_memo(connection)
 
 
 def reset_db_current_org_id() -> None:
@@ -132,7 +125,7 @@ def reset_db_current_org_id() -> None:
         with connection.cursor() as cursor:
             cursor.execute("RESET app.current_org_id")
     finally:
-        _clear_priming_memo(connection)
+        _priming._clear_priming_memo(connection)
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +183,7 @@ def _restore_current_org_id(prior: uuid.UUID | None) -> None:
             else:
                 cursor.execute("SET LOCAL app.current_org_id = %s", [str(prior)])
     finally:
-        _clear_priming_memo(connection)
+        _priming._clear_priming_memo(connection)
 
 
 @contextlib.contextmanager
@@ -534,7 +527,7 @@ def operator_access(*, reason: str) -> Iterator[None]:
     Temporarily sets the PostgreSQL GUC ``app.operator_access`` to
     ``'on'`` via ``SET LOCAL`` so that FORCE RLS policies allow queries
     matching **any** ``organization_id`` (see the SA14.5 OR clause added
-    to ``tenancy._FORCE_RLS_FORWARD_SQL`` ``_select`` sub-policy).
+    to ``_tenancy_rls._FORCE_RLS_FORWARD_SQL`` ``_select`` sub-policy).
 
     The elevation is **transaction-scoped**: ``SET LOCAL`` applies only
     within the current database transaction and is automatically reset

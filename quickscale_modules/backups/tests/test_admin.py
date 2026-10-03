@@ -257,6 +257,23 @@ class TestBackupPolicyAdmin:
         assert "Uploaded backup file" in content
         assert "remote-only artifacts" in content
 
+    def test_restore_page_resolves_default_policy_on_services(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        """The restore page resolves ``ensure_default_policy`` on ``services``."""
+        with patch(
+            "quickscale_modules_backups.services.ensure_default_policy",
+            return_value=backup_policy,
+        ) as mocked_policy:
+            response = admin_client.get(
+                reverse("admin:quickscale_backups_backuppolicy_restore")
+            )
+
+        assert response.status_code == 200
+        mocked_policy.assert_called_once()
+
     @pytest.mark.parametrize(
         ("permission_codenames", "expect_artifact_inventory"),
         [
@@ -318,7 +335,7 @@ class TestBackupPolicyAdmin:
         client.force_login(user)
 
         with patch(
-            "quickscale_modules_backups.admin.restore_backup_artifact"
+            "quickscale_modules_backups.services.restore_backup_artifact"
         ) as mocked_restore:
             response = client.post(
                 reverse("admin:quickscale_backups_backuppolicy_restore"),
@@ -351,7 +368,7 @@ class TestBackupPolicyAdmin:
 
         with (
             patch(
-                "quickscale_modules_backups.admin.restore_admin_uploaded_backup",
+                "quickscale_modules_backups.services.restore_admin_uploaded_backup",
                 return_value=RestoreResult(
                     executed=False,
                     dry_run=True,
@@ -359,7 +376,7 @@ class TestBackupPolicyAdmin:
                 ),
             ) as mocked_uploaded_restore,
             patch(
-                "quickscale_modules_backups.admin.restore_backup_artifact"
+                "quickscale_modules_backups.services.restore_backup_artifact"
             ) as mocked_recorded_restore,
         ):
             response = admin_client.post(
@@ -417,7 +434,7 @@ class TestBackupPolicyAdmin:
         client.force_login(user)
 
         with patch(
-            "quickscale_modules_backups.admin.restore_backup_artifact"
+            "quickscale_modules_backups.services.restore_backup_artifact"
         ) as mocked_restore:
             response = client.post(
                 reverse("admin:quickscale_backups_backuppolicy_restore"),
@@ -437,19 +454,19 @@ class TestBackupPolicyAdmin:
             (
                 "create",
                 "admin:quickscale_backups_backuppolicy_create",
-                "quickscale_modules_backups.admin.dispatch_background_create",
+                "quickscale_modules_backups.services.dispatch_background_create",
                 False,
             ),
             (
                 "prune",
                 "admin:quickscale_backups_backuppolicy_prune",
-                "quickscale_modules_backups.admin.dispatch_background_prune",
+                "quickscale_modules_backups.services.dispatch_background_prune",
                 False,
             ),
             (
                 "download",
                 "admin:quickscale_backups_backupartifact_download",
-                "quickscale_modules_backups.admin.download_backup_path",
+                "quickscale_modules_backups.services.download_backup_path",
                 True,
             ),
         ],
@@ -485,11 +502,11 @@ class TestBackupPolicyAdmin:
         [
             (
                 "create_backup_now",
-                "quickscale_modules_backups.admin.dispatch_background_create",
+                "quickscale_modules_backups.services.dispatch_background_create",
             ),
             (
                 "prune_expired_backups_now",
-                "quickscale_modules_backups.admin.dispatch_background_prune",
+                "quickscale_modules_backups.services.dispatch_background_prune",
             ),
         ],
     )
@@ -524,11 +541,11 @@ class TestBackupPolicyAdmin:
         [
             (
                 "admin:quickscale_backups_backuppolicy_create",
-                "quickscale_modules_backups.admin.dispatch_background_create",
+                "quickscale_modules_backups.services.dispatch_background_create",
             ),
             (
                 "admin:quickscale_backups_backuppolicy_prune",
-                "quickscale_modules_backups.admin.dispatch_background_prune",
+                "quickscale_modules_backups.services.dispatch_background_prune",
             ),
         ],
     )
@@ -559,7 +576,7 @@ class TestBackupPolicyAdmin:
         _attach_messages(request)
 
         with patch(
-            "quickscale_modules_backups.admin.dispatch_background_create",
+            "quickscale_modules_backups.services.dispatch_background_create",
         ) as mocked_dispatch:
             policy_admin.create_backup_now(request, BackupPolicy.objects.all())
 
@@ -734,7 +751,7 @@ class TestBackupPolicyAdmin:
             Path(postgresql_backup_artifact.local_path).unlink()
 
         with patch(
-            "quickscale_modules_backups.admin.restore_backup_artifact"
+            "quickscale_modules_backups.services.restore_backup_artifact"
         ) as mocked_restore:
             response = admin_client.post(
                 reverse("admin:quickscale_backups_backuppolicy_restore"),
@@ -805,7 +822,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
     ) -> None:
         with patch(
-            "quickscale_modules_backups.admin.dispatch_background_create",
+            "quickscale_modules_backups.services.dispatch_background_create",
         ) as mocked_create:
             response = admin_client.post(
                 reverse("admin:quickscale_backups_backuppolicy_create"),
@@ -824,7 +841,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
     ) -> None:
         with patch(
-            "quickscale_modules_backups.admin.dispatch_background_create",
+            "quickscale_modules_backups.services.dispatch_background_create",
             side_effect=BackupError(
                 "Required executable 'pg_dump' is not installed in this runtime."
             ),
@@ -853,7 +870,7 @@ class TestBackupPolicyAdmin:
         client.force_login(user)
 
         with patch(
-            "quickscale_modules_backups.admin.dispatch_background_prune",
+            "quickscale_modules_backups.services.dispatch_background_prune",
         ) as mocked_prune:
             response = client.post(
                 reverse("admin:quickscale_backups_backuppolicy_prune"),
@@ -878,7 +895,7 @@ class TestBackupPolicyAdmin:
         client.force_login(user)
 
         with patch(
-            "quickscale_modules_backups.admin.dispatch_background_create",
+            "quickscale_modules_backups.services.dispatch_background_create",
         ) as mocked_create:
             response = client.post(
                 reverse("admin:quickscale_backups_backuppolicy_changelist"),
@@ -904,7 +921,7 @@ class TestBackupPolicyAdmin:
         changelist_url = reverse("admin:quickscale_backups_backuppolicy_changelist")
 
         with patch(
-            "quickscale_modules_backups.admin.dispatch_background_prune",
+            "quickscale_modules_backups.services.dispatch_background_prune",
         ) as mocked_prune:
             response = admin_client.post(
                 changelist_url,
@@ -928,7 +945,7 @@ class TestBackupPolicyAdmin:
         backup_policy: BackupPolicy,
     ) -> None:
         with patch(
-            "quickscale_modules_backups.admin.dispatch_background_prune",
+            "quickscale_modules_backups.services.dispatch_background_prune",
         ) as mocked_prune:
             response = admin_client.post(
                 reverse("admin:quickscale_backups_backuppolicy_prune"),
@@ -1040,7 +1057,7 @@ class TestBackupPolicyAdmin:
         )
 
         with patch(
-            "quickscale_modules_backups.admin.restore_backup_artifact"
+            "quickscale_modules_backups.services.restore_backup_artifact"
         ) as mocked_restore:
             response = admin_client.post(
                 reverse("admin:quickscale_backups_backuppolicy_restore"),
@@ -2428,7 +2445,7 @@ class TestBackupArtifactAdmin:
         client.force_login(user)
 
         with patch(
-            "quickscale_modules_backups.admin.dispatch_background_create",
+            "quickscale_modules_backups.services.dispatch_background_create",
         ) as mocked_create:
             response = client.post(
                 reverse("admin:quickscale_backups_backupartifact_create"),
@@ -2453,7 +2470,7 @@ class TestBackupArtifactAdmin:
         client.force_login(user)
 
         with patch(
-            "quickscale_modules_backups.admin.dispatch_background_create",
+            "quickscale_modules_backups.services.dispatch_background_create",
         ) as mocked_create:
             response = client.post(
                 reverse("admin:quickscale_backups_backupartifact_create")
@@ -2726,7 +2743,9 @@ class TestBackupArtifactAdmin:
         request.user = superuser
         _attach_messages(request)
 
-        with patch("quickscale_modules_backups.admin.download_backup_path") as mocked:
+        with patch(
+            "quickscale_modules_backups.services.download_backup_path"
+        ) as mocked:
             response = artifact_admin.download_view(request, backup_artifact.pk)
 
         assert response.status_code == 302
@@ -2749,7 +2768,7 @@ class TestBackupArtifactAdmin:
         _attach_messages(request)
 
         with patch(
-            "quickscale_modules_backups.admin.download_backup_path",
+            "quickscale_modules_backups.services.download_backup_path",
             side_effect=BackupError(
                 f"Backup file not found: {Path(backup_artifact.local_path)}"
             ),

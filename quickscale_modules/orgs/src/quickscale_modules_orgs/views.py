@@ -1,14 +1,15 @@
 """Server-rendered org management views for the QuickScale organizations module.
 
-Module Conventions rule 28: this module is a re-exporting facade over private
-``_<name>.py`` sibling modules grouped by concern (``_view_context``,
+Module Conventions rule 28: this module is a facade over private ``_<name>.py``
+sibling modules grouped by concern (``_view_context``,
 ``_view_serialization``, ``_view_invitation``, ``_view_org_management``, and
-``_api_views``).  It keeps the pricing-handoff seam
+``_api_views``); it re-exports their public names and keeps private names on
+the module that defines them.  It keeps the pricing-handoff seam
 (``_billing_pricing_path`` over ``collect_capabilities``) and the
 invitation-notification seam (``_load_invitation_notification_sender``) with
-the views that resolve them from this module's globals, so every prior
-``quickscale_modules_orgs.views`` import path, test patch target, and
-``mock.patch("quickscale_modules_orgs.views...")`` seam keeps resolving.
+the views that resolve them from this module's globals, so this module's own
+patch seams and every prior public ``quickscale_modules_orgs.views`` import
+path keep resolving.
 """
 
 from __future__ import annotations
@@ -48,6 +49,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView as APIView
 
+import quickscale_modules_orgs._view_serialization as _view_serialization
+
 from quickscale_core.runtime import collect_capabilities
 from quickscale_modules_orgs._api_views import (
     OrgApiBaseView as OrgApiBaseView,
@@ -62,11 +65,9 @@ from quickscale_modules_orgs._api_views import (
 from quickscale_modules_orgs._view_context import (
     OrganizationContextMixin as OrganizationContextMixin,
     SaasModeRequiredMixin as SaasModeRequiredMixin,
-    _is_saas_mode as _is_saas_mode,
 )
 from quickscale_modules_orgs._view_invitation import (
     OrgInvitationAcceptView as OrgInvitationAcceptView,
-    _INVITATION_PAGE_COPY as _INVITATION_PAGE_COPY,
 )
 from quickscale_modules_orgs._view_org_management import (
     MemberListView as MemberListView,
@@ -75,18 +76,6 @@ from quickscale_modules_orgs._view_org_management import (
     OrgListView as OrgListView,
     OrgSettingsView as OrgSettingsView,
     RevokeInvitationView as RevokeInvitationView,
-    _membership_id_in_range as _membership_id_in_range,
-)
-from quickscale_modules_orgs._view_serialization import (
-    _first_error_message as _first_error_message,
-    _form_error_data as _form_error_data,
-    _get_inviter_display_name as _get_inviter_display_name,
-    _normalize_email as _normalize_email,
-    _serialize_invitation as _serialize_invitation,
-    _serialize_membership as _serialize_membership,
-    _serialize_organization as _serialize_organization,
-    _serialize_role_choices as _serialize_role_choices,
-    _validation_error_data as _validation_error_data,
 )
 from quickscale_modules_orgs._constants import (
     ACTIVE_ORG_SESSION_KEY,
@@ -217,7 +206,7 @@ class InvitationNotificationMixin:
         }
 
     def get_inviter_display_name(self) -> str:
-        return _get_inviter_display_name(self.request.user)
+        return _view_serialization._get_inviter_display_name(self.request.user)
 
 
 class OrgCreateView(SaasModeRequiredMixin, LoginRequiredMixin, FormView):
@@ -304,7 +293,7 @@ class OrgApiListCreateView(OrgApiBaseView):
         return Response(
             {
                 "organizations": [
-                    _serialize_organization(
+                    _view_serialization._serialize_organization(
                         membership.organization, role=membership.role
                     )
                     for membership in memberships
@@ -323,7 +312,7 @@ class OrgApiListCreateView(OrgApiBaseView):
 
         form = OrgCreateForm(payload)
         if not form.is_valid():
-            raise DRFValidationError(_form_error_data(form))
+            raise DRFValidationError(_view_serialization._form_error_data(form))
 
         organization = form.save(user=request.user)
         # See OrgCreateView.form_valid: the flat-route handoff resolves its
@@ -332,7 +321,7 @@ class OrgApiListCreateView(OrgApiBaseView):
         redirect_urls = _org_creation_redirect_urls(organization)
         return Response(
             {
-                "organization": _serialize_organization(
+                "organization": _view_serialization._serialize_organization(
                     organization, role=OrgRole.OWNER
                 ),
                 "next_url": redirect_urls["next_url"],
@@ -362,14 +351,14 @@ class OrgApiInviteView(
 
         form = self.get_invite_form(data=payload)
         if not form.is_valid():
-            raise DRFValidationError(_form_error_data(form))
+            raise DRFValidationError(_view_serialization._form_error_data(form))
 
         invitation = self.save_invitation_form(form)
         if invitation is None:
-            raise DRFValidationError(_form_error_data(form))
+            raise DRFValidationError(_view_serialization._form_error_data(form))
 
         return Response(
-            {"invitation": _serialize_invitation(invitation)},
+            {"invitation": _view_serialization._serialize_invitation(invitation)},
             status=201,
         )
 

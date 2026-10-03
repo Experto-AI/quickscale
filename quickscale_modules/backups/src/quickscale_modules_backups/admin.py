@@ -2,24 +2,21 @@
 
 The restore form lives in ``_admin_forms``, the restore page helpers in
 ``_admin_restore``, and the artifact admin implementation in
-``_admin_artifact``; this module re-exports the full former surface so the
-import path stays a drop-in replacement, and keeps the registered admin
-classes with their service-call seams.
+``_admin_artifact``; this module re-exports its intended public surface so the
+import path stays a drop-in replacement, and resolves service calls through
+``quickscale_modules_backups.services`` at call time.
 """
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
-from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseRedirect
-from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from django.utils.html import format_html
+
+import quickscale_modules_backups.services as _services
 
 from quickscale_modules_backups._admin_artifact import BackupArtifactAdminBase
 from quickscale_modules_backups._admin_forms import BackupPolicyRestoreForm
@@ -30,26 +27,25 @@ from quickscale_modules_backups.models import (
     BackupSnapshot,
 )
 from quickscale_modules_backups.services import (
-    STALE_RESTORE_THRESHOLD_MINUTES,
-    BackupError,
-    BackupRestoreBlocked,
-    RestoreSourceResolutionMode,
-    delete_artifact_files,
-    dispatch_background_create,
-    dispatch_background_prune,
-    dispatch_background_restore,
-    download_backup_path,
-    ensure_default_policy,
-    is_restore_stale,
-    prepare_admin_uploaded_restore_artifact,
-    reset_stale_restore,
-    restore_admin_uploaded_backup,
-    restore_backup_artifact,
-    validate_backup_artifact,
+    STALE_RESTORE_THRESHOLD_MINUTES as STALE_RESTORE_THRESHOLD_MINUTES,
+    BackupError as BackupError,
+    BackupRestoreBlocked as BackupRestoreBlocked,
+    RestoreSourceResolutionMode as RestoreSourceResolutionMode,
+    delete_artifact_files as delete_artifact_files,
+    dispatch_background_create as dispatch_background_create,
+    dispatch_background_prune as dispatch_background_prune,
+    dispatch_background_restore as dispatch_background_restore,
+    download_backup_path as download_backup_path,
+    ensure_default_policy as ensure_default_policy,
+    is_restore_stale as is_restore_stale,
+    prepare_admin_uploaded_restore_artifact as prepare_admin_uploaded_restore_artifact,
+    reset_stale_restore as reset_stale_restore,
+    restore_admin_uploaded_backup as restore_admin_uploaded_backup,
+    restore_backup_artifact as restore_backup_artifact,
+    validate_backup_artifact as validate_backup_artifact,
 )
 
 __all__ = [
-    "Any",
     "BackupArtifact",
     "BackupArtifactAdmin",
     "BackupError",
@@ -58,34 +54,19 @@ __all__ = [
     "BackupPolicyRestoreForm",
     "BackupRestoreBlocked",
     "BackupSnapshot",
-    "FileResponse",
-    "HttpRequest",
-    "HttpResponse",
-    "HttpResponseRedirect",
-    "Path",
-    "PermissionDenied",
     "RestoreSourceResolutionMode",
     "STALE_RESTORE_THRESHOLD_MINUTES",
-    "TemplateResponse",
-    "admin",
-    "cast",
     "delete_artifact_files",
     "dispatch_background_create",
     "dispatch_background_prune",
     "dispatch_background_restore",
     "download_backup_path",
     "ensure_default_policy",
-    "format_html",
-    "forms",
     "is_restore_stale",
-    "json",
-    "messages",
-    "path",
     "prepare_admin_uploaded_restore_artifact",
     "reset_stale_restore",
     "restore_admin_uploaded_backup",
     "restore_backup_artifact",
-    "reverse",
     "validate_backup_artifact",
 ]
 
@@ -94,8 +75,9 @@ __all__ = [
 class BackupPolicyAdmin(RestoreWorkflowAdminMixin):
     """Read-only admin interface for the applied backup policy snapshot.
 
-    The restore service-call seams stay on this facade subclass so
-    ``quickscale_modules_backups.admin`` remains their lookup site.
+    The restore service-call seams resolve through
+    ``quickscale_modules_backups.services`` at call time, so tests patch the
+    module that defines each service.
     """
 
     _notice_fields = [
@@ -224,7 +206,7 @@ class BackupPolicyAdmin(RestoreWorkflowAdminMixin):
 
     def _is_restore_stale(self, artifact: BackupArtifact) -> bool:
         """Return whether the artifact's restore is stale."""
-        return is_restore_stale(artifact)
+        return _services.is_restore_stale(artifact)
 
     def _can_view_restore_artifacts(self, request: HttpRequest) -> bool:
         """Return whether this request may inspect artifact-backed restore inputs."""
@@ -251,7 +233,7 @@ class BackupPolicyAdmin(RestoreWorkflowAdminMixin):
         ):
             self._require_change_permission(request)
 
-        ensure_default_policy()
+        _services.ensure_default_policy()
         merged_context = {
             **(extra_context or {}),
             "show_create_prune_controls": self.has_change_permission(request),
@@ -287,7 +269,7 @@ class BackupPolicyAdmin(RestoreWorkflowAdminMixin):
         """Render and execute the guarded admin restore workflow."""
         self._require_restore_access(request)
 
-        policy = ensure_default_policy()
+        policy = _services.ensure_default_policy()
         can_view_restore_artifacts = self._can_view_restore_artifacts(request)
         eligible_artifacts = (
             self._get_admin_restore_candidates() if can_view_restore_artifacts else []
@@ -340,13 +322,13 @@ class BackupPolicyAdmin(RestoreWorkflowAdminMixin):
             == BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT
         ):
             assert selected_artifact is not None  # noqa: S101 - internal invariant guaranteed by the caller
-            return restore_backup_artifact(
+            return _services.restore_backup_artifact(
                 selected_artifact,
                 confirmation=form.cleaned_data["confirmation"],
                 dry_run=True,
                 resolution_mode=RestoreSourceResolutionMode.LOCAL_ONLY,
             )
-        return restore_admin_uploaded_backup(
+        return _services.restore_admin_uploaded_backup(
             form.cleaned_data["uploaded_file"],
             confirmation=form.cleaned_data["confirmation"],
             dry_run=True,
@@ -364,17 +346,17 @@ class BackupPolicyAdmin(RestoreWorkflowAdminMixin):
             == BackupPolicyRestoreForm.SOURCE_MODE_RECORDED_ARTIFACT
         ):
             assert selected_artifact is not None  # noqa: S101 - internal invariant guaranteed by the caller
-            dispatch_background_restore(
+            _services.dispatch_background_restore(
                 selected_artifact,
                 confirmation=form.cleaned_data["confirmation"],
             )
             return
 
-        trusted_artifact = prepare_admin_uploaded_restore_artifact(
+        trusted_artifact = _services.prepare_admin_uploaded_restore_artifact(
             form.cleaned_data["uploaded_file"],
             confirmation=form.cleaned_data["confirmation"],
         )
-        dispatch_background_restore(
+        _services.dispatch_background_restore(
             trusted_artifact,
             confirmation=form.cleaned_data["confirmation"],
         )
@@ -436,7 +418,7 @@ class BackupPolicyAdmin(RestoreWorkflowAdminMixin):
         """Dispatch background backup creation from the admin surface."""
         self._require_change_permission(request)
         try:
-            dispatch_background_create(trigger="admin")
+            _services.dispatch_background_create(trigger="admin")
         except BackupError as exc:
             self.message_user(
                 request,
@@ -456,7 +438,7 @@ class BackupPolicyAdmin(RestoreWorkflowAdminMixin):
         """Dispatch background backup pruning from the admin surface."""
         self._require_change_permission(request)
         try:
-            dispatch_background_prune(trigger="admin")
+            _services.dispatch_background_prune(trigger="admin")
         except BackupError as exc:
             self.message_user(
                 request,
@@ -476,8 +458,9 @@ class BackupPolicyAdmin(RestoreWorkflowAdminMixin):
 class BackupArtifactAdmin(BackupArtifactAdminBase):
     """Admin interface for backup artifact history and download access.
 
-    The service-call seams live on this facade subclass so
-    ``quickscale_modules_backups.admin`` stays their lookup site.
+    The service-call seams resolve through
+    ``quickscale_modules_backups.services`` at call time, so tests patch the
+    module that defines each service.
     """
 
     def _get_policy_admin(self) -> BackupPolicyAdmin | None:
@@ -489,19 +472,19 @@ class BackupArtifactAdmin(BackupArtifactAdminBase):
 
     def _is_restore_stale(self, artifact: BackupArtifact) -> bool:
         """Return whether the artifact's restore is stale."""
-        return is_restore_stale(artifact)
+        return _services.is_restore_stale(artifact)
 
     def _reset_stale_restore(self, artifact: BackupArtifact) -> None:
         """Reset one stranded restore to ``Status.FAILED``."""
-        reset_stale_restore(artifact)
+        _services.reset_stale_restore(artifact)
 
     def _validate_backup_artifact(self, artifact: BackupArtifact) -> Any:
         """Validate one artifact and return its issues."""
-        return validate_backup_artifact(artifact)
+        return _services.validate_backup_artifact(artifact)
 
     def _delete_artifact_files(self, artifact: BackupArtifact) -> None:
         """Delete one artifact's local and remote files."""
-        delete_artifact_files(artifact)
+        _services.delete_artifact_files(artifact)
 
     def _has_downloadable_local_file(self, obj: BackupArtifact) -> bool:
         """Return whether the admin can still offer a local download action."""
@@ -509,7 +492,7 @@ class BackupArtifactAdmin(BackupArtifactAdminBase):
             return False
 
         try:
-            download_backup_path(obj)
+            _services.download_backup_path(obj)
         except BackupError:
             return False
         return True
@@ -544,7 +527,7 @@ class BackupArtifactAdmin(BackupArtifactAdminBase):
             )
 
         try:
-            local_path = download_backup_path(artifact)
+            local_path = _services.download_backup_path(artifact)
         except BackupError as exc:
             self.message_user(
                 request, f"Download unavailable: {exc}", level=messages.ERROR

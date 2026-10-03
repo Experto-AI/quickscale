@@ -255,8 +255,9 @@ def declared_boundary_guards(
     Entries follow app-label order.  The declarations are validated before
     their hooks are resolved, so a malformed or duplicate declaration fails
     closed instead of being read as an app with nothing to guard.  The
-    aggregate resolver arrives as a parameter so the facade's patch seam
-    keeps resolving.
+    aggregate resolver arrives as a parameter; the facade passes this module's
+    ``organization_removal_obligations``, so a defining-module patch reaches
+    it.
     """
     aggregate()
     guards: list[DeclaredBoundaryGuard] = []

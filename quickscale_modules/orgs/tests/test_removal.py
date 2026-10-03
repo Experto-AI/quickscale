@@ -551,7 +551,8 @@ def test_declared_refusal_fields_list_unguarded_fields(
         ),
     )
     monkeypatch.setattr(
-        removal, "organization_removal_obligations", lambda: (obligation,)
+        "quickscale_modules_orgs._removal_declarations.organization_removal_obligations",
+        lambda: (obligation,),
     )
 
     assert declared_refusal_fields(RemovalBoundary.PURGE) == (

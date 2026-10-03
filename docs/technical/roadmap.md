@@ -176,7 +176,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Slices:**
   - [x] (a) Rule 46 decision entry and log channels: private files log on the facade's channel,
     the rule 28 clause, and the release-note list of moved channels.
-  - [ ] (b) Re-exports: trim module facades to public names and retarget their tests' patches.
+  - [x] (b) Re-exports: trim module facades to public names and retarget their tests' patches.
   - [ ] (c) Rule 19 finds view code by content, with its control case.
 
   **Surfaces:** loggers and facades in auth, backups, billing (Track 2), notifications, and orgs,
