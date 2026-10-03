@@ -37,7 +37,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: SA237
 Track 3: SA238 ──► SA241 ──► SA216
      critical path: SA238 → SA191 → SA153
@@ -56,7 +56,8 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** SA237 (Track 2) and SA238 (Track 3) can start now; SA241 follows SA238 on
+**Parallel start.** SA214 (Track 1), SA237 (Track 2), and SA238 (Track 3) can start now; SA214
+runs ahead of SA191 on Track 1 against a pinned pre-SA191 `bap-web` donor; SA241 follows SA238 on
 Track 3 and lands before SA153, then SA216. SA235 closed rule 41 and `mount-path-copies` with the
 two cells the seventh pass corrected (rules 31, 37, and 41), and SA240's org-creation command
 landed for SA191's cutover; SA215's closing pass closed inventory sections 1–41. The seventh
@@ -74,7 +75,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 | no | no | yes | no | **yes** |
+| 1 | SA214 | yes | yes | yes | **yes** | no |
 | 2 | SA237 | yes | yes | yes | **yes** | no |
 | 3 | SA238 | yes | yes | yes | **yes** | **yes** |
 
