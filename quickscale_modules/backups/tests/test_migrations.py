@@ -96,7 +96,7 @@ def test_fresh_initial_contains_the_final_backup_schema() -> None:
     )
     assert snapshot._meta.get_field("authoritative_dump").unique is True
     assert set(connection.introspection.table_names()) >= {
-        "quickscale_backups_policy",
-        "quickscale_backups_artifact",
-        "quickscale_backups_snapshot",
+        "quickscale_backups_backuppolicy",
+        "quickscale_backups_backupartifact",
+        "quickscale_backups_backupsnapshot",
     }
