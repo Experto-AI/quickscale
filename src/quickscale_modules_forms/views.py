@@ -100,11 +100,9 @@ def _capture_submission_analytics(submission: FormSubmission, request: Request) 
     if not apps.is_installed("quickscale_modules_analytics"):
         return
 
-    from quickscale_modules_analytics.services import (
-        get_analytics_runtime_settings,
-    )
+    from quickscale_modules_analytics.services import is_enabled as analytics_enabled
 
-    if not get_analytics_runtime_settings().enabled:
+    if not analytics_enabled():
         return
 
     transaction.on_commit(lambda: _emit_submission_event(submission, request))
@@ -360,9 +358,9 @@ class FormSubmitAPIView(CreateAPIView):
 
             # CR-P3-006 / rule 21: both helpers schedule their effect on the
             # write's commit, never inline — a rolled-back submission sends no
-            # email and fires no analytics event.  Both are already
-            # exception-safe (never raise) so they cannot roll back the
-            # submission transaction.
+            # email and fires no analytics event.  Their preparation is
+            # exception-safe; a send that raises beyond NotificationError
+            # (rule 43) surfaces only after the write has committed.
             notification_status = notify_submission(submission)
             _capture_submission_analytics(submission, request)
 
