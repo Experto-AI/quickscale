@@ -233,6 +233,7 @@ class TestUploadPathAndNaming:
             "blog",
             asset_kind="uploads",
             filename="hero.png",
+            image_format="PNG",
             now=datetime(2026, 3, 18, tzinfo=timezone.utc),
             content=b"abc",
         )
@@ -249,11 +250,67 @@ class TestUploadPathAndNaming:
         )
 
         path = build_upload_path(
-            "blog", asset_kind="uploads", filename="hero.png", content=b"abc"
+            "blog",
+            asset_kind="uploads",
+            filename="hero.png",
+            image_format="PNG",
+            content=b"abc",
         )
 
         assert path.startswith("blog/uploads/2031/05/")
         assert path.endswith(".png")
+
+    def test_build_upload_path_uses_the_validated_format_over_the_client_name(
+        self,
+    ) -> None:
+        """A valid PNG named x.html is stored as .png, not as the client suffix."""
+        uploaded = _uploaded_image(filename="x.html", image_format="PNG")
+        validated = validate_file_upload(
+            uploaded,
+            max_size_bytes=2_000_000,
+            allowed_image_formats={"PNG"},
+        )
+
+        path = build_upload_path(
+            "blog",
+            asset_kind="uploads",
+            filename=uploaded.name,
+            image_format=validated.format,
+        )
+
+        assert path.endswith(".png")
+        assert not path.endswith(".html")
+
+    @pytest.mark.parametrize(
+        ("image_format", "expected_extension"),
+        [
+            ("JPEG", ".jpg"),
+            ("PNG", ".png"),
+            ("WEBP", ".webp"),
+            ("GIF", ".gif"),
+        ],
+    )
+    def test_build_upload_path_maps_each_validated_format(
+        self,
+        image_format: str,
+        expected_extension: str,
+    ) -> None:
+        path = build_upload_path(
+            "blog",
+            asset_kind="uploads",
+            filename="x.html",
+            image_format=image_format,
+        )
+
+        assert path.endswith(expected_extension)
+
+    def test_build_upload_path_without_a_validated_format_never_trusts_the_name(
+        self,
+    ) -> None:
+        path = build_upload_path("blog", asset_kind="uploads", filename="x.html")
+
+        assert path.endswith(".bin")
+        assert not path.endswith(".html")
 
 
 class TestPublicUrlHelpers:
