@@ -56,7 +56,8 @@ runs ahead of SA191. SA204 freezes migration history before any post-SA153 modul
 SA154 is an inventory, not work.
 
 **Parallel start.** All three tracks can start now: SA233 (Track 1), SA239 (Track 2), and SA236
-(Track 3). SA215's closing pass landed and closed inventory sections 1–41. The coherence audit's
+(Track 3). SA215's closing pass landed and closed inventory sections 1–41 (the two cells the
+seventh pass corrected are carried by SA235). The coherence audit's
 seventh pass (sections 42–47, D43–D48) is carried by SA235–SA238. Each begins by recording its
 decision (proposed rules 41–46 in the
 [inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes

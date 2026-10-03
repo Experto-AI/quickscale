@@ -262,7 +262,13 @@ The names decisions.md quoted from the audit-time shipped state now carry the re
 `quickscale_modules_<module>` app labels → `quickscale_<module>`). The audit-time prose of the
 [Coherence audit re-run](#coherence-audit-re-run-2026-09-28) section and the evidence cells in
 sections 1–41 below remain the 2026-09-28 audit record, not a description of the current tree; the
-index statuses and this closing pass are the current state.
+2026-10-03 index statuses and this closing pass are the current state.
+
+Two sections 1–41 items are not closed by this pass but are carried, with the corrections the
+2026-10-03 pass above records: `theme-module-presence` (the social seam pages still hand-write
+module flags and paths) and `module-lists-outside-members` (the generated shell routes stay
+literal). Their fix is host-template and seam work, owned by SA235 together with its mount-path
+item, so they are the pass's deferred remainder rather than accepted exceptions.
 
 ---
 
