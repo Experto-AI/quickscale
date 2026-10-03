@@ -20,23 +20,8 @@ from pathlib import Path
 from typing import TextIO
 
 
-def build_argument_parser() -> argparse.ArgumentParser:
-    """Build the beta migration argument parser."""
-    parser = argparse.ArgumentParser(
-        description=(
-            "Run the maintainer-only fresh-first beta-site migration workflow. The "
-            "workflow can execute deterministically through local verification."
-        )
-    )
-    subparsers = parser.add_subparsers(dest="mode", required=True)
-
-    subparser = subparsers.add_parser(
-        "fresh-first",
-        help=(
-            "Run the fresh-first workflow: donor is the current beta site and recipient "
-            "is a fresh scaffold."
-        ),
-    )
+def _add_common_arguments(subparser: argparse.ArgumentParser) -> None:
+    """Add the donor/recipient inputs shared by every workflow mode."""
     subparser.add_argument(
         "--donor",
         required=True,
@@ -56,6 +41,35 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--report-path",
         help="Optional path where the JSON report should be written",
     )
+
+
+def build_argument_parser() -> argparse.ArgumentParser:
+    """Build the beta migration argument parser."""
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run the maintainer-only fresh-first beta-site migration workflow. The "
+            "workflow can execute deterministically through local verification."
+        )
+    )
+    subparsers = parser.add_subparsers(dest="mode", required=True)
+
+    fresh_first = subparsers.add_parser(
+        "fresh-first",
+        help=(
+            "Run the fresh-first workflow: donor is the current beta site and recipient "
+            "is a fresh scaffold."
+        ),
+    )
+    _add_common_arguments(fresh_first)
+
+    iterate = subparsers.add_parser(
+        "iterate",
+        help=(
+            "Run one migration iteration: regenerate the throwaway recipient from the "
+            "donor's quickscale.yml, then run the fresh-first workflow."
+        ),
+    )
+    _add_common_arguments(iterate)
 
     return parser
 

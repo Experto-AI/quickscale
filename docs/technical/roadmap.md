@@ -409,8 +409,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     and refused at preflight).
 
   **Slices:**
-  - [ ] (a) `make beta-migrate-iterate`: one non-interactive iteration driven by the donor's
-    `quickscale.yml`.
+  - [x] (a) `make beta-migrate-iterate`: one non-interactive iteration driven by the donor's
+    `quickscale.yml`. Handoff: the target reads slug, package, theme, and modules from the donor
+    config, regenerates through a staging directory and `quickscale apply --split-refs-from-branches`,
+    then runs fresh-first; next are G-001 and slices (b)–(f); watch the apply confirmation input and
+    the fail-closed recipient and stage guards.
   - [ ] (b) Classification of every donor file, with unclassified files as blockers.
   - [ ] (c) Project-owned apps (copy, register, mount, regenerate migrations) and frontend
     dependency merge.

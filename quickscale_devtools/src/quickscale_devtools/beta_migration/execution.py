@@ -22,6 +22,7 @@ from .model import (
     _append_completed_step,
     _append_skipped_step,
     _record_changed_file,
+    _remove_path,
 )
 from .planning import (
     _build_pending_manual_actions,
@@ -29,6 +30,10 @@ from .planning import (
     _prepare_beta_migration_report,
 )
 from .preflight import _protected_recipient_paths
+from .regeneration import (
+    _execute_regenerate_recipient,
+    _plan_beta_migration_iterate,
+)
 from .snapshots import _load_project_snapshot
 from .toml_editing import (
     _collect_missing_path_dependency_values,
@@ -43,15 +48,6 @@ from quickscale_core.project_state import ProjectStateManager
 from quickscale_core.schema.state_schema import StateManager
 from quickscale_core.utils.poetry_env import build_isolated_poetry_env
 from typing import Any
-
-
-def _remove_path(path: Path) -> None:
-    if not path.exists():
-        return
-    if path.is_dir():
-        shutil.rmtree(path)
-        return
-    path.unlink()
 
 
 def _copy_path(source: Path, destination: Path) -> None:
@@ -473,8 +469,40 @@ def _execute_fresh_first(report: BetaMigrationReport) -> BetaMigrationReport:
     return report
 
 
+def _run_beta_migration_iterate(
+    inputs: BetaMigrationInput,
+) -> BetaMigrationReport:
+    """Regenerate the throwaway recipient, then run the fresh-first workflow."""
+    report = _plan_beta_migration_iterate(inputs, execution_intent="run")
+    if report.blockers or inputs.dry_run:
+        report.pending_manual_actions = _build_pending_manual_actions(report)
+        return report
+
+    try:
+        _execute_regenerate_recipient(report, inputs)
+    except Exception as exc:
+        report.phase = "iterate-regeneration-failed"
+        report.status = "blocked"
+        _append_blocker(report, f"regenerate-recipient failed: {exc}")
+        report.pending_manual_actions = _build_pending_manual_actions(report)
+        return report
+
+    report = _prepare_beta_migration_report(
+        inputs, execution_intent="run", report=report
+    )
+    if report.blockers:
+        return report
+
+    report = _execute_fresh_first(report)
+    report.pending_manual_actions = _build_pending_manual_actions(report)
+    return report
+
+
 def run_beta_migration(inputs: BetaMigrationInput) -> BetaMigrationReport:
-    """Run the fresh-first beta migration workflow."""
+    """Run the requested beta migration workflow."""
+    if inputs.mode == "iterate":
+        return _run_beta_migration_iterate(inputs)
+
     report = _prepare_beta_migration_report(inputs, execution_intent="run")
     if report.blockers or inputs.dry_run:
         report.pending_manual_actions = _build_pending_manual_actions(report)

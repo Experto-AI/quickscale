@@ -45,6 +45,7 @@
 #   make docs                 - Compile contributing docs
 #   make install              - Install QuickScale globally
 #   make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first beta migration on a throwaway recipient
+#   make beta-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path - Regenerate the recipient from the donor's quickscale.yml, then run fresh-first
 #   make build                - Build all distribution packages
 #   make publish-build        - Build packages only (no publish)
 #   make publish-test         - Publish to TestPyPI
@@ -67,6 +68,7 @@
         docs \
         build clean \
 		beta-migrate-fresh \
+		beta-migrate-iterate \
         publish-build publish-test publish-prod publish-full publish-module publish-modules \
         seal-module seal-modules seal-status \
         legacy-mount legacy-unmount legacy-status \
@@ -251,6 +253,8 @@ help:
 	@echo "  make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first on a throwaway recipient"
 	@echo "                             Default: mutate recipient + local verification; DRY_RUN=1 plans only"
 	@echo "                             Optional: REPORT=/abs/path/report.json"
+	@echo "  make beta-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path - Regenerate the recipient from the donor's quickscale.yml, then run fresh-first"
+	@echo "                             Accepts the same DRY_RUN/REPORT options as beta-migrate-fresh"
 	@echo ""
 	@echo "Inner loop (fast, while coding):"
 	@echo "  make fix                  - Auto-format + auto-fix lint (write mode)"
@@ -406,6 +410,36 @@ beta-migrate-fresh:
 			--report-path "$$report"; \
 	else \
 		poetry run python scripts/beta_migrate.py fresh-first \
+			--donor "$$donor" \
+			--recipient "$$recipient" \
+			$$dry_run_args; \
+	fi
+
+# Run one beta-migration iteration: regenerate the recipient from the donor's
+# quickscale.yml through the shipped apply command, then run the fresh-first
+# workflow against the regenerated recipient.
+beta-migrate-iterate:
+	@set -e; \
+	donor=$(call shell_quote,$(call transport_value,DONOR)); \
+	recipient=$(call shell_quote,$(call transport_value,RECIPIENT)); \
+	report=$(call shell_quote,$(call transport_value,REPORT)); \
+	dry_run=$(call shell_quote,$(call transport_value,DRY_RUN)); \
+	if [ -z "$$donor" ] || [ -z "$$recipient" ]; then \
+		echo "Error: DONOR and RECIPIENT are required absolute paths (optional: DRY_RUN=1 REPORT=/abs/path/report.json)."; \
+		exit 1; \
+	fi; \
+	dry_run_args=""; \
+	if [ "$$dry_run" = "1" ] || [ "$$dry_run" = "true" ] || [ "$$dry_run" = "yes" ]; then \
+		dry_run_args="--dry-run"; \
+	fi; \
+	if [ -n "$$report" ]; then \
+		poetry run python scripts/beta_migrate.py iterate \
+			--donor "$$donor" \
+			--recipient "$$recipient" \
+			$$dry_run_args \
+			--report-path "$$report"; \
+	else \
+		poetry run python scripts/beta_migrate.py iterate \
 			--donor "$$donor" \
 			--recipient "$$recipient" \
 			$$dry_run_args; \

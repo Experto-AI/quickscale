@@ -372,9 +372,9 @@ def _build_identity_reconciliation_plan(
     report: BetaMigrationReport,
 ) -> IdentityReconciliationPlan:
     """Render and validate every fresh-first identity change before any write."""
-    if report.mode != "fresh-first" or report.donor is None or report.recipient is None:
+    if report.donor is None or report.recipient is None:
         raise ValueError(
-            "Fresh-first donor and recipient snapshots are required for identity reconciliation."
+            "Donor and recipient snapshots are required for identity reconciliation."
         )
 
     donor_identity = report.donor.identity
