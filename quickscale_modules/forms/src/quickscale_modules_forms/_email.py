@@ -23,7 +23,8 @@ from quickscale_modules_notifications.services import (
 if TYPE_CHECKING:
     from quickscale_modules_forms.models import FormSubmission
 
-logger = logging.getLogger(__name__)
+# Module Conventions rule 46: a private file logs on its facade's channel.
+logger = logging.getLogger("quickscale_modules_forms.views")
 
 _TRACKED_SUBMISSION_TEMPLATE_KEY = "notifications.forms_submission"
 

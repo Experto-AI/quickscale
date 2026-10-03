@@ -174,7 +174,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   private name. The release notes list every log channel that moved since 0.88.0.
 
   **Slices:**
-  - [ ] (a) Rule 46 decision entry and log channels: private files log on the facade's channel,
+  - [x] (a) Rule 46 decision entry and log channels: private files log on the facade's channel,
     the rule 28 clause, and the release-note list of moved channels.
   - [ ] (b) Re-exports: trim module facades to public names and retarget their tests' patches.
   - [ ] (c) Rule 19 finds view code by content, with its control case.

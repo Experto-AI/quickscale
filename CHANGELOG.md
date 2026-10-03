@@ -478,6 +478,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Personal-data fields are inventoried behind a failing test.** A cross-module conformance
     test walks every installed model and fails when a field that could hold a user's data is
     neither listed with its anonymization treatment nor excluded with a reason.
+  - **Split-module loggers use the facade channel.** A private file behind a facade logs on the
+    facade's channel instead of one named for its own file: forms' notification logging moves to
+    `quickscale_modules_forms.views` and orgs' debug-helper logging to
+    `quickscale_modules_orgs.debug_views`, and the module-conventions harness rejects
+    `getLogger(__name__)` in such a file.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

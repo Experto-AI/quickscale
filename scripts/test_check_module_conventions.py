@@ -5136,6 +5136,65 @@ def test_package_file_name_controls() -> None:
     )
 
 
+def test_private_facade_log_channel_controls() -> None:
+    module = _golden_module()
+    private_logger = "import logging\n\nlogger = logging.getLogger(__name__)\n"
+    facade = _with_files(
+        module,
+        views="from ._helpers import helper\n",
+        **{"_helpers.py": private_logger},
+    )
+    violations = _violations(checker.rule_28_file_names, facade)
+    assert any(
+        "_helpers.py" in violation and "getLogger(__name__)" in violation
+        for violation in violations
+    ), violations
+    absolute = _with_files(
+        module,
+        views="from quickscale_modules_demo._helpers import helper\n",
+        **{"_helpers.py": private_logger},
+    )
+    assert any(
+        "_helpers.py" in violation
+        for violation in _violations(checker.rule_28_file_names, absolute)
+    )
+    package_root = _with_files(
+        module,
+        views="from quickscale_modules_demo import _helpers\n",
+        **{"_helpers.py": private_logger},
+    )
+    assert any(
+        "_helpers.py" in violation
+        for violation in _violations(checker.rule_28_file_names, package_root)
+    )
+    relative_root = _with_files(
+        module,
+        views="from . import _helpers\n",
+        **{"_helpers.py": private_logger},
+    )
+    assert any(
+        "_helpers.py" in violation
+        for violation in _violations(checker.rule_28_file_names, relative_root)
+    )
+    facade_channel = _with_files(
+        facade,
+        **{
+            "_helpers.py": 'import logging\n\nlogger = logging.getLogger("quickscale_demo.views")\n'
+        },
+    )
+    assert _violations(checker.rule_28_file_names, facade_channel) == []
+    orphan = _with_files(module, **{"_helpers.py": private_logger})
+    assert _violations(checker.rule_28_file_names, orphan) == []
+    private_only = _with_files(
+        module,
+        **{
+            "_other.py": "from ._helpers import helper\n",
+            "_helpers.py": private_logger,
+        },
+    )
+    assert _violations(checker.rule_28_file_names, private_only) == []
+
+
 def test_typecheck_config_controls() -> None:
     module = _golden_module()
     corpus = _corpus(module)
