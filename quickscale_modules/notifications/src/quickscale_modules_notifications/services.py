@@ -90,7 +90,6 @@ __all__ = [
     "NotificationConfigurationError",
     "NotificationDisabledError",
     "NotificationError",
-    "NotificationSettingsSnapshot",
     "NotificationTemplateDefinition",
     "NotificationTemplateError",
     "NotificationValidationError",
@@ -118,10 +117,9 @@ def send_notification(
     context: Mapping[str, Any],
     tags: Sequence[str] | None = None,
     metadata: Mapping[str, Any] | None = None,
-    dispatch_after_commit: bool = True,
     mailer: DeliveryMailer | None = None,
 ) -> NotificationMessage:
-    """Create a logical notification message and dispatch it after commit by default."""
+    """Create a logical notification message and dispatch it after commit."""
     normalized_recipients = _normalize_recipients(recipients)
     if not normalized_recipients:
         raise NotificationValidationError("At least one recipient is required.")
@@ -160,12 +158,9 @@ def send_notification(
                 for recipient in normalized_recipients
             ]
         )
-        if dispatch_after_commit:
-            transaction.on_commit(
-                lambda: dispatch_notification_message(message.pk, mailer=mailer)
-            )
-        else:
-            dispatch_notification_message(message.pk, mailer=mailer)
+        transaction.on_commit(
+            lambda: dispatch_notification_message(message.pk, mailer=mailer)
+        )
     return message
 
 

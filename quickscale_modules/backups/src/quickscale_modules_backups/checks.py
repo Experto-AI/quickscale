@@ -30,11 +30,11 @@ def check_private_remote_credentials(
         # its credential requirement does not apply while it is off.
         return []
 
-    from quickscale_modules_backups.services import (
-        _build_policy_snapshot_from_settings,
+    from quickscale_modules_backups._settings import (
+        build_policy_snapshot_from_settings,
     )
 
-    snapshot = _build_policy_snapshot_from_settings()
+    snapshot = build_policy_snapshot_from_settings()
     if snapshot.target_mode != _REMOTE_TARGET_MODE:
         return []
 

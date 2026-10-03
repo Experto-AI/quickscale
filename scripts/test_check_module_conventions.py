@@ -5351,15 +5351,278 @@ def test_module_list_controls() -> None:
     assert checker.rule_37_module_lists(presentation) == []
 
 
+def test_settings_snapshot_location_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_42_settings_snapshots, module) == []
+
+    wrong_location = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n\n'
+            "class DemoRuntimeSettingsSnapshot:\n"
+            "    enabled: bool\n\n"
+            "    @classmethod\n"
+            "    def from_settings(cls):\n"
+            "        return cls(enabled=True)\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+    )
+    assert any(
+        "defines the settings snapshot DemoRuntimeSettingsSnapshot outside _settings.py"
+        in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, wrong_location)
+    )
+
+    misplaced_getter = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n'
+            "from django.conf import settings\n\n\n"
+            "def demo_runtime_settings():\n"
+            "    return DemoRuntimeSettingsSnapshot(enabled=settings.QUICKSCALE_DEMO_ENABLED)\n"
+        ),
+    )
+    assert any(
+        "builds a settings snapshot outside _settings.py" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, misplaced_getter)
+    )
+
+    exported = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["DemoPolicySnapshot", "is_enabled"]\n\n'
+            "from quickscale_modules_demo._settings import DemoPolicySnapshot\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from django.conf import settings\n\n\n"
+                "class DemoPolicySnapshot:\n"
+                "    retention_days: int\n\n\n"
+                "def demo_policy_snapshot():\n"
+                "    return DemoPolicySnapshot(\n"
+                "        retention_days=int(settings.QUICKSCALE_DEMO_RETENTION)\n"
+                "    )\n"
+            ),
+        },
+    )
+    assert any(
+        "exports the settings snapshot DemoPolicySnapshot" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, exported)
+    )
+
+    split_class = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n\n'
+            "class DemoSettingsSnapshot:\n"
+            "    enabled: bool\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from django.conf import settings\n\n"
+                "from quickscale_modules_demo.services import DemoSettingsSnapshot\n\n\n"
+                "def demo_settings_snapshot():\n"
+                "    return DemoSettingsSnapshot(\n"
+                "        enabled=settings.QUICKSCALE_DEMO_ENABLED\n"
+                "    )\n"
+            ),
+        },
+    )
+    assert any(
+        "defines the settings snapshot DemoSettingsSnapshot outside _settings.py" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, split_class)
+    )
+
+    split_class_alias = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n\n'
+            "class DemoSettingsSnapshot:\n"
+            "    enabled: bool\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from django.conf import settings\n\n"
+                "from quickscale_modules_demo.services import (\n"
+                "    DemoSettingsSnapshot as Snapshot,\n"
+                ")\n\n\n"
+                "def demo_settings_snapshot():\n"
+                "    return Snapshot(enabled=settings.QUICKSCALE_DEMO_ENABLED)\n"
+            ),
+        },
+    )
+    assert any(
+        "defines the settings snapshot DemoSettingsSnapshot outside _settings.py" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, split_class_alias)
+    )
+
+    alias_exported = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["Snapshot", "is_enabled"]\n\n'
+            "from quickscale_modules_demo._settings import (\n"
+            "    DemoSettingsSnapshot as Snapshot,\n"
+            ")\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from dataclasses import dataclass\n\n"
+                "from django.conf import settings\n\n\n"
+                "@dataclass(frozen=True)\n"
+                "class DemoSettingsSnapshot:\n"
+                "    enabled: bool\n\n"
+                "    @classmethod\n"
+                "    def from_settings(cls):\n"
+                "        return cls(enabled=bool(settings.QUICKSCALE_DEMO_ENABLED))\n"
+            ),
+        },
+    )
+    assert any(
+        "exports the settings snapshot DemoSettingsSnapshot" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, alias_exported)
+    )
+
+    alias_allowed = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "verify"]\n\n'
+            "from quickscale_modules_demo.checks import check_demo as verify\n\n\n"
+            "def demo_query(*, subject: str) -> str:\n"
+            "    return subject\n"
+        ),
+    )
+    assert _violations(checker.rule_42_settings_snapshots, alias_allowed) == []
+
+
+def test_optional_sender_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_43_optional_senders, module) == []
+
+    settings_read = _with_files(
+        module,
+        views=(
+            "from importlib import import_module\n\n\n"
+            "def load_sender():\n"
+            "    services = import_module('quickscale_modules_notifications.services')\n"
+            "    return services.NotificationSettingsSnapshot.from_settings().enabled\n"
+        ),
+    )
+    assert any(
+        "reads notifications's settings through NotificationSettingsSnapshot" in violation
+        for violation in _violations(checker.rule_43_optional_senders, settings_read)
+    )
+
+    catch_all = _with_files(
+        module,
+        views=(
+            "from quickscale_modules_notifications.services import send_notification\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        send_notification(template_key='x', recipients=[], context={})\n"
+            "    except Exception:\n"
+            "        return\n"
+        ),
+    )
+    assert any(
+        "catches Exception around notifications's service call" in violation
+        for violation in _violations(checker.rule_43_optional_senders, catch_all)
+    )
+
+    dotted_catch_all = _with_files(
+        module,
+        views=(
+            "import quickscale_modules_notifications.services\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        quickscale_modules_notifications.services.send_notification(\n"
+            "            template_key='x', recipients=[], context={}\n"
+            "        )\n"
+            "    except Exception:\n"
+            "        return\n"
+        ),
+    )
+    assert any(
+        "catches Exception around notifications's service call" in violation
+        for violation in _violations(checker.rule_43_optional_senders, dotted_catch_all)
+    )
+
+    dotted_narrowed = _with_files(
+        module,
+        views=(
+            "import quickscale_modules_notifications.services\n\n"
+            "from quickscale_modules_notifications.services import NotificationError\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        quickscale_modules_notifications.services.send_notification(\n"
+            "            template_key='x', recipients=[], context={}\n"
+            "        )\n"
+            "    except NotificationError:\n"
+            "        return\n"
+        ),
+    )
+    assert _violations(checker.rule_43_optional_senders, dotted_narrowed) == []
+
+    narrowed = _with_files(
+        module,
+        views=(
+            "from quickscale_modules_notifications.services import (\n"
+            "    NotificationError,\n"
+            "    send_notification,\n"
+            ")\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        send_notification(template_key='x', recipients=[], context={})\n"
+            "    except NotificationError:\n"
+            "        return\n"
+        ),
+    )
+    assert _violations(checker.rule_43_optional_senders, narrowed) == []
+
+    best_effort = _with_files(
+        module,
+        views=(
+            "def emit() -> None:\n"
+            "    from quickscale_modules_analytics.services import capture_event\n\n"
+            "    try:\n"
+            "        capture_event(distinct_id='x', event='e')\n"
+            "    except Exception:\n"
+            "        return\n"
+        ),
+    )
+    assert _violations(checker.rule_43_optional_senders, best_effort) == []
+
+
 def test_layer_table_mirrors_the_shipped_modules() -> None:
     corpus = checker.load_corpus(REPO_ROOT)
     assert {module.name for module in corpus.modules} == set(checker.MODULE_LAYERS)
 
 
-def test_covered_and_open_rules_partition_1_to_39() -> None:
+# Rules the harness must cover or record as open.  SA215 covered 1-39;
+# SA236 adds 42-43.  Rule 41 and rules 44-46 land with SA235, SA237, and
+# SA238, which extend this set.
+RECORDED_RULE_NUMBERS = frozenset({*range(1, 40), 42, 43})
+
+
+def test_covered_and_open_rules_partition_the_recorded_rules() -> None:
     covered = {rule.number for rule in checker.RULES}
     open_rules = {number for number, _ in checker.OPEN_RULES}
-    assert covered | open_rules == set(range(1, 40))
+    assert covered | open_rules == RECORDED_RULE_NUMBERS
     assert not covered & open_rules
 
 

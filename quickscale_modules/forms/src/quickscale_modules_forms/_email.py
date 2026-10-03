@@ -8,12 +8,17 @@ rolled-back submission sends nothing.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 
-from quickscale_modules_notifications.services import send_notification
+from quickscale_modules_notifications.services import (
+    NotificationError,
+    is_enabled,
+    send_notification,
+)
 
 if TYPE_CHECKING:
     from quickscale_modules_forms.models import FormSubmission
@@ -24,14 +29,30 @@ _TRACKED_SUBMISSION_TEMPLATE_KEY = "notifications.forms_submission"
 
 
 def notify_submission(submission: "FormSubmission") -> str:
-    """Queue the tracked notification for a new non-spam submission.
+    """Prepare the tracked notification for a new non-spam submission.
 
-    Never raises — a notification failure must never affect the form
-    submission response.  Returns a status string: "queued",
-    "no_recipients", "skipped_spam", or "enqueue_error".
+    A preparation failure never affects the form submission response; once the
+    send runs — on commit, or immediately outside a transaction — only
+    notifications' own ``NotificationError`` is tolerated (rules 21 and 43),
+    so a configuration or programming error stays visible.  Returns a status
+    string: "queued", "no_recipients", "skipped_spam", or "enqueue_error".
     """
+    if submission.is_spam:
+        return "skipped_spam"
+
+    if not is_enabled():
+        # Rules 20/43: the optional sender asks the module before sending; a
+        # disabled module skips the email instead of relying on the catch.
+        # The question stays outside the preparation catch so a failing
+        # question is never swallowed as "enqueue_error".
+        logger.warning(
+            "Notifications module is disabled — notification for submission #%s skipped",
+            submission.pk,
+        )
+        return "queued"
+
     try:
-        return _enqueue_notification(submission)
+        status, dispatch = _prepare_submission_notification(submission)
     except Exception:
         logger.warning(
             "Unexpected error preparing notification for submission #%s",
@@ -39,12 +60,15 @@ def notify_submission(submission: "FormSubmission") -> str:
             exc_info=True,
         )
         return "enqueue_error"
+    if dispatch is not None:
+        # Rule 21: the effect belongs to the write's commit, not to the caller.
+        transaction.on_commit(dispatch)
+    return status
 
 
-def _enqueue_notification(submission: "FormSubmission") -> str:
-    if submission.is_spam:
-        return "skipped_spam"
-
+def _prepare_submission_notification(
+    submission: "FormSubmission",
+) -> tuple[str, Callable[[], None] | None]:
     # CR-SA85-REV-007: dereference submission.form inside org_scope so
     # that lazy FK traversal finds the related Form under the correct
     # RLS context.  Extract the fields we need before the scope exits.
@@ -65,7 +89,7 @@ def _enqueue_notification(submission: "FormSubmission") -> str:
             form_slug,
             form_pk,
         )
-        return "no_recipients"
+        return "no_recipients", None
 
     # CR-P3-006: materialize notification context inside a short org scope
     # so FORCE RLS allows reading committed FormFieldValue rows via the
@@ -83,8 +107,9 @@ def _enqueue_notification(submission: "FormSubmission") -> str:
                 tags=["forms"],
                 metadata={"workflow": "form-submission"},
             )
-        except Exception:
-            # Never block submission processing due to delivery failure
+        except NotificationError:
+            # Best-effort: a notification failure never blocks submission
+            # processing, and any other error (rule 43) stays visible.
             logger.warning(
                 "Failed to send notification email for submission #%s (form: %s)",
                 submission.pk,
@@ -98,9 +123,7 @@ def _enqueue_notification(submission: "FormSubmission") -> str:
         form_slug,
         recipients,
     )
-    # Rule 21: the effect belongs to the write's commit, not to the caller.
-    transaction.on_commit(_dispatch)
-    return "queued"
+    return "queued", _dispatch
 
 
 def _build_submission_notification_context(

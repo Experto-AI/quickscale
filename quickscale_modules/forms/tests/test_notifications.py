@@ -2,6 +2,7 @@
 
 import pytest
 from django.core import mail
+from django.test import override_settings
 
 from quickscale_modules_forms._email import notify_submission
 from quickscale_modules_forms.models import FormSubmission
@@ -105,10 +106,11 @@ class TestNotifySubmission:
         monkeypatch,
         django_capture_on_commit_callbacks,
     ):
-        """A failing tracked delivery never raises out of notify_submission"""
+        """A failing tracked delivery reports through NotificationError (rule 43)."""
+        from quickscale_modules_notifications.services import NotificationError
 
         def failing_send(*args, **kwargs):
-            raise Exception("SMTP connection refused")
+            raise NotificationError("SMTP connection refused")
 
         monkeypatch.setattr(
             "quickscale_modules_forms._email.send_notification",
@@ -118,6 +120,70 @@ class TestNotifySubmission:
         with django_capture_on_commit_callbacks(execute=True):
             status = notify_submission(submission)
         assert status == "queued"
+
+    def test_delivery_configuration_error_propagates(
+        self,
+        submission,
+        field_value,
+        monkeypatch,
+        django_capture_on_commit_callbacks,
+    ):
+        """Rule 43: forms catches only NotificationError; other errors stay visible."""
+
+        def failing_send(*args, **kwargs):
+            raise RuntimeError("SMTP connection refused")
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms._email.send_notification",
+            failing_send,
+        )
+
+        with pytest.raises(RuntimeError, match="SMTP connection refused"):
+            with django_capture_on_commit_callbacks(execute=True):
+                notify_submission(submission)
+
+    def test_disabled_notifications_skips_the_send(
+        self,
+        submission,
+        field_value,
+        monkeypatch,
+        django_capture_on_commit_callbacks,
+    ):
+        """Rules 20/43: a disabled notifications module is asked, not caught."""
+        sent: list[object] = []
+
+        def recording_send(*args, **kwargs):
+            sent.append(kwargs)
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms._email.send_notification",
+            recording_send,
+        )
+        with override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False):
+            with django_capture_on_commit_callbacks(execute=True):
+                status = notify_submission(submission)
+
+        assert status == "queued"
+        assert sent == []
+
+    def test_enablement_question_failure_propagates(
+        self,
+        submission,
+        field_value,
+        monkeypatch,
+    ):
+        """Rule 43: a failing is_enabled() question is not swallowed by preparation."""
+
+        def failing_enabled():
+            raise AttributeError("QUICKSCALE_NOTIFICATIONS_ENABLED")
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms._email.is_enabled",
+            failing_enabled,
+        )
+
+        with pytest.raises(AttributeError, match="QUICKSCALE_NOTIFICATIONS_ENABLED"):
+            notify_submission(submission)
 
     def test_subject_without_name_field(
         self, form, db, django_capture_on_commit_callbacks
@@ -502,8 +568,8 @@ class TestNotifySubmissionFormFkInScope:
     Creates a submission under an explicit org scope, then refreshes it from
     the database (clearing any in-memory FK cache), exits the setup scope,
     and calls notify_submission with no ambient org context.  The notification
-    must still succeed because _enqueue_notification wraps the submission.form
-    dereference in its own org_scope.
+    must still succeed because _prepare_submission_notification wraps the
+    submission.form dereference in its own org_scope.
     """
 
     def test_freshly_reloaded_uncached_form_fk_in_scope(self, db):
@@ -573,7 +639,7 @@ class TestNotifySubmissionFormFkInScope:
         assert get_current_org_id() is None
 
         # Call notify_submission with no ambient org context.
-        # _enqueue_notification must wrap its own org_scope.
+        # _prepare_submission_notification must wrap its own org_scope.
         from quickscale_modules_forms._email import notify_submission
 
         notify_submission(fresh_sub)
@@ -591,3 +657,20 @@ class TestNotifySubmissionFormFkInScope:
             "Recipient must match form.notify_emails — proves form.load() "
             "succeeded inside org_scope"
         )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_configuration_error_propagates_without_an_ambient_transaction(
+    submission, field_value, monkeypatch
+):
+    """Rule 43: outside a transaction on_commit runs at once and the error surfaces."""
+
+    def failing_send(*args, **kwargs):
+        raise RuntimeError("SMTP connection refused")
+
+    monkeypatch.setattr(
+        "quickscale_modules_forms._email.send_notification", failing_send
+    )
+
+    with pytest.raises(RuntimeError, match="SMTP connection refused"):
+        notify_submission(submission)
