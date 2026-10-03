@@ -28,8 +28,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
 | SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | SA234 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
-| SA240 | Add the idempotent `quickscale_orgs_create_site_org` command for SA191's cutover | post-v88 | 3 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA237, SA238, SA240 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA237, SA238 | Deferred |
 | SA241 | Record the React-frontend and public-page prerender decisions for SA153 | post-v88 | 2 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191, SA241 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
@@ -42,7 +41,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA234 ──► SA237 ──► SA241
-Track 3: SA240 ──► SA238 ──► SA242 ──► SA216
+Track 3: SA238 ──► SA242 ──► SA216
      critical path: SA234 → SA238 → SA191 → SA153
 ```
 
@@ -60,14 +59,14 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** SA234 (Track 2) and SA240 (Track 3) can start now; SA238 (Track 3) waits on
-SA234, and SA242 may fill Track 3 while it waits. SA241 (Track 2) follows SA237 and must land
-before SA153. SA235 closed rule 41 and `mount-path-copies` with the two cells the seventh pass
-corrected (rules 31, 37, and 41); SA215's closing pass closed inventory sections 1–41. The
-seventh pass's remaining items, rules 44–46, rest with SA237 and SA238 (SA236 closed rules 42–43);
-each records its decision (proposed rules 44–46 in the
+**Parallel start.** SA234 (Track 2) can start now; SA238 (Track 3) waits on SA234, and SA242 may
+fill Track 3 while it waits. SA241 (Track 2) follows SA237 and must land before SA153. SA235
+closed rule 41 and `mount-path-copies` with the two cells the seventh pass corrected (rules 31,
+37, and 41), and SA240's org-creation command landed for SA191's cutover; SA215's closing pass
+closed inventory sections 1–41. The seventh pass's remaining items, rules 44–46, rest with SA237
+and SA238 (SA236 closed rules 42–43); each records its decision (proposed rules 44–46 in the
 [inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
-its own item, harness clause, and inventory section. SA191 waits on SA237, SA238, and SA240.
+its own item, harness clause, and inventory section. SA191 waits on SA237 and SA238.
 
 **Off the critical path.** SA216 follows SA215 because both change auth's views, orgs' removal
 path, and the user-referencing models.
@@ -80,7 +79,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | no | no | yes | no | **yes** |
 | 2 | SA234 | yes | yes | yes | **yes** | no |
-| 3 | SA240 | yes | yes | yes | **yes** | **yes** |
+| 3 | SA238 | no | no | yes | no | **yes** |
 
 ### Ownership and merge coordination
 
@@ -322,30 +321,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** the new `bap-web-new` repository and its reseed step; the migration prompt; the
   `forms` module only for upstreamed customizations.
 
-- [ ] **SA240 — Add the idempotent `quickscale_orgs_create_site_org` command for SA191's cutover.**
-
-  **Context:** SA191 rebuilds `bap-web` on a fresh database and must create the site's
-  organization in the deploy step that runs `migrate`, before the catalog is reseeded under the
-  restricted runtime role. Today a project can create one only through orgs' admin or services
-  (the [migration prompt](../planning/bap-web-migration-prompt.md) says so). Split out of SA191 so
-  Track 3 delivers it while SA191 waits on the conventions.
-
-  **Scope:** `quickscale_orgs_create_site_org <slug> <name>` (the Module Conventions command
-  name): creates the organization once, is a no-op on rerun with the same arguments, and fails on
-  a slug that exists under a different name or is reserved (`RESERVED_ORG_SLUGS`). First establish
-  which role can create an organization. If the runtime role can, the command runs under it like
-  orgs' other commands. If it needs the superuser role, a decision entry adds it as the third
-  sanctioned privileged command in all four places that declare the two-command contract
-  ([decisions.md](decisions.md) § RLS enforcement rule), including the CLI producer (Track 2,
-  through the serialized merge queue) and the generated `start.sh`.
-
-  **Acceptance:** tests prove creation, an idempotent rerun, and the conflicting-name and
-  reserved-slug failures, and that the command runs under the role the scope settled on and fails
-  closed under any other. orgs' README documents it.
-
-  **Surfaces:** orgs management commands, tests, and README; if privileged, orgs' `checks.py`, the
-  `quickscale_core.runtime` settings facade, the CLI producer, the generated `start.sh`, and
-  decisions.
+- [x] **SA240 — Add the idempotent `quickscale_orgs_create_site_org` command for SA191's cutover.**
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 

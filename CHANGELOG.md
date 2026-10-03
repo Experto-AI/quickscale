@@ -467,6 +467,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     template value reverses billing's pricing and dashboard routes, so its links follow the
     module's paths in both deployment modes and the retired organization-scoped billing URL is
     gone.
+  - **A site organization is created once.** `quickscale_orgs_create_site_org <slug> <name>`
+    creates an organization for a deploy step, is a no-op on a rerun with the same arguments, and
+    refuses a slug that already exists under a different name or is reserved (`api`,
+    `__system__`); it runs under the restricted runtime role and is not a privileged command.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
