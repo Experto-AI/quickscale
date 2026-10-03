@@ -49,9 +49,7 @@ ported, and SA204 has not frozen the migration history. SA204 freezes migration 
 any post-SA153 module schema change. SA154 is an inventory, not work.
 
 **Off the critical path.** SA215 runs on Track 3, which owns the conformance harness it adds rules
-to. SA231 (Track 1) fills its track until SA215 lands and SA191 can start. SA232 (Track 2) has
-completed its splits; the closing gate batch in SA231 now owns the baseline re-tightening. SA216
-waits for SA215 because both change auth's views, orgs' removal path, and the user-referencing
+to. SA231 (Track 1) fills its track until SA215 lands and SA191 can start. SA216 waits for SA215 because both change auth's views, orgs' removal path, and the user-referencing
 models.
 
 ### Track states
@@ -117,9 +115,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
   and this ticket closes them.
 
-  **Remaining:** the rules the conformance test does not yet cover, including SA216's
-  write-effect rule; the release notes; decisions' quoted names; the inventory's closing pass.
-
   **Scope:** the conformance test extended to every rule of 1–39 it does not yet cover, with a
   control case per rule; the release notes; the inventory's closing pass. A drift item no
   convention ticket fixed is fixed here or recorded as an accepted exception.
@@ -136,8 +131,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Context:** `make quality` (`scripts/check_quality.sh`) measures radon complexity against a
   ratchet baseline (`scripts/quality_baseline.json`), but it only warns: no CI stage or registered
-  gate runs it, and file length is not in the baseline. Batch 1 and the module batch have landed;
-  no Track 1 file reaches 800 lines.
+  gate runs it, and file length is not in the baseline. The split batches have landed.
 
   **Scope:** the closing batch: add file length to the baseline ratchet, list each file still
   reaching the length ceiling with its reason, re-tighten the baseline, and register `make quality`
@@ -147,10 +141,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   lists it with a reason; zero regressions against the baseline; `make quality` exits non-zero on
   a regression, which a control case proves; the gate is registered and runs in local CI.
 
-  **Surfaces:** each batch's files; `scripts/quality_baseline.json`, `scripts/check_quality.sh`;
+  **Surfaces:** `scripts/quality_baseline.json`, `scripts/check_quality.sh`;
   the gate registry and gate documentation.
-
-- [x] **SA232 — Split the long CLI command, `dr_engine`, and billing files.**
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
