@@ -48,7 +48,8 @@ from quickscale_modules_billing.models import (
 import quickscale_modules_billing._locks as _locks
 import quickscale_modules_billing._stripe_client as _stripe_client
 
-logger = logging.getLogger(__name__)
+# Module Conventions rule 46: a private file logs on its facade's channel.
+logger = logging.getLogger("quickscale_modules_billing.services")
 
 
 @_translate_stripe_errors("Stripe subscription cancellation failed.")
