@@ -461,6 +461,96 @@
       "reason": "SA232 splits railway_utils.py into private _<name>.py modules that railway_utils re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
       "expires_on": "2027-03-31",
       "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W060",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_capture.py::_complete_capture_after_dump",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W061",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_capture.py::_resume_backup_capture",
+      "base_ceiling": 0,
+      "ceiling": 25,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W062",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_capture.py::create_backup",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W063",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_media.py::_resolve_media_runtime",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W064",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_media.py::sync_backup_snapshot_media",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W065",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_policy.py::_validate_policy_snapshot_internal",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W066",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_remote.py::_delete_snapshot_storage",
+      "base_ceiling": 0,
+      "ceiling": 18,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W067",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_report.py::_build_snapshot_full_backup_contract",
+      "base_ceiling": 0,
+      "ceiling": 34,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W068",
+      "entry_key": "complexity:quickscale_core/src/quickscale_core/dr_engine/_report.py::build_backup_snapshot_report",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA232 splits orchestration.py into private _<name>.py modules that orchestration re-exports (Module Conventions rule 28); the file path changes, so the baseline key is a rename (delete plus new exemption), not a complexity increase.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
     }
   ]
 }
