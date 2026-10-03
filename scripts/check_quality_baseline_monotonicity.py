@@ -4,7 +4,10 @@ SA121 — merge-base baseline monotonicity gate.
 
 Compares every ceiling in the current ``quality_baseline.json`` against the
 merge-base blob from Git and rejects increases unless covered by a structured,
-time-bounded waiver in ``quality_waivers.json``.
+time-bounded waiver in ``quality_waivers.json``. Complexity ceilings are keyed
+by ``module.qualname`` (SA233): a function that moved between files is compared
+against the ceiling it carried before the move, so a pure move is accepted and
+a worsened qualname still needs a waiver.
 
 Exit codes
 ----------
@@ -40,6 +43,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 _YYYY_MM_DD_RE = _re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+_IDENTIFIER_SEGMENT_RE = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 # Canonical source labels for error envelopes
 _SOURCE_MERGE_BASE = "merge_base_baseline"
@@ -170,6 +174,62 @@ def _validate_free_text(text: str, source: str, json_path: str) -> None:
             )
 
 
+def _validate_dotted_identifier_path(value: str, source: str, json_path: str) -> None:
+    """
+    Validate that *value* is a dotted Python identifier path (``a.b.c``).
+
+    Raises ``SchemaValidationError`` on the first violation.
+    """
+    if not isinstance(value, str) or not value:
+        raise SchemaValidationError(
+            source,
+            json_path,
+            f"{json_path} must be a non-empty string",
+        )
+    _validate_free_text(value, source, json_path)
+    if any(not _IDENTIFIER_SEGMENT_RE.fullmatch(segment) for segment in value.split(".")):
+        raise SchemaValidationError(
+            source,
+            json_path,
+            f"{json_path}={value!r} must be a dotted Python identifier path",
+        )
+
+
+def _module_from_repo_path(path: str, source: str, json_path: str) -> str:
+    """
+    Derive the defining module path from a canonical repo-relative ``.py`` path.
+
+    ``quickscale_cli/src/quickscale_cli/commands/apply_command.py`` becomes
+    ``quickscale_cli.commands.apply_command``; a package ``__init__.py`` maps to
+    the package itself. The path must sit under a ``src/`` root, like every path
+    the analyzers report.
+    """
+    parts = path.split("/")
+    if "src" not in parts:
+        raise SchemaValidationError(
+            source,
+            json_path,
+            f"{json_path}={path!r} must sit under a src/ root",
+        )
+    module_parts = parts[parts.index("src") + 1 :]
+    if not module_parts or not module_parts[-1].endswith(".py"):
+        raise SchemaValidationError(
+            source,
+            json_path,
+            f"{json_path}={path!r} must name a Python source file under src/",
+        )
+    module_parts[-1] = module_parts[-1][: -len(".py")]
+    if module_parts[-1] == "__init__":
+        module_parts = module_parts[:-1]
+    if not module_parts:
+        raise SchemaValidationError(
+            source,
+            json_path,
+            f"{json_path}={path!r} does not name a module under src/",
+        )
+    return ".".join(module_parts)
+
+
 def _parse_entry_key(entry_key: str) -> tuple[str, str]:
     """
     Parse a waiver ``entry_key`` into ``(section_prefix, remainder)``.
@@ -177,7 +237,7 @@ def _parse_entry_key(entry_key: str) -> tuple[str, str]:
     Section-specific canonical syntax:
 
     - ``dead_code:allowed_messages:<msg>:multiplicity``
-    - ``complexity:<safe-repo-path>::<nonempty-symbol>``
+    - ``complexity:<module>.<qualname>``
     - ``file_length:<safe-repo-path>``
     - ``duplication:allowed_blocks``
 
@@ -200,42 +260,23 @@ def _parse_entry_key(entry_key: str) -> tuple[str, str]:
 
     if entry_key.startswith("complexity:"):
         remainder = entry_key[len("complexity:") :]
-        # Must contain exactly one ``::`` separator between path and symbol
-        if "::" not in remainder:
-            raise ValueError(
-                f"complexity entry_key must contain '::' separator between "
-                f"path and symbol: {entry_key!r}"
-            )
-        parts = remainder.split("::")
-        if len(parts) != 2:
-            raise ValueError(
-                f"complexity entry_key must have exactly one '::' separator "
-                f"(got {len(parts) - 1}): {entry_key!r}"
-            )
-        path_part, symbol_part = parts
-        # A third colon immediately after the separator is an overlapping
-        # extra separator (``file.py:::func``), not part of the symbol.
-        if symbol_part.startswith(":"):
-            raise ValueError(
-                f"complexity entry_key must have exactly one '::' separator "
-                f"(got an extra separator): {entry_key!r}"
-            )
-        if not path_part:
-            raise ValueError(f"complexity entry_key path must be nonempty: {entry_key!r}")
-        if not symbol_part:
-            raise ValueError(f"complexity entry_key symbol must be nonempty: {entry_key!r}")
-        # Validate the repo-relative path part via the path validator
-        _validate_repo_relative_path(
-            path_part,
-            "waiver_ledger",
-            f"entry_key path component in {entry_key!r}",
-        )
-        # CR-003: free-text validate the symbol part
+        if not remainder:
+            raise ValueError(f"complexity entry_key must be nonempty: {entry_key!r}")
+        # CR-003: free-text validate before the dotted-path check so control,
+        # surrogate, and DEL characters keep their exact rejection message.
         _validate_free_text(
-            symbol_part,
+            remainder,
             "waiver_ledger",
-            f"entry_key symbol component in {entry_key!r}",
+            f"entry_key complexity component in {entry_key!r}",
         )
+        segments = remainder.split(".")
+        if len(segments) < 2 or any(
+            not _IDENTIFIER_SEGMENT_RE.fullmatch(segment) for segment in segments
+        ):
+            raise ValueError(
+                f"complexity entry_key must be a module.qualname dotted "
+                f"Python identifier path: {entry_key!r}"
+            )
         return ("complexity", entry_key)
 
     if entry_key.startswith("file_length:"):
@@ -384,10 +425,18 @@ def _load_json(path: str | Path) -> dict[str, Any]:
     return data
 
 
+@dataclass(frozen=True)
+class _ValidatedBaseline:
+    """Validated ceiling indexes plus the qualname of every complexity key."""
+
+    indexes: dict[str, int]
+    complexity_qualnames: dict[str, str]
+
+
 def _validate_baseline_structure(
     data: dict[str, Any],
     source: str,
-) -> dict[str, int]:
+) -> _ValidatedBaseline:
     """
     Validate that *data* is a well-formed quality baseline dict.
 
@@ -396,9 +445,12 @@ def _validate_baseline_structure(
     the current file: every loaded baseline must pass this check before
     canonicalization.
 
-    Returns validated ceiling indexes as ``dict[str, int]`` keyed by canonical
-    key.  Never returns malformed defaults — exits 2 before returning if the
-    data is structurally invalid.
+    Complexity entries are keyed by ``module.qualname`` (SA233); a merge-base
+    blob may still carry the legacy ``path::symbol`` form, which is
+    canonicalized to ``module.qualname`` here.  Returns validated ceiling
+    indexes as ``dict[str, int]`` keyed by canonical key plus the qualname of
+    every complexity key.  Never returns malformed defaults — exits 2 before
+    returning if the data is structurally invalid.
     """
     if not isinstance(data, dict):
         raise SchemaValidationError(source, "", "must be a JSON object")
@@ -472,6 +524,7 @@ def _validate_baseline_structure(
             f"(got {type(cf_fns).__name__ if cf_fns is not None else 'None'})",
         )
     valid_complexity_types = {"function", "method", "class"}
+    complexity_qualnames: dict[str, str] = {}
     for ck, entry in cf_fns.items():
         if not isinstance(ck, str) or not ck:
             raise SchemaValidationError(
@@ -485,34 +538,81 @@ def _validate_baseline_structure(
                 f"complexity.allowed_functions[{ck!r}]",
                 f"complexity.allowed_functions[{ck!r}] must be a dict (got {type(entry).__name__})",
             )
-        for field in ("file", "symbol"):
-            val = entry.get(field)
-            if not isinstance(val, str) or not val:
+        if "module" in entry or "qualname" in entry:
+            # SA233 canonical form: keyed by module.qualname.
+            for field in ("module", "qualname"):
+                val = entry.get(field)
+                if not isinstance(val, str) or not val:
+                    raise SchemaValidationError(
+                        source,
+                        f"complexity.allowed_functions[{ck!r}].{field}",
+                        f"complexity.allowed_functions[{ck!r}].{field} must be a non-empty string",
+                    )
+            _validate_dotted_identifier_path(
+                entry["module"],
+                source,
+                f"complexity.allowed_functions[{ck!r}].module",
+            )
+            _validate_dotted_identifier_path(
+                entry["qualname"],
+                source,
+                f"complexity.allowed_functions[{ck!r}].qualname",
+            )
+            expected_key = f"{entry['module']}.{entry['qualname']}"
+            if ck != expected_key:
                 raise SchemaValidationError(
                     source,
-                    f"complexity.allowed_functions[{ck!r}].{field}",
-                    f"complexity.allowed_functions[{ck!r}].{field} must be a non-empty string",
+                    "complexity.allowed_functions",
+                    (f"complexity key {ck!r} must equal module.qualname {expected_key!r}"),
                 )
-        # CR-003: validate repo-relative path for complexity file field
-        _validate_repo_relative_path(
-            entry["file"],
-            source,
-            f"complexity.allowed_functions[{ck!r}].file",
-        )
-        # CR-003: free-text validate symbol
-        _validate_free_text(
-            entry["symbol"],
-            source,
-            f"complexity.allowed_functions[{ck!r}].symbol",
-        )
-        # CR-003: complexity map key must equal exact file::symbol
-        expected_key = f"{entry['file']}::{entry['symbol']}"
-        if ck != expected_key:
-            raise SchemaValidationError(
+            canonical_key = f"complexity:{ck}"
+            complexity_qualnames[canonical_key] = entry["qualname"]
+        else:
+            # Legacy path::symbol form. Accepted only from the merge-base blob,
+            # so pre-SA233 ancestors still compare; the current baseline must
+            # use module.qualname.
+            if source != _SOURCE_MERGE_BASE:
+                raise SchemaValidationError(
+                    source,
+                    f"complexity.allowed_functions[{ck!r}]",
+                    "legacy path::symbol complexity keys are accepted only in the "
+                    "merge-base baseline; current entries must use module.qualname",
+                )
+            for field in ("file", "symbol"):
+                val = entry.get(field)
+                if not isinstance(val, str) or not val:
+                    raise SchemaValidationError(
+                        source,
+                        f"complexity.allowed_functions[{ck!r}].{field}",
+                        f"complexity.allowed_functions[{ck!r}].{field} must be a non-empty string",
+                    )
+            # CR-003: validate repo-relative path for complexity file field
+            _validate_repo_relative_path(
+                entry["file"],
                 source,
-                "complexity.allowed_functions",
-                (f"complexity key {ck!r} must equal file::symbol {expected_key!r}"),
+                f"complexity.allowed_functions[{ck!r}].file",
             )
+            # CR-003: free-text validate symbol
+            _validate_free_text(
+                entry["symbol"],
+                source,
+                f"complexity.allowed_functions[{ck!r}].symbol",
+            )
+            # CR-003: complexity map key must equal exact file::symbol
+            expected_key = f"{entry['file']}::{entry['symbol']}"
+            if ck != expected_key:
+                raise SchemaValidationError(
+                    source,
+                    "complexity.allowed_functions",
+                    (f"complexity key {ck!r} must equal file::symbol {expected_key!r}"),
+                )
+            module = _module_from_repo_path(
+                entry["file"],
+                source,
+                f"complexity.allowed_functions[{ck!r}].file",
+            )
+            canonical_key = f"complexity:{module}.{entry['symbol']}"
+            complexity_qualnames[canonical_key] = entry["symbol"]
         typ = entry.get("type")
         if typ not in valid_complexity_types:
             raise SchemaValidationError(
@@ -531,7 +631,7 @@ def _validate_baseline_structure(
                 f"must be a non-negative integer "
                 f"(got {type(mc).__name__ if mc is not None else 'None'})",
             )
-        indexes[f"complexity:{ck}"] = int(mc)
+        indexes[canonical_key] = int(mc)
 
     # ---- file_length (SA231) ----
     # The section is optional so pre-SA231 blobs stay valid: an absent section
@@ -641,7 +741,10 @@ def _validate_baseline_structure(
                     f"duplication.allowed_block_identities[{i}] must be a non-empty string",
                 )
 
-    return indexes
+    return _ValidatedBaseline(
+        indexes=indexes,
+        complexity_qualnames=complexity_qualnames,
+    )
 
 
 def _validate_waiver_ledger_structure(
@@ -909,6 +1012,78 @@ def _compare_indexes(
             )
 
     return results
+
+
+def _canonical_module(canonical_key: str, qualname: str) -> str:
+    """Return the module part of a canonical complexity key."""
+    return canonical_key[len("complexity:") : -(len(qualname) + 1)]
+
+
+def _shared_module_prefix_length(module_a: str, module_b: str) -> int:
+    """Count the leading dotted segments two module paths share."""
+    shared = 0
+    for left, right in zip(module_a.split("."), module_b.split(".")):
+        if left != right:
+            break
+        shared += 1
+    return shared
+
+
+def _repoint_moved_complexity(
+    old: _ValidatedBaseline,
+    new: _ValidatedBaseline,
+) -> dict[str, int]:
+    """
+    Re-point moved complexity entries onto their new canonical keys.
+
+    A current complexity key absent from the old baseline is a move when an old
+    entry with the same qualname no longer exists in the current baseline under
+    its own key. The move source is consumed and its ceiling is re-keyed to the
+    new key, so a pure move compares unchanged and a worsened move is reported
+    against the ceiling the function carried before it moved. When several old
+    entries share the qualname, the one sharing the longest module prefix with
+    the new key wins, then the highest ceiling, then the lowest key.
+    """
+    adjusted = dict(old.indexes)
+    available: dict[str, list[tuple[str, int]]] = {}
+    for key, qualname in old.complexity_qualnames.items():
+        if key in new.indexes:
+            continue
+        available.setdefault(qualname, []).append((key, old.indexes[key]))
+
+    for key in sorted(new.complexity_qualnames):
+        if key in old.indexes:
+            continue
+        qualname = new.complexity_qualnames[key]
+        candidates = available.get(qualname)
+        if not candidates:
+            continue
+        new_module = _canonical_module(key, qualname)
+        candidates.sort(
+            key=lambda item: (
+                -_shared_module_prefix_length(_canonical_module(item[0], qualname), new_module),
+                -item[1],
+                item[0],
+            )
+        )
+        source_key, source_ceiling = candidates.pop(0)
+        adjusted.pop(source_key, None)
+        adjusted[key] = source_ceiling
+    return adjusted
+
+
+def _compare_baselines(
+    old: _ValidatedBaseline,
+    new: _ValidatedBaseline,
+) -> list[ComparisonResult]:
+    """
+    Compare two validated baselines, accepting pure moves.
+
+    A complexity entry that moved between files is compared against the ceiling
+    it carried before the move; a value at or below that ceiling passes, and a
+    higher value is a violation whose ``old_value`` is the pre-move ceiling.
+    """
+    return _compare_indexes(_repoint_moved_complexity(old, new), new.indexes)
 
 
 # ---------------------------------------------------------------------------
@@ -1563,14 +1738,14 @@ def _main_impl(argv: list[str] | None = None) -> tuple[int, dict[str, Any] | Non
 
     # ---- Validate baseline structure (both blobs) + get validated indexes ---
     try:
-        base_indexes = _validate_baseline_structure(base_blob, _SOURCE_MERGE_BASE)
-        current_indexes = _validate_baseline_structure(current, _SOURCE_CURRENT)
+        base_index = _validate_baseline_structure(base_blob, _SOURCE_MERGE_BASE)
+        current_index = _validate_baseline_structure(current, _SOURCE_CURRENT)
     except SchemaValidationError as exc:
         _write_error_output(source=exc.source, path=exc.path, message=exc.message)
         return 2, None
 
-    # ---- Compare using validated indexes -----------------------------------
-    violations: list[ComparisonResult] = _compare_indexes(base_indexes, current_indexes)
+    # ---- Compare using validated indexes (pure moves are accepted) ---------
+    violations: list[ComparisonResult] = _compare_baselines(base_index, current_index)
 
     # ---- Load waivers ------------------------------------------------------
     waiver_path = os.environ.get("QUALITY_WAIVERS_FILE", str(_DEFAULT_WAIVERS))
