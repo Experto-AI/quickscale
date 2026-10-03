@@ -31,6 +31,7 @@ from django.http import (
     HttpResponseForbidden,
 )
 from django.shortcuts import redirect
+from django.urls import NoReverseMatch, get_script_prefix, reverse
 
 from ._constants import ACTIVE_ORG_SESSION_KEY
 
@@ -43,9 +44,61 @@ from .current_org import (
 from .models import Organization, OrganizationMembership
 
 EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/")
-API_ORG_PREFIX = "/orgs/api/"
 
 GetResponse = Callable[[HttpRequest], HttpResponse]
+
+
+def _path_info(reversed_url: str) -> str:
+    """Return *reversed_url* in the same coordinate system as ``path_info``.
+
+    ``reverse`` returns a script-prefixed URL, while the middleware receives
+    ``request.path_info`` without the script prefix; a deployment under
+    ``SCRIPT_NAME`` must strip that prefix before comparing paths.
+    """
+    script_prefix = get_script_prefix()
+    if script_prefix != "/" and reversed_url.startswith(script_prefix):
+        return "/" + reversed_url[len(script_prefix) :]
+    return reversed_url
+
+
+def _orgs_index_prefix() -> str | None:
+    """Return the orgs module's index path reversed from its URL name.
+
+    ``None`` when the orgs URLs are not mounted (the module is installed but
+    switched off), so the middleware has no management or redirect surface.
+    """
+    try:
+        return _path_info(reverse("quickscale_orgs:index"))
+    except NoReverseMatch:
+        return None
+
+
+def _orgs_new_prefix() -> str | None:
+    """Return the orgs creation path reversed from its URL name."""
+    try:
+        return _path_info(reverse("quickscale_orgs:new"))
+    except NoReverseMatch:
+        return None
+
+
+def _orgs_api_prefix() -> str | None:
+    """Return the orgs JSON API prefix reversed from its URL name."""
+    try:
+        return _path_info(reverse("quickscale_orgs:api_list_create"))
+    except NoReverseMatch:
+        return None
+
+
+def _orgs_index_redirect() -> str | None:
+    """Return the browser-facing orgs index URL for a redirect.
+
+    Unlike the comparison prefixes, a redirect target must keep the script
+    prefix: the browser resolves it against the deployment root.
+    """
+    try:
+        return reverse("quickscale_orgs:index")
+    except NoReverseMatch:
+        return None
 
 
 class OrganizationRequest(HttpRequest):
@@ -138,8 +191,11 @@ class TenantMiddleware:
             # Stale/invalid session org — clear and fall through to fallback.
             request.session.pop(ACTIVE_ORG_SESSION_KEY, None)
 
-        # No session org — redirect to /orgs/.
-        return redirect("/orgs/")
+        # No session org — redirect to the orgs module's index route.
+        index = _orgs_index_redirect()
+        if index is None:
+            return self.get_response(request)
+        return redirect(index)
 
     @staticmethod
     def _resolve_session_org(org_id: object) -> Organization | None:
@@ -226,37 +282,49 @@ class TenantMiddleware:
         """Return True for paths owned by the orgs module (bypass org resolution).
 
         Management paths skip middleware org resolution because the views
-        own access control.  All other paths under ``/orgs/<slug>/`` go
-        through org resolution (fail-closed).
+        own access control.  All other paths under the orgs index prefix go
+        through org resolution (fail-closed).  The prefixes are reversed from
+        the orgs module's own URL names (Module Conventions rule 41), so a
+        mount change reaches this guard automatically.
         """
-        # Exact /orgs/, /orgs/new/, /orgs/invitations/... are management.
-        if (
-            path == "/orgs/"
-            or path.startswith("/orgs/new/")
-            or path.startswith("/orgs/invitations/")
-        ):
+        index = _orgs_index_prefix()
+        new = _orgs_new_prefix()
+        api = _orgs_api_prefix()
+        if index is None or new is None or api is None:
+            # The orgs URLs are not mounted; nothing is orgs management.
+            return False
+
+        # The orgs index, the creation page, and invitations are management.
+        invitations = f"{index}invitations/"
+        if path == index or path.startswith(new) or path.startswith(invitations):
             return True
 
-        # All /orgs/api/ paths are orgs-module owned.
-        if path.startswith(API_ORG_PREFIX):
+        # All orgs JSON API paths are orgs-module owned.
+        if path.startswith(api):
             return True
 
-        # For /orgs/<slug>/... check what follows the slug.
-        if path.startswith("/orgs/"):
-            segments = path.strip("/").split("/")
-            # segments[0] = "orgs", segments[1] = <slug>
-            if len(segments) < 3:
-                # /orgs/<slug>/ exactly — org dashboard (management)
+        # For the org-scoped pages under the index prefix, inspect what
+        # follows the mount, relative to the mount itself, so a nested mount
+        # keeps the same classification.
+        if path.startswith(index):
+            remainder = path[len(index) :].strip("/")
+            if not remainder:
+                # The org dashboard path exactly — org dashboard (management)
                 return True
 
-            # segments[2] is the segment after the slug.
-            next_segment = segments[2]
+            segments = remainder.split("/")
+            if len(segments) < 2:
+                # The slug with no sub-path — org dashboard (management)
+                return True
+
+            # segments[0] is the slug; segments[1] follows it.
+            next_segment = segments[1]
             # Known management sub-paths.
             if next_segment in ("members", "settings"):
                 return True
             # VIEW-AS debug paths — bypass org resolution so the debug
             # views can activate/exit without an active session org.
-            if next_segment == "debug" and len(segments) >= 4:
+            if next_segment == "debug" and len(segments) >= 3:
                 return True
             # Unknown segment — fail closed: resolve org instead of bypassing.
             return False
