@@ -430,13 +430,13 @@ class _BackupPolicyPersistenceProvider:
         """
         from quickscale_core.runtime import _build_policy_snapshot_from_model
         from quickscale_modules_backups.models import BackupPolicy
-        from quickscale_modules_backups.services import (
-            _build_policy_snapshot_from_settings,
+        from quickscale_modules_backups._settings import (
+            build_policy_snapshot_from_settings,
         )
 
         policy = BackupPolicy.objects.filter(key="default").first()
         if policy is None:
-            return _build_policy_snapshot_from_settings()
+            return build_policy_snapshot_from_settings()
         return _build_policy_snapshot_from_model(policy)
 
     def settings_policy_snapshot(self) -> Any:
@@ -445,11 +445,11 @@ class _BackupPolicyPersistenceProvider:
         The DR engine asks for this through the registered persistence seam,
         so it never names a backups setting or writes a backups default.
         """
-        from quickscale_modules_backups.services import (
-            _build_policy_snapshot_from_settings,
+        from quickscale_modules_backups._settings import (
+            build_policy_snapshot_from_settings,
         )
 
-        return _build_policy_snapshot_from_settings()
+        return build_policy_snapshot_from_settings()
 
     def save_default_policy(self, policy: Any) -> None:
         """Persist a policy snapshot to the default ``BackupPolicy`` row.
@@ -487,11 +487,11 @@ class _BackupPolicyPersistenceProvider:
         Returns the persisted ``BackupPolicy`` row.
         """
         from quickscale_modules_backups.models import BackupPolicy
-        from quickscale_modules_backups.services import (
-            _build_policy_snapshot_from_settings,
+        from quickscale_modules_backups._settings import (
+            build_policy_snapshot_from_settings,
         )
 
-        snapshot = _build_policy_snapshot_from_settings()
+        snapshot = build_policy_snapshot_from_settings()
         defaults = asdict(snapshot)
         policy, _ = BackupPolicy.objects.get_or_create(key="default", defaults=defaults)
         updated_fields = [

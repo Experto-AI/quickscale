@@ -304,7 +304,7 @@ files.
 - ✅ Destructive restore is guarded on both supported surfaces: BackupPolicy-admin
   restore requires exact filename confirmation plus the environment gate; CLI
   restore keeps its existing syntax under the same guardrails
-- ✅ Scheduled execution is command-driven only (`manage.py backups_create
+- ✅ Scheduled execution is command-driven only (`manage.py quickscale_backups_create
   --scheduled`, or an equivalent platform cron job)
 - ✅ Private-remote credentials are referenced by environment-variable **name**
   only
@@ -564,8 +564,10 @@ settings read but never declared, and every default written twice. Renames are a
   per-module names; the schema comes from the project.
 - ✅ Module test settings define every declared setting; they may be generated from the manifest.
 - ✅ Database-backed settings (backups' `BackupPolicy`, notifications' `NotificationSettings`) keep
-  their models; only their initial values come from settings.
-- ❌ `getattr(settings, NAME, default)`, per-module settings readers, or defaults written in code.
+  their models as read-only mirrors of settings; settings are the only switch (rule 20), and the
+  models' initial values come from settings.
+- ❌ `getattr(settings, NAME, default)`, a settings reader that defaults or coerces, or defaults
+  written in code.
 - ❌ Reading a setting the module's manifest does not declare, or another module's setting.
 - ❌ A runtime accessor, generated per-module settings file, or Pydantic-style second schema.
 
@@ -620,9 +622,9 @@ unprojected manifest keys" prohibition. Moving a module between layers is a deci
 - ✅ The layer order covers references by name as well as imports (rule 34).
 
 **6. No legacy names.** Renames land in one release, in modules, core, CLI, generator templates,
-tests, fixtures, and docs together — including names quoted elsewhere in this file, which describe
-the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
-`quickscale_modules_<module>` labels).
+tests, fixtures, and docs together — including names quoted elsewhere in this file, which now
+carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
+`quickscale_<module>` app labels).
 - ❌ Aliases, `LegacyKeyAlias` entries, or fallback reads for a renamed option or setting.
 - ✅ `apply` refuses a retired option key — in `quickscale.yml` and in `.quickscale/state.yml` — and
   the startup check refuses a retired setting, each naming its replacement.
@@ -862,9 +864,10 @@ public surface is `services.py` (rule 4).
 - ✅ Every email a module sends goes through notifications' `send_notification`; a module that
   emails lists `notifications` in `required_modules` (orgs' `implies: notifications` becomes a
   requirement). Listed exception: auth's django-allauth mail.
-- ✅ Notifications can still be off at runtime (its `NotificationSettings` row); `send_notification`
+- ✅ Notifications can still be off at runtime; `QUICKSCALE_NOTIFICATIONS_ENABLED` is the only
+  switch (its `NotificationSettings` row is a read-only mirror, not a switch). `send_notification`
   then raises `NotificationDisabledError` (rule 23), and a sender for which email is optional checks
-  `is_enabled()` first instead of catching it.
+  `is_enabled()` first instead of catching it (rule 43).
 - ❌ A module's own `EmailMessage` / `send_mail` path, or a fallback sender when notifications is
   absent or off.
 
@@ -1004,9 +1007,9 @@ test checks both. Other files in `tests/` are `conftest.py`,
   `apps.get_model`, `apps.is_installed`, or `apps.get_app_config`. An upward need uses a capability
   (rule 4). Migrations referencing another module's models are excepted.
 - ✅ Applied: orgs' `require_org_feature` (it reads billing's plan features) moves to billing's
-  published surface; the purge command's billing steps and
-  `removal.BOUNDARY_GUARDED_OBLIGATIONS` become billing's removal declarations (the SA213
-  pattern), and its blog and crm label prefixes come from those modules' own declarations; orgs'
+  published surface; the purge command's billing steps become billing's `removal_obligations`
+  declaration with its boundary-guarded fields and hooks (the SA213 pattern), and its blog and crm
+  label prefixes come from those modules' own declarations; orgs'
   `checks.py` boundary table is declared by each boundary's owner (auth declares
   account deletion); `TENANT_TABLE_REGISTRY`, a CI parity oracle only
   (§[Multi-tenant SaaS Architecture](#multitenant-saas-architecture)), is test-owned and absent
@@ -1069,7 +1072,8 @@ headings.
   is a requirement under rule 20).
 
 **40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
-and the CLI's option handling fails on each of rules 1–39 (rule 27 through the user-FK conformance gate; rule 30
+and the CLI's option handling fails on each of rules 1–39 and 42–43 (rule 21 stays a review rule
+with each module's write-effect rollback test; rule 27 through the user-FK conformance gate; rule 30
 in `apply` itself): names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
@@ -1090,7 +1094,9 @@ and `RunSQL` tables, database function and advisory-lock names,
 stems in shared namespaces, references by name against the layers, `os.getenv` in module code, the
 root `mypy.ini` module sections and any per-module `[tool.mypy]`, literal module lists outside the
 modules, option keys and command names in READMEs, and `required_modules` specifiers and
-`implies` — with a control case proving each rule rejects a violation. The layer table, each
+`implies`, settings snapshots outside `_settings.py` or in `__all__` and cross-module settings
+objects, and `except Exception` around another module's service call — with a control case proving
+each rule rejects a violation. The layer table, each
 foundation's published extension bases, and every listed exception live in one test-owned
 mapping that mirrors this section.
 
@@ -1115,6 +1121,20 @@ mapping that mirrors this section.
   `TenantMiddleware`'s exempt prefixes (`/accounts/`, `/admin/`, `/healthcheck/`) are not orgs
   paths; and the generated 404 hint's path tests are diagnostics against a requested path, not
   route declarations.
+**42. Settings snapshots.**
+- ✅ A module that needs one consistent view of several of its own settings builds it in its private
+  `_settings.py` as a frozen dataclass with a `from_settings()` classmethod, reading each setting
+  directly, with no default and no coercion. It stays private; callers outside the module ask
+  `is_enabled()` or a `services.py` function.
+- ❌ A settings snapshot defined outside `_settings.py`, named in `__all__`, or read by another
+  module; a snapshot that defaults, coerces, or reads another module's settings.
+
+**43. Optional senders.**
+- ✅ A sender guards an optional module with `apps.is_installed(...)` and that module's
+  `services.is_enabled()`, and catches only that module's `<Module>Error` where its failure is
+  tolerable.
+- ❌ Reading another module's settings object; `except Exception` around another module's service
+  call (rule 23's listed analytics best-effort exception aside).
 
 ---
 
@@ -1648,7 +1668,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 **RLS enforcement rule (critical):**
 - RLS enforces only when the app connects as the restricted `NOSUPERUSER/NOBYPASSRLS` runtime role selected by `RUNTIME_DATABASE_URL`
 - Generated runtime serving now fails closed when `RUNTIME_DATABASE_URL` is unset; only the named privileged command paths intentionally use the superuser `DATABASE_URL`
-- **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
+- **Always-on boot guard:** `orgs.QuickscaleOrgsConfig.ready()` asserts `rolbypassrls=false AND rolsuper=false` on every boot where `QUICKSCALE_PRIVILEGED_COMMAND` is unset or set to an unrecognised value — regardless of `QUICKSCALE_ORGS_MODE` or `DEBUG`. Raises `ImproperlyConfigured` if the connected role has BYPASSRLS and/or SUPERUSER unless one of the two explicit exemptions applies:
   1. `QUICKSCALE_PRIVILEGED_COMMAND` set to a sanctioned privileged DB command (`migrate` or `createcachetable`) — the deployment `start.sh` and `quickscale manage` unset `RUNTIME_DATABASE_URL` so these operations run under the superuser role (correct and deliberate). The two-command contract is independently declared by the `orgs` module guard (`_PRIVILEGED_COMMANDS` in `checks.py`), the `quickscale_core.runtime.settings` facade, the CLI producer, and the generated `start.sh` launcher; none is a single source of truth, and all four must remain fail-closed and aligned.
   2. `QUICKSCALE_ALLOW_BYPASSRLS=1` — non-serving environment-variable escape hatch for intentional single-tenant/development use. It is never a production serving mode.
 - `start.sh` deliberately unsets `RUNTIME_DATABASE_URL` for `migrate` and `createcachetable`; supplied argv exits 2 without a privileged path; `runserver`/`gunicorn` must still use the restricted runtime role
@@ -1663,7 +1683,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - Ambient scoping: request-scoped tenant reads flow through `request.org` → ContextVar (`app.current_org_id`) → `TenantManager`; the authoritative tenant-facing API is ambient manager scoping, not `.for_org(...)` query chaining.
 - Operator access: management commands and operator paths use `operator_access(reason=...)` for audited elevated access. When a command or admin path truly needs an unfiltered queryset, it may read from model `all_objects` explicitly under that contract. Self-service account deletion does not receive or yield that context: the orgs-owned `account_deletion_user_reference_organization_ids()` seam validates nullable user relations and returns only matching organization IDs, using one indexed query per matching tenant model; all subsequent nulling remains under each organization's ordinary write scope.
 - Org ownership: System org owns all published-public content (blog feed, public listings, social links). Anonymous visitors see System-org rows; solo authenticated = personal org; saas authenticated = active org.
-- Teardown policy: `on_delete=PROTECT` on all tenant-owned FKs + explicit `purge_organization` management command for ordered, FK-safe delete — GDPR-capable, no accidental cascade.
+- Teardown policy: `on_delete=PROTECT` on all tenant-owned FKs + explicit `quickscale_orgs_purge_organization` management command for ordered, FK-safe delete — GDPR-capable, no accidental cascade.
 - **Composite-FK deferability policy:** every Option C composite FK (the child-table `organization_id` + local-key pair added by the `_ADD_COMPOSITE_FK_SQL` helper in `orgs/tenancy.py`) is `NOT DEFERRABLE`. On PostgreSQL 18, `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, so the constraint is already effectively immediate — `NOT DEFERRABLE` is the fail-fast choice consistent with the [fail-hard principle](#fail-hard-principle) and requires no `SET CONSTRAINTS ALL DEFERRED` carve-out for fixture/loaddata restores. A conformance test validates that every Option C composite FK is `NOT DEFERRABLE`.
 - **`tenant_excluded` marker precedence:** in `is_tenant_model()` (`orgs/tenancy.py`), an explicit `tenant_excluded = "reason"` marker on a model takes precedence over class-hierarchy detection (``TenantModel`` inheritance) — a model marked excluded is never classified as tenant-scoped even if it also inherits tenant machinery.
 - **Intentional CASCADE exception:** `OrganizationInvitation.invited_by` remains `on_delete=CASCADE` because a pending invitation is an action attributed to its sender—if the sender's account is deleted, the invitation has no meaningful sender identity and dissolving it along with the sender is the correct behavior. This is a narrow, documented exception to the general SET_NULL rule for user-FKs in tenant-scoped models (`PROTECT` is not allowed; Module Conventions rule 27). The other two `CASCADE` user-FKs are `OrganizationMembership.user` and blog's `AuthorProfile.user` (rows that mean nothing without their user); every other user-FK in `quickscale_modules_*` is SET_NULL (enforced by a conformance test in the orgs cross-module test harness).
@@ -2377,7 +2397,7 @@ or a new decision waives it.
 **Architecture & Patterns:**
 - ❌ Runtime dynamic `INSTALLED_APPS` modifications
 - ❌ DI frameworks or service registries (direct imports in production); `AppConfig`-declared capabilities collected by one core helper and the listed core ports are the allowed forms — see §[Module Conventions](#module-conventions)
-- ❌ Module settings read with a code default, a per-module reader, or across modules; module-to-module imports outside the target's public surface or against the layer order — see §[Module Conventions](#module-conventions)
+- ❌ Module settings read with a code default or a reader that defaults or coerces, another module's settings, or a settings snapshot outside the private `_settings.py`; module-to-module imports outside the target's public surface or against the layer order — see §[Module Conventions](#module-conventions)
 - ❌ Custom abstract provider interfaces or app-defined multi-provider contracts (use Django's email path plus `django-anymail` for the approved provider rather than building a generic provider layer)
 - ❌ Custom database table naming (use Django's `app_label` default)
 - ❌ Core fallback adapters, compat shims, or silent degradation paths — see §[Fail-Hard Principle](#fail-hard-principle). This includes any "compatibility fallback" wiring path for bundled/installed contexts: an unimportable managed adapter raises, it does not degrade (AF7 **G4**)

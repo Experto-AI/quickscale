@@ -750,6 +750,288 @@ def test_literal_choices_control() -> None:
     )
 
 
+def test_upload_to_extension_control() -> None:
+    module = _golden_module()
+    client_named_models = (
+        "from pathlib import Path\n\n"
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n\n"
+        "def widget_upload_to(instance, filename):\n"
+        '    return f"widgets/{Path(filename).suffix.lower()}"\n\n\n'
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(upload_to=widget_upload_to)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    flagged = _with_files(module, models=client_named_models)
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted_models = client_named_models.replace(
+        '    return f"widgets/{Path(filename).suffix.lower()}"\n',
+        '    return f"widgets/{filename}"\n',
+    )
+    accepted = _with_files(module, models=accepted_models)
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+@pytest.mark.parametrize(
+    "import_line",
+    [
+        "from ._uploads import widget_upload_to",
+        "from quickscale_modules_demo._uploads import widget_upload_to",
+    ],
+)
+def test_upload_to_extension_via_sibling_builder_control(
+    import_line: str,
+) -> None:
+    module = _golden_module()
+    imported_models = (
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n"
+        f"{import_line}\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(upload_to=widget_upload_to)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    flagged = _with_files(
+        module,
+        models=imported_models,
+        **{
+            "_uploads.py": (
+                "from pathlib import Path\n\n\n"
+                "def widget_upload_to(instance, filename):\n"
+                '    return f"widgets/{Path(filename).suffix.lower()}"\n'
+            )
+        },
+    )
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted = _with_files(
+        module,
+        models=imported_models,
+        **{
+            "_uploads.py": (
+                'def widget_upload_to(instance, filename):\n    return f"widgets/{filename}"\n'
+            )
+        },
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+def test_upload_to_extension_via_custom_field_control() -> None:
+    module = _golden_module()
+    custom_field_models = (
+        "from pathlib import Path\n\n"
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n\n"
+        "def widget_upload_to(instance, filename):\n"
+        '    return f"widgets/{Path(filename).suffix.lower()}"\n\n\n'
+        "class WidgetImageField(models.ImageField):\n"
+        "    pass\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = WidgetImageField(upload_to=widget_upload_to)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    flagged = _with_files(module, models=custom_field_models)
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted_models = custom_field_models.replace(
+        '    return f"widgets/{Path(filename).suffix.lower()}"\n',
+        '    return f"widgets/{filename}"\n',
+    )
+    accepted = _with_files(module, models=accepted_models)
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+@pytest.mark.parametrize(
+    "import_line",
+    [
+        "from . import _uploads",
+        "from quickscale_modules_demo import _uploads",
+        "import quickscale_modules_demo._uploads as _uploads",
+    ],
+)
+def test_upload_to_extension_via_qualified_builder_control(
+    import_line: str,
+) -> None:
+    module = _golden_module()
+    qualified_models = (
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n"
+        f"{import_line}\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(upload_to=_uploads.widget_upload_to)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    flagged = _with_files(
+        module,
+        models=qualified_models,
+        **{
+            "_uploads.py": (
+                "from pathlib import Path\n\n\n"
+                "def widget_upload_to(instance, filename):\n"
+                '    return f"widgets/{Path(filename).suffix.lower()}"\n'
+            )
+        },
+    )
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted = _with_files(
+        module,
+        models=qualified_models,
+        **{
+            "_uploads.py": (
+                'def widget_upload_to(instance, filename):\n    return f"widgets/{filename}"\n'
+            )
+        },
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+@pytest.mark.parametrize(
+    "import_line",
+    [
+        "from ._uploads import widget_upload_to as image_path",
+        "from quickscale_modules_demo._uploads import widget_upload_to as image_path",
+    ],
+)
+def test_upload_to_extension_via_function_alias_control(
+    import_line: str,
+) -> None:
+    module = _golden_module()
+    aliased_models = (
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n"
+        f"{import_line}\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(upload_to=image_path)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    flagged = _with_files(
+        module,
+        models=aliased_models,
+        **{
+            "_uploads.py": (
+                "from pathlib import Path\n\n\n"
+                "def widget_upload_to(instance, filename):\n"
+                '    return f"widgets/{Path(filename).suffix.lower()}"\n'
+            )
+        },
+    )
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted = _with_files(
+        module,
+        models=aliased_models,
+        **{
+            "_uploads.py": (
+                'def widget_upload_to(instance, filename):\n    return f"widgets/{filename}"\n'
+            )
+        },
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+def test_upload_to_extension_same_named_decoy_control() -> None:
+    module = _golden_module()
+    qualified_models = (
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n"
+        "from . import _uploads\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(upload_to=_uploads.widget_upload_to)\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    accepted = _with_files(
+        module,
+        models=qualified_models,
+        **{
+            "_uploads.py": (
+                'def widget_upload_to(instance, filename):\n    return f"widgets/{filename}"\n'
+            ),
+            "_archive.py": (
+                "from pathlib import Path\n\n\n"
+                "def widget_upload_to(instance, filename):\n"
+                '    return f"archive/{Path(filename).suffix.lower()}"\n'
+            ),
+        },
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+def test_upload_to_extension_unaliased_dotted_import_control() -> None:
+    module = _golden_module()
+    dotted_models = (
+        "import quickscale_modules_demo._uploads\n"
+        "import quickscale_modules_demo._archive\n\n"
+        "from django.db import models\n"
+        "from quickscale_modules_orgs.models import TenantModel\n\n\n"
+        "class Widget(TenantModel):\n"
+        "    image = models.ImageField(\n"
+        "        upload_to=quickscale_modules_demo._uploads.widget_upload_to\n"
+        "    )\n\n"
+        "    class Meta(TenantModel.Meta):\n"
+        "        ordering = ['pk']\n\n"
+        "    def __str__(self) -> str:\n"
+        "        return 'widget'\n"
+    )
+    dirty_builder = (
+        "from pathlib import Path\n\n\n"
+        "def widget_upload_to(instance, filename):\n"
+        '    return f"widgets/{Path(filename).suffix.lower()}"\n'
+    )
+    clean_builder = 'def widget_upload_to(instance, filename):\n    return f"widgets/{filename}"\n'
+
+    flagged = _with_files(
+        module,
+        models=dotted_models,
+        **{"_uploads.py": dirty_builder, "_archive.py": clean_builder},
+    )
+    assert any(
+        "client filename" in violation
+        for violation in _violations(checker.rule_14_model_basics, flagged)
+    )
+
+    accepted = _with_files(
+        module,
+        models=dotted_models,
+        **{"_uploads.py": clean_builder, "_archive.py": dirty_builder},
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
 def test_package_root_control() -> None:
     module = _golden_module()
     broken = _with_files(
@@ -5238,15 +5520,278 @@ def test_module_list_template_control() -> None:
     assert checker.rule_37_module_lists(orgs_reservation) == []
 
 
+def test_settings_snapshot_location_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_42_settings_snapshots, module) == []
+
+    wrong_location = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n\n'
+            "class DemoRuntimeSettingsSnapshot:\n"
+            "    enabled: bool\n\n"
+            "    @classmethod\n"
+            "    def from_settings(cls):\n"
+            "        return cls(enabled=True)\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+    )
+    assert any(
+        "defines the settings snapshot DemoRuntimeSettingsSnapshot outside _settings.py"
+        in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, wrong_location)
+    )
+
+    misplaced_getter = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n'
+            "from django.conf import settings\n\n\n"
+            "def demo_runtime_settings():\n"
+            "    return DemoRuntimeSettingsSnapshot(enabled=settings.QUICKSCALE_DEMO_ENABLED)\n"
+        ),
+    )
+    assert any(
+        "builds a settings snapshot outside _settings.py" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, misplaced_getter)
+    )
+
+    exported = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["DemoPolicySnapshot", "is_enabled"]\n\n'
+            "from quickscale_modules_demo._settings import DemoPolicySnapshot\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from django.conf import settings\n\n\n"
+                "class DemoPolicySnapshot:\n"
+                "    retention_days: int\n\n\n"
+                "def demo_policy_snapshot():\n"
+                "    return DemoPolicySnapshot(\n"
+                "        retention_days=int(settings.QUICKSCALE_DEMO_RETENTION)\n"
+                "    )\n"
+            ),
+        },
+    )
+    assert any(
+        "exports the settings snapshot DemoPolicySnapshot" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, exported)
+    )
+
+    split_class = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n\n'
+            "class DemoSettingsSnapshot:\n"
+            "    enabled: bool\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from django.conf import settings\n\n"
+                "from quickscale_modules_demo.services import DemoSettingsSnapshot\n\n\n"
+                "def demo_settings_snapshot():\n"
+                "    return DemoSettingsSnapshot(\n"
+                "        enabled=settings.QUICKSCALE_DEMO_ENABLED\n"
+                "    )\n"
+            ),
+        },
+    )
+    assert any(
+        "defines the settings snapshot DemoSettingsSnapshot outside _settings.py" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, split_class)
+    )
+
+    split_class_alias = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "is_enabled"]\n\n\n'
+            "class DemoSettingsSnapshot:\n"
+            "    enabled: bool\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from django.conf import settings\n\n"
+                "from quickscale_modules_demo.services import (\n"
+                "    DemoSettingsSnapshot as Snapshot,\n"
+                ")\n\n\n"
+                "def demo_settings_snapshot():\n"
+                "    return Snapshot(enabled=settings.QUICKSCALE_DEMO_ENABLED)\n"
+            ),
+        },
+    )
+    assert any(
+        "defines the settings snapshot DemoSettingsSnapshot outside _settings.py" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, split_class_alias)
+    )
+
+    alias_exported = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["Snapshot", "is_enabled"]\n\n'
+            "from quickscale_modules_demo._settings import (\n"
+            "    DemoSettingsSnapshot as Snapshot,\n"
+            ")\n\n\n"
+            "def is_enabled() -> bool:\n"
+            "    return True\n"
+        ),
+        **{
+            "_settings.py": (
+                "from dataclasses import dataclass\n\n"
+                "from django.conf import settings\n\n\n"
+                "@dataclass(frozen=True)\n"
+                "class DemoSettingsSnapshot:\n"
+                "    enabled: bool\n\n"
+                "    @classmethod\n"
+                "    def from_settings(cls):\n"
+                "        return cls(enabled=bool(settings.QUICKSCALE_DEMO_ENABLED))\n"
+            ),
+        },
+    )
+    assert any(
+        "exports the settings snapshot DemoSettingsSnapshot" in violation
+        for violation in _violations(checker.rule_42_settings_snapshots, alias_exported)
+    )
+
+    alias_allowed = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            '__all__ = ["demo_query", "verify"]\n\n'
+            "from quickscale_modules_demo.checks import check_demo as verify\n\n\n"
+            "def demo_query(*, subject: str) -> str:\n"
+            "    return subject\n"
+        ),
+    )
+    assert _violations(checker.rule_42_settings_snapshots, alias_allowed) == []
+
+
+def test_optional_sender_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_43_optional_senders, module) == []
+
+    settings_read = _with_files(
+        module,
+        views=(
+            "from importlib import import_module\n\n\n"
+            "def load_sender():\n"
+            "    services = import_module('quickscale_modules_notifications.services')\n"
+            "    return services.NotificationSettingsSnapshot.from_settings().enabled\n"
+        ),
+    )
+    assert any(
+        "reads notifications's settings through NotificationSettingsSnapshot" in violation
+        for violation in _violations(checker.rule_43_optional_senders, settings_read)
+    )
+
+    catch_all = _with_files(
+        module,
+        views=(
+            "from quickscale_modules_notifications.services import send_notification\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        send_notification(template_key='x', recipients=[], context={})\n"
+            "    except Exception:\n"
+            "        return\n"
+        ),
+    )
+    assert any(
+        "catches Exception around notifications's service call" in violation
+        for violation in _violations(checker.rule_43_optional_senders, catch_all)
+    )
+
+    dotted_catch_all = _with_files(
+        module,
+        views=(
+            "import quickscale_modules_notifications.services\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        quickscale_modules_notifications.services.send_notification(\n"
+            "            template_key='x', recipients=[], context={}\n"
+            "        )\n"
+            "    except Exception:\n"
+            "        return\n"
+        ),
+    )
+    assert any(
+        "catches Exception around notifications's service call" in violation
+        for violation in _violations(checker.rule_43_optional_senders, dotted_catch_all)
+    )
+
+    dotted_narrowed = _with_files(
+        module,
+        views=(
+            "import quickscale_modules_notifications.services\n\n"
+            "from quickscale_modules_notifications.services import NotificationError\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        quickscale_modules_notifications.services.send_notification(\n"
+            "            template_key='x', recipients=[], context={}\n"
+            "        )\n"
+            "    except NotificationError:\n"
+            "        return\n"
+        ),
+    )
+    assert _violations(checker.rule_43_optional_senders, dotted_narrowed) == []
+
+    narrowed = _with_files(
+        module,
+        views=(
+            "from quickscale_modules_notifications.services import (\n"
+            "    NotificationError,\n"
+            "    send_notification,\n"
+            ")\n\n\n"
+            "def send_now() -> None:\n"
+            "    try:\n"
+            "        send_notification(template_key='x', recipients=[], context={})\n"
+            "    except NotificationError:\n"
+            "        return\n"
+        ),
+    )
+    assert _violations(checker.rule_43_optional_senders, narrowed) == []
+
+    best_effort = _with_files(
+        module,
+        views=(
+            "def emit() -> None:\n"
+            "    from quickscale_modules_analytics.services import capture_event\n\n"
+            "    try:\n"
+            "        capture_event(distinct_id='x', event='e')\n"
+            "    except Exception:\n"
+            "        return\n"
+        ),
+    )
+    assert _violations(checker.rule_43_optional_senders, best_effort) == []
+
+
 def test_layer_table_mirrors_the_shipped_modules() -> None:
     corpus = checker.load_corpus(REPO_ROOT)
     assert {module.name for module in corpus.modules} == set(checker.MODULE_LAYERS)
 
 
-def test_covered_and_open_rules_partition_1_to_39() -> None:
+# Rules the harness must cover or record as open.  SA215 covered 1-39;
+# SA236 adds 42-43.  Rule 41 and rules 44-46 land with SA235, SA237, and
+# SA238, which extend this set.
+RECORDED_RULE_NUMBERS = frozenset({*range(1, 40), 42, 43})
+
+
+def test_covered_and_open_rules_partition_the_recorded_rules() -> None:
     covered = {rule.number for rule in checker.RULES}
     open_rules = {number for number, _ in checker.OPEN_RULES}
-    assert covered | open_rules == set(range(1, 40))
+    assert covered | open_rules == RECORDED_RULE_NUMBERS
     assert not covered & open_rules
 
 

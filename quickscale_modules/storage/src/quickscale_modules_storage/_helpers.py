@@ -21,6 +21,21 @@ from PIL import Image, UnidentifiedImageError
 
 IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
 
+#: SA239: the fixed extension for each Pillow format the modules accept. A
+#: stored name never takes its extension from the client-supplied filename;
+#: an unrecognized or absent format resolves to ``.bin``.
+_IMAGE_EXTENSION_BY_FORMAT: dict[str, str] = {
+    "JPEG": ".jpg",
+    "PNG": ".png",
+    "WEBP": ".webp",
+    "GIF": ".gif",
+}
+
+
+def _image_extension_for_format(image_format: str | None) -> str:
+    """Return the fixed extension for a validated Pillow image format (SA239)."""
+    return _IMAGE_EXTENSION_BY_FORMAT.get(str(image_format or "").upper(), ".bin")
+
 
 @dataclass(frozen=True)
 class StorageBackendSelection:
@@ -246,6 +261,7 @@ def build_upload_path(
     *,
     asset_kind: str,
     filename: str,
+    image_format: str | None = None,
     now: datetime | None = None,
     content: bytes | None = None,
     version: str | None = None,
@@ -253,12 +269,14 @@ def build_upload_path(
     """Build a cache-friendly upload path segmented by module and year/month.
 
     Rule 23: keyword-only after the one leading subject, so a new parameter
-    never reorders a caller's positional arguments.
+    never reorders a caller's positional arguments.  SA239: the stored
+    extension is the fixed mapping of the validated ``image_format``
+    (``validate_file_upload``'s return), never the client-supplied filename.
     """
     timestamp = now or timezone.now()
     module_segment = slugify(module_name) or "module"
     kind_segment = slugify(asset_kind) or "asset"
-    extension = Path(filename).suffix.lower() or ".bin"
+    extension = _image_extension_for_format(image_format)
     name = make_cache_friendly_name(filename, content=content, version=version)
     return f"{module_segment}/{kind_segment}/{timestamp:%Y/%m}/{name}{extension}"
 

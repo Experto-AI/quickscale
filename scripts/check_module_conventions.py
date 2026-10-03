@@ -2533,6 +2533,199 @@ def rule_13_tenant_models(corpus: Corpus) -> list[str]:
     return violations
 
 
+def _file_field_class_names(module: Module) -> set[str]:
+    """
+    Return every file-field class name a module's own package defines.
+
+    Rule 14's filename clause must see an ``upload_to`` registered on the
+    module's own ``FileField``/``ImageField`` subclass, not just Django's base
+    classes, so a custom field stays inside the detector's scan set.
+    """
+    names = {"FileField", "ImageField"}
+    changed = True
+    while changed:
+        changed = False
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            for node in ast.walk(_parse(text)):
+                if not isinstance(node, ast.ClassDef) or node.name in names:
+                    continue
+                if set(_class_names(node)) & names:
+                    names.add(node.name)
+                    changed = True
+    return names
+
+
+def _module_file(
+    parts: tuple[str, ...],
+    module_name: str,
+    package_files: Mapping[str, str],
+) -> str | None:
+    """Return the package file a dotted module path refers to, if it exists."""
+    package = f"quickscale_modules_{module_name}"
+    dotted = ".".join(parts)
+    if not dotted.startswith(f"{package}."):
+        return None
+    rel = dotted[len(package) + 1 :].replace(".", "/") + ".py"
+    return rel if rel in package_files else None
+
+
+def _import_package_parts(node: ast.ImportFrom, module_name: str) -> tuple[str, ...] | None:
+    """
+    Map an own-package ``ImportFrom`` target to its package path (SA239).
+
+    Both the level-1 relative form (``from ._uploads import …``) and the
+    absolute form (``from quickscale_modules_<module>._uploads import …``)
+    resolve to the same package path; a deeper relative level leaves the
+    package and is ignored.
+    """
+    package = f"quickscale_modules_{module_name}"
+    base = (package,)
+    if node.module:
+        if node.level:
+            if node.level != 1:
+                return None
+            return base + tuple(node.module.split("."))
+        parts = tuple(node.module.split("."))
+        if parts[:1] != base:
+            return None
+        return parts
+    if node.level != 1:
+        return None
+    return base
+
+
+def _builder_bindings(
+    tree: ast.Module,
+    module_name: str,
+    package_files: Mapping[str, str],
+) -> dict[str, tuple[str, str | None]]:
+    """
+    Map ``models.py`` bindings to own-package files (SA239).
+
+    A binding is ``(file, function)`` for a function import and
+    ``(file, None)`` for a module import; imports outside the module's own
+    package are ignored.  Resolution stays tied to the import binding, so an
+    unrelated same-named function cannot answer for a registered callable.
+    """
+    bindings: dict[str, tuple[str, str | None]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            base = _import_package_parts(node, module_name)
+            if base is None:
+                continue
+            if node.module is None:
+                for alias in node.names:
+                    target = _module_file(base + (alias.name,), module_name, package_files)
+                    if target:
+                        bindings[alias.asname or alias.name] = (target, None)
+                continue
+            imported_module = _module_file(base, module_name, package_files)
+            for alias in node.names:
+                local = alias.asname or alias.name
+                if imported_module is not None:
+                    bindings[local] = (imported_module, alias.name)
+                else:
+                    target = _module_file(base + (alias.name,), module_name, package_files)
+                    if target:
+                        bindings[local] = (target, None)
+        elif isinstance(node, ast.Import):
+            # An unaliased ``import a.b.c`` binds the package root, so the
+            # attribute chain itself names the file; only ``as`` bindings
+            # point at one specific module.
+            for alias in node.names:
+                if not alias.asname:
+                    continue
+                parts = tuple(alias.name.split("."))
+                target = _module_file(parts, module_name, package_files)
+                if target is not None:
+                    bindings[alias.asname] = (target, None)
+    return bindings
+
+
+def _resolve_upload_to_builder(
+    target: ast.expr | None,
+    local_functions: Mapping[str, ast.FunctionDef],
+    bindings: Mapping[str, tuple[str, str | None]],
+    module_name: str,
+    package_files: Mapping[str, str],
+) -> tuple[str, str] | None:
+    """Resolve one ``upload_to`` target to its ``(file, function)`` (SA239)."""
+    if isinstance(target, ast.Name):
+        if target.id in local_functions:
+            return ("models.py", target.id)
+        binding = bindings.get(target.id)
+        if binding is None:
+            return None
+        file, function = binding
+        if function is None or file not in package_files:
+            return None
+        return (file, function)
+    if isinstance(target, ast.Attribute):
+        chain = _attribute_chain(target)
+        if chain is None or len(chain) < 2:
+            return None
+        # An absolute chain names its own file before any import binding is
+        # consulted, mirroring Python's package-root attribute semantics; a
+        # local alias (``import … as x`` or ``from . import x``) is a binding.
+        file = _module_file(chain[:-1], module_name, package_files)
+        if file is not None:
+            return (file, chain[-1])
+        binding = bindings.get(chain[0])
+        if binding is not None:
+            file, function = binding
+            if function is not None or file not in package_files:
+                return None
+            return (file, chain[-1])
+    return None
+
+
+def _upload_to_builders(
+    module: Module,
+    tree: ast.Module,
+    field_class_names: set[str],
+) -> list[tuple[str, str]]:
+    """Resolve every ``upload_to`` registration to ``(file, function)`` (SA239)."""
+    package_files = {
+        rel: text
+        for rel, text in module.files.items()
+        if rel.endswith(".py") and not rel.startswith("migrations/")
+    }
+    local_functions = {
+        node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+    }
+    bindings = _builder_bindings(tree, module.name, package_files)
+    builders: set[tuple[str, str]] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if _call_func_name(node) not in field_class_names:
+            continue
+        builder = _resolve_upload_to_builder(
+            _keyword(node, "upload_to"),
+            local_functions,
+            bindings,
+            module.name,
+            package_files,
+        )
+        if builder is not None:
+            builders.add(builder)
+    return sorted(builders)
+
+
+def _path_suffix_reads(node: ast.AST) -> list[ast.Attribute]:
+    """Return every ``Path(...).suffix`` read inside one AST subtree (SA239)."""
+    reads: list[ast.Attribute] = []
+    for inner in ast.walk(node):
+        if not isinstance(inner, ast.Attribute) or inner.attr != "suffix":
+            continue
+        value = inner.value
+        if isinstance(value, ast.Call) and _call_func_name(value) == "Path":
+            reads.append(inner)
+    return reads
+
+
 def rule_14_model_basics(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
@@ -2547,6 +2740,21 @@ def rule_14_model_basics(corpus: Corpus) -> list[str]:
         if models is None:
             continue
         tree = _parse(models)
+        field_class_names = _file_field_class_names(module)
+        for builder_source, builder_name in _upload_to_builders(module, tree, field_class_names):
+            source = module.files.get(builder_source)
+            if source is None:
+                continue
+            for node in ast.walk(_parse(source)):
+                if not isinstance(node, ast.FunctionDef) or node.name != builder_name:
+                    continue
+                for suffix_read in _path_suffix_reads(node):
+                    violations.append(
+                        f"rule 14: {module.name}: {builder_source}:{builder_name} "
+                        f"takes the upload extension from the client filename "
+                        f"(line {suffix_read.lineno})"
+                    )
+                break
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign) and isinstance(node.value, (ast.List, ast.Tuple)):
                 for target in node.targets:
@@ -4789,6 +4997,323 @@ def rule_36_typecheck_config(corpus: Corpus) -> list[str]:
     return violations
 
 
+def _body_nodes(body: list[ast.stmt]) -> list[ast.AST]:
+    """Return nodes in *body* without descending into nested functions."""
+    found: list[ast.AST] = []
+    stack: list[ast.AST] = list(body)
+    while stack:
+        current = stack.pop()
+        found.append(current)
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        stack.extend(ast.iter_child_nodes(current))
+    return found
+
+
+def _scope_nodes(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.AST]:
+    """Return *node*'s own body without descending into nested functions."""
+    return _body_nodes(node.body)
+
+
+def _class_defines_from_settings(node: ast.ClassDef) -> bool:
+    """Return whether a class declares the rule 42 ``from_settings()`` factory."""
+    return any(
+        isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "from_settings"
+        for item in node.body
+    )
+
+
+_RULE_42_EXPORTED_SNAPSHOT = re.compile(r"SettingsSnapshot$")
+_RULE_43_SETTINGS_ATTRIBUTE = re.compile(r"(?:Settings|Snapshot)")
+_COERCION_BUILTINS = frozenset({"bool", "float", "int", "list", "str", "tuple"})
+
+# Rule 23's listed exception: analytics' services are best-effort and never
+# raise to callers, so a caller may tolerate any failure while using them.
+_RULE_43_BEST_EFFORT_MODULES = frozenset({"analytics"})
+
+
+def _is_direct_setting_read(
+    node: ast.expr,
+    names: set[str],
+    modules: set[tuple[str, ...]],
+) -> bool:
+    """Return whether an expression is a setting read, wrapped coercions included."""
+    if isinstance(node, ast.Attribute):
+        return _is_settings_receiver(node.value, names, modules)
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in _COERCION_BUILTINS
+        and len(node.args) == 1
+        and not node.keywords
+    ):
+        return _is_direct_setting_read(node.args[0], names, modules)
+    return False
+
+
+def _call_builds_settings_snapshot(
+    call: ast.Call,
+    names: set[str],
+    modules: set[tuple[str, ...]],
+) -> bool:
+    """Return whether a call is a ``from_settings()`` factory or an all-settings constructor."""
+    if isinstance(call.func, ast.Attribute) and call.func.attr == "from_settings":
+        return True
+    if isinstance(call.func, ast.Name) and call.func.id in _COERCION_BUILTINS:
+        return False
+    arguments = [*call.args, *(keyword.value for keyword in call.keywords)]
+    return bool(arguments) and all(
+        _is_direct_setting_read(argument, names, modules) for argument in arguments
+    )
+
+
+def _intra_module_import_names(tree: ast.Module, module: Module) -> dict[str, str]:
+    """Map own-package import aliases to their original names (rule 42 resolution)."""
+    names: dict[str, str] = {}
+    prefix = f"{MODULE_IMPORT_PREFIX}{module.name}"
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        same_package = bool(node.level) or (
+            node.module is not None
+            and (node.module == prefix or node.module.startswith(f"{prefix}."))
+        )
+        if not same_package:
+            continue
+        for alias in node.names:
+            names[alias.asname or alias.name] = alias.name
+    return names
+
+
+def _settings_snapshot_names(module: Module) -> set[str]:
+    """Collect the snapshot names the module's private ``_settings.py`` builds."""
+    text = module.files.get("_settings.py")
+    if text is None:
+        return set()
+    tree = _parse(text)
+    names, modules = _settings_bindings(tree)
+    aliases = _intra_module_import_names(tree, module)
+    found = {
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and _class_defines_from_settings(node)
+    }
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not _call_builds_settings_snapshot(
+            node, names, modules
+        ):
+            continue
+        if isinstance(node.func, ast.Name):
+            found.add(aliases.get(node.func.id, node.func.id))
+        elif isinstance(node.func, ast.Attribute):
+            if node.func.attr == "from_settings":
+                if isinstance(node.func.value, ast.Name):
+                    found.add(aliases.get(node.func.value.id, node.func.value.id))
+            else:
+                found.add(node.func.attr)
+    return found
+
+
+def _returns_settings_snapshot(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    names: set[str],
+    modules: set[tuple[str, ...]],
+) -> int | None:
+    """Return the line of a return that builds a settings snapshot, if any."""
+    for item in _scope_nodes(node):
+        if (
+            isinstance(item, ast.Return)
+            and item.value is not None
+            and isinstance(item.value, ast.Call)
+            and _call_builds_settings_snapshot(item.value, names, modules)
+        ):
+            return item.lineno
+    return None
+
+
+def rule_42_settings_snapshots(corpus: Corpus) -> list[str]:
+    """Rule 42: a settings snapshot lives only in the private ``_settings.py``."""
+    violations: list[str] = []
+    for module in corpus.modules:
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            tree = _parse(text)
+            in_settings_module = rel == "_settings.py"
+            names, modules = _settings_bindings(tree)
+            snapshot_names = _settings_snapshot_names(module)
+            for node in tree.body:
+                if (
+                    isinstance(node, ast.ClassDef)
+                    and not in_settings_module
+                    and (_class_defines_from_settings(node) or node.name in snapshot_names)
+                ):
+                    violations.append(
+                        f"rule 42: {module.name}: {rel}:{node.lineno} defines the settings "
+                        f"snapshot {node.name} outside _settings.py"
+                    )
+                if (
+                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and not in_settings_module
+                ):
+                    returned_at = _returns_settings_snapshot(node, names, modules)
+                    if returned_at is not None:
+                        violations.append(
+                            f"rule 42: {module.name}: {rel}:{returned_at} builds a settings "
+                            "snapshot outside _settings.py"
+                        )
+            for export in _declared_exports(tree) or ():
+                resolved = _intra_module_import_names(tree, module).get(export, export)
+                if resolved in snapshot_names or _RULE_42_EXPORTED_SNAPSHOT.search(resolved):
+                    violations.append(
+                        f"rule 42: {module.name}: {rel} exports the settings snapshot {resolved}"
+                    )
+    return violations
+
+
+def _import_module_service_bindings(tree: ast.Module) -> dict[str, str]:
+    """Map locals assigned from ``import_module("<module>.services")`` to that module."""
+    bindings: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        value = node.value
+        if not isinstance(target, ast.Name) or not isinstance(value, ast.Call):
+            continue
+        func = value.func
+        if not isinstance(func, ast.Name) or func.id != "import_module":
+            continue
+        if len(value.args) != 1 or not isinstance(value.args[0], ast.Constant):
+            continue
+        path = value.args[0].value
+        if not isinstance(path, str):
+            continue
+        target_module = _module_target(tuple(path.split(".")))
+        if target_module is not None and target_module[1] == ("services",):
+            bindings[target.id] = target_module[0]
+    return bindings
+
+
+def _other_module_service_imports(tree: ast.Module, module_name: str) -> dict[str, str]:
+    """Map names imported from another module's ``services`` to that module."""
+    names: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or not node.module or node.level:
+            continue
+        target = _module_target(tuple(node.module.split(".")))
+        if target is None or target[0] == module_name or target[1] != ("services",):
+            continue
+        for alias in node.names:
+            names[alias.asname or alias.name] = target[0]
+    return names
+
+
+def _attribute_binding_module(
+    chain: tuple[str, ...],
+    service_bindings: dict[tuple[str, ...], str],
+    import_module_bindings: dict[str, str],
+) -> str | None:
+    """Resolve the module an attribute chain is rooted in, if it is another module."""
+    direct = _module_target(chain)
+    if direct is not None:
+        return direct[0]
+    if (chain[0],) in service_bindings:
+        return service_bindings[(chain[0],)]
+    return import_module_bindings.get(chain[0])
+
+
+def _call_other_module_service(
+    call: ast.Call,
+    service_names: dict[str, str],
+    service_bindings: dict[tuple[str, ...], str],
+    import_module_bindings: dict[str, str],
+) -> tuple[str, str] | None:
+    """Return the module and name a call targets through its ``services`` surface."""
+    func = call.func
+    if isinstance(func, ast.Name):
+        owner = service_names.get(func.id)
+        return (owner, func.id) if owner is not None else None
+    if isinstance(func, ast.Attribute):
+        chain = _attribute_chain(func)
+        if chain is None:
+            return None
+        for prefix, binding_owner in sorted(
+            service_bindings.items(), key=lambda item: len(item[0]), reverse=True
+        ):
+            if len(prefix) < len(chain) and chain[: len(prefix)] == prefix:
+                return (binding_owner, func.attr)
+        owner = import_module_bindings.get(chain[0])
+        if owner is not None:
+            return (owner, func.attr)
+    return None
+
+
+def rule_43_optional_senders(corpus: Corpus) -> list[str]:
+    """Rule 43: an optional sender guards with ``is_enabled()`` and one error base."""
+    violations: list[str] = []
+    for module in corpus.modules:
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            tree = _parse(text)
+            service_bindings = _service_module_bindings(tree)
+            import_module_bindings = _import_module_service_bindings(tree)
+            service_names = _other_module_service_imports(tree, module.name)
+            for node in ast.walk(tree):
+                if not (
+                    isinstance(node, ast.Attribute)
+                    and _RULE_43_SETTINGS_ATTRIBUTE.search(node.attr)
+                ):
+                    continue
+                chain = _attribute_chain(node)
+                if chain is None:
+                    continue
+                owner = _attribute_binding_module(chain, service_bindings, import_module_bindings)
+                if owner is not None and owner != module.name:
+                    violations.append(
+                        f"rule 43: {module.name}: {rel}:{node.lineno} reads {owner}'s "
+                        f"settings through {node.attr}"
+                    )
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                for item in _scope_nodes(node):
+                    if not isinstance(item, ast.Try):
+                        continue
+                    owner = next(
+                        (
+                            found
+                            for found in (
+                                _call_other_module_service(
+                                    child,
+                                    service_names,
+                                    service_bindings,
+                                    import_module_bindings,
+                                )
+                                for child in _body_nodes(item.body)
+                                if isinstance(child, ast.Call)
+                            )
+                            if found is not None
+                            and found[0] != module.name
+                            and found[0] not in _RULE_43_BEST_EFFORT_MODULES
+                        ),
+                        None,
+                    )
+                    if owner is None:
+                        continue
+                    for handler in item.handlers:
+                        catches_everything = handler.type is None or (
+                            isinstance(handler.type, ast.Name) and handler.type.id == "Exception"
+                        )
+                        if catches_everything:
+                            violations.append(
+                                f"rule 43: {module.name}: {rel}:{handler.lineno} catches "
+                                f"Exception around {owner[0]}'s service call"
+                            )
+    return violations
+
+
 RULES: tuple[Rule, ...] = (
     Rule(1, "settings names and the enabled switch", rule_1_settings_names),
     Rule(2, "identity names", rule_2_identity_names),
@@ -4830,11 +5355,14 @@ RULES: tuple[Rule, ...] = (
     Rule(37, "module lists outside the modules", rule_37_module_lists),
     Rule(38, "README content", rule_38_readme_content),
     Rule(39, "module dependencies", rule_39_module_dependencies),
+    Rule(42, "settings snapshots", rule_42_settings_snapshots),
+    Rule(43, "optional senders", rule_43_optional_senders),
 )
 
 # Rules the harness does not yet cover: their remaining code change has not
 # landed, or another gate already enforces them.  The coverage test keeps this
-# a partition with RULES over 1-39, so SA215 cannot forget a rule.
+# a partition with RULES over the recorded rules, so no rule can be silently
+# omitted.
 OPEN_RULES: tuple[tuple[int, str], ...] = (
     (21, "SA216 (rule 21 is a review rule; each module's write-effect rollback test)"),
     (27, "SA215 (user-FK conformance gate orgs/tests/test_user_fk_conformance.py)"),

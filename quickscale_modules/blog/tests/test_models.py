@@ -17,6 +17,7 @@ from quickscale_modules_blog.models import (
     _save_format_from_name,
     _thumbnail_save_kwargs,
     AuthorProfile,
+    blog_media_upload_to,
     BlogMediaAsset,
     Category,
     Post,
@@ -24,6 +25,17 @@ from quickscale_modules_blog.models import (
 )
 
 User = get_user_model()
+
+
+def _uploaded_test_image(filename: str, image_format: str) -> SimpleUploadedFile:
+    """Create an in-memory image upload whose name lies about its format."""
+    image_bytes = BytesIO()
+    Image.new("RGB", (32, 32), color="green").save(image_bytes, format=image_format)
+    return SimpleUploadedFile(
+        filename,
+        image_bytes.getvalue(),
+        content_type="text/html",
+    )
 
 
 class TestModelHelpers:
@@ -99,6 +111,74 @@ class TestModelHelpers:
         prepared = _prepare_thumbnail_image(image, "PNG")
 
         assert prepared.mode == "RGBA"
+
+    @pytest.mark.parametrize(
+        ("image_format", "expected_extension"),
+        [
+            ("JPEG", ".jpg"),
+            ("PNG", ".png"),
+            ("WEBP", ".webp"),
+            ("GIF", ".gif"),
+        ],
+    )
+    @pytest.mark.parametrize("storage_missing", [False, True])
+    def test_blog_media_upload_to_uses_the_validated_format(
+        self,
+        image_format,
+        expected_extension,
+        storage_missing,
+        tmp_path,
+        settings,
+    ):
+        """A valid image named x.html is stored under its Pillow format."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        asset = BlogMediaAsset()
+        uploaded = _uploaded_test_image("x.html", image_format)
+
+        if storage_missing:
+            with patch.object(_storage, "storage_services", return_value=None):
+                asset.file.save(uploaded.name, uploaded, save=False)
+        else:
+            asset.file.save(uploaded.name, uploaded, save=False)
+
+        assert asset.file.name.endswith(expected_extension)
+        assert not asset.file.name.endswith(".html")
+
+    def test_blog_media_upload_to_follows_replaced_content(
+        self,
+        tmp_path,
+        settings,
+    ):
+        """Replacing the file derives the extension from the new bytes."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        asset = BlogMediaAsset()
+        asset.file.save(
+            "first.png", _uploaded_test_image("first.png", "PNG"), save=False
+        )
+        assert asset.file.name.endswith(".png")
+
+        with patch.object(_storage, "storage_services", return_value=None):
+            asset.file.save(
+                "x.html", _uploaded_test_image("x.html", "JPEG"), save=False
+            )
+
+        assert asset.file.name.endswith(".jpg")
+        assert not asset.file.name.endswith(".html")
+
+    def test_blog_media_upload_to_without_a_recorded_format_uses_bin(
+        self,
+        tmp_path,
+        settings,
+    ):
+        """A builder driven without the FieldFile hook stores a neutral .bin."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        asset = BlogMediaAsset()
+
+        with patch.object(_storage, "storage_services", return_value=None):
+            stored_name = blog_media_upload_to(asset, "x.html")
+
+        assert stored_name.endswith(".bin")
+        assert not stored_name.endswith(".html")
 
 
 class TestStorageSeam:
