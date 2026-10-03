@@ -2,6 +2,8 @@
 # ruff: noqa: E402 — AF5 Phase 4: module-level bypass set before imports
 
 import sys
+import quickscale_cli.commands._types as _types
+import quickscale_cli.commands._finalize as _finalize
 from pathlib import Path
 import subprocess
 import tomllib
@@ -24,54 +26,62 @@ from quickscale_core.apply.steps.env_sync import render_env_example_block
 # AF5 Phase 4: Bypass the late destructive/remote confirmation gate in
 # all tests so test output assertions remain stable.  Each test function
 # sets this at module-load time; individual tests may override.
-import quickscale_cli.commands.apply_command as _apply_command_mod
 
-_apply_command_mod._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
+_types._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
 
 
-from quickscale_cli.commands.apply_command import (
+from quickscale_cli.commands._types import (
     ApplyContext,
     EmbedModulesResult,
-    ModuleEmbedProvenance,
+)
+from quickscale_cli.commands._module_shared import ModuleEmbedProvenance
+from quickscale_cli.commands._context import (
     _attempt_provenance_repair_if_needed,
-    _build_project_state_snapshot,
-    _check_output_directory,
-    _clear_apply_recovery_state,
-    _commit_pending_config_changes,
-    _determine_output_path,
-    _display_config_summary,
-    _display_next_steps,
-    _embed_module,
-    _embed_modules_step,
-    _ensure_backups_gitignore_rules,
-    _execute_apply_steps,
-    _execute_apply_steps_locked,
-    _finalize_apply_state,
-    _generate_project,
-    _generate_with_existing_config,
-    _git_commit,
     _handle_delta_and_existing_state,
-    _populate_consolidated_tracking_from_legacy,
     _regenerate_managed_wiring_for_apply,
-    _init_git,
-    _init_git_with_config,
-    _load_and_validate_config,
-    _load_module_manifests,
-    _normalize_backups_gitignore_entry,
     _prepare_apply_context,
-    _print_apply_failure_summary,
     _provenance_repair_might_be_needed,
     _refresh_context_after_lock,
-    _isolated_poetry_env,
+)
+from quickscale_cli.commands._state import (
+    _build_project_state_snapshot,
+    _clear_apply_recovery_state,
+    _populate_consolidated_tracking_from_legacy,
+    _save_apply_recovery_state,
+    _save_project_state,
+)
+from quickscale_cli.commands._generation import (
+    _check_output_directory,
+    _determine_output_path,
+    _display_config_summary,
+    _generate_project,
+    _generate_with_existing_config,
+)
+from quickscale_cli.commands._git_ops import (
+    _commit_pending_config_changes,
+    _git_commit,
+    _init_git,
+    _init_git_with_config,
     _run_command,
+)
+from quickscale_cli.commands._finalize import (
+    _display_next_steps,
+    _finalize_apply_state,
+    _print_apply_failure_summary,
+)
+from quickscale_cli.commands._embedding import (
+    _embed_module,
+    _embed_modules_step,
+)
+from quickscale_cli.commands._runtime import (
+    _ensure_backups_gitignore_rules,
+    _normalize_backups_gitignore_entry,
     _run_migrations,
     _run_migrations_in_docker,
     _run_migrations_in_docker_impl,
     _run_poetry_lock,
     _run_poetry_install,
     _run_post_generation_steps,
-    _save_apply_recovery_state,
-    _save_project_state,
     _sync_billing_env_example,
     _sync_project_module_dependencies_for_apply,
     _sync_project_module_dependencies_for_apply_impl,
@@ -79,16 +89,31 @@ from quickscale_cli.commands.apply_command import (
     _start_docker_impl,
     _sync_analytics_env_example,
     _sync_notifications_env_example,
+)
+from quickscale_cli.commands._steps import (
+    _execute_apply_steps,
+    _execute_apply_steps_locked,
+)
+from quickscale_cli.commands._config import (
+    _load_and_validate_config,
+    _load_module_manifests,
     _update_module_config_in_state,
+)
+from quickscale_core.utils.poetry_env import (
+    build_isolated_poetry_env as _isolated_poetry_env,
+)
+from quickscale_cli.commands._split_refs import (
     _expand_split_refs_from_branches,
     _module_names_to_embed,
     _parse_split_ref_overrides,
     _validate_split_ref_override_coverage,
+)
+from quickscale_cli.commands.apply_command import (
     apply,
 )
 
 
-from quickscale_cli.commands.module_commands import _update_single_module
+from quickscale_cli.commands._module_update import _update_single_module
 from quickscale_core.schema.state_schema import (
     ModuleState,
     ProjectState,
@@ -105,11 +130,11 @@ from quickscale_core.manifest.loader import ManifestError
 def _stub_default_split_tag_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep apply embed regressions hermetic; focused tag tests override these."""
     monkeypatch.setattr(
-        "quickscale_cli.commands.module_commands.check_remote_tag_exists",
+        "quickscale_core.utils.git_tags.check_remote_tag_exists",
         lambda remote, tag: True,
     )
     monkeypatch.setattr(
-        "quickscale_cli.commands.module_commands.resolve_remote_tag",
+        "quickscale_core.utils.git_tags.resolve_remote_tag",
         lambda remote, tag: "a" * 40,
     )
 
@@ -143,26 +168,24 @@ class TestSA136cSplitRefApplyContract:
         ctx.qs_config.modules = {"auth": Mock(), "blog": Mock()}
 
         with (
-            patch("quickscale_cli.commands.apply_command._resolve_apply_preflight"),
+            patch("quickscale_cli.commands._context._resolve_apply_preflight"),
             patch(
-                "quickscale_cli.commands.apply_command._prepare_apply_context",
+                "quickscale_cli.commands._context._prepare_apply_context",
                 return_value=ctx,
             ),
-            patch("quickscale_cli.commands.apply_command._display_config_summary"),
+            patch("quickscale_cli.commands._generation._display_config_summary"),
             patch(
-                "quickscale_cli.commands.apply_command._provenance_repair_might_be_needed",
+                "quickscale_cli.commands._context._provenance_repair_might_be_needed",
+                return_value=False,
+            ),
+            patch("quickscale_cli.commands._context._handle_delta_and_existing_state"),
+            patch("quickscale_cli.commands._generation._check_output_directory"),
+            patch(
+                "quickscale_cli.commands.apply_support._confirm_apply",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._handle_delta_and_existing_state"
-            ),
-            patch("quickscale_cli.commands.apply_command._check_output_directory"),
-            patch(
-                "quickscale_cli.commands.apply_command._confirm_apply",
-                return_value=False,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._execute_apply_steps"
+                "quickscale_cli.commands._steps._execute_apply_steps"
             ) as mock_execute,
         ):
             result = CliRunner().invoke(
@@ -238,26 +261,24 @@ class TestSA136cSplitRefApplyContract:
         ctx.qs_config.modules = {"auth": Mock(), "blog": Mock()}
 
         with (
-            patch("quickscale_cli.commands.apply_command._resolve_apply_preflight"),
+            patch("quickscale_cli.commands._context._resolve_apply_preflight"),
             patch(
-                "quickscale_cli.commands.apply_command._prepare_apply_context",
+                "quickscale_cli.commands._context._prepare_apply_context",
                 return_value=ctx,
             ),
-            patch("quickscale_cli.commands.apply_command._display_config_summary"),
+            patch("quickscale_cli.commands._generation._display_config_summary"),
             patch(
-                "quickscale_cli.commands.apply_command._provenance_repair_might_be_needed",
+                "quickscale_cli.commands._context._provenance_repair_might_be_needed",
+                return_value=False,
+            ),
+            patch("quickscale_cli.commands._context._handle_delta_and_existing_state"),
+            patch("quickscale_cli.commands._generation._check_output_directory"),
+            patch(
+                "quickscale_cli.commands.apply_support._confirm_apply",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._handle_delta_and_existing_state"
-            ),
-            patch("quickscale_cli.commands.apply_command._check_output_directory"),
-            patch(
-                "quickscale_cli.commands.apply_command._confirm_apply",
-                return_value=False,
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._execute_apply_steps"
+                "quickscale_cli.commands._steps._execute_apply_steps"
             ) as mock_execute,
         ):
             result = CliRunner().invoke(
@@ -318,19 +339,17 @@ class TestSA136cSplitRefApplyContract:
 
         mock_lock = Mock()
         with (
+            patch("quickscale_cli.commands._state._warn_version_drift_for_apply"),
             patch(
-                "quickscale_cli.commands.apply_command._warn_version_drift_for_apply"
-            ),
-            patch(
-                "quickscale_cli.commands.apply_command._refresh_context_after_lock",
+                "quickscale_cli.commands._context._refresh_context_after_lock",
                 side_effect=_refresh_to_different_target_set,
             ),
             patch(
-                "quickscale_cli.commands.apply_command.AdvisoryLock",
+                "quickscale_core.advisory_lock.AdvisoryLock",
                 return_value=mock_lock,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._execute_apply_steps_locked"
+                "quickscale_cli.commands._steps._execute_apply_steps_locked"
             ) as mock_locked,
         ):
             with pytest.raises(click.UsageError, match="unknown modules: auth"):
@@ -403,7 +422,7 @@ def _install_failing_pre_commit_hook(project_path: Path) -> None:
 class TestRunCommand:
     """Tests for _run_command helper"""
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_success(self, mock_run):
         """Test successful command execution"""
         mock_run.return_value = Mock(returncode=0, stdout="output", stderr="")
@@ -411,7 +430,7 @@ class TestRunCommand:
         assert success is True
         assert output == "output"
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_failure(self, mock_run):
         """Test failed command execution"""
         mock_run.return_value = Mock(returncode=1, stdout="", stderr="error msg")
@@ -419,7 +438,7 @@ class TestRunCommand:
         assert success is False
         assert "error msg" in output
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_file_not_found(self, mock_run):
         """Test command not found"""
         mock_run.side_effect = FileNotFoundError("nope")
@@ -427,7 +446,7 @@ class TestRunCommand:
         assert success is False
         assert "nope" in output
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_unexpected_error(self, mock_run):
         """Test unexpected exception"""
         mock_run.side_effect = RuntimeError("boom")
@@ -435,7 +454,7 @@ class TestRunCommand:
         assert success is False
         assert "boom" in output
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_no_capture(self, mock_run):
         """Test command without capture"""
         mock_run.return_value = Mock(returncode=0, stdout=None, stderr=None)
@@ -491,7 +510,7 @@ class TestSA65SubprocessEnvScoping:
             f"got: {_env['PYTHONPATH']}"
         )
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_run_command_default_env_is_none(self, mock_run):
         """``_run_command`` must not pass an ``env`` kwarg by default."""
         mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
@@ -503,7 +522,7 @@ class TestSA65SubprocessEnvScoping:
             f"Expected env=None for foreign subprocess, got {_call_kwargs.get('env')}"
         )
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_run_migrations_in_docker_passes_quickscale_env(self, mock_run, tmp_path):
         """``_run_migrations_in_docker_impl`` must pass the scoped env
         so the nested ``quickscale_cli.main`` child can resolve packages."""
@@ -516,7 +535,7 @@ class TestSA65SubprocessEnvScoping:
             Path("/tmp/test"),
         )
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_start_docker_impl_non_verbose_passes_quickscale_env(
         self, mock_run, tmp_path
     ):
@@ -533,7 +552,7 @@ class TestSA65SubprocessEnvScoping:
             False,
         )
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_start_docker_impl_verbose_passes_quickscale_env(self, mock_run, tmp_path):
         """``_start_docker_impl`` (verbose path) must pass the scoped env
         to the nested ``quickscale_cli.main`` child."""
@@ -548,7 +567,7 @@ class TestSA65SubprocessEnvScoping:
             True,
         )
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_verifier_compose_marker_reaches_nested_up(self, mock_run, monkeypatch):
         """The verifier-owned Compose marker survives apply's env hop."""
         marker = "qs-sa117b-" + "a" * 32
@@ -560,7 +579,7 @@ class TestSA65SubprocessEnvScoping:
         nested_env = mock_run.call_args.kwargs["env"]
         assert nested_env["QUICKSCALE_VERIFY_COMPOSE_PROJECT"] == marker
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_verifier_compose_marker_reaches_verbose_nested_up(
         self, mock_run, monkeypatch
     ):
@@ -576,7 +595,7 @@ class TestSA65SubprocessEnvScoping:
             == marker
         )
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_nonverbose_nested_up_without_marker_preserves_argv(
         self, mock_run, monkeypatch
     ):
@@ -594,7 +613,7 @@ class TestSA65SubprocessEnvScoping:
             "--build",
         ]
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_verbose_nested_up_without_marker_preserves_argv(
         self, mock_run, monkeypatch
     ):
@@ -621,7 +640,7 @@ class TestSA65SubprocessEnvScoping:
 class TestGenerateProject:
     """Tests for _generate_project"""
 
-    @patch("quickscale_cli.commands.apply_command.ProjectGenerator")
+    @patch("quickscale_core.generator.ProjectGenerator")
     def test_success(self, mock_gen_cls):
         """Test successful project generation"""
         mock_config = Mock()
@@ -632,7 +651,7 @@ class TestGenerateProject:
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is True
 
-    @patch("quickscale_cli.commands.apply_command.ProjectGenerator")
+    @patch("quickscale_core.generator.ProjectGenerator")
     def test_removed_theme_value_error_is_handled(self, mock_gen_cls):
         """Unsupported themes should be surfaced as invalid configuration."""
         mock_gen_cls.side_effect = ValueError("Invalid theme 'showcase_htmx'")
@@ -644,7 +663,7 @@ class TestGenerateProject:
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
 
-    @patch("quickscale_cli.commands.apply_command.ProjectGenerator")
+    @patch("quickscale_core.generator.ProjectGenerator")
     def test_file_exists_error(self, mock_gen_cls):
         """Test FileExistsError handling"""
         mock_gen_cls.return_value.generate.side_effect = FileExistsError()
@@ -656,7 +675,7 @@ class TestGenerateProject:
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
 
-    @patch("quickscale_cli.commands.apply_command.ProjectGenerator")
+    @patch("quickscale_core.generator.ProjectGenerator")
     def test_value_error(self, mock_gen_cls):
         """Test ValueError handling"""
         mock_gen_cls.return_value.generate.side_effect = ValueError("bad config")
@@ -668,7 +687,7 @@ class TestGenerateProject:
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
 
-    @patch("quickscale_cli.commands.apply_command.ProjectGenerator")
+    @patch("quickscale_core.generator.ProjectGenerator")
     def test_generic_error(self, mock_gen_cls):
         """Test generic exception handling"""
         mock_gen_cls.return_value.generate.side_effect = RuntimeError("oops")
@@ -680,7 +699,7 @@ class TestGenerateProject:
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
 
-    @patch("quickscale_cli.commands.apply_command.ProjectGenerator")
+    @patch("quickscale_core.generator.ProjectGenerator")
     def test_selected_modules_forwarded_from_quickscale_config(self, mock_gen_cls):
         """Fresh apply must forward ``selected_modules`` from ``config.modules``.
 
@@ -708,7 +727,7 @@ class TestGenerateProject:
             selected_modules=["auth", "blog", "notifications"],
         )
 
-    @patch("quickscale_cli.commands.apply_command.ProjectGenerator")
+    @patch("quickscale_core.generator.ProjectGenerator")
     def test_selected_modules_empty_list_when_no_modules(self, mock_gen_cls):
         """An empty ``modules`` block should forward an empty selection list."""
         mock_config = Mock()
@@ -734,28 +753,28 @@ class TestGenerateProject:
 class TestGitOperations:
     """Tests for _init_git, _git_commit"""
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_init_git_success(self, mock_run):
         """Test successful git init"""
         mock_run.return_value = (True, "")
         assert _init_git(Path("/tmp/proj")) is True
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_init_git_failure(self, mock_run):
         """Test failed git init"""
         mock_run.return_value = (False, "error")
         assert _init_git(Path("/tmp/proj")) is False
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("subprocess.run")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_git_commit_success(self, mock_run, mock_subprocess):
         """Test successful git commit"""
         mock_subprocess.return_value = Mock(returncode=0, stdout="tree123\n", stderr="")
         mock_run.return_value = (True, "")
         assert _git_commit(Path("/tmp/proj"), "msg") is True
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("subprocess.run")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_git_commit_add_fails(self, mock_run, mock_subprocess):
         """Test git commit when git add fails"""
         mock_subprocess.side_effect = [
@@ -774,7 +793,7 @@ class TestGitOperations:
 class TestEmbedModule:
     """Tests for _embed_module"""
 
-    @patch("quickscale_cli.commands.apply_command.embed_module")
+    @patch("quickscale_cli.commands._module_embed.embed_module")
     def test_success(self, mock_embed):
         """Test successful module embedding"""
         mock_embed.return_value = True
@@ -791,7 +810,7 @@ class TestEmbedModule:
             provenance_sink=None,
         )
 
-    @patch("quickscale_cli.commands.apply_command.embed_module")
+    @patch("quickscale_cli.commands._module_embed.embed_module")
     def test_success_skip_auth_migration_check(self, mock_embed):
         """Test module embedding with auth migration check bypass."""
         mock_embed.return_value = True
@@ -825,21 +844,21 @@ class TestEmbedModule:
 
         with (
             patch(
-                "quickscale_cli.commands.module_commands._validate_git_environment",
+                "quickscale_cli.commands._module_shared._validate_git_environment",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._validate_module_not_exists",
+                "quickscale_cli.commands._module_shared._validate_module_not_exists",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._validate_remote_branch",
+                "quickscale_cli.commands._module_shared._validate_remote_branch",
                 return_value=True,
             ),
-            patch("quickscale_cli.commands.module_commands.run_git_subtree_add"),
-            patch("quickscale_cli.commands.module_commands.add_module"),
+            patch("quickscale_core.utils.git_subtree.run_git_subtree_add"),
+            patch("quickscale_core.config.add_module"),
             patch(
-                "quickscale_cli.commands.module_commands.regenerate_managed_wiring"
+                "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring"
             ) as mock_regenerate,
         ):
             result = _embed_module(tmp_path, "blog")
@@ -847,13 +866,13 @@ class TestEmbedModule:
         assert result is True
         mock_regenerate.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command.embed_module")
+    @patch("quickscale_cli.commands._module_embed.embed_module")
     def test_failure(self, mock_embed):
         """Test failed module embedding"""
         mock_embed.return_value = False
         assert _embed_module(Path("/tmp/proj"), "auth") is False
 
-    @patch("quickscale_cli.commands.apply_command.embed_module")
+    @patch("quickscale_cli.commands._module_embed.embed_module")
     def test_exception(self, mock_embed):
         """Test exception during module embedding"""
         mock_embed.side_effect = RuntimeError("oops")
@@ -868,19 +887,19 @@ class TestEmbedModule:
 class TestPostGenerationHelpers:
     """Tests for poetry install and migrations helpers"""
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_poetry_install(self, mock_run):
         """Test poetry install wrapper"""
         mock_run.return_value = (True, "")
         assert _run_poetry_install(Path("/tmp/proj")) is True
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_poetry_lock(self, mock_run):
         """Test poetry lock wrapper"""
         mock_run.return_value = (True, "")
         assert _run_poetry_lock(Path("/tmp/proj")) is True
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_poetry_install_uses_isolated_env(self, mock_run):
         """poetry install must not inherit an ambient VIRTUAL_ENV."""
         mock_run.return_value = (True, "")
@@ -889,7 +908,7 @@ class TestPostGenerationHelpers:
         assert "VIRTUAL_ENV" not in passed_env
         assert passed_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_poetry_lock_uses_isolated_env(self, mock_run):
         """poetry lock must not inherit an ambient VIRTUAL_ENV."""
         mock_run.return_value = (True, "")
@@ -923,13 +942,13 @@ class TestPostGenerationHelpers:
         assert env["DJANGO_SETTINGS_MODULE"] == "generated.settings.test_e2e"
         assert env["POETRY_CACHE_DIR"] == "/tmp/worker-cache"
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_migrations(self, mock_run):
         """Test run migrations wrapper"""
         mock_run.return_value = (True, "")
         assert _run_migrations(Path("/tmp/proj")) is True
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_migrations_uses_isolated_poetry_env(
         self, mock_run: Mock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -948,7 +967,7 @@ class TestPostGenerationHelpers:
         assert f"{fake_venv}/bin" not in passed_env["PATH"].split(":")
         assert passed_env["POETRY_VIRTUALENVS_IN_PROJECT"] == "true"
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_migrations_in_docker(self, mock_run):
         """Test run migrations in docker wrapper"""
         mock_run.return_value = (True, "")
@@ -963,7 +982,7 @@ class TestPostGenerationHelpers:
 class TestStartDocker:
     """Tests for _start_docker"""
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands._git_ops._run_command")
     def test_start_docker_no_verbose(self, mock_run):
         """Test Docker start without verbose"""
         mock_run.return_value = (True, "")
@@ -977,25 +996,25 @@ class TestStartDocker:
             env=ANY,
         )
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_start_docker_verbose_success(self, mock_run):
         """Test Docker start with verbose output"""
         mock_run.return_value = Mock(returncode=0)
         assert _start_docker(Path("/tmp/proj"), build=True, verbose=True) is True
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_start_docker_verbose_failure(self, mock_run):
         """Test Docker start verbose failure"""
         mock_run.return_value = Mock(returncode=1)
         assert _start_docker(Path("/tmp/proj"), build=True, verbose=True) is False
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_start_docker_verbose_file_not_found(self, mock_run):
         """Test Docker start verbose command not found"""
         mock_run.side_effect = FileNotFoundError()
         assert _start_docker(Path("/tmp/proj"), build=True, verbose=True) is False
 
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("subprocess.run")
     def test_start_docker_verbose_exception(self, mock_run):
         """Test Docker start verbose generic exception"""
         mock_run.side_effect = RuntimeError("boom")
@@ -1010,7 +1029,7 @@ class TestStartDocker:
 class TestLoadModuleManifests:
     """Tests for _load_module_manifests"""
 
-    @patch("quickscale_cli.commands.apply_command.get_manifest_for_module")
+    @patch("quickscale_core.manifest.loader.get_manifest_for_module")
     def test_loads_manifests(self, mock_get):
         """Test loading module manifests"""
         mock_manifest = Mock()
@@ -1019,14 +1038,14 @@ class TestLoadModuleManifests:
         assert "auth" in result
         assert "blog" in result
 
-    @patch("quickscale_cli.commands.apply_command.get_manifest_for_module")
+    @patch("quickscale_core.manifest.loader.get_manifest_for_module")
     def test_skips_missing_manifests(self, mock_get):
         """Test skipping modules without manifests"""
         mock_get.return_value = None
         result = _load_module_manifests(Path("/tmp"), ["auth"])
         assert result == {}
 
-    @patch("quickscale_cli.commands.apply_command.get_manifest_for_module")
+    @patch("quickscale_core.manifest.loader.get_manifest_for_module")
     def test_strict_manifest_errors_propagate(self, mock_get):
         """Strict manifest mode should fail instead of silently degrading."""
         mock_get.side_effect = ManifestError("bad manifest", "auth")
@@ -1844,9 +1863,7 @@ class TestHandleDeltaAndExistingState:
         delta.has_changes = False
         state = Mock()
 
-        with patch(
-            "quickscale_cli.commands.apply_command.format_delta", return_value="none"
-        ):
+        with patch("quickscale_core.schema.delta.format_delta", return_value="none"):
             _handle_delta_and_existing_state(
                 delta,
                 state,
@@ -1862,9 +1879,7 @@ class TestHandleDeltaAndExistingState:
         delta.theme_changed = False
         state = Mock()
 
-        with patch(
-            "quickscale_cli.commands.apply_command.format_delta", return_value="changes"
-        ):
+        with patch("quickscale_core.schema.delta.format_delta", return_value="changes"):
             with pytest.raises(click.Abort):
                 _handle_delta_and_existing_state(delta, state)
 
@@ -1887,9 +1902,7 @@ class TestHandleDeltaAndExistingState:
         delta.get_all_immutable_changes.return_value = [("auth", change)]
         state = Mock()
 
-        with patch(
-            "quickscale_cli.commands.apply_command.format_delta", return_value="changes"
-        ):
+        with patch("quickscale_core.schema.delta.format_delta", return_value="changes"):
             with pytest.raises(click.Abort):
                 _handle_delta_and_existing_state(delta, state)
 
@@ -1902,11 +1915,9 @@ class TestHandleDeltaAndExistingState:
         delta.theme_changed = True
         state = Mock()
 
-        with patch(
-            "quickscale_cli.commands.apply_command.format_delta", return_value="changes"
-        ):
+        with patch("quickscale_core.schema.delta.format_delta", return_value="changes"):
             with patch(
-                "quickscale_cli.commands.apply_command.click.confirm",
+                "click.confirm",
                 return_value=False,
             ):
                 with pytest.raises(click.Abort):
@@ -1921,11 +1932,9 @@ class TestHandleDeltaAndExistingState:
         delta.theme_changed = True
         state = Mock()
 
-        with patch(
-            "quickscale_cli.commands.apply_command.click.confirm", return_value=True
-        ):
+        with patch("click.confirm", return_value=True):
             with patch(
-                "quickscale_cli.commands.apply_command.format_delta",
+                "quickscale_core.schema.delta.format_delta",
                 return_value="changes",
             ):
                 _handle_delta_and_existing_state(delta, state)
@@ -1989,9 +1998,9 @@ class TestCheckOutputDirectory:
 class TestInitGitWithConfig:
     """Tests for _init_git_with_config"""
 
-    @patch("quickscale_cli.commands.apply_command._git_commit")
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command._init_git")
+    @patch("quickscale_cli.commands._git_ops._git_commit")
+    @patch("subprocess.run")
+    @patch("quickscale_cli.commands._git_ops._init_git")
     def test_success(self, mock_init, mock_run, mock_commit):
         """Test successful git init with config"""
         mock_init.return_value = True
@@ -1999,16 +2008,16 @@ class TestInitGitWithConfig:
         mock_commit.return_value = True
         _init_git_with_config(Path("/tmp/proj"))
 
-    @patch("quickscale_cli.commands.apply_command._init_git")
+    @patch("quickscale_cli.commands._git_ops._init_git")
     def test_git_init_fails(self, mock_init):
         """Test when git init fails"""
         mock_init.return_value = False
         _init_git_with_config(Path("/tmp/proj"))
         # Should not raise
 
-    @patch("quickscale_cli.commands.apply_command._git_commit")
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command._init_git")
+    @patch("quickscale_cli.commands._git_ops._git_commit")
+    @patch("subprocess.run")
+    @patch("quickscale_cli.commands._git_ops._init_git")
     def test_commit_fails(self, mock_init, mock_run, mock_commit):
         """Test when initial commit fails"""
         mock_init.return_value = True
@@ -2026,12 +2035,12 @@ class TestInitGitWithConfig:
 class TestCommitPendingConfigChanges:
     """Tests for _commit_pending_config_changes"""
 
-    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_no_op_when_working_directory_is_clean(self, mock_clean):
         """Test that function does nothing when working directory is already clean"""
         mock_clean.return_value = True
 
-        with patch("quickscale_cli.commands.apply_command.subprocess.run") as mock_run:
+        with patch("subprocess.run") as mock_run:
             _commit_pending_config_changes(Path("/tmp/test"))
 
         mock_run.assert_not_called()
@@ -2041,15 +2050,15 @@ class TestCommitPendingConfigChanges:
         from quickscale_core.utils.git_utils import GitError
 
         with patch(
-            "quickscale_cli.commands.apply_command.is_working_directory_clean",
+            "quickscale_core.utils.git_repo.is_working_directory_clean",
             side_effect=GitError("status unavailable"),
         ):
             with pytest.raises(GitError, match="status unavailable"):
                 _commit_pending_config_changes(Path("/tmp/test"))
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    @patch("quickscale_cli.commands._git_ops._run_command")
+    @patch("subprocess.run")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_stages_and_commits_config_files_when_dirty(
         self, mock_clean, mock_subprocess, mock_run_command
     ):
@@ -2093,9 +2102,9 @@ class TestCommitPendingConfigChanges:
             "Committing pending QuickScale configuration changes",
         )
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    @patch("quickscale_cli.commands._git_ops._run_command")
+    @patch("subprocess.run")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_excludes_apply_recovery_snapshot_from_checkpoint_pathspec(
         self, mock_clean, mock_subprocess, mock_run_command
     ):
@@ -2139,9 +2148,9 @@ class TestCommitPendingConfigChanges:
             ".quickscale/state.yml",
         ]
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    @patch("quickscale_cli.commands._git_ops._run_command")
+    @patch("subprocess.run")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_only_transient_apply_recovery_dirty_skips_checkpoint_commit(
         self, mock_clean, mock_subprocess, mock_run_command
     ):
@@ -2157,9 +2166,9 @@ class TestCommitPendingConfigChanges:
 
         mock_run_command.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    @patch("quickscale_cli.commands._git_ops._run_command")
+    @patch("subprocess.run")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_aborts_when_unrelated_changes_are_already_staged(
         self, mock_clean, mock_subprocess, mock_run_command
     ):
@@ -2180,9 +2189,9 @@ class TestCommitPendingConfigChanges:
 
         mock_run_command.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    @patch("quickscale_cli.commands._git_ops._run_command")
+    @patch("subprocess.run")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_aborts_when_unrelated_unstaged_changes_are_present(
         self, mock_clean, mock_subprocess, mock_run_command
     ):
@@ -2199,9 +2208,9 @@ class TestCommitPendingConfigChanges:
 
         mock_run_command.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    @patch("quickscale_cli.commands._git_ops._run_command")
+    @patch("subprocess.run")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_aborts_when_unrelated_untracked_changes_are_present(
         self, mock_clean, mock_subprocess, mock_run_command
     ):
@@ -2218,9 +2227,9 @@ class TestCommitPendingConfigChanges:
 
         mock_run_command.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._run_command")
-    @patch("quickscale_cli.commands.apply_command.subprocess.run")
-    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    @patch("quickscale_cli.commands._git_ops._run_command")
+    @patch("subprocess.run")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
     def test_commits_both_quickscale_yml_and_state_yml(
         self, mock_clean, mock_subprocess, mock_run_command
     ):
@@ -2315,10 +2324,10 @@ class TestCommitPendingConfigChanges:
         assert ".quickscale/apply-recovery.yml" not in commit_paths
         assert "?? .quickscale/apply-recovery.yml" in status_output
 
-    @patch("quickscale_cli.commands.apply_command._handle_delta_and_existing_state")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._commit_pending_config_changes")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._context._handle_delta_and_existing_state")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._commit_pending_config_changes")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_execute_apply_steps_aborts_before_embed_when_pre_embed_commit_aborts(
         self,
         mock_generate_new_project,
@@ -2389,8 +2398,8 @@ class TestEmbedModulesStep:
             failed_module=None,
         )
 
-    @patch("quickscale_cli.commands.apply_command._git_commit")
-    @patch("quickscale_cli.commands.apply_command._embed_module")
+    @patch("quickscale_cli.commands._git_ops._git_commit")
+    @patch("quickscale_cli.commands._embedding._embed_module")
     def test_successful_embed(self, mock_embed, mock_commit):
         """Test successful module embedding"""
         mock_embed.return_value = True
@@ -2408,8 +2417,8 @@ class TestEmbedModulesStep:
             provenance_sink=ANY,
         )
 
-    @patch("quickscale_cli.commands.apply_command._git_commit")
-    @patch("quickscale_cli.commands.apply_command._embed_module")
+    @patch("quickscale_cli.commands._git_ops._git_commit")
+    @patch("quickscale_cli.commands._embedding._embed_module")
     def test_successful_embed_aborts_when_checkpoint_commit_fails(
         self, mock_embed, mock_commit
     ):
@@ -2422,9 +2431,9 @@ class TestEmbedModulesStep:
 
         mock_commit.assert_called_once_with(Path("/tmp"), "Add module: auth")
 
-    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
-    @patch("quickscale_cli.commands.apply_command._git_commit")
-    @patch("quickscale_cli.commands.apply_command._embed_module")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
+    @patch("quickscale_cli.commands._git_ops._git_commit")
+    @patch("quickscale_cli.commands._embedding._embed_module")
     def test_failed_embed(self, mock_embed, mock_commit, mock_clean):
         """Test failed module embedding fails fast."""
         mock_embed.return_value = False
@@ -2437,9 +2446,9 @@ class TestEmbedModulesStep:
             failed_module="auth",
         )
 
-    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
-    @patch("quickscale_cli.commands.apply_command._git_commit")
-    @patch("quickscale_cli.commands.apply_command._embed_module")
+    @patch("quickscale_core.utils.git_repo.is_working_directory_clean")
+    @patch("quickscale_cli.commands._git_ops._git_commit")
+    @patch("quickscale_cli.commands._embedding._embed_module")
     def test_failed_embed_aborts_when_partial_checkpoint_commit_fails(
         self, mock_embed, mock_commit, mock_clean
     ):
@@ -2456,8 +2465,8 @@ class TestEmbedModulesStep:
             "Partial module: auth (incomplete)",
         )
 
-    @patch("quickscale_cli.commands.apply_command._git_commit")
-    @patch("quickscale_cli.commands.apply_command._embed_module")
+    @patch("quickscale_cli.commands._git_ops._git_commit")
+    @patch("quickscale_cli.commands._embedding._embed_module")
     def test_existing_project_does_not_skip_auth_guard(self, mock_embed, mock_commit):
         """Existing projects should still run auth migration guardrail."""
         mock_embed.return_value = True
@@ -2472,8 +2481,8 @@ class TestEmbedModulesStep:
             provenance_sink=ANY,
         )
 
-    @patch("quickscale_cli.commands.apply_command._git_commit")
-    @patch("quickscale_cli.commands.apply_command._embed_module")
+    @patch("quickscale_cli.commands._git_ops._git_commit")
+    @patch("quickscale_cli.commands._embedding._embed_module")
     def test_provenance_collected_from_embed(self, mock_embed, mock_commit):
         """Phase 1 checkpoint: provenance payloads are collected per module."""
         mock_commit.return_value = True
@@ -2507,8 +2516,8 @@ class TestEmbedModulesStep:
             result.provenance_payloads["blog"].tracking_branch == "splits/blog-module"
         )
 
-    @patch("quickscale_cli.commands.apply_command._git_commit", return_value=True)
-    @patch("quickscale_cli.commands.apply_command._embed_module", return_value=True)
+    @patch("quickscale_cli.commands._git_ops._git_commit", return_value=True)
+    @patch("quickscale_cli.commands._embedding._embed_module", return_value=True)
     def test_split_ref_overrides_route_to_matching_modules(
         self, mock_embed, mock_commit
     ):
@@ -2832,9 +2841,9 @@ class TestProvenancePersistence:
 class TestRunPostGenerationSteps:
     """Tests for _run_post_generation_steps"""
 
-    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
-    @patch("quickscale_cli.commands.apply_command._run_migrations")
-    @patch("quickscale_cli.commands.apply_command._run_poetry_install")
+    @patch("quickscale_cli.commands._runtime._run_poetry_lock")
+    @patch("quickscale_cli.commands._runtime._run_migrations")
+    @patch("quickscale_cli.commands._runtime._run_poetry_install")
     def test_all_succeed(self, mock_poetry, mock_migrate, mock_lock):
         """Test when all steps succeed"""
         mock_lock.return_value = True
@@ -2842,9 +2851,9 @@ class TestRunPostGenerationSteps:
         mock_migrate.return_value = True
         assert _run_post_generation_steps(Path("/tmp")) is True
 
-    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
-    @patch("quickscale_cli.commands.apply_command._run_migrations")
-    @patch("quickscale_cli.commands.apply_command._run_poetry_install")
+    @patch("quickscale_cli.commands._runtime._run_poetry_lock")
+    @patch("quickscale_cli.commands._runtime._run_migrations")
+    @patch("quickscale_cli.commands._runtime._run_poetry_install")
     def test_poetry_lock_fails(self, mock_poetry, mock_migrate, mock_lock):
         """Test when poetry lock fails"""
         mock_lock.return_value = False
@@ -2855,9 +2864,9 @@ class TestRunPostGenerationSteps:
         mock_poetry.assert_not_called()
         mock_migrate.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
-    @patch("quickscale_cli.commands.apply_command._run_migrations")
-    @patch("quickscale_cli.commands.apply_command._run_poetry_install")
+    @patch("quickscale_cli.commands._runtime._run_poetry_lock")
+    @patch("quickscale_cli.commands._runtime._run_migrations")
+    @patch("quickscale_cli.commands._runtime._run_poetry_install")
     def test_poetry_install_fails(self, mock_poetry, mock_migrate, mock_lock):
         """Test when poetry install fails"""
         mock_lock.return_value = True
@@ -2866,9 +2875,9 @@ class TestRunPostGenerationSteps:
         assert _run_post_generation_steps(Path("/tmp")) is False
         mock_migrate.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
-    @patch("quickscale_cli.commands.apply_command._run_migrations")
-    @patch("quickscale_cli.commands.apply_command._run_poetry_install")
+    @patch("quickscale_cli.commands._runtime._run_poetry_lock")
+    @patch("quickscale_cli.commands._runtime._run_migrations")
+    @patch("quickscale_cli.commands._runtime._run_poetry_install")
     def test_migrations_not_run_in_step_10_anymore(
         self, mock_poetry, mock_migrate, mock_lock
     ):
@@ -2881,9 +2890,9 @@ class TestRunPostGenerationSteps:
         assert _run_post_generation_steps(Path("/tmp")) is True
         mock_migrate.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
-    @patch("quickscale_cli.commands.apply_command._run_migrations")
-    @patch("quickscale_cli.commands.apply_command._run_poetry_install")
+    @patch("quickscale_cli.commands._runtime._run_poetry_lock")
+    @patch("quickscale_cli.commands._runtime._run_migrations")
+    @patch("quickscale_cli.commands._runtime._run_poetry_install")
     def test_migrations_not_run_in_step_10(self, mock_poetry, mock_migrate, mock_lock):
         """AF5 Phase 4: Step 10 does not run migrations (deferred to step 13)."""
         mock_lock.return_value = True
@@ -2895,7 +2904,7 @@ class TestRunPostGenerationSteps:
 class TestSyncProjectModuleDependenciesForApply:
     """Tests for apply-time batch dependency synchronization."""
 
-    @patch("quickscale_cli.commands.apply_command.sync_project_module_dependencies")
+    @patch("quickscale_cli.utils._dependency_sync_ops.sync_project_module_dependencies")
     def test_syncs_all_configured_modules(self, mock_sync):
         qs_config = Mock()
         qs_config.modules = {
@@ -2921,7 +2930,7 @@ class TestSyncProjectModuleDependenciesForApply:
             },
         )
 
-    @patch("quickscale_cli.commands.apply_command.sync_project_module_dependencies")
+    @patch("quickscale_cli.utils._dependency_sync_ops.sync_project_module_dependencies")
     def test_sync_failure_returns_false(self, mock_sync):
         qs_config = Mock()
         qs_config.modules = {"auth": Mock(options={})}
@@ -2980,7 +2989,7 @@ class TestSyncProjectCoreDependency:
         return wheelhouse
 
     def test_rewrites_pin_to_local_wheel_once(self, tmp_path):
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_core_dependency,
         )
 
@@ -3006,7 +3015,7 @@ class TestSyncProjectCoreDependency:
         assert sync_project_core_dependency(tmp_path, wheelhouse) is False
 
     def test_project_without_the_pin_is_left_untouched(self, tmp_path):
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_core_dependency,
         )
 
@@ -3019,7 +3028,7 @@ class TestSyncProjectCoreDependency:
         assert "quickscale-core" not in (tmp_path / "pyproject.toml").read_text()
 
     def test_existing_local_path_resolution_is_preserved(self, tmp_path):
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_core_dependency,
         )
 
@@ -3038,8 +3047,8 @@ class TestSyncProjectCoreDependency:
         )
 
     def test_wheel_outside_the_lockstep_pin_is_refused(self, tmp_path):
-        from quickscale_cli.utils.module_dependency_sync import (
-            DependencySyncError,
+        from quickscale_cli.utils._dependency_io import DependencySyncError
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_core_dependency,
         )
 
@@ -3053,7 +3062,7 @@ class TestSyncProjectCoreDependency:
         assert ">=0.89.0,<0.90.0" in (tmp_path / "pyproject.toml").read_text()
 
     def test_empty_wheelhouse_is_a_noop(self, tmp_path):
-        from quickscale_cli.utils.module_dependency_sync import (
+        from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_core_dependency,
         )
 
@@ -3174,7 +3183,7 @@ class TestSaveProjectState:
         delta = Mock()
         delta.config_deltas = {}
 
-        with patch("quickscale_cli.commands.apply_command.StateManager") as mock_sm:
+        with patch("quickscale_core.schema.state_schema.StateManager") as mock_sm:
             mock_sm.return_value.save.side_effect = OSError("write error")
             assert _save_project_state(tmp_path, config, None, [], delta) is False
 
@@ -3799,24 +3808,24 @@ class TestExecuteApplySteps:
     def _stub_post_embed_manifest_load(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Downstream step tests use mocked embeds, so bypass disk manifest I/O."""
         monkeypatch.setattr(
-            "quickscale_cli.commands.apply_command._load_module_manifests",
+            "quickscale_cli.commands._config._load_module_manifests",
             lambda *args, **kwargs: {},
         )
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_apply_uses_single_final_managed_wiring_regeneration(
         self,
         mock_generate_new_project,
@@ -3868,19 +3877,19 @@ class TestExecuteApplySteps:
 
         mock_regenerate_wiring.assert_called_once_with(ctx, ["blog"])
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_partial_embed_failure_persists_completed_modules_before_abort(
         self,
         mock_generate_new_project,
@@ -3918,7 +3927,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+            "quickscale_cli.commands._state._save_apply_recovery_state"
         ) as mock_save_recovery:
             with pytest.raises(click.Abort):
                 _execute_apply_steps(
@@ -3953,11 +3962,11 @@ class TestExecuteApplySteps:
         mock_run_post.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._clear_apply_recovery_state")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._state._clear_apply_recovery_state")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_partial_embed_failure_does_not_clear_recovery_when_state_save_fails(
         self,
         mock_generate_new_project,
@@ -4005,20 +4014,20 @@ class TestExecuteApplySteps:
         assert "could not save partial authoritative state" in text
         mock_clear_recovery.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_dependency_install_failure_aborts_apply(
         self,
         mock_generate_new_project,
@@ -4061,7 +4070,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+            "quickscale_cli.commands._state._save_apply_recovery_state"
         ) as mock_save_recovery:
             with pytest.raises(click.Abort):
                 _execute_apply_steps(
@@ -4085,13 +4094,13 @@ class TestExecuteApplySteps:
         assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_display_next_steps.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_managed_wiring_failure_aborts_when_recovery_state_cannot_be_saved(
         self,
         mock_generate_new_project,
@@ -4125,7 +4134,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+            "quickscale_cli.commands._state._save_apply_recovery_state",
             return_value=False,
         ) as mock_save_recovery:
             with pytest.raises(click.Abort):
@@ -4156,17 +4165,17 @@ class TestExecuteApplySteps:
         assert list(state_snapshot.modules) == ["auth"]
         mock_display_next_steps.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_analytics_env_sync_failure_aborts_apply(
         self,
         mock_generate_new_project,
@@ -4206,7 +4215,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+            "quickscale_cli.commands._state._save_apply_recovery_state"
         ) as mock_save_recovery:
             with pytest.raises(click.Abort):
                 _execute_apply_steps(
@@ -4230,21 +4239,21 @@ class TestExecuteApplySteps:
         mock_run_post.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_billing_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_billing_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_billing_env_sync_failure_aborts_apply(
         self,
         mock_generate_new_project,
@@ -4287,7 +4296,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+            "quickscale_cli.commands._state._save_apply_recovery_state"
         ) as mock_save_recovery:
             with pytest.raises(click.Abort):
                 _execute_apply_steps(
@@ -4312,20 +4321,20 @@ class TestExecuteApplySteps:
         mock_run_post.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_backups_gitignore_failure_aborts_apply_and_saves_recovery(
         self,
         mock_generate_new_project,
@@ -4364,7 +4373,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+            "quickscale_cli.commands._state._save_apply_recovery_state"
         ) as mock_save_recovery:
             with pytest.raises(click.Abort):
                 _execute_apply_steps(
@@ -4406,19 +4415,19 @@ class TestExecuteApplySteps:
             },
         ],
     )
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
-    @patch("quickscale_cli.commands.apply_command._start_docker")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_migrations_in_docker")
+    @patch("quickscale_cli.commands._runtime._start_docker")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_new_project_all_none_some_modules_use_same_docker_path(
         self,
         mock_generate_new_project,
@@ -4488,19 +4497,19 @@ class TestExecuteApplySteps:
             existing_project=False,
         )
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
-    @patch("quickscale_cli.commands.apply_command._start_docker")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_migrations_in_docker")
+    @patch("quickscale_cli.commands._runtime._start_docker")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_new_project_without_docker_autostart_defers_migrations_in_post_step(
         self,
         mock_generate_new_project,
@@ -4553,19 +4562,19 @@ class TestExecuteApplySteps:
         mock_start_docker.assert_not_called()
         mock_run_migrations_in_docker.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
-    @patch("quickscale_cli.commands.apply_command._start_docker")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_migrations_in_docker")
+    @patch("quickscale_cli.commands._runtime._start_docker")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_new_project_no_docker_with_docker_autostart_skips_all_migrations(
         self,
         mock_generate_new_project,
@@ -4622,23 +4631,23 @@ class TestExecuteApplySteps:
             existing_project=False,
         )
 
-    @patch("quickscale_cli.commands.apply_command._handle_delta_and_existing_state")
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_migrations")
-    @patch("quickscale_cli.commands.apply_command._run_poetry_install")
-    @patch("quickscale_cli.commands.apply_command._run_poetry_lock")
+    @patch("quickscale_cli.commands._context._handle_delta_and_existing_state")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_migrations")
+    @patch("quickscale_cli.commands._runtime._run_poetry_install")
+    @patch("quickscale_cli.commands._runtime._run_poetry_lock")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_existing_project_local_migrations_failure_aborts_apply_and_saves_recovery(
         self,
         mock_generate_new_project,
@@ -4697,7 +4706,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+            "quickscale_cli.commands._state._save_apply_recovery_state"
         ) as mock_save_recovery:
             with pytest.raises(click.Abort):
                 _execute_apply_steps(
@@ -4721,20 +4730,20 @@ class TestExecuteApplySteps:
         assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_display_next_steps.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_migrations")
-    @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
-    @patch("quickscale_cli.commands.apply_command._start_docker")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_migrations")
+    @patch("quickscale_cli.commands._runtime._run_migrations_in_docker")
+    @patch("quickscale_cli.commands._runtime._start_docker")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_docker_autostart_failure_aborts_apply(
         self,
         mock_generate_new_project,
@@ -4774,7 +4783,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+            "quickscale_cli.commands._state._save_apply_recovery_state"
         ) as mock_save_recovery:
             with pytest.raises(click.Abort):
                 _execute_apply_steps(
@@ -4800,20 +4809,20 @@ class TestExecuteApplySteps:
         assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_display_next_steps.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_migrations")
-    @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
-    @patch("quickscale_cli.commands.apply_command._start_docker")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_migrations")
+    @patch("quickscale_cli.commands._runtime._run_migrations_in_docker")
+    @patch("quickscale_cli.commands._runtime._start_docker")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_docker_migrations_failure_aborts_apply(
         self,
         mock_generate_new_project,
@@ -4854,7 +4863,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command._save_apply_recovery_state"
+            "quickscale_cli.commands._state._save_apply_recovery_state"
         ) as mock_save_recovery:
             with pytest.raises(click.Abort):
                 _execute_apply_steps(
@@ -4880,21 +4889,21 @@ class TestExecuteApplySteps:
         assert mock_save_recovery.call_args.kwargs["state_snapshot"] is not None
         mock_display_next_steps.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._clear_apply_recovery_state")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._clear_apply_recovery_state")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_authoritative_state_save_failure_preserves_recovery_and_aborts(
         self,
         mock_generate_new_project,
@@ -4940,7 +4949,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+            "quickscale_cli.commands._state._save_apply_recovery_state",
             return_value=True,
         ) as mock_save_recovery:
             with pytest.raises(click.Abort):
@@ -4986,14 +4995,14 @@ class TestExecuteApplySteps:
         """Pre-embed generation failure must abort apply before git init
         and before advisory lock acquisition."""
         with patch(
-            "quickscale_cli.commands.apply_command._generate_new_project",
+            "quickscale_cli.commands._generation._generate_new_project",
             side_effect=click.Abort(),
         ):
             with patch(
-                "quickscale_cli.commands.apply_command._init_git_with_config"
+                "quickscale_cli.commands._git_ops._init_git_with_config"
             ) as mock_init_git:
                 with patch(
-                    "quickscale_cli.commands.apply_command.AdvisoryLock"
+                    "quickscale_core.advisory_lock.AdvisoryLock"
                 ) as mock_lock_cls:
                     ctx = Mock()
                     ctx.existing_state = None
@@ -5010,17 +5019,17 @@ class TestExecuteApplySteps:
                     mock_init_git.assert_not_called()
                     mock_lock_cls.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_git_init_failure_does_not_block_apply(
         self,
         mock_generate_new_project,
@@ -5082,20 +5091,20 @@ class TestExecuteApplySteps:
     # F12.3b: Railway deploy integration                                  #
     # ------------------------------------------------------------------ #
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_railway_deploy_skipped_when_not_linked(
         self,
         mock_generate_new_project,
@@ -5152,20 +5161,20 @@ class TestExecuteApplySteps:
         mock_save_state.assert_called_once()
         mock_display_next_steps.assert_called_once()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_railway_deploy_triggers_when_linked(
         self,
         mock_generate_new_project,
@@ -5214,7 +5223,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command.deploy_railway_service",
+            "quickscale_cli.utils._railway_cli.deploy_railway_service",
         ) as mock_deploy:
             mock_deploy.return_value = Mock(
                 returncode=0, stderr="", stdout="Deploy started"
@@ -5234,20 +5243,20 @@ class TestExecuteApplySteps:
         mock_save_state.assert_called_once()
         mock_display_next_steps.assert_called_once()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_railway_deploy_failure_aborts_with_recovery(
         self,
         mock_generate_new_project,
@@ -5296,10 +5305,10 @@ class TestExecuteApplySteps:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command.deploy_railway_service",
+                "quickscale_cli.utils._railway_cli.deploy_railway_service",
             ) as mock_deploy,
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ) as mock_save_recovery,
         ):
@@ -5323,20 +5332,20 @@ class TestExecuteApplySteps:
         mock_save_state.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_railway_deploy_cli_not_installed_aborts_with_recovery(
         self,
         mock_generate_new_project,
@@ -5385,11 +5394,11 @@ class TestExecuteApplySteps:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command.deploy_railway_service",
+                "quickscale_cli.utils._railway_cli.deploy_railway_service",
                 side_effect=FileNotFoundError("Railway CLI not found"),
             ) as mock_deploy,
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ) as mock_save_recovery,
         ):
@@ -5409,20 +5418,20 @@ class TestExecuteApplySteps:
         mock_save_state.assert_not_called()
         mock_display_next_steps.assert_not_called()
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_railway_deploy_with_no_docker_and_docker_start(
         self,
         mock_generate_new_project,
@@ -5475,7 +5484,7 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.build = True
 
         with patch(
-            "quickscale_cli.commands.apply_command.deploy_railway_service",
+            "quickscale_cli.utils._railway_cli.deploy_railway_service",
         ) as mock_deploy:
             mock_deploy.return_value = Mock(
                 returncode=0, stderr="", stdout="Deploy started"
@@ -5499,16 +5508,14 @@ class TestExecuteApplySteps:
     # SA18.9: Step 4 abort path regression
     # ------------------------------------------------------------------
 
-    @patch("quickscale_cli.commands.apply_command._save_apply_recovery_state")
-    @patch(
-        "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply"
-    )
-    @patch("quickscale_cli.commands.apply_command._print_apply_failure_summary")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._state._save_apply_recovery_state")
+    @patch("quickscale_cli.commands._state._capture_managed_file_hashes_after_apply")
+    @patch("quickscale_cli.commands._finalize._print_apply_failure_summary")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_step4_hash_capture_failure_aborts_apply(
         self,
         mock_generate_new_project,
@@ -5577,16 +5584,14 @@ class TestExecuteApplySteps:
         # Verify subsequent steps were NOT reached
         mock_regenerate_wiring.assert_called_once()  # step 3 ran
 
-    @patch("quickscale_cli.commands.apply_command._save_apply_recovery_state")
-    @patch(
-        "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply"
-    )
-    @patch("quickscale_cli.commands.apply_command._print_apply_failure_summary")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    @patch("quickscale_cli.commands._state._save_apply_recovery_state")
+    @patch("quickscale_cli.commands._state._capture_managed_file_hashes_after_apply")
+    @patch("quickscale_cli.commands._finalize._print_apply_failure_summary")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
     def test_step4_hash_failure_recovery_save_fails_still_aborts(
         self,
         mock_generate_new_project,
@@ -5651,7 +5656,7 @@ class TestExecuteApplySteps:
 class TestGenerateWithExistingConfig:
     """Tests for _generate_with_existing_config"""
 
-    @patch("quickscale_cli.commands.apply_command._generate_project")
+    @patch("quickscale_cli.commands._generation._generate_project")
     def test_success(self, mock_gen, tmp_path):
         """Test generation with existing config"""
         output = tmp_path / "myapp"
@@ -5674,7 +5679,7 @@ class TestGenerateWithExistingConfig:
         assert config_file.read_text() == "original config"
         assert (output / "manage.py").exists()
 
-    @patch("quickscale_cli.commands.apply_command._generate_project")
+    @patch("quickscale_cli.commands._generation._generate_project")
     def test_failure(self, mock_gen, tmp_path):
         """Test generation failure"""
         output = tmp_path / "myapp"
@@ -5689,7 +5694,7 @@ class TestGenerateWithExistingConfig:
         with pytest.raises(click.Abort):
             _generate_with_existing_config(mock_config, output, config_file, False)
 
-    @patch("quickscale_cli.commands.apply_command._generate_project")
+    @patch("quickscale_cli.commands._generation._generate_project")
     def test_with_force(self, mock_gen, tmp_path):
         """Test generation with force flag"""
         output = tmp_path / "myapp"
@@ -5712,7 +5717,7 @@ class TestGenerateWithExistingConfig:
         assert not (output / "old_file.txt").exists()
         assert (output / "manage.py").exists()
 
-    @patch("quickscale_cli.commands.apply_command._generate_project")
+    @patch("quickscale_cli.commands._generation._generate_project")
     def test_force_with_failure_preserves_original(self, mock_gen, tmp_path):
         """Test force flag + generation failure preserves original project."""
         output = tmp_path / "myapp"
@@ -5738,7 +5743,7 @@ class TestGenerateWithExistingConfig:
         assert (output / "subdir" / "nested.txt").exists()
         assert (output / "subdir" / "nested.txt").read_text() == "nested"
 
-    @patch("quickscale_cli.commands.apply_command._generate_project")
+    @patch("quickscale_cli.commands._generation._generate_project")
     def test_force_staging_failure_rollback(self, mock_gen, tmp_path):
         """Force mode must restore original files if staging-phase filesystem ops fail.
 
@@ -5824,7 +5829,7 @@ class TestGenerateWithExistingConfig:
 
         with patch("tempfile.mkdtemp", tracking_mkdtemp):
             with patch(
-                "quickscale_cli.commands.apply_command._generate_project",
+                "quickscale_cli.commands._generation._generate_project",
                 side_effect=fake_generate,
             ):
                 _generate_with_existing_config(mock_config, output, config_file, True)
@@ -6222,8 +6227,8 @@ class TestCR002PostLockGateReEvaluation:
     must abort instead of continuing to mutate based on stale decisions.
     """
 
-    @patch("quickscale_cli.commands.apply_command._refresh_context_after_lock")
-    @patch("quickscale_cli.commands.apply_command.AdvisoryLock")
+    @patch("quickscale_cli.commands._context._refresh_context_after_lock")
+    @patch("quickscale_core.advisory_lock.AdvisoryLock")
     def test_post_lock_no_op_aborts_apply(self, mock_lock_cls, mock_refresh):
         """Apply must abort when post-lock refresh reveals no changes."""
 
@@ -6297,8 +6302,8 @@ class TestCR002PostLockGateReEvaluation:
         mock_lock.acquire.assert_called_once()
         mock_lock.release.assert_called_once()
 
-    @patch("quickscale_cli.commands.apply_command._refresh_context_after_lock")
-    @patch("quickscale_cli.commands.apply_command.AdvisoryLock")
+    @patch("quickscale_cli.commands._context._refresh_context_after_lock")
+    @patch("quickscale_core.advisory_lock.AdvisoryLock")
     def test_post_lock_immutable_changes_abort_apply(self, mock_lock_cls, mock_refresh):
         """Apply must abort when post-lock refresh reveals immutable changes."""
 
@@ -6366,7 +6371,7 @@ class TestCR002PostLockGateReEvaluation:
         ctx.had_existing_state = True
 
         with patch(
-            "quickscale_cli.commands.apply_command.format_delta",
+            "quickscale_core.schema.delta.format_delta",
             return_value="changes",
         ):
             with pytest.raises(click.Abort):
@@ -6381,8 +6386,8 @@ class TestCR002PostLockGateReEvaluation:
         mock_lock.acquire.assert_called_once()
         mock_lock.release.assert_called_once()
 
-    @patch("quickscale_cli.commands.apply_command._refresh_context_after_lock")
-    @patch("quickscale_cli.commands.apply_command.AdvisoryLock")
+    @patch("quickscale_cli.commands._context._refresh_context_after_lock")
+    @patch("quickscale_core.advisory_lock.AdvisoryLock")
     def test_post_lock_config_removal_aborts_apply(self, mock_lock_cls, mock_refresh):
         """Apply must abort when post-lock refresh reveals config-driven removals."""
 
@@ -6443,7 +6448,7 @@ class TestCR002PostLockGateReEvaluation:
         ctx.had_existing_state = True
 
         with patch(
-            "quickscale_cli.commands.apply_command.format_delta",
+            "quickscale_core.schema.delta.format_delta",
             return_value="changes",
         ):
             with pytest.raises(click.Abort):
@@ -6474,23 +6479,23 @@ class TestCRF12_3B_002RecoveryRerunMigrationGate:
     local migrations run before Railway deploy (CR-F12.3B-002).
     """
 
-    @patch("quickscale_cli.commands.apply_command._display_next_steps")
-    @patch("quickscale_cli.commands.apply_command._save_project_state")
-    @patch("quickscale_cli.commands.apply_command._run_migrations")
-    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands._finalize._display_next_steps")
+    @patch("quickscale_cli.commands._state._save_project_state")
+    @patch("quickscale_cli.commands._runtime._run_migrations")
+    @patch("quickscale_cli.commands._runtime._run_post_generation_steps")
     @patch(
-        "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply"
+        "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply"
     )
-    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
-    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
-    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
-    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
-    @patch("quickscale_cli.commands.apply_command._capture_git_index_snapshot")
-    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
-    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
-    @patch("quickscale_cli.commands.apply_command._generate_new_project")
-    @patch("quickscale_cli.commands.apply_command._refresh_context_after_lock")
-    @patch("quickscale_cli.commands.apply_command.AdvisoryLock")
+    @patch("quickscale_cli.commands._runtime._sync_analytics_env_example")
+    @patch("quickscale_cli.commands._runtime._sync_notifications_env_example")
+    @patch("quickscale_cli.commands._runtime._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands._context._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands._git_ops._capture_git_index_snapshot")
+    @patch("quickscale_cli.commands._embedding._embed_modules_step")
+    @patch("quickscale_cli.commands._git_ops._init_git_with_config")
+    @patch("quickscale_cli.commands._generation._generate_new_project")
+    @patch("quickscale_cli.commands._context._refresh_context_after_lock")
+    @patch("quickscale_core.advisory_lock.AdvisoryLock")
     def test_recovery_rerun_migration_gate_uses_post_lock_context(
         self,
         mock_lock_cls,
@@ -6649,7 +6654,7 @@ class TestPhase3NoOpProvenanceRepair:
         # Mock resolve_remote_ref to return a SHA
         resolved_sha = "b" * 40
         with patch(
-            "quickscale_cli.commands.apply_command.resolve_remote_ref",
+            "quickscale_core.utils.git_repo.resolve_remote_ref",
             return_value=resolved_sha,
         ):
             _attempt_provenance_repair_if_needed(ctx)
@@ -6726,7 +6731,7 @@ class TestPhase3NoOpProvenanceRepair:
         from quickscale_core.utils.git_utils import GitError
 
         with patch(
-            "quickscale_cli.commands.apply_command.resolve_remote_ref",
+            "quickscale_core.utils.git_repo.resolve_remote_ref",
             side_effect=GitError("Network error"),
         ):
             _attempt_provenance_repair_if_needed(ctx)
@@ -6779,7 +6784,7 @@ class TestPhase3NoOpProvenanceRepair:
         )
 
         with patch(
-            "quickscale_cli.commands.apply_command.resolve_remote_ref",
+            "quickscale_core.utils.git_repo.resolve_remote_ref",
             return_value="b" * 40,
         ):
             _attempt_provenance_repair_if_needed(ctx)
@@ -6829,9 +6834,7 @@ class TestPhase3NoOpProvenanceRepair:
         )
 
         # Mock resolve_remote_ref - should NOT be called
-        with patch(
-            "quickscale_cli.commands.apply_command.resolve_remote_ref"
-        ) as mock_resolve:
+        with patch("quickscale_core.utils.git_repo.resolve_remote_ref") as mock_resolve:
             _attempt_provenance_repair_if_needed(ctx)
             mock_resolve.assert_not_called()
 
@@ -6875,9 +6878,7 @@ class TestPhase3NoOpProvenanceRepair:
         )
 
         # Mock resolve_remote_ref - should NOT be called
-        with patch(
-            "quickscale_cli.commands.apply_command.resolve_remote_ref"
-        ) as mock_resolve:
+        with patch("quickscale_core.utils.git_repo.resolve_remote_ref") as mock_resolve:
             _attempt_provenance_repair_if_needed(ctx)
             mock_resolve.assert_not_called()
 
@@ -6989,7 +6990,7 @@ class TestProvenanceTripleConsistency:
 
         resolved_sha = "c" * 40
         with patch(
-            "quickscale_cli.commands.apply_command.resolve_remote_ref",
+            "quickscale_core.utils.git_repo.resolve_remote_ref",
             return_value=resolved_sha,
         ):
             _attempt_provenance_repair_if_needed(ctx)
@@ -7133,9 +7134,7 @@ class TestHandleDeltaPendingProvenanceRepair:
         delta.has_changes = False
         state = Mock()
 
-        with patch(
-            "quickscale_cli.commands.apply_command.format_delta", return_value="none"
-        ):
+        with patch("quickscale_core.schema.delta.format_delta", return_value="none"):
             # Must NOT raise click.Abort
             _handle_delta_and_existing_state(
                 delta,
@@ -7329,19 +7328,19 @@ class TestCallerParityAcrossProvenancePaths:
 
             with (
                 patch(
-                    "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                    "quickscale_core.utils.git_repo.resolve_remote_ref",
                     return_value=resolved_sha,
                 ) as mock_resolve,
                 patch(
-                    "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                    "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                     side_effect=_fake_subtree_pull,
                 ),
                 patch(
-                    "quickscale_cli.commands.module_commands._read_embedded_module_version",
+                    "quickscale_cli.commands._module_shared._read_embedded_module_version",
                     return_value="0.83.0",
                 ),
                 patch(
-                    "quickscale_cli.commands.module_commands._commit_module_update",
+                    "quickscale_cli.commands._module_update_io._commit_module_update",
                 ),
             ):
                 result = _update_single_module(
@@ -7420,7 +7419,7 @@ class TestCallerParityAcrossProvenancePaths:
 
         resolved_sha = "c" * 40
         with patch(
-            "quickscale_cli.commands.apply_command.resolve_remote_ref",
+            "quickscale_core.utils.git_repo.resolve_remote_ref",
             return_value=resolved_sha,
         ) as mock_resolve:
             _attempt_provenance_repair_if_needed(ctx)
@@ -7525,7 +7524,7 @@ class TestCallerParityAcrossProvenancePaths:
         )
 
         with patch(
-            "quickscale_cli.commands.apply_command.resolve_remote_ref",
+            "quickscale_core.utils.git_repo.resolve_remote_ref",
             return_value=resolved_sha,
         ):
             _attempt_provenance_repair_if_needed(ctx)
@@ -7557,7 +7556,7 @@ class TestCallerParityAcrossProvenancePaths:
         Apply additionally carries the resolved SHA through its provenance
         handoff; standalone keeps its own tracking and wiring behavior.
         """
-        from quickscale_cli.commands.module_commands import (
+        from quickscale_cli.commands._module_shared import (
             STANDALONE_MODULE_EXECUTION_MODE,
         )
 
@@ -7638,7 +7637,7 @@ class TestApplyFailureSummaryParity:
     def _stub_post_embed_manifest_load(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Downstream step tests use mocked embeds, so bypass disk manifest I/O."""
         monkeypatch.setattr(
-            "quickscale_cli.commands.apply_command._load_module_manifests",
+            "quickscale_cli.commands._config._load_module_manifests",
             lambda *args, **kwargs: {},
         )
 
@@ -7725,7 +7724,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -7733,7 +7732,7 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 return_value=QuickScaleState(
                     version="1",
                     project=ProjectState(
@@ -7744,19 +7743,19 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="a" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=False,
             ) as mock_save_recovery,
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -7808,17 +7807,17 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
             ) as mock_embed,
             patch(
-                "quickscale_cli.commands.apply_command._save_project_state",
+                "quickscale_cli.commands._state._save_project_state",
                 return_value=False,
             ) as mock_save_state,
             patch(
-                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+                "quickscale_cli.commands._state._clear_apply_recovery_state",
             ) as mock_clear_recovery,
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             mock_embed.return_value = EmbedModulesResult(
@@ -7879,15 +7878,15 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._save_project_state",
+                "quickscale_cli.commands._state._save_project_state",
                 return_value=False,
             ) as mock_save_state,
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ) as mock_save_recovery,
             patch(
-                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+                "quickscale_cli.commands._state._clear_apply_recovery_state",
             ) as mock_clear_recovery,
         ):
             with pytest.raises(click.Abort):
@@ -7942,15 +7941,15 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._save_project_state",
+                "quickscale_cli.commands._state._save_project_state",
                 return_value=False,
             ) as mock_save_state,
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=False,
             ) as mock_save_recovery,
             patch(
-                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+                "quickscale_cli.commands._state._clear_apply_recovery_state",
             ) as mock_clear_recovery,
         ):
             with pytest.raises(click.Abort):
@@ -7994,7 +7993,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=False,
                     embedded_modules=["auth"],
@@ -8002,14 +8001,14 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_project_state",
+                "quickscale_cli.commands._state._save_project_state",
                 return_value=True,
             ) as mock_save,
             patch(
-                "quickscale_cli.commands.apply_command._clear_apply_recovery_state",
+                "quickscale_cli.commands._state._clear_apply_recovery_state",
             ) as mock_clear,
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -8050,7 +8049,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -8058,11 +8057,11 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 side_effect=ValueError("oops"),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -8102,7 +8101,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -8110,7 +8109,7 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 return_value=QuickScaleState(
                     version="1",
                     project=ProjectState(
@@ -8121,19 +8120,19 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="a" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -8172,7 +8171,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -8180,7 +8179,7 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 return_value=QuickScaleState(
                     version="1",
                     project=ProjectState(
@@ -8191,26 +8190,26 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="a" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
             ),
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -8250,7 +8249,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -8258,7 +8257,7 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 return_value=QuickScaleState(
                     version="1",
                     project=ProjectState(
@@ -8269,30 +8268,30 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="a" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                "quickscale_cli.commands._runtime._sync_notifications_env_example",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
             ),
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -8332,7 +8331,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -8340,7 +8339,7 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 return_value=QuickScaleState(
                     version="1",
                     project=ProjectState(
@@ -8351,34 +8350,34 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="a" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                "quickscale_cli.commands._runtime._sync_notifications_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                "quickscale_cli.commands._runtime._sync_analytics_env_example",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
             ),
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -8418,7 +8417,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -8426,7 +8425,7 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 return_value=QuickScaleState(
                     version="1",
                     project=ProjectState(
@@ -8437,38 +8436,38 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="a" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                "quickscale_cli.commands._runtime._sync_notifications_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                "quickscale_cli.commands._runtime._sync_analytics_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_billing_env_example",
+                "quickscale_cli.commands._runtime._sync_billing_env_example",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
             ),
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -8507,7 +8506,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -8515,7 +8514,7 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 return_value=QuickScaleState(
                     version="1",
                     project=ProjectState(
@@ -8526,42 +8525,42 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="a" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                "quickscale_cli.commands._runtime._sync_notifications_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                "quickscale_cli.commands._runtime._sync_analytics_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_billing_env_example",
+                "quickscale_cli.commands._runtime._sync_billing_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
             ),
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -8601,7 +8600,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -8609,7 +8608,7 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 return_value=QuickScaleState(
                     version="1",
                     project=ProjectState(
@@ -8620,46 +8619,46 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="a" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                "quickscale_cli.commands._runtime._sync_notifications_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                "quickscale_cli.commands._runtime._sync_analytics_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_billing_env_example",
+                "quickscale_cli.commands._runtime._sync_billing_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                "quickscale_cli.commands._runtime._run_post_generation_steps",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
             ),
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -8699,7 +8698,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -8707,7 +8706,7 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 return_value=QuickScaleState(
                     version="1",
                     project=ProjectState(
@@ -8718,50 +8717,50 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="a" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                "quickscale_cli.commands._runtime._sync_notifications_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                "quickscale_cli.commands._runtime._sync_analytics_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_billing_env_example",
+                "quickscale_cli.commands._runtime._sync_billing_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                "quickscale_cli.commands._runtime._run_post_generation_steps",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._start_docker",
+                "quickscale_cli.commands._runtime._start_docker",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
             ),
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -8801,7 +8800,7 @@ class TestApplyFailureSummaryParity:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 return_value=EmbedModulesResult(
                     success=True,
                     embedded_modules=["auth"],
@@ -8809,7 +8808,7 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._build_project_state_snapshot",
+                "quickscale_cli.commands._state._build_project_state_snapshot",
                 return_value=QuickScaleState(
                     version="1",
                     project=ProjectState(
@@ -8820,54 +8819,54 @@ class TestApplyFailureSummaryParity:
                 ),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="a" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules",
+                "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_notifications_env_example",
+                "quickscale_cli.commands._runtime._sync_notifications_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_analytics_env_example",
+                "quickscale_cli.commands._runtime._sync_analytics_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_billing_env_example",
+                "quickscale_cli.commands._runtime._sync_billing_env_example",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                "quickscale_cli.commands._runtime._run_post_generation_steps",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._start_docker",
+                "quickscale_cli.commands._runtime._start_docker",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._run_migrations_in_docker",
+                "quickscale_cli.commands._runtime._run_migrations_in_docker",
                 return_value=False,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._save_apply_recovery_state",
+                "quickscale_cli.commands._state._save_apply_recovery_state",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._capture_managed_file_hashes_after_apply",
+                "quickscale_cli.commands._state._capture_managed_file_hashes_after_apply",
             ),
             patch(
-                "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+                "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             ),
         ):
             with pytest.raises(click.Abort):
@@ -9026,10 +9025,8 @@ class TestConfirmDestructiveRemotePhase:
 
     @staticmethod
     def _call(capsys, *, docker: bool, local: bool, bypass: bool = False):
-        with patch.object(
-            _apply_command_mod, "_AF5_DESTRUCTIVE_CONFIRM_BYPASS", bypass
-        ):
-            _apply_command_mod._confirm_destructive_remote_phase(
+        with patch.object(_types, "_AF5_DESTRUCTIVE_CONFIRM_BYPASS", bypass):
+            _finalize._confirm_destructive_remote_phase(
                 should_auto_start_docker=docker,
                 should_run_local_migrations=local,
             )

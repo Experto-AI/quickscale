@@ -12,7 +12,9 @@ import subprocess
 import time
 from pathlib import Path
 
-import quickscale_cli.utils.railway_utils as _railway_utils
+
+import quickscale_cli.utils._railway_cli as _railway_cli
+import quickscale_core.utils.poetry_env as _poetry_env
 
 
 def generate_django_secret_key() -> str:
@@ -58,7 +60,7 @@ def get_deployment_url(service: str | None = None) -> str | None:
 
     """
     try:
-        result = _railway_utils.run_railway_command(["status"], timeout=10)
+        result = _railway_cli.run_railway_command(["status"], timeout=10)
 
         if result.returncode == 0:
             # Parse output for deployment URL
@@ -122,7 +124,7 @@ def generate_railway_domain(service: str) -> str | None:
 
     """
     try:
-        result = _railway_utils.run_railway_command(
+        result = _railway_cli.run_railway_command(
             ["domain", "--service", service], timeout=30
         )
 
@@ -302,7 +304,7 @@ def check_poetry_lock_consistency() -> tuple[bool, str]:
             capture_output=True,
             text=True,
             timeout=10,
-            env=_railway_utils.build_isolated_poetry_env(),
+            env=_poetry_env.build_isolated_poetry_env(),
         )
 
         if result.returncode == 0:
@@ -335,7 +337,7 @@ def fix_poetry_lock() -> tuple[bool, str]:
             capture_output=True,
             text=True,
             timeout=120,
-            env=_railway_utils.build_isolated_poetry_env(),
+            env=_poetry_env.build_isolated_poetry_env(),
         )
 
         if result.returncode == 0:
@@ -376,12 +378,12 @@ def get_railway_variables(
             cmd.extend(["--environment", environment])
 
         # Try JSON output first for reliable parsing
-        json_vars = _railway_utils._get_railway_variables_json(cmd)
+        json_vars = _get_railway_variables_json(cmd)
         if json_vars is not None:
             return json_vars
 
         # Fall back to text parsing for older CLI versions
-        result = _railway_utils.run_railway_command(cmd, timeout=30)
+        result = _railway_cli.run_railway_command(cmd, timeout=30)
 
         if result.returncode == 0:
             # Parse output to extract variables
@@ -424,7 +426,7 @@ def _get_railway_variables_json(
 
     """
     try:
-        result = _railway_utils.run_railway_command(base_cmd + ["--json"], timeout=30)
+        result = _railway_cli.run_railway_command(base_cmd + ["--json"], timeout=30)
         if result.returncode != 0:
             return None
         try:
@@ -491,7 +493,7 @@ def link_database_to_service(service: str, database_service: str) -> tuple[bool,
 
         attempts_completed = attempt
         try:
-            result = _railway_utils.run_railway_command(
+            result = _railway_cli.run_railway_command(
                 [
                     "variable",
                     "set",
@@ -509,7 +511,7 @@ def link_database_to_service(service: str, database_service: str) -> tuple[bool,
             error_text = str(e).strip()
             if error_text:
                 last_error = error_text
-            if _railway_utils._is_non_retryable_database_link_error(error_text):
+            if _is_non_retryable_database_link_error(error_text):
                 return False, f"Error linking DATABASE_URL: {error_text}"
         else:
             if result.returncode == 0:
@@ -519,7 +521,7 @@ def link_database_to_service(service: str, database_service: str) -> tuple[bool,
             if error_text:
                 last_error = error_text
 
-            if _railway_utils._is_non_retryable_database_link_error(error_text):
+            if _is_non_retryable_database_link_error(error_text):
                 return False, f"Failed to link DATABASE_URL: {error_text}"
 
         if attempt < max_attempts and time.monotonic() - start_time < max_wait_seconds:

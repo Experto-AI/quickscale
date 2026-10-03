@@ -1,9 +1,8 @@
 """Shared apply-command types, constants, and pre-embed path predicates.
 
 Implementation detail of :mod:`quickscale_cli.commands.apply_command`;
-that module re-exports every name defined here (Module Conventions
-rule 28), so existing import paths and test patch targets keep
-working.
+collaborators are resolved through the sibling modules that define
+them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -12,9 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 
-from quickscale_cli.commands.module_commands import (
-    ModuleEmbedProvenance,
-)
+from quickscale_cli.commands._module_shared import ModuleEmbedProvenance
 from quickscale_core.schema.config_schema import (
     QuickScaleConfig,
 )
@@ -26,7 +23,8 @@ from quickscale_core.schema.state_schema import (
 from quickscale_core.manifest import ModuleManifest
 
 # AF6 Phase 2 — core step bodies
-import quickscale_cli.commands.apply_command as _apply_command
+
+import quickscale_core.apply as _apply
 
 
 @dataclass
@@ -86,7 +84,7 @@ _PRE_EMBED_AUTHORITATIVE_GIT_PATHS = (
 
 _FAILED_STEP = {
     step.step_id: step.failed_step_label
-    for step in _apply_command.APPLY_STEPS
+    for step in _apply.APPLY_STEPS
     if step.failed_step_label is not None
 }
 
@@ -106,9 +104,9 @@ def _is_transient_apply_recovery_path(path: str) -> bool:
 
 def _is_pre_embed_allowed_dirty_path(path: str) -> bool:
     """Return whether a dirty path is apply-owned and safe to ignore or checkpoint."""
-    return _apply_command._is_pre_embed_authoritative_path(
+    return _is_pre_embed_authoritative_path(path) or _is_transient_apply_recovery_path(
         path
-    ) or _apply_command._is_transient_apply_recovery_path(path)
+    )
 
 
 def _get_pre_embed_checkpoint_paths(paths: list[str]) -> list[str]:

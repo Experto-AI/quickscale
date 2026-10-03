@@ -1,5 +1,7 @@
 """Unit tests for git utilities."""
 
+# ruff: noqa: E402 — sys.path bootstrap precedes the core imports below.
+
 import shlex
 import shutil
 import stat

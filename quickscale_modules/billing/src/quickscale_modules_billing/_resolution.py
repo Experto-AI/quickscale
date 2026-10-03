@@ -13,7 +13,6 @@ from typing import Any
 from django.apps import apps
 from quickscale_modules_orgs.current_org import org_scope
 
-import quickscale_modules_billing.services as _services
 from quickscale_modules_billing._customers import (
     _resolve_organization_by_customer_id as _resolve_organization_by_customer_id,
 )
@@ -79,6 +78,7 @@ from quickscale_modules_billing.models import (
     PurchaseCheckout,
     Subscription,
 )
+import quickscale_modules_billing._subscription_checkout as _subscription_checkout
 
 
 def _resolve_plan_for_subscription_payload(
@@ -113,16 +113,18 @@ def _resolve_subscription_for_runtime_event(
             return subscription
 
     if customer_id.strip():
-        subscription = _services._resolve_authoritative_subscription_reservation(
-            organization=organization,
-            customer_id=customer_id,
-            for_update=for_update,
+        subscription = (
+            _subscription_checkout._resolve_authoritative_subscription_reservation(
+                organization=organization,
+                customer_id=customer_id,
+                for_update=for_update,
+            )
         )
         if subscription is not None:
             return subscription
 
     if organization is not None:
-        return _services._resolve_authoritative_subscription_reservation(
+        return _subscription_checkout._resolve_authoritative_subscription_reservation(
             organization=organization,
             for_update=for_update,
         )
@@ -150,8 +152,10 @@ def _resolve_organization_for_invoice(
 def _resolve_user_for_invoice(*, invoice_payload: Mapping[str, Any]) -> Any | None:
     customer_id = str(invoice_payload.get("customer") or "").strip()
     if customer_id:
-        subscription = _services._resolve_authoritative_subscription_reservation(
-            customer_id=customer_id,
+        subscription = (
+            _subscription_checkout._resolve_authoritative_subscription_reservation(
+                customer_id=customer_id,
+            )
         )
         if subscription is not None:
             return subscription.user
@@ -168,8 +172,10 @@ def _resolve_user_for_subscription(
 ) -> Any | None:
     customer_id = str(subscription_payload.get("customer") or "").strip()
     if customer_id:
-        subscription = _services._resolve_authoritative_subscription_reservation(
-            customer_id=customer_id,
+        subscription = (
+            _subscription_checkout._resolve_authoritative_subscription_reservation(
+                customer_id=customer_id,
+            )
         )
         if subscription is not None:
             return subscription.user

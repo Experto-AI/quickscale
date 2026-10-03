@@ -13,7 +13,11 @@ from tempfile import TemporaryDirectory
 import click
 
 from quickscale_cli.commands._module_shared import _UpdatePathSnapshot
-import quickscale_cli.commands.module_commands as _module_commands
+
+import quickscale_core.schema.state_schema as _state_schema
+import quickscale_core.project_state_hashes as _project_state_hashes
+import quickscale_core.utils.git_errors as _git_errors
+import quickscale_cli.utils.module_wiring_manager as _module_wiring_manager
 
 
 def _remove_update_path(path: Path) -> None:
@@ -65,13 +69,13 @@ def _snapshot_update_path(
 def _restore_update_snapshot(snapshot: _UpdatePathSnapshot) -> None:
     """Restore a single module update snapshot."""
     if not snapshot.existed:
-        _module_commands._remove_update_path(snapshot.path)
+        _remove_update_path(snapshot.path)
         return
 
     if snapshot.backup_path is None:
         raise RuntimeError(f"Missing rollback payload for {snapshot.path}")
 
-    _module_commands._remove_update_path(snapshot.path)
+    _remove_update_path(snapshot.path)
     if snapshot.is_dir:
         shutil.copytree(snapshot.backup_path, snapshot.path)
         return
@@ -83,7 +87,7 @@ def _restore_update_snapshot(snapshot: _UpdatePathSnapshot) -> None:
 def _restore_update_snapshots(snapshots: list[_UpdatePathSnapshot]) -> None:
     """Restore all module update snapshots in reverse mutation order."""
     for snapshot in reversed(snapshots):
-        _module_commands._restore_update_snapshot(snapshot)
+        _restore_update_snapshot(snapshot)
 
 
 def _record_update_mutation_snapshots(
@@ -99,7 +103,7 @@ def _record_update_mutation_snapshots(
         ("pyproject-toml", project_path / "pyproject.toml"),
     ]
     return [
-        _module_commands._snapshot_update_path(path, backup_root, label)
+        _snapshot_update_path(path, backup_root, label)
         for label, path in snapshot_targets
     ]
 
@@ -161,7 +165,7 @@ def _commit_contract_adoption() -> None:
         if cached_diff.returncode == 0:
             return
         if cached_diff.returncode != 1:
-            raise _module_commands.GitError(
+            raise _git_errors.GitError(
                 "Failed to inspect staged changes before recording contract adoption"
             )
         subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
@@ -171,7 +175,7 @@ def _commit_contract_adoption() -> None:
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        raise _module_commands.GitError(
+        raise _git_errors.GitError(
             f"Failed to commit the recorded contract adoption: {e.stderr}"
         )
 
@@ -199,24 +203,20 @@ def _regenerate_and_record_managed_wiring(
     )
     with TemporaryDirectory(prefix="quickscale-update-wiring-") as backup_dir:
         snapshots = [
-            _module_commands._snapshot_update_path(
-                path, Path(backup_dir), f"managed-{index}"
-            )
+            _snapshot_update_path(path, Path(backup_dir), f"managed-{index}")
             for index, path in enumerate(wiring_paths)
         ]
         try:
-            success, message = _module_commands.regenerate_managed_wiring(
+            success, message = _module_wiring_manager.regenerate_managed_wiring(
                 project_path,
                 project_package=project_package,
             )
             if not success:
-                _module_commands._restore_update_snapshots(snapshots)
+                _restore_update_snapshots(snapshots)
                 return False, message
-            _module_commands._record_managed_wiring_hashes(
-                project_path, project_package
-            )
+            _record_managed_wiring_hashes(project_path, project_package)
         except Exception as error:  # noqa: BLE001 - restore before surfacing
-            _module_commands._restore_update_snapshots(snapshots)
+            _restore_update_snapshots(snapshots)
             return False, str(error)
     return True, message
 
@@ -226,19 +226,19 @@ def _record_managed_wiring_hashes(
     project_package: str,
 ) -> None:
     """Record the regenerated wiring's hashes in the authoritative state."""
-    state_manager = _module_commands.StateManager(project_path)
+    state_manager = _state_schema.StateManager(project_path)
     state = state_manager.load()
     if state is None:
         return
 
     managed_paths = [
         f"{project_package}/{relative}"
-        for relative in _module_commands.DEFAULT_MANAGED_WIRING_PATHS
+        for relative in _project_state_hashes.DEFAULT_MANAGED_WIRING_PATHS
     ]
-    for path_str, digest in _module_commands.compute_file_hashes(
+    for path_str, digest in _project_state_hashes.compute_file_hashes(
         project_path, managed_paths
     ).items():
-        state.managed_files[path_str] = _module_commands.ManagedFileRecord(
+        state.managed_files[path_str] = _state_schema.ManagedFileRecord(
             path=path_str,
             hash=digest,
         )
@@ -279,7 +279,7 @@ def _commit_regenerated_managed_wiring(project_package: str) -> None:
     ):
         # A path that no longer exists but is tracked must be staged so a
         # regeneration that removes a managed file commits its deletion.
-        if wiring_path.exists() or _module_commands._git_tracks_path(wiring_path):
+        if wiring_path.exists() or _git_tracks_path(wiring_path):
             tracked_paths.append(str(wiring_path))
     state_path = Path(".quickscale") / "state.yml"
     if state_path.exists():
@@ -295,7 +295,7 @@ def _commit_regenerated_managed_wiring(project_package: str) -> None:
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        raise _module_commands.GitError(
+        raise _git_errors.GitError(
             f"Failed to stage regenerated managed wiring: {e.stderr}"
         )
 
@@ -307,7 +307,7 @@ def _commit_regenerated_managed_wiring(project_package: str) -> None:
     if cached_diff.returncode == 0:
         return
     if cached_diff.returncode != 1:
-        raise _module_commands.GitError(
+        raise _git_errors.GitError(
             "Failed to inspect staged changes before the wiring commit"
         )
 
@@ -319,7 +319,7 @@ def _commit_regenerated_managed_wiring(project_package: str) -> None:
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        raise _module_commands.GitError(
+        raise _git_errors.GitError(
             f"Failed to commit regenerated managed wiring: {e.stderr}"
         )
 
@@ -386,7 +386,7 @@ def _roll_back_partial_module_update(
         restore_from_head = [
             path
             for path in restore_paths
-            if _module_commands._path_in_commit(project_path, pre_update_head, path)
+            if _path_in_commit(project_path, pre_update_head, path)
         ]
         if restore_from_head:
             subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
@@ -443,7 +443,7 @@ def _commit_module_update(module_name: str, module_prefix: str) -> None:
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        raise _module_commands.GitError(
+        raise _git_errors.GitError(
             f"Failed to stage {module_name} update commit: {e.stderr}"
         )
 
@@ -458,7 +458,7 @@ def _commit_module_update(module_name: str, module_prefix: str) -> None:
         return
 
     if cached_diff.returncode != 1:
-        raise _module_commands.GitError(
+        raise _git_errors.GitError(
             "Failed to inspect staged changes before module update commit"
         )
 
@@ -471,6 +471,4 @@ def _commit_module_update(module_name: str, module_prefix: str) -> None:
             text=True,
         )
     except subprocess.CalledProcessError as e:
-        raise _module_commands.GitError(
-            f"Failed to commit {module_name} update: {e.stderr}"
-        )
+        raise _git_errors.GitError(f"Failed to commit {module_name} update: {e.stderr}")

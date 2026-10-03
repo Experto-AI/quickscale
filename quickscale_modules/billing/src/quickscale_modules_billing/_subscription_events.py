@@ -12,7 +12,6 @@ from typing import Any
 
 from quickscale_modules_orgs.current_org import org_scope
 
-import quickscale_modules_billing.services as _services
 from quickscale_modules_billing._customers import (
     _sync_organization_customer_id as _sync_organization_customer_id,
 )
@@ -41,6 +40,8 @@ from quickscale_modules_billing.models import (
     Plan,
     Subscription,
 )
+import quickscale_modules_billing._resolution as _resolution
+import quickscale_modules_billing._locks as _locks
 
 
 def _upsert_subscription_from_payload(
@@ -61,13 +62,13 @@ def _upsert_subscription_from_payload(
         stripe_status = fallback_status.strip().lower()
     local_status = _map_stripe_subscription_status(stripe_status)
 
-    plan = _services._resolve_plan_for_subscription_payload(subscription_payload)
+    plan = _resolution._resolve_plan_for_subscription_payload(subscription_payload)
     if expected_plan is not None and plan.pk != expected_plan.pk:
         raise BillingWebhookError(
             "Stripe subscription does not match the invoiced billing plan."
         )
 
-    organization = _services._resolve_organization_for_subscription(
+    organization = _resolution._resolve_organization_for_subscription(
         subscription_payload=subscription_payload
     )
     if (
@@ -86,7 +87,7 @@ def _upsert_subscription_from_payload(
             "Could not resolve a local organization for the Stripe subscription."
         )
     if provider_lock_held:
-        return _services._apply_subscription_payload(
+        return _apply_subscription_payload(
             subscription_payload=subscription_payload,
             stripe_subscription_id=stripe_subscription_id,
             local_status=local_status,
@@ -94,8 +95,8 @@ def _upsert_subscription_from_payload(
             organization=organization,
             fallback_user=fallback_user,
         )
-    with _services.subscription_provider_mutation_lock(organization):
-        return _services._apply_subscription_payload(
+    with _locks.subscription_provider_mutation_lock(organization):
+        return _apply_subscription_payload(
             subscription_payload=subscription_payload,
             stripe_subscription_id=stripe_subscription_id,
             local_status=local_status,
@@ -118,7 +119,7 @@ def _apply_subscription_payload(
 
     # Phase 3: each handler owns its org scope for SET LOCAL support.
     with org_scope(organization):
-        organization = _services._lock_organization_for_billing_mutation(organization)
+        organization = _locks._lock_organization_for_billing_mutation(organization)
         user = _resolve_user_for_subscription(subscription_payload=subscription_payload)
         if user is None:
             user = fallback_user
@@ -127,7 +128,7 @@ def _apply_subscription_payload(
                 "Could not resolve a local user for the Stripe subscription."
             )
 
-        subscription = _services._resolve_subscription_for_runtime_event(
+        subscription = _resolution._resolve_subscription_for_runtime_event(
             stripe_subscription_id=stripe_subscription_id,
             customer_id=str(subscription_payload.get("customer") or "").strip(),
             organization=organization,

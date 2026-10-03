@@ -1141,6 +1141,30 @@ mapping that mirrors this section.
 
 ---
 
+### Split-Facade Seams (SA234) {#split-facade-seams}
+
+**Rule:** A test's seam is the module that defines the name (or an injected collaborator),
+never the re-export path. A private module (`_<name>.py`) imports the sibling modules that
+define its collaborators and never imports its own package's facade. A facade imports its
+private siblings one way and re-exports public names only.
+
+- ✅ `patch("<defining-module>.X")`; a private module resolves each collaborator at call time
+  through the module that defines it, and a facade keeps its public import paths by
+  re-exporting public names (`X as X`) from its private siblings.
+- ❌ A `_<name>.py` module importing its own package's facade — the CLI command and utility
+  facades, `dr_engine`, and billing included; a private or incidental name in a facade's
+  re-export block or in a facade-surface test's expected set.
+- Enforcement: `scripts/check_split_facade_imports.py` (registered gate
+  `check-split-facade-imports`) rejects a private module importing a facade in its family; the
+  CLI split facades (`quickscale_cli/tests/test_split_facade_surfaces.py`) and billing
+  `services` (`test_services_facade_surface.py`) each carry a surface test that pins public
+  names only.
+
+Evidence and options weighed: [arch audit § Finding 2](../others/arch-audit.md)
+(`split-facades-patch-coupled`, option 1 with option 3's ratchet re-key).
+
+---
+
 ### Module Implementation Requirements {#module-implementation-checklist}
 
 **Rule:** Every QuickScale module must be complete, embeddable, and usable

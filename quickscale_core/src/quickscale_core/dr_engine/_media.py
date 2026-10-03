@@ -6,7 +6,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import quickscale_core.dr_engine.orchestration as _orchestration
+
+import quickscale_core.dr_engine._state as _state
+import quickscale_core.dr_engine._sidecar as _sidecar
+import quickscale_core.dr_engine.primitives as _primitives
+import django.conf as _conf
+import quickscale_core.dr_engine._metadata as _metadata
+import shutil
+import quickscale_core.dr_engine._types as _types
 
 
 def _build_s3_storage_from_selection(selection: Any) -> Any:
@@ -36,7 +43,7 @@ def _resolve_media_runtime(
 ) -> dict[str, Any]:
     """Resolve local or s3-compatible media runtime settings."""
     try:
-        selection = _orchestration._load_storage_helpers().select_storage_backend(
+        selection = _metadata._load_storage_helpers().select_storage_backend(
             settings_obj
         )
     except ModuleNotFoundError as exc:
@@ -48,41 +55,41 @@ def _resolve_media_runtime(
         else:
             # Storage helper is installed but a sub-dependency is missing.
             # Fail hard — do not silently fall back to local media.
-            raise _orchestration.BackupConfigurationError(str(exc)) from exc
+            raise _primitives.BackupConfigurationError(str(exc)) from exc
     except Exception as exc:
-        raise _orchestration.BackupConfigurationError(str(exc)) from exc
+        raise _primitives.BackupConfigurationError(str(exc)) from exc
 
     if selection is not None:
         if require_s3_compatible and not selection.use_s3_compatible:
-            raise _orchestration.BackupConfigurationError(
+            raise _primitives.BackupConfigurationError(
                 "Railway-target media sync requires an s3-compatible target media backend; "
                 "local MEDIA_ROOT is not a supported Railway target."
             )
         if selection.use_s3_compatible:
             bucket_name = str(selection.options.get("bucket_name", "")).strip()
             if not bucket_name:
-                raise _orchestration.BackupConfigurationError(
+                raise _primitives.BackupConfigurationError(
                     "S3-compatible media sync requires AWS_STORAGE_BUCKET_NAME"
                 )
             return {
                 "backend": selection.backend,
                 "use_s3_compatible": True,
-                "storage": _orchestration._build_s3_storage_from_selection(selection),
+                "storage": _build_s3_storage_from_selection(selection),
                 "bucket_name": bucket_name,
             }
     else:
         # Storage helpers unavailable — fall back to local detection.
         if require_s3_compatible:
-            raise _orchestration.BackupConfigurationError(
+            raise _primitives.BackupConfigurationError(
                 "Railway-target media sync requires an s3-compatible target media backend; "
                 "storage helper is unavailable in this runtime."
             )
 
     media_root_text = str(
-        _orchestration._read_setting_value(settings_obj, "MEDIA_ROOT", "")
+        _metadata._read_setting_value(settings_obj, "MEDIA_ROOT", "")
     ).strip()
     if not media_root_text:
-        raise _orchestration.BackupConfigurationError(
+        raise _primitives.BackupConfigurationError(
             "Local media sync requires MEDIA_ROOT to be configured"
         )
     return {
@@ -115,14 +122,14 @@ def _copy_media_item(
         if not target_runtime["use_s3_compatible"]:
             target_path = Path(target_runtime["media_root"]) / relative_path
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            _orchestration.shutil.copy2(source_path, target_path)
+            shutil.copy2(source_path, target_path)
             return True
 
         target_storage = target_runtime["storage"]
         target_storage.connection.meta.client.upload_file(
             str(source_path),
             target_runtime["bucket_name"],
-            _orchestration._storage_object_key(target_storage, relative_path),
+            _storage_object_key(target_storage, relative_path),
         )
         return True
 
@@ -139,7 +146,7 @@ def _copy_media_item(
         target_storage.connection.meta.client.upload_fileobj(
             source_handle,
             target_runtime["bucket_name"],
-            _orchestration._storage_object_key(target_storage, relative_path),
+            _storage_object_key(target_storage, relative_path),
         )
     return True
 
@@ -151,26 +158,26 @@ def sync_backup_snapshot_media(
     target_runtime_settings: dict[str, str],
 ) -> dict[str, Any]:
     """Dry-run or execute media sync for one snapshot using target env overrides."""
-    snapshot = _orchestration.get_backup_snapshot(snapshot_id)
-    media_manifest = _orchestration._load_snapshot_sidecar_payload(
-        snapshot, _orchestration._MEDIA_SYNC_MANIFEST_FILENAME
+    snapshot = _state.get_backup_snapshot(snapshot_id)
+    media_manifest = _sidecar._load_snapshot_sidecar_payload(
+        snapshot, _primitives._MEDIA_SYNC_MANIFEST_FILENAME
     )
     manifest_status = str(media_manifest.get("status", "")).strip()
     if manifest_status != "ready":
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             "Media sync requires a ready media manifest, found status "
             f"'{manifest_status or 'unknown'}'."
         )
 
     inventory = media_manifest.get("inventory", [])
     if not isinstance(inventory, list):
-        raise _orchestration.BackupError("Media manifest inventory must be a list")
+        raise _primitives.BackupError("Media manifest inventory must be a list")
 
-    source_runtime = _orchestration._resolve_media_runtime(_orchestration.settings)
-    target_runtime = _orchestration._resolve_media_runtime(
+    source_runtime = _resolve_media_runtime(_conf.settings)
+    target_runtime = _resolve_media_runtime(
         target_runtime_settings,
         require_s3_compatible=(
-            str(target_runtime_settings.get(_orchestration._ROUTE_KIND_KEY, "")).strip()
+            str(target_runtime_settings.get(_types._ROUTE_KIND_KEY, "")).strip()
             == "railway"
         ),
     )
@@ -195,7 +202,7 @@ def sync_backup_snapshot_media(
                 missing_paths.append(relative_path)
             continue
 
-        copied = _orchestration._copy_media_item(
+        copied = _copy_media_item(
             relative_path=relative_path,
             source_runtime=source_runtime,
             target_runtime=target_runtime,

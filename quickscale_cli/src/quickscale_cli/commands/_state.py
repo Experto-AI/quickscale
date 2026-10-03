@@ -1,9 +1,8 @@
 """Applied-state snapshots, recovery ledgers, and managed-file hashes.
 
 Implementation detail of :mod:`quickscale_cli.commands.apply_command`;
-that module re-exports every name defined here (Module Conventions
-rule 28), so existing import paths and test patch targets keep
-working.
+collaborators are resolved through the sibling modules that define
+them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -15,9 +14,7 @@ from pathlib import Path
 import click
 
 
-from quickscale_cli.commands.module_commands import (
-    ModuleEmbedProvenance,
-)
+from quickscale_cli.commands._module_shared import ModuleEmbedProvenance
 from quickscale_core.schema.config_schema import (
     QuickScaleConfig,
 )
@@ -35,7 +32,20 @@ from quickscale_core.project_state import (
 # AF6 Phase 2 — core step bodies
 from quickscale_core.apply.steps.types import StepOutcome
 from quickscale_cli.commands._types import _APPLY_RECOVERY_FILENAME
-import quickscale_cli.commands.apply_command as _apply_command
+
+import quickscale_core.project_state_manager as _project_state_manager
+import quickscale_core.project_state_drift as _project_state_drift
+import quickscale_core.apply.steps.types as _types
+import quickscale_core.apply.steps as _steps
+import quickscale_cli.commands._config as _config
+import quickscale_core.apply as _apply
+import quickscale_core.project_state_hashes as _project_state_hashes
+import quickscale_core.schema.state_schema as _state_schema
+import quickscale_core.config as _config_2
+import quickscale_core.manifest.loader as _loader
+import quickscale_core.contracts.module_options as _module_options
+import quickscale_core as _quickscale_core
+import quickscale_cli.commands.contract_vintage as _contract_vintage
 
 
 def _resolve_managed_wiring_paths(
@@ -53,7 +63,7 @@ def _resolve_managed_wiring_paths(
     package = qs_config.project.package
     return [
         f"{package}/{relative}"
-        for relative in _apply_command.DEFAULT_MANAGED_WIRING_PATHS
+        for relative in _project_state_hashes.DEFAULT_MANAGED_WIRING_PATHS
     ]
 
 
@@ -69,18 +79,18 @@ def _warn_version_drift_for_apply(
     :func:`_sync_legacy_module_config_versions`. The warnings exist so
     that operations and status can surface the gap.
     """
-    state_manager = _apply_command.ProjectStateManager(project_path)
+    state_manager = _project_state_manager.ProjectStateManager(project_path)
     try:
         state = state_manager.load_state()
         config = state_manager.load_config()
-    except (_apply_command.StateError, _apply_command.ConfigError) as error:
+    except (_state_schema.StateError, _config_2.ConfigError) as error:
         click.secho(
             f"⚠️  Could not read managed state files for drift check: {error}",
             fg="yellow",
         )
         return []
 
-    drift = _apply_command.check_version_drift(state, config)
+    drift = _project_state_drift.check_version_drift(state, config)
     if not drift:
         return []
 
@@ -113,13 +123,13 @@ def _capture_managed_file_hashes_after_apply(
     """
 
     def _resolve_paths() -> list[str]:
-        return _apply_command._resolve_managed_wiring_paths(qs_config)
+        return _resolve_managed_wiring_paths(qs_config)
 
     def _compute_hashes(path: Path, paths: list[str]) -> dict[str, str]:
-        return _apply_command.compute_file_hashes(path, paths)
+        return _project_state_hashes.compute_file_hashes(path, paths)
 
     def _record_hash(path_str: str, digest: str) -> None:
-        state.managed_files[path_str] = _apply_command.ManagedFileRecord(
+        state.managed_files[path_str] = _state_schema.ManagedFileRecord(
             path=path_str, hash=digest
         )
 
@@ -129,12 +139,12 @@ def _capture_managed_file_hashes_after_apply(
         else:
             click.secho(message, fg="yellow")
 
-    step_ctx = _apply_command.StepContext(
+    step_ctx = _types.StepContext(
         output_path=project_path,
         qs_config=qs_config,
         reporter=_reporter,
     )
-    return _apply_command.step_capture_hashes(
+    return _steps.step_capture_hashes(
         step_ctx,
         compute_file_hashes_fn=_compute_hashes,
         resolve_managed_wiring_paths_fn=_resolve_paths,
@@ -193,16 +203,16 @@ def _build_project_state_snapshot(
     timestamp = datetime.now().isoformat()
 
     if existing_state is None:
-        new_state = _apply_command.QuickScaleState(
+        new_state = _state_schema.QuickScaleState(
             version="1",
-            project=_apply_command.ProjectState(
+            project=_state_schema.ProjectState(
                 slug=qs_config.project.slug,
                 package=qs_config.project.package,
                 theme=qs_config.project.theme,
-                project_contract=_apply_command.quickscale_version,
+                project_contract=_quickscale_core.__version__,
                 # A fresh generation carries the current templates, so it has
                 # adopted every declared step (SA207).
-                adopted_contract_steps=_apply_command.declared_adoption_step_ids(
+                adopted_contract_steps=_contract_vintage.declared_adoption_step_ids(
                     embedded_modules
                 ),
                 created_at=timestamp,
@@ -234,7 +244,7 @@ def _build_project_state_snapshot(
             if provenance is not None
             else (existing_module_state.commit_sha if existing_module_state else None)
         )
-        new_state.modules[module_name] = _apply_command.ModuleState(
+        new_state.modules[module_name] = _state_schema.ModuleState(
             name=module_name,
             version=existing_module_state.version if existing_module_state else None,
             commit_sha=commit_sha,
@@ -243,22 +253,20 @@ def _build_project_state_snapshot(
                 if existing_module_state is not None
                 else timestamp
             ),
-            options=_apply_command.sanitize_module_options(
+            options=_module_options.sanitize_module_options(
                 module_name,
                 qs_config.modules[module_name].options,
             ),
         )
 
-    _apply_command._update_module_config_in_state(new_state, qs_config, delta)
+    _config._update_module_config_in_state(new_state, qs_config, delta)
 
     for module_name, module_state in new_state.modules.items():
-        manifest = _apply_command.get_manifest_for_module(output_path, module_name)
+        manifest = _loader.get_manifest_for_module(output_path, module_name)
         if manifest is None:
             continue
 
-        normalized_version = _apply_command.normalize_installed_version(
-            manifest.version
-        )
+        normalized_version = _config_2.normalize_installed_version(manifest.version)
         if normalized_version is not None:
             module_state.version = normalized_version
 
@@ -266,14 +274,14 @@ def _build_project_state_snapshot(
     # installed_at) from the legacy config.yml that embed_module wrote
     # during this apply pass.  This ensures state.yml is self-contained
     # after apply so that fresh push/update/status work from state alone.
-    _apply_command._populate_consolidated_tracking_from_legacy(output_path, new_state)
+    _populate_consolidated_tracking_from_legacy(output_path, new_state)
 
     return new_state
 
 
 def _get_apply_recovery_manager(project_path: Path) -> LedgerManager:
     """Return a LedgerManager bound to the recovery ledger file."""
-    return _apply_command.LedgerManager(project_path)
+    return _apply.LedgerManager(project_path)
 
 
 def _load_apply_recovery_state(project_path: Path) -> QuickScaleState | None:
@@ -284,7 +292,7 @@ def _load_apply_recovery_state(project_path: Path) -> QuickScaleState | None:
     does not exist.  Malformed content raises :class:`LedgerError` which
     propagates as a ``StateError`` to existing callers.
     """
-    mgr = _apply_command._get_apply_recovery_manager(project_path)
+    mgr = _get_apply_recovery_manager(project_path)
     ledger = mgr.load()
     if ledger is None:
         return None
@@ -332,7 +340,7 @@ def _save_apply_recovery_state(
     ``None`` if absent.
     """
     try:
-        recovery_state = state_snapshot or _apply_command._build_project_state_snapshot(
+        recovery_state = state_snapshot or _build_project_state_snapshot(
             output_path,
             qs_config,
             existing_state,
@@ -340,7 +348,7 @@ def _save_apply_recovery_state(
             delta,
             provenance_payloads=provenance_payloads,
         )
-        mgr = _apply_command._get_apply_recovery_manager(output_path)
+        mgr = _get_apply_recovery_manager(output_path)
 
         # Carry forward any existing resume_checkpoint from the on-disk
         # ledger so AF5 metadata is preserved across recovery rewrites.
@@ -349,7 +357,7 @@ def _save_apply_recovery_state(
             existing_ledger.resume_checkpoint if existing_ledger is not None else None
         )
 
-        ledger = _apply_command.RecoveryLedger(
+        ledger = _apply.RecoveryLedger(
             applied_state=recovery_state,
             resume_checkpoint=resume_checkpoint,
             step_progress=None,
@@ -361,7 +369,7 @@ def _save_apply_recovery_state(
             fg="green",
         )
         return True
-    except (_apply_command.LedgerError, OSError) as e:
+    except (_apply.LedgerError, OSError) as e:
         click.secho(
             f"❌ Failed to save apply recovery state: {e}",
             fg="red",
@@ -379,7 +387,7 @@ def _save_apply_recovery_state(
 
 def _clear_apply_recovery_state(output_path: Path) -> None:
     """Remove any stale post-embed recovery snapshot."""
-    mgr = _apply_command._get_apply_recovery_manager(output_path)
+    mgr = _get_apply_recovery_manager(output_path)
     if not mgr.ledger_file.exists():
         return
 
@@ -408,8 +416,8 @@ def _save_project_state(
     message — the effective behavior is fail-closed.
     """
     try:
-        state_manager = _apply_command.StateManager(output_path)
-        new_state = state_snapshot or _apply_command._build_project_state_snapshot(
+        state_manager = _state_schema.StateManager(output_path)
+        new_state = state_snapshot or _build_project_state_snapshot(
             output_path,
             qs_config,
             existing_state,

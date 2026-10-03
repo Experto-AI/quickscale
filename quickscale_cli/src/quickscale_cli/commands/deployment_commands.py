@@ -1,18 +1,13 @@
 """Deployment commands for production platforms.
 
 The implementation lives in private sibling modules grouped by concern
-(``_deploy_steps``, ``_deploy_service_config``); this module owns the public
-command surface and re-exports every name that previously lived here
-(Module Conventions rule 28), so existing
-``quickscale_cli.commands.deployment_commands`` imports and test patch targets
-keep working unchanged.
+(``_deploy_steps``, ``_deploy_service_config``); this module owns the public command surface, re-exports public names for
+unchanged import paths, and resolves collaborators through the sibling modules
+that define them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
 
-import json as json
-import secrets as secrets
-import sys as sys
 from pathlib import Path as Path
 
 import click as click
@@ -52,33 +47,15 @@ from quickscale_cli.utils.railway_utils import (
     verify_railway_dependencies as verify_railway_dependencies,
     verify_railway_json as verify_railway_json,
 )
-from quickscale_cli.commands._deploy_steps import (
-    _app_service_exists_step as _app_service_exists_step,
-    _check_and_upgrade_railway_cli as _check_and_upgrade_railway_cli,
-    _check_poetry_lock_step as _check_poetry_lock_step,
-    _check_uncommitted_changes_step as _check_uncommitted_changes_step,
-    _create_app_service_step as _create_app_service_step,
-    _ensure_railway_auth_step as _ensure_railway_auth_step,
-    _ensure_railway_cli_step as _ensure_railway_cli_step,
-    _generate_domain_step as _generate_domain_step,
-    _init_railway_project_step as _init_railway_project_step,
-    _link_database_step as _link_database_step,
-    _list_railway_service_names as _list_railway_service_names,
-    _list_railway_services as _list_railway_services,
-    _postgres_service_matches as _postgres_service_matches,
-    _setup_postgres_step as _setup_postgres_step,
-    _verify_dependencies_step as _verify_dependencies_step,
-    _verify_railway_files_step as _verify_railway_files_step,
-)
 from quickscale_cli.commands._deploy_service_config import (
-    _configure_env_vars_step as _configure_env_vars_step,
-    _deploy_app_step as _deploy_app_step,
-    _display_summary as _display_summary,
-    _existing_service_variables as _existing_service_variables,
-    _runtime_role_variables as _runtime_role_variables,
-    _verify_deployment_step as _verify_deployment_step,
     runtime_database_url as runtime_database_url,
 )
+import quickscale_cli.commands.contract_vintage as _contract_vintage
+import quickscale_core.project_state_manager as _project_state_manager
+import quickscale_core.schema.state_schema as _state_schema
+import quickscale_cli.utils._railway_project as _railway_project
+import quickscale_cli.commands._deploy_steps as _deploy_steps
+import quickscale_cli.commands._deploy_service_config as _deploy_service_config
 
 
 @click.group()
@@ -120,12 +97,12 @@ def railway(
     """
     project_path = Path.cwd()
     try:
-        state = ProjectStateManager(project_path).load_state()
-    except (StateError, OSError) as error:
+        state = _project_state_manager.ProjectStateManager(project_path).load_state()
+    except (_state_schema.StateError, OSError) as error:
         raise click.ClickException(
             f"Unable to read project state for the contract-vintage check: {error}"
         ) from error
-    enforce_shipped_contract_vintage(
+    _contract_vintage.enforce_shipped_contract_vintage(
         state,
         state.modules if state else (),
         operation="'quickscale deploy railway'",
@@ -136,59 +113,61 @@ def railway(
 
     if project_name is None:
         project_name = Path.cwd().name
-    app_service = get_app_service_name(project_name)
+    app_service = _railway_project.get_app_service_name(project_name)
 
     # Step 0: Pre-flight checks
     click.echo("\n🔍 Running pre-flight checks...")
-    _check_uncommitted_changes_step()
+    _deploy_steps._check_uncommitted_changes_step()
     # Record the confirmed adoption after the uncommitted-changes check, so the
     # operator is not warned about a change this command just made, and under
     # the project lock so the write cannot overwrite a concurrent change (SA207).
     if confirm_contract_adoption:
-        record_confirmed_adoption(project_path, operation="deploy")
-    _verify_railway_files_step()
-    _verify_dependencies_step()
-    _check_poetry_lock_step()
+        _contract_vintage.record_confirmed_adoption(project_path, operation="deploy")
+    _deploy_steps._verify_railway_files_step()
+    _deploy_steps._verify_dependencies_step()
+    _deploy_steps._check_poetry_lock_step()
 
     # Step 1: Check Railway CLI installation
     click.echo("\n🔧 Checking Railway CLI...")
-    _ensure_railway_cli_step()
+    _deploy_steps._ensure_railway_cli_step()
 
     # Step 2: Check Railway authentication
     click.echo("\n🔐 Checking Railway authentication...")
-    _ensure_railway_auth_step()
+    _deploy_steps._ensure_railway_auth_step()
 
     # Step 3: Initialize Railway project if needed
-    _init_railway_project_step()
+    _deploy_steps._init_railway_project_step()
 
     # Step 4: Read app state before any re-deploy mutation
-    app_service_exists = _app_service_exists_step(app_service)
+    app_service_exists = _deploy_steps._app_service_exists_step(app_service)
     existing_vars = (
-        _existing_service_variables(app_service) if app_service_exists else None
+        _deploy_service_config._existing_service_variables(app_service)
+        if app_service_exists
+        else None
     )
 
     # Step 5: Check for PostgreSQL service
     click.echo("\n🗄️  Setting up PostgreSQL database...")
-    postgres_service = _setup_postgres_step()
+    postgres_service = _deploy_steps._setup_postgres_step()
 
     # Step 6: Create a first-deploy app service, then read its empty live state
     if not app_service_exists:
         click.echo(f"\n📦 Creating application service: {app_service}...")
-        _create_app_service_step(app_service)
-        existing_vars = _existing_service_variables(app_service)
+        _deploy_steps._create_app_service_step(app_service)
+        existing_vars = _deploy_service_config._existing_service_variables(app_service)
 
     # Step 7: Link DATABASE_URL from PostgreSQL to app service
     click.echo("\n🔗 Linking DATABASE_URL to app service...")
-    database_linked = _link_database_step(app_service, postgres_service)
+    database_linked = _deploy_steps._link_database_step(app_service, postgres_service)
 
     # Step 8: Generate public domain first
     click.echo("\n🌐 Generating public domain...")
-    domain_name = _generate_domain_step(app_service)
+    domain_name = _deploy_steps._generate_domain_step(app_service)
     domain_url = f"https://{domain_name}" if domain_name else None
 
     # Step 9: Configure environment variables in batch
     click.echo("\n⚙️  Configuring environment variables...")
-    _configure_env_vars_step(
+    _deploy_service_config._configure_env_vars_step(
         app_service,
         domain_name,
         postgres_service,
@@ -197,14 +176,14 @@ def railway(
 
     # Step 10: Deploy to app service
     click.echo("\n🚢 Deploying application...")
-    _deploy_app_step(app_service)
+    _deploy_service_config._deploy_app_step(app_service)
 
     # Step 11: Verify environment variables
     click.echo("\n🔍 Verifying environment configuration...")
-    _verify_deployment_step(app_service)
+    _deploy_service_config._verify_deployment_step(app_service)
 
     # Step 12: Display deployment summary
-    _display_summary(
+    _deploy_service_config._display_summary(
         app_service,
         domain_url,
         database_linked,

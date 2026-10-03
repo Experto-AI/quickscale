@@ -9,7 +9,13 @@ from quickscale_core.dr_engine._types import _RemoteUploader
 from quickscale_core.dr_engine.primitives import BackupPolicySnapshot
 from typing import Any
 
-import quickscale_core.dr_engine.orchestration as _orchestration
+
+import quickscale_core._dr_remote_storage as _dr_remote_storage
+import quickscale_core.dr_engine.primitives as _primitives
+import quickscale_core.dr_engine._paths as _paths
+import quickscale_core.dr_engine._lock as _lock
+import quickscale_core.dr_engine._state as _state
+import shutil
 
 
 def _resolve_private_remote_credentials(
@@ -20,13 +26,13 @@ def _resolve_private_remote_credentials(
     secret_access_key = policy.resolve_remote_secret_access_key()
 
     if not access_key_id:
-        raise _orchestration.BackupConfigurationError(
+        raise _primitives.BackupConfigurationError(
             "Environment variable "
             f"'{policy.remote_access_key_id_env_var.strip()}' is required for "
             "private_remote backups"
         )
     if not secret_access_key:
-        raise _orchestration.BackupConfigurationError(
+        raise _primitives.BackupConfigurationError(
             "Environment variable "
             f"'{policy.remote_secret_access_key_env_var.strip()}' is required for "
             "private_remote backups"
@@ -36,9 +42,7 @@ def _resolve_private_remote_credentials(
 
 
 def _upload_to_private_remote(local_path: Path, policy: BackupPolicySnapshot) -> str:
-    access_key_id, secret_access_key = (
-        _orchestration._resolve_private_remote_credentials(policy)
-    )
+    access_key_id, secret_access_key = _resolve_private_remote_credentials(policy)
 
     options: dict[str, Any] = {
         "bucket_name": policy.remote_bucket_name,
@@ -56,7 +60,7 @@ def _upload_to_private_remote(local_path: Path, policy: BackupPolicySnapshot) ->
     remote_key = (
         f"{remote_prefix}/{local_path.name}" if remote_prefix else local_path.name
     )
-    _orchestration.upload_file_to_s3(local_path, remote_key, options)
+    _dr_remote_storage.upload_file_to_s3(local_path, remote_key, options)
     return remote_key
 
 
@@ -67,9 +71,7 @@ def _materialize_private_remote_key(
 ) -> None:
     from storages.backends.s3 import S3Storage
 
-    access_key_id, secret_access_key = (
-        _orchestration._resolve_private_remote_credentials(policy)
-    )
+    access_key_id, secret_access_key = _resolve_private_remote_credentials(policy)
 
     options: dict[str, Any] = {
         "bucket_name": policy.remote_bucket_name,
@@ -88,19 +90,17 @@ def _materialize_private_remote_key(
     try:
         with storage.open(remote_key, mode="rb") as source_handle:
             with destination.open("wb") as destination_handle:
-                _orchestration.shutil.copyfileobj(source_handle, destination_handle)
+                shutil.copyfileobj(source_handle, destination_handle)
     except Exception as exc:
-        cleanup_error = _orchestration._cleanup_local_backup_file(destination)
+        cleanup_error = _lock._cleanup_local_backup_file(destination)
         details = f"Private remote materialization failed for {remote_key}: {exc}"
         if cleanup_error is not None:
             details += f"; cleanup failed: {cleanup_error}"
-        raise _orchestration.BackupError(details) from exc
+        raise _primitives.BackupError(details) from exc
 
 
 def _delete_private_remote_key(remote_key: str, policy: BackupPolicySnapshot) -> None:
-    access_key_id, secret_access_key = (
-        _orchestration._resolve_private_remote_credentials(policy)
-    )
+    access_key_id, secret_access_key = _resolve_private_remote_credentials(policy)
 
     options: dict[str, Any] = {
         "bucket_name": policy.remote_bucket_name,
@@ -114,7 +114,7 @@ def _delete_private_remote_key(remote_key: str, policy: BackupPolicySnapshot) ->
     options["access_key"] = access_key_id
     options["secret_key"] = secret_access_key
 
-    _orchestration.delete_s3_key(remote_key, options)
+    _dr_remote_storage.delete_s3_key(remote_key, options)
 
 
 def _upload_snapshot_child_to_private_remote(
@@ -132,7 +132,7 @@ def _upload_snapshot_child_to_private_remote(
         remote_prefix = f"{snapshot_remote_root}/{relative_parent}"
     return remote_uploader(
         local_path,
-        _orchestration._replace_policy_remote_prefix(policy, remote_prefix),
+        _paths._replace_policy_remote_prefix(policy, remote_prefix),
     )
 
 
@@ -171,9 +171,9 @@ def _delete_snapshot_storage(
         remote_keys.add(artifact.remote_key)
 
     if remote_keys:
-        deleter = remote_deleter or _orchestration._delete_private_remote_key
+        deleter = remote_deleter or _delete_private_remote_key
         remote_policy = (
-            _orchestration._resolve_artifact_remote_policy(artifact, policy)
+            _state._resolve_artifact_remote_policy(artifact, policy)
             if artifact is not None
             else policy
         )
@@ -181,7 +181,7 @@ def _delete_snapshot_storage(
             deleter(remote_key, remote_policy)
 
     if snapshot_root.exists():
-        _orchestration.shutil.rmtree(snapshot_root)
+        shutil.rmtree(snapshot_root)
 
     if artifact is not None and artifact.local_path:
         artifact_local_path = Path(artifact.local_path)

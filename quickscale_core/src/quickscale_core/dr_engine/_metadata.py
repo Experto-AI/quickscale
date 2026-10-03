@@ -16,7 +16,14 @@ from typing import Any
 from typing import cast
 import os
 
-import quickscale_core.dr_engine.orchestration as _orchestration
+
+import quickscale_core.dr_engine._types as _types
+import quickscale_core.dr_engine.primitives as _primitives
+import django.conf as _conf
+import importlib as _importlib
+import quickscale_core.dr_engine._paths as _paths
+import subprocess
+import django
 
 
 def _get_source_environment() -> str:
@@ -25,11 +32,11 @@ def _get_source_environment() -> str:
 
 
 def _get_project_slug() -> str:
-    base_dir = Path(getattr(_orchestration.settings, "BASE_DIR", Path.cwd()))
+    base_dir = Path(getattr(_conf.settings, "BASE_DIR", Path.cwd()))
     candidate = base_dir.name.strip()
     if candidate:
         return candidate
-    return str(_orchestration.settings.ROOT_URLCONF.split(".", maxsplit=1)[0])
+    return str(_conf.settings.ROOT_URLCONF.split(".", maxsplit=1)[0])
 
 
 def _collect_module_versions() -> dict[str, str]:
@@ -38,7 +45,7 @@ def _collect_module_versions() -> dict[str, str]:
         if not app_config.name.startswith("quickscale_modules_"):
             continue
         try:
-            package = _orchestration.import_module(app_config.name)
+            package = _importlib.import_module(app_config.name)
         except Exception:  # noqa: S112 - best-effort inventory; an unimportable module is omitted
             continue
         versions[app_config.name] = str(getattr(package, "__version__", "unknown"))
@@ -47,9 +54,9 @@ def _collect_module_versions() -> dict[str, str]:
 
 def _get_git_revision() -> str | None:
     """Return the best-effort current git revision for release metadata."""
-    base_dir = Path(getattr(_orchestration.settings, "BASE_DIR", Path.cwd()))
+    base_dir = Path(getattr(_conf.settings, "BASE_DIR", Path.cwd()))
     try:
-        result = _orchestration.subprocess.run(
+        result = subprocess.run(
             ["git", "rev-parse", "HEAD"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             check=False,
@@ -69,8 +76,8 @@ def _get_git_revision() -> str | None:
 def _load_storage_helpers() -> _StorageHelpersModule:
     """Load storage's public service module behind a typed local boundary."""
     return cast(
-        _orchestration._StorageHelpersModule,
-        _orchestration.import_module("quickscale_modules_storage.services"),
+        _types._StorageHelpersModule,
+        _importlib.import_module("quickscale_modules_storage.services"),
     )
 
 
@@ -90,15 +97,15 @@ def _build_release_metadata(*, captured_at: datetime) -> dict[str, Any]:
     return {
         "manifest_version": 1,
         "captured_at": captured_at.astimezone(timezone.utc).isoformat(),
-        "project_slug": _orchestration._get_project_slug(),
-        "source_environment": _orchestration._get_source_environment(),
+        "project_slug": _get_project_slug(),
+        "source_environment": _get_source_environment(),
         "status": "ready",
         "app_version": str(
-            getattr(_orchestration.settings, "QUICKSCALE_APP_VERSION", "unknown")
+            getattr(_conf.settings, "QUICKSCALE_APP_VERSION", "unknown")
         ),
-        "django_version": _orchestration.django.get_version(),
-        "module_versions": _orchestration._collect_module_versions(),
-        "git_sha": _orchestration._get_git_revision(),
+        "django_version": django.get_version(),
+        "module_versions": _collect_module_versions(),
+        "git_sha": _get_git_revision(),
     }
 
 
@@ -127,32 +134,32 @@ def _create_database_dump(
             database_server_major,
             dump_client_version,
             dump_client_major,
-        ) = _orchestration._require_postgresql_18_contract(
+        ) = _require_postgresql_18_contract(
             database_engine=engine,
             executable="pg_dump",
             operation=operation,
         )
         backup_format = "pg_dump_custom"
-        filename = _orchestration.build_backup_filename(
+        filename = _paths.build_backup_filename(
             resolved_policy,
             now=now,
             suffix="dump",
         )
         local_path = database_directory / filename
-        _orchestration._dump_postgresql_database(
+        _primitives._dump_postgresql_database(
             local_path,
-            _orchestration.django.db.connections["default"].settings_dict,
+            django.db.connections["default"].settings_dict,
             shell_runner=shell_runner,
         )
     else:
         backup_format = "json"
-        filename = _orchestration.build_backup_filename(
+        filename = _paths.build_backup_filename(
             resolved_policy,
             now=now,
             suffix="json",
         )
         local_path = database_directory / filename
-        _orchestration._dump_database_as_json(local_path)
+        _dump_database_as_json(local_path)
 
     return (
         local_path,
@@ -188,19 +195,17 @@ def _build_backup_metadata(
         "backup_format": backup_format,
         "database_engine": database_engine,
         "database_name": database_name,
-        "django_version": _orchestration.django.get_version(),
+        "django_version": django.get_version(),
         "environment": os.getenv("QUICKSCALE_ENVIRONMENT", "local") or "local",
         "target_mode": target_mode,
-        "module_versions": _orchestration._collect_module_versions(),
+        "module_versions": _collect_module_versions(),
         "app_version": str(
-            getattr(_orchestration.settings, "QUICKSCALE_APP_VERSION", "unknown")
+            getattr(_conf.settings, "QUICKSCALE_APP_VERSION", "unknown")
         ),
     }
     resolved_database_server_version = database_server_version
     if resolved_database_server_version is None:
-        resolved_database_server_version = _orchestration._get_database_server_version(
-            database_engine
-        )
+        resolved_database_server_version = _get_database_server_version(database_engine)
     if resolved_database_server_version is not None:
         metadata["database_server_version"] = resolved_database_server_version
     if database_server_major is not None:
@@ -214,11 +219,11 @@ def _build_backup_metadata(
 
 def _get_database_server_version(engine: str) -> str | None:
     """Return best-effort database server version metadata for the active backend."""
-    version_query = _orchestration._database_server_version_query(engine)
+    version_query = _database_server_version_query(engine)
     if version_query is None:
         return None
 
-    connection = _orchestration.django.db.connections["default"]
+    connection = django.db.connections["default"]
     try:
         with connection.cursor() as cursor:
             cursor.execute(version_query)
@@ -235,7 +240,7 @@ def _get_database_server_version(engine: str) -> str | None:
 
 def _database_server_version_query(engine: str) -> str | None:
     """Return a read-only version query for supported backup backends."""
-    engine_family = _orchestration._database_engine_family(engine)
+    engine_family = _primitives._database_engine_family(engine)
     if engine_family == "postgresql":
         return "SHOW server_version"
     if engine_family == "sqlite":
@@ -249,52 +254,50 @@ def _require_postgresql_18_contract(
     operation: str,
 ) -> tuple[str, int, str, int]:
     """Require a PostgreSQL 18 server plus PostgreSQL 18 client tooling."""
-    if _orchestration._database_engine_family(database_engine) != "postgresql":
-        raise _orchestration.BackupConfigurationError(
+    if _primitives._database_engine_family(database_engine) != "postgresql":
+        raise _primitives.BackupConfigurationError(
             "PostgreSQL contract checks require DATABASES['default']['ENGINE'] to "
             "use PostgreSQL."
         )
 
-    database_server_version = _orchestration._get_database_server_version(
-        database_engine
-    )
+    database_server_version = _get_database_server_version(database_engine)
     if database_server_version is None:
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             "PostgreSQL "
-            f"{operation} requires a PostgreSQL {_orchestration._REQUIRED_POSTGRESQL_MAJOR} "
+            f"{operation} requires a PostgreSQL {_primitives._REQUIRED_POSTGRESQL_MAJOR} "
             "server, but the current server version could not be determined."
         )
-    database_server_major = _orchestration._extract_leading_major_version(
+    database_server_major = _primitives._extract_leading_major_version(
         database_server_version
     )
     if database_server_major is None:
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             "PostgreSQL "
-            f"{operation} requires a PostgreSQL {_orchestration._REQUIRED_POSTGRESQL_MAJOR} "
+            f"{operation} requires a PostgreSQL {_primitives._REQUIRED_POSTGRESQL_MAJOR} "
             "server, but the current server version could not be determined."
         )
-    if database_server_major != _orchestration._REQUIRED_POSTGRESQL_MAJOR:
-        raise _orchestration.BackupError(
+    if database_server_major != _primitives._REQUIRED_POSTGRESQL_MAJOR:
+        raise _primitives.BackupError(
             "PostgreSQL "
-            f"{operation} requires a PostgreSQL {_orchestration._REQUIRED_POSTGRESQL_MAJOR} "
+            f"{operation} requires a PostgreSQL {_primitives._REQUIRED_POSTGRESQL_MAJOR} "
             f"server, found '{database_server_version}'."
         )
 
-    tool_version = _orchestration._get_postgresql_tool_version(executable)
-    tool_major = _orchestration._extract_any_major_version(tool_version)
+    tool_version = _primitives._get_postgresql_tool_version(executable)
+    tool_major = _primitives._extract_any_major_version(tool_version)
     if tool_major is None:
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             "PostgreSQL "
-            f"{operation} requires PostgreSQL {_orchestration._REQUIRED_POSTGRESQL_MAJOR} "
+            f"{operation} requires PostgreSQL {_primitives._REQUIRED_POSTGRESQL_MAJOR} "
             f"{executable} tooling, but the installed tool version could not be "
-            "determined." + _orchestration._get_postgresql_18_guidance()
+            "determined." + _get_postgresql_18_guidance()
         )
-    if tool_major != _orchestration._REQUIRED_POSTGRESQL_MAJOR:
-        raise _orchestration.BackupError(
+    if tool_major != _primitives._REQUIRED_POSTGRESQL_MAJOR:
+        raise _primitives.BackupError(
             "PostgreSQL "
-            f"{operation} requires PostgreSQL {_orchestration._REQUIRED_POSTGRESQL_MAJOR} "
+            f"{operation} requires PostgreSQL {_primitives._REQUIRED_POSTGRESQL_MAJOR} "
             f"{executable} tooling, found '{tool_version}'."
-            + _orchestration._get_postgresql_18_guidance()
+            + _get_postgresql_18_guidance()
         )
 
     return database_server_version, database_server_major, tool_version, tool_major

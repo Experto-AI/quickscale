@@ -28,19 +28,31 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from quickscale_core.dr_engine.persistence import PersistedBackupArtifact
 
-import quickscale_core.dr_engine.orchestration as _orchestration
+
+import quickscale_core.dr_engine.recovery as _recovery
+import quickscale_core.dr_engine._state as _state
+import quickscale_core.dr_engine._lock as _lock
+import quickscale_core.dr_engine.primitives as _primitives
+import quickscale_core.dr_engine.persistence as _persistence
+import quickscale_core.dr_engine._metadata as _metadata
+import tempfile as _tempfile
+import django.conf as _conf
+import shutil
+import quickscale_core.dr_engine._policy as _policy
+import quickscale_core.dr_engine._remote as _remote
+import django
+import django.utils.timezone as _django_timezone
 
 
 def _get_restore_compatibility_issues(artifact: Any) -> list[str]:
     """Return restore guardrail issues — delegates to the core implementation."""
     current_engine = str(
-        _orchestration.django.db.connections["default"].settings_dict.get("ENGINE")
-        or ""
+        django.db.connections["default"].settings_dict.get("ENGINE") or ""
     ).strip()
-    return _orchestration._core_get_restore_compatibility_issues(
+    return _recovery._get_restore_compatibility_issues(
         artifact,
         current_engine,
-        installed_module_versions=_orchestration._collect_module_versions(),
+        installed_module_versions=_metadata._collect_module_versions(),
     )
 
 
@@ -50,7 +62,7 @@ def _resolve_restore_source(
     artifact: Any = None,
     file_path: str | Path | None = None,
     snapshot_id: str | None = None,
-    resolution_mode: RestoreSourceResolutionMode = _orchestration.RestoreSourceResolutionMode.REMOTE_FALLBACK,
+    resolution_mode: RestoreSourceResolutionMode = _recovery.RestoreSourceResolutionMode.REMOTE_FALLBACK,
     policy: BackupPolicySnapshot | None = None,
     remote_materializer: RemoteMaterializer | None = None,
 ) -> Iterator[ResolvedRestoreSource]:
@@ -59,20 +71,20 @@ def _resolve_restore_source(
 
     def _policy_resolver(art: ArtifactLike) -> Any:
         nonlocal resolved_policy
-        resolved_policy = _orchestration._resolve_artifact_remote_policy(
+        resolved_policy = _state._resolve_artifact_remote_policy(
             cast("Any", art),
-            resolved_policy or _orchestration._load_active_policy_snapshot(),
+            resolved_policy or _policy._load_active_policy_snapshot(),
         )
         return resolved_policy
 
-    with _orchestration._core_resolve_restore_source(
+    with _recovery._resolve_restore_source(
         artifact=artifact,
         file_path=file_path,
         snapshot_id=snapshot_id,
         resolution_mode=resolution_mode,
         remote_materializer=remote_materializer
-        or _orchestration._materialize_private_remote_key,
-        snapshot_resolver=_orchestration._resolve_authoritative_snapshot_dump,
+        or _remote._materialize_private_remote_key,
+        snapshot_resolver=_resolve_authoritative_snapshot_dump,
         policy_resolver=_policy_resolver,
     ) as restore_source:
         yield restore_source
@@ -80,15 +92,15 @@ def _resolve_restore_source(
 
 def _resolve_authoritative_snapshot_dump(snapshot_id: str) -> Any:
     """Resolve a snapshot id to its authoritative database dump artifact."""
-    snapshot = _orchestration.get_backup_snapshot(snapshot_id)
+    snapshot = _state.get_backup_snapshot(snapshot_id)
     if snapshot.status == "deleted":
-        raise _orchestration.BackupRestoreBlocked(
+        raise _recovery.BackupRestoreBlocked(
             f"Restore blocked because snapshot '{snapshot.snapshot_id}' has been deleted or pruned."
         )
 
     artifact = snapshot.authoritative_dump
     if artifact is None:
-        raise _orchestration.BackupRestoreBlocked(
+        raise _recovery.BackupRestoreBlocked(
             "Restore blocked because the requested snapshot does not have an "
             "authoritative database dump artifact."
         )
@@ -104,15 +116,13 @@ def _ensure_postgresql_18_restore_runtime(current_engine: str) -> None:
 
     _core_ensure_runtime(
         current_engine,
-        require_contract=_orchestration._require_postgresql_18_contract,
+        require_contract=_metadata._require_postgresql_18_contract,
     )
 
 
 def _restore_execution_allowed() -> bool:
     """Return whether destructive restore execution is permitted (Django-backed)."""
-    return _orchestration._core_restore_execution_allowed(
-        is_debug=_orchestration.settings.DEBUG
-    )
+    return _recovery._restore_execution_allowed(is_debug=_conf.settings.DEBUG)
 
 
 def _execute_restore_for_resolved_source(
@@ -126,12 +136,11 @@ def _execute_restore_for_resolved_source(
 ) -> RestoreResult:
     """Run the guarded restore pipeline — Django-backed wrapper around core."""
     current_engine = str(
-        _orchestration.django.db.connections["default"].settings_dict.get("ENGINE")
-        or ""
+        django.db.connections["default"].settings_dict.get("ENGINE") or ""
     ).strip()
-    connection_settings = _orchestration.django.db.connections["default"].settings_dict
+    connection_settings = django.db.connections["default"].settings_dict
 
-    result = _orchestration._core_execute_restore_for_resolved_source(
+    result = _recovery._execute_restore_for_resolved_source(
         restore_source,
         confirmation=confirmation,
         dry_run=dry_run,
@@ -139,16 +148,16 @@ def _execute_restore_for_resolved_source(
         shell_runner=shell_runner,
         current_engine=current_engine,
         connection_settings=connection_settings,
-        is_debug=_orchestration.settings.DEBUG,
-        pg_contract_checker=_orchestration._require_postgresql_18_contract,
-        installed_module_versions=_orchestration._collect_module_versions(),
+        is_debug=_conf.settings.DEBUG,
+        pg_contract_checker=_metadata._require_postgresql_18_contract,
+        installed_module_versions=_metadata._collect_module_versions(),
         recorded_module_versions=recorded_module_versions,
     )
 
     if result.executed and restore_source.artifact is not None:
-        restore_warnings = _orchestration._persist_restore_artifact_metadata(
+        restore_warnings = _persist_restore_artifact_metadata(
             restore_source.artifact,
-            restored_at=_orchestration.django_timezone.now(),
+            restored_at=_django_timezone.now(),
         )
         if restore_warnings:
             result = replace(result, warnings=(*result.warnings, *restore_warnings))
@@ -165,7 +174,7 @@ def restore_backup_source(
     dry_run: bool = False,
     allow_production: bool = False,
     resolution_mode: RestoreSourceResolutionMode = (
-        _orchestration.RestoreSourceResolutionMode.REMOTE_FALLBACK
+        _recovery.RestoreSourceResolutionMode.REMOTE_FALLBACK
     ),
     shell_runner: ShellCommandRunner | None = None,
     policy: BackupPolicySnapshot | None = None,
@@ -178,7 +187,7 @@ def restore_backup_source(
     no artifact row, such as a snapshot report restored by file path; the
     Django-backed restore path compares it with the installed modules.
     """
-    with _orchestration._resolve_restore_source(
+    with _resolve_restore_source(
         artifact=artifact,
         file_path=file_path,
         snapshot_id=snapshot_id,
@@ -186,7 +195,7 @@ def restore_backup_source(
         policy=policy,
         remote_materializer=remote_materializer,
     ) as restore_source:
-        return _orchestration._execute_restore_for_resolved_source(
+        return _execute_restore_for_resolved_source(
             restore_source,
             confirmation=confirmation,
             dry_run=dry_run,
@@ -203,14 +212,14 @@ def restore_backup_artifact(
     dry_run: bool = False,
     allow_production: bool = False,
     resolution_mode: RestoreSourceResolutionMode = (
-        _orchestration.RestoreSourceResolutionMode.REMOTE_FALLBACK
+        _recovery.RestoreSourceResolutionMode.REMOTE_FALLBACK
     ),
     shell_runner: ShellCommandRunner | None = None,
     policy: BackupPolicySnapshot | None = None,
     remote_materializer: RemoteMaterializer | None = None,
 ) -> RestoreResult:
     """Run guarded restore validation or execution for a backup artifact."""
-    return _orchestration.restore_backup_source(
+    return restore_backup_source(
         artifact=artifact,
         confirmation=confirmation,
         dry_run=dry_run,
@@ -236,25 +245,23 @@ def _stage_admin_restore_upload(
 
     try:
         with staged_path.open("wb") as handle:
-            for chunk in _orchestration._iter_admin_restore_upload_chunks(
-                uploaded_file
-            ):
+            for chunk in _iter_admin_restore_upload_chunks(uploaded_file):
                 if not chunk:
                     continue
                 digest.update(chunk)
                 handle.write(chunk)
                 size_bytes += len(chunk)
     except OSError as exc:
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             f"Unable to stage uploaded backup file: {exc}"
         ) from exc
 
     if size_bytes < 1:
-        raise _orchestration.BackupRestoreBlocked(
+        raise _recovery.BackupRestoreBlocked(
             "Restore blocked because the uploaded backup file is empty."
         )
 
-    return _orchestration.StagedAdminRestoreUpload(
+    return _lock.StagedAdminRestoreUpload(
         local_path=staged_path,
         checksum_sha256=digest.hexdigest(),
         size_bytes=size_bytes,
@@ -277,7 +284,7 @@ def _iter_admin_restore_upload_chunks(uploaded_file: Any) -> Iterator[bytes]:
 
     read_method = getattr(uploaded_file, "read", None)
     if not callable(read_method):
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             "Uploaded backup file does not provide a readable stream."
         )
 
@@ -288,7 +295,7 @@ def _iter_admin_restore_upload_chunks(uploaded_file: Any) -> Iterator[bytes]:
     if isinstance(payload, bytes):
         yield payload
         return
-    raise _orchestration.BackupError(
+    raise _primitives.BackupError(
         "Uploaded backup file did not return bytes when read."
     )
 
@@ -296,7 +303,7 @@ def _iter_admin_restore_upload_chunks(uploaded_file: Any) -> Iterator[bytes]:
 def _cleanup_admin_restore_upload_directory(staging_directory: Path) -> str | None:
     """Delete one quarantined admin restore staging directory."""
     try:
-        _orchestration.shutil.rmtree(staging_directory)
+        shutil.rmtree(staging_directory)
     except FileNotFoundError:
         return None
     except OSError as exc:
@@ -315,7 +322,7 @@ def _resolve_admin_uploaded_restore_artifact(
     provider through the typed core ``resolve_admin_uploaded_restore_artifact``
     seam in ``quickscale_core.dr_engine.persistence``.
     """
-    return _orchestration.resolve_admin_uploaded_restore_artifact(
+    return _persistence.resolve_admin_uploaded_restore_artifact(
         checksum_sha256=checksum_sha256, size_bytes=size_bytes
     )
 
@@ -329,9 +336,7 @@ def _persist_restore_artifact_metadata(
 
     SA89b Phase 1: delegates to the persistence provider.
     """
-    return _orchestration.update_artifact_after_restore(
-        artifact, restored_at=restored_at
-    )
+    return _persistence.update_artifact_after_restore(artifact, restored_at=restored_at)
 
 
 def restore_admin_uploaded_backup(
@@ -345,16 +350,16 @@ def restore_admin_uploaded_backup(
 ) -> RestoreResult:
     """Restore one admin-uploaded backup after trusted snapshot-backed matching."""
     staging_directory = Path(
-        _orchestration.mkdtemp(prefix="quickscale-backups-admin-upload-")
+        _tempfile.mkdtemp(prefix="quickscale-backups-admin-upload-")
     )
     result: RestoreResult | None = None
 
     try:
-        staged_upload = _orchestration._stage_admin_restore_upload(
+        staged_upload = _stage_admin_restore_upload(
             uploaded_file,
             staging_directory=staging_directory,
         )
-        trusted_artifact = _orchestration._resolve_admin_uploaded_restore_artifact(
+        trusted_artifact = _resolve_admin_uploaded_restore_artifact(
             checksum_sha256=staged_upload.checksum_sha256,
             size_bytes=staged_upload.size_bytes,
         )
@@ -364,27 +369,27 @@ def restore_admin_uploaded_backup(
         # uploaded-file dry-run path applies the same eligibility guard
         # and recovery guidance as the recorded-artifact branch.
         if trusted_artifact.status == "restoring":
-            stale_threshold = _orchestration.django_timezone.now() - timedelta(
+            stale_threshold = _django_timezone.now() - timedelta(
                 minutes=stale_threshold_minutes
             )
             if (
                 trusted_artifact.restore_started_at is not None
                 and trusted_artifact.restore_started_at < stale_threshold
             ):
-                raise _orchestration.BackupRestoreBlocked(
+                raise _recovery.BackupRestoreBlocked(
                     "This backup artifact's restore appears stale "
                     f"(started at {trusted_artifact.restore_started_at:%Y-%m-%d %H:%M:%S} UTC) — "
                     "the child process likely died. Reset the artifact status "
                     "from the BackupArtifact admin list to retry."
                 )
-            raise _orchestration.BackupRestoreBlocked(
+            raise _recovery.BackupRestoreBlocked(
                 "This backup artifact is currently being "
                 "restored. Wait for the restore to "
                 "complete before retrying."
             )
 
-        result = _orchestration._execute_restore_for_resolved_source(
-            _orchestration.ResolvedRestoreSource(
+        result = _execute_restore_for_resolved_source(
+            _recovery.ResolvedRestoreSource(
                 confirmation_value=trusted_artifact.filename,
                 local_path=staged_upload.local_path,
                 backup_format=trusted_artifact.backup_format,
@@ -396,9 +401,7 @@ def restore_admin_uploaded_backup(
             shell_runner=shell_runner,
         )
     except Exception as exc:
-        cleanup_error = _orchestration._cleanup_admin_restore_upload_directory(
-            staging_directory
-        )
+        cleanup_error = _cleanup_admin_restore_upload_directory(staging_directory)
         if cleanup_error is not None:
             exc.add_note(
                 "Failed to clean up staged admin restore upload directory "
@@ -407,9 +410,7 @@ def restore_admin_uploaded_backup(
         raise
 
     assert result is not None  # noqa: S101 - internal invariant guaranteed by the caller
-    cleanup_error = _orchestration._cleanup_admin_restore_upload_directory(
-        staging_directory
-    )
+    cleanup_error = _cleanup_admin_restore_upload_directory(staging_directory)
     if cleanup_error is None:
         return result
 
@@ -417,7 +418,7 @@ def restore_admin_uploaded_backup(
         result,
         warnings=(
             *result.warnings,
-            _orchestration.RestoreWarning(
+            _recovery.RestoreWarning(
                 code="admin_restore_upload_cleanup_failed",
                 message=(
                     "Restore completed, but the staged admin upload directory "

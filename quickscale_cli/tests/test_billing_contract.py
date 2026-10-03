@@ -74,7 +74,7 @@ def test_apply_next_steps_name_the_required_stripe_endpoint_version(
     """The billing wiring output must state the required webhook endpoint version."""
     from unittest.mock import Mock
 
-    from quickscale_cli.commands.apply_command import _display_next_steps
+    from quickscale_cli.commands._finalize import _display_next_steps
 
     config = Mock()
     config.project.slug = "myapp"

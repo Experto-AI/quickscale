@@ -12,7 +12,11 @@ import sys
 
 import click
 
-import quickscale_cli.commands.deployment_commands as _deployment_commands
+
+import quickscale_core.generator.runtime_database as _runtime_database
+import quickscale_cli.utils._railway_cli as _railway_cli
+import quickscale_cli.utils._railway_project as _railway_project
+import pathlib as _pathlib
 
 
 def runtime_database_url(postgres_service: str, password: str) -> str:
@@ -24,7 +28,7 @@ def runtime_database_url(postgres_service: str, password: str) -> str:
     """
     ref = postgres_service
     return (
-        f"postgresql://{_deployment_commands.RUNTIME_DB_ROLE}:{password}"
+        f"postgresql://{_runtime_database.RUNTIME_DB_ROLE}:{password}"
         f"@${{{{{ref}.PGHOST}}}}:${{{{{ref}.PGPORT}}}}/${{{{{ref}.PGDATABASE}}}}"
     )
 
@@ -32,7 +36,7 @@ def runtime_database_url(postgres_service: str, password: str) -> str:
 def _existing_service_variables(app_service: str) -> dict[str, str]:
     """Return the app service's current Railway variables or fail hard."""
     try:
-        variables = _deployment_commands.get_railway_variables(app_service)
+        variables = _railway_project.get_railway_variables(app_service)
     except Exception as exc:
         raise click.ClickException(
             f"Unable to read Railway variables for service '{app_service}': {exc}"
@@ -59,11 +63,9 @@ def _runtime_role_variables(
         return {}
     password = existing.get("RUNTIME_DB_PASSWORD") or secrets.token_hex(24)
     return {
-        "RUNTIME_DB_ROLE": _deployment_commands.RUNTIME_DB_ROLE,
+        "RUNTIME_DB_ROLE": _runtime_database.RUNTIME_DB_ROLE,
         "RUNTIME_DB_PASSWORD": password,
-        "RUNTIME_DATABASE_URL": _deployment_commands.runtime_database_url(
-            postgres_service, password
-        ),
+        "RUNTIME_DATABASE_URL": runtime_database_url(postgres_service, password),
     }
 
 
@@ -87,20 +89,18 @@ def _configure_env_vars_step(
 
     env_vars = {
         "SECRET_KEY": existing_vars.get("SECRET_KEY")
-        or _deployment_commands.generate_django_secret_key(),
+        or _railway_project.generate_django_secret_key(),
         "DEBUG": "False",
         "DJANGO_SETTINGS_MODULE": f"{django_package}.settings.production",
     }
 
-    runtime_vars = _deployment_commands._runtime_role_variables(
-        postgres_service, existing_vars
-    )
+    runtime_vars = _runtime_role_variables(postgres_service, existing_vars)
     env_vars.update(runtime_vars)
 
     if domain_name:
         env_vars["ALLOWED_HOSTS"] = domain_name
 
-    success, failed_keys = _deployment_commands.set_railway_variables_batch(
+    success, failed_keys = _railway_cli.set_railway_variables_batch(
         env_vars, service=app_service
     )
 
@@ -112,7 +112,7 @@ def _configure_env_vars_step(
                 click.echo(f"   • {key}=<{state}>")
             elif key == "RUNTIME_DATABASE_URL":
                 click.echo(
-                    f"   • {key}=<{_deployment_commands.RUNTIME_DB_ROLE} "
+                    f"   • {key}=<{_runtime_database.RUNTIME_DB_ROLE} "
                     f"@ {postgres_service}>"
                 )
             else:
@@ -149,8 +149,8 @@ def _deploy_app_step(app_service: str) -> None:
     click.echo("This may take a few minutes...")
 
     try:
-        result = _deployment_commands.deploy_railway_service(
-            project_path=_deployment_commands.Path.cwd(),
+        result = _railway_cli.deploy_railway_service(
+            project_path=_pathlib.Path.cwd(),
             service_name=app_service,
             timeout=60,
         )
@@ -180,7 +180,7 @@ def _deploy_app_step(app_service: str) -> None:
 def _verify_deployment_step(app_service: str) -> bool:
     """Verify environment variables were set correctly."""
     try:
-        deployed_vars = _deployment_commands.get_railway_variables(app_service)
+        deployed_vars = _railway_project.get_railway_variables(app_service)
     except Exception as exc:
         raise click.ClickException(
             f"Unable to verify Railway variables for service '{app_service}': {exc}"
@@ -289,7 +289,7 @@ def _display_summary(
     click.echo("   • Migrations run automatically on first deploy")
     click.echo(
         f"   • start.sh creates the restricted "
-        f"'{_deployment_commands.RUNTIME_DB_ROLE}' database role "
+        f"'{_runtime_database.RUNTIME_DB_ROLE}' database role "
         "before migrating"
     )
 

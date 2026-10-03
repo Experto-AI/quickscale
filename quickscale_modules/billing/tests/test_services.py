@@ -1,6 +1,17 @@
 """Tests for billing runtime services."""
 
 from __future__ import annotations
+import quickscale_modules_billing._locks as _locks
+import quickscale_modules_billing._subscription_checkout as _subscription_checkout
+import quickscale_modules_billing._subscription_mutations as _subscription_mutations
+import quickscale_modules_billing._resolution as _resolution
+import quickscale_modules_billing._webhooks_invoice as _webhooks_invoice
+import quickscale_modules_billing._credits as _credits
+import quickscale_modules_billing._settings as _settings
+import quickscale_modules_billing._payload as _payload
+import quickscale_modules_billing._subscription_events as _subscription_events
+import quickscale_modules_billing._removal as _removal
+import quickscale_modules_billing._checkout as _checkout
 
 import inspect
 from dataclasses import dataclass, field
@@ -22,25 +33,32 @@ from quickscale_modules_billing.models import (
     Subscription,
     WebhookEvent,
 )
-from quickscale_modules_billing import services as billing_services
-from quickscale_modules_billing.services import (
+from quickscale_modules_billing.exceptions import (
     BillingConfigurationError,
     BillingDisabledError,
     BillingError,
-    BillingSettingsSnapshot,
     BillingSubscriptionAnomalyError,
     BillingValidationError,
     BillingWebhookError,
     BillingWebhookSignatureError,
-    StripeClient,
+)
+from quickscale_modules_billing._settings import (
+    BillingSettingsSnapshot,
     SubscriptionCancellationTransition,
-    cancel_current_subscription,
-    create_billing_portal_session,
-    credit_user,
-    get_or_create_stripe_customer,
+)
+from quickscale_modules_billing._stripe_client import (
+    StripeClient,
     get_stripe_client,
-    handle_stripe_event,
+)
+from quickscale_modules_billing._subscription_mutations import (
+    cancel_current_subscription,
     resume_current_subscription,
+)
+from quickscale_modules_billing._checkout import create_billing_portal_session
+from quickscale_modules_billing._credits import credit_user
+from quickscale_modules_billing._customers import get_or_create_stripe_customer
+from quickscale_modules_billing.services import (
+    handle_stripe_event,
 )
 from quickscale_modules_orgs.models import Organization
 
@@ -335,7 +353,7 @@ def test_get_stripe_client_wraps_missing_sdk(
 ) -> None:
     monkeypatch.setattr(settings, "QUICKSCALE_BILLING_SECRET_KEY", "sk_test_123")
     monkeypatch.setattr(
-        "quickscale_modules_billing.services.import_module",
+        "quickscale_modules_billing._stripe_client.import_module",
         lambda module_name: (_ for _ in ()).throw(ImportError(module_name)),
     )
 
@@ -356,7 +374,7 @@ def test_get_stripe_client_returns_configured_wrapper(
     )
     monkeypatch.setattr(settings, "QUICKSCALE_BILLING_SECRET_KEY", "sk_test_123")
     monkeypatch.setattr(
-        "quickscale_modules_billing.services.import_module",
+        "quickscale_modules_billing._stripe_client.import_module",
         lambda module_name: fake_module,
     )
 
@@ -395,7 +413,7 @@ def test_get_or_create_stripe_customer_prefers_existing_subscription(
         status=Subscription.Status.ACTIVE,
     )
     monkeypatch.setattr(
-        "quickscale_modules_billing.services.get_stripe_client",
+        "quickscale_modules_billing._stripe_client.get_stripe_client",
         lambda **kwargs: (_ for _ in ()).throw(AssertionError(kwargs)),
     )
 
@@ -729,7 +747,7 @@ def test_create_billing_portal_session_returns_stripe_url(
         return original_create_portal(**kwargs)
 
     monkeypatch.setattr(
-        billing_services,
+        _locks,
         "subscription_provider_mutation_lock",
         record_provider_lock,
     )
@@ -827,7 +845,7 @@ def test_subscription_checkout_creation_holds_provider_mutation_lock(
         return f"https://checkout.example.com/{call_number}"
 
     monkeypatch.setattr(
-        billing_services,
+        _subscription_checkout,
         "_create_subscription_checkout_session",
         fake_create,
     )
@@ -835,7 +853,7 @@ def test_subscription_checkout_creation_holds_provider_mutation_lock(
     def create_checkout() -> str:
         close_old_connections()
         try:
-            return billing_services.create_subscription_checkout_session(
+            return _subscription_checkout.create_subscription_checkout_session(
                 user,
                 plan=plan,
                 success_url="https://app.example.com/success",
@@ -894,7 +912,7 @@ def test_queued_cancellation_revalidates_owner_after_provider_lock(
             close_old_connections()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        with billing_services.subscription_provider_mutation_lock(organization):
+        with _locks.subscription_provider_mutation_lock(organization):
             cancellation_future = executor.submit(cancel_subscription)
             assert cancellation_started.wait(timeout=10)
             assert not cancellation_future.done()
@@ -919,8 +937,8 @@ def test_cancel_current_subscription_schedules_period_end_cancel_and_updates_loc
     org_context,
 ) -> None:
     plan = _create_plan(price_id="price_cancel")
-    current_period_start = billing_services._stripe_timestamp_to_datetime(1713225600)
-    current_period_end = billing_services._stripe_timestamp_to_datetime(1715817600)
+    current_period_start = _payload._stripe_timestamp_to_datetime(1713225600)
+    current_period_end = _payload._stripe_timestamp_to_datetime(1715817600)
     subscription = Subscription.all_objects.create(
         user=user,
         organization=organization,
@@ -951,13 +969,11 @@ def test_cancel_current_subscription_schedules_period_end_cancel_and_updates_loc
     assert updated_subscription.pk == subscription.pk
     assert subscription.status == Subscription.Status.ACTIVE
     assert subscription.stripe_customer_id == "cus_cancel_updated"
-    assert (
-        subscription.current_period_start
-        == billing_services._stripe_timestamp_to_datetime(1715817600)
+    assert subscription.current_period_start == _payload._stripe_timestamp_to_datetime(
+        1715817600
     )
-    assert (
-        subscription.current_period_end
-        == billing_services._stripe_timestamp_to_datetime(1718409600)
+    assert subscription.current_period_end == _payload._stripe_timestamp_to_datetime(
+        1718409600
     )
     assert fake_client.canceled_subscription_calls == ["sub_cancel"]
 
@@ -1215,7 +1231,9 @@ def test_cancellation_transition_does_not_reresolve_subscription(
             }
         }
     )
-    original_resolver = billing_services._resolve_authoritative_subscription_reservation
+    original_resolver = (
+        _subscription_checkout._resolve_authoritative_subscription_reservation
+    )
     resolved_ids: list[object] = []
 
     def resolve_once(**kwargs):
@@ -1226,7 +1244,7 @@ def test_cancellation_transition_does_not_reresolve_subscription(
         return resolved
 
     monkeypatch.setattr(
-        billing_services,
+        _subscription_checkout,
         "_resolve_authoritative_subscription_reservation",
         resolve_once,
     )
@@ -1328,7 +1346,7 @@ def test_cancellation_transition_compensates_internal_failure(
         }
     )
     monkeypatch.setattr(
-        billing_services,
+        _subscription_mutations,
         "_persist_subscription_provider_snapshot",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             RuntimeError("local sync failed")
@@ -1357,8 +1375,8 @@ def test_subscription_upsert_locks_organization_before_subscription_row(
     """Webhook subscription writes obey the org-before-child lock order."""
     plan = _create_plan(price_id="price_lock_order")
     events: list[str] = []
-    original_lock = billing_services._lock_organization_for_billing_mutation
-    original_resolve = billing_services._resolve_subscription_for_runtime_event
+    original_lock = _locks._lock_organization_for_billing_mutation
+    original_resolve = _resolution._resolve_subscription_for_runtime_event
 
     def record_org_lock(organization_arg):
         events.append("organization")
@@ -1369,17 +1387,17 @@ def test_subscription_upsert_locks_organization_before_subscription_row(
         return original_resolve(**kwargs)
 
     monkeypatch.setattr(
-        billing_services,
+        _locks,
         "_lock_organization_for_billing_mutation",
         record_org_lock,
     )
     monkeypatch.setattr(
-        billing_services,
+        _resolution,
         "_resolve_subscription_for_runtime_event",
         record_subscription_lock,
     )
 
-    billing_services._upsert_subscription_from_payload(
+    _subscription_events._upsert_subscription_from_payload(
         {
             "id": "sub_lock_order",
             "customer": "cus_lock_order",
@@ -1463,8 +1481,8 @@ def test_account_deletion_discovers_and_detaches_every_billing_user_reference(
     )
 
     with CaptureQueriesContext(connection) as baseline_queries:
-        organization_ids = (
-            billing_services.account_deletion_user_reference_organization_ids(user.pk)
+        organization_ids = _removal.account_deletion_user_reference_organization_ids(
+            user.pk
         )
     Organization.objects.bulk_create(
         [
@@ -1477,9 +1495,9 @@ def test_account_deletion_discovers_and_detaches_every_billing_user_reference(
     )
     with CaptureQueriesContext(connection) as expanded_queries:
         expanded_organization_ids = (
-            billing_services.account_deletion_user_reference_organization_ids(user.pk)
+            _removal.account_deletion_user_reference_organization_ids(user.pk)
         )
-    detached_count = billing_services.detach_account_deletion_user_references(
+    detached_count = _removal.detach_account_deletion_user_references(
         user.pk,
         organization_ids=organization_ids,
     )
@@ -1731,7 +1749,6 @@ def test_credit_user_deterministic_integrity_recovery(
     full-suite conditions).  The handler re-fetches the row that a competing
     commit inserted.
     """
-    from quickscale_modules_billing import services as billing_services
 
     # Pre-create the CreditBalance so a savepoint rollback inside
     # credit_user doesn't remove it.
@@ -1759,8 +1776,8 @@ def test_credit_user_deterministic_integrity_recovery(
     # Patch _find_existing_credit_transaction to return None so
     # credit_user proceeds past the procedural duplicate check and
     # attempts to create a row.
-    original_find = billing_services._find_existing_credit_transaction
-    billing_services._find_existing_credit_transaction = lambda **kwargs: None  # type: ignore[method-assign]
+    original_find = _credits._find_existing_credit_transaction
+    _credits._find_existing_credit_transaction = lambda **kwargs: None  # type: ignore[method-assign]
 
     # Patch CreditTransaction.all_objects.create to raise IntegrityError
     # deterministically instead of relying on the DB unique constraint
@@ -1779,7 +1796,7 @@ def test_credit_user_deterministic_integrity_recovery(
             stripe_event_id="evt_deterministic_integrity_recovery",
         )
     finally:
-        billing_services._find_existing_credit_transaction = original_find
+        _credits._find_existing_credit_transaction = original_find
         CreditTransaction.all_objects.create = original_create
 
     # The recovery handler should return the pre-inserted competing row.
@@ -2023,13 +2040,11 @@ def test_handle_stripe_event_backfills_missing_subscription_before_crediting(
     assert subscription.status == Subscription.Status.ACTIVE
     assert subscription.stripe_customer_id == "cus_metadata"
     assert subscription.stripe_subscription_id == "sub_123"
-    assert (
-        subscription.current_period_start
-        == billing_services._stripe_timestamp_to_datetime(1713225600)
+    assert subscription.current_period_start == _payload._stripe_timestamp_to_datetime(
+        1713225600
     )
-    assert (
-        subscription.current_period_end
-        == billing_services._stripe_timestamp_to_datetime(1715817600)
+    assert subscription.current_period_end == _payload._stripe_timestamp_to_datetime(
+        1715817600
     )
     assert transaction_row.stripe_object_id == "in_metadata"
     assert CreditBalance.all_objects.get(organization=organization).balance == 100
@@ -2084,7 +2099,7 @@ def test_invoice_paid_unresolved_org_holds_one_lock_through_backfill_and_credit(
 
     fake_client.retrieve_subscription = record_retrieve  # type: ignore[method-assign]
     monkeypatch.setattr(
-        billing_services,
+        _locks,
         "subscription_provider_mutation_lock",
         record_provider_lock,
     )
@@ -2211,7 +2226,7 @@ def test_handle_stripe_event_serializes_concurrent_duplicate_deliveries(
 
     fake_client.construct_event = record_construct_event  # type: ignore[method-assign]
     monkeypatch.setattr(
-        billing_services,
+        _webhooks_invoice,
         "_handle_invoice_paid_event",
         record_handler,
     )
@@ -2221,7 +2236,7 @@ def test_handle_stripe_event_serializes_concurrent_duplicate_deliveries(
         "whsec_concurrent_duplicate",
     )
 
-    def deliver_event() -> billing_services.StripeWebhookResult:
+    def deliver_event() -> _settings.StripeWebhookResult:
         close_old_connections()
         try:
             return handle_stripe_event(
@@ -2255,17 +2270,17 @@ def test_handle_stripe_event_serializes_concurrent_duplicate_deliveries(
     ("event_type", "handler_name", "resolver_name"),
     [
         (
-            billing_services.STRIPE_EVENT_TYPE_INVOICE_PAID,
+            _settings.STRIPE_EVENT_TYPE_INVOICE_PAID,
             "_process_invoice_paid_event",
             "_resolve_organization_for_invoice",
         ),
         (
-            billing_services.STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED,
+            _settings.STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED,
             "_apply_invoice_payment_failed_event",
             "_resolve_organization_for_invoice",
         ),
         (
-            billing_services.STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_UPDATED,
+            _settings.STRIPE_EVENT_TYPE_CUSTOMER_SUBSCRIPTION_UPDATED,
             "_apply_subscription_payload",
             "_resolve_organization_for_subscription",
         ),
@@ -2292,21 +2307,30 @@ def test_subscription_affecting_webhooks_hold_provider_mutation_lock(
         del args, kwargs
         events.append(("handler", event_type))
 
+    handler_modules = {
+        "_process_invoice_paid_event": _webhooks_invoice,
+        "_apply_invoice_payment_failed_event": _webhooks_invoice,
+        "_apply_subscription_payload": _subscription_events,
+    }
+    resolver_modules = {
+        "_resolve_organization_for_invoice": _resolution,
+        "_resolve_organization_for_subscription": _resolution,
+    }
     monkeypatch.setattr(
-        billing_services,
+        resolver_modules[resolver_name],
         resolver_name,
         lambda **kwargs: organization,
     )
-    monkeypatch.setattr(billing_services, handler_name, record_handler)
+    monkeypatch.setattr(handler_modules[handler_name], handler_name, record_handler)
     monkeypatch.setattr(
-        billing_services,
+        _locks,
         "subscription_provider_mutation_lock",
         record_provider_lock,
     )
 
     plan = _create_plan(price_id="price_webhook_lock")
-    if event_type == billing_services.STRIPE_EVENT_TYPE_INVOICE_PAID:
-        billing_services._handle_invoice_paid_event(
+    if event_type == _settings.STRIPE_EVENT_TYPE_INVOICE_PAID:
+        _webhooks_invoice._handle_invoice_paid_event(
             _invoice_paid_event(
                 event_id="evt_invoice_lock",
                 invoice_id="in_invoice_lock",
@@ -2315,7 +2339,7 @@ def test_subscription_affecting_webhooks_hold_provider_mutation_lock(
             ),
             stripe_client=FakeStripeClient(),
         )
-    elif event_type == billing_services.STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED:
+    elif event_type == _settings.STRIPE_EVENT_TYPE_INVOICE_PAYMENT_FAILED:
         event = _invoice_paid_event(
             event_id="evt_invoice_failed_lock",
             invoice_id="in_invoice_failed_lock",
@@ -2323,14 +2347,14 @@ def test_subscription_affecting_webhooks_hold_provider_mutation_lock(
             price_id=plan.stripe_price_id,
         )
         event["type"] = event_type
-        billing_services._handle_invoice_payment_failed_event(event)
+        _webhooks_invoice._handle_invoice_payment_failed_event(event)
     else:
         monkeypatch.setattr(
-            billing_services,
+            _resolution,
             "_resolve_plan_for_subscription_payload",
             lambda payload: plan,
         )
-        billing_services._upsert_subscription_from_payload(
+        _subscription_events._upsert_subscription_from_payload(
             {
                 "id": "sub_webhook_lock",
                 "status": "active",
@@ -2370,7 +2394,7 @@ def test_invoice_paid_reloads_subscription_after_organization_lock(
             price_id=plan.stripe_price_id,
         )
     )
-    original_lock = billing_services._lock_organization_for_billing_mutation
+    original_lock = _locks._lock_organization_for_billing_mutation
     state_changed = False
 
     def change_subscription_before_lock(locked_organization: Any) -> Any:
@@ -2386,12 +2410,12 @@ def test_invoice_paid_reloads_subscription_after_organization_lock(
         settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_invoice_reload"
     )
     monkeypatch.setattr(
-        billing_services,
+        _locks,
         "_lock_organization_for_billing_mutation",
         change_subscription_before_lock,
     )
     monkeypatch.setattr(
-        billing_services,
+        _locks,
         "subscription_provider_mutation_lock",
         lambda _organization: nullcontext(),
     )
@@ -2433,7 +2457,7 @@ def test_invoice_paid_refuses_provider_identity_drift_before_finalization(
             price_id=plan.stripe_price_id,
         )
     )
-    original_lock = billing_services._lock_organization_for_billing_mutation
+    original_lock = _locks._lock_organization_for_billing_mutation
 
     def replace_identity_before_lock(locked_organization: Any) -> Any:
         import concurrent.futures
@@ -2458,7 +2482,7 @@ def test_invoice_paid_refuses_provider_identity_drift_before_finalization(
         return original_lock(locked_organization)
 
     monkeypatch.setattr(
-        billing_services,
+        _locks,
         "_lock_organization_for_billing_mutation",
         replace_identity_before_lock,
     )
@@ -3300,7 +3324,7 @@ def test_display_name_for_user_prefers_full_name_when_available() -> None:
         get_full_name=lambda: "Billing User",
     )
 
-    assert billing_services._display_name_for_user(user) == "Billing User"
+    assert _payload._display_name_for_user(user) == "Billing User"
 
 
 def test_display_name_for_user_falls_back_to_email_when_full_name_is_blank() -> None:
@@ -3310,7 +3334,7 @@ def test_display_name_for_user_falls_back_to_email_when_full_name_is_blank() -> 
         get_full_name=lambda: "",
     )
 
-    assert billing_services._display_name_for_user(user) == "fallback@example.com"
+    assert _payload._display_name_for_user(user) == "fallback@example.com"
 
 
 def test_stripe_client_construct_event_returns_normalized_mapping() -> None:
@@ -3400,11 +3424,11 @@ def test_stripe_client_construct_event_maps_generic_sdk_errors() -> None:
 def test_public_checkout_and_credit_services_are_keyword_only_after_subject() -> None:
     """Rule 23: at most one leading subject; every other argument keyword-only."""
     for service in (
-        billing_services.create_checkout_session,
-        billing_services.create_subscription_checkout_session,
-        billing_services.create_billing_portal_session,
-        billing_services.detach_account_deletion_user_references,
-        billing_services.debit_user,
+        _checkout.create_checkout_session,
+        _subscription_checkout.create_subscription_checkout_session,
+        _checkout.create_billing_portal_session,
+        _removal.detach_account_deletion_user_references,
+        _credits.debit_user,
     ):
         parameters = list(inspect.signature(service).parameters.values())
 
@@ -3475,8 +3499,8 @@ def test_cancel_current_subscription_translates_provider_errors(
         stripe_subscription_id="sub_cancel_error",
         stripe_customer_id="cus_cancel_error",
         status=Subscription.Status.ACTIVE,
-        current_period_start=billing_services._stripe_timestamp_to_datetime(1713225600),
-        current_period_end=billing_services._stripe_timestamp_to_datetime(1715817600),
+        current_period_start=_payload._stripe_timestamp_to_datetime(1713225600),
+        current_period_end=_payload._stripe_timestamp_to_datetime(1715817600),
     )
     fake_client = FakeStripeClient(
         subscriptions={
@@ -3507,6 +3531,6 @@ def test_cancel_current_subscription_translates_provider_errors(
 def test_is_enabled_reads_the_module_enabled_setting() -> None:
     """Rule 1: ``is_enabled()`` reports ``QUICKSCALE_BILLING_ENABLED`` both ways."""
     with override_settings(QUICKSCALE_BILLING_ENABLED=True):
-        assert billing_services.is_enabled() is True
+        assert _settings.is_enabled() is True
     with override_settings(QUICKSCALE_BILLING_ENABLED=False):
-        assert billing_services.is_enabled() is False
+        assert _settings.is_enabled() is False

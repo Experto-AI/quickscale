@@ -13,7 +13,7 @@ from typing import Any
 
 import stripe
 
-from quickscale_modules_billing.services import STRIPE_API_VERSION
+from quickscale_modules_billing._settings import STRIPE_API_VERSION
 
 TEST_API_KEY = "sk_test_quickscale_billing"
 

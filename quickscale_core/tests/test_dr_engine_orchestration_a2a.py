@@ -1,6 +1,9 @@
 """Pure-mock A-II coverage for media sync and policy/path safety."""
 
 from __future__ import annotations
+import quickscale_core.dr_engine._media as _media
+import quickscale_core.dr_engine._prune as _prune
+import quickscale_core.dr_engine._policy as _policy_2
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,7 +12,6 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from quickscale_core.dr_engine import orchestration as orch
 from quickscale_core.dr_engine.primitives import BackupConfigurationError, BackupError
 from quickscale_core.dr_engine.primitives import BackupPolicySnapshot
 
@@ -79,7 +81,7 @@ class TestMediaRuntimeAndCopy:
             },
         )
         with patch("storages.backends.s3.S3Storage") as storage_cls:
-            result = orch._build_s3_storage_from_selection(selection)
+            result = _media._build_s3_storage_from_selection(selection)
 
         assert result is storage_cls.return_value
         storage_cls.assert_called_once_with(
@@ -99,11 +101,16 @@ class TestMediaRuntimeAndCopy:
             options={"bucket_name": "media"},
         )
         with (
-            patch(f"{_ORCH}._load_storage_helpers") as load_helpers,
-            patch(f"{_ORCH}._build_s3_storage_from_selection", return_value="storage"),
+            patch(
+                "quickscale_core.dr_engine._metadata._load_storage_helpers"
+            ) as load_helpers,
+            patch(
+                "quickscale_core.dr_engine._media._build_s3_storage_from_selection",
+                return_value="storage",
+            ),
         ):
             load_helpers.return_value.select_storage_backend.return_value = selection
-            result = orch._resolve_media_runtime(SimpleNamespace(MEDIA_ROOT="unused"))
+            result = _media._resolve_media_runtime(SimpleNamespace(MEDIA_ROOT="unused"))
 
         assert result == {
             "backend": "railway",
@@ -137,10 +144,12 @@ class TestMediaRuntimeAndCopy:
         require_s3: bool,
         message: str,
     ) -> None:
-        with patch(f"{_ORCH}._load_storage_helpers") as load_helpers:
+        with patch(
+            "quickscale_core.dr_engine._metadata._load_storage_helpers"
+        ) as load_helpers:
             load_helpers.return_value.select_storage_backend.return_value = selection
             with pytest.raises(BackupConfigurationError, match=message):
-                orch._resolve_media_runtime(
+                _media._resolve_media_runtime(
                     settings_obj, require_s3_compatible=require_s3
                 )
 
@@ -148,12 +157,14 @@ class TestMediaRuntimeAndCopy:
         self,
     ) -> None:
         with patch(
-            f"{_ORCH}._load_storage_helpers",
+            "quickscale_core.dr_engine._metadata._load_storage_helpers",
             side_effect=ModuleNotFoundError(
                 "storage", name="quickscale_modules_storage"
             ),
         ):
-            result = orch._resolve_media_runtime(SimpleNamespace(MEDIA_ROOT=" /media "))
+            result = _media._resolve_media_runtime(
+                SimpleNamespace(MEDIA_ROOT=" /media ")
+            )
 
         assert result == {
             "backend": "local",
@@ -163,18 +174,18 @@ class TestMediaRuntimeAndCopy:
 
     def test_resolve_media_runtime_does_not_hide_helper_dependency_errors(self) -> None:
         with patch(
-            f"{_ORCH}._load_storage_helpers",
+            "quickscale_core.dr_engine._metadata._load_storage_helpers",
             side_effect=ModuleNotFoundError("boto", name="boto3"),
         ):
             with pytest.raises(BackupConfigurationError, match="boto"):
-                orch._resolve_media_runtime(SimpleNamespace(MEDIA_ROOT="/media"))
+                _media._resolve_media_runtime(SimpleNamespace(MEDIA_ROOT="/media"))
 
     def test_storage_object_key_normalizes_location_and_relative_path(self) -> None:
-        assert orch._storage_object_key(
+        assert _media._storage_object_key(
             SimpleNamespace(location=" /uploads/ "), "/a/b.jpg"
         ) == ("uploads/a/b.jpg")
         assert (
-            orch._storage_object_key(SimpleNamespace(location=""), "a/b.jpg")
+            _media._storage_object_key(SimpleNamespace(location=""), "a/b.jpg")
             == "a/b.jpg"
         )
 
@@ -187,7 +198,7 @@ class TestMediaRuntimeAndCopy:
         source.parent.mkdir(parents=True)
         source.write_bytes(b"media")
 
-        copied = orch._copy_media_item(
+        copied = _media._copy_media_item(
             relative_path="nested/photo.jpg",
             source_runtime={"use_s3_compatible": False, "media_root": source_root},
             target_runtime={"use_s3_compatible": False, "media_root": target_root},
@@ -200,7 +211,7 @@ class TestMediaRuntimeAndCopy:
         self, tmp_path: Path
     ) -> None:
         target = MagicMock()
-        copied = orch._copy_media_item(
+        copied = _media._copy_media_item(
             relative_path="missing.jpg",
             source_runtime={"use_s3_compatible": False, "media_root": tmp_path},
             target_runtime={
@@ -222,7 +233,7 @@ class TestMediaRuntimeAndCopy:
             connection=SimpleNamespace(meta=SimpleNamespace(client=client)),
         )
 
-        assert orch._copy_media_item(
+        assert _media._copy_media_item(
             relative_path="photo.jpg",
             source_runtime={"use_s3_compatible": False, "media_root": tmp_path},
             target_runtime={
@@ -244,7 +255,7 @@ class TestMediaRuntimeAndCopy:
         source_storage = MagicMock()
         source_storage.open.return_value = source_handle
         local_target = tmp_path / "local"
-        assert orch._copy_media_item(
+        assert _media._copy_media_item(
             relative_path="nested/file.dump",
             source_runtime={"use_s3_compatible": True, "storage": source_storage},
             target_runtime={"use_s3_compatible": False, "media_root": local_target},
@@ -258,7 +269,7 @@ class TestMediaRuntimeAndCopy:
             location="prefix",
             connection=SimpleNamespace(meta=SimpleNamespace(client=target_client)),
         )
-        assert orch._copy_media_item(
+        assert _media._copy_media_item(
             relative_path="file.dump",
             source_runtime={"use_s3_compatible": True, "storage": source_storage},
             target_runtime={
@@ -286,9 +297,12 @@ class TestMediaSyncOrchestration:
         }
         target_runtime = {"backend": "railway", "use_s3_compatible": True}
         with (
-            patch(f"{_ORCH}.get_backup_snapshot", return_value=snapshot),
             patch(
-                f"{_ORCH}._load_snapshot_sidecar_payload",
+                "quickscale_core.dr_engine._state.get_backup_snapshot",
+                return_value=snapshot,
+            ),
+            patch(
+                "quickscale_core.dr_engine._sidecar._load_snapshot_sidecar_payload",
                 return_value={
                     "status": "ready",
                     "inventory": [
@@ -300,12 +314,12 @@ class TestMediaSyncOrchestration:
                 },
             ),
             patch(
-                f"{_ORCH}._resolve_media_runtime",
+                "quickscale_core.dr_engine._media._resolve_media_runtime",
                 side_effect=[source_runtime, target_runtime],
             ),
-            patch(f"{_ORCH}._copy_media_item") as copier,
+            patch("quickscale_core.dr_engine._media._copy_media_item") as copier,
         ):
-            result = orch.sync_backup_snapshot_media(
+            result = _media.sync_backup_snapshot_media(
                 "snap-a2",
                 dry_run=True,
                 target_runtime_settings={"ROUTE_KIND": "railway"},
@@ -339,18 +353,27 @@ class TestMediaSyncOrchestration:
             "storage": MagicMock(),
         }
         with (
-            patch(f"{_ORCH}.get_backup_snapshot", return_value=snapshot),
             patch(
-                f"{_ORCH}._load_snapshot_sidecar_payload",
+                "quickscale_core.dr_engine._state.get_backup_snapshot",
+                return_value=snapshot,
+            ),
+            patch(
+                "quickscale_core.dr_engine._sidecar._load_snapshot_sidecar_payload",
                 return_value={
                     "status": "ready",
                     "inventory": [{"relative_path": "a"}, {"relative_path": "b"}],
                 },
             ),
-            patch(f"{_ORCH}._resolve_media_runtime", side_effect=[source, target]),
-            patch(f"{_ORCH}._copy_media_item", side_effect=[True, False]) as copier,
+            patch(
+                "quickscale_core.dr_engine._media._resolve_media_runtime",
+                side_effect=[source, target],
+            ),
+            patch(
+                "quickscale_core.dr_engine._media._copy_media_item",
+                side_effect=[True, False],
+            ) as copier,
         ):
-            result = orch.sync_backup_snapshot_media(
+            result = _media.sync_backup_snapshot_media(
                 "snap-a2", target_runtime_settings={"ROUTE_KIND": "other"}
             )
 
@@ -375,12 +398,16 @@ class TestMediaSyncOrchestration:
     ) -> None:
         with (
             patch(
-                f"{_ORCH}.get_backup_snapshot", return_value=_snapshot(Path("/snap"))
+                "quickscale_core.dr_engine._state.get_backup_snapshot",
+                return_value=_snapshot(Path("/snap")),
             ),
-            patch(f"{_ORCH}._load_snapshot_sidecar_payload", return_value=manifest),
+            patch(
+                "quickscale_core.dr_engine._sidecar._load_snapshot_sidecar_payload",
+                return_value=manifest,
+            ),
         ):
             with pytest.raises(BackupError, match=message):
-                orch.sync_backup_snapshot_media("snap-a2", target_runtime_settings={})
+                _media.sync_backup_snapshot_media("snap-a2", target_runtime_settings={})
 
 
 class TestPolicySnapshotOrchestration:
@@ -399,7 +426,7 @@ class TestPolicySnapshotOrchestration:
             automation_enabled=True,
             schedule="0 2 * * *",
         )
-        assert orch._build_policy_snapshot_from_model(model) == _policy(
+        assert _policy_2._build_policy_snapshot_from_model(model) == _policy(
             retention_days=9,
             naming_prefix="model",
             target_mode="private_remote",
@@ -452,7 +479,9 @@ class TestPolicySnapshotOrchestration:
     ) -> None:
         assert any(
             expected in issue
-            for issue in orch._validate_policy_snapshot_internal(_policy(**overrides))
+            for issue in _policy_2._validate_policy_snapshot_internal(
+                _policy(**overrides)
+            )
         )
 
     def test_load_active_policy_uses_settings_and_ensures_existing_provider_policy(
@@ -461,7 +490,7 @@ class TestPolicySnapshotOrchestration:
         settings_policy = _policy(naming_prefix="settings")
         with (
             patch(
-                f"{_ORCH}.settings_policy_snapshot",
+                "quickscale_core.dr_engine.persistence.settings_policy_snapshot",
                 return_value=settings_policy,
             ),
             patch(
@@ -472,14 +501,14 @@ class TestPolicySnapshotOrchestration:
                 "quickscale_core.dr_engine.persistence.ensure_default_policy"
             ) as ensure,
         ):
-            assert orch._load_active_policy_snapshot() is settings_policy
+            assert _policy_2._load_active_policy_snapshot() is settings_policy
         ensure.assert_called_once_with()
 
     def test_load_active_policy_can_skip_default_reconciliation(self) -> None:
         settings_policy = _policy(naming_prefix="settings")
         with (
             patch(
-                f"{_ORCH}.settings_policy_snapshot",
+                "quickscale_core.dr_engine.persistence.settings_policy_snapshot",
                 return_value=settings_policy,
             ),
             patch(
@@ -491,7 +520,7 @@ class TestPolicySnapshotOrchestration:
             ) as ensure,
         ):
             assert (
-                orch._load_active_policy_snapshot(ensure_default=False)
+                _policy_2._load_active_policy_snapshot(ensure_default=False)
                 is settings_policy
             )
         ensure.assert_not_called()
@@ -500,7 +529,7 @@ class TestPolicySnapshotOrchestration:
         settings_policy = _policy(naming_prefix="settings")
         with (
             patch(
-                f"{_ORCH}.settings_policy_snapshot",
+                "quickscale_core.dr_engine.persistence.settings_policy_snapshot",
                 return_value=settings_policy,
             ),
             patch(
@@ -511,7 +540,7 @@ class TestPolicySnapshotOrchestration:
                 "quickscale_core.dr_engine.persistence.ensure_default_policy"
             ) as ensure,
         ):
-            assert orch._load_active_policy_snapshot() is settings_policy
+            assert _policy_2._load_active_policy_snapshot() is settings_policy
         ensure.assert_not_called()
 
 
@@ -524,12 +553,12 @@ class TestPathSafetyAndDownloads:
         nested = root / "nested" / "file.dump"
         nested.parent.mkdir()
         nested.write_text("dump")
-        assert orch._is_path_within_root(nested, root)
-        assert not orch._is_path_within_root(tmp_path / "other", root)
-        assert not orch._path_uses_symlink_within_root(nested, root)
+        assert _prune._is_path_within_root(nested, root)
+        assert not _prune._is_path_within_root(tmp_path / "other", root)
+        assert not _prune._path_uses_symlink_within_root(nested, root)
         link = root / "link"
         link.symlink_to(nested.parent, target_is_directory=True)
-        assert orch._path_uses_symlink_within_root(link / "file.dump", root)
+        assert _prune._path_uses_symlink_within_root(link / "file.dump", root)
 
     def test_authoritative_roots_deduplicate_policy_and_snapshot_roots(
         self, tmp_path: Path
@@ -538,12 +567,15 @@ class TestPathSafetyAndDownloads:
         policy = _policy(local_directory=str(tmp_path))
         with (
             patch(
-                f"{_ORCH}._get_authoritative_snapshot_for_artifact",
+                "quickscale_core.dr_engine._state._get_authoritative_snapshot_for_artifact",
                 return_value=_snapshot(tmp_path),
             ),
-            patch(f"{_ORCH}.get_local_backup_directory", return_value=tmp_path),
+            patch(
+                "quickscale_core.dr_engine._paths.get_local_backup_directory",
+                return_value=tmp_path,
+            ),
         ):
-            roots = orch._get_authoritative_local_backup_roots(artifact, policy)
+            roots = _prune._get_authoritative_local_backup_roots(artifact, policy)
         assert roots == (tmp_path,)
 
     def test_download_backup_path_accepts_authoritative_regular_file(
@@ -553,12 +585,16 @@ class TestPathSafetyAndDownloads:
         file_path.write_text("dump")
         artifact = SimpleNamespace(local_path=str(file_path))
         with (
-            patch(f"{_ORCH}.get_local_backup_directory", return_value=tmp_path),
             patch(
-                f"{_ORCH}._get_authoritative_snapshot_for_artifact", return_value=None
+                "quickscale_core.dr_engine._paths.get_local_backup_directory",
+                return_value=tmp_path,
+            ),
+            patch(
+                "quickscale_core.dr_engine._state._get_authoritative_snapshot_for_artifact",
+                return_value=None,
             ),
         ):
-            assert orch.download_backup_path(artifact, policy=_policy()) == file_path
+            assert _prune.download_backup_path(artifact, policy=_policy()) == file_path
 
     @pytest.mark.parametrize(
         ("artifact_path", "root", "message"),
@@ -571,7 +607,7 @@ class TestPathSafetyAndDownloads:
         self, artifact_path: str | None, root: str, message: str
     ) -> None:
         with pytest.raises(BackupError, match=message):
-            orch.download_backup_path(
+            _prune.download_backup_path(
                 SimpleNamespace(local_path=artifact_path),
                 policy=_policy(local_directory=root),
             )
@@ -584,13 +620,17 @@ class TestPathSafetyAndDownloads:
         outside = tmp_path / "outside.dump"
         outside.write_text("dump")
         with (
-            patch(f"{_ORCH}.get_local_backup_directory", return_value=root),
             patch(
-                f"{_ORCH}._get_authoritative_snapshot_for_artifact", return_value=None
+                "quickscale_core.dr_engine._paths.get_local_backup_directory",
+                return_value=root,
+            ),
+            patch(
+                "quickscale_core.dr_engine._state._get_authoritative_snapshot_for_artifact",
+                return_value=None,
             ),
         ):
             with pytest.raises(BackupError, match="authoritative"):
-                orch.download_backup_path(
+                _prune.download_backup_path(
                     SimpleNamespace(local_path=str(outside)), policy=_policy()
                 )
 
@@ -599,13 +639,17 @@ class TestPathSafetyAndDownloads:
         link = root / "link.dump"
         link.symlink_to(real)
         with (
-            patch(f"{_ORCH}.get_local_backup_directory", return_value=root),
             patch(
-                f"{_ORCH}._get_authoritative_snapshot_for_artifact", return_value=None
+                "quickscale_core.dr_engine._paths.get_local_backup_directory",
+                return_value=root,
+            ),
+            patch(
+                "quickscale_core.dr_engine._state._get_authoritative_snapshot_for_artifact",
+                return_value=None,
             ),
         ):
             with pytest.raises(BackupError, match="symlinks"):
-                orch.download_backup_path(
+                _prune.download_backup_path(
                     SimpleNamespace(local_path=str(link)), policy=_policy()
                 )
 
@@ -615,12 +659,16 @@ class TestPathSafetyAndDownloads:
         directory = tmp_path / "directory"
         directory.mkdir()
         with (
-            patch(f"{_ORCH}.get_local_backup_directory", return_value=tmp_path),
             patch(
-                f"{_ORCH}._get_authoritative_snapshot_for_artifact", return_value=None
+                "quickscale_core.dr_engine._paths.get_local_backup_directory",
+                return_value=tmp_path,
+            ),
+            patch(
+                "quickscale_core.dr_engine._state._get_authoritative_snapshot_for_artifact",
+                return_value=None,
             ),
         ):
             with pytest.raises(BackupError, match="regular file"):
-                orch.download_backup_path(
+                _prune.download_backup_path(
                     SimpleNamespace(local_path=str(directory)), policy=_policy()
                 )

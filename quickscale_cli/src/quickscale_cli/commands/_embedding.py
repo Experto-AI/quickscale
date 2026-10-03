@@ -1,9 +1,8 @@
 """Module embedding step adapters.
 
 Implementation detail of :mod:`quickscale_cli.commands.apply_command`;
-that module re-exports every name defined here (Module Conventions
-rule 28), so existing import paths and test patch targets keep
-working.
+collaborators are resolved through the sibling modules that define
+them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -15,16 +14,21 @@ from typing import Any
 import click
 
 
-from quickscale_cli.commands.module_commands import (
-    ModuleEmbedProvenance,
-)
+from quickscale_cli.commands._module_shared import ModuleEmbedProvenance
 from quickscale_core.schema.state_schema import (
     QuickScaleState,
 )
 
 # AF6 Phase 2 — core step bodies
 from quickscale_cli.commands._types import EmbedModulesResult
-import quickscale_cli.commands.apply_command as _apply_command
+
+import quickscale_core.apply.steps.types as _types
+import quickscale_core.apply.steps as _steps
+import quickscale_cli.commands._types as _types_2
+import quickscale_cli.commands._module_shared as _module_shared
+import quickscale_cli.commands._module_embed as _module_embed
+import quickscale_cli.commands._git_ops as _git_ops
+import quickscale_core.utils.git_repo as _git_repo
 
 
 def _embed_module(
@@ -46,12 +50,12 @@ def _embed_module(
             "skip_auth_migration_check": skip_auth_migration_check,
             "sync_dependencies": False,
             "install_dependencies": False,
-            "execution_mode": _apply_command.APPLY_MODULE_EXECUTION_MODE,
+            "execution_mode": _module_shared.APPLY_MODULE_EXECUTION_MODE,
             "provenance_sink": provenance_sink,
         }
         if split_ref is not None:
             embed_kwargs["split_ref"] = split_ref
-        success = _apply_command.embed_module(
+        success = _module_embed.embed_module(
             **embed_kwargs,
         )
 
@@ -77,9 +81,9 @@ def _embed_modules_step(
     if no_modules or not modules_to_embed:
         if existing_state and not modules_to_embed:
             click.echo("⏭️  No new modules to embed")
-        return _apply_command.EmbedModulesResult(success=True, embedded_modules=[])
+        return _types_2.EmbedModulesResult(success=True, embedded_modules=[])
 
-    step_ctx = _apply_command.StepContext(
+    step_ctx = _types.StepContext(
         output_path=output_path,
         existing_state=existing_state,
     )
@@ -99,23 +103,23 @@ def _embed_modules_step(
         }
         if module_name in overrides:
             embed_kwargs["split_ref"] = overrides[module_name]
-        return _apply_command._embed_module(
+        return _embed_module(
             path,
             module_name,
             **embed_kwargs,
         )
 
-    outcome = _apply_command.step_embed_modules(
+    outcome = _steps.step_embed_modules(
         step_ctx,
         modules_to_embed=modules_to_embed,
         no_modules=no_modules,
         embed_one_module=_embed_one_module,
-        commit_changes=_apply_command._git_commit,
-        is_working_directory_clean_fn=_apply_command.is_working_directory_clean,
+        commit_changes=_git_ops._git_commit,
+        is_working_directory_clean_fn=_git_repo.is_working_directory_clean,
     )
 
     if outcome.success:
-        return _apply_command.EmbedModulesResult(
+        return _types_2.EmbedModulesResult(
             success=True,
             embedded_modules=step_ctx.embedded_modules,
             provenance_payloads=(
@@ -128,7 +132,7 @@ def _embed_modules_step(
     if step_ctx.embed_commit_failure:
         raise click.Abort()
 
-    return _apply_command.EmbedModulesResult(
+    return _types_2.EmbedModulesResult(
         success=False,
         embedded_modules=step_ctx.embedded_modules,
         failed_module=step_ctx.embed_failed_module,

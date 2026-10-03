@@ -1,6 +1,9 @@
 """Extended tests for status_command.py - covering helper functions and edge cases."""
 
 import json
+import quickscale_cli.commands._status_context as _status_context
+import quickscale_core.schema.delta as _delta
+import quickscale_cli.commands._status_display as _status_display
 import os
 from unittest.mock import Mock, patch
 
@@ -11,12 +14,8 @@ import pytest
 
 from quickscale_core.contracts.module_discovery import ModulePresenceState
 from quickscale_core.schema.config_schema import ConfigValidationError
-from quickscale_cli.commands import status_command
-from quickscale_cli.commands.status_command import (
+from quickscale_cli.commands._status_display import (
     _build_json_output,
-    _check_contract_vintage,
-    _compute_drift_diagnostics,
-    _detect_project_context,
     _display_docker_status,
     _display_drift_diagnostics,
     _display_drift_warnings,
@@ -24,10 +23,21 @@ from quickscale_cli.commands.status_command import (
     _display_pending_changes,
     _display_project_info,
     _display_text_status,
+)
+from quickscale_cli.commands.contract_vintage import (
+    check_contract_vintage as _check_contract_vintage,
+)
+from quickscale_cli.commands._status_diagnostics import (
+    _compute_drift_diagnostics,
+    _state_file_has_consolidated_sections,
+)
+from quickscale_cli.commands._status_context import (
+    _detect_project_context,
     _format_datetime,
     _get_docker_status,
     _load_config,
-    _state_file_has_consolidated_sections,
+)
+from quickscale_cli.commands.status_command import (
     status,
 )
 from quickscale_core.project_state import ProjectStateManager
@@ -41,7 +51,7 @@ from quickscale_core.project_state import ProjectStateManager
 class TestGetDockerStatus:
     """Tests for _get_docker_status"""
 
-    @patch("quickscale_cli.commands.status_command.subprocess.run")
+    @patch("subprocess.run")
     def test_docker_running(self, mock_run):
         """Test Docker status when containers are running"""
         mock_run.return_value = Mock(
@@ -53,28 +63,28 @@ class TestGetDockerStatus:
         assert "myapp-backend-1" in result
         assert "Up 5 minutes" in result["myapp-backend-1"]
 
-    @patch("quickscale_cli.commands.status_command.subprocess.run")
+    @patch("subprocess.run")
     def test_docker_no_containers(self, mock_run):
         """Test Docker status with no running containers"""
         mock_run.return_value = Mock(returncode=0, stdout="")
         result = _get_docker_status()
         assert result is None
 
-    @patch("quickscale_cli.commands.status_command.subprocess.run")
+    @patch("subprocess.run")
     def test_docker_not_available(self, mock_run):
         """Test when Docker is not available"""
         mock_run.side_effect = FileNotFoundError()
         result = _get_docker_status()
         assert result is None
 
-    @patch("quickscale_cli.commands.status_command.subprocess.run")
+    @patch("subprocess.run")
     def test_docker_command_fails(self, mock_run):
         """Test when docker compose fails"""
         mock_run.return_value = Mock(returncode=1, stdout="")
         result = _get_docker_status()
         assert result is None
 
-    @patch("quickscale_cli.commands.status_command.subprocess.run")
+    @patch("subprocess.run")
     def test_docker_lines_without_separator(self, mock_run):
         """Test docker output without proper separator"""
         mock_run.return_value = Mock(returncode=0, stdout="no separator here")
@@ -249,14 +259,12 @@ class TestDisplayFunctions:
         state.project.theme = "showcase_react"
         state.modules = {}
 
-        with patch(
-            "quickscale_cli.commands.status_command.compute_delta"
-        ) as mock_delta:
+        with patch("quickscale_core.schema.delta.compute_delta") as mock_delta:
             delta = Mock()
             delta.has_changes = True
             mock_delta.return_value = delta
             with patch(
-                "quickscale_cli.commands.status_command.format_delta",
+                "quickscale_core.schema.delta.format_delta",
                 return_value="+ auth",
             ):
                 _display_pending_changes(config, state)
@@ -266,15 +274,13 @@ class TestDisplayFunctions:
         config = Mock()
         state = Mock()
 
-        with patch(
-            "quickscale_cli.commands.status_command.compute_delta"
-        ) as mock_delta:
+        with patch("quickscale_core.schema.delta.compute_delta") as mock_delta:
             delta = Mock()
             delta.has_changes = False
             mock_delta.return_value = delta
             _display_pending_changes(config, state)
 
-    @patch("quickscale_cli.commands.status_command._get_docker_status")
+    @patch("quickscale_cli.commands._status_context._get_docker_status")
     def test_display_docker_status_running(self, mock_status):
         """Display Docker status for running containers"""
         mock_status.return_value = {
@@ -284,7 +290,7 @@ class TestDisplayFunctions:
         }
         _display_docker_status()
 
-    @patch("quickscale_cli.commands.status_command._get_docker_status")
+    @patch("quickscale_cli.commands._status_context._get_docker_status")
     def test_display_docker_status_none(self, mock_status):
         """Display Docker status when not available"""
         mock_status.return_value = None
@@ -365,15 +371,15 @@ class TestBuildJsonOutput:
         delta.theme_changed = False
 
         with patch(
-            "quickscale_cli.commands.status_command._get_docker_status",
+            "quickscale_cli.commands._status_context._get_docker_status",
             return_value=None,
         ):
             with patch(
-                "quickscale_cli.commands.status_command._load_module_manifests",
+                "quickscale_cli.commands._status_context._load_module_manifests",
                 return_value={},
             ):
                 with patch(
-                    "quickscale_cli.commands.status_command.compute_delta",
+                    "quickscale_core.schema.delta.compute_delta",
                     return_value=delta,
                 ):
                     result = _build_json_output(
@@ -388,7 +394,7 @@ class TestBuildJsonOutput:
     def test_without_state(self, tmp_path):
         """Build JSON without state"""
         with patch(
-            "quickscale_cli.commands.status_command._get_docker_status",
+            "quickscale_cli.commands._status_context._get_docker_status",
             return_value=None,
         ):
             result = _build_json_output(tmp_path, None, None, None)
@@ -399,7 +405,7 @@ class TestBuildJsonOutput:
     def test_with_docker_status(self, tmp_path):
         """Build JSON with Docker status"""
         with patch(
-            "quickscale_cli.commands.status_command._get_docker_status",
+            "quickscale_cli.commands._status_context._get_docker_status",
             return_value={"backend": "Up"},
         ):
             result = _build_json_output(tmp_path, None, None, None)
@@ -443,7 +449,7 @@ class TestDisplayTextStatus:
         psm.load_config.return_value = None
 
         with patch(
-            "quickscale_cli.commands.status_command._get_docker_status",
+            "quickscale_cli.commands._status_context._get_docker_status",
             return_value=None,
         ):
             _display_text_status(tmp_path, state, None, None, None, sm, psm)
@@ -461,12 +467,10 @@ class TestDisplayTextStatus:
         sm = Mock()
         psm = Mock(spec=ProjectStateManager)
         with patch(
-            "quickscale_cli.commands.status_command._get_docker_status",
+            "quickscale_cli.commands._status_context._get_docker_status",
             return_value=None,
         ):
-            with patch(
-                "quickscale_cli.commands.status_command.compute_delta"
-            ) as mock_delta:
+            with patch("quickscale_core.schema.delta.compute_delta") as mock_delta:
                 delta = Mock()
                 delta.has_changes = False
                 mock_delta.return_value = delta
@@ -1102,19 +1106,17 @@ class TestFacadePatchTargets:
     def test_patched_docker_probe_flows_through_display(self, capsys) -> None:
         """Patching the facade docker probe reaches the display helper."""
         with patch.object(
-            status_command, "_get_docker_status", return_value={"app": "Up"}
+            _status_context, "_get_docker_status", return_value={"app": "Up"}
         ):
-            status_command._display_docker_status()
+            _status_display._display_docker_status()
 
         assert "app: Up" in capsys.readouterr().out
 
     def test_patched_subprocess_flows_through_docker_probe(self) -> None:
         """Patching the facade subprocess binding reaches the docker probe."""
         completed = Mock(returncode=0, stdout="app: Up\n")
-        with patch.object(
-            status_command.subprocess, "run", return_value=completed
-        ) as runner:
-            assert status_command._get_docker_status() == {"app": "Up"}
+        with patch("subprocess.run", return_value=completed) as runner:
+            assert _status_context._get_docker_status() == {"app": "Up"}
 
         runner.assert_called_once()
 
@@ -1122,14 +1124,12 @@ class TestFacadePatchTargets:
         """Patching the facade delta helpers reaches pending-change display."""
         delta = Mock(has_changes=True)
         with (
+            patch.object(_delta, "compute_delta", return_value=delta) as compute,
             patch.object(
-                status_command, "compute_delta", return_value=delta
-            ) as compute,
-            patch.object(
-                status_command, "format_delta", return_value="module auth added"
+                _delta, "format_delta", return_value="module auth added"
             ) as formatter,
         ):
-            status_command._display_pending_changes(Mock(), None)
+            _status_display._display_pending_changes(Mock(), None)
 
         compute.assert_called_once()
         formatter.assert_called_once_with(delta)
@@ -1145,17 +1145,17 @@ class TestFacadePatchTargets:
         record.state = ModulePresenceState.ACTIVE
         with (
             patch.object(
-                status_command,
+                _status_context,
                 "_discover_project_module_presence",
                 return_value=[record],
             ),
             patch.object(
-                status_command,
+                _status_context,
                 "_load_module_manifests",
                 return_value={"auth": Mock()},
             ) as loader,
         ):
-            manifests, records = status_command._load_status_manifests(tmp_path, state)
+            manifests, records = _status_context._load_status_manifests(tmp_path, state)
 
         loader.assert_called_once_with(tmp_path, ["auth"], strict=True)
         assert records == [record]

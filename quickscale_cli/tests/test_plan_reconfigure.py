@@ -6,9 +6,9 @@ from pathlib import Path
 import yaml
 from click.testing import CliRunner
 
+from quickscale_cli.commands._plan_shared import _configure_selected_modules
+from quickscale_cli.commands._plan_reconfigure import _get_project_info_for_reconfig
 from quickscale_cli.commands.plan_command import (
-    _configure_selected_modules,
-    _get_project_info_for_reconfig,
     plan,
 )
 from quickscale_core.contracts.module_catalog import get_discovered_module_entries

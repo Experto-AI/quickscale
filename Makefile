@@ -76,6 +76,7 @@
          check-csrf-exempt check-commit-testimony check-project-contract-vintage check-gate-suites isolation-conformance \
          check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture security-negative-probes refresh-action-pins \
          check-workflow-security check-secret-scanning check-module-conventions \
+         check-split-facade-imports \
          check-gate-parity check-ci-gate-generation \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
@@ -342,6 +343,7 @@ help:
 	@echo "  make check-workflow-security      - Blocking zizmor scan: action pinning and top-level workflow permissions"
 	@echo "  make check-secret-scanning        - Blocking gitleaks secret scan with reasoned allowlists"
 	@echo "  make check-module-conventions     - Module Conventions rule 40 conformance check over every manifest and module source"
+	@echo "  make check-split-facade-imports   - Reject a private module importing its own package's facade (SA234)"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts and the known-bad Dockerfile gate control"
 	@echo "  make refresh-action-pins          - Operator: refresh SHA-pinned actions to their latest releases (CHECK=1 reports only)"
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
@@ -1077,6 +1079,10 @@ check-secret-scanning:
 # ticket has not landed are recorded in the check's OPEN_RULES mapping.
 check-module-conventions:
 	@$(PYTHON) scripts/check_module_conventions.py
+
+# Reject a private module importing its own package's facade (SA234).
+check-split-facade-imports:
+	@$(PYTHON) scripts/check_split_facade_imports.py
 
 security-negative-probes:
 	@$(PYTHON) scripts/check_security_gates.py security-negative-probes

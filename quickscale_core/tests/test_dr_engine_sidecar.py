@@ -74,9 +74,12 @@ class TestBuildEnvVarManifest:
     def test_basic_structure(self) -> None:
         """Returns a manifest with version, captured_at, status, and env var names."""
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="staging",
             ),
             patch.dict(os.environ, {"PATH": "/usr/bin", "HOME": "/root"}, clear=True),
@@ -94,9 +97,12 @@ class TestBuildEnvVarManifest:
     def test_empty_environment(self) -> None:
         """No env vars returns count 0 with empty list."""
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="test",
             ),
             patch.dict(os.environ, {}, clear=True),
@@ -116,9 +122,12 @@ class TestBuildPromotionVerificationPlaceholder:
     def test_basic_structure(self) -> None:
         """Placeholder has reserved status, empty reports, and rollback_pin."""
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="production",
             ),
         ):
@@ -192,13 +201,16 @@ class TestBuildMediaSyncManifest:
             MEDIA_ROOT = str(media_dir)
 
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="staging",
             ),
             patch(
-                f"{_ORCH}._load_storage_helpers",
+                "quickscale_core.dr_engine._metadata._load_storage_helpers",
                 side_effect=ModuleNotFoundError(
                     "No module named 'quickscale_modules_storage'",
                     name="quickscale_modules_storage",
@@ -226,13 +238,16 @@ class TestBuildMediaSyncManifest:
             MEDIA_ROOT = ""
 
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="staging",
             ),
             patch(
-                f"{_ORCH}._load_storage_helpers",
+                "quickscale_core.dr_engine._metadata._load_storage_helpers",
                 side_effect=ModuleNotFoundError(
                     "No module named 'quickscale_modules_storage'",
                     name="quickscale_modules_storage",
@@ -252,13 +267,16 @@ class TestBuildMediaSyncManifest:
             MEDIA_ROOT = str(tmp_path / "nonexistent")
 
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="staging",
             ),
             patch(
-                f"{_ORCH}._load_storage_helpers",
+                "quickscale_core.dr_engine._metadata._load_storage_helpers",
                 side_effect=ModuleNotFoundError(
                     "No module named 'quickscale_modules_storage'",
                     name="quickscale_modules_storage",
@@ -280,13 +298,16 @@ class TestBuildMediaSyncManifest:
             MEDIA_ROOT = str(media_file)
 
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="staging",
             ),
             patch(
-                f"{_ORCH}._load_storage_helpers",
+                "quickscale_core.dr_engine._metadata._load_storage_helpers",
                 side_effect=ModuleNotFoundError(
                     "No module named 'quickscale_modules_storage'",
                     name="quickscale_modules_storage",
@@ -308,13 +329,16 @@ class TestBuildMediaSyncManifest:
             MEDIA_ROOT = str(media_dir)
 
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="staging",
             ),
             patch(
-                f"{_ORCH}._load_storage_helpers",
+                "quickscale_core.dr_engine._metadata._load_storage_helpers",
                 side_effect=ModuleNotFoundError(
                     "No module named 'quickscale_modules_storage'",
                     name="quickscale_modules_storage",
@@ -343,7 +367,9 @@ class TestPersistSnapshotSidecarPayload:
         # _load_active_policy_snapshot is a lazy import (inside function body)
         # save_snapshot is a module-level import in _sidecar.py
         with (
-            patch(f"{_ORCH}._load_active_policy_snapshot") as mock_load,
+            patch(
+                "quickscale_core.dr_engine._policy._load_active_policy_snapshot"
+            ) as mock_load,
             patch(
                 f"{_SIDE}.save_snapshot",
             ) as mock_save,
@@ -386,7 +412,9 @@ class TestPersistSnapshotSidecarPayload:
         payload = {"status": "ready"}
 
         with (
-            patch(f"{_ORCH}._load_active_policy_snapshot") as mock_load,
+            patch(
+                "quickscale_core.dr_engine._policy._load_active_policy_snapshot"
+            ) as mock_load,
             patch(
                 f"{_SIDE}.save_snapshot",
             ),
@@ -418,7 +446,9 @@ class TestPersistSnapshotSidecarPayload:
         payload = {"status": "ready"}
 
         with (
-            patch(f"{_ORCH}._load_active_policy_snapshot") as mock_load,
+            patch(
+                "quickscale_core.dr_engine._policy._load_active_policy_snapshot"
+            ) as mock_load,
             patch(
                 f"{_SIDE}.save_snapshot",
             ),
@@ -443,12 +473,14 @@ class TestPersistSnapshotSidecarPayload:
         payload = {"status": "ready"}
 
         with (
-            patch(f"{_ORCH}._load_active_policy_snapshot") as mock_load,
+            patch(
+                "quickscale_core.dr_engine._policy._load_active_policy_snapshot"
+            ) as mock_load,
             patch(
                 f"{_SIDE}.save_snapshot",
             ),
             patch(
-                f"{_ORCH}._upload_snapshot_child_to_private_remote",
+                "quickscale_core.dr_engine._remote._upload_snapshot_child_to_private_remote",
                 return_value="s3://new-remote-key",
             ),
         ):
@@ -473,12 +505,14 @@ class TestPersistSnapshotSidecarPayload:
         payload = {"status": "ready"}
 
         with (
-            patch(f"{_ORCH}._load_active_policy_snapshot") as mock_load,
+            patch(
+                "quickscale_core.dr_engine._policy._load_active_policy_snapshot"
+            ) as mock_load,
             patch(
                 f"{_SIDE}.save_snapshot",
             ),
             patch(
-                f"{_ORCH}._upload_snapshot_child_to_private_remote",
+                "quickscale_core.dr_engine._remote._upload_snapshot_child_to_private_remote",
                 side_effect=BackupError("upload failed"),
             ),
         ):
@@ -507,12 +541,14 @@ class TestPersistSnapshotSidecarPayload:
         payload = {"status": "ready"}
 
         with (
-            patch(f"{_ORCH}._load_active_policy_snapshot") as mock_load,
+            patch(
+                "quickscale_core.dr_engine._policy._load_active_policy_snapshot"
+            ) as mock_load,
             patch(
                 f"{_SIDE}.save_snapshot",
             ),
             patch(
-                f"{_ORCH}._upload_snapshot_child_to_private_remote",
+                "quickscale_core.dr_engine._remote._upload_snapshot_child_to_private_remote",
                 side_effect=ValueError("unexpected"),
             ),
         ):
@@ -549,13 +585,16 @@ class TestCaptureSnapshotSidecars:
             MEDIA_ROOT = ""
 
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="test",
             ),
             patch(
-                f"{_ORCH}._load_storage_helpers",
+                "quickscale_core.dr_engine._metadata._load_storage_helpers",
                 side_effect=ModuleNotFoundError(
                     "No module named 'quickscale_modules_storage'",
                     name="quickscale_modules_storage",
@@ -563,7 +602,7 @@ class TestCaptureSnapshotSidecars:
             ),
             patch(f"{_SIDE}.settings", FakeSettings()),
             patch(
-                f"{_ORCH}._build_release_metadata",
+                "quickscale_core.dr_engine._metadata._build_release_metadata",
                 return_value={"manifest_version": 1, "status": "ready"},
             ),
             patch(f"{_SIDE}._compute_sha256", return_value="abc"),
@@ -600,13 +639,16 @@ class TestBuildMediaSyncManifestExceptions:
     def test_generic_exception_from_storage_helpers(self) -> None:
         """A generic Exception (non-ModuleNotFound) returns unsupported status."""
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="staging",
             ),
             patch(
-                f"{_ORCH}._load_storage_helpers",
+                "quickscale_core.dr_engine._metadata._load_storage_helpers",
                 side_effect=Exception("unexpected error"),
             ),
             patch(f"{_SIDE}.settings", type("Fake", (), {})()),
@@ -631,13 +673,16 @@ class TestCaptureSnapshotSidecarsPrivateRemote:
         policy = SimpleNamespace(target_mode="private_remote")
 
         with (
-            patch(f"{_ORCH}._get_project_slug", return_value="myproj"),
             patch(
-                f"{_ORCH}._get_source_environment",
+                "quickscale_core.dr_engine._metadata._get_project_slug",
+                return_value="myproj",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._get_source_environment",
                 return_value="test",
             ),
             patch(
-                f"{_ORCH}._load_storage_helpers",
+                "quickscale_core.dr_engine._metadata._load_storage_helpers",
                 side_effect=ModuleNotFoundError(
                     "No module named 'quickscale_modules_storage'",
                     name="quickscale_modules_storage",
@@ -645,12 +690,12 @@ class TestCaptureSnapshotSidecarsPrivateRemote:
             ),
             patch(f"{_SIDE}.settings", type("FakeSettings", (), {"MEDIA_ROOT": ""})()),
             patch(
-                f"{_ORCH}._build_release_metadata",
+                "quickscale_core.dr_engine._metadata._build_release_metadata",
                 return_value={"manifest_version": 1, "status": "ready"},
             ),
             patch(f"{_SIDE}._compute_sha256", return_value="abc"),
             patch(
-                f"{_ORCH}._upload_snapshot_child_to_private_remote",
+                "quickscale_core.dr_engine._remote._upload_snapshot_child_to_private_remote",
                 side_effect=BackupError("upload failed"),
             ),
         ):
@@ -682,7 +727,7 @@ class TestUploadToPrivateRemote:
         policy = SimpleNamespace(target_mode="private_remote")
 
         with patch(
-            f"{_ORCH}._upload_to_private_remote",
+            "quickscale_core.dr_engine._remote._upload_to_private_remote",
             return_value="s3://bucket/key",
         ):
             result = _upload_to_private_remote(local_path, policy)

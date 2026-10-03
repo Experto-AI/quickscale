@@ -10,7 +10,11 @@ from __future__ import annotations
 from typing import Any
 
 from quickscale_cli.commands._dr_context import DisasterRecoveryContext
-import quickscale_cli.commands.dr_commands as _dr_commands
+
+import quickscale_core.contracts.module_options as _module_options
+import quickscale_core.dr_engine.primitives as _primitives
+import quickscale_cli.commands._dr_adapter as _dr_adapter
+import quickscale_cli.utils._railway_cli as _railway_cli
 
 
 def _classify_env_var(name: str) -> tuple[str, str]:
@@ -24,7 +28,7 @@ def _classify_env_var(name: str) -> tuple[str, str]:
     including the legacy test suite — continues to receive the same
     ``(category, reason)`` tuple with the same reason strings.
     """
-    return _dr_commands.get_env_var_portability(name)
+    return _module_options.get_env_var_portability(name)
 
 
 def _build_env_sync_plan(
@@ -32,7 +36,7 @@ def _build_env_sync_plan(
     snapshot_report: dict[str, Any],
 ) -> dict[str, Any]:
     payloads = snapshot_report.get("sidecar_payloads") or {}
-    env_manifest = payloads.get(_dr_commands._ENV_MANIFEST_FILENAME)
+    env_manifest = payloads.get(_primitives._ENV_VAR_MANIFEST_FILENAME)
     if not isinstance(env_manifest, dict):
         return {
             "status": "unavailable",
@@ -55,7 +59,7 @@ def _build_env_sync_plan(
             "reason": str(env_manifest.get("reason", "env-var manifest is not ready")),
         }
 
-    source_live_variables = _dr_commands._load_source_live_variables(context)
+    source_live_variables = _dr_adapter._load_source_live_variables(context)
     target_live_variables = context.target_runtime_variables
     portable_candidates: list[str] = []
     portable_existing: list[str] = []
@@ -66,7 +70,7 @@ def _build_env_sync_plan(
     raw_names = env_manifest.get("names", [])
     source_names = [name for name in raw_names if isinstance(name, str)]
     for name in sorted(source_names):
-        category, reason = _dr_commands._classify_env_var(name)
+        category, reason = _classify_env_var(name)
         if category == "ignored":
             ignored_count += 1
             continue
@@ -117,7 +121,7 @@ def _execute_portable_env_sync(
     context: DisasterRecoveryContext,
     env_sync_plan: dict[str, Any],
 ) -> dict[str, Any]:
-    source_live_variables = _dr_commands._load_source_live_variables(context)
+    source_live_variables = _dr_adapter._load_source_live_variables(context)
     variables_to_copy = {
         name: source_live_variables[name]
         for name in env_sync_plan.get("portable_candidates", [])
@@ -137,7 +141,7 @@ def _execute_portable_env_sync(
             "portable_conflicts": env_sync_plan.get("portable_conflicts", []),
         }
 
-    success, failed_keys = _dr_commands.set_railway_variables_batch(
+    success, failed_keys = _railway_cli.set_railway_variables_batch(
         variables_to_copy,
         service=context.target_service,
         environment=context.target_railway_environment,

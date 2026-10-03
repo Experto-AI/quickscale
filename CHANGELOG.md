@@ -24,6 +24,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
 ## Releases
 
 - v0.89.0 — prepared, not published — [Development Maintenance](docs/releases/release-v0.89.0.md). Begins the post-v0.88 maintenance line with source-derived validation expectations.
+  - **Split-facade seams use the defining module.** Test seams and collaborator calls across the CLI
+    command and utility facades, `dr_engine`, and billing resolve through the module that defines each
+    name, facades re-export public names only, and a registered `check-split-facade-imports` gate fails
+    when a private module imports its own package's facade.
   - **Gate-parity counts derive from their sources.** The parity suite computes registry-bound and workflow-station expectations from their authoritative declarations, so adding a gate updates derived counts without a hand edit.
   - **Version-derived test expectations.** CLI wiring, module-command, billing, and notifications tests derive the expected current version from package metadata instead of a pinned release string, so version bumps no longer require matching test edits.
   - **Project-owned tenant models join isolation checks.** Models in a project app inherit `TenantModel` (directly or through a module's abstract base) and declare their own FORCE RLS migration so classification and policy refresh cover them while retaining organization ownership and forced row-level security.
@@ -471,6 +475,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     creates an organization for a deploy step, is a no-op on a rerun with the same arguments, and
     refuses a slug that already exists under a different name or is reserved (`api`,
     `__system__`); it runs under the restricted runtime role and is not a privileged command.
+  - **Personal-data fields are inventoried behind a failing test.** A cross-module conformance
+    test walks every installed model and fails when a field that could hold a user's data is
+    neither listed with its anonymization treatment nor excluded with a reason.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -1,6 +1,8 @@
 """Purchase-domain tests for the QuickScale billing module."""
 
 from __future__ import annotations
+import quickscale_modules_billing._checkout as _checkout
+import quickscale_modules_billing._payload as _payload
 
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -13,7 +15,6 @@ from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
-from quickscale_modules_billing import services as billing_services
 from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
@@ -26,16 +27,18 @@ from quickscale_modules_billing.serializers import (
     CreditBalanceSerializer,
     CreditTransactionSerializer,
 )
-from quickscale_modules_billing.services import (
+from quickscale_modules_billing.exceptions import (
     BillingError,
     BillingValidationError,
     BillingWebhookError,
-    StripeClient,
-    StripeWebhookResult,
-    create_checkout_session,
-    credit_user,
+)
+from quickscale_modules_billing._stripe_client import StripeClient
+from quickscale_modules_billing._settings import StripeWebhookResult
+from quickscale_modules_billing._checkout import create_checkout_session
+from quickscale_modules_billing._credits import credit_user
+from quickscale_modules_billing._removal import reconcile_purchase_checkouts_for_removal
+from quickscale_modules_billing.services import (
     handle_stripe_event,
-    reconcile_purchase_checkouts_for_removal,
 )
 from quickscale_modules_orgs.current_org import org_scope
 
@@ -261,7 +264,7 @@ def test_create_checkout_session_returns_stripe_url_and_attaches_metadata(
 
     assert checkout_url == "https://checkout.stripe.test/session/123"
     reservation = PurchaseCheckout.all_objects.get(organization=organization)
-    reservation_reference = billing_services._purchase_checkout_reference(reservation)
+    reservation_reference = _payload._purchase_checkout_reference(reservation)
     assert reservation.user == user
     assert reservation.plan == plan
     assert reservation.status == PurchaseCheckout.Status.OPEN
@@ -303,7 +306,7 @@ def test_create_checkout_session_returns_stripe_url_and_attaches_metadata(
                 "quickscale_purchase_checkout_reference": reservation_reference,
             },
             "client_reference_id": _user_reference(user),
-            "idempotency_key": billing_services._build_purchase_checkout_create_idempotency_key(
+            "idempotency_key": _payload._build_purchase_checkout_create_idempotency_key(
                 reservation_reference
             ),
         }
@@ -572,12 +575,12 @@ def test_purchase_checkout_creation_holds_provider_mutation_lock(
             second_entered.set()
         return f"https://checkout.example.com/{call_number}"
 
-    monkeypatch.setattr(billing_services, "_create_checkout_session", fake_create)
+    monkeypatch.setattr(_checkout, "_create_checkout_session", fake_create)
 
     def create_checkout() -> str:
         close_old_connections()
         try:
-            return billing_services.create_checkout_session(
+            return _checkout.create_checkout_session(
                 user,
                 plan=plan,
                 success_url="https://app.example.com/success",

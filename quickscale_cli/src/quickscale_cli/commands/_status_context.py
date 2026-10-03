@@ -21,7 +21,15 @@ from quickscale_core.schema.state_schema import (
     StateManager,
 )
 
-import quickscale_cli.commands.status_command as _status_command
+
+import quickscale_core.schema.config_schema as _config_schema
+import quickscale_core.contracts.module_discovery as _module_discovery
+import quickscale_core.contracts.module_catalog as _module_catalog
+import quickscale_core.manifest.loader_errors as _loader_errors
+import quickscale_core.schema.state_schema as _state_schema
+import quickscale_core.project_state_manager as _project_state_manager
+import quickscale_core.manifest.loader as _loader
+import subprocess
 
 
 def _get_docker_status() -> dict[str, str] | None:
@@ -32,7 +40,7 @@ def _get_docker_status() -> dict[str, str] | None:
 
     """
     try:
-        result = _status_command.subprocess.run(
+        result = subprocess.run(
             ["docker", "compose", "ps", "--format", "{{.Name}}: {{.Status}}"],  # noqa: S607 - PATH-resolved executable by design
             capture_output=True,
             text=True,
@@ -88,7 +96,7 @@ def _detect_project_context() -> tuple[Path | None, Path | None, Path | None]:
 def _load_config(config_path: Path) -> QuickScaleConfig | None:
     """Load and validate quickscale.yml"""
     yaml_content = config_path.read_text()
-    return _status_command.validate_config(yaml_content)
+    return _config_schema.validate_config(yaml_content)
 
 
 def _load_module_manifests(
@@ -109,7 +117,7 @@ def _load_module_manifests(
     """
     manifests: dict[str, ModuleManifest] = {}
     for module_name in module_names:
-        manifest = _status_command.get_manifest_for_module(
+        manifest = _loader.get_manifest_for_module(
             project_path, module_name, strict=strict
         )
         if manifest:
@@ -122,7 +130,7 @@ def _discover_project_module_presence(
     module_names: list[str],
 ) -> list[ModulePresenceRecord]:
     """Capture typed filesystem presence for state-owned modules."""
-    return _status_command.discover_module_presence(
+    return _module_discovery.discover_module_presence(
         base_path=project_path / "modules",
         expected_names=module_names,
     )
@@ -130,7 +138,7 @@ def _discover_project_module_presence(
 
 def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> None:
     """Abort status when non-public-ready modules appear in config or applied state."""
-    not_ready = _status_command.find_not_ready_modules(module_names)
+    not_ready = _module_catalog.find_not_ready_modules(module_names)
     if not not_ready:
         return
 
@@ -141,7 +149,7 @@ def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> Non
         bold=True,
     )
     for module_name in not_ready:
-        reason = _status_command.get_module_readiness_reason(module_name)
+        reason = _module_catalog.get_module_readiness_reason(module_name)
         if reason is not None:
             click.echo(f"  • {reason}", err=True)
 
@@ -154,7 +162,7 @@ def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> Non
     raise click.Abort()
 
 
-def _abort_for_manifest_error(error: _status_command.ManifestError) -> None:
+def _abort_for_manifest_error(error: _loader_errors.ManifestError) -> None:
     """Abort status with an actionable manifest validation message."""
     click.secho(
         "\n❌ Installed module manifest error during 'status':",
@@ -178,19 +186,19 @@ def _load_status_state_and_config(
     StateManager, ProjectStateManager, QuickScaleState | None, QuickScaleConfig | None
 ]:
     """Load status inputs and apply the command's fail-hard module policy."""
-    state_manager = _status_command.StateManager(project_path)
-    project_state_manager = _status_command.ProjectStateManager(project_path)
+    state_manager = _state_schema.StateManager(project_path)
+    project_state_manager = _project_state_manager.ProjectStateManager(project_path)
     try:
         state = state_manager.load()
-    except _status_command.StateError as error:
+    except _state_schema.StateError as error:
         click.secho(
             f"❌ Failed to load .quickscale/state.yml: {error}", fg="red", err=True
         )
         raise click.Abort() from error
 
     try:
-        config = _status_command._load_config(config_path) if config_path else None
-    except _status_command.ConfigValidationError as error:
+        config = _load_config(config_path) if config_path else None
+    except _config_schema.ConfigValidationError as error:
         click.secho(f"❌ Invalid quickscale.yml:\n{error}", fg="red", err=True)
         raise click.Abort() from error
     except OSError as error:
@@ -198,11 +206,11 @@ def _load_status_state_and_config(
         raise click.Abort() from error
 
     if config is not None:
-        _status_command._abort_for_not_ready_modules(
+        _abort_for_not_ready_modules(
             list(config.modules.keys()), source="quickscale.yml"
         )
     if state is not None:
-        _status_command._abort_for_not_ready_modules(
+        _abort_for_not_ready_modules(
             list(state.modules.keys()),
             source=".quickscale/state.yml",
         )
@@ -219,21 +227,21 @@ def _load_status_manifests(
     if not state or not state.modules:
         return manifests, presence_records
 
-    presence_records = _status_command._discover_project_module_presence(
+    presence_records = _discover_project_module_presence(
         project_path,
         list(state.modules.keys()),
     )
     active_module_names = [
         record.name
         for record in presence_records
-        if record.state is _status_command.ModulePresenceState.ACTIVE
+        if record.state is _module_discovery.ModulePresenceState.ACTIVE
     ]
     try:
-        manifests = _status_command._load_module_manifests(
+        manifests = _load_module_manifests(
             project_path,
             active_module_names,
             strict=True,
         )
-    except _status_command.ManifestError as error:
-        _status_command._abort_for_manifest_error(error)
+    except _loader_errors.ManifestError as error:
+        _abort_for_manifest_error(error)
     return manifests, presence_records

@@ -1,6 +1,20 @@
 """Regression coverage for enforced generated-file contract vintages."""
 
 from __future__ import annotations
+import quickscale_cli.commands._deploy_steps as _deploy_steps
+import quickscale_cli.commands._deploy_service_config as _deploy_service_config
+import quickscale_cli.commands._module_shared as _module_shared
+import quickscale_core.project_state_manager as _project_state_manager
+import quickscale_cli.commands._module_update as _module_update
+import quickscale_cli.commands._module_update_io as _module_update_io
+import quickscale_core.advisory_lock as _advisory_lock
+import quickscale_cli.commands._state as _state_2
+import quickscale_cli.commands._context as _context
+import quickscale_cli.commands._split_refs as _split_refs
+import quickscale_cli.commands._steps as _steps
+import quickscale_cli.commands._generation as _generation
+import quickscale_cli.commands.contract_vintage as _contract_vintage
+import quickscale_cli.commands.apply_support as _apply_support
 
 import json
 import shlex
@@ -16,7 +30,6 @@ import pytest
 from quickscale_cli.commands import (
     apply_command,
     deployment_commands,
-    module_commands,
     status_command,
 )
 from quickscale_cli.commands.contract_vintage import (
@@ -344,30 +357,30 @@ def test_update_records_adoption_after_module_mutations(
     manager.load_state.return_value = state
 
     monkeypatch.chdir(project)
-    monkeypatch.setattr(module_commands, "_validate_update_environment", Mock())
+    monkeypatch.setattr(_module_shared, "_validate_update_environment", Mock())
     monkeypatch.setattr(
-        module_commands, "ProjectStateManager", Mock(return_value=manager)
+        _project_state_manager, "ProjectStateManager", Mock(return_value=manager)
     )
-    monkeypatch.setattr(module_commands, "_warn_version_drift_for_update", Mock())
+    monkeypatch.setattr(_module_shared, "_warn_version_drift_for_update", Mock())
     monkeypatch.setattr(
-        module_commands, "_validate_module_readiness", Mock(return_value=True)
+        _module_shared, "_validate_module_readiness", Mock(return_value=True)
     )
-    monkeypatch.setattr(module_commands, "_update_single_module", _update)
+    monkeypatch.setattr(_module_update, "_update_single_module", _update)
     monkeypatch.setattr(
-        module_commands,
+        _module_update_io,
         "_regenerate_and_record_managed_wiring",
         lambda *args, **kwargs: (True, "regenerated"),
     )
     monkeypatch.setattr(
-        module_commands,
+        _module_update_io,
         "_commit_regenerated_managed_wiring",
         lambda *args, **kwargs: None,
     )
-    monkeypatch.setattr(module_commands, "AdvisoryLock", Mock(return_value=Mock()))
-    monkeypatch.setattr(module_commands.click, "confirm", Mock(return_value=True))
+    monkeypatch.setattr(_advisory_lock, "AdvisoryLock", Mock(return_value=Mock()))
+    monkeypatch.setattr("click.confirm", Mock(return_value=True))
 
     result = CliRunner().invoke(
-        module_commands.update, ["--no-preview", "--confirm-contract-adoption"]
+        _module_update.update, ["--no-preview", "--confirm-contract-adoption"]
     )
 
     assert result.exit_code == 0
@@ -403,17 +416,17 @@ def test_update_billing_names_the_sa201_throttling_step(
     manager.load_state.return_value = state
     update_module = Mock(return_value=True)
 
-    monkeypatch.setattr(module_commands, "_validate_update_environment", Mock())
+    monkeypatch.setattr(_module_shared, "_validate_update_environment", Mock())
     monkeypatch.setattr(
-        module_commands, "ProjectStateManager", Mock(return_value=manager)
+        _project_state_manager, "ProjectStateManager", Mock(return_value=manager)
     )
-    monkeypatch.setattr(module_commands, "_warn_version_drift_for_update", Mock())
+    monkeypatch.setattr(_module_shared, "_warn_version_drift_for_update", Mock())
     monkeypatch.setattr(
-        module_commands, "_validate_module_readiness", Mock(return_value=True)
+        _module_shared, "_validate_module_readiness", Mock(return_value=True)
     )
-    monkeypatch.setattr(module_commands, "_update_single_module", update_module)
+    monkeypatch.setattr(_module_update, "_update_single_module", update_module)
 
-    result = CliRunner().invoke(module_commands.update, ["--no-preview"])
+    result = CliRunner().invoke(_module_update.update, ["--no-preview"])
 
     assert result.exit_code == 1
     assert "generated project (sa201-throttling)" in result.output
@@ -434,31 +447,31 @@ def test_update_confirm_contract_adoption_records_and_proceeds(
     lock = Mock()
 
     monkeypatch.chdir(project)
-    monkeypatch.setattr(module_commands, "_validate_update_environment", Mock())
+    monkeypatch.setattr(_module_shared, "_validate_update_environment", Mock())
     monkeypatch.setattr(
-        module_commands, "ProjectStateManager", Mock(return_value=manager)
+        _project_state_manager, "ProjectStateManager", Mock(return_value=manager)
     )
-    monkeypatch.setattr(module_commands, "_warn_version_drift_for_update", Mock())
+    monkeypatch.setattr(_module_shared, "_warn_version_drift_for_update", Mock())
     monkeypatch.setattr(
-        module_commands, "_validate_module_readiness", Mock(return_value=True)
+        _module_shared, "_validate_module_readiness", Mock(return_value=True)
     )
-    monkeypatch.setattr(module_commands, "_update_single_module", update_module)
+    monkeypatch.setattr(_module_update, "_update_single_module", update_module)
     monkeypatch.setattr(
-        module_commands,
+        _module_update_io,
         "_regenerate_and_record_managed_wiring",
         lambda *args, **kwargs: (True, "regenerated"),
     )
     monkeypatch.setattr(
-        module_commands,
+        _module_update_io,
         "_commit_regenerated_managed_wiring",
         lambda *args, **kwargs: None,
     )
-    monkeypatch.setattr(module_commands, "AdvisoryLock", Mock(return_value=lock))
-    monkeypatch.setattr(module_commands, "_commit_contract_adoption", Mock())
-    monkeypatch.setattr(module_commands.click, "confirm", Mock(return_value=True))
+    monkeypatch.setattr(_advisory_lock, "AdvisoryLock", Mock(return_value=lock))
+    monkeypatch.setattr(_module_update_io, "_commit_contract_adoption", Mock())
+    monkeypatch.setattr("click.confirm", Mock(return_value=True))
 
     result = CliRunner().invoke(
-        module_commands.update, ["--no-preview", "--confirm-contract-adoption"]
+        _module_update.update, ["--no-preview", "--confirm-contract-adoption"]
     )
 
     assert result.exit_code == 0
@@ -488,14 +501,14 @@ def test_executed_apply_records_adoption_under_its_own_lock(
     )
     execute_locked = Mock()
 
-    monkeypatch.setattr(apply_command, "_warn_version_drift_for_apply", Mock())
-    monkeypatch.setattr(apply_command, "_refresh_context_after_lock", Mock())
-    monkeypatch.setattr(apply_command, "_validate_split_ref_override_coverage", Mock())
-    monkeypatch.setattr(apply_command, "_attempt_provenance_repair_if_needed", Mock())
-    monkeypatch.setattr(apply_command, "_handle_delta_and_existing_state", Mock())
-    monkeypatch.setattr(apply_command, "_execute_apply_steps_locked", execute_locked)
+    monkeypatch.setattr(_state_2, "_warn_version_drift_for_apply", Mock())
+    monkeypatch.setattr(_context, "_refresh_context_after_lock", Mock())
+    monkeypatch.setattr(_split_refs, "_validate_split_ref_override_coverage", Mock())
+    monkeypatch.setattr(_context, "_attempt_provenance_repair_if_needed", Mock())
+    monkeypatch.setattr(_context, "_handle_delta_and_existing_state", Mock())
+    monkeypatch.setattr(_steps, "_execute_apply_steps_locked", execute_locked)
 
-    apply_command._execute_apply_steps(ctx, False, True, True)
+    _steps._execute_apply_steps(ctx, False, True, True)
 
     assert execute_locked.call_count == 1
     reloaded = ProjectStateManager(tmp_path).load_state()
@@ -636,16 +649,14 @@ def test_locked_apply_path_records_confirmation_on_no_delta(
     execute_locked = Mock()
     regenerate = Mock(return_value=True)
 
-    monkeypatch.setattr(apply_command, "_refresh_context_after_lock", Mock())
-    monkeypatch.setattr(apply_command, "_validate_split_ref_override_coverage", Mock())
-    monkeypatch.setattr(apply_command, "_attempt_provenance_repair_if_needed", Mock())
-    monkeypatch.setattr(apply_command, "_handle_delta_and_existing_state", handle_delta)
-    monkeypatch.setattr(apply_command, "_execute_apply_steps_locked", execute_locked)
-    monkeypatch.setattr(
-        apply_command, "_regenerate_managed_wiring_for_apply", regenerate
-    )
+    monkeypatch.setattr(_context, "_refresh_context_after_lock", Mock())
+    monkeypatch.setattr(_split_refs, "_validate_split_ref_override_coverage", Mock())
+    monkeypatch.setattr(_context, "_attempt_provenance_repair_if_needed", Mock())
+    monkeypatch.setattr(_context, "_handle_delta_and_existing_state", handle_delta)
+    monkeypatch.setattr(_steps, "_execute_apply_steps_locked", execute_locked)
+    monkeypatch.setattr(_context, "_regenerate_managed_wiring_for_apply", regenerate)
 
-    apply_command._execute_apply_steps(ctx, False, True, True)
+    _steps._execute_apply_steps(ctx, False, True, True)
 
     assert handle_delta.call_count == 0
     assert execute_locked.call_count == 0
@@ -668,39 +679,35 @@ def test_deploy_confirm_contract_adoption_records(
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
-        deployment_commands, "ProjectStateManager", Mock(return_value=manager)
+        _project_state_manager, "ProjectStateManager", Mock(return_value=manager)
+    )
+    monkeypatch.setattr(_deploy_steps, "_check_uncommitted_changes_step", first_step)
+    monkeypatch.setattr(_deploy_steps, "_verify_railway_files_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_verify_dependencies_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_check_poetry_lock_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_ensure_railway_cli_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_ensure_railway_auth_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_init_railway_project_step", Mock())
+    monkeypatch.setattr(
+        _deploy_steps, "_app_service_exists_step", Mock(return_value=False)
     )
     monkeypatch.setattr(
-        deployment_commands, "_check_uncommitted_changes_step", first_step
+        _deploy_steps, "_setup_postgres_step", Mock(return_value="Postgres")
     )
-    monkeypatch.setattr(deployment_commands, "_verify_railway_files_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_verify_dependencies_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_check_poetry_lock_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_ensure_railway_cli_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_ensure_railway_auth_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_init_railway_project_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_create_app_service_step", Mock())
     monkeypatch.setattr(
-        deployment_commands, "_app_service_exists_step", Mock(return_value=False)
+        _deploy_service_config, "_existing_service_variables", Mock(return_value={})
     )
+    monkeypatch.setattr(_deploy_steps, "_link_database_step", Mock(return_value=True))
     monkeypatch.setattr(
-        deployment_commands, "_setup_postgres_step", Mock(return_value="Postgres")
+        _deploy_steps, "_generate_domain_step", Mock(return_value="example.test")
     )
-    monkeypatch.setattr(deployment_commands, "_create_app_service_step", Mock())
+    monkeypatch.setattr(_deploy_service_config, "_configure_env_vars_step", Mock())
+    monkeypatch.setattr(_deploy_service_config, "_deploy_app_step", Mock())
     monkeypatch.setattr(
-        deployment_commands, "_existing_service_variables", Mock(return_value={})
+        _deploy_service_config, "_verify_deployment_step", Mock(return_value=True)
     )
-    monkeypatch.setattr(
-        deployment_commands, "_link_database_step", Mock(return_value=True)
-    )
-    monkeypatch.setattr(
-        deployment_commands, "_generate_domain_step", Mock(return_value="example.test")
-    )
-    monkeypatch.setattr(deployment_commands, "_configure_env_vars_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_deploy_app_step", Mock())
-    monkeypatch.setattr(
-        deployment_commands, "_verify_deployment_step", Mock(return_value=True)
-    )
-    monkeypatch.setattr(deployment_commands, "_display_summary", Mock())
+    monkeypatch.setattr(_deploy_service_config, "_display_summary", Mock())
 
     result = CliRunner().invoke(
         deployment_commands.railway,
@@ -817,18 +824,16 @@ def _patch_apply_preflight(
     config_path.write_text("version: '1'\n")
 
     monkeypatch.setattr(
-        apply_command, "_resolve_apply_preflight", Mock(return_value=tmp_path)
+        _context, "_resolve_apply_preflight", Mock(return_value=tmp_path)
     )
+    monkeypatch.setattr(_context, "_prepare_apply_context", Mock(return_value=context))
+    monkeypatch.setattr(_split_refs, "_validate_split_ref_override_coverage", Mock())
+    monkeypatch.setattr(_generation, "_display_config_summary", Mock())
     monkeypatch.setattr(
-        apply_command, "_prepare_apply_context", Mock(return_value=context)
+        _context, "_provenance_repair_might_be_needed", Mock(return_value=False)
     )
-    monkeypatch.setattr(apply_command, "_validate_split_ref_override_coverage", Mock())
-    monkeypatch.setattr(apply_command, "_display_config_summary", Mock())
-    monkeypatch.setattr(
-        apply_command, "_provenance_repair_might_be_needed", Mock(return_value=False)
-    )
-    monkeypatch.setattr(apply_command, "_refresh_context_after_lock", Mock())
-    monkeypatch.setattr(apply_command, "_execute_apply_steps", execute)
+    monkeypatch.setattr(_context, "_refresh_context_after_lock", Mock())
+    monkeypatch.setattr(_steps, "_execute_apply_steps", execute)
     return execute
 
 
@@ -840,9 +845,7 @@ def test_apply_confirm_contract_adoption_regenerates_then_records_without_config
     context = _adoption_only_apply_context(tmp_path)
     execute = _patch_apply_preflight(monkeypatch, tmp_path, context)
     regenerate = Mock(return_value=True)
-    monkeypatch.setattr(
-        apply_command, "_regenerate_managed_wiring_for_apply", regenerate
-    )
+    monkeypatch.setattr(_context, "_regenerate_managed_wiring_for_apply", regenerate)
 
     result = CliRunner().invoke(
         apply_command.apply,
@@ -866,7 +869,7 @@ def test_apply_confirm_contract_adoption_records_regenerated_wiring_hashes(
     context = _adoption_only_apply_context(tmp_path)
     _patch_apply_preflight(monkeypatch, tmp_path, context)
     monkeypatch.setattr(
-        apply_command, "_regenerate_managed_wiring_for_apply", Mock(return_value=True)
+        _context, "_regenerate_managed_wiring_for_apply", Mock(return_value=True)
     )
     package_dir = tmp_path / "example"
     (package_dir / "settings").mkdir(parents=True)
@@ -905,14 +908,12 @@ def test_apply_adoption_aborts_when_configuration_changes_under_lock(
     context = _adoption_only_apply_context(tmp_path)
     execute = _patch_apply_preflight(monkeypatch, tmp_path, context)
     regenerate = Mock(return_value=True)
-    monkeypatch.setattr(
-        apply_command, "_regenerate_managed_wiring_for_apply", regenerate
-    )
+    monkeypatch.setattr(_context, "_regenerate_managed_wiring_for_apply", regenerate)
 
     def _refresh(ctx: object) -> None:
         ctx.delta = SimpleNamespace(has_changes=True)
 
-    monkeypatch.setattr(apply_command, "_refresh_context_after_lock", _refresh)
+    monkeypatch.setattr(_context, "_refresh_context_after_lock", _refresh)
 
     result = CliRunner().invoke(
         apply_command.apply,
@@ -958,7 +959,7 @@ def test_adoption_records_hashes_without_dropping_legacy_module_tracking(
 
     _patch_apply_preflight(monkeypatch, tmp_path, context)
     monkeypatch.setattr(
-        apply_command, "_regenerate_managed_wiring_for_apply", Mock(return_value=True)
+        _context, "_regenerate_managed_wiring_for_apply", Mock(return_value=True)
     )
     package_dir = tmp_path / "example"
     (package_dir / "settings").mkdir(parents=True)
@@ -991,16 +992,14 @@ def test_record_confirmed_adoption_defers_when_the_delta_appears_under_lock(
     """A concurrent apply that lands under the lock is not overwritten."""
     context = _adoption_only_apply_context(tmp_path)
     regenerate = Mock(return_value=True)
-    monkeypatch.setattr(
-        apply_command, "_regenerate_managed_wiring_for_apply", regenerate
-    )
+    monkeypatch.setattr(_context, "_regenerate_managed_wiring_for_apply", regenerate)
 
     def _refresh(ctx: object) -> None:
         ctx.delta = SimpleNamespace(has_changes=True)
 
-    monkeypatch.setattr(apply_command, "_refresh_context_after_lock", _refresh)
+    monkeypatch.setattr(_context, "_refresh_context_after_lock", _refresh)
 
-    assert apply_command._record_confirmed_adoption(context) is None
+    assert _context._record_confirmed_adoption(context) is None
     regenerate.assert_not_called()
     reloaded = ProjectStateManager(tmp_path).load_state()
     assert reloaded is not None
@@ -1015,10 +1014,10 @@ def test_apply_confirm_contract_adoption_not_recorded_when_regeneration_fails(
     context = _adoption_only_apply_context(tmp_path)
     _patch_apply_preflight(monkeypatch, tmp_path, context)
     monkeypatch.setattr(
-        apply_command, "_regenerate_managed_wiring_for_apply", Mock(return_value=False)
+        _context, "_regenerate_managed_wiring_for_apply", Mock(return_value=False)
     )
     record = Mock()
-    monkeypatch.setattr(apply_command, "record_contract_adoption", record)
+    monkeypatch.setattr(_contract_vintage, "record_contract_adoption", record)
 
     result = CliRunner().invoke(
         apply_command.apply,
@@ -1077,16 +1076,16 @@ def test_update_enforces_vintage_before_module_mutation(
     update_module = Mock(return_value=True)
     lock = Mock()
 
-    monkeypatch.setattr(module_commands, "_validate_update_environment", Mock())
+    monkeypatch.setattr(_module_shared, "_validate_update_environment", Mock())
     monkeypatch.setattr(
-        module_commands, "ProjectStateManager", Mock(return_value=manager)
+        _project_state_manager, "ProjectStateManager", Mock(return_value=manager)
     )
-    monkeypatch.setattr(module_commands, "_warn_version_drift_for_update", Mock())
+    monkeypatch.setattr(_module_shared, "_warn_version_drift_for_update", Mock())
     monkeypatch.setattr(
-        module_commands, "_validate_module_readiness", Mock(return_value=True)
+        _module_shared, "_validate_module_readiness", Mock(return_value=True)
     )
     monkeypatch.setattr(
-        module_commands,
+        _contract_vintage,
         "enforce_shipped_contract_vintage",
         lambda current_state, module_names, **kwargs: enforce_contract_vintage(
             current_state,
@@ -1095,24 +1094,24 @@ def test_update_enforces_vintage_before_module_mutation(
             acknowledged=kwargs["acknowledged"],
         ),
     )
-    monkeypatch.setattr(module_commands, "_update_single_module", update_module)
+    monkeypatch.setattr(_module_update, "_update_single_module", update_module)
     monkeypatch.setattr(
-        module_commands,
+        _module_update_io,
         "_regenerate_and_record_managed_wiring",
         lambda *args, **kwargs: (True, "regenerated"),
     )
     monkeypatch.setattr(
-        module_commands,
+        _module_update_io,
         "_commit_regenerated_managed_wiring",
         lambda *args, **kwargs: None,
     )
-    monkeypatch.setattr(module_commands, "AdvisoryLock", Mock(return_value=lock))
-    monkeypatch.setattr(module_commands.click, "confirm", Mock(return_value=True))
+    monkeypatch.setattr(_advisory_lock, "AdvisoryLock", Mock(return_value=lock))
+    monkeypatch.setattr("click.confirm", Mock(return_value=True))
 
     args = ["--no-preview"]
     if acknowledged:
         args.append("--acknowledge-contract-vintage")
-    result = CliRunner().invoke(module_commands.update, args)
+    result = CliRunner().invoke(_module_update.update, args)
 
     assert result.exit_code == expected_exit
     assert update_module.call_count == (1 if expected_exit == 0 else 0)
@@ -1154,13 +1153,11 @@ def test_apply_enforces_vintage_before_execution(
     config_path.write_text("version: '1'\n")
 
     monkeypatch.setattr(
-        apply_command, "_resolve_apply_preflight", Mock(return_value=tmp_path)
+        _context, "_resolve_apply_preflight", Mock(return_value=tmp_path)
     )
+    monkeypatch.setattr(_context, "_prepare_apply_context", Mock(return_value=context))
     monkeypatch.setattr(
-        apply_command, "_prepare_apply_context", Mock(return_value=context)
-    )
-    monkeypatch.setattr(
-        apply_command,
+        _contract_vintage,
         "enforce_shipped_contract_vintage",
         lambda current_state, module_names, **kwargs: enforce_contract_vintage(
             current_state,
@@ -1169,15 +1166,15 @@ def test_apply_enforces_vintage_before_execution(
             acknowledged=kwargs["acknowledged"],
         ),
     )
-    monkeypatch.setattr(apply_command, "_validate_split_ref_override_coverage", Mock())
-    monkeypatch.setattr(apply_command, "_display_config_summary", Mock())
+    monkeypatch.setattr(_split_refs, "_validate_split_ref_override_coverage", Mock())
+    monkeypatch.setattr(_generation, "_display_config_summary", Mock())
     monkeypatch.setattr(
-        apply_command, "_provenance_repair_might_be_needed", Mock(return_value=False)
+        _context, "_provenance_repair_might_be_needed", Mock(return_value=False)
     )
-    monkeypatch.setattr(apply_command, "_handle_delta_and_existing_state", Mock())
-    monkeypatch.setattr(apply_command, "_check_output_directory", Mock())
-    monkeypatch.setattr(apply_command, "_confirm_apply", Mock(return_value=False))
-    monkeypatch.setattr(apply_command, "_execute_apply_steps", execute)
+    monkeypatch.setattr(_context, "_handle_delta_and_existing_state", Mock())
+    monkeypatch.setattr(_generation, "_check_output_directory", Mock())
+    monkeypatch.setattr(_apply_support, "_confirm_apply", Mock(return_value=False))
+    monkeypatch.setattr(_steps, "_execute_apply_steps", execute)
 
     args = [str(config_path)]
     if acknowledged:
@@ -1220,39 +1217,35 @@ def test_deploy_enforces_vintage_before_preflight(
     first_step = Mock()
 
     monkeypatch.setattr(
-        deployment_commands, "ProjectStateManager", Mock(return_value=manager)
+        _project_state_manager, "ProjectStateManager", Mock(return_value=manager)
+    )
+    monkeypatch.setattr(_deploy_steps, "_check_uncommitted_changes_step", first_step)
+    monkeypatch.setattr(_deploy_steps, "_verify_railway_files_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_verify_dependencies_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_check_poetry_lock_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_ensure_railway_cli_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_ensure_railway_auth_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_init_railway_project_step", Mock())
+    monkeypatch.setattr(
+        _deploy_steps, "_app_service_exists_step", Mock(return_value=False)
     )
     monkeypatch.setattr(
-        deployment_commands, "_check_uncommitted_changes_step", first_step
+        _deploy_steps, "_setup_postgres_step", Mock(return_value="Postgres")
     )
-    monkeypatch.setattr(deployment_commands, "_verify_railway_files_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_verify_dependencies_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_check_poetry_lock_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_ensure_railway_cli_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_ensure_railway_auth_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_init_railway_project_step", Mock())
+    monkeypatch.setattr(_deploy_steps, "_create_app_service_step", Mock())
     monkeypatch.setattr(
-        deployment_commands, "_app_service_exists_step", Mock(return_value=False)
+        _deploy_service_config, "_existing_service_variables", Mock(return_value={})
     )
+    monkeypatch.setattr(_deploy_steps, "_link_database_step", Mock(return_value=True))
     monkeypatch.setattr(
-        deployment_commands, "_setup_postgres_step", Mock(return_value="Postgres")
+        _deploy_steps, "_generate_domain_step", Mock(return_value="example.test")
     )
-    monkeypatch.setattr(deployment_commands, "_create_app_service_step", Mock())
+    monkeypatch.setattr(_deploy_service_config, "_configure_env_vars_step", Mock())
+    monkeypatch.setattr(_deploy_service_config, "_deploy_app_step", Mock())
     monkeypatch.setattr(
-        deployment_commands, "_existing_service_variables", Mock(return_value={})
+        _deploy_service_config, "_verify_deployment_step", Mock(return_value=True)
     )
-    monkeypatch.setattr(
-        deployment_commands, "_link_database_step", Mock(return_value=True)
-    )
-    monkeypatch.setattr(
-        deployment_commands, "_generate_domain_step", Mock(return_value="example.test")
-    )
-    monkeypatch.setattr(deployment_commands, "_configure_env_vars_step", Mock())
-    monkeypatch.setattr(deployment_commands, "_deploy_app_step", Mock())
-    monkeypatch.setattr(
-        deployment_commands, "_verify_deployment_step", Mock(return_value=True)
-    )
-    monkeypatch.setattr(deployment_commands, "_display_summary", Mock())
+    monkeypatch.setattr(_deploy_service_config, "_display_summary", Mock())
 
     args = ["--project-name", "example"]
     if acknowledged:

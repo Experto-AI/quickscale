@@ -1,9 +1,8 @@
 """Failure reporting, state finalization, and step adapters.
 
 Implementation detail of :mod:`quickscale_cli.commands.apply_command`;
-that module re-exports every name defined here (Module Conventions
-rule 28), so existing import paths and test patch targets keep
-working.
+collaborators are resolved through the sibling modules that define
+them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -15,9 +14,7 @@ from typing import Any, cast
 import click
 
 
-from quickscale_cli.commands.module_commands import (
-    ModuleEmbedProvenance,
-)
+from quickscale_cli.commands._module_shared import ModuleEmbedProvenance
 from quickscale_core.schema.config_schema import (
     QuickScaleConfig,
 )
@@ -34,7 +31,19 @@ from quickscale_cli.commands._types import (
     _APPLY_RECOVERY_FILENAME,
     _FAILED_STEP,
 )
-import quickscale_cli.commands.apply_command as _apply_command
+
+import quickscale_cli.commands._types as _types
+import quickscale_core.apply.steps.types as _types_2
+import quickscale_core.apply.steps as _steps
+import quickscale_cli.commands._state as _state
+import quickscale_cli.commands._context as _context
+import quickscale_core.schema.state_schema as _state_schema
+import quickscale_cli.commands._config as _config
+import quickscale_cli.commands.apply_support as _apply_support
+import quickscale_cli.commands._git_ops as _git_ops
+import quickscale_cli.utils._railway_cli as _railway_cli
+import quickscale_cli.utils._railway_project as _railway_project
+import quickscale_core.contracts.module_options as _module_options
 
 
 def _display_next_steps_impl(
@@ -71,7 +80,7 @@ def _display_next_steps_impl(
 
     modules = qs_config.modules if isinstance(qs_config.modules, Mapping) else {}
     if "backups" in modules:
-        backups_options = _apply_command._resolved_module_options(
+        backups_options = _config._resolved_module_options(
             "backups", modules["backups"].options or {}
         )
         click.echo("\n  # Backups operations")
@@ -100,13 +109,13 @@ def _display_next_steps_impl(
         if backups_options.get("target_mode") == "private_remote":
             access_key_env_var = str(
                 backups_options.get(
-                    _apply_command.BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION
+                    _module_options.BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION
                 )
                 or ""
             )
             secret_key_env_var = str(
                 backups_options.get(
-                    _apply_command.BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION
+                    _module_options.BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION
                 )
                 or ""
             )
@@ -117,23 +126,23 @@ def _display_next_steps_impl(
             )
 
     if "notifications" in modules:
-        notifications_options = _apply_command._resolved_module_options(
+        notifications_options = _config._resolved_module_options(
             "notifications", modules["notifications"].options or {}
         )
         resend_api_key_env_var = str(
             notifications_options.get(
-                _apply_command.NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION
+                _module_options.NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION
             )
             or ""
         )
         webhook_secret_env_var = str(
             notifications_options.get(
-                _apply_command.NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION
+                _module_options.NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION
             )
             or ""
         )
         click.echo("\n  # Notifications setup")
-        notifications_adapter = _apply_command.notifications_adapter_module()
+        notifications_adapter = _apply_support.notifications_adapter_module()
         if bool(notifications_options.get("enabled", True)):
             if notifications_adapter is not None and (
                 notifications_adapter.notifications_live_delivery_configured(
@@ -169,7 +178,7 @@ def _display_next_steps_impl(
             )
 
     if "analytics" in modules:
-        analytics_options = _apply_command._resolved_module_options(
+        analytics_options = _config._resolved_module_options(
             "analytics", modules["analytics"].options or {}
         )
         click.echo("\n  # Analytics setup")
@@ -182,7 +191,7 @@ def _display_next_steps_impl(
             )
             posthog_host = str(
                 analytics_options.get("posthog_host")
-                or _apply_command.ANALYTICS_POSTHOG_DEFAULT_HOST
+                or _module_options.ANALYTICS_POSTHOG_DEFAULT_HOST
             )
             click.echo("  PostHog dashboard: https://app.posthog.com")
             click.echo(
@@ -217,11 +226,11 @@ def _display_next_steps_impl(
         click.echo("\n  # Social integration")
         click.echo(
             "  Managed backend transport: "
-            + f"{_apply_command.SOCIAL_INTEGRATION_BASE_PATH} and {_apply_command.SOCIAL_INTEGRATION_EMBEDS_PATH}"
+            + f"{_module_options.SOCIAL_INTEGRATION_BASE_PATH} and {_module_options.SOCIAL_INTEGRATION_EMBEDS_PATH}"
         )
         click.echo(
             "  Fresh showcase_react generations keep Django-owned public pages at "
-            + f"{_apply_command.SOCIAL_LINK_TREE_PATH} and {_apply_command.SOCIAL_EMBEDS_PATH}"
+            + f"{_module_options.SOCIAL_LINK_TREE_PATH} and {_module_options.SOCIAL_EMBEDS_PATH}"
         )
         click.echo(
             "  showcase_react and existing generated projects only receive the managed "
@@ -230,7 +239,7 @@ def _display_next_steps_impl(
         )
 
     if "billing" in modules:
-        billing_options = _apply_command._resolved_module_options(
+        billing_options = _config._resolved_module_options(
             "billing", modules["billing"].options or {}
         )
         webhook_secret_env_var = str(
@@ -262,10 +271,10 @@ def _display_next_steps(
     existing_project: bool = False,
 ) -> None:
     """Thin wrapper delegating to core step body (AF6 Phase 2)."""
-    step_ctx = _apply_command.StepContext(output_path=output_path, qs_config=qs_config)
-    _apply_command.step_display_next_steps(
+    step_ctx = _types_2.StepContext(output_path=output_path, qs_config=qs_config)
+    _steps.step_display_next_steps(
         step_ctx,
-        display_next_steps_fn=_apply_command._display_next_steps_impl,
+        display_next_steps_fn=_display_next_steps_impl,
         no_docker=no_docker,
         docker_started=docker_started,
         existing_project=existing_project,
@@ -296,7 +305,7 @@ def _abort_after_post_embed_failure(
     reason: str,
 ) -> None:
     """Persist rerunnable recovery state before aborting post-embed failures."""
-    if _apply_command._save_apply_recovery_state(
+    if _state._save_apply_recovery_state(
         ctx.output_path,
         ctx.qs_config,
         ctx.existing_state,
@@ -305,12 +314,10 @@ def _abort_after_post_embed_failure(
         state_snapshot=post_embed_state,
         checkpoint_tree_id=checkpoint_tree_id,
     ):
-        _apply_command._print_apply_failure_summary(
-            failed_step=failed_step, reason=reason
-        )
+        _print_apply_failure_summary(failed_step=failed_step, reason=reason)
         raise click.Abort()
 
-    _apply_command._print_apply_failure_summary(
+    _print_apply_failure_summary(
         failed_step="apply recovery state persistence",
         reason=(
             f"{failed_step} failed and QuickScale could not save "
@@ -329,7 +336,7 @@ def _finalize_apply_state(
     """Thin wrapper delegating to core step body (AF6 Phase 2)."""
 
     def _save_state() -> bool:
-        return _apply_command._save_project_state(
+        return _state._save_project_state(
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
@@ -339,7 +346,7 @@ def _finalize_apply_state(
         )
 
     def _save_recovery(*, checkpoint_tree_id: str) -> bool:
-        return _apply_command._save_apply_recovery_state(
+        return _state._save_apply_recovery_state(
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
@@ -350,10 +357,10 @@ def _finalize_apply_state(
         )
 
     def _clear_recovery() -> None:
-        _apply_command._clear_apply_recovery_state(ctx.output_path)
+        _state._clear_apply_recovery_state(ctx.output_path)
 
-    step_ctx = _apply_command._build_step_context(ctx, state_snapshot=post_embed_state)
-    outcome = _apply_command.step_finalize_state(
+    step_ctx = _context._build_step_context(ctx, state_snapshot=post_embed_state)
+    outcome = _steps.step_finalize_state(
         step_ctx,
         save_project_state_fn=_save_state,
         save_recovery_state_fn=_save_recovery,
@@ -364,7 +371,7 @@ def _finalize_apply_state(
     if outcome.success:
         return
 
-    _apply_command._print_apply_failure_summary(
+    _print_apply_failure_summary(
         failed_step=_FAILED_STEP.get(
             "authoritative state persistence", "authoritative state persistence"
         ),
@@ -383,12 +390,10 @@ def _exec_step_post_embed_snapshot(
     Returns ``(post_embed_state, checkpoint_tree_id)`` on success, or
     ``(None, None)`` and raises ``click.Abort`` on failure.
     """
-    step_ctx = _apply_command._build_step_context(
-        ctx, embedded_modules=embedded_modules
-    )
+    step_ctx = _context._build_step_context(ctx, embedded_modules=embedded_modules)
 
     def _build_snapshot() -> QuickScaleState | None:
-        return _apply_command._build_project_state_snapshot(
+        return _state._build_project_state_snapshot(
             ctx.output_path,
             ctx.qs_config,
             ctx.existing_state,
@@ -398,25 +403,25 @@ def _exec_step_post_embed_snapshot(
         )
 
     def _capture_index() -> GitIndexSnapshot | None:
-        snapshot = _apply_command._capture_git_index_snapshot(ctx.output_path)
+        snapshot = _git_ops._capture_git_index_snapshot(ctx.output_path)
         if snapshot is None:
             return None
-        return _apply_command.GitIndexSnapshot(tree_id=snapshot.tree_id)
+        return _steps.GitIndexSnapshot(tree_id=snapshot.tree_id)
 
-    outcome = _apply_command.step_post_embed_snapshot(
+    outcome = _steps.step_post_embed_snapshot(
         step_ctx,
         build_state_snapshot=_build_snapshot,
         capture_git_index=_capture_index,
     )
 
     if not outcome.success:
-        _apply_command._print_apply_failure_summary(
+        _print_apply_failure_summary(
             failed_step="post-embed state snapshot",
             reason=str(outcome.message),
         )
         raise click.Abort()
 
-    post_embed_state = cast(_apply_command.QuickScaleState, step_ctx.state_snapshot)
+    post_embed_state = cast(_state_schema.QuickScaleState, step_ctx.state_snapshot)
     return post_embed_state, step_ctx.checkpoint_tree_id or ""
 
 
@@ -425,8 +430,8 @@ def _exec_step_apply_mutable_config(ctx: ApplyContext) -> None:
 
     Informational step — never fails.
     """
-    step_ctx = _apply_command._build_step_context(ctx)
-    _apply_command.step_apply_mutable_config(step_ctx)
+    step_ctx = _context._build_step_context(ctx)
+    _steps.step_apply_mutable_config(step_ctx)
 
 
 def _exec_step_railway_deploy(
@@ -445,22 +450,22 @@ def _exec_step_railway_deploy(
         project_path: Path,
         service_name: str,
     ) -> Any:
-        return _apply_command.deploy_railway_service(
+        return _railway_cli.deploy_railway_service(
             project_path=project_path,
             service_name=service_name,
         )
 
-    step_ctx = _apply_command._build_step_context(ctx, state_snapshot=post_embed_state)
+    step_ctx = _context._build_step_context(ctx, state_snapshot=post_embed_state)
 
-    outcome = _apply_command.step_railway_deploy(
+    outcome = _steps.step_railway_deploy(
         step_ctx,
         is_railway_linked=is_railway_linked,
         deploy_railway_fn=_deploy_fn,
-        get_service_name_fn=_apply_command.get_app_service_name,
+        get_service_name_fn=_railway_project.get_app_service_name,
     )
 
     if not outcome.success:
-        _apply_command._abort_after_post_embed_failure(
+        _abort_after_post_embed_failure(
             ctx,
             post_embed_state,
             checkpoint_tree_id=checkpoint_tree_id,
@@ -479,7 +484,7 @@ def _confirm_destructive_remote_phase(
     Silently returns when ``_AF5_DESTRUCTIVE_CONFIRM_BYPASS`` is set (test
     mode).  Raises ``click.Abort`` when the operator declines.
     """
-    if _apply_command._AF5_DESTRUCTIVE_CONFIRM_BYPASS:
+    if _types._AF5_DESTRUCTIVE_CONFIRM_BYPASS:
         return
 
     click.echo("\n" + "=" * 50)

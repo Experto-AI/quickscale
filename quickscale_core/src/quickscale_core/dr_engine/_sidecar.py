@@ -1,8 +1,8 @@
 """Sidecar building and lifecycle for DR snapshots.
 
 Manifest building, sidecar persistence, and snapshot descriptor management.
-All functions here use lazy imports for cross-module references to avoid
-circular imports with ``orchestration.py``.
+Cross-module references resolve through the sibling modules that define
+them.
 
 SA89b Phase 1: snapshot persistence operations are routed through the
 module-level ``save_snapshot`` wrapper in ``quickscale_core.dr_engine.persistence``.
@@ -43,7 +43,7 @@ from quickscale_core.dr_engine.primitives import (
 
 def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
     """Capture private media inventory or fail with explicit provider metadata."""
-    from quickscale_core.dr_engine.orchestration import (
+    from quickscale_core.dr_engine._metadata import (
         _get_project_slug,
         _get_source_environment,
         _load_storage_helpers,
@@ -184,7 +184,7 @@ def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
 
 def _build_env_var_manifest(*, captured_at: datetime) -> dict[str, Any]:
     """Capture environment variable names only, never their values."""
-    from quickscale_core.dr_engine.orchestration import (
+    from quickscale_core.dr_engine._metadata import (
         _get_project_slug,
         _get_source_environment,
     )
@@ -211,7 +211,7 @@ def _build_promotion_verification_placeholder(
     captured_at: datetime,
 ) -> dict[str, Any]:
     """Initialize the reserved promotion verification sidecar."""
-    from quickscale_core.dr_engine.orchestration import (
+    from quickscale_core.dr_engine._metadata import (
         _get_project_slug,
         _get_source_environment,
     )
@@ -272,8 +272,8 @@ def _persist_snapshot_sidecar_payload(
     remote_uploader: Callable[..., str] | None = None,
 ) -> dict[str, Any]:
     """Write one sidecar payload and refresh its snapshot descriptor."""
-    from quickscale_core.dr_engine.orchestration import (
-        _load_active_policy_snapshot,
+    from quickscale_core.dr_engine._policy import _load_active_policy_snapshot
+    from quickscale_core.dr_engine._remote import (
         _upload_snapshot_child_to_private_remote,
     )
 
@@ -359,8 +359,8 @@ def _capture_snapshot_sidecars(
     remote_uploader: Callable[..., str] | None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Capture private sidecar manifests without breaking the dump-first contract."""
-    from quickscale_core.dr_engine.orchestration import (
-        _build_release_metadata,
+    from quickscale_core.dr_engine._metadata import _build_release_metadata
+    from quickscale_core.dr_engine._remote import (
         _upload_snapshot_child_to_private_remote,
     )
 
@@ -470,7 +470,7 @@ def _capture_snapshot_sidecars(
 
 def _upload_to_private_remote(local_path: Path, policy: BackupPolicySnapshot) -> str:
     """Default upload callback — delegated to orchestration layer."""
-    from quickscale_core.dr_engine.orchestration import (
+    from quickscale_core.dr_engine._remote import (
         _upload_to_private_remote as _core_upload,
     )
 

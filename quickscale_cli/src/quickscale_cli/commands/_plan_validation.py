@@ -9,24 +9,30 @@ from pathlib import Path
 
 
 from quickscale_core.schema.config_schema import QuickScaleConfig
-import quickscale_cli.commands.plan_command as _plan_command
+
+import quickscale_core.manifest.option_validation as _option_validation
+import quickscale_cli.commands.apply_support as _apply_support
+import quickscale_core.schema.config_schema as _config_schema
+import click
+import quickscale_core.contracts.resolvers as _resolvers
+import pathlib as _pathlib
 
 
 def _abort_for_invalid_existing_config(config_path: Path, error: Exception) -> None:
     """Abort planner existing-project flows with actionable config remediation."""
-    _plan_command.click.secho(
+    click.secho(
         "\n❌ Cannot continue because quickscale.yml is invalid.",
         fg="red",
         err=True,
         bold=True,
     )
-    _plan_command.click.echo(f"  • {error}", err=True)
-    _plan_command.click.echo(
+    click.echo(f"  • {error}", err=True)
+    click.echo(
         f"\n💡 Fix {config_path} and re-run this planner command.",
         err=True,
     )
 
-    raise _plan_command.click.Abort()
+    raise click.Abort()
 
 
 def _validate_existing_project_notifications_or_abort(
@@ -38,27 +44,27 @@ def _validate_existing_project_notifications_or_abort(
         return
 
     notifications_options = notifications_config.options or {}
-    notification_issues = _plan_command.validate_module_options(
-        _plan_command.load_module_manifest_with_fallback("notifications"),
+    notification_issues = _option_validation.validate_module_options(
+        _resolvers.load_module_manifest_with_fallback("notifications"),
         notifications_options,
     )
     if not notification_issues:
         return
 
-    _plan_command.click.secho(
+    click.secho(
         "\n❌ Notifications module configuration is incomplete for this planner update:",
         fg="red",
         err=True,
         bold=True,
     )
     for issue in notification_issues:
-        _plan_command.click.echo(f"  • {issue}", err=True)
+        click.echo(f"  • {issue}", err=True)
 
-    notifications_adapter = _plan_command.notifications_adapter_module()
+    notifications_adapter = _apply_support.notifications_adapter_module()
     if notifications_adapter is not None and (
         notifications_adapter.notifications_production_targeted(notifications_options)
     ):
-        _plan_command.click.echo(
+        click.echo(
             "\n💡 This configuration targets live Resend delivery, so planner "
             "refuses to rewrite quickscale.yml until the missing notifications "
             "settings are fixed. Re-run 'quickscale plan --reconfigure "
@@ -66,13 +72,13 @@ def _validate_existing_project_notifications_or_abort(
             err=True,
         )
     else:
-        _plan_command.click.echo(
+        click.echo(
             "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or "
             "edit quickscale.yml to correct the notifications values.",
             err=True,
         )
 
-    raise _plan_command.click.Abort()
+    raise click.Abort()
 
 
 def _validate_existing_project_config_or_abort(config: QuickScaleConfig) -> str:
@@ -86,17 +92,17 @@ def _validate_existing_project_config_or_abort(config: QuickScaleConfig) -> str:
     Returns:
         The validated YAML text to preview and save.
     """
-    _plan_command._validate_existing_project_notifications_or_abort(config)
-    yaml_content = _plan_command.generate_yaml(config)
+    _validate_existing_project_notifications_or_abort(config)
+    yaml_content = _config_schema.generate_yaml(config)
 
     try:
-        _plan_command.validate_config(yaml_content)
+        _config_schema.validate_config(yaml_content)
     except Exception as error:
-        _plan_command.click.secho(
+        click.secho(
             "\n❌ Configuration validation failed:", fg="red", err=True, bold=True
         )
-        _plan_command.click.echo(f"  • {error}", err=True)
-        raise _plan_command.click.Abort()
+        click.echo(f"  • {error}", err=True)
+        raise click.Abort()
 
     return yaml_content
 
@@ -111,7 +117,7 @@ def _detect_existing_project(
         Tuple of (project_path, existing_config) if project found, (None, None) otherwise
 
     """
-    cwd = _plan_command.Path.cwd()
+    cwd = _pathlib.Path.cwd()
 
     # Check for quickscale.yml in current directory
     config_path = cwd / "quickscale.yml"
@@ -120,7 +126,7 @@ def _detect_existing_project(
     if config_path.exists():
         try:
             yaml_content = config_path.read_text()
-            config = _plan_command.validate_config(yaml_content)
+            config = _config_schema.validate_config(yaml_content)
             return cwd, config
         except Exception:
             # Config exists but is invalid - treat as existing project anyway

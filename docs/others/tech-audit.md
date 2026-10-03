@@ -157,12 +157,6 @@ read line by line. Silence on those areas means *not looked at*, not *clean*.
 schema: tech-audit/v6
 audited: c10b529e3a6076554c09e35c9af28adb28454a78
 items:
-  - {id: blog-upload-client-extension, status: open, severity: S3, category: III,
-     title: "Blog media keeps the client-supplied file extension", effort: Trivial, confidence: Medium,
-     reality: generated-app,
-     anchors: [quickscale_modules/blog/src/quickscale_modules_blog/models.py,
-               quickscale_modules/storage/src/quickscale_modules_storage/_helpers.py],
-     depends_on: [], chain: [], first_seen: 2026-10-03, last_verified: 2026-10-03}
   - {id: dr-restore-vintage-exact-match, status: watchlist, category: I,
      title: "Restore refuses any backup after a module patch bump", reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/recovery.py], first_seen: 2026-09-24, last_verified: 2026-10-03}
@@ -181,45 +175,13 @@ items:
 
 ## 3. Summary table
 
-| ID | Sev | Category | Title | Effort | Conf | Since |
-|---|---|---|---|---|---|---|
-| `blog-upload-client-extension` | S3 | III | Blog media keeps the client-supplied file extension | Trivial — **quick win** | Medium | new |
-
-**Counts:** S1 — 0 · S2 — 0 · S3 — 1 · S4 — 0 · total 1 open. Reconciliation: 0 prior findings
-open, 0 resolved, 0 regressed, 0 withdrawn, 1 new. Watch items: 2 carried, 2 added.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 0 · total 0 open. Reconciliation: 1 resolved. Watch items: 2 carried, 2 added.
 
 ---
 
 ## 4. Findings
 
-**`blog-upload-client-extension`** · **S3** (Moderate × Common: any authenticated org member, which
-in solo mode means any signed-up user; one unverified precondition, a public bucket domain, keeps
-it at S3) · R2.
-
-- **Location:** `blog/models.py:93–103` `blog_media_upload_to`; `storage/_helpers.py:244–263`
-  `build_upload_path`. Reached from `MediaUploadAPIView.post` (`blog/views.py:188`), gated by
-  `HasOrgRole(OrgRole.MEMBER)` (`blog/views.py:182`).
-- **Defect:** the stored object's extension is taken from the client-supplied filename
-  (`Path(filename).suffix.lower()`), not from the format Pillow validated. An upload that passes
-  image validation is stored under whatever extension the client named. With the S3-compatible
-  backend, django-storages derives `Content-Type` from that name.
-- **Failure scenario:** an org member uploads a file that is a valid allowed image and also
-  carries markup, named with an HTML extension. It passes `_validate_blog_image_upload`, is stored
-  as `blog/uploads/YYYY/MM/<name>.html`, and is served as `text/html` from the media domain. The
-  result is stored script on that origin, with the API returning the URL. **Verified on paper**:
-  the path code and the absence of any extension check were read.
-- **Refutation:** Django serves media only under `DEBUG` (`urls.py.j2:93–95`), so the app origin
-  is not affected. The impact is confined to the media origin, and that caps severity at S3. This
-  code predates the delta, but SA226 widened who can reach it from staff to any member.
-- **Fix:** derive the extension from the validated `image.format` (a fixed map: JPEG→`.jpg`,
-  PNG→`.png`, WEBP→`.webp`, GIF→`.gif`) in both `blog_media_upload_to` and `build_upload_path`.
-  Pass the validated format through, or recompute it from the stored name's validated metadata.
-  **Effort:** Trivial. **Fix files:** the two anchors, plus
-  `storage/_helpers.validate_file_upload`'s return if the format is carried.
-- **Verification:** a blog API test that uploads a valid PNG named `x.html` and asserts that the
-  stored name ends in `.png`. Add the same test for `build_upload_path`.
-- **Fix risk:** none known. Existing stored objects keep their names.
-- **Detection signal:** `BlogMediaAsset.file` names whose suffix is not an image suffix.
+No open findings.
 
 ---
 
@@ -235,7 +197,7 @@ Prior rows are carried. Rows changed this pass are marked ★.
 | ★ CRM API + dashboard | session (CSRF) | `HasOrgRole` viewer/member; queries pinned to `request.org` | serializers reject foreign-org FKs | DRF | DRF defaults | n/a | n/a | DRF | n/a |
 | ★ Forms admin API + CSV export | session (CSRF) | `HasOrgRole` viewer/member; `_get_org_bound_queryset` + RLS | DRF | CSV cells neutralized | DRF defaults | n/a | n/a | DRF | `operator_access` for superusers |
 | Forms public schema/submit | `AllowAny` | n/a | serializer | DRF | `FormSubmitThrottle` | n/a | n/a | DRF | submission row |
-| ★ Blog automation API | session (CSRF) | `HasOrgRole(MEMBER)`, org-stamped | Pillow format/size/pixel; **extension unchecked** → `blog-upload-client-extension` | JSON | `quickscale_blog_api` | n/a | slug 409 | rule-9 shape | n/a |
+| ★ Blog automation API | session (CSRF) | `HasOrgRole(MEMBER)`, org-stamped | Pillow format/size/pixel; extension from the validated format | JSON | `quickscale_blog_api` | n/a | slug 409 | rule-9 shape | n/a |
 | ★ Listings publish API | session (CSRF) | `HasOrgRole(MEMBER)`, org-stamped | module validation | JSON | DRF defaults | n/a | slug 409 | rule-9 shape | n/a |
 | ★ Orgs JSON API (DRF) | session (CSRF), 401 challenge | `min_org_role` on the same org it acts on | `JSONParser` + forms | JSON | DRF defaults | n/a | n/a | rule-9 shape | n/a |
 | ★ `OrgInvitationAcceptView` | `LoginRequiredMixin` (restored `093489e6`) | token lookup | n/a | autoescape | out of scope | n/a | n/a | Django | n/a |
@@ -251,8 +213,7 @@ Every empty cell carries a finding ID or a stated reason.
 
 ## 6. Fix order and batching
 
-There is one finding and it is independent. It lands as one PR touching blog and storage, with its
-test.
+No open findings.
 
 ---
 
@@ -261,7 +222,7 @@ test.
 - **orgs** — clean. Permissions, middleware, JSON API base, and invitation view read in full.
 - **crm** — clean. The SA226 view diff and the serializers' FK validation read in full.
 - **forms** — clean. The admin API, org-bound queryset, export, and on-commit effects were read.
-- **blog** — one finding (`blog-upload-client-extension`). API and upload validation read in full.
+- **blog** — clean. API and upload validation read in full.
 - **billing** — clean. Every view's auth path, the webhook pipeline up to the lock, and the locks
   were read. The SA232 split was checked through the class sweep.
 - **notifications** — clean. Webhook verification read in full.
@@ -306,8 +267,6 @@ added:
 
 ## 10. Tooling gaps
 
-- **Upload-name rule in the conventions harness:** reject `Path(<client filename>).suffix` in
-  `upload_to` builders. Prevents `blog-upload-client-extension`.
 - Gaps from the prior pass (image-layer and broader IaC scanning) are carried.
 
 ---
@@ -340,10 +299,7 @@ added:
 
 ## 12. Questions that would change severity
 
-1. Do deployments expose the storage bucket under a domain that shares a site with the app (for
-   example `media.<app domain>`), or under the app's own host via a proxy? If it is the app
-   origin, `blog-upload-client-extension` rises to S2.
-
+None open.
 ---
 
 ## 13. Reconciliation log
@@ -411,5 +367,7 @@ added:
 - 2026-10-03 — `orgs-provider-id-check-blocks-migrate`: carried (trigger not fired).
 - 2026-10-03 — `blog-upload-client-extension`: new, open (S3). Pre-existing code whose reachability
   SA226 widened from staff to org members.
+- 2026-10-03 — `blog-upload-client-extension`: resolved (SA239). Blog and storage upload paths
+  derive the extension from the validated image format.
 - 2026-10-03 — `crm-stage-seed-lost-on-commit-failure`: new watchlist (introduced by SA229).
 - 2026-10-03 — `orgs-disabled-in-saas-wedges-site`: new watchlist (introduced by SA219).

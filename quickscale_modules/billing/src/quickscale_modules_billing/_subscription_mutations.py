@@ -15,7 +15,6 @@ from django.apps import apps
 from django.conf import settings
 from quickscale_modules_orgs.current_org import org_scope
 
-import quickscale_modules_billing.services as _services
 from quickscale_modules_billing._payload import (
     _extract_subscription_period_bounds as _extract_subscription_period_bounds,
 )
@@ -46,6 +45,8 @@ from quickscale_modules_billing.exceptions import (
 from quickscale_modules_billing.models import (
     Subscription,
 )
+import quickscale_modules_billing._locks as _locks
+import quickscale_modules_billing._stripe_client as _stripe_client
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ def cancel_current_subscription(
     capture_transition: bool = False,
 ) -> Subscription | SubscriptionCancellationTransition | None:
     """Schedule the organization's current Stripe-backed subscription to end after the period."""
-    with _services.subscription_provider_mutation_lock(organization):
+    with _locks.subscription_provider_mutation_lock(organization):
         _, organization = _require_owner_provider_mutation_authorization(
             user,
             organization,
@@ -89,7 +90,7 @@ def resume_current_subscription(
     transition: SubscriptionCancellationTransition | None = None,
 ) -> Subscription:
     """Undo a scheduled cancellation when account deletion is rejected."""
-    with _services.subscription_provider_mutation_lock(organization):
+    with _locks.subscription_provider_mutation_lock(organization):
         if transition is not None:
             # This is compensation for an already-authorized cancellation, not
             # a new user mutation. Restore only the captured provider identity.
@@ -172,9 +173,14 @@ def _cancel_current_subscription_with_transition(
 ) -> SubscriptionCancellationTransition | None:
     """Cancel only after recording the exact provider state to restore."""
     snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
+    # Imported lazily: _subscription_checkout imports this module at load time.
+    import quickscale_modules_billing._subscription_checkout as _subscription_checkout
+
     with org_scope(organization):
-        subscription = _services._resolve_authoritative_subscription_reservation(
-            organization=organization,
+        subscription = (
+            _subscription_checkout._resolve_authoritative_subscription_reservation(
+                organization=organization,
+            )
         )
     if subscription is None:
         return None
@@ -186,7 +192,7 @@ def _cancel_current_subscription_with_transition(
             "Current recurring subscription is missing a Stripe subscription id."
         )
 
-    resolved_client = stripe_client or _services.get_stripe_client(
+    resolved_client = stripe_client or _stripe_client.get_stripe_client(
         settings_snapshot=snapshot
     )
     remote_subscription = resolved_client.retrieve_subscription(
@@ -211,7 +217,7 @@ def _cancel_current_subscription_with_transition(
         updated_subscription = resolved_client.cancel_subscription(
             stripe_subscription_id=transition.stripe_subscription_id,
         )
-        _services._persist_subscription_provider_snapshot(
+        _persist_subscription_provider_snapshot(
             subscription,
             updated_subscription,
             expected_identity=transition.identity,
@@ -258,7 +264,7 @@ def _restore_subscription_cancellation_transition(
 
     snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
     _ensure_billing_enabled(snapshot)
-    resolved_client = stripe_client or _services.get_stripe_client(
+    resolved_client = stripe_client or _stripe_client.get_stripe_client(
         settings_snapshot=snapshot
     )
     updated_subscription = resolved_client.resume_subscription(
@@ -272,7 +278,7 @@ def _restore_subscription_cancellation_transition(
                 "The captured Stripe subscription was restored, but its local row no "
                 "longer exists; no local provider snapshot was written."
             ) from exc
-    return _services._persist_subscription_provider_snapshot(
+    return _persist_subscription_provider_snapshot(
         subscription,
         updated_subscription,
         expected_identity=transition.identity,
@@ -289,9 +295,14 @@ def _set_current_subscription_cancel_at_period_end(
 ) -> Subscription:
     """Reconcile one organization's period-end cancellation state."""
     snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
+    # Imported lazily: _subscription_checkout imports this module at load time.
+    import quickscale_modules_billing._subscription_checkout as _subscription_checkout
+
     with org_scope(organization):
-        subscription = _services._resolve_authoritative_subscription_reservation(
-            organization=organization,
+        subscription = (
+            _subscription_checkout._resolve_authoritative_subscription_reservation(
+                organization=organization,
+            )
         )
     if subscription is None:
         raise BillingValidationError(
@@ -305,7 +316,7 @@ def _set_current_subscription_cancel_at_period_end(
             "Current recurring subscription is missing a Stripe subscription id."
         )
 
-    resolved_client = stripe_client or _services.get_stripe_client(
+    resolved_client = stripe_client or _stripe_client.get_stripe_client(
         settings_snapshot=snapshot
     )
     expected_identity = SubscriptionProviderIdentity(
@@ -322,7 +333,7 @@ def _set_current_subscription_cancel_at_period_end(
             stripe_subscription_id=stripe_subscription_id,
         )
 
-    return _services._persist_subscription_provider_snapshot(
+    return _persist_subscription_provider_snapshot(
         subscription,
         updated_subscription,
         expected_identity=expected_identity,
@@ -373,7 +384,7 @@ def _persist_subscription_provider_snapshot(
         )
 
     with org_scope(organization):
-        _services._lock_organization_for_billing_mutation(
+        _locks._lock_organization_for_billing_mutation(
             expected_identity.organization_id
         )
         subscription = Subscription.all_objects.select_for_update().get(

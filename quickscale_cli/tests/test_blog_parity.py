@@ -13,7 +13,7 @@ from unittest.mock import patch
 import pytest
 
 from quickscale_cli.commands.module_config import MODULE_CONFIGURATOR_REGISTRY
-from quickscale_cli.commands.plan_command import _configure_selected_modules
+from quickscale_cli.commands._plan_shared import _configure_selected_modules
 from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
 from quickscale_core.manifest.option_validation import (
     collect_option_validation_issues,

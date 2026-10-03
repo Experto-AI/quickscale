@@ -18,7 +18,20 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
 
-import quickscale_core.dr_engine.orchestration as _orchestration
+
+import quickscale_core.dr_engine._sidecar as _sidecar
+import quickscale_core.dr_engine._state as _state
+import quickscale_core.dr_engine._paths as _paths
+import quickscale_core.dr_engine._policy as _policy
+import quickscale_core.dr_engine._metadata as _metadata
+import quickscale_core.dr_engine._remote as _remote
+import quickscale_core.dr_engine.primitives as _primitives
+import quickscale_core.dr_engine.persistence as _persistence
+import quickscale_core.dr_engine._prune as _prune
+import quickscale_core.dr_engine._lock as _lock
+import quickscale_core.dr_engine.recovery as _recovery
+import django
+import shutil
 
 
 def _complete_capture_after_dump(
@@ -40,43 +53,43 @@ def _complete_capture_after_dump(
     """
     # Remote upload for private_remote targets
     if resolved_policy.target_mode == "private_remote" and not artifact.remote_key:
-        uploader = remote_uploader or _orchestration._upload_to_private_remote
+        uploader = remote_uploader or _remote._upload_to_private_remote
         try:
-            remote_key = _orchestration._upload_snapshot_child_to_private_remote(
+            remote_key = _remote._upload_snapshot_child_to_private_remote(
                 local_path,
                 policy=resolved_policy,
                 snapshot_remote_root=snapshot.remote_root_key,
                 relative_path=str(child_descriptors_json["database"]["relative_path"]),
                 remote_uploader=uploader,
             )
-        except _orchestration.BackupError as exc:
-            _orchestration._mark_remote_upload_failure(
+        except _primitives.BackupError as exc:
+            _state._mark_remote_upload_failure(
                 artifact, local_path=local_path, error=exc
             )
             child_descriptors_json["database"]["status"] = "failed"
             child_descriptors_json["database"]["error"] = str(exc)
-            _orchestration._mark_snapshot_failed(
+            _state._mark_snapshot_failed(
                 snapshot,
                 failure_note=f"database dump remote upload failed: {exc}",
                 child_descriptors_json=child_descriptors_json,
             )
-            raise _orchestration.BackupError(
+            raise _primitives.BackupError(
                 f"Snapshot capture failed for snapshot '{snapshot.snapshot_id}': {exc}"
             ) from exc
         except Exception as exc:
-            upload_error = _orchestration.BackupError(
+            upload_error = _primitives.BackupError(
                 "Snapshot capture failed for snapshot "
                 f"'{snapshot.snapshot_id}': Private remote upload failed for "
                 f"{artifact.filename}: {exc}"
             )
-            _orchestration._mark_remote_upload_failure(
+            _state._mark_remote_upload_failure(
                 artifact,
                 local_path=local_path,
                 error=upload_error,
             )
             child_descriptors_json["database"]["status"] = "failed"
             child_descriptors_json["database"]["error"] = str(upload_error)
-            _orchestration._mark_snapshot_failed(
+            _state._mark_snapshot_failed(
                 snapshot,
                 failure_note=(f"database dump remote upload failed: {upload_error}"),
                 child_descriptors_json=child_descriptors_json,
@@ -85,17 +98,15 @@ def _complete_capture_after_dump(
 
         artifact.remote_key = remote_key
         try:
-            _orchestration.save_artifact(
+            _persistence.save_artifact(
                 artifact, update_fields=["remote_key", "updated_at"]
             )
         except Exception as exc:
-            cleanup_error = (
-                _orchestration._rollback_remote_upload_after_persistence_failure(
-                    artifact,
-                    remote_key=remote_key,
-                    policy=resolved_policy,
-                    remote_deleter=remote_deleter,
-                )
+            cleanup_error = _state._rollback_remote_upload_after_persistence_failure(
+                artifact,
+                remote_key=remote_key,
+                policy=resolved_policy,
+                remote_deleter=remote_deleter,
             )
             message = (
                 "Snapshot capture failed for snapshot "
@@ -114,35 +125,33 @@ def _complete_capture_after_dump(
             child_descriptors_json["database"]["status"] = "failed"
             child_descriptors_json["database"]["remote_key"] = remote_key
             child_descriptors_json["database"]["error"] = message
-            _orchestration._mark_snapshot_failed(
+            _state._mark_snapshot_failed(
                 snapshot,
                 failure_note=message,
                 child_descriptors_json=child_descriptors_json,
             )
-            raise _orchestration.BackupError(message) from exc
+            raise _primitives.BackupError(message) from exc
 
         child_descriptors_json["database"]["remote_key"] = remote_key
         child_descriptors_json["database"].pop("error", None)
         snapshot.child_descriptors_json = child_descriptors_json
-        _orchestration.save_snapshot(
+        _persistence.save_snapshot(
             snapshot, update_fields=["child_descriptors_json", "updated_at"]
         )
 
     # Capture sidecars
-    child_descriptors_json, sidecar_failures = (
-        _orchestration._capture_snapshot_sidecars(
-            snapshot=snapshot,
-            policy=resolved_policy,
-            captured_at=now,
-            remote_uploader=remote_uploader,
-        )
+    child_descriptors_json, sidecar_failures = _sidecar._capture_snapshot_sidecars(
+        snapshot=snapshot,
+        policy=resolved_policy,
+        captured_at=now,
+        remote_uploader=remote_uploader,
     )
     snapshot.child_descriptors_json = child_descriptors_json
     if sidecar_failures:
         failure_note = "snapshot sidecar capture failed: " + "; ".join(sidecar_failures)
         snapshot.status = "failed"
         snapshot.failure_note = failure_note
-        _orchestration.save_snapshot(
+        _persistence.save_snapshot(
             snapshot,
             update_fields=[
                 "child_descriptors_json",
@@ -151,7 +160,7 @@ def _complete_capture_after_dump(
                 "updated_at",
             ],
         )
-        _orchestration._persist_snapshot_metadata_on_artifact(
+        _state._persist_snapshot_metadata_on_artifact(
             artifact,
             snapshot,
             note=failure_note,
@@ -160,11 +169,9 @@ def _complete_capture_after_dump(
         snapshot.status = "ready"
         if artifact.status != "ready":
             artifact.status = "ready"
-            _orchestration.save_artifact(
-                artifact, update_fields=["status", "updated_at"]
-            )
+            _persistence.save_artifact(artifact, update_fields=["status", "updated_at"])
         snapshot.failure_note = ""
-        _orchestration.save_snapshot(
+        _persistence.save_snapshot(
             snapshot,
             update_fields=[
                 "child_descriptors_json",
@@ -173,23 +180,21 @@ def _complete_capture_after_dump(
                 "updated_at",
             ],
         )
-        cleared_previous_note = _orchestration._clear_appended_artifact_note(
+        cleared_previous_note = _state._clear_appended_artifact_note(
             artifact,
             previous_failure_note,
         )
-        _orchestration._persist_snapshot_metadata_on_artifact(artifact, snapshot)
+        _state._persist_snapshot_metadata_on_artifact(artifact, snapshot)
         if cleared_previous_note:
-            _orchestration.save_artifact(
+            _persistence.save_artifact(
                 artifact, update_fields=["validation_notes", "updated_at"]
             )
 
     # Post-capture prune
     try:
-        _orchestration.prune_expired_backups(policy=resolved_policy, now=now)
+        _prune.prune_expired_backups(policy=resolved_policy, now=now)
     except Exception as exc:
-        _orchestration._record_prune_failure_without_masking_success(
-            artifact, error=exc
-        )
+        _state._record_prune_failure_without_masking_success(artifact, error=exc)
 
     return artifact
 
@@ -206,56 +211,52 @@ def _resume_backup_capture(
     now: datetime,
 ) -> Any:
     """Resume an incomplete snapshot capture using the existing snapshot id."""
-    snapshot = _orchestration.get_backup_snapshot(snapshot_id)
-    resolved_policy = _orchestration._build_snapshot_capture_resume_policy(
-        snapshot, policy
-    )
-    issues = _orchestration._validate_policy_snapshot_internal(resolved_policy)
+    snapshot = _state.get_backup_snapshot(snapshot_id)
+    resolved_policy = _paths._build_snapshot_capture_resume_policy(snapshot, policy)
+    issues = _policy._validate_policy_snapshot_internal(resolved_policy)
     if issues:
-        raise _orchestration.BackupConfigurationError("; ".join(issues))
+        raise _primitives.BackupConfigurationError("; ".join(issues))
 
     if snapshot.status == "deleted":
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             f"Cannot resume snapshot '{snapshot.snapshot_id}' because it has already been deleted."
         )
 
-    source_environment = _orchestration._get_source_environment()
+    source_environment = _metadata._get_source_environment()
     if snapshot.source_environment != source_environment:
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             f"Cannot resume snapshot '{snapshot.snapshot_id}' from environment "
             f"'{source_environment}' because it was captured from "
             f"'{snapshot.source_environment}'."
         )
 
     if (
-        _orchestration._snapshot_uses_private_remote(snapshot)
+        _paths._snapshot_uses_private_remote(snapshot)
         and not snapshot.remote_root_key.strip()
     ):
-        raise _orchestration.BackupError(
+        raise _primitives.BackupError(
             f"Cannot resume snapshot '{snapshot.snapshot_id}' because its private remote root is missing."
         )
 
-    if _orchestration._snapshot_capture_is_complete(snapshot):
-        raise _orchestration.BackupError(
+    if _paths._snapshot_capture_is_complete(snapshot):
+        raise _primitives.BackupError(
             f"Backup snapshot '{snapshot.snapshot_id}' is already complete; resume is not needed."
         )
 
-    snapshot_lock_directory = _orchestration._build_snapshot_lock_directory(snapshot)
+    snapshot_lock_directory = _paths._build_snapshot_lock_directory(snapshot)
     snapshot_lock_directory.mkdir(parents=True, exist_ok=True)
 
-    with _orchestration._backup_creation_lock(snapshot_lock_directory, now=now):
-        _orchestration.refresh_snapshot(snapshot)
+    with _lock._backup_creation_lock(snapshot_lock_directory, now=now):
+        _persistence.refresh_snapshot(snapshot)
         previous_failure_note = snapshot.failure_note.strip()
         snapshot_root = Path(snapshot.local_root_path)
         snapshot_root.mkdir(parents=True, exist_ok=True)
         database_directory = (
-            snapshot_root / _orchestration._SNAPSHOT_DATABASE_DIRECTORY_NAME
+            snapshot_root / _primitives._SNAPSHOT_DATABASE_DIRECTORY_NAME
         )
         database_directory.mkdir(parents=True, exist_ok=True)
 
-        connection_settings = _orchestration.django.db.connections[
-            "default"
-        ].settings_dict
+        connection_settings = django.db.connections["default"].settings_dict
         engine = str(connection_settings.get("ENGINE", ""))
         database_name = str(connection_settings.get("NAME", ""))
         artifact = snapshot.authoritative_dump
@@ -265,7 +266,7 @@ def _resume_backup_capture(
                 path for path in database_directory.iterdir() if path.is_file()
             )
             if len(candidate_dump_files) > 1:
-                raise _orchestration.BackupError(
+                raise _primitives.BackupError(
                     f"Cannot resume snapshot '{snapshot.snapshot_id}' because multiple database dump candidates were found."
                 )
 
@@ -276,14 +277,14 @@ def _resume_backup_capture(
 
             if candidate_dump_files:
                 local_path = candidate_dump_files[0]
-                backup_format = _orchestration._detect_restore_file_format(local_path)
+                backup_format = _recovery._detect_restore_file_format(local_path)
                 if backup_format == "pg_dump_custom":
                     (
                         database_server_version,
                         database_server_major,
                         dump_client_version,
                         dump_client_major,
-                    ) = _orchestration._require_postgresql_18_contract(
+                    ) = _metadata._require_postgresql_18_contract(
                         database_engine=engine,
                         executable="pg_dump",
                         operation="backup capture resume",
@@ -297,7 +298,7 @@ def _resume_backup_capture(
                     database_server_major,
                     dump_client_version,
                     dump_client_major,
-                ) = _orchestration._create_database_dump(
+                ) = _metadata._create_database_dump(
                     engine,
                     resolved_policy,
                     shell_runner=shell_runner,
@@ -306,9 +307,9 @@ def _resume_backup_capture(
                     operation="backup capture resume",
                 )
 
-            checksum = _orchestration._compute_sha256(local_path)
+            checksum = _primitives._compute_sha256(local_path)
             size_bytes = local_path.stat().st_size
-            metadata = _orchestration._build_backup_metadata(
+            metadata = _metadata._build_backup_metadata(
                 created_at=now,
                 backup_format=backup_format,
                 database_engine=engine,
@@ -323,7 +324,7 @@ def _resume_backup_capture(
             if snapshot.remote_root_key:
                 metadata["snapshot_remote_root_key"] = snapshot.remote_root_key
 
-            artifact = _orchestration.create_artifact(
+            artifact = _persistence.create_artifact(
                 filename=local_path.name,
                 storage_target=(
                     "private_remote"
@@ -348,26 +349,26 @@ def _resume_backup_capture(
             snapshot.authoritative_dump = artifact
         else:
             if artifact.status == "deleted":
-                raise _orchestration.BackupError(
+                raise _primitives.BackupError(
                     f"Cannot resume snapshot '{snapshot.snapshot_id}' because its authoritative dump artifact has been deleted."
                 )
 
-            local_path = _orchestration._resolve_snapshot_database_local_path(
+            local_path = _state._resolve_snapshot_database_local_path(
                 snapshot, artifact
             )
             if not local_path.exists():
-                raise _orchestration.BackupError(
+                raise _primitives.BackupError(
                     f"Cannot resume snapshot '{snapshot.snapshot_id}' because the original authoritative dump file is missing."
                 )
 
-            validation_issues = _orchestration._collect_local_backup_validation_issues(
+            validation_issues = _recovery._collect_local_backup_validation_issues(
                 local_path,
                 backup_format=artifact.backup_format,
                 expected_checksum=artifact.checksum_sha256,
                 expected_size=artifact.size_bytes,
             )
             if validation_issues:
-                raise _orchestration.BackupError(
+                raise _primitives.BackupError(
                     f"Cannot resume snapshot '{snapshot.snapshot_id}' because the original authoritative dump file is not valid: "
                     + "; ".join(validation_issues)
                 )
@@ -386,7 +387,7 @@ def _resume_backup_capture(
                 artifact.status = "ready"
                 update_fields.append("status")
             if update_fields:
-                _orchestration.save_artifact(
+                _persistence.save_artifact(
                     artifact, update_fields=[*update_fields, "updated_at"]
                 )
 
@@ -395,17 +396,15 @@ def _resume_backup_capture(
             if isinstance(snapshot.child_descriptors_json, dict)
             else {}
         )
-        child_descriptors_json["database"] = (
-            _orchestration._build_snapshot_database_descriptor(
-                snapshot,
-                artifact,
-            )
+        child_descriptors_json["database"] = _paths._build_snapshot_database_descriptor(
+            snapshot,
+            artifact,
         )
         sidecars = child_descriptors_json.get("sidecars")
         if not isinstance(sidecars, dict):
             child_descriptors_json["sidecars"] = {}
         snapshot.child_descriptors_json = child_descriptors_json
-        _orchestration.save_snapshot(
+        _persistence.save_snapshot(
             snapshot,
             update_fields=[
                 "authoritative_dump",
@@ -414,7 +413,7 @@ def _resume_backup_capture(
             ],
         )
 
-        return _orchestration._complete_capture_after_dump(
+        return _complete_capture_after_dump(
             artifact,
             snapshot,
             resolved_policy=resolved_policy,
@@ -439,11 +438,11 @@ def create_backup(
     resume_snapshot_id: str | None = None,
 ) -> Any:
     """Create a backup artifact, optionally offloading it to private remote storage."""
-    resolved_policy = policy or _orchestration._load_active_policy_snapshot()
+    resolved_policy = policy or _policy._load_active_policy_snapshot()
     backup_started_at = now or datetime.now(timezone.utc)
 
     if resume_snapshot_id is not None:
-        return _orchestration._resume_backup_capture(
+        return _resume_backup_capture(
             resume_snapshot_id,
             initiated_by=initiated_by,
             trigger=trigger,
@@ -454,36 +453,32 @@ def create_backup(
             now=backup_started_at,
         )
 
-    issues = _orchestration._validate_policy_snapshot_internal(resolved_policy)
+    issues = _policy._validate_policy_snapshot_internal(resolved_policy)
     if issues:
-        raise _orchestration.BackupConfigurationError("; ".join(issues))
+        raise _primitives.BackupConfigurationError("; ".join(issues))
 
-    local_directory = _orchestration.get_local_backup_directory(resolved_policy)
+    local_directory = _paths.get_local_backup_directory(resolved_policy)
     local_directory.mkdir(parents=True, exist_ok=True)
 
-    with _orchestration._backup_creation_lock(local_directory, now=backup_started_at):
-        connection_settings = _orchestration.django.db.connections[
-            "default"
-        ].settings_dict
+    with _lock._backup_creation_lock(local_directory, now=backup_started_at):
+        connection_settings = django.db.connections["default"].settings_dict
         engine = str(connection_settings.get("ENGINE", ""))
         database_name = str(connection_settings.get("NAME", ""))
         previous_failure_note = ""
-        snapshot_id = _orchestration._mint_snapshot_id()
-        snapshot_root = _orchestration._build_snapshot_local_root(
-            resolved_policy, snapshot_id
-        )
+        snapshot_id = _primitives._mint_snapshot_id()
+        snapshot_root = _paths._build_snapshot_local_root(resolved_policy, snapshot_id)
         snapshot_root.mkdir(parents=True, exist_ok=True)
         database_directory = (
-            snapshot_root / _orchestration._SNAPSHOT_DATABASE_DIRECTORY_NAME
+            snapshot_root / _primitives._SNAPSHOT_DATABASE_DIRECTORY_NAME
         )
         database_directory.mkdir(parents=True, exist_ok=True)
-        snapshot = _orchestration.create_snapshot(
+        snapshot = _persistence.create_snapshot(
             snapshot_id=snapshot_id,
             status="pending",
-            source_environment=_orchestration._get_source_environment(),
+            source_environment=_metadata._get_source_environment(),
             local_root_path=str(snapshot_root),
             remote_root_key=(
-                _orchestration._build_snapshot_remote_root(resolved_policy, snapshot_id)
+                _paths._build_snapshot_remote_root(resolved_policy, snapshot_id)
                 if resolved_policy.target_mode == "private_remote"
                 else ""
             ),
@@ -499,7 +494,7 @@ def create_backup(
                 database_server_major,
                 dump_client_version,
                 dump_client_major,
-            ) = _orchestration._create_database_dump(
+            ) = _metadata._create_database_dump(
                 engine,
                 resolved_policy,
                 shell_runner=shell_runner,
@@ -509,33 +504,33 @@ def create_backup(
             )
         except Exception as exc:
             if snapshot_root.exists():
-                _orchestration.shutil.rmtree(snapshot_root)
-            _orchestration._mark_snapshot_failed(
+                shutil.rmtree(snapshot_root)
+            _state._mark_snapshot_failed(
                 snapshot,
                 failure_note=f"snapshot preparation failed: {exc}",
             )
-            raise _orchestration.BackupError(
+            raise _primitives.BackupError(
                 f"Snapshot capture failed for snapshot '{snapshot.snapshot_id}': {exc}"
             ) from exc
 
         try:
-            checksum = _orchestration._compute_sha256(local_path)
+            checksum = _primitives._compute_sha256(local_path)
             size_bytes = local_path.stat().st_size
         except Exception as exc:
-            cleanup_error = _orchestration._cleanup_local_backup_file(local_path)
+            cleanup_error = _lock._cleanup_local_backup_file(local_path)
             failure_note = f"snapshot dump creation failed: {exc}"
             if cleanup_error is not None:
                 failure_note += f"; cleanup failed: {cleanup_error}"
-            _orchestration._mark_snapshot_failed(snapshot, failure_note=failure_note)
+            _state._mark_snapshot_failed(snapshot, failure_note=failure_note)
             if cleanup_error is not None:
                 exc.add_note(
                     f"Failed to clean up partial backup file '{local_path}': {cleanup_error}"
                 )
-            raise _orchestration.BackupError(
+            raise _primitives.BackupError(
                 f"Snapshot capture failed for snapshot '{snapshot.snapshot_id}': {exc}"
             ) from exc
 
-        metadata = _orchestration._build_backup_metadata(
+        metadata = _metadata._build_backup_metadata(
             created_at=backup_started_at,
             backup_format=backup_format,
             database_engine=engine,
@@ -550,7 +545,7 @@ def create_backup(
         if snapshot.remote_root_key:
             metadata["snapshot_remote_root_key"] = snapshot.remote_root_key
 
-        artifact = _orchestration.create_artifact(
+        artifact = _persistence.create_artifact(
             filename=filename,
             storage_target=(
                 "private_remote"
@@ -573,14 +568,12 @@ def create_backup(
             trigger=trigger,
         )
         child_descriptors_json: dict[str, Any] = {
-            "database": _orchestration._build_snapshot_database_descriptor(
-                snapshot, artifact
-            ),
+            "database": _paths._build_snapshot_database_descriptor(snapshot, artifact),
             "sidecars": {},
         }
         snapshot.authoritative_dump = artifact
         snapshot.child_descriptors_json = child_descriptors_json
-        _orchestration.save_snapshot(
+        _persistence.save_snapshot(
             snapshot,
             update_fields=[
                 "authoritative_dump",
@@ -589,7 +582,7 @@ def create_backup(
             ],
         )
 
-        return _orchestration._complete_capture_after_dump(
+        return _complete_capture_after_dump(
             artifact,
             snapshot,
             resolved_policy=resolved_policy,

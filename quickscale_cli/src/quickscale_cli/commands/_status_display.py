@@ -19,7 +19,13 @@ from quickscale_core.schema.state_schema import (
     StateManager,
 )
 
-import quickscale_cli.commands.status_command as _status_command
+
+import quickscale_core.schema.delta as _delta
+import quickscale_cli.commands._status_context as _status_context
+import quickscale_core.project_state_drift as _project_state_drift
+import quickscale_core.project_state_hashes as _project_state_hashes
+import quickscale_core.config as _config
+import quickscale_core.schema.state_schema as _state_schema
 
 
 def _display_project_info(state: QuickScaleState) -> None:
@@ -29,10 +35,10 @@ def _display_project_info(state: QuickScaleState) -> None:
     click.echo(f"   Package: {state.project.package}")
     click.echo(f"   Theme: {state.project.theme}")
     click.echo(
-        f"   Created: {_status_command._format_datetime(state.project.created_at)}"
+        f"   Created: {_status_context._format_datetime(state.project.created_at)}"
     )
     click.echo(
-        f"   Last Applied: {_status_command._format_datetime(state.project.last_applied)}"
+        f"   Last Applied: {_status_context._format_datetime(state.project.last_applied)}"
     )
 
 
@@ -46,7 +52,7 @@ def _display_modules(state: QuickScaleState) -> None:
     for name, module in state.modules.items():
         version_str = f"v{module.version}" if module.version else "unknown"
         embedded_at = (
-            _status_command._format_datetime(module.embedded_at)
+            _status_context._format_datetime(module.embedded_at)
             if module.embedded_at
             else "unknown"
         )
@@ -62,11 +68,11 @@ def _display_pending_changes(
     if config is None:
         return
 
-    delta = _status_command.compute_delta(config, state, manifests)
+    delta = _delta.compute_delta(config, state, manifests)
 
     if delta.has_changes:
         click.echo("\n⚡ Pending Changes:")
-        change_summary = _status_command.format_delta(delta)
+        change_summary = _delta.format_delta(delta)
         for line in change_summary.splitlines():
             click.echo(f"   {line}")
         click.echo("\n💡 Run 'quickscale apply' to apply these changes")
@@ -76,7 +82,7 @@ def _display_pending_changes(
 
 def _display_docker_status() -> None:
     """Display Docker container status if available"""
-    status = _status_command._get_docker_status()
+    status = _status_context._get_docker_status()
 
     if status is None:
         return
@@ -138,8 +144,8 @@ def _display_version_drift_warnings(
         state = project_state_manager.load_state()
         config = project_state_manager.load_config()
     except (
-        _status_command.ConfigError,
-        _status_command.StateError,
+        _config.ConfigError,
+        _state_schema.StateError,
         OSError,
     ) as error:
         click.echo(
@@ -148,7 +154,7 @@ def _display_version_drift_warnings(
         )
         return
 
-    drift = _status_command.check_version_drift(state, config)
+    drift = _project_state_drift.check_version_drift(state, config)
     if not drift:
         return
 
@@ -213,17 +219,18 @@ def _display_managed_files(diagnostics: dict) -> None:
         click.secho("   Managed files: ✅ consolidated in state.yml", fg="green")
         return
     legacy_hashes_present = (
-        _status_command.FILE_HASHES_FILENAME in diagnostics["legacy_files_present"]
+        _project_state_hashes.FILE_HASHES_FILENAME
+        in diagnostics["legacy_files_present"]
     )
     if legacy_hashes_present and diagnostics["legacy_compat_active"]:
         click.secho(
-            f"   Managed files: ⚠️  using legacy {_status_command.FILE_HASHES_FILENAME}",
+            f"   Managed files: ⚠️  using legacy {_project_state_hashes.FILE_HASHES_FILENAME}",
             fg="yellow",
         )
     elif legacy_hashes_present:
         click.secho(
             f"   Managed files: no records (legacy "
-            f"{_status_command.FILE_HASHES_FILENAME} ignored)",
+            f"{_project_state_hashes.FILE_HASHES_FILENAME} ignored)",
             fg="yellow",
         )
     else:
@@ -361,13 +368,13 @@ def _display_contract_vintage(diagnostics: dict) -> None:
 def _display_drift_diagnostics(diagnostics: dict) -> None:
     """Display M2 drift and compatibility diagnostics in text format."""
     click.echo("\n🔍 M2 Drift & Compatibility:")
-    _status_command._display_state_consolidation(diagnostics)
-    _status_command._display_module_tracking(diagnostics)
-    _status_command._display_managed_files(diagnostics)
-    _status_command._display_filesystem_drift(diagnostics)
-    _status_command._display_managed_file_drift(diagnostics)
-    _status_command._display_version_drift(diagnostics)
-    _status_command._display_contract_vintage(diagnostics)
+    _display_state_consolidation(diagnostics)
+    _display_module_tracking(diagnostics)
+    _display_managed_files(diagnostics)
+    _display_filesystem_drift(diagnostics)
+    _display_managed_file_drift(diagnostics)
+    _display_version_drift(diagnostics)
+    _display_contract_vintage(diagnostics)
 
 
 def _build_json_output(
@@ -421,7 +428,7 @@ def _build_json_output(
             },
         }
 
-        delta = _status_command.compute_delta(config, state, manifests)
+        delta = _delta.compute_delta(config, state, manifests)
         output["pending_changes"] = {
             "has_changes": delta.has_changes,
             "modules_to_add": delta.modules_to_add,
@@ -430,7 +437,7 @@ def _build_json_output(
             "theme_changed": delta.theme_changed,
         }
 
-    docker_status = _status_command._get_docker_status()
+    docker_status = _status_context._get_docker_status()
     if docker_status:
         output["docker"] = docker_status
 
@@ -469,30 +476,30 @@ def _display_text_status(
 
     # Display state information
     if state:
-        _status_command._display_project_info(state)
-        _status_command._display_modules(state)
-        _status_command._display_drift_warnings(state_manager)
-        _status_command._display_managed_file_drift_warnings(project_state_manager)
-        _status_command._display_version_drift_warnings(project_state_manager)
+        _display_project_info(state)
+        _display_modules(state)
+        _display_drift_warnings(state_manager)
+        _display_managed_file_drift_warnings(project_state_manager)
+        _display_version_drift_warnings(project_state_manager)
     else:
         click.secho("\n⚠️  No state file found (.quickscale/state.yml)", fg="yellow")
         click.echo("   Run 'quickscale apply' to initialize the project state.")
 
     # Phase 4: display explicit M2 drift & compatibility diagnostics.
     if drift_diagnostics is not None:
-        _status_command._display_drift_diagnostics(drift_diagnostics)
+        _display_drift_diagnostics(drift_diagnostics)
 
     resolved_manifests = manifests
     if resolved_manifests is None and state and state.modules:
-        resolved_manifests = _status_command._load_module_manifests(
+        resolved_manifests = _status_context._load_module_manifests(
             project_path,
             list(state.modules.keys()),
         )
 
     # Display pending changes
-    _status_command._display_pending_changes(config, state, resolved_manifests)
+    _display_pending_changes(config, state, resolved_manifests)
 
     # Display Docker status
-    _status_command._display_docker_status()
+    _display_docker_status()
 
     click.echo("")  # Final newline

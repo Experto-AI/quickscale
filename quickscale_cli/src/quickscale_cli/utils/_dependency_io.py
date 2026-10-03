@@ -17,8 +17,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-import quickscale_cli.utils.module_dependency_sync as _module_dependency_sync
-
 
 _DEPENDENCY_NAME_PATTERN = re.compile(r"^\s*([A-Za-z0-9_.-]+)")
 _VERSION_PATTERN = re.compile(r"(\d+(?:\.\d+)*)")
@@ -80,18 +78,14 @@ def _load_toml_file(path: Path) -> dict[str, Any]:
         with open(path, "rb") as file_handle:
             data = tomllib.load(file_handle)
     except OSError as error:
-        raise _module_dependency_sync.DependencySyncError(
+        raise DependencySyncError(
             f"Failed to read TOML file {path}: {error}"
         ) from error
     except tomllib.TOMLDecodeError as error:
-        raise _module_dependency_sync.DependencySyncError(
-            f"Invalid TOML in {path}: {error}"
-        ) from error
+        raise DependencySyncError(f"Invalid TOML in {path}: {error}") from error
 
     if not isinstance(data, dict):
-        raise _module_dependency_sync.DependencySyncError(
-            f"TOML file {path} did not parse to a mapping"
-        )
+        raise DependencySyncError(f"TOML file {path} did not parse to a mapping")
     return data
 
 
@@ -101,13 +95,13 @@ def _load_project_name(
     """Load the module package name from `[project].name`."""
     project_table = data.get("project", {})
     if not isinstance(project_table, dict):
-        raise _module_dependency_sync.DependencySyncError(
+        raise DependencySyncError(
             f"Embedded {module_name} pyproject.toml is missing a valid [project] table"
         )
 
     package_name = project_table.get("name")
     if not isinstance(package_name, str) or not package_name.strip():
-        raise _module_dependency_sync.DependencySyncError(
+        raise DependencySyncError(
             f"Embedded {module_name} pyproject.toml is missing [project].name"
         )
     return package_name.strip()
@@ -119,19 +113,19 @@ def _load_poetry_dependencies(
     """Load `[tool.poetry.dependencies]` from a TOML document."""
     tool_table = data.get("tool", {})
     if not isinstance(tool_table, dict):
-        raise _module_dependency_sync.DependencySyncError(
+        raise DependencySyncError(
             f"Unable to locate [tool.poetry.dependencies] in {pyproject_path}"
         )
 
     poetry_table = tool_table.get("poetry", {})
     if not isinstance(poetry_table, dict):
-        raise _module_dependency_sync.DependencySyncError(
+        raise DependencySyncError(
             f"Unable to locate [tool.poetry.dependencies] in {pyproject_path}"
         )
 
     dependencies = poetry_table.get("dependencies", {})
     if not isinstance(dependencies, dict):
-        raise _module_dependency_sync.DependencySyncError(
+        raise DependencySyncError(
             f"[tool.poetry.dependencies] must be a mapping in {pyproject_path}"
         )
 
@@ -140,9 +134,9 @@ def _load_poetry_dependencies(
 
 def _extract_dependency_name(requirement: str, module_name: str) -> str:
     """Extract a dependency key name from a manifest requirement string."""
-    match = _module_dependency_sync._DEPENDENCY_NAME_PATTERN.match(requirement)
+    match = _DEPENDENCY_NAME_PATTERN.match(requirement)
     if match is None:
-        raise _module_dependency_sync.DependencySyncError(
+        raise DependencySyncError(
             f"Unable to parse dependency name from {module_name} manifest entry: {requirement!r}"
         )
     return match.group(1)
@@ -158,9 +152,9 @@ def _should_skip_manifest_dependency(
         return False
 
     backend = str((module_options or {}).get("backend", "local")).strip().lower()
-    if backend in _module_dependency_sync._STORAGE_CLOUD_BACKENDS:
+    if backend in _STORAGE_CLOUD_BACKENDS:
         return False
-    return dependency_name in _module_dependency_sync._STORAGE_CLOUD_DEPENDENCIES
+    return dependency_name in _STORAGE_CLOUD_DEPENDENCIES
 
 
 def _resolve_wheelhouse_dir() -> Path | None:
@@ -171,19 +165,16 @@ def _resolve_wheelhouse_dir() -> Path | None:
     used, so a locally installed build resolves its own unpublished wheels
     instead of pinning a PyPI version that does not exist.
     """
-    if _module_dependency_sync._LOCAL_WHEELHOUSE_ENV in os.environ:
-        wheelhouse_value = os.environ[_module_dependency_sync._LOCAL_WHEELHOUSE_ENV]
+    if _LOCAL_WHEELHOUSE_ENV in os.environ:
+        wheelhouse_value = os.environ[_LOCAL_WHEELHOUSE_ENV]
         wheelhouse = Path(wheelhouse_value)
         if not wheelhouse.is_absolute() or not wheelhouse.is_dir():
-            raise _module_dependency_sync.DependencySyncError(
-                f"{_module_dependency_sync._LOCAL_WHEELHOUSE_ENV} must name an "
-                "absolute wheelhouse directory"
+            raise DependencySyncError(
+                f"{_LOCAL_WHEELHOUSE_ENV} must name an absolute wheelhouse directory"
             )
         return wheelhouse
 
-    install_wheelhouse = (
-        Path(sys.prefix) / _module_dependency_sync._INSTALL_WHEELHOUSE_DIRNAME
-    )
+    install_wheelhouse = Path(sys.prefix) / _INSTALL_WHEELHOUSE_DIRNAME
     if install_wheelhouse.is_dir():
         return install_wheelhouse
     return None
@@ -210,7 +201,7 @@ def _raise_for_missing_explicit_wheel(
     wheel_pattern: str,
 ) -> None:
     """Fail when an explicit wheelhouse lacks its requested local artifact."""
-    if _module_dependency_sync._LOCAL_WHEELHOUSE_ENV not in os.environ:
+    if _LOCAL_WHEELHOUSE_ENV not in os.environ:
         return
 
     available_wheels = sorted(
@@ -218,14 +209,14 @@ def _raise_for_missing_explicit_wheel(
         for candidate in wheelhouse.iterdir()
         if candidate.is_file() and candidate.suffix.lower() == ".whl"
     )
-    raise _module_dependency_sync.DependencySyncError(
-        f"{_module_dependency_sync._LOCAL_WHEELHOUSE_ENV} requested local dependency "
+    raise DependencySyncError(
+        f"{_LOCAL_WHEELHOUSE_ENV} requested local dependency "
         f"{dependency_name}, but no matching wheel was found in "
         f"{wheelhouse}; searched directory {wheelhouse} with pattern "
         f"{wheel_pattern!r}. Available wheels: "
         f"{available_wheels or '[none]'}. Build or copy a wheel matching "
         f"{wheel_pattern!r}, or unset "
-        f"{_module_dependency_sync._LOCAL_WHEELHOUSE_ENV} to use the "
+        f"{_LOCAL_WHEELHOUSE_ENV} to use the "
         "manifest version spec."
     )
 
@@ -238,7 +229,7 @@ def _resolve_local_wheel_dependency(
 ) -> dict[str, str] | None:
     """Materialize and return an exact local wheel for installed acceptance."""
     normalized_name = re.sub(r"[-_.]+", "-", dependency_name).lower()
-    if normalized_name not in _module_dependency_sync._LOCAL_WHEEL_DISTRIBUTIONS:
+    if normalized_name not in _LOCAL_WHEEL_DISTRIBUTIONS:
         return None
 
     if wheelhouse is None:
@@ -250,18 +241,16 @@ def _resolve_local_wheel_dependency(
     # than relying on Path.glob's case-sensitive, hyphen-only matching.
     normalized_name = re.sub(r"[-_.]+", "_", dependency_name).lower()
     wheel_pattern = f"{normalized_name}-*.whl"
-    candidates = _module_dependency_sync._find_local_wheel_candidates(
-        wheelhouse, normalized_name
-    )
+    candidates = _find_local_wheel_candidates(wheelhouse, normalized_name)
     if not candidates:
-        _module_dependency_sync._raise_for_missing_explicit_wheel(
+        _raise_for_missing_explicit_wheel(
             wheelhouse,
             dependency_name,
             wheel_pattern,
         )
         return None
     if len(candidates) != 1:
-        raise _module_dependency_sync.DependencySyncError(
+        raise DependencySyncError(
             f"Wheelhouse {wheelhouse} has ambiguous wheels for {dependency_name}: "
             f"{[candidate.name for candidate in candidates]}"
         )
@@ -287,8 +276,8 @@ def _build_module_path_dependency_value(
 
     if module_name == "storage":
         backend = str((module_options or {}).get("backend", "local")).strip().lower()
-        if backend in _module_dependency_sync._STORAGE_CLOUD_BACKENDS:
-            dependency_value["extras"] = [_module_dependency_sync._STORAGE_CLOUD_EXTRA]
+        if backend in _STORAGE_CLOUD_BACKENDS:
+            dependency_value["extras"] = [_STORAGE_CLOUD_EXTRA]
 
     return dependency_value
 
@@ -301,10 +290,8 @@ def _iter_required_dependency_names(
     """Resolve manifest dependency requirements to project dependency keys."""
     dependency_names: list[str] = []
     for requirement in manifest_dependencies:
-        dependency_name = _module_dependency_sync._extract_dependency_name(
-            requirement, module_name
-        )
-        if _module_dependency_sync._should_skip_manifest_dependency(
+        dependency_name = _extract_dependency_name(requirement, module_name)
+        if _should_skip_manifest_dependency(
             module_name, dependency_name, module_options
         ):
             continue

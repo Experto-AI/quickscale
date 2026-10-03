@@ -15,6 +15,7 @@ Note: Requires Docker to be running
 """
 
 from collections.abc import Callable
+import quickscale_cli.commands._types as _types
 import json
 import os
 import re
@@ -42,9 +43,8 @@ from quickscale_core.generator import ProjectGenerator
 # Bypass the apply command's destructive/remote confirmation gate so
 # that E2E tests do not require interactive input for that prompt.
 # Docker and migration steps still execute normally after bypass.
-import quickscale_cli.commands.apply_command as _apply_mod
 
-_apply_mod._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
+_types._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
 
 
 def _retain_e2e_resources() -> bool:

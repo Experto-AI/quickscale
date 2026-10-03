@@ -1,9 +1,8 @@
 """Fresh-generation and output-directory handling for apply.
 
 Implementation detail of :mod:`quickscale_cli.commands.apply_command`;
-that module re-exports every name defined here (Module Conventions
-rule 28), so existing import paths and test patch targets keep
-working.
+collaborators are resolved through the sibling modules that define
+them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -22,7 +21,8 @@ from quickscale_core.schema.state_schema import (
 )
 
 # AF6 Phase 2 — core step bodies
-import quickscale_cli.commands.apply_command as _apply_command
+
+import quickscale_core.generator as _generator
 
 
 def _generate_project(config: QuickScaleConfig, output_path: Path) -> bool:
@@ -40,7 +40,7 @@ def _generate_project(config: QuickScaleConfig, output_path: Path) -> bool:
             f"(package: {config.project.package})..."
         )
 
-        generator = _apply_command.ProjectGenerator(
+        generator = _generator.ProjectGenerator(
             theme=config.project.theme,
             selected_modules=list(config.modules.keys()),
         )
@@ -135,14 +135,14 @@ def _generate_new_project(
     if output_path.exists():
         quickscale_yml_path = output_path / "quickscale.yml"
         if quickscale_yml_path.exists():
-            _apply_command._generate_with_existing_config(
+            _generate_with_existing_config(
                 qs_config, output_path, quickscale_yml_path, force
             )
         else:
-            if not _apply_command._generate_project(qs_config, output_path):
+            if not _generate_project(qs_config, output_path):
                 raise click.Abort()
     else:
-        if not _apply_command._generate_project(qs_config, output_path):
+        if not _generate_project(qs_config, output_path):
             raise click.Abort()
 
 
@@ -161,7 +161,7 @@ def _generate_with_existing_config(
     temp_dir = Path(tempfile.mkdtemp(dir=str(output_path.parent)))
     temp_project = temp_dir / qs_config.project.slug
 
-    if not _apply_command._generate_project(qs_config, temp_project):
+    if not _generate_project(qs_config, temp_project):
         shutil.rmtree(temp_dir)
         raise click.Abort()
 

@@ -1,9 +1,8 @@
 """Split-ref parsing and embed-set coverage validation.
 
 Implementation detail of :mod:`quickscale_cli.commands.apply_command`;
-that module re-exports every name defined here (Module Conventions
-rule 28), so existing import paths and test patch targets keep
-working.
+collaborators are resolved through the sibling modules that define
+them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -15,7 +14,10 @@ import click
 
 # AF6 Phase 2 — core step bodies
 from quickscale_cli.commands._types import ApplyContext
-import quickscale_cli.commands.apply_command as _apply_command
+
+import quickscale_core.utils.git_errors as _git_errors
+import quickscale_core.utils.git_naming as _git_naming
+import quickscale_core.utils.git_tags as _git_tags
 
 
 def _parse_split_ref_overrides(split_refs: tuple[str, ...]) -> dict[str, str]:
@@ -30,9 +32,9 @@ def _parse_split_ref_overrides(split_refs: tuple[str, ...]) -> dict[str, str]:
                 param_hint="--split-ref",
             )
         try:
-            _apply_command.validate_module_name(module_name)
-            _apply_command.validate_tag_name(split_ref)
-        except _apply_command.GitError as error:
+            _git_naming.validate_module_name(module_name)
+            _git_tags.validate_tag_name(split_ref)
+        except _git_errors.GitError as error:
             raise click.BadParameter(
                 f"invalid --split-ref value {raw_value!r}: {error}",
                 param_hint="--split-ref",
@@ -64,10 +66,10 @@ def _expand_split_refs_from_branches(ctx: ApplyContext) -> dict[str, str]:
     """
     try:
         return {
-            module_name: _apply_command.resolve_split_branch(module_name)
-            for module_name in sorted(_apply_command._module_names_to_embed(ctx))
+            module_name: _git_naming.resolve_split_branch(module_name)
+            for module_name in sorted(_module_names_to_embed(ctx))
         }
-    except _apply_command.GitError as error:
+    except _git_errors.GitError as error:
         raise click.UsageError(f"--split-refs-from-branches: {error}") from error
 
 
@@ -91,7 +93,7 @@ def _validate_split_ref_override_coverage(
     if no_modules:
         raise click.UsageError("--split-ref cannot be combined with --no-modules")
 
-    target_modules = _apply_command._module_names_to_embed(ctx)
+    target_modules = _module_names_to_embed(ctx)
     if not target_modules:
         raise click.UsageError(
             "--split-ref cannot be used when this apply has no modules to embed"

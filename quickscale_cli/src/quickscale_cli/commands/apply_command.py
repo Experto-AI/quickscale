@@ -2,31 +2,18 @@
 
 The implementation lives in private sibling modules grouped by concern
 (``_types``, ``_git_ops``, ``_steps``, ...); this module owns the public
-command surface and re-exports every name that previously lived here
-(Module Conventions rule 28), so existing
-``quickscale_cli.commands.apply_command`` imports and test patch targets
-keep working unchanged.
+command surface, re-exports public names for unchanged import paths, and
+resolves collaborators through the sibling modules that define them
+(decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
 
-import copy as copy
-import os as os
 import shlex as shlex
-import subprocess as subprocess
-import sys as sys
-import traceback as traceback
-from collections.abc import Mapping as Mapping
-from dataclasses import dataclass as dataclass
-from datetime import datetime as datetime
 from pathlib import (
     Path as Path,
-    PurePosixPath as PurePosixPath,
-    PureWindowsPath as PureWindowsPath,
 )
-from typing import Any as Any, cast as cast
 import click as click
-import yaml as yaml
 from quickscale_core.contracts.module_options import (
     ANALYTICS_POSTHOG_DEFAULT_HOST as ANALYTICS_POSTHOG_DEFAULT_HOST,
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION as BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
@@ -54,13 +41,7 @@ from quickscale_core.manifest.required_modules import (
     resolve_required_modules as resolve_required_modules,
 )
 from quickscale_cli.commands.apply_support import (
-    _build_quickscale_env as _build_quickscale_env,
-    _confirm_apply as _confirm_apply,
-    _report_theme_preflight_error as _report_theme_preflight_error,
     notifications_adapter_module as notifications_adapter_module,
-)
-from quickscale_cli.commands.apply_support import (
-    _resolve_apply_raw_root as _resolve_apply_raw_root,
 )
 from quickscale_cli.commands.contract_vintage import (
     declared_adoption_step_ids as declared_adoption_step_ids,
@@ -137,9 +118,6 @@ from quickscale_core.utils.theme_validation import (
     ThemeValidationError as ThemeValidationError,
     validate_theme_preflight as validate_theme_preflight,
 )
-from quickscale_core.utils.poetry_env import (
-    build_isolated_poetry_env as _isolated_poetry_env,  # noqa: F401,
-)
 from quickscale_core.utils.git_utils import (
     GitError as GitError,
     is_working_directory_clean as is_working_directory_clean,
@@ -180,283 +158,12 @@ from quickscale_core.apply.steps.types import (
 )
 from quickscale_cli.commands._types import ApplyContext as ApplyContext
 from quickscale_cli.commands._types import EmbedModulesResult as EmbedModulesResult
-from quickscale_cli.commands._types import (
-    _GitIndexTreeSnapshot as _GitIndexTreeSnapshot,
-)
-from quickscale_cli.commands._types import (
-    _UNSAFE_GITIGNORE_LEADING_CHARACTERS as _UNSAFE_GITIGNORE_LEADING_CHARACTERS,
-)
-from quickscale_cli.commands._types import (
-    _UNSAFE_GITIGNORE_GLOB_CHARACTERS as _UNSAFE_GITIGNORE_GLOB_CHARACTERS,
-)
-from quickscale_cli.commands._types import (
-    _APPLY_RECOVERY_FILENAME as _APPLY_RECOVERY_FILENAME,
-)
-from quickscale_cli.commands._types import _APPLY_RECOVERY_STEM as _APPLY_RECOVERY_STEM
-from quickscale_cli.commands._types import (
-    _AF5_DESTRUCTIVE_CONFIRM_BYPASS as _AF5_DESTRUCTIVE_CONFIRM_BYPASS,
-)
-from quickscale_cli.commands._types import (
-    _PRE_EMBED_AUTHORITATIVE_GIT_PATHS as _PRE_EMBED_AUTHORITATIVE_GIT_PATHS,
-)
-from quickscale_cli.commands._types import _FAILED_STEP as _FAILED_STEP
-from quickscale_cli.commands._types import (
-    _is_pre_embed_authoritative_path as _is_pre_embed_authoritative_path,
-)
-from quickscale_cli.commands._types import (
-    _is_transient_apply_recovery_path as _is_transient_apply_recovery_path,
-)
-from quickscale_cli.commands._types import (
-    _is_pre_embed_allowed_dirty_path as _is_pre_embed_allowed_dirty_path,
-)
-from quickscale_cli.commands._types import (
-    _get_pre_embed_checkpoint_paths as _get_pre_embed_checkpoint_paths,
-)
-from quickscale_cli.commands._git_ops import (
-    _capture_git_index_snapshot as _capture_git_index_snapshot,
-)
-from quickscale_cli.commands._git_ops import (
-    _restore_git_index_snapshot as _restore_git_index_snapshot,
-)
-from quickscale_cli.commands._git_ops import (
-    _restore_failed_apply_checkpoint as _restore_failed_apply_checkpoint,
-)
-from quickscale_cli.commands._git_ops import (
-    _stage_and_commit_with_index_restore as _stage_and_commit_with_index_restore,
-)
-from quickscale_cli.commands._git_ops import _run_command as _run_command
-from quickscale_cli.commands._git_ops import _init_git as _init_git
-from quickscale_cli.commands._git_ops import _git_commit as _git_commit
-from quickscale_cli.commands._git_ops import (
-    _init_git_with_config as _init_git_with_config,
-)
-from quickscale_cli.commands._git_ops import (
-    _list_git_changed_paths as _list_git_changed_paths,
-)
-from quickscale_cli.commands._git_ops import (
-    _commit_pending_config_changes as _commit_pending_config_changes,
-)
-from quickscale_cli.commands._generation import _generate_project as _generate_project
-from quickscale_cli.commands._generation import (
-    _determine_output_path as _determine_output_path,
-)
-from quickscale_cli.commands._generation import (
-    _display_config_summary as _display_config_summary,
-)
-from quickscale_cli.commands._generation import (
-    _check_output_directory as _check_output_directory,
-)
-from quickscale_cli.commands._generation import (
-    _generate_new_project as _generate_new_project,
-)
-from quickscale_cli.commands._generation import (
-    _generate_with_existing_config as _generate_with_existing_config,
-)
-from quickscale_cli.commands._config import (
-    _abort_for_not_ready_modules as _abort_for_not_ready_modules,
-)
-from quickscale_cli.commands._config import (
-    _abort_for_manifest_error as _abort_for_manifest_error,
-)
-from quickscale_cli.commands._config import (
-    _load_module_manifests as _load_module_manifests,
-)
-from quickscale_cli.commands._config import (
-    _check_immutable_config_changes as _check_immutable_config_changes,
-)
-from quickscale_cli.commands._config import (
-    _abort_for_config_driven_module_removals as _abort_for_config_driven_module_removals,
-)
-from quickscale_cli.commands._config import (
-    _update_module_config_in_state as _update_module_config_in_state,
-)
-from quickscale_cli.commands._config import (
-    _sanitize_loaded_module_configs as _sanitize_loaded_module_configs,
-)
-from quickscale_cli.commands._config import (
-    _materialize_required_module_configs as _materialize_required_module_configs,
-)
-from quickscale_cli.commands._config import (
-    _load_and_validate_config as _load_and_validate_config,
-)
-from quickscale_cli.commands._config import (
-    _abort_for_disabled_required_modules as _abort_for_disabled_required_modules,
-)
-from quickscale_cli.commands._config import (
-    _validate_module_prerequisites as _validate_module_prerequisites,
-)
-from quickscale_cli.commands._config import (
-    _resolved_module_options as _resolved_module_options,
-)
-from quickscale_cli.commands._split_refs import (
-    _parse_split_ref_overrides as _parse_split_ref_overrides,
-)
-from quickscale_cli.commands._split_refs import (
-    _expand_split_refs_from_branches as _expand_split_refs_from_branches,
-)
-from quickscale_cli.commands._split_refs import (
-    _module_names_to_embed as _module_names_to_embed,
-)
-from quickscale_cli.commands._split_refs import (
-    _validate_split_ref_override_coverage as _validate_split_ref_override_coverage,
-)
-from quickscale_cli.commands._embedding import _embed_module as _embed_module
-from quickscale_cli.commands._embedding import (
-    _embed_modules_step as _embed_modules_step,
-)
-from quickscale_cli.commands._embedding import (
-    _embed_modules_ran_successfully as _embed_modules_ran_successfully,
-)
-from quickscale_cli.commands._runtime import _run_poetry_install as _run_poetry_install
-from quickscale_cli.commands._runtime import _run_poetry_lock as _run_poetry_lock
-from quickscale_cli.commands._runtime import _run_migrations as _run_migrations
-from quickscale_cli.commands._runtime import (
-    _run_migrations_in_docker_impl as _run_migrations_in_docker_impl,
-)
-from quickscale_cli.commands._runtime import (
-    _run_migrations_in_docker as _run_migrations_in_docker,
-)
-from quickscale_cli.commands._runtime import (
-    _run_local_migrations as _run_local_migrations,
-)
-from quickscale_cli.commands._runtime import (
-    _should_check_stale_volumes as _should_check_stale_volumes,
-)
-from quickscale_cli.commands._runtime import (
-    _preflight_stale_docker_volumes as _preflight_stale_docker_volumes,
-)
-from quickscale_cli.commands._runtime import _start_docker_impl as _start_docker_impl
-from quickscale_cli.commands._runtime import _start_docker as _start_docker
-from quickscale_cli.commands._runtime import (
-    _sync_env_example_blocks_impl as _sync_env_example_blocks_impl,
-)
-from quickscale_cli.commands._runtime import (
-    _sync_notifications_env_example as _sync_notifications_env_example,
-)
-from quickscale_cli.commands._runtime import (
-    _sync_analytics_env_example as _sync_analytics_env_example,
-)
-from quickscale_cli.commands._runtime import (
-    _sync_billing_env_example as _sync_billing_env_example,
-)
-from quickscale_cli.commands._runtime import (
-    _normalize_backups_gitignore_entry as _normalize_backups_gitignore_entry,
-)
-from quickscale_cli.commands._runtime import (
-    _ensure_backups_gitignore_rules as _ensure_backups_gitignore_rules,
-)
-from quickscale_cli.commands._runtime import (
-    _run_post_generation_steps_impl as _run_post_generation_steps_impl,
-)
-from quickscale_cli.commands._runtime import (
-    _run_post_generation_steps as _run_post_generation_steps,
-)
-from quickscale_cli.commands._runtime import (
-    _sync_project_module_dependencies_for_apply_impl as _sync_project_module_dependencies_for_apply_impl,
-)
-from quickscale_cli.commands._runtime import (
-    _sync_project_module_dependencies_for_apply as _sync_project_module_dependencies_for_apply,
-)
-from quickscale_cli.commands._state import (
-    _resolve_managed_wiring_paths as _resolve_managed_wiring_paths,
-)
-from quickscale_cli.commands._state import (
-    _warn_version_drift_for_apply as _warn_version_drift_for_apply,
-)
-from quickscale_cli.commands._state import (
-    _capture_managed_file_hashes_after_apply as _capture_managed_file_hashes_after_apply,
-)
-from quickscale_cli.commands._state import (
-    _populate_consolidated_tracking_from_legacy as _populate_consolidated_tracking_from_legacy,
-)
-from quickscale_cli.commands._state import (
-    _build_project_state_snapshot as _build_project_state_snapshot,
-)
-from quickscale_cli.commands._state import (
-    _get_apply_recovery_manager as _get_apply_recovery_manager,
-)
-from quickscale_cli.commands._state import (
-    _load_apply_recovery_state as _load_apply_recovery_state,
-)
-from quickscale_cli.commands._state import (
-    _merge_apply_recovery_state as _merge_apply_recovery_state,
-)
-from quickscale_cli.commands._state import (
-    _save_apply_recovery_state as _save_apply_recovery_state,
-)
-from quickscale_cli.commands._state import (
-    _clear_apply_recovery_state as _clear_apply_recovery_state,
-)
-from quickscale_cli.commands._state import _save_project_state as _save_project_state
-from quickscale_cli.commands._context import (
-    _provenance_repair_might_be_needed as _provenance_repair_might_be_needed,
-)
-from quickscale_cli.commands._context import (
-    _attempt_provenance_repair_if_needed as _attempt_provenance_repair_if_needed,
-)
-from quickscale_cli.commands._context import (
-    _handle_delta_and_existing_state as _handle_delta_and_existing_state,
-)
-from quickscale_cli.commands._context import (
-    _prepare_apply_context as _prepare_apply_context,
-)
-from quickscale_cli.commands._context import (
-    _regenerate_managed_wiring_for_apply as _regenerate_managed_wiring_for_apply,
-)
-from quickscale_cli.commands._context import (
-    _context_has_pending_post_embed_recovery as _context_has_pending_post_embed_recovery,
-)
-from quickscale_cli.commands._context import (
-    _context_had_existing_state as _context_had_existing_state,
-)
-from quickscale_cli.commands._context import (
-    _refresh_context_after_lock as _refresh_context_after_lock,
-)
-from quickscale_cli.commands._context import _build_step_context as _build_step_context
-from quickscale_cli.commands._context import (
-    _resolve_apply_preflight as _resolve_apply_preflight,
-)
-from quickscale_cli.commands._context import (
-    _enforce_apply_contract_vintage_preflight as _enforce_apply_contract_vintage_preflight,
-)
-from quickscale_cli.commands._context import (
-    _record_regenerated_wiring_hashes as _record_regenerated_wiring_hashes,
-)
-from quickscale_cli.commands._context import (
-    _regenerate_and_record_adoption as _regenerate_and_record_adoption,
-)
-from quickscale_cli.commands._context import (
-    _record_confirmed_adoption as _record_confirmed_adoption,
-)
-from quickscale_cli.commands._finalize import (
-    _display_next_steps_impl as _display_next_steps_impl,
-)
-from quickscale_cli.commands._finalize import _display_next_steps as _display_next_steps
-from quickscale_cli.commands._finalize import (
-    _print_apply_failure_summary as _print_apply_failure_summary,
-)
-from quickscale_cli.commands._finalize import (
-    _abort_after_post_embed_failure as _abort_after_post_embed_failure,
-)
-from quickscale_cli.commands._finalize import (
-    _finalize_apply_state as _finalize_apply_state,
-)
-from quickscale_cli.commands._finalize import (
-    _exec_step_post_embed_snapshot as _exec_step_post_embed_snapshot,
-)
-from quickscale_cli.commands._finalize import (
-    _exec_step_apply_mutable_config as _exec_step_apply_mutable_config,
-)
-from quickscale_cli.commands._finalize import (
-    _exec_step_railway_deploy as _exec_step_railway_deploy,
-)
-from quickscale_cli.commands._finalize import (
-    _confirm_destructive_remote_phase as _confirm_destructive_remote_phase,
-)
-from quickscale_cli.commands._steps import _execute_apply_steps as _execute_apply_steps
-from quickscale_cli.commands._steps import (
-    _execute_apply_steps_locked as _execute_apply_steps_locked,
-)
+import quickscale_cli.commands.apply_support as _apply_support
+import quickscale_cli.commands.contract_vintage as _contract_vintage
+import quickscale_cli.commands._generation as _generation
+import quickscale_cli.commands._split_refs as _split_refs
+import quickscale_cli.commands._context as _context
+import quickscale_cli.commands._steps as _steps
 
 
 @click.command()
@@ -570,10 +277,10 @@ def apply(
         raise click.UsageError(
             "--split-refs-from-branches cannot be combined with --split-ref"
         )
-    split_ref_overrides = _parse_split_ref_overrides(split_refs)
+    split_ref_overrides = _split_refs._parse_split_ref_overrides(split_refs)
     config_path = Path(config)
-    output_path = _resolve_apply_preflight(config_path)
-    _enforce_apply_contract_vintage_preflight(
+    output_path = _context._resolve_apply_preflight(config_path)
+    _context._enforce_apply_contract_vintage_preflight(
         config_path,
         output_path,
         acknowledged=acknowledge_contract_vintage,
@@ -581,9 +288,9 @@ def apply(
     )
 
     # Prepare context
-    ctx = _prepare_apply_context(config_path)
+    ctx = _context._prepare_apply_context(config_path)
     ctx.confirm_contract_adoption = confirm_contract_adoption
-    enforce_shipped_contract_vintage(
+    _contract_vintage.enforce_shipped_contract_vintage(
         ctx.existing_state,
         set(ctx.qs_config.modules)
         | set(ctx.existing_state.modules if ctx.existing_state else ()),
@@ -591,20 +298,20 @@ def apply(
         acknowledged=acknowledge_contract_vintage or confirm_contract_adoption,
     )
     if split_refs_from_branches:
-        split_ref_overrides = _expand_split_refs_from_branches(ctx)
-    _validate_split_ref_override_coverage(
+        split_ref_overrides = _split_refs._expand_split_refs_from_branches(ctx)
+    _split_refs._validate_split_ref_override_coverage(
         ctx,
         split_ref_overrides,
         no_modules=no_modules,
     )
 
     # Display configuration summary
-    _display_config_summary(ctx.qs_config)
+    _generation._display_config_summary(ctx.qs_config)
 
     # Probe whether provenance repair might be needed before the no-op gate.
     # The actual repair is deferred to the locked path inside
     # _execute_apply_steps (CR-F26-001).
-    has_pending_provenance_repair = _provenance_repair_might_be_needed(ctx)
+    has_pending_provenance_repair = _context._provenance_repair_might_be_needed(ctx)
 
     # Adoption-only confirmation: a project whose configuration is unchanged
     # still needs a path to record the confirmed adoption (SA207).  The record
@@ -616,7 +323,7 @@ def apply(
         and not ctx.has_pending_post_embed_recovery
         and not has_pending_provenance_repair
     ):
-        adopted = _record_confirmed_adoption(ctx)
+        adopted = _context._record_confirmed_adoption(ctx)
         if adopted is None:
             # A concurrent apply landed between the pre-lock read and the
             # lock.  The desired configuration in memory may be stale, so do
@@ -641,7 +348,7 @@ def apply(
         return
 
     # Handle delta and existing state
-    _handle_delta_and_existing_state(
+    _context._handle_delta_and_existing_state(
         ctx.delta,
         ctx.existing_state,
         has_pending_post_embed_recovery=ctx.has_pending_post_embed_recovery,
@@ -649,16 +356,16 @@ def apply(
     )
 
     # Check output directory
-    _check_output_directory(ctx.output_path, ctx.existing_state, force)
+    _generation._check_output_directory(ctx.output_path, ctx.existing_state, force)
 
-    show_docker_output = _confirm_apply(
+    show_docker_output = _apply_support._confirm_apply(
         ctx,
         no_docker=no_docker,
         verbose_docker=verbose_docker,
     )
 
     # Execute apply steps
-    _execute_apply_steps(
+    _steps._execute_apply_steps(
         ctx,
         force,
         no_docker,

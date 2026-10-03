@@ -1,6 +1,12 @@
 """Tests for the public disaster-recovery command surface."""
 
 import json
+import quickscale_cli.commands._dr_adapter as _dr_adapter
+import quickscale_cli.utils._railway_cli as _railway_cli
+import quickscale_cli.commands._dr_report as _dr_report
+import quickscale_cli.commands._dr_context as _dr_context
+import quickscale_cli.commands._dr_env_sync as _dr_env_sync
+import quickscale_cli.commands.dr_output as _dr_output
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
@@ -9,10 +15,11 @@ import click
 import pytest
 from click.testing import CliRunner
 
-import quickscale_cli.commands.dr_commands as dr_commands
-from quickscale_cli.commands.dr_commands import (
+from quickscale_cli.commands._dr_context import (
     DisasterRecoveryContext,
     DrRouteSpec,
+)
+from quickscale_cli.commands.dr_commands import (
     dr,
 )
 from quickscale_cli.utils.project_identity import ProjectIdentity
@@ -57,9 +64,11 @@ def test_capture_requires_source_service_for_railway_source_route() -> None:
     runner = CliRunner()
 
     with (
-        patch("quickscale_cli.commands.dr_commands._validate_project_and_docker"),
         patch(
-            "quickscale_cli.commands.dr_commands.resolve_project_identity",
+            "quickscale_cli.commands.development_commands._validate_project_and_docker"
+        ),
+        patch(
+            "quickscale_core.utils.project_identity.resolve_project_identity",
             return_value=ProjectIdentity(slug="myapp", package="myapp"),
         ),
     ):
@@ -79,7 +88,9 @@ def test_capture_requires_source_service_for_railway_source_route() -> None:
 def test_plan_requires_target_service_for_railway_target_route() -> None:
     runner = CliRunner()
 
-    with patch("quickscale_cli.commands.dr_commands._validate_project_and_docker"):
+    with patch(
+        "quickscale_cli.commands.development_commands._validate_project_and_docker"
+    ):
         result = runner.invoke(
             dr,
             [
@@ -101,11 +112,11 @@ def test_capture_local_route_outputs_snapshot_summary() -> None:
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._capture_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._capture_snapshot_report",
             return_value={
                 "snapshot_id": "snap-123",
                 "source_environment": "local",
@@ -130,11 +141,11 @@ def test_capture_outputs_json_snapshot_payload() -> None:
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._capture_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._capture_snapshot_report",
             return_value={
                 "snapshot_id": "snap-123",
                 "source_environment": "local",
@@ -166,11 +177,11 @@ def test_capture_resume_forwards_snapshot_id() -> None:
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._capture_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._capture_snapshot_report",
             return_value={
                 "snapshot_id": "snap-123",
                 "source_environment": "local",
@@ -222,30 +233,30 @@ def test_plan_records_verification_and_shows_manual_actions() -> None:
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._fetch_snapshot_report",
             return_value=snapshot_report,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._build_database_plan",
+            "quickscale_cli.commands._dr_adapter._build_database_plan",
             return_value={
                 "status": "ready",
                 "message": "Restore validation completed successfully (dry run).",
             },
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._run_media_sync",
+            "quickscale_cli.commands._dr_adapter._run_media_sync",
             return_value={"status": "ready", "planned_count": 3},
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            "quickscale_cli.commands._dr_env_sync._build_env_sync_plan",
             return_value=env_plan,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._record_verification"
+            "quickscale_cli.commands._dr_adapter._record_verification"
         ) as mocked_record,
     ):
         result = runner.invoke(
@@ -275,11 +286,11 @@ def test_plan_outputs_json_payload() -> None:
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._fetch_snapshot_report",
             return_value={
                 "snapshot_id": "snap-123",
                 "sidecar_payloads": {
@@ -291,18 +302,18 @@ def test_plan_outputs_json_payload() -> None:
             },
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._build_database_plan",
+            "quickscale_cli.commands._dr_adapter._build_database_plan",
             return_value={
                 "status": "ready",
                 "message": "Restore validation completed successfully (dry run).",
             },
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._run_media_sync",
+            "quickscale_cli.commands._dr_adapter._run_media_sync",
             return_value={"status": "ready", "planned_count": 2},
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            "quickscale_cli.commands._dr_env_sync._build_env_sync_plan",
             return_value={
                 "status": "ready",
                 "portable_candidates": ["DEBUG"],
@@ -312,7 +323,7 @@ def test_plan_outputs_json_payload() -> None:
                 "ignored_count": 0,
             },
         ),
-        patch("quickscale_cli.commands.dr_commands._record_verification"),
+        patch("quickscale_cli.commands._dr_adapter._record_verification"),
     ):
         result = runner.invoke(
             dr,
@@ -342,15 +353,15 @@ def test_execute_runs_selected_surfaces_and_records_report() -> None:
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._fetch_snapshot_report",
             return_value=snapshot_report,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            "quickscale_cli.commands._dr_env_sync._build_env_sync_plan",
             return_value={
                 "portable_candidates": ["DEBUG"],
                 "manual_requirements": [],
@@ -358,22 +369,22 @@ def test_execute_runs_selected_surfaces_and_records_report() -> None:
             },
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._execute_portable_env_sync",
+            "quickscale_cli.commands._dr_env_sync._execute_portable_env_sync",
             return_value={"status": "completed", "copied": ["DEBUG"], "failed": []},
         ) as mocked_env,
         patch(
-            "quickscale_cli.commands.dr_commands._execute_database_restore",
+            "quickscale_cli.commands._dr_adapter._execute_database_restore",
             return_value={
                 "status": "completed",
                 "restore_message": "Restore executed.",
             },
         ) as mocked_db,
         patch(
-            "quickscale_cli.commands.dr_commands._run_media_sync",
+            "quickscale_cli.commands._dr_adapter._run_media_sync",
             return_value={"status": "completed", "copied_count": 3},
         ) as mocked_media,
         patch(
-            "quickscale_cli.commands.dr_commands._record_verification"
+            "quickscale_cli.commands._dr_adapter._record_verification"
         ) as mocked_record,
     ):
         result = runner.invoke(
@@ -412,15 +423,15 @@ def test_execute_records_partial_result_when_surface_fails() -> None:
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._fetch_snapshot_report",
             return_value=snapshot_report,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            "quickscale_cli.commands._dr_env_sync._build_env_sync_plan",
             return_value={
                 "portable_candidates": ["DEBUG"],
                 "manual_requirements": [],
@@ -428,16 +439,16 @@ def test_execute_records_partial_result_when_surface_fails() -> None:
             },
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._execute_portable_env_sync",
+            "quickscale_cli.commands._dr_env_sync._execute_portable_env_sync",
             return_value={"status": "completed", "copied": ["DEBUG"], "failed": []},
         ) as mocked_env,
         patch(
-            "quickscale_cli.commands.dr_commands._execute_database_restore",
+            "quickscale_cli.commands._dr_adapter._execute_database_restore",
             side_effect=click.ClickException("restore exploded"),
         ) as mocked_db,
-        patch("quickscale_cli.commands.dr_commands._run_media_sync") as mocked_media,
+        patch("quickscale_cli.commands._dr_adapter._run_media_sync") as mocked_media,
         patch(
-            "quickscale_cli.commands.dr_commands._record_verification"
+            "quickscale_cli.commands._dr_adapter._record_verification"
         ) as mocked_record,
     ):
         result = runner.invoke(
@@ -508,15 +519,15 @@ def test_execute_resume_skips_completed_surfaces_and_retries_remaining() -> None
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._fetch_snapshot_report",
             return_value=snapshot_report,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            "quickscale_cli.commands._dr_env_sync._build_env_sync_plan",
             return_value={
                 "portable_candidates": ["DEBUG"],
                 "manual_requirements": [],
@@ -524,21 +535,21 @@ def test_execute_resume_skips_completed_surfaces_and_retries_remaining() -> None
             },
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._execute_portable_env_sync"
+            "quickscale_cli.commands._dr_env_sync._execute_portable_env_sync"
         ) as mocked_env,
         patch(
-            "quickscale_cli.commands.dr_commands._execute_database_restore",
+            "quickscale_cli.commands._dr_adapter._execute_database_restore",
             return_value={
                 "status": "completed",
                 "restore_message": "Restore executed.",
             },
         ) as mocked_db,
         patch(
-            "quickscale_cli.commands.dr_commands._run_media_sync",
+            "quickscale_cli.commands._dr_adapter._run_media_sync",
             return_value={"status": "completed", "copied_count": 3},
         ) as mocked_media,
         patch(
-            "quickscale_cli.commands.dr_commands._record_verification"
+            "quickscale_cli.commands._dr_adapter._record_verification"
         ) as mocked_record,
     ):
         result = runner.invoke(
@@ -616,15 +627,15 @@ def test_execute_bare_resume_preserves_completed_surfaces_from_prior_partial_exe
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._fetch_snapshot_report",
             return_value=snapshot_report,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            "quickscale_cli.commands._dr_env_sync._build_env_sync_plan",
             return_value={
                 "portable_candidates": ["DEBUG"],
                 "manual_requirements": [],
@@ -632,21 +643,21 @@ def test_execute_bare_resume_preserves_completed_surfaces_from_prior_partial_exe
             },
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._execute_portable_env_sync"
+            "quickscale_cli.commands._dr_env_sync._execute_portable_env_sync"
         ) as mocked_env,
         patch(
-            "quickscale_cli.commands.dr_commands._execute_database_restore",
+            "quickscale_cli.commands._dr_adapter._execute_database_restore",
             return_value={
                 "status": "completed",
                 "restore_message": "Restore executed.",
             },
         ) as mocked_db,
         patch(
-            "quickscale_cli.commands.dr_commands._run_media_sync",
+            "quickscale_cli.commands._dr_adapter._run_media_sync",
             return_value={"status": "completed", "copied_count": 3},
         ) as mocked_media,
         patch(
-            "quickscale_cli.commands.dr_commands._record_verification"
+            "quickscale_cli.commands._dr_adapter._record_verification"
         ) as mocked_record,
     ):
         result = runner.invoke(
@@ -722,15 +733,15 @@ def test_execute_resume_subset_retry_preserves_omitted_open_surfaces() -> None:
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._fetch_snapshot_report",
             return_value=snapshot_report,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            "quickscale_cli.commands._dr_env_sync._build_env_sync_plan",
             return_value={
                 "portable_candidates": [],
                 "manual_requirements": [{"name": "DATABASE_URL"}],
@@ -738,18 +749,18 @@ def test_execute_resume_subset_retry_preserves_omitted_open_surfaces() -> None:
             },
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._execute_portable_env_sync"
+            "quickscale_cli.commands._dr_env_sync._execute_portable_env_sync"
         ) as mocked_env,
         patch(
-            "quickscale_cli.commands.dr_commands._execute_database_restore",
+            "quickscale_cli.commands._dr_adapter._execute_database_restore",
             return_value={
                 "status": "completed",
                 "restore_message": "Restore executed.",
             },
         ) as mocked_db,
-        patch("quickscale_cli.commands.dr_commands._run_media_sync") as mocked_media,
+        patch("quickscale_cli.commands._dr_adapter._run_media_sync") as mocked_media,
         patch(
-            "quickscale_cli.commands.dr_commands._record_verification"
+            "quickscale_cli.commands._dr_adapter._record_verification"
         ) as mocked_record,
     ):
         result = runner.invoke(
@@ -815,15 +826,15 @@ def test_execute_outputs_json_partial_payload_and_records_rollback_pin() -> None
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._fetch_snapshot_report",
             return_value={"snapshot_id": "snap-123", "sidecar_payloads": {}},
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            "quickscale_cli.commands._dr_env_sync._build_env_sync_plan",
             return_value={
                 "portable_candidates": [],
                 "manual_requirements": [{"name": "DATABASE_URL"}],
@@ -831,7 +842,7 @@ def test_execute_outputs_json_partial_payload_and_records_rollback_pin() -> None
             },
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._set_rollback_pin",
+            "quickscale_cli.commands._dr_adapter._set_rollback_pin",
             return_value={
                 "rollback_pin": {
                     "active": True,
@@ -841,7 +852,7 @@ def test_execute_outputs_json_partial_payload_and_records_rollback_pin() -> None
             },
         ) as mocked_pin,
         patch(
-            "quickscale_cli.commands.dr_commands._execute_portable_env_sync",
+            "quickscale_cli.commands._dr_env_sync._execute_portable_env_sync",
             return_value={
                 "status": "manual_required",
                 "copied": [],
@@ -851,7 +862,7 @@ def test_execute_outputs_json_partial_payload_and_records_rollback_pin() -> None
             },
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._record_verification"
+            "quickscale_cli.commands._dr_adapter._record_verification"
         ) as mocked_record,
     ):
         result = runner.invoke(
@@ -889,7 +900,7 @@ def test_execute_requires_rollback_pin_for_production_routes() -> None:
     )
 
     with patch(
-        "quickscale_cli.commands.dr_commands._build_context",
+        "quickscale_cli.commands._dr_context._build_context",
         return_value=production_context,
     ):
         result = runner.invoke(
@@ -918,11 +929,11 @@ def test_report_outputs_json_route_report() -> None:
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._fetch_snapshot_report",
             return_value={
                 "snapshot_id": "snap-123",
                 "status": "ready",
@@ -975,11 +986,11 @@ def test_report_formats_latest_plan_and_execute_records() -> None:
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands._build_context",
+            "quickscale_cli.commands._dr_context._build_context",
             return_value=context,
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            "quickscale_cli.commands._dr_adapter._fetch_snapshot_report",
             return_value=snapshot_report,
         ),
     ):
@@ -1001,23 +1012,23 @@ def test_report_formats_latest_plan_and_execute_records() -> None:
 
 def test_resolve_project_identity_wraps_value_error() -> None:
     with patch(
-        "quickscale_cli.commands.dr_commands.resolve_project_identity",
+        "quickscale_core.utils.project_identity.resolve_project_identity",
         side_effect=ValueError("missing quickscale.yml"),
     ):
         with pytest.raises(click.ClickException, match="missing quickscale.yml"):
-            dr_commands._resolve_project_identity()
+            _dr_context._resolve_project_identity()
 
 
 def test_fetch_railway_runtime_variables_raises_when_lookup_fails() -> None:
     with patch(
-        "quickscale_cli.commands.dr_commands.get_railway_variables",
+        "quickscale_cli.utils._railway_project.get_railway_variables",
         return_value=None,
     ):
         with pytest.raises(
             click.ClickException,
             match=r"Unable to load Railway variables for the target service 'myapp-production \(production\)'",
         ):
-            dr_commands._fetch_railway_runtime_variables(
+            _dr_context._fetch_railway_runtime_variables(
                 service="myapp-production",
                 railway_environment="production",
                 role="target",
@@ -1028,17 +1039,19 @@ def test_build_context_fetches_source_and_target_runtime_variables_for_railway_r
     None
 ):
     with (
-        patch("quickscale_cli.commands.dr_commands._validate_project_and_docker"),
         patch(
-            "quickscale_cli.commands.dr_commands._resolve_project_identity",
+            "quickscale_cli.commands.development_commands._validate_project_and_docker"
+        ),
+        patch(
+            "quickscale_cli.commands._dr_context._resolve_project_identity",
             return_value=ProjectIdentity(slug="myapp", package="myapp"),
         ),
         patch(
-            "quickscale_cli.commands.dr_commands._fetch_railway_runtime_variables",
+            "quickscale_cli.commands._dr_context._fetch_railway_runtime_variables",
             side_effect=[{"DEBUG": "false"}, {"DEBUG": "true"}],
         ) as mocked_fetch,
     ):
-        context = dr_commands._build_context(
+        context = _dr_context._build_context(
             "railway-develop-to-railway-production",
             source_service="myapp-develop",
             target_service="myapp-production",
@@ -1069,11 +1082,11 @@ def test_manage_wrappers_forward_expected_arguments() -> None:
     context = _context()
 
     with patch.object(
-        dr_commands,
+        _dr_adapter,
         "_call_adapter",
         return_value={"status": "ready"},
     ) as mocked_adapter:
-        snapshot_report = dr_commands._fetch_snapshot_report(
+        snapshot_report = _dr_adapter._fetch_snapshot_report(
             context,
             snapshot_id="snap-123",
             sidecar_payloads=(
@@ -1081,15 +1094,15 @@ def test_manage_wrappers_forward_expected_arguments() -> None:
                 "release-metadata.json",
             ),
         )
-        capture_report = dr_commands._capture_snapshot_report(context)
-        verification_report = dr_commands._record_verification(
+        capture_report = _dr_adapter._capture_snapshot_report(context)
+        verification_report = _dr_adapter._record_verification(
             context,
             snapshot_id="snap-123",
             phase="plan",
             status="ready",
             payload={"database": {"status": "ready"}},
         )
-        pin_report = dr_commands._set_rollback_pin(
+        pin_report = _dr_adapter._set_rollback_pin(
             context,
             snapshot_id="snap-123",
             hours=6,
@@ -1129,11 +1142,11 @@ def test_manage_wrappers_forward_expected_arguments() -> None:
     )
 
     with patch.object(
-        dr_commands,
+        _dr_adapter,
         "_call_adapter",
         return_value={"status": "ready"},
     ) as mocked_adapter:
-        result = dr_commands._run_media_sync(
+        result = _dr_adapter._run_media_sync(
             replace(context, target_runtime_variables={"MEDIA_ROOT": "/tmp/media"}),
             snapshot_id="snap-123",
             dry_run=True,
@@ -1166,7 +1179,7 @@ def test_build_database_plan_validates_restore_metadata_and_returns_restore_payl
     }
 
     with patch.object(
-        dr_commands,
+        _dr_adapter,
         "_call_adapter",
         return_value={
             "status": "ready",
@@ -1177,7 +1190,7 @@ def test_build_database_plan_validates_restore_metadata_and_returns_restore_payl
             "restore_scope_label": "Local only",
         },
     ) as mocked_adapter:
-        plan = dr_commands._build_database_plan(context, snapshot_report)
+        plan = _dr_adapter._build_database_plan(context, snapshot_report)
 
     assert plan == {
         "status": "ready",
@@ -1193,7 +1206,7 @@ def test_build_database_plan_validates_restore_metadata_and_returns_restore_payl
     )
 
     with patch.object(
-        dr_commands,
+        _dr_adapter,
         "_call_adapter",
         side_effect=click.ClickException(
             "Snapshot 'snap-123' is missing its authoritative restore file metadata."
@@ -1203,7 +1216,7 @@ def test_build_database_plan_validates_restore_metadata_and_returns_restore_payl
             click.ClickException,
             match="missing its authoritative restore file metadata",
         ):
-            dr_commands._build_database_plan(
+            _dr_adapter._build_database_plan(
                 context,
                 {
                     "snapshot_id": "snap-123",
@@ -1218,11 +1231,11 @@ def test_load_source_live_variables_and_classify_env_var_cover_expected_cases() 
 
     with (
         patch(
-            "quickscale_cli.commands.dr_commands.get_backend_container_name",
+            "quickscale_cli.utils.project_manager.get_backend_container_name",
             return_value="backend",
         ),
         patch(
-            "quickscale_cli.commands.dr_commands.subprocess.run",
+            "subprocess.run",
             return_value=SimpleNamespace(
                 returncode=0,
                 stdout="DEBUG=true\nINVALID\nBLOG_THEME=midnight\nDATABASE_URL=postgres://db\n",
@@ -1230,7 +1243,7 @@ def test_load_source_live_variables_and_classify_env_var_cover_expected_cases() 
             ),
         ),
     ):
-        assert dr_commands._load_source_live_variables(local_context) == {
+        assert _dr_adapter._load_source_live_variables(local_context) == {
             "DEBUG": "true",
             "BLOG_THEME": "midnight",
             "DATABASE_URL": "postgres://db",
@@ -1240,39 +1253,39 @@ def test_load_source_live_variables_and_classify_env_var_cover_expected_cases() 
         _context(route="railway-develop-to-railway-production"),
         source_runtime_variables={"DEBUG": "false"},
     )
-    assert dr_commands._load_source_live_variables(railway_context) == {
+    assert _dr_adapter._load_source_live_variables(railway_context) == {
         "DEBUG": "false"
     }
-    assert dr_commands._classify_env_var("") == ("ignored", "blank name")
-    assert dr_commands._classify_env_var("HOME") == (
+    assert _dr_env_sync._classify_env_var("") == ("ignored", "blank name")
+    assert _dr_env_sync._classify_env_var("HOME") == (
         "ignored",
         "shell/runtime noise",
     )
-    assert dr_commands._classify_env_var("POETRY_CACHE_DIR") == (
+    assert _dr_env_sync._classify_env_var("POETRY_CACHE_DIR") == (
         "ignored",
         "shell/runtime noise",
     )
-    assert dr_commands._classify_env_var("DATABASE_URL") == (
+    assert _dr_env_sync._classify_env_var("DATABASE_URL") == (
         "manual",
         "provider-owned or target-owned variable",
     )
-    assert dr_commands._classify_env_var("AWS_ACCESS_KEY_ID") == (
+    assert _dr_env_sync._classify_env_var("AWS_ACCESS_KEY_ID") == (
         "manual",
         "provider-owned or target-owned variable",
     )
-    assert dr_commands._classify_env_var("PUBLIC_BASE_URL") == (
+    assert _dr_env_sync._classify_env_var("PUBLIC_BASE_URL") == (
         "manual",
         "sensitive or environment-specific variable",
     )
-    assert dr_commands._classify_env_var("DEBUG") == (
+    assert _dr_env_sync._classify_env_var("DEBUG") == (
         "portable",
         "portable variable",
     )
-    assert dr_commands._classify_env_var("BLOG_THEME") == (
+    assert _dr_env_sync._classify_env_var("BLOG_THEME") == (
         "portable",
         "portable variable",
     )
-    assert dr_commands._classify_env_var("UNLISTED_VAR") == (
+    assert _dr_env_sync._classify_env_var("UNLISTED_VAR") == (
         "manual",
         "outside the conservative portable allowlist",
     )
@@ -1281,8 +1294,8 @@ def test_load_source_live_variables_and_classify_env_var_cover_expected_cases() 
 def test_build_env_sync_plan_handles_unavailable_and_manual_required_states() -> None:
     context = _context()
 
-    unavailable = dr_commands._build_env_sync_plan(context, {"sidecar_payloads": {}})
-    not_ready = dr_commands._build_env_sync_plan(
+    unavailable = _dr_env_sync._build_env_sync_plan(context, {"sidecar_payloads": {}})
+    not_ready = _dr_env_sync._build_env_sync_plan(
         context,
         {
             "sidecar_payloads": {
@@ -1295,7 +1308,7 @@ def test_build_env_sync_plan_handles_unavailable_and_manual_required_states() ->
     )
 
     with patch.object(
-        dr_commands,
+        _dr_adapter,
         "_load_source_live_variables",
         return_value={
             "DEBUG": "true",
@@ -1304,7 +1317,7 @@ def test_build_env_sync_plan_handles_unavailable_and_manual_required_states() ->
             "DATABASE_URL": "postgres://source",
         },
     ):
-        env_sync_plan = dr_commands._build_env_sync_plan(
+        env_sync_plan = _dr_env_sync._build_env_sync_plan(
             replace(
                 context,
                 target_runtime_variables={
@@ -1359,11 +1372,11 @@ def test_build_env_sync_plan_keeps_destructive_restore_gate_manual_only() -> Non
     context = _context()
 
     with patch.object(
-        dr_commands,
+        _dr_adapter,
         "_load_source_live_variables",
         return_value={"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
     ):
-        env_sync_plan = dr_commands._build_env_sync_plan(
+        env_sync_plan = _dr_env_sync._build_env_sync_plan(
             context,
             {
                 "sidecar_payloads": {
@@ -1395,7 +1408,7 @@ def test_build_plan_payload_and_execute_portable_env_sync_cover_manual_and_parti
     None
 ):
     context = _context()
-    plan_payload = dr_commands._build_plan_payload(
+    plan_payload = _dr_report._build_plan_payload(
         context,
         {
             "snapshot_id": "snap-123",
@@ -1420,11 +1433,11 @@ def test_build_plan_payload_and_execute_portable_env_sync_cover_manual_and_parti
     )
 
     with patch.object(
-        dr_commands,
+        _dr_adapter,
         "_load_source_live_variables",
         return_value={},
     ):
-        skipped_result = dr_commands._execute_portable_env_sync(
+        skipped_result = _dr_env_sync._execute_portable_env_sync(
             context,
             {
                 "portable_candidates": [],
@@ -1435,17 +1448,17 @@ def test_build_plan_payload_and_execute_portable_env_sync_cover_manual_and_parti
 
     with (
         patch.object(
-            dr_commands,
+            _dr_adapter,
             "_load_source_live_variables",
             return_value={"DEBUG": "true", "BLOG_THEME": "midnight"},
         ),
         patch.object(
-            dr_commands,
+            _railway_cli,
             "set_railway_variables_batch",
             return_value=(False, ["BLOG_THEME"]),
         ) as mocked_set,
     ):
-        partial_result = dr_commands._execute_portable_env_sync(
+        partial_result = _dr_env_sync._execute_portable_env_sync(
             context,
             {
                 "portable_candidates": ["DEBUG", "BLOG_THEME"],
@@ -1492,7 +1505,7 @@ def test_execute_database_restore_runs_production_flow_and_missing_metadata_rais
     }
 
     with patch.object(
-        dr_commands,
+        _dr_adapter,
         "_call_adapter",
         return_value={
             "status": "completed",
@@ -1503,7 +1516,7 @@ def test_execute_database_restore_runs_production_flow_and_missing_metadata_rais
             "restore_file": "/tmp/db.dump",
         },
     ) as mocked_adapter:
-        restore_result = dr_commands._execute_database_restore(
+        restore_result = _dr_adapter._execute_database_restore(
             production_context,
             snapshot_report,
         )
@@ -1523,7 +1536,7 @@ def test_execute_database_restore_runs_production_flow_and_missing_metadata_rais
     )
 
     with patch.object(
-        dr_commands,
+        _dr_adapter,
         "_call_adapter",
         side_effect=click.ClickException(
             "Snapshot 'snap-123' is missing its authoritative restore file metadata."
@@ -1533,7 +1546,7 @@ def test_execute_database_restore_runs_production_flow_and_missing_metadata_rais
             click.ClickException,
             match="missing its authoritative restore file metadata",
         ):
-            dr_commands._execute_database_restore(
+            _dr_adapter._execute_database_restore(
                 production_context,
                 {
                     "snapshot_id": "snap-123",
@@ -1550,7 +1563,7 @@ def test_build_route_report_and_echo_helpers_render_optional_fields(
         _context(route="railway-develop-to-railway-production"),
         source_service="myapp-develop",
     )
-    route_report = dr_commands._build_route_report(
+    route_report = _dr_report._build_route_report(
         {
             "snapshot_id": "snap-123",
             "status": "ready",
@@ -1585,7 +1598,7 @@ def test_build_route_report_and_echo_helpers_render_optional_fields(
         route="local-to-railway-develop",
     )
 
-    dr_commands._echo_capture_summary(
+    _dr_output._echo_capture_summary(
         context,
         {
             "snapshot_id": "snap-123",
@@ -1594,7 +1607,7 @@ def test_build_route_report_and_echo_helpers_render_optional_fields(
             "authoritative_dump": {"filename": "db.dump"},
         },
     )
-    dr_commands._echo_execute_summary(
+    _dr_output._echo_execute_summary(
         {
             "route": "local-to-railway-develop",
             "snapshot_id": "snap-123",
@@ -1605,7 +1618,7 @@ def test_build_route_report_and_echo_helpers_render_optional_fields(
             "media": {"status": "completed"},
         }
     )
-    dr_commands._echo_report_summary(
+    _dr_output._echo_report_summary(
         {
             "route": "local-to-railway-develop",
             "snapshot_id": "snap-123",
@@ -1655,7 +1668,7 @@ def test_fetch_railway_runtime_variables_format_drift_converts_to_click_exceptio
 ):
     """Test that ValueError from get_railway_variables becomes ClickException."""
     with patch(
-        "quickscale_cli.commands.dr_commands.get_railway_variables",
+        "quickscale_cli.utils._railway_project.get_railway_variables",
         side_effect=ValueError(
             "Railway CLI returned success but output format is unrecognized"
         ),
@@ -1664,7 +1677,7 @@ def test_fetch_railway_runtime_variables_format_drift_converts_to_click_exceptio
             click.ClickException,
             match="Railway CLI output format error for target service 'myapp-production'",
         ):
-            dr_commands._fetch_railway_runtime_variables(
+            _dr_context._fetch_railway_runtime_variables(
                 service="myapp-production",
                 railway_environment=None,
                 role="target",
@@ -1679,11 +1692,11 @@ def test_call_adapter_pipes_json_via_stdin_not_argv() -> None:
     """
     with (
         patch(
-            "quickscale_cli.commands.dr_commands.get_backend_container_name",
+            "quickscale_cli.utils.project_manager.get_backend_container_name",
             return_value="backend",
         ),
         patch(
-            "quickscale_cli.commands.dr_commands.subprocess.run",
+            "subprocess.run",
         ) as mock_run,
     ):
         mock_run.return_value = Mock(
@@ -1691,7 +1704,7 @@ def test_call_adapter_pipes_json_via_stdin_not_argv() -> None:
             stdout='{"status": "ok"}',
         )
 
-        result = dr_commands._call_adapter(
+        result = _dr_adapter._call_adapter(
             "test_func",
             secret_key="super-secret-value",
             db_url="postgres://user:pass@host/db",
@@ -1726,7 +1739,7 @@ def test_fetch_railway_runtime_variables_unparsable_text_becomes_click_exception
     at the DR caller seam, not silent collapse to {}.
     """
     with patch(
-        "quickscale_cli.commands.dr_commands.get_railway_variables",
+        "quickscale_cli.utils._railway_project.get_railway_variables",
         side_effect=ValueError(
             "Railway CLI returned success with non-empty output but no "
             "KEY=VALUE pairs could be parsed."
@@ -1736,7 +1749,7 @@ def test_fetch_railway_runtime_variables_unparsable_text_becomes_click_exception
             click.ClickException,
             match="Railway CLI output format error for target service 'myapp-production'",
         ):
-            dr_commands._fetch_railway_runtime_variables(
+            _dr_context._fetch_railway_runtime_variables(
                 service="myapp-production",
                 railway_environment=None,
                 role="target",
@@ -1751,11 +1764,11 @@ class TestFacadePatchTargets:
         context = _context()
 
         with patch.object(
-            dr_commands,
+            _dr_adapter,
             "_call_adapter",
             return_value={"status": "ready"},
         ) as mocked_adapter:
-            report = dr_commands._fetch_snapshot_report(
+            report = _dr_adapter._fetch_snapshot_report(
                 context,
                 snapshot_id="snap-123",
                 sidecar_payloads=("env-var-manifest.json",),
@@ -1773,11 +1786,11 @@ class TestFacadePatchTargets:
         context = _context()
 
         with patch.object(
-            dr_commands,
+            _dr_adapter,
             "_load_source_live_variables",
             return_value={"BLOG_THEME": "midnight"},
         ):
-            plan = dr_commands._build_env_sync_plan(
+            plan = _dr_env_sync._build_env_sync_plan(
                 context,
                 {
                     "sidecar_payloads": {
@@ -1797,17 +1810,17 @@ class TestFacadePatchTargets:
 
         with (
             patch.object(
-                dr_commands,
+                _dr_adapter,
                 "_load_source_live_variables",
                 return_value={"DEBUG": "true", "BLOG_THEME": "midnight"},
             ),
             patch.object(
-                dr_commands,
+                _railway_cli,
                 "set_railway_variables_batch",
                 return_value=(True, []),
             ) as mocked_set,
         ):
-            result = dr_commands._execute_portable_env_sync(
+            result = _dr_env_sync._execute_portable_env_sync(
                 context,
                 {
                     "portable_candidates": ["DEBUG", "BLOG_THEME"],
@@ -1829,11 +1842,11 @@ class TestFacadePatchTargets:
         record = {"phase": "plan", "status": "ready"}
 
         with patch.object(
-            dr_commands,
+            _dr_report,
             "_build_route_report",
             return_value={"latest_records": {"plan": record}},
         ) as mocked_route_report:
-            latest = dr_commands._latest_route_phase_record(
+            latest = _dr_report._latest_route_phase_record(
                 {"snapshot_id": "snap-123"},
                 route="local-to-railway-develop",
                 phase="plan",
@@ -1848,16 +1861,16 @@ class TestFacadePatchTargets:
         """Patching the facade route table reaches route resolution."""
         sentinel = object()
 
-        with patch.object(dr_commands, "_DR_ROUTES", {"custom": sentinel}):
-            assert dr_commands._resolve_route("custom") is sentinel
+        with patch.object(_dr_context, "_DR_ROUTES", {"custom": sentinel}):
+            assert _dr_context._resolve_route("custom") is sentinel
 
     def test_patched_execute_constants_flow_through_selection_and_status(self) -> None:
         """Patching the facade execute constants reaches selection and status checks."""
         with (
-            patch.object(dr_commands, "_DR_EXECUTE_SURFACES", ("custom_surface",)),
-            patch.object(dr_commands, "_DR_EXECUTE_RETRYABLE_STATUSES", {"custom"}),
+            patch.object(_dr_report, "_DR_EXECUTE_SURFACES", ("custom_surface",)),
+            patch.object(_dr_report, "_DR_EXECUTE_RETRYABLE_STATUSES", {"custom"}),
         ):
-            selected = dr_commands._resolve_execute_surface_selection(
+            selected = _dr_report._resolve_execute_surface_selection(
                 latest_execute_record={
                     "payload": {"custom_surface": {"status": "custom"}}
                 },
@@ -1866,7 +1879,7 @@ class TestFacadePatchTargets:
                 env_vars=False,
                 resume=True,
             )
-            follow_up = dr_commands._surface_result_requires_follow_up(
+            follow_up = _dr_report._surface_result_requires_follow_up(
                 {"status": "custom"}
             )
 

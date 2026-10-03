@@ -11,6 +11,8 @@ old/new module set would otherwise fail mid-update.
 """
 
 from __future__ import annotations
+import quickscale_cli.commands._module_update_io as _module_update_io
+import quickscale_core.project_state_manager as _project_state_manager
 
 import shutil
 import subprocess
@@ -27,11 +29,11 @@ from quickscale_core.project_state import (
 )
 from quickscale_core.schema.state_schema import StateError, StateManager
 from quickscale_core.utils.git_utils import GitError
-from quickscale_cli.commands.module_commands import (
+from quickscale_cli.commands._module_update_io import (
     _commit_regenerated_managed_wiring,
     _regenerate_and_record_managed_wiring,
-    update,
 )
+from quickscale_cli.commands._module_update import update
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_MANIFEST_ROOT = REPO_ROOT / "quickscale_modules"
@@ -162,23 +164,23 @@ def _update_mocks(project_path: Path):
     )
     return (
         patch(
-            "quickscale_cli.commands.module_commands.load_config",
+            "quickscale_core.config.load_config",
             return_value=config,
         ),
         patch(
-            "quickscale_cli.commands.module_commands.resolve_remote_ref",
+            "quickscale_core.utils.git_repo.resolve_remote_ref",
             return_value="a" * 40,
         ),
         patch(
-            "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+            "quickscale_core.utils.git_subtree.run_git_subtree_pull",
             side_effect=_fake_subtree_pull,
         ),
         patch(
-            "quickscale_cli.commands.module_commands.click.confirm",
+            "click.confirm",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.module_commands._sync_module_dependencies",
+            "quickscale_cli.commands._module_embed._sync_module_dependencies",
             return_value=True,
         ),
     )
@@ -286,7 +288,7 @@ def test_regeneration_failure_restores_pre_update_wiring(
         return False, "wiring conflict"
 
     with patch(
-        "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+        "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring",
         side_effect=_failing_regeneration,
     ):
         success, message = _regenerate_and_record_managed_wiring(project, "myapp")
@@ -314,7 +316,7 @@ def test_partial_failure_rolls_back_modules_committed_before_it(
         _update_mocks(project)
     )
     resolve_patch = patch(
-        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        "quickscale_core.utils.git_repo.resolve_remote_ref",
         side_effect=["a" * 40, GitError("network unavailable")],
     )
     with load_config_patch, resolve_patch, pull_patch, confirm_patch, deps_patch:
@@ -365,9 +367,7 @@ def test_partial_failure_rollback_runs_under_the_update_lock(
     monkeypatch.chdir(project)
     observed: dict[str, bool] = {}
 
-    from quickscale_cli.commands import module_commands
-
-    real_rollback = module_commands._roll_back_partial_module_update
+    real_rollback = _module_update_io._roll_back_partial_module_update
 
     def _probe(
         project_path: Path,
@@ -387,7 +387,7 @@ def test_partial_failure_rollback_runs_under_the_update_lock(
         _update_mocks(project)
     )
     resolve_patch = patch(
-        "quickscale_cli.commands.module_commands.resolve_remote_ref",
+        "quickscale_core.utils.git_repo.resolve_remote_ref",
         side_effect=["a" * 40, GitError("network unavailable")],
     )
     with (
@@ -397,7 +397,7 @@ def test_partial_failure_rollback_runs_under_the_update_lock(
         confirm_patch,
         deps_patch,
         patch.object(
-            module_commands,
+            _module_update_io,
             "_roll_back_partial_module_update",
             side_effect=_probe,
         ),
@@ -439,7 +439,7 @@ def test_regeneration_failure_rolls_back_updated_modules(
         confirm_patch,
         deps_patch,
         patch(
-            "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+            "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring",
             return_value=(False, "wiring conflict"),
         ),
     ):
@@ -501,7 +501,7 @@ def test_post_pull_phase_failure_rolls_back_updated_modules(
         confirm_patch,
         deps_patch,
         patch(
-            "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+            "quickscale_cli.commands._module_update_io._regenerate_and_record_managed_wiring",
             side_effect=RuntimeError("state read failed"),
         ),
     ):
@@ -576,7 +576,7 @@ def test_failed_wiring_commit_rolls_back_wiring_and_modules(
         confirm_patch,
         deps_patch,
         patch(
-            "quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring",
+            "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring",
             side_effect=_stage_then_fail,
         ),
     ):
@@ -630,9 +630,7 @@ def test_post_pull_state_load_failure_triggers_rollback(
     project = _write_project(tmp_path)
     monkeypatch.chdir(project)
 
-    from quickscale_cli.commands import module_commands
-
-    real_load = module_commands.ProjectStateManager.load_state
+    real_load = _project_state_manager.ProjectStateManager.load_state
     calls = {"count": 0}
 
     def _flaky_load(self):
@@ -647,24 +645,26 @@ def test_post_pull_state_load_failure_triggers_rollback(
     )
     with (
         patch(
-            "quickscale_cli.commands.module_commands.load_config",
+            "quickscale_core.config.load_config",
             return_value=config,
         ),
         patch(
-            "quickscale_cli.commands.module_commands.click.confirm",
+            "click.confirm",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.module_commands._update_single_module",
+            "quickscale_cli.commands._module_update._update_single_module",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.module_commands._warn_version_drift_for_update",
+            "quickscale_cli.commands._module_shared._warn_version_drift_for_update",
             Mock(),
         ),
-        patch.object(module_commands.ProjectStateManager, "load_state", _flaky_load),
         patch.object(
-            module_commands,
+            _project_state_manager.ProjectStateManager, "load_state", _flaky_load
+        ),
+        patch.object(
+            _module_update_io,
             "_roll_back_partial_module_update",
         ) as mock_rollback,
     ):
@@ -701,11 +701,11 @@ def test_hash_persistence_failure_restores_wiring(
 
     with (
         patch(
-            "quickscale_cli.commands.module_commands.regenerate_managed_wiring",
+            "quickscale_cli.utils.module_wiring_manager.regenerate_managed_wiring",
             side_effect=_partial_regeneration,
         ),
         patch(
-            "quickscale_cli.commands.module_commands._record_managed_wiring_hashes",
+            "quickscale_cli.commands._module_update_io._record_managed_wiring_hashes",
             side_effect=RuntimeError("state save failed"),
         ),
     ):

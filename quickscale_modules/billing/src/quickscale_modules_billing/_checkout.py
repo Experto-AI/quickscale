@@ -11,10 +11,7 @@ from typing import Any
 
 from quickscale_modules_orgs.current_org import org_scope
 
-import quickscale_modules_billing.services as _services
-from quickscale_modules_billing._customers import (
-    get_or_create_stripe_customer as get_or_create_stripe_customer,
-)
+import quickscale_modules_billing._customers as _customers
 from quickscale_modules_billing._payload import (
     _build_checkout_session_metadata as _build_checkout_session_metadata,
 )
@@ -36,21 +33,14 @@ from quickscale_modules_billing._settings import (
 from quickscale_modules_billing._settings import (
     BillingSettingsSnapshot as BillingSettingsSnapshot,
 )
-from quickscale_modules_billing._settings import (
-    _ensure_billing_enabled as _ensure_billing_enabled,
-)
+import quickscale_modules_billing._settings as _settings
 from quickscale_modules_billing._stripe_client import (
     _stripe_error_classes as _stripe_error_classes,
 )
 from quickscale_modules_billing._subscription_mutations import (
     _require_owner_provider_mutation_authorization as _require_owner_provider_mutation_authorization,
 )
-from quickscale_modules_billing._validation import (
-    _validate_one_time_purchase_plan as _validate_one_time_purchase_plan,
-)
-from quickscale_modules_billing._validation import (
-    _validate_stripe_price_parity as _validate_stripe_price_parity,
-)
+import quickscale_modules_billing._validation as _validation
 from quickscale_modules_billing.exceptions import (
     BillingError,
     BillingValidationError,
@@ -59,6 +49,8 @@ from quickscale_modules_billing.models import (
     Plan,
     PurchaseCheckout,
 )
+import quickscale_modules_billing._stripe_client as _stripe_client
+import quickscale_modules_billing._locks as _locks
 
 
 def create_checkout_session(
@@ -73,12 +65,12 @@ def create_checkout_session(
 ) -> str:
     """Serialize one-time Checkout creation with destructive org boundaries."""
     try:
-        with _services.subscription_provider_mutation_lock(organization):
+        with _locks.subscription_provider_mutation_lock(organization):
             user, organization = _require_owner_provider_mutation_authorization(
                 user,
                 organization,
             )
-            return _services._create_checkout_session(
+            return _create_checkout_session(
                 user,
                 plan,
                 success_url,
@@ -103,21 +95,21 @@ def _create_checkout_session(
 ) -> str:
     """Create one Stripe purchase session while its organization mutex is held."""
     snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
-    _ensure_billing_enabled(snapshot)
+    _settings._ensure_billing_enabled(snapshot)
 
     normalized_success_url = success_url.strip()
     normalized_cancel_url = cancel_url.strip()
     if not normalized_success_url or not normalized_cancel_url:
         raise BillingValidationError("Checkout success and cancel URLs are required.")
 
-    _validate_one_time_purchase_plan(plan)
+    _validation._validate_one_time_purchase_plan(plan)
 
-    resolved_client = stripe_client or _services.get_stripe_client(
+    resolved_client = stripe_client or _stripe_client.get_stripe_client(
         settings_snapshot=snapshot
     )
     stripe_price = resolved_client.retrieve_price(price_id=plan.stripe_price_id)
-    _validate_stripe_price_parity(plan=plan, stripe_price=stripe_price)
-    customer_id, _ = get_or_create_stripe_customer(
+    _validation._validate_stripe_price_parity(plan=plan, stripe_price=stripe_price)
+    customer_id, _ = _customers.get_or_create_stripe_customer(
         user,
         organization=organization,
         stripe_client=resolved_client,
@@ -127,7 +119,7 @@ def _create_checkout_session(
     # create. An exception can mean Stripe created the session but the response
     # was lost, so the PREPARING row must remain as a fail-closed obligation.
     with org_scope(organization):
-        _services._lock_organization_for_billing_mutation(organization)
+        _locks._lock_organization_for_billing_mutation(organization)
         preparing_reservations = list(
             PurchaseCheckout.all_objects.select_for_update()
             .filter(
@@ -179,7 +171,7 @@ def _create_checkout_session(
         raise BillingError("Stripe checkout session creation did not return an id.")
 
     with org_scope(organization):
-        _services._lock_organization_for_billing_mutation(organization)
+        _locks._lock_organization_for_billing_mutation(organization)
         reservation = PurchaseCheckout.all_objects.select_for_update().get(
             pk=reservation.pk
         )
@@ -212,22 +204,22 @@ def create_billing_portal_session(
 ) -> str:
     """Create a hosted Stripe billing portal session for the given organization."""
     snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
-    _ensure_billing_enabled(snapshot)
+    _settings._ensure_billing_enabled(snapshot)
 
     normalized_return_url = return_url.strip()
     if not normalized_return_url:
         raise BillingValidationError("Billing portal return URL is required.")
 
-    resolved_client = stripe_client or _services.get_stripe_client(
+    resolved_client = stripe_client or _stripe_client.get_stripe_client(
         settings_snapshot=snapshot
     )
     try:
-        with _services.subscription_provider_mutation_lock(organization):
+        with _locks.subscription_provider_mutation_lock(organization):
             user, organization = _require_owner_provider_mutation_authorization(
                 user,
                 organization,
             )
-            customer_id, _ = get_or_create_stripe_customer(
+            customer_id, _ = _customers.get_or_create_stripe_customer(
                 user,
                 organization=organization,
                 stripe_client=resolved_client,

@@ -2,6 +2,7 @@
 # ruff: noqa: E402 — AF5 Phase 4: module-level bypass set before imports
 
 import os
+import quickscale_cli.commands._types as _types
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -15,19 +16,16 @@ from quickscale_core.contracts.module_discovery import authoritative_module_name
 
 # AF5 Phase 4: Bypass the late destructive/remote confirmation gate so test
 # assertions remain stable with the new two-phase confirmation flow.
-import quickscale_cli.commands.apply_command as _apply_command_mod
 
-_apply_command_mod._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
+_types._AF5_DESTRUCTIVE_CONFIRM_BYPASS = True
 
-from quickscale_cli.commands.apply_command import (  # type: ignore[import-untyped]
-    EmbedModulesResult,
-    _embed_modules_step,
+from quickscale_cli.commands._types import EmbedModulesResult
+from quickscale_cli.commands._embedding import _embed_modules_step
+from quickscale_cli.commands.apply_command import (
     apply,
 )
-from quickscale_cli.commands.module_commands import (  # type: ignore[import-untyped]
-    push,
-    update,
-)
+from quickscale_cli.commands._module_push import push
+from quickscale_cli.commands._module_update import update
 from quickscale_cli.commands.remove_command import remove  # type: ignore[import-untyped]
 
 
@@ -528,31 +526,31 @@ def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
 
     with (
         patch(
-            "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             return_value=None,
         ),
         patch(
-            "quickscale_cli.commands.apply_command._embed_modules_step",
+            "quickscale_cli.commands._embedding._embed_modules_step",
             side_effect=_embed_step,
         ) as mock_embed_modules_step,
         patch(
-            "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+            "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
             return_value=Mock(tree_id="d" * 40),
         ),
         patch(
-            "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+            "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+            "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.apply_command._run_post_generation_steps",
+            "quickscale_cli.commands._runtime._run_post_generation_steps",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.apply_command._run_local_migrations",
+            "quickscale_cli.commands._runtime._run_local_migrations",
             return_value=True,
         ),
     ):
@@ -626,31 +624,31 @@ def test_remove_with_pending_recovery_then_apply_does_not_resurrect_removed_modu
 
     with (
         patch(
-            "quickscale_cli.commands.apply_command._commit_pending_config_changes",
+            "quickscale_cli.commands._git_ops._commit_pending_config_changes",
             return_value=None,
         ),
         patch(
-            "quickscale_cli.commands.apply_command._embed_modules_step",
+            "quickscale_cli.commands._embedding._embed_modules_step",
             side_effect=_embed_step,
         ) as mock_embed_modules_step,
         patch(
-            "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+            "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
             return_value=Mock(tree_id="d" * 40),
         ),
         patch(
-            "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+            "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+            "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.apply_command._run_post_generation_steps",
+            "quickscale_cli.commands._runtime._run_post_generation_steps",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.apply_command._run_local_migrations",
+            "quickscale_cli.commands._runtime._run_local_migrations",
             return_value=True,
         ),
     ):
@@ -694,31 +692,31 @@ def test_apply_backups_local_adds_private_gitignore_and_state() -> None:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._generate_new_project",
+                "quickscale_cli.commands._generation._generate_new_project",
                 side_effect=_generate_minimal_project,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._init_git_with_config",
+                "quickscale_cli.commands._git_ops._init_git_with_config",
                 return_value=None,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 side_effect=_embed_modules_into_project,
             ) as mock_embed_modules_step,
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="d" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                "quickscale_cli.commands._runtime._run_post_generation_steps",
                 return_value=True,
             ),
         ):
@@ -782,31 +780,31 @@ def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._generate_new_project",
+                "quickscale_cli.commands._generation._generate_new_project",
                 side_effect=_generate_minimal_project,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._init_git_with_config",
+                "quickscale_cli.commands._git_ops._init_git_with_config",
                 return_value=None,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 side_effect=_embed_modules_into_project,
             ) as mock_embed_modules_step,
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="d" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                "quickscale_cli.commands._context._regenerate_managed_wiring_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                "quickscale_cli.commands._runtime._run_post_generation_steps",
                 return_value=True,
             ),
         ):
@@ -1019,23 +1017,23 @@ def test_apply_updates_blog_enable_rss_for_existing_embedded_project() -> None:
 
         with (
             patch(
-                "quickscale_cli.commands.apply_command._embed_modules_step",
+                "quickscale_cli.commands._embedding._embed_modules_step",
                 wraps=_embed_modules_step,
             ) as mock_embed_modules_step,
             patch(
-                "quickscale_cli.commands.apply_command._capture_git_index_snapshot",
+                "quickscale_cli.commands._git_ops._capture_git_index_snapshot",
                 return_value=Mock(tree_id="d" * 40),
             ),
             patch(
-                "quickscale_cli.commands.apply_command._sync_project_module_dependencies_for_apply",
+                "quickscale_cli.commands._runtime._sync_project_module_dependencies_for_apply",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                "quickscale_cli.commands._runtime._run_post_generation_steps",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.apply_command._run_local_migrations",
+                "quickscale_cli.commands._runtime._run_local_migrations",
                 return_value=True,
             ),
         ):
@@ -1117,22 +1115,22 @@ def test_update_after_removal_only_targets_remaining_modules(
     _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
     with (
         patch(
-            "quickscale_cli.commands.module_commands._validate_update_environment",
+            "quickscale_cli.commands._module_shared._validate_update_environment",
             return_value=None,
         ),
         patch(
-            "quickscale_cli.commands.module_commands.click.confirm",
+            "click.confirm",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+            "quickscale_cli.commands._module_update_io._regenerate_and_record_managed_wiring",
             return_value=(True, "regenerated"),
         ),
         patch(
-            "quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring",
+            "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring",
         ),
         patch(
-            "quickscale_cli.commands.module_commands._update_single_module",
+            "quickscale_cli.commands._module_update._update_single_module",
             return_value=True,
         ) as mock_update_single_module,
     ):
@@ -1196,14 +1194,12 @@ def test_push_after_successful_remove_treats_removed_module_as_absent(
 
     _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
     with (
-        patch("quickscale_cli.commands.module_commands.is_git_repo", return_value=True),
+        patch("quickscale_core.utils.git_repo.is_git_repo", return_value=True),
         patch(
-            "quickscale_cli.commands.module_commands.click.confirm",
+            "click.confirm",
             return_value=True,
         ),
-        patch(
-            "quickscale_cli.commands.module_commands.run_git_subtree_push"
-        ) as mock_push,
+        patch("quickscale_core.utils.git_subtree.run_git_subtree_push") as mock_push,
     ):
         remaining_result = runner.invoke(
             push,
@@ -1353,22 +1349,22 @@ def test_update_after_partial_remove_on_non_consolidated_project_targets_survivi
     _assert_physical_module_manifest_names(project_path, inventory - {"auth"})
     with (
         patch(
-            "quickscale_cli.commands.module_commands._validate_update_environment",
+            "quickscale_cli.commands._module_shared._validate_update_environment",
             return_value=None,
         ),
         patch(
-            "quickscale_cli.commands.module_commands.click.confirm",
+            "click.confirm",
             return_value=True,
         ),
         patch(
-            "quickscale_cli.commands.module_commands._regenerate_and_record_managed_wiring",
+            "quickscale_cli.commands._module_update_io._regenerate_and_record_managed_wiring",
             return_value=(True, "regenerated"),
         ),
         patch(
-            "quickscale_cli.commands.module_commands._commit_regenerated_managed_wiring",
+            "quickscale_cli.commands._module_update_io._commit_regenerated_managed_wiring",
         ),
         patch(
-            "quickscale_cli.commands.module_commands._update_single_module",
+            "quickscale_cli.commands._module_update._update_single_module",
             return_value=True,
         ) as mock_update_single_module,
     ):
@@ -1529,23 +1525,23 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
         os.chdir(project_path)
         with (
             patch(
-                "quickscale_cli.commands.module_commands.load_config",
+                "quickscale_core.config.load_config",
                 return_value=config,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.resolve_remote_ref",
+                "quickscale_core.utils.git_repo.resolve_remote_ref",
                 return_value="abc123def456abc123def456abc123def456abc1",
             ),
             patch(
-                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                "quickscale_core.utils.git_subtree.run_git_subtree_pull",
                 side_effect=_fake_subtree_pull,
             ),
             patch(
-                "quickscale_cli.commands.module_commands.click.confirm",
+                "click.confirm",
                 return_value=True,
             ),
             patch(
-                "quickscale_cli.commands.module_commands._sync_module_dependencies",
+                "quickscale_cli.commands._module_embed._sync_module_dependencies",
                 return_value=True,
             ),
         ):

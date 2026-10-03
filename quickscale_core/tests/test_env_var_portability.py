@@ -13,6 +13,7 @@ against the new location.
 """
 
 from __future__ import annotations
+import quickscale_cli.commands._dr_env_sync as _dr_env_sync
 
 import pytest
 
@@ -289,7 +290,6 @@ def test_classify_env_var_legacy_shim_delegates_to_centralized_helper() -> None:
     # The CLI keeps a thin shim that calls into the centralized helper
     # so any caller that still reaches into ``dr_commands._classify_env_var``
     # continues to work. The shim must return the exact same tuple.
-    from quickscale_cli.commands import dr_commands
 
     for name, expected in LEGACY_PARITY_CASES:
-        assert dr_commands._classify_env_var(name) == expected
+        assert _dr_env_sync._classify_env_var(name) == expected

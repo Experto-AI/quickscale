@@ -1,11 +1,27 @@
 """Facade-seam regression tests for the split DR orchestration module.
 
-The implementation lives in private sibling modules; every public name stays
-importable from ``quickscale_core.dr_engine.orchestration`` and every test
-patch target on that path must keep propagating into the moved definitions.
+The implementation lives in private sibling modules.  Every public name stays
+importable from ``quickscale_core.dr_engine.orchestration``, while test patch
+seams live on the sibling module that defines the name — never on the re-export
+path (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
+import quickscale_core.dr_engine._metadata as _metadata
+import django.conf as _conf
+import quickscale_core.dr_engine._remote as _remote
+import quickscale_core._dr_remote_storage as _dr_remote_storage
+import quickscale_core.dr_engine._state as _state
+import quickscale_core.dr_engine.verification as _verification
+import quickscale_core.dr_engine._report as _report
+import django.utils as _utils
+import quickscale_core.dr_engine._policy as _policy_2
+import quickscale_core.dr_engine.recovery as _recovery
+import quickscale_core.dr_engine._types as _types
+import quickscale_core.dr_engine._prune as _prune
+import quickscale_core.dr_engine._media as _media
+import quickscale_core.dr_engine._capture as _capture
+import quickscale_core.dr_engine._restore as _restore
 
 import sys
 from datetime import datetime, timezone
@@ -41,24 +57,28 @@ def _policy(**overrides: object) -> BackupPolicySnapshot:
 
 
 class TestFacadePatchTargets:
-    """The facade keeps patch targets effective across the split modules."""
+    """Patch targets live on the sibling modules that define the names."""
 
-    def test_metadata_builder_resolves_helpers_through_the_facade(self) -> None:
-        """Patching facade helpers reaches the moved release-metadata builder."""
+    def test_metadata_builder_resolves_helpers_through_the_defining_module(
+        self,
+    ) -> None:
+        """Patching defining-sibling helpers reaches the release-metadata builder."""
         with (
-            patch.object(orch, "_get_project_slug", return_value="patched-slug"),
-            patch.object(orch, "_get_source_environment", return_value="staging"),
-            patch.object(orch, "_collect_module_versions", return_value={"m": "1"}),
-            patch.object(orch, "_get_git_revision", return_value="abc123"),
+            patch.object(_metadata, "_get_project_slug", return_value="patched-slug"),
+            patch.object(_metadata, "_get_source_environment", return_value="staging"),
             patch.object(
-                orch,
+                _metadata, "_collect_module_versions", return_value={"m": "1"}
+            ),
+            patch.object(_metadata, "_get_git_revision", return_value="abc123"),
+            patch.object(
+                _conf,
                 "settings",
                 SimpleNamespace(QUICKSCALE_APP_VERSION="9.9"),
             ),
-            patch.object(orch, "django") as django_module,
+            patch.object(_metadata, "django") as django_module,
         ):
             django_module.get_version.return_value = "9.9-django"
-            metadata = orch._build_release_metadata(captured_at=_NOW)
+            metadata = _metadata._build_release_metadata(captured_at=_NOW)
 
         assert metadata["project_slug"] == "patched-slug"
         assert metadata["source_environment"] == "staging"
@@ -69,8 +89,8 @@ class TestFacadePatchTargets:
         """Patching the facade persistence seam reaches the state helper."""
         snapshot = SimpleNamespace(status="pending", failure_note="")
 
-        with patch.object(orch, "save_snapshot") as save_snapshot:
-            orch._mark_snapshot_failed(snapshot, failure_note="boom")
+        with patch.object(persistence, "save_snapshot") as save_snapshot:
+            _state._mark_snapshot_failed(snapshot, failure_note="boom")
 
         assert snapshot.status == "failed"
         assert snapshot.failure_note == "boom"
@@ -81,10 +101,10 @@ class TestFacadePatchTargets:
         policy = _policy()
 
         with (
-            patch.object(orch, "settings_policy_snapshot", return_value=policy),
+            patch.object(persistence, "settings_policy_snapshot", return_value=policy),
             patch.object(persistence, "has_any_policy", return_value=False),
         ):
-            assert orch._load_active_policy_snapshot() is policy
+            assert _policy_2._load_active_policy_snapshot() is policy
 
     def test_remote_upload_resolves_seams_through_the_facade(self) -> None:
         """Patching the facade credential resolver and sink reaches the uploader."""
@@ -97,13 +117,15 @@ class TestFacadePatchTargets:
 
         with (
             patch.object(
-                orch,
+                _remote,
                 "_resolve_private_remote_credentials",
                 return_value=("key", "secret"),
             ) as credentials,
-            patch.object(orch, "upload_file_to_s3") as upload,
+            patch.object(_dr_remote_storage, "upload_file_to_s3") as upload,
         ):
-            remote_key = orch._upload_to_private_remote(Path("/tmp/dump.dump"), policy)
+            remote_key = _remote._upload_to_private_remote(
+                Path("/tmp/dump.dump"), policy
+            )
 
         assert remote_key == "snapshots/dump.dump"
         credentials.assert_called_once_with(policy)
@@ -112,12 +134,12 @@ class TestFacadePatchTargets:
     def test_capture_resume_resolves_snapshot_loader_through_the_facade(self) -> None:
         """Patching the facade snapshot loader reaches the capture resumer."""
         with patch.object(
-            orch,
+            _state,
             "get_backup_snapshot",
             side_effect=RuntimeError("sentinel"),
         ):
             with pytest.raises(RuntimeError, match="sentinel"):
-                orch._resume_backup_capture(
+                _capture._resume_backup_capture(
                     "snap-1",
                     trigger="manual",
                     policy=_policy(),
@@ -132,25 +154,24 @@ class TestFacadePatchTargets:
         snapshot = SimpleNamespace(status="ready")
 
         with (
-            patch.object(orch, "get_backup_snapshot", return_value=snapshot),
+            patch.object(_state, "get_backup_snapshot", return_value=snapshot),
             patch.object(
-                orch,
+                _verification,
                 "_build_clear_rollback_pin_fields",
                 return_value={
                     "rollback_pin_expires_at": None,
                     "rollback_pin_reason": "",
                 },
             ),
-            patch.object(orch, "save_snapshot") as save_snapshot,
+            patch.object(persistence, "save_snapshot") as save_snapshot,
             patch.object(
-                orch,
+                _report,
                 "build_backup_snapshot_report",
                 return_value={"status": "ready"},
             ),
-            patch.object(orch, "django_timezone") as django_timezone,
+            patch.object(_utils.timezone, "now", return_value=_NOW),
         ):
-            django_timezone.now.return_value = _NOW
-            result = orch.clear_backup_snapshot_rollback_pin("snap-1")
+            result = _report.clear_backup_snapshot_rollback_pin("snap-1")
 
         assert result == {"status": "ready"}
         save_snapshot.assert_called_once()
@@ -160,13 +181,17 @@ class TestFacadePatchTargets:
         policy = _policy(retention_days=1)
 
         with (
-            patch.object(orch, "_load_active_policy_snapshot", return_value=policy),
-            patch.object(orch, "iter_expired_snapshots", return_value=[]) as snapshots,
             patch.object(
-                orch, "iter_expired_unlinked_artifacts", return_value=[]
+                _policy_2, "_load_active_policy_snapshot", return_value=policy
+            ),
+            patch.object(
+                persistence, "iter_expired_snapshots", return_value=[]
+            ) as snapshots,
+            patch.object(
+                persistence, "iter_expired_unlinked_artifacts", return_value=[]
             ) as artifacts,
         ):
-            deleted = orch.prune_expired_backups(dry_run=True, now=_NOW)
+            deleted = _prune.prune_expired_backups(dry_run=True, now=_NOW)
 
         assert deleted == 0
         snapshots.assert_called_once()
@@ -182,9 +207,9 @@ class TestFacadePatchTargets:
         )
 
         with patch.object(
-            orch, "_load_storage_helpers", return_value=helpers
+            _metadata, "_load_storage_helpers", return_value=helpers
         ) as loader:
-            runtime = orch._resolve_media_runtime({"MEDIA_ROOT": "/tmp/media"})
+            runtime = _media._resolve_media_runtime({"MEDIA_ROOT": "/tmp/media"})
 
         loader.assert_called_once_with()
         assert runtime["backend"] == "local"
@@ -193,13 +218,13 @@ class TestFacadePatchTargets:
         """Patching the facade core guard reaches the restore wrapper."""
         with (
             patch.object(
-                orch,
-                "_core_restore_execution_allowed",
+                _recovery,
+                "_restore_execution_allowed",
                 return_value=True,
             ) as guard,
-            patch.object(orch, "settings", SimpleNamespace(DEBUG=False)),
+            patch.object(_conf, "settings", SimpleNamespace(DEBUG=False)),
         ):
-            assert orch._restore_execution_allowed() is True
+            assert _restore._restore_execution_allowed() is True
 
         guard.assert_called_once_with(is_debug=False)
 
@@ -219,11 +244,18 @@ class TestFacadeSurface:
             "restore_backup_source": "quickscale_core.dr_engine._restore",
             "prune_expired_backups": "quickscale_core.dr_engine._prune",
             "sync_backup_snapshot_media": "quickscale_core.dr_engine._media",
-            "_upload_to_private_remote": "quickscale_core.dr_engine._remote",
-            "_get_project_slug": "quickscale_core.dr_engine._metadata",
         }
         for name, module in expected.items():
             assert getattr(orch, name).__module__ == module
+        # Private seams are reached on the defining sibling, never the facade.
+        assert _remote._upload_to_private_remote.__module__ == (
+            "quickscale_core.dr_engine._remote"
+        )
+        assert _metadata._get_project_slug.__module__ == (
+            "quickscale_core.dr_engine._metadata"
+        )
+        assert not hasattr(orch, "_get_project_slug")
+        assert not hasattr(orch, "_upload_to_private_remote")
 
     def test_public_names_keep_canonical_identity_with_runtime_facade(self) -> None:
         """runtime.dr re-exports the very objects bound on the orchestration path."""
@@ -253,5 +285,5 @@ class TestFacadeSurface:
 
     def test_types_helpers_stay_bound_on_the_facade(self) -> None:
         """Protocols and constants moved to ``_types`` are re-exported."""
-        assert orch._ROUTE_KIND_KEY == "ROUTE_KIND"
-        assert orch._RemoteUploader.__module__ == "quickscale_core.dr_engine._types"
+        assert _types._ROUTE_KIND_KEY == "ROUTE_KIND"
+        assert _types._RemoteUploader.__module__ == "quickscale_core.dr_engine._types"

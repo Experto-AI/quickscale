@@ -35,7 +35,7 @@ def build_backup_filename(
     suffix: str | None = None,
 ) -> str:
     """Build a deterministic operator-friendly backup filename."""
-    from quickscale_core.dr_engine.orchestration import _get_project_slug
+    from quickscale_core.dr_engine._metadata import _get_project_slug
 
     timestamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     timestamp_text = timestamp.strftime("%Y%m%dT%H%M%SZ")
@@ -149,9 +149,7 @@ def _build_snapshot_capture_resume_policy(
     policy: BackupPolicySnapshot,
 ) -> BackupPolicySnapshot:
     """Align the active policy with the stored snapshot topology for resume."""
-    from quickscale_core.dr_engine.orchestration import (
-        _resolve_artifact_remote_policy,
-    )
+    from quickscale_core.dr_engine._state import _resolve_artifact_remote_policy
 
     resolved_policy = replace(
         policy,
