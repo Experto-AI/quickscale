@@ -1577,3 +1577,53 @@ def test_middleware_context_activation_does_not_require_request_long_atomic(
     assert get_current_org_id() is None, (
         "Middleware must not leak org context after the request completes"
     )
+
+
+def test_org_management_path_is_script_prefix_relative() -> None:
+    """Rule 41: the guard compares prefixes in the request's coordinates."""
+    from django.urls import set_script_prefix
+
+    set_script_prefix("/portal/")
+    try:
+        assert TenantMiddleware._is_org_management_path("/orgs/") is True
+        assert TenantMiddleware._is_org_management_path("/orgs/new/") is True
+        assert (
+            TenantMiddleware._is_org_management_path(
+                "/orgs/invitations/00000000-0000-0000-0000-000000000000/accept/"
+            )
+            is True
+        )
+        assert TenantMiddleware._is_org_management_path("/orgs/api/acme/") is True
+        assert TenantMiddleware._is_org_management_path("/orgs/acme/") is True
+        assert TenantMiddleware._is_org_management_path("/orgs/acme/members/") is True
+        assert TenantMiddleware._is_org_management_path("/orgs/acme/settings/") is True
+        assert (
+            TenantMiddleware._is_org_management_path("/orgs/acme/debug/as-org/") is True
+        )
+        assert TenantMiddleware._is_org_management_path("/orgs/acme/blog/") is False
+        assert TenantMiddleware._is_org_management_path("/") is False
+    finally:
+        set_script_prefix("/")
+
+
+@pytest.mark.django_db
+def test_saas_redirect_keeps_the_script_prefix(client, settings) -> None:
+    """Rule 41: the redirect target is browser-facing, not path_info-relative."""
+    from django.urls import set_script_prefix
+
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    user = get_user_model().objects.create_user(
+        username="portal-user",
+        email="portal-user@example.com",
+        password="secret123",
+    )
+    client.force_login(user)
+
+    set_script_prefix("/portal/")
+    try:
+        response = client.get("/")
+    finally:
+        set_script_prefix("/")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/portal/orgs/"

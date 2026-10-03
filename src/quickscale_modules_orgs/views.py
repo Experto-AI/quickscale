@@ -119,8 +119,7 @@ def _load_invitation_notification_sender() -> Any | None:
     if not apps.is_installed("quickscale_modules_notifications"):
         return None
     notifications_services = import_module("quickscale_modules_notifications.services")
-    snapshot = notifications_services.NotificationSettingsSnapshot.from_settings()
-    if not snapshot.enabled:
+    if not notifications_services.is_enabled():
         return None
     return getattr(notifications_services, "send_notification", None)
 
