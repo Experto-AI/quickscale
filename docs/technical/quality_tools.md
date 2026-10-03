@@ -235,7 +235,7 @@ Every increase in the following retained baseline values requires a waiver:
 | Section | Key | Compared value |
 |---------|-----|----------------|
 | `dead_code` | Per normalized message | Occurrence count (multiplicity) |
-| `complexity` | Per `path::symbol` key | `max_complexity` |
+| `complexity` | Per `module.qualname` key | `max_complexity` |
 | `file_length` | Per repo-relative path | `max_lines` |
 | `duplication` | Global | `allowed_blocks` |
 
@@ -245,9 +245,19 @@ side is an increase from 0 that needs a waiver. Legacy `large_files` data is
 never indexed.
 
 A missing base key is treated as 0 (any current value > 0 is an increase).
-Deleted, reduced, or unchanged entries pass without action.  A rename is
-modelled as delete plus new-exemption: the old key disappears (pass) and the
-new key appears as an increase (requires a waiver if > 0).
+Deleted, reduced, or unchanged entries pass without action.  A complexity
+**move** is not an increase: when a current key is absent from the merge base
+and an old entry carries the same `qualname` but no longer exists under its own
+key, the old ceiling is re-keyed to the new location.  A value at or below that
+ceiling is a pure move and passes without a waiver; a higher value is a
+worsened qualname and needs one.  When several old entries share the qualname,
+the one sharing the longest module prefix wins, then the highest ceiling.  The
+report comparison only treats a baseline entry as a move source when a
+full-grade radon pass no longer reports it in the tree, so a function reduced
+below the reporting threshold cannot lend its ceiling to an unrelated new
+function.  The merge base may still carry the legacy `path::symbol` form, which
+is canonicalized to `module.qualname` before comparison; the current baseline
+must use `module.qualname`.
 
 ### Baseline File Schema
 
@@ -262,9 +272,9 @@ required unless marked optional; extra fields are tolerated but ignored.
   },
   "complexity": {
     "allowed_functions": {
-      "file::symbol": {
-        "file": "canonical/repo/relative/path.py",
-        "symbol": "function_or_method_name",
+      "package.module.function_or_method_name": {
+        "module": "package.module",
+        "qualname": "function_or_method_name",
         "type": "function|method|class",
         "max_complexity": 11,
         "reason": "required when max_complexity >= 21"
@@ -293,15 +303,19 @@ Field-level rules:
 - **`dead_code.allowed_messages`** — list of non-empty strings.  Multiplicity
   (occurrence count of each distinct message) is the compared value.  Empty
   strings are rejected; duplicates are valid and simply raise multiplicity.
-- **`complexity.allowed_functions`** — dict mapping canonical `file::symbol`
-  keys to records with `file` (non-empty repo-relative POSIX path), `symbol`
-  (non-empty), `type` (`function`/`method`/`class`), and `max_complexity`
-  (strict non-negative non-bool `int`).  Paths are validated by a strict
-  canonical-path checker that rejects absolute paths, Windows
-  backslashes/drive letters, empty/dot/dotdot segments, repeated separators,
-  leading/trailing whitespace, and surrogate/control characters.  A `reason`
+- **`complexity.allowed_functions`** — dict mapping canonical
+  `module.qualname` keys to records with `module` and `qualname` (each a
+  non-empty dotted Python identifier path), `type`
+  (`function`/`method`/`class`), and `max_complexity` (strict non-negative
+  non-bool `int`).  The key must equal `module.qualname`.  The module is the
+  function's defining module: the repo path under `src/`, with `/` mapped to
+  `.`, `.py` dropped, and `__init__` mapped to its package.  A `reason`
   (non-empty string) is required when `max_complexity` is at or above the
-  critical threshold (21); it is optional below it.
+  critical threshold (21); it is optional below it.  The merge-base side of a
+  comparison may still carry the pre-SA233 `file::symbol` form, whose key must
+  equal `file::symbol` and whose `file` is validated by a strict
+  repo-relative path checker; it is canonicalized to `module.qualname`.  The
+  current baseline must use the `module.qualname` form.
 - **`file_length.allowed_files`** — optional section; a dict mapping each
   accepted file's canonical repo-relative path to a record with `max_lines`
   (strict non-negative non-bool `int`) and `reason` (non-empty string).  The
@@ -357,7 +371,7 @@ Waivers are stored in `scripts/quality_waivers.json`:
   "waivers": [
     {
       "waiver_id": "W001",
-      "entry_key": "complexity:path/to/file.py::function_name",
+      "entry_key": "complexity:package.module.function_name",
       "base_ceiling": 12,
       "ceiling": 13,
       "owner": "user@example.com",
@@ -375,10 +389,9 @@ key that does not match its section's strict canonical syntax:
 
 - ``dead_code:allowed_messages:<nonempty-msg>:multiplicity`` — the message
   between the prefix and ``:multiplicity`` suffix must be non-empty.
-- ``complexity:<safe-repo-path>::<nonempty-symbol>`` — exactly one ``::``
-  separator between a validated repo-relative path and a non-empty symbol.
-  Extra or missing separators are rejected.  The path component is validated
-  by the same ``_validate_repo_relative_path`` used during baseline loading.
+- ``complexity:<module>.<qualname>`` — a dotted Python identifier path with
+  at least two segments.  Non-identifier characters (including ``/``, ``::``,
+  and control, surrogate, or DEL characters) are rejected.
 - ``file_length:<safe-repo-path>`` — exactly one validated repo-relative path
   after the prefix; extra colons are rejected.
 - ``duplication:allowed_blocks`` — exact literal match only.

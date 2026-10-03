@@ -24,13 +24,11 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA233 | Key the quality ratchet by qualified name and retire the rename waivers | post-v88 | 1 | — | Deferred |
-| SA234 | Retarget test patches to defining modules and remove facade back-imports | post-v88 | 2 | SA233 | Deferred |
+| SA234 | Retarget test patches to defining modules and remove facade back-imports | post-v88 | 2 | — | Deferred |
 | SA235 | Declare module UI paths in manifests and render host routes from discovery | post-v88 | 1 | — | Deferred |
 | SA236 | Make settings snapshots private and guard optional senders on `is_enabled()` | post-v88 | 3 | — | Deferred |
 | SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
 | SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | SA234 | Deferred |
-| SA239 | Derive blog and storage upload extensions from the validated image format | post-v88 | 2 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA235, SA236, SA237, SA238 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
@@ -41,10 +39,10 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA233 ──► SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA239 ──► SA234 ──► SA237
+Track 1: SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
+Track 2: SA234 ──► SA237
 Track 3: SA236 ──► SA238 ──► SA216
-     critical path: SA233 → SA234 → SA238 → SA191 → SA153
+     critical path: SA234 → SA238 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -55,7 +53,7 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** All three tracks can start now: SA233 (Track 1), SA239 (Track 2), and SA236
+**Parallel start.** All three tracks can start now: SA235 (Track 1), SA234 (Track 2), and SA236
 (Track 3). SA215's closing pass landed and closed inventory sections 1–41 (the two cells the
 seventh pass corrected are carried by SA235). The coherence audit's
 seventh pass (sections 42–47, D43–D48) is carried by SA235–SA238. Each begins by recording its
@@ -63,9 +61,8 @@ decision (proposed rules 41–46 in the
 [inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
 its own item, harness clause, and inventory section, and SA191 waits for all of them.
 
-**Off the critical path.** SA239 is a standalone S3 fix that ships in the next release that has it.
-SA216 follows SA215 because both change auth's views, orgs' removal path, and the
-user-referencing models.
+**Off the critical path.** SA216 follows SA215 because both change auth's views, orgs' removal
+path, and the user-referencing models.
 
 ### Track states
 
@@ -73,8 +70,8 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA233 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA239 | yes | yes | yes | **yes** | no |
+| 1 | SA235 | yes | yes | yes | **yes** | **yes** |
+| 2 | SA234 | yes | yes | yes | **yes** | no |
 | 3 | SA236 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -129,22 +126,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA233 — Key the quality ratchet by qualified name and retire the rename waivers.**
-
-  **Context:** `quality_baseline.json` keys complexity by file path, so every function SA231/SA232
-  moved needed a waiver whose only reason is "path changes, so the baseline key is a rename" (55
-  entries, all expiring 2027-03-31). `make quality` now fails, so each further split mints more
-  waivers, and the waivers lapse in a single batch on that expiry date (arch audit
-  `split-facades-patch-coupled`, first step).
-
-  **Acceptance:** complexity entries are keyed by `module.qualname`, so moving a function between
-  files neither regresses nor needs a waiver; file-length entries stay keyed by path. Every rename
-  waiver is deleted, and the remaining waivers carry a real reason. The monotonicity check rejects a
-  worsened qualname and accepts a pure move, with a control for each. `quality_tools.md` describes
-  the key.
-
-  **Surfaces:** `scripts/check_quality.sh`, `quality_baseline.json`, `quality_waivers.json`,
-  `check_quality_baseline_monotonicity.py` and its tests, and `quality_tools.md`.
+- [x] **SA233 — Key the quality ratchet by qualified name and retire the rename waivers.**
 
 - [ ] **SA234 — Retarget test patches to defining modules and remove facade back-imports.**
 
@@ -264,23 +246,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** loggers and facades in auth, backups, billing (Track 2), notifications, and orgs,
   with their tests; harness rule 19 and rule 28; release notes; decisions.
 
-- [ ] **SA239 — Derive blog and storage upload extensions from the validated image format.**
-
-  **Context:** `blog_media_upload_to` and storage's `build_upload_path` take the stored extension
-  from the client's filename. So a valid image named `x.html` is stored as `.html`, and on the
-  S3-compatible backend it is served as `text/html` from the media origin. SA226 widened who can
-  reach this from staff to any org member (tech audit `blog-upload-client-extension`, S3). The
-  severity rises to S2 if a deployment serves the bucket from the app's own site (tech audit
-  question 1).
-
-  **Acceptance:** both builders map Pillow's validated format to a fixed extension (JPEG→`.jpg`,
-  PNG→`.png`, WEBP→`.webp`, GIF→`.gif`). Blog API and storage tests upload a valid PNG named
-  `x.html` and assert that the stored name ends in `.png`. A harness clause rejects
-  `Path(<filename>).suffix` in an `upload_to` builder (tech audit tooling gap), with a control case.
-  Existing objects keep their names.
-
-  **Surfaces:** `blog/models.py`, `storage/_helpers.py` (and `validate_file_upload`'s return if the
-  format is carried), their tests; the harness (Track 3, through the queue).
+- [x] **SA239 — Derive blog and storage upload extensions from the validated image format.**
 
 - [x] **SA215 — Enforce the remaining module conventions and close the inventory.**
 

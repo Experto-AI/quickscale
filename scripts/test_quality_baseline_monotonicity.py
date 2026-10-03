@@ -282,23 +282,23 @@ def baseline_snapshot() -> dict[str, Any]:
         },
         "complexity": {
             "allowed_functions": {
-                "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section": {  # noqa: E501
-                    "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
+                "quickscale_core.schema.config_schema._validate_modules_section": {  # noqa: E501
+                    "module": "quickscale_core.schema.config_schema",
+                    "qualname": "_validate_modules_section",
+                    "type": "function",
                     "max_complexity": 11,
-                    "symbol": "_validate_modules_section",
-                    "type": "function",
                 },
-                "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_perform_module_embed": {  # noqa: E501
-                    "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                "quickscale_cli.commands.module_commands._perform_module_embed": {  # noqa: E501
+                    "module": "quickscale_cli.commands.module_commands",
+                    "qualname": "_perform_module_embed",
+                    "type": "function",
                     "max_complexity": 20,
-                    "symbol": "_perform_module_embed",
-                    "type": "function",
                 },
-                "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_update_single_module": {  # noqa: E501
-                    "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-                    "max_complexity": 17,
-                    "symbol": "_update_single_module",
+                "quickscale_cli.commands.module_commands._update_single_module": {  # noqa: E501
+                    "module": "quickscale_cli.commands.module_commands",
+                    "qualname": "_update_single_module",
                     "type": "function",
+                    "max_complexity": 17,
                 },
             },
         },
@@ -322,23 +322,23 @@ def current_baseline_with_increases() -> dict[str, Any]:
         },
         "complexity": {
             "allowed_functions": {
-                "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section": {  # noqa: E501
-                    "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
+                "quickscale_core.schema.config_schema._validate_modules_section": {  # noqa: E501
+                    "module": "quickscale_core.schema.config_schema",
+                    "qualname": "_validate_modules_section",
+                    "type": "function",
                     "max_complexity": 12,
-                    "symbol": "_validate_modules_section",
-                    "type": "function",
                 },
-                "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_perform_module_embed": {  # noqa: E501
-                    "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                "quickscale_cli.commands.module_commands._perform_module_embed": {  # noqa: E501
+                    "module": "quickscale_cli.commands.module_commands",
+                    "qualname": "_perform_module_embed",
+                    "type": "function",
                     "max_complexity": 22,
-                    "symbol": "_perform_module_embed",
-                    "type": "function",
                 },
-                "quickscale_cli/src/quickscale_cli/commands/module_commands.py::_update_single_module": {  # noqa: E501
-                    "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-                    "max_complexity": 18,
-                    "symbol": "_update_single_module",
+                "quickscale_cli.commands.module_commands._update_single_module": {  # noqa: E501
+                    "module": "quickscale_cli.commands.module_commands",
+                    "qualname": "_update_single_module",
                     "type": "function",
+                    "max_complexity": 18,
                 },
             },
         },
@@ -351,8 +351,8 @@ def current_baseline_with_increases() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-CLI_PATH = "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-CFG_PATH = "quickscale_core/src/quickscale_core/schema/config_schema.py"
+CLI_MODULE = "quickscale_cli.commands.module_commands"
+CFG_MODULE = "quickscale_core.schema.config_schema"
 
 
 def _build_dead_code_indexes(messages: list[str]) -> dict[str, int]:
@@ -387,7 +387,7 @@ class TestCompareIndexes:
         """Same baseline produces no violations."""
         old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(baseline_snapshot, "new")
-        results = _check._compare_indexes(old_idx, new_idx)
+        results = _check._compare_baselines(old_idx, new_idx)
         assert len(results) == 0
 
     def test_file_length_increase_is_fl_rise(self) -> None:
@@ -411,16 +411,16 @@ class TestCompareIndexes:
         """All SA114 increases are caught via index comparison."""
         old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(current_baseline_with_increases, "new")
-        results = _check._compare_indexes(old_idx, new_idx)
+        results = _check._compare_baselines(old_idx, new_idx)
         # SA125-DEC-001 retired the line-ceiling surface, so the historical
         # line-count cases are replayed as two surviving complexity increases.
         assert len(results) == 3  # complexity 11→12, 20→22, 17→18
 
         # CR-006: Exact canonical keys, not substring/any()
         expected_keys = [
-            f"complexity:{CLI_PATH}::_perform_module_embed",
-            f"complexity:{CLI_PATH}::_update_single_module",
-            f"complexity:{CFG_PATH}::_validate_modules_section",
+            f"complexity:{CLI_MODULE}._perform_module_embed",
+            f"complexity:{CLI_MODULE}._update_single_module",
+            f"complexity:{CFG_MODULE}._validate_modules_section",
         ]
         actual_keys = sorted(r["canonical_key"] for r in results)
         assert actual_keys == expected_keys, (
@@ -445,7 +445,7 @@ class TestCompareIndexes:
         new["dead_code"]["allowed_messages"].append("new/file.py: unused var 'x'")
         old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(new, "new")
-        results = _check._compare_indexes(old_idx, new_idx)
+        results = _check._compare_baselines(old_idx, new_idx)
         # One new dead-code violation (multiplicity increased from 0 to 1)
         assert len(results) == 1
         r = results[0]
@@ -462,27 +462,25 @@ class TestCompareIndexes:
     def test_reduced_passes(self, baseline_snapshot: dict) -> None:
         """Decreased values are not violations."""
         new = json.loads(json.dumps(baseline_snapshot))
-        key = (
-            "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section"
-        )
+        key = "quickscale_core.schema.config_schema._validate_modules_section"
         new["complexity"]["allowed_functions"][key]["max_complexity"] = 10
         old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(new, "new")
-        results = _check._compare_indexes(old_idx, new_idx)
+        results = _check._compare_baselines(old_idx, new_idx)
         assert len(results) == 0
 
     def test_new_key_is_violation(self, baseline_snapshot: dict) -> None:
         """A new key (old missing = 0, new > 0) is a violation."""
         new = json.loads(json.dumps(baseline_snapshot))
-        new["complexity"]["allowed_functions"]["new.py::func"] = {
-            "file": "new.py",
-            "max_complexity": 5,
-            "symbol": "func",
+        new["complexity"]["allowed_functions"]["new.func"] = {
+            "module": "new",
+            "qualname": "func",
             "type": "function",
+            "max_complexity": 5,
         }
         old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(new, "new")
-        results = _check._compare_indexes(old_idx, new_idx)
+        results = _check._compare_baselines(old_idx, new_idx)
         complexity_increases = [r for r in results if r["section"] == "complexity"]
         assert len(complexity_increases) == 1
         r = next(r for r in complexity_increases if r["old_value"] == 0)
@@ -494,7 +492,7 @@ class TestCompareIndexes:
         new["complexity"]["allowed_functions"] = {}
         old_idx = _check._validate_baseline_structure(baseline_snapshot, "old")
         new_idx = _check._validate_baseline_structure(new, "new")
-        results = _check._compare_indexes(old_idx, new_idx)
+        results = _check._compare_baselines(old_idx, new_idx)
         assert results == [], "Removing every key must never be a violation"
 
     def test_error_codes_match_section(self) -> None:
@@ -503,7 +501,7 @@ class TestCompareIndexes:
             {},
             {
                 "dead_code:allowed_messages:msg:a:multiplicity": 2,
-                "complexity:a.py::f": 5,
+                "complexity:a.f": 5,
                 "duplication:allowed_blocks": 3,
             },
         )
@@ -514,6 +512,221 @@ class TestCompareIndexes:
             ("complexity", "CC-RISE"),
             ("duplication", "DP-RISE"),
         }, f"SA125-DEC-001: large_files must not be a recognized section; got {codes}"
+
+
+class TestComplexityMoves:
+    """SA233: complexity entries are keyed by module.qualname; moves are accepted."""
+
+    @staticmethod
+    def _baseline(entries: dict[str, dict[str, Any]], source: str) -> Any:
+        data = {
+            "schema_version": 1,
+            "dead_code": {"allowed_messages": []},
+            "complexity": {"allowed_functions": entries},
+            "duplication": {"allowed_blocks": 0},
+        }
+        return _check._validate_baseline_structure(data, source)
+
+    @staticmethod
+    def _entry(module: str, qualname: str, max_complexity: int) -> dict[str, Any]:
+        return {
+            "module": module,
+            "qualname": qualname,
+            "type": "function",
+            "max_complexity": max_complexity,
+        }
+
+    def test_pure_move_is_accepted(self) -> None:
+        """A function that moved between files passes at its old ceiling."""
+        old = self._baseline(
+            {"pkg.old_location.helper": self._entry("pkg.old_location", "helper", 12)},
+            _check._SOURCE_MERGE_BASE,
+        )
+        new = self._baseline(
+            {"pkg.new_location.helper": self._entry("pkg.new_location", "helper", 12)},
+            _check._SOURCE_CURRENT,
+        )
+        assert _check._compare_baselines(old, new) == []
+
+    def test_pure_move_may_reduce(self) -> None:
+        """A move that reduced complexity passes."""
+        old = self._baseline(
+            {"pkg.old_location.helper": self._entry("pkg.old_location", "helper", 12)},
+            _check._SOURCE_MERGE_BASE,
+        )
+        new = self._baseline(
+            {"pkg.new_location.helper": self._entry("pkg.new_location", "helper", 9)},
+            _check._SOURCE_CURRENT,
+        )
+        assert _check._compare_baselines(old, new) == []
+
+    def test_worsened_move_is_rejected_against_old_ceiling(self) -> None:
+        """A move that increased complexity is an increase, not a rename."""
+        old = self._baseline(
+            {"pkg.old_location.helper": self._entry("pkg.old_location", "helper", 12)},
+            _check._SOURCE_MERGE_BASE,
+        )
+        new = self._baseline(
+            {"pkg.new_location.helper": self._entry("pkg.new_location", "helper", 14)},
+            _check._SOURCE_CURRENT,
+        )
+        assert _check._compare_baselines(old, new) == [
+            {
+                "section": "complexity",
+                "canonical_key": "complexity:pkg.new_location.helper",
+                "old_value": 12,
+                "new_value": 14,
+                "error_code": "CC-RISE",
+            }
+        ]
+
+    def test_move_matches_the_longest_module_prefix(self) -> None:
+        """The closest old module wins when several entries share a qualname."""
+        old = self._baseline(
+            {
+                "pkg.alpha.helper": self._entry("pkg.alpha", "helper", 20),
+                "pkg.beta.helper": self._entry("pkg.beta", "helper", 10),
+            },
+            _check._SOURCE_MERGE_BASE,
+        )
+        new = self._baseline(
+            {"pkg.beta.moved.helper": self._entry("pkg.beta.moved", "helper", 12)},
+            _check._SOURCE_CURRENT,
+        )
+        results = _check._compare_baselines(old, new)
+        assert results == [
+            {
+                "section": "complexity",
+                "canonical_key": "complexity:pkg.beta.moved.helper",
+                "old_value": 10,
+                "new_value": 12,
+                "error_code": "CC-RISE",
+            }
+        ]
+
+    def test_stationary_entry_is_not_a_move_source(self) -> None:
+        """An old entry still present under its own key is never consumed."""
+        old = self._baseline(
+            {"pkg.alpha.helper": self._entry("pkg.alpha", "helper", 20)},
+            _check._SOURCE_MERGE_BASE,
+        )
+        new = self._baseline(
+            {
+                "pkg.alpha.helper": self._entry("pkg.alpha", "helper", 20),
+                "pkg.beta.helper": self._entry("pkg.beta", "helper", 15),
+            },
+            _check._SOURCE_CURRENT,
+        )
+        results = _check._compare_baselines(old, new)
+        assert results == [
+            {
+                "section": "complexity",
+                "canonical_key": "complexity:pkg.beta.helper",
+                "old_value": 0,
+                "new_value": 15,
+                "error_code": "CC-RISE",
+            }
+        ]
+
+    def test_legacy_merge_base_keys_are_canonicalized(self) -> None:
+        """A legacy path::symbol merge-base entry pairs with a moved qualname."""
+        legacy_key = "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_helper"
+        old = self._baseline(
+            {
+                legacy_key: {
+                    "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
+                    "symbol": "_helper",
+                    "type": "function",
+                    "max_complexity": 12,
+                },
+            },
+            _check._SOURCE_MERGE_BASE,
+        )
+        pure_move = self._baseline(
+            {
+                "quickscale_cli.commands._finalize._helper": self._entry(
+                    "quickscale_cli.commands._finalize", "_helper", 12
+                ),
+            },
+            _check._SOURCE_CURRENT,
+        )
+        assert _check._compare_baselines(old, pure_move) == []
+
+        worsened = self._baseline(
+            {
+                "quickscale_cli.commands._finalize._helper": self._entry(
+                    "quickscale_cli.commands._finalize", "_helper", 15
+                ),
+            },
+            _check._SOURCE_CURRENT,
+        )
+        assert _check._compare_baselines(old, worsened) == [
+            {
+                "section": "complexity",
+                "canonical_key": "complexity:quickscale_cli.commands._finalize._helper",
+                "old_value": 12,
+                "new_value": 15,
+                "error_code": "CC-RISE",
+            }
+        ]
+
+    def test_current_baseline_rejects_legacy_keys(self) -> None:
+        """The current baseline must use module.qualname keys."""
+        legacy_key = "quickscale_cli/src/quickscale_cli/commands/apply_command.py::_helper"
+        with pytest.raises(RuntimeError, match="legacy path::symbol"):
+            self._baseline(
+                {
+                    legacy_key: {
+                        "file": "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
+                        "symbol": "_helper",
+                        "type": "function",
+                        "max_complexity": 12,
+                    },
+                },
+                _check._SOURCE_CURRENT,
+            )
+
+    def test_key_must_equal_module_qualname(self) -> None:
+        """A canonical entry whose key differs from module.qualname is rejected."""
+        with pytest.raises(RuntimeError, match="must equal module.qualname"):
+            self._baseline(
+                {"pkg.other.helper": self._entry("pkg.mod", "helper", 12)},
+                _check._SOURCE_CURRENT,
+            )
+
+    def test_non_identifier_module_rejected(self) -> None:
+        """A module that is not a dotted identifier path is rejected."""
+        with pytest.raises(RuntimeError, match="dotted Python identifier"):
+            self._baseline(
+                {"1pkg.helper": self._entry("1pkg", "helper", 12)},
+                _check._SOURCE_CURRENT,
+            )
+
+    def test_checked_in_baseline_uses_module_qualname_keys(self) -> None:
+        """The tracked baseline and ledger use the module.qualname form."""
+        baseline = json.loads(
+            (_REPO_ROOT / "scripts" / "quality_baseline.json").read_text(encoding="utf-8")
+        )
+        functions = baseline["complexity"]["allowed_functions"]
+        assert functions, "the tracked baseline must list complexity entries"
+        for key, entry in functions.items():
+            assert key == f"{entry['module']}.{entry['qualname']}", key
+            assert "file" not in entry, key
+            assert "symbol" not in entry, key
+
+        ledger = json.loads(
+            (_REPO_ROOT / "scripts" / "quality_waivers.json").read_text(encoding="utf-8")
+        )
+        complexity_waivers = [
+            waiver for waiver in ledger["waivers"] if waiver["entry_key"].startswith("complexity:")
+        ]
+        assert complexity_waivers, "the tracked ledger must carry complexity waivers"
+        for waiver in complexity_waivers:
+            assert _check._parse_entry_key(waiver["entry_key"]) == (
+                "complexity",
+                waiver["entry_key"],
+            )
+            assert "path changes" not in waiver["reason"], waiver["waiver_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -530,7 +743,7 @@ def _make_waiver(**overrides: Any) -> dict[str, Any]:
     """
     base = {
         "waiver_id": "W001",
-        "entry_key": "complexity:quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section",  # noqa: E501
+        "entry_key": "complexity:quickscale_core.schema.config_schema._validate_modules_section",  # noqa: E501
         "base_ceiling": 11,
         "ceiling": 12,
         "owner": "test@example.com",
@@ -622,14 +835,14 @@ class TestWaiverValidation:
 
     def test_malformed_entry_key_del(self, now: date, known_anchors: set[str]) -> None:
         """An entry_key containing DEL (0x7F) produces malformed error."""
-        w = _make_waiver(entry_key="complexity:src/file.py::func\x7fname")
+        w = _make_waiver(entry_key="complexity:file.func\x7fname")
         err = _check._validate_waiver_row(w, 0, now, known_anchors)
         assert err is not None
         assert "must not contain control" in err
 
     def test_malformed_entry_key_surrogate(self, now: date, known_anchors: set[str]) -> None:
         """An entry_key containing surrogate chars produces malformed error."""
-        w = _make_waiver(entry_key="complexity:src/file.py::func\ud800name")
+        w = _make_waiver(entry_key="complexity:file.func\ud800name")
         err = _check._validate_waiver_row(w, 0, now, known_anchors)
         assert err is not None
         assert "must not contain control" in err
@@ -681,9 +894,9 @@ class TestFreeTextValidation:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "file.py::bad\tfunc": {
-                        "file": "file.py",
-                        "symbol": "bad\tfunc",
+                    "file.bad\tfunc": {
+                        "module": "file",
+                        "qualname": "bad\tfunc",
                         "type": "function",
                         "max_complexity": 5,
                     }
@@ -706,21 +919,21 @@ class TestWaiverEvaluation:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section",  # noqa: E501
+                "canonical_key": "complexity:quickscale_core.schema.config_schema._validate_modules_section",  # noqa: E501
                 "old_value": 11,
                 "new_value": 12,
                 "error_code": "CC-RISE",
             },
             {
                 "section": "complexity",
-                "canonical_key": f"complexity:{CLI_PATH}::_perform_module_embed",
+                "canonical_key": f"complexity:{CLI_MODULE}._perform_module_embed",
                 "old_value": 20,
                 "new_value": 22,
                 "error_code": "CC-RISE",
             },
             {
                 "section": "complexity",
-                "canonical_key": f"complexity:{CLI_PATH}::_update_single_module",
+                "canonical_key": f"complexity:{CLI_MODULE}._update_single_module",
                 "old_value": 17,
                 "new_value": 18,
                 "error_code": "CC-RISE",
@@ -729,7 +942,7 @@ class TestWaiverEvaluation:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section",  # noqa: E501
+                "entry_key": "complexity:quickscale_core.schema.config_schema._validate_modules_section",  # noqa: E501
                 "base_ceiling": 11,
                 "ceiling": 12,
                 "owner": "dev@example.com",
@@ -739,7 +952,7 @@ class TestWaiverEvaluation:
             },
             {
                 "waiver_id": "W002",
-                "entry_key": f"complexity:{CLI_PATH}::_perform_module_embed",
+                "entry_key": f"complexity:{CLI_MODULE}._perform_module_embed",
                 "base_ceiling": 20,
                 "ceiling": 22,
                 "owner": "dev@example.com",
@@ -749,7 +962,7 @@ class TestWaiverEvaluation:
             },
             {
                 "waiver_id": "W003",
-                "entry_key": f"complexity:{CLI_PATH}::_update_single_module",
+                "entry_key": f"complexity:{CLI_MODULE}._update_single_module",
                 "base_ceiling": 17,
                 "ceiling": 18,
                 "owner": "dev@example.com",
@@ -775,7 +988,7 @@ class TestWaiverEvaluation:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:some/file.py::func",
+                "canonical_key": "complexity:some.file.func",
                 "old_value": 5,
                 "new_value": 10,
                 "error_code": "CC-RISE",
@@ -791,7 +1004,7 @@ class TestWaiverEvaluation:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:some/file.py::func",
+                "canonical_key": "complexity:some.file.func",
                 "old_value": 5,
                 "new_value": 20,
                 "error_code": "CC-RISE",
@@ -800,7 +1013,7 @@ class TestWaiverEvaluation:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:some/file.py::func",
+                "entry_key": "complexity:some.file.func",
                 "base_ceiling": 5,
                 "ceiling": 15,
                 "owner": "dev@example.com",
@@ -816,9 +1029,9 @@ class TestWaiverEvaluation:
                 "waiver_id": "W001",
                 "status": "over_ceiling",
                 "error": (
-                    "current value 20 exceeds waiver ceiling 15 for complexity:some/file.py::func"
+                    "current value 20 exceeds waiver ceiling 15 for complexity:some.file.func"
                 ),
-                "matches": ["complexity:some/file.py::func"],
+                "matches": ["complexity:some.file.func"],
                 "waiver_index": 0,
                 "base_ceiling": 5,
                 "ceiling": 15,
@@ -836,7 +1049,7 @@ class TestWaiverEvaluation:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:some/file.py::func",
+                "canonical_key": "complexity:some.file.func",
                 "old_value": 5,
                 "new_value": 10,
                 "error_code": "CC-RISE",
@@ -845,7 +1058,7 @@ class TestWaiverEvaluation:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:some/file.py::func",
+                "entry_key": "complexity:some.file.func",
                 "base_ceiling": 3,  # wrong — actual old_value is 5
                 "ceiling": 10,
                 "owner": "dev@example.com",
@@ -860,8 +1073,8 @@ class TestWaiverEvaluation:
             {
                 "waiver_id": "W001",
                 "status": "stale_base",
-                "error": ("base_ceiling 3 != merge-base value 5 for complexity:some/file.py::func"),
-                "matches": ["complexity:some/file.py::func"],
+                "error": ("base_ceiling 3 != merge-base value 5 for complexity:some.file.func"),
+                "matches": ["complexity:some.file.func"],
                 "waiver_index": 0,
                 "base_ceiling": 3,
                 "ceiling": 10,
@@ -880,7 +1093,7 @@ class TestWaiverEvaluation:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:some/nonexistent.py::func",
+                "entry_key": "complexity:some.nonexistent.func",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev@example.com",
@@ -896,9 +1109,9 @@ class TestWaiverEvaluation:
                 "waiver_id": "W001",
                 "status": "orphan",
                 "warning": (
-                    "entry_key 'complexity:some/nonexistent.py::func' has no corresponding increase"
+                    "entry_key 'complexity:some.nonexistent.func' has no corresponding increase"
                 ),
-                "matches": ["complexity:some/nonexistent.py::func"],
+                "matches": ["complexity:some.nonexistent.func"],
                 "waiver_index": 0,
                 "base_ceiling": 5,
                 "ceiling": 10,
@@ -913,7 +1126,7 @@ class TestWaiverEvaluation:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:some/file.py::func",
+                "canonical_key": "complexity:some.file.func",
                 "old_value": 5,
                 "new_value": 10,
                 "error_code": "CC-RISE",
@@ -922,7 +1135,7 @@ class TestWaiverEvaluation:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:some/file.py::func",
+                "entry_key": "complexity:some.file.func",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev@example.com",
@@ -954,7 +1167,7 @@ class TestWaiverEvaluation:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:some/file.py::func",
+                "canonical_key": "complexity:some.file.func",
                 "old_value": 5,
                 "new_value": 10,
                 "error_code": "CC-RISE",
@@ -963,7 +1176,7 @@ class TestWaiverEvaluation:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:some/file.py::func",
+                "entry_key": "complexity:some.file.func",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev@example.com",
@@ -973,7 +1186,7 @@ class TestWaiverEvaluation:
             },
             {
                 "waiver_id": "W002",
-                "entry_key": "complexity:some/file.py::func",  # same key
+                "entry_key": "complexity:some.file.func",  # same key
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev@example.com",
@@ -998,7 +1211,7 @@ class TestWaiverEvaluation:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:some/file.py::func1",
+                "entry_key": "complexity:some.file.func1",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev@example.com",
@@ -1008,7 +1221,7 @@ class TestWaiverEvaluation:
             },
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:some/file.py::func2",
+                "entry_key": "complexity:some.file.func2",
                 "base_ceiling": 3,
                 "ceiling": 8,
                 "owner": "dev@example.com",
@@ -1133,7 +1346,7 @@ class TestLoadWaivers:
             "waivers": [
                 {
                     "waiver_id": "W001",
-                    "entry_key": "complexity:x.py::f",
+                    "entry_key": "complexity:x.f",
                     "base_ceiling": 5,
                     "ceiling": 10,
                     "owner": "dev",
@@ -1174,7 +1387,7 @@ class TestValidateBaselineStructure:
 
     def test_valid_baseline_returns_indexes(self, baseline_snapshot: dict) -> None:
         """A valid baseline returns ceiling indexes with expected keys."""
-        indexes = _check._validate_baseline_structure(baseline_snapshot, "test")
+        indexes = _check._validate_baseline_structure(baseline_snapshot, "test").indexes
         assert indexes == {
             (
                 "dead_code:allowed_messages:quickscale_cli/src/quickscale_cli/commands/"
@@ -1188,18 +1401,9 @@ class TestValidateBaselineStructure:
                 "dead_code:allowed_messages:quickscale_modules/orgs/src/"
                 "quickscale_modules_orgs/checks.py: unused variable 'app_configs':multiplicity"
             ): 2,
-            (
-                "complexity:quickscale_core/src/quickscale_core/schema/"
-                "config_schema.py::_validate_modules_section"
-            ): 11,
-            (
-                "complexity:quickscale_cli/src/quickscale_cli/commands/"
-                "module_commands.py::_perform_module_embed"
-            ): 20,
-            (
-                "complexity:quickscale_cli/src/quickscale_cli/commands/"
-                "module_commands.py::_update_single_module"
-            ): 17,
+            ("complexity:quickscale_core.schema.config_schema._validate_modules_section"): 11,
+            ("complexity:quickscale_cli.commands.module_commands._perform_module_embed"): 20,
+            ("complexity:quickscale_cli.commands.module_commands._update_single_module"): 17,
             "duplication:allowed_blocks": 0,
         }
 
@@ -1272,9 +1476,9 @@ class TestValidateBaselineStructure:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "f.py::func": {
-                        "file": "f.py",
-                        "symbol": "func",
+                    "f.func": {
+                        "module": "f",
+                        "qualname": "func",
                         "type": "function",
                         "max_complexity": 5.5,
                     }
@@ -1293,9 +1497,9 @@ class TestValidateBaselineStructure:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "f.py::func": {
-                        "file": "f.py",
-                        "symbol": "func",
+                    "f.func": {
+                        "module": "f",
+                        "qualname": "func",
                         "type": "function",
                         "max_complexity": True,
                     }
@@ -1314,9 +1518,9 @@ class TestValidateBaselineStructure:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "f.py::func": {
-                        "file": "f.py",
-                        "symbol": "func",
+                    "f.func": {
+                        "module": "f",
+                        "qualname": "func",
                         "type": "function",
                         "max_complexity": -1,
                     }
@@ -1335,9 +1539,9 @@ class TestValidateBaselineStructure:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "f.py::func": {
-                        "file": "f.py",
-                        "symbol": "func",
+                    "f.func": {
+                        "module": "f",
+                        "qualname": "func",
                         "type": "unknown_type",
                         "max_complexity": 5,
                     }
@@ -1364,7 +1568,7 @@ class TestValidateBaselineStructure:
             "large_files": {"allowed_files": {"big.py": {"max_lines": 1234}}},
             "duplication": {"allowed_blocks": 0},
         }
-        indexes = _check._validate_baseline_structure(data, "test")
+        indexes = _check._validate_baseline_structure(data, "test").indexes
         assert indexes == {"duplication:allowed_blocks": 0}, (
             f"large_files must contribute no index keys; got {indexes}"
         )
@@ -1385,7 +1589,7 @@ class TestValidateBaselineStructure:
             },
             "duplication": {"allowed_blocks": 0},
         }
-        indexes = _check._validate_baseline_structure(data, "test")
+        indexes = _check._validate_baseline_structure(data, "test").indexes
         assert indexes == {
             "file_length:quickscale_core/src/quickscale_core/big.py": 900,
             "duplication:allowed_blocks": 0,
@@ -1586,7 +1790,7 @@ class TestStateMachine:
             {
                 # Missing required 'owner' field
                 "waiver_id": "W001",
-                "entry_key": "complexity:x.py::f",
+                "entry_key": "complexity:x.f",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "reason": "test",
@@ -1597,7 +1801,7 @@ class TestStateMachine:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:x.py::f",
+                "canonical_key": "complexity:x.f",
                 "old_value": 5,
                 "new_value": 10,
                 "error_code": "CC-RISE",
@@ -1612,7 +1816,7 @@ class TestStateMachine:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:x.py::f1",
+                "entry_key": "complexity:x.f1",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev",
@@ -1622,7 +1826,7 @@ class TestStateMachine:
             },
             {
                 "waiver_id": "W001",  # duplicate ID
-                "entry_key": "complexity:x.py::f2",
+                "entry_key": "complexity:x.f2",
                 "base_ceiling": 3,
                 "ceiling": 8,
                 "owner": "dev",
@@ -1641,7 +1845,7 @@ class TestStateMachine:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:nonexistent.py::f",
+                "entry_key": "complexity:nonexistent.f",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev",
@@ -1659,7 +1863,7 @@ class TestStateMachine:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:nonexistent.py::f",
+                "entry_key": "complexity:nonexistent.f",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev",
@@ -1677,7 +1881,7 @@ class TestStateMachine:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:x.py::f",
+                "entry_key": "complexity:x.f",
                 "base_ceiling": 999,  # wrong — actual old is 5
                 "ceiling": 10,
                 "owner": "dev",
@@ -1689,7 +1893,7 @@ class TestStateMachine:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:x.py::f",
+                "canonical_key": "complexity:x.f",
                 "old_value": 5,
                 "new_value": 20,  # also over ceiling
                 "error_code": "CC-RISE",
@@ -1707,7 +1911,7 @@ class TestStateMachine:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:x.py::f",
+                "entry_key": "complexity:x.f",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev",
@@ -1719,7 +1923,7 @@ class TestStateMachine:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:x.py::f",
+                "canonical_key": "complexity:x.f",
                 "old_value": 5,
                 "new_value": 10,
                 "error_code": "CC-RISE",
@@ -1734,7 +1938,7 @@ class TestStateMachine:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:a.py::f",
+                "entry_key": "complexity:a.f",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev",
@@ -1744,7 +1948,7 @@ class TestStateMachine:
             },
             {
                 "waiver_id": "W002",
-                "entry_key": "complexity:b.py::g",
+                "entry_key": "complexity:b.g",
                 "base_ceiling": 3,
                 "ceiling": 8,
                 "owner": "dev",
@@ -1756,14 +1960,14 @@ class TestStateMachine:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:a.py::f",
+                "canonical_key": "complexity:a.f",
                 "old_value": 5,
                 "new_value": 10,
                 "error_code": "CC-RISE",
             },
             {
                 "section": "complexity",
-                "canonical_key": "complexity:b.py::g",
+                "canonical_key": "complexity:b.g",
                 "old_value": 3,
                 "new_value": 8,
                 "error_code": "CC-RISE",
@@ -1782,7 +1986,7 @@ class TestStateMachine:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:x.py::f",
+                "entry_key": "complexity:x.f",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev",
@@ -1794,7 +1998,7 @@ class TestStateMachine:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:x.py::f",
+                "canonical_key": "complexity:x.f",
                 "old_value": 5,
                 "new_value": 10,
                 "error_code": "CC-RISE",
@@ -1811,7 +2015,7 @@ class TestStateMachine:
         waivers = [
             {
                 "waiver_id": "W001",
-                "entry_key": "complexity:x.py::f",
+                "entry_key": "complexity:x.f",
                 "base_ceiling": 5,
                 "ceiling": 10,
                 "owner": "dev",
@@ -1823,7 +2027,7 @@ class TestStateMachine:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:x.py::f",
+                "canonical_key": "complexity:x.f",
                 "old_value": 5,
                 "new_value": 10,
                 "error_code": "CC-RISE",
@@ -1838,7 +2042,7 @@ class TestStateMachine:
         violations = [
             {
                 "section": "complexity",
-                "canonical_key": "complexity:uncovered.py::f",
+                "canonical_key": "complexity:uncovered.f",
                 "old_value": 5,
                 "new_value": 10,
                 "error_code": "CC-RISE",
@@ -2196,7 +2400,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-ANCHOR-001",
-                            "entry_key": "complexity:nonexistent.py::func",
+                            "entry_key": "complexity:nonexistent.func",
                             "base_ceiling": 5,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -2246,11 +2450,11 @@ class TestShellIntegration:
         current["file_length"] = {"allowed_files": {}}
         current["duplication"] = {"allowed_blocks": 0}
         current["complexity"]["allowed_functions"] = {
-            "stale_base_test.py::func": {
-                "file": "stale_base_test.py",
-                "max_complexity": 10,
-                "symbol": "func",
+            "stale_base_test.func": {
+                "module": "stale_base_test",
+                "qualname": "func",
                 "type": "function",
+                "max_complexity": 10,
             },
         }
         temp_baseline = tmp_path / "baseline_stale.json"
@@ -2265,7 +2469,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-STALE-001",
-                            "entry_key": "complexity:stale_base_test.py::func",
+                            "entry_key": "complexity:stale_base_test.func",
                             "base_ceiling": 999,  # wrong — actual old value is 0
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -2298,7 +2502,7 @@ class TestShellIntegration:
                 _canonical_record(
                     error_code="CC-RISE",
                     section="complexity",
-                    canonical_key="complexity:stale_base_test.py::func",
+                    canonical_key="complexity:stale_base_test.func",
                     old_value=0,
                     new_value=10,
                     waiver_id="W-STALE-001",
@@ -2321,11 +2525,11 @@ class TestShellIntegration:
         current["file_length"] = {"allowed_files": {}}
         current["duplication"] = {"allowed_blocks": 0}
         current["complexity"]["allowed_functions"] = {
-            "over_ceiling_test.py::func": {
-                "file": "over_ceiling_test.py",
-                "max_complexity": 20,
-                "symbol": "func",
+            "over_ceiling_test.func": {
+                "module": "over_ceiling_test",
+                "qualname": "func",
                 "type": "function",
+                "max_complexity": 20,
             },
         }
         temp_baseline = tmp_path / "baseline_over.json"
@@ -2340,7 +2544,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-OVER-001",
-                            "entry_key": "complexity:over_ceiling_test.py::func",
+                            "entry_key": "complexity:over_ceiling_test.func",
                             "base_ceiling": 0,
                             "ceiling": 5,  # too low — actual value is 20
                             "owner": "test@example.com",
@@ -2373,7 +2577,7 @@ class TestShellIntegration:
                 _canonical_record(
                     error_code="CC-RISE",
                     section="complexity",
-                    canonical_key="complexity:over_ceiling_test.py::func",
+                    canonical_key="complexity:over_ceiling_test.func",
                     old_value=0,
                     new_value=20,
                     waiver_id="W-OVER-001",
@@ -2396,11 +2600,11 @@ class TestShellIntegration:
         current["file_length"] = {"allowed_files": {}}
         current["duplication"] = {"allowed_blocks": 0}
         current["complexity"]["allowed_functions"] = {
-            "expired_test.py::func": {
-                "file": "expired_test.py",
-                "max_complexity": 10,
-                "symbol": "func",
+            "expired_test.func": {
+                "module": "expired_test",
+                "qualname": "func",
                 "type": "function",
+                "max_complexity": 10,
             },
         }
         temp_baseline = tmp_path / "baseline_expired.json"
@@ -2415,7 +2619,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-EXP-001",
-                            "entry_key": "complexity:expired_test.py::func",
+                            "entry_key": "complexity:expired_test.func",
                             "base_ceiling": 0,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -2448,7 +2652,7 @@ class TestShellIntegration:
                 _canonical_record(
                     error_code="CC-RISE",
                     section="complexity",
-                    canonical_key="complexity:expired_test.py::func",
+                    canonical_key="complexity:expired_test.func",
                     old_value=0,
                     new_value=10,
                     decision_ref="<required: add waiver or revert increase>",
@@ -2475,11 +2679,11 @@ class TestShellIntegration:
         current["file_length"] = {"allowed_files": {}}
         current["duplication"] = {"allowed_blocks": 0}
         current["complexity"]["allowed_functions"] = {
-            "dup_both.py::func": {
-                "file": "dup_both.py",
-                "max_complexity": 10,
-                "symbol": "func",
+            "dup_both.func": {
+                "module": "dup_both",
+                "qualname": "func",
                 "type": "function",
+                "max_complexity": 10,
             },
         }
         temp_baseline = tmp_path / "baseline_dup_both.json"
@@ -2494,7 +2698,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-DUP-BOTH",
-                            "entry_key": "complexity:dup_both.py::func",
+                            "entry_key": "complexity:dup_both.func",
                             "base_ceiling": 0,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -2504,7 +2708,7 @@ class TestShellIntegration:
                         },
                         {
                             "waiver_id": "W-DUP-BOTH",
-                            "entry_key": "complexity:dup_both.py::func",
+                            "entry_key": "complexity:dup_both.func",
                             "base_ceiling": 0,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -2537,7 +2741,7 @@ class TestShellIntegration:
                 _canonical_record(
                     error_code="CC-RISE",
                     section="complexity",
-                    canonical_key="complexity:dup_both.py::func",
+                    canonical_key="complexity:dup_both.func",
                     old_value=0,
                     new_value=10,
                     decision_ref="<required: add waiver or revert increase>",
@@ -2736,11 +2940,11 @@ class TestShellIntegration:
             {
                 "schema_version": 1,
                 "dead_code": {"allowed_messages": []},
-                "complexity": {"allowed_functions": {"x.py::f": "not-a-dict"}},
+                "complexity": {"allowed_functions": {"x.f": "not-a-dict"}},
                 "large_files": {"allowed_files": {}},
                 "duplication": {"allowed_blocks": 0},
             },
-            "complexity.allowed_functions['x.py::f'] must be a dict (got str)",
+            "complexity.allowed_functions['x.f'] must be a dict (got str)",
         ),
         (
             "invalid_complexity_type",
@@ -2749,9 +2953,9 @@ class TestShellIntegration:
                 "dead_code": {"allowed_messages": []},
                 "complexity": {
                     "allowed_functions": {
-                        "x.py::f": {
-                            "file": "x.py",
-                            "symbol": "f",
+                        "x.f": {
+                            "module": "x",
+                            "qualname": "f",
                             "type": "unknown",
                             "max_complexity": 5,
                         }
@@ -2760,7 +2964,7 @@ class TestShellIntegration:
                 "large_files": {"allowed_files": {}},
                 "duplication": {"allowed_blocks": 0},
             },
-            "complexity.allowed_functions['x.py::f'].type must be one of "
+            "complexity.allowed_functions['x.f'].type must be one of "
             "['class', 'function', 'method'] (got 'unknown')",
         ),
         (
@@ -2770,9 +2974,9 @@ class TestShellIntegration:
                 "dead_code": {"allowed_messages": []},
                 "complexity": {
                     "allowed_functions": {
-                        "x.py::f": {
-                            "file": "x.py",
-                            "symbol": "f",
+                        "x.f": {
+                            "module": "x",
+                            "qualname": "f",
                             "type": "function",
                             "max_complexity": 5.5,
                         }
@@ -2781,7 +2985,7 @@ class TestShellIntegration:
                 "large_files": {"allowed_files": {}},
                 "duplication": {"allowed_blocks": 0},
             },
-            "complexity.allowed_functions['x.py::f'].max_complexity must be a "
+            "complexity.allowed_functions['x.f'].max_complexity must be a "
             "non-negative integer (got float)",
         ),
         (
@@ -2791,9 +2995,9 @@ class TestShellIntegration:
                 "dead_code": {"allowed_messages": []},
                 "complexity": {
                     "allowed_functions": {
-                        "x.py::f": {
-                            "file": "x.py",
-                            "symbol": "f",
+                        "x.f": {
+                            "module": "x",
+                            "qualname": "f",
                             "type": "function",
                             "max_complexity": -1,
                         }
@@ -2802,7 +3006,7 @@ class TestShellIntegration:
                 "large_files": {"allowed_files": {}},
                 "duplication": {"allowed_blocks": 0},
             },
-            "complexity.allowed_functions['x.py::f'].max_complexity must be a "
+            "complexity.allowed_functions['x.f'].max_complexity must be a "
             "non-negative integer (got int)",
         ),
         (
@@ -2812,9 +3016,9 @@ class TestShellIntegration:
                 "dead_code": {"allowed_messages": []},
                 "complexity": {
                     "allowed_functions": {
-                        "x.py::f": {
-                            "file": "x.py",
-                            "symbol": "f",
+                        "x.f": {
+                            "module": "x",
+                            "qualname": "f",
                             "type": "function",
                             "max_complexity": True,
                         }
@@ -2823,7 +3027,7 @@ class TestShellIntegration:
                 "large_files": {"allowed_files": {}},
                 "duplication": {"allowed_blocks": 0},
             },
-            "complexity.allowed_functions['x.py::f'].max_complexity must be a "
+            "complexity.allowed_functions['x.f'].max_complexity must be a "
             "non-negative integer (got bool)",
         ),
         (
@@ -2912,11 +3116,11 @@ class TestShellIntegration:
         "empty_string_in_allowed_messages": "dead_code.allowed_messages[0]",
         "non_dict_complexity": "complexity",
         "non_dict_allowed_functions": "complexity.allowed_functions",
-        "non_dict_complexity_entry": "complexity.allowed_functions['x.py::f']",
-        "invalid_complexity_type": "complexity.allowed_functions['x.py::f'].type",
-        "float_max_complexity": "complexity.allowed_functions['x.py::f'].max_complexity",
-        "negative_max_complexity": "complexity.allowed_functions['x.py::f'].max_complexity",
-        "bool_max_complexity": "complexity.allowed_functions['x.py::f'].max_complexity",
+        "non_dict_complexity_entry": "complexity.allowed_functions['x.f']",
+        "invalid_complexity_type": "complexity.allowed_functions['x.f'].type",
+        "float_max_complexity": "complexity.allowed_functions['x.f'].max_complexity",
+        "negative_max_complexity": "complexity.allowed_functions['x.f'].max_complexity",
+        "bool_max_complexity": "complexity.allowed_functions['x.f'].max_complexity",
         "non_dict_duplication": "duplication",
         "string_allowed_blocks": "duplication.allowed_blocks",
         "negative_allowed_blocks": "duplication.allowed_blocks",
@@ -2995,9 +3199,9 @@ class TestShellIntegration:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "file.py::bad\x7ffunc": {
-                        "file": "file.py",
-                        "symbol": "bad\x7ffunc",
+                    "file.bad\x7ffunc": {
+                        "module": "file",
+                        "qualname": "bad\x7ffunc",
                         "type": "function",
                         "max_complexity": 5,
                     }
@@ -3013,14 +3217,14 @@ class TestShellIntegration:
             env={"QUALITY_BASELINE_FILE": str(temp)},
         )
         assert result.returncode == 2
-        invalid_key = "file.py::bad\x7ffunc"
+        invalid_key = "file.bad\x7ffunc"
         invalid_symbol = "bad\x7ffunc"
         _assert_exact_error_envelope(
             result,
             source="current_baseline",
-            path=f"complexity.allowed_functions[{invalid_key!r}].symbol",
+            path=f"complexity.allowed_functions[{invalid_key!r}].qualname",
             message=(
-                f"complexity.allowed_functions[{invalid_key!r}].symbol="
+                f"complexity.allowed_functions[{invalid_key!r}].qualname="
                 f"{invalid_symbol!r} must not contain control, surrogate, or DEL characters"
             ),
         )
@@ -3104,7 +3308,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-SUR-KEY",
-                            "entry_key": "complexity:file.py::bad\ud800func",
+                            "entry_key": "complexity:file.bad\ud800func",
                             "base_ceiling": 0,
                             "ceiling": 5,
                             "owner": "test@example.com",
@@ -3167,7 +3371,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-DEL-KEY",
-                            "entry_key": "complexity:file.py::bad\x7ffunc",
+                            "entry_key": "complexity:file.bad\x7ffunc",
                             "base_ceiling": 0,
                             "ceiling": 5,
                             "owner": "test@example.com",
@@ -3218,12 +3422,12 @@ class TestShellIntegration:
                 "dead_code:allowed_messages::multiplicity",
             ),
             (
-                "complexity_missing_separator",
-                "complexity:file.pyfunc",
+                "complexity_single_segment",
+                "complexity:func",
             ),
             (
                 "complexity_extra_separator",
-                "complexity:file.py:::func",
+                "complexity:file.:func",
             ),
             (
                 "complexity_empty_path",
@@ -3235,7 +3439,7 @@ class TestShellIntegration:
             ),
             (
                 "unknown_prefix",
-                "unknown:file.py::func",
+                "unknown:file.func",
             ),
             (
                 "large_files_extra_colon",
@@ -3247,16 +3451,16 @@ class TestShellIntegration:
             ),
             (
                 "complexity_absolute_waiver_path",
-                "complexity:/etc/passwd::func",
+                "complexity:.etc.passwd.func",
             ),
             (
                 "complexity_backslash_waiver_path",
-                r"complexity:windows\path\file.py::func",
+                r"complexity:windows\path\file.func",
             ),
         ],
         ids=[
             "empty-dead_code-message",
-            "complexity-missing-separator",
+            "complexity-single-segment",
             "complexity-extra-separator",
             "complexity-empty-path",
             "complexity-empty-symbol",
@@ -3367,11 +3571,11 @@ class TestShellIntegration:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "tz_test_file.py::tz_test_func": {
-                        "file": "tz_test_file.py",
-                        "max_complexity": 10,
-                        "symbol": "tz_test_func",
+                    "tz_test_file.tz_test_func": {
+                        "module": "tz_test_file",
+                        "qualname": "tz_test_func",
                         "type": "function",
+                        "max_complexity": 10,
                     },
                 },
             },
@@ -3391,7 +3595,7 @@ class TestShellIntegration:
                         "waivers": [
                             {
                                 "waiver_id": "W-TZ-001",
-                                "entry_key": "complexity:tz_test_file.py::tz_test_func",
+                                "entry_key": "complexity:tz_test_file.tz_test_func",
                                 "base_ceiling": 0,
                                 "ceiling": 10,
                                 "owner": "tz-test@example.com",
@@ -3439,11 +3643,11 @@ class TestShellIntegration:
         # Create a modified baseline with higher values than the default allows.
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
         # Inject an extra complexity increase the default baseline has no record of
-        current["complexity"]["allowed_functions"]["new_file.py::new_function"] = {
-            "file": "new_file.py",
-            "max_complexity": 5,
-            "symbol": "new_function",
+        current["complexity"]["allowed_functions"]["new_file.new_function"] = {
+            "module": "new_file",
+            "qualname": "new_function",
             "type": "function",
+            "max_complexity": 5,
         }
         temp_baseline = tmp_path / "quality_baseline.json"
         temp_baseline.write_text(json.dumps(current), encoding="utf-8")
@@ -3465,7 +3669,7 @@ class TestShellIntegration:
                 _canonical_record(
                     error_code="CC-RISE",
                     section="complexity",
-                    canonical_key="complexity:new_file.py::new_function",
+                    canonical_key="complexity:new_file.new_function",
                     old_value=0,
                     new_value=5,
                     waiver_file=str(_REPO_ROOT / "scripts" / "quality_waivers.json"),
@@ -3604,11 +3808,11 @@ class TestShellIntegration:
         shared waiver_id appears in the full inventory.
         """
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
-        current["complexity"]["allowed_functions"]["malformed_dup_test.py::func"] = {
-            "file": "malformed_dup_test.py",
-            "max_complexity": 10,
-            "symbol": "func",
+        current["complexity"]["allowed_functions"]["malformed_dup_test.func"] = {
+            "module": "malformed_dup_test",
+            "qualname": "func",
             "type": "function",
+            "max_complexity": 10,
         }
         temp_baseline = tmp_path / "baseline_malformed_dup.json"
         temp_baseline.write_text(json.dumps(current), encoding="utf-8")
@@ -3622,7 +3826,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-MAL-DUP",
-                            "entry_key": "complexity:malformed_dup_test.py::func",
+                            "entry_key": "complexity:malformed_dup_test.func",
                             "base_ceiling": 0,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -3633,7 +3837,7 @@ class TestShellIntegration:
                         {
                             # Malformed copy — missing 'owner', same waiver_id
                             "waiver_id": "W-MAL-DUP",
-                            "entry_key": "complexity:other_key.py::func",
+                            "entry_key": "complexity:other_key.func",
                             "base_ceiling": 0,
                             "ceiling": 5,
                             "reason": "Missing owner",
@@ -3712,7 +3916,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-WF-001",
-                            "entry_key": "complexity:nonexistent.py::f",
+                            "entry_key": "complexity:nonexistent.f",
                             "base_ceiling": 5,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -3746,11 +3950,11 @@ class TestShellIntegration:
         """Duplicate entry_keys make violations unresolved and exit 1."""
         # Create a baseline with an increase that needs a waiver
         current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
-        current["complexity"]["allowed_functions"]["duplicate_test.py::func"] = {
-            "file": "duplicate_test.py",
-            "max_complexity": 10,
-            "symbol": "func",
+        current["complexity"]["allowed_functions"]["duplicate_test.func"] = {
+            "module": "duplicate_test",
+            "qualname": "func",
             "type": "function",
+            "max_complexity": 10,
         }
         temp_baseline = tmp_path / "baseline_dup.json"
         temp_baseline.write_text(json.dumps(current), encoding="utf-8")
@@ -3765,7 +3969,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W001",
-                            "entry_key": "complexity:duplicate_test.py::func",
+                            "entry_key": "complexity:duplicate_test.func",
                             "base_ceiling": 0,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -3775,7 +3979,7 @@ class TestShellIntegration:
                         },
                         {
                             "waiver_id": "W002",
-                            "entry_key": "complexity:duplicate_test.py::func",
+                            "entry_key": "complexity:duplicate_test.func",
                             "base_ceiling": 0,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -3830,25 +4034,23 @@ class TestShellIntegration:
             },
             "complexity": {
                 "allowed_functions": {
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section": {  # noqa: E501
-                        "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
+                    "quickscale_core.schema.config_schema._validate_modules_section": {  # noqa: E501
+                        "module": "quickscale_core.schema.config_schema",
+                        "qualname": "_validate_modules_section",
+                        "type": "function",
                         "max_complexity": 11,
-                        "symbol": "_validate_modules_section",
-                        "type": "function",
                     },
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                    "::_perform_module_embed": {
-                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                    "quickscale_cli.commands.module_commands._perform_module_embed": {
+                        "module": "quickscale_cli.commands.module_commands",
+                        "qualname": "_perform_module_embed",
+                        "type": "function",
                         "max_complexity": 20,
-                        "symbol": "_perform_module_embed",
-                        "type": "function",
                     },
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                    "::_update_single_module": {
-                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-                        "max_complexity": 17,
-                        "symbol": "_update_single_module",
+                    "quickscale_cli.commands.module_commands._update_single_module": {
+                        "module": "quickscale_cli.commands.module_commands",
+                        "qualname": "_update_single_module",
                         "type": "function",
+                        "max_complexity": 17,
                     },
                 },
             },
@@ -3867,7 +4069,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-ORPHAN-001",
-                            "entry_key": "complexity:nonexistent/path.py::no_such_func",
+                            "entry_key": "complexity:nonexistent.path.no_such_func",
                             "base_ceiling": 5,
                             "ceiling": 10,
                             "owner": "test-orphan@example.com",
@@ -3959,7 +4161,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-ORPHAN-UC-001",
-                            "entry_key": "complexity:nonexistent.py::func",
+                            "entry_key": "complexity:nonexistent.func",
                             "base_ceiling": 5,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -4012,11 +4214,11 @@ class TestShellIntegration:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section": {  # noqa: E501
-                        "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
-                        "max_complexity": 10,  # lower than the baseline snapshot's 11
-                        "symbol": "_validate_modules_section",
+                    "quickscale_core.schema.config_schema._validate_modules_section": {  # noqa: E501
+                        "module": "quickscale_core.schema.config_schema",
+                        "qualname": "_validate_modules_section",
                         "type": "function",
+                        "max_complexity": 10,  # lower than the baseline snapshot's 11,
                     },
                 },
             },
@@ -4036,7 +4238,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-ORPHAN-RED-001",
-                            "entry_key": "complexity:quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section",  # noqa: E501
+                            "entry_key": "complexity:quickscale_core.schema.config_schema._validate_modules_section",  # noqa: E501
                             "base_ceiling": 11,
                             "ceiling": 12,
                             "owner": "test@example.com",
@@ -4090,11 +4292,11 @@ class TestShellIntegration:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "new_active_test.py::new_func": {
-                        "file": "new_active_test.py",
-                        "max_complexity": 10,
-                        "symbol": "new_func",
+                    "new_active_test.new_func": {
+                        "module": "new_active_test",
+                        "qualname": "new_func",
                         "type": "function",
+                        "max_complexity": 10,
                     },
                 },
             },
@@ -4102,17 +4304,17 @@ class TestShellIntegration:
         }
         baseline["complexity"]["allowed_functions"].update(
             {
-                "new_active_large.py::f2": {
-                    "file": "new_active_large.py",
+                "new_active_large.f2": {
+                    "module": "new_active_large",
+                    "qualname": "f2",
+                    "type": "function",
                     "max_complexity": 200,
-                    "symbol": "f2",
-                    "type": "function",
                 },
-                "new_active_large2.py::f3": {
-                    "file": "new_active_large2.py",
-                    "max_complexity": 300,
-                    "symbol": "f3",
+                "new_active_large2.f3": {
+                    "module": "new_active_large2",
+                    "qualname": "f3",
                     "type": "function",
+                    "max_complexity": 300,
                 },
             }
         )
@@ -4128,7 +4330,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-ACT-001",
-                            "entry_key": "complexity:new_active_test.py::new_func",
+                            "entry_key": "complexity:new_active_test.new_func",
                             "base_ceiling": 0,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -4138,7 +4340,7 @@ class TestShellIntegration:
                         },
                         {
                             "waiver_id": "W-ACT-002",
-                            "entry_key": "complexity:new_active_large.py::f2",
+                            "entry_key": "complexity:new_active_large.f2",
                             "base_ceiling": 0,
                             "ceiling": 200,
                             "owner": "test@example.com",
@@ -4148,7 +4350,7 @@ class TestShellIntegration:
                         },
                         {
                             "waiver_id": "W-ACT-003",
-                            "entry_key": "complexity:new_active_large2.py::f3",
+                            "entry_key": "complexity:new_active_large2.f3",
                             "base_ceiling": 0,
                             "ceiling": 300,
                             "owner": "test@example.com",
@@ -4237,26 +4439,23 @@ class TestShellIntegration:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py"
-                    "::_validate_modules_section": {
-                        "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
+                    "quickscale_core.schema.config_schema._validate_modules_section": {
+                        "module": "quickscale_core.schema.config_schema",
+                        "qualname": "_validate_modules_section",
+                        "type": "function",
                         "max_complexity": 11,
-                        "symbol": "_validate_modules_section",
-                        "type": "function",
                     },
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                    "::_perform_module_embed": {
-                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                    "quickscale_cli.commands.module_commands._perform_module_embed": {
+                        "module": "quickscale_cli.commands.module_commands",
+                        "qualname": "_perform_module_embed",
+                        "type": "function",
                         "max_complexity": 20,
-                        "symbol": "_perform_module_embed",
-                        "type": "function",
                     },
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                    "::_update_single_module": {
-                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-                        "max_complexity": 17,
-                        "symbol": "_update_single_module",
+                    "quickscale_cli.commands.module_commands._update_single_module": {
+                        "module": "quickscale_cli.commands.module_commands",
+                        "qualname": "_update_single_module",
                         "type": "function",
+                        "max_complexity": 17,
                     },
                 },
             },
@@ -4272,26 +4471,23 @@ class TestShellIntegration:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py"
-                    "::_validate_modules_section": {
-                        "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
+                    "quickscale_core.schema.config_schema._validate_modules_section": {
+                        "module": "quickscale_core.schema.config_schema",
+                        "qualname": "_validate_modules_section",
+                        "type": "function",
                         "max_complexity": 12,
-                        "symbol": "_validate_modules_section",
-                        "type": "function",
                     },
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                    "::_perform_module_embed": {
-                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                    "quickscale_cli.commands.module_commands._perform_module_embed": {
+                        "module": "quickscale_cli.commands.module_commands",
+                        "qualname": "_perform_module_embed",
+                        "type": "function",
                         "max_complexity": 22,
-                        "symbol": "_perform_module_embed",
-                        "type": "function",
                     },
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                    "::_update_single_module": {
-                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-                        "max_complexity": 18,
-                        "symbol": "_update_single_module",
+                    "quickscale_cli.commands.module_commands._update_single_module": {
+                        "module": "quickscale_cli.commands.module_commands",
+                        "qualname": "_update_single_module",
                         "type": "function",
+                        "max_complexity": 18,
                     },
                 },
             },
@@ -4356,12 +4552,9 @@ class TestShellIntegration:
 
         # CR-006: Exact canonical keys, not substring/any()
         expected_keys = [
-            "complexity:quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-            "::_perform_module_embed",
-            "complexity:quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-            "::_update_single_module",
-            "complexity:quickscale_core/src/quickscale_core/schema/config_schema.py"
-            "::_validate_modules_section",
+            "complexity:quickscale_cli.commands.module_commands._perform_module_embed",
+            "complexity:quickscale_cli.commands.module_commands._update_single_module",
+            "complexity:quickscale_core.schema.config_schema._validate_modules_section",
         ]
         actual_keys = sorted(v["canonical_key"] for v in violations)
         assert actual_keys == expected_keys, (
@@ -4392,26 +4585,23 @@ class TestShellIntegration:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py"
-                    "::_validate_modules_section": {
-                        "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
+                    "quickscale_core.schema.config_schema._validate_modules_section": {
+                        "module": "quickscale_core.schema.config_schema",
+                        "qualname": "_validate_modules_section",
+                        "type": "function",
                         "max_complexity": 11,
-                        "symbol": "_validate_modules_section",
-                        "type": "function",
                     },
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                    "::_perform_module_embed": {
-                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                    "quickscale_cli.commands.module_commands._perform_module_embed": {
+                        "module": "quickscale_cli.commands.module_commands",
+                        "qualname": "_perform_module_embed",
+                        "type": "function",
                         "max_complexity": 20,
-                        "symbol": "_perform_module_embed",
-                        "type": "function",
                     },
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                    "::_update_single_module": {
-                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-                        "max_complexity": 17,
-                        "symbol": "_update_single_module",
+                    "quickscale_cli.commands.module_commands._update_single_module": {
+                        "module": "quickscale_cli.commands.module_commands",
+                        "qualname": "_update_single_module",
                         "type": "function",
+                        "max_complexity": 17,
                     },
                 },
             },
@@ -4426,26 +4616,23 @@ class TestShellIntegration:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "quickscale_core/src/quickscale_core/schema/config_schema.py"
-                    "::_validate_modules_section": {
-                        "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
+                    "quickscale_core.schema.config_schema._validate_modules_section": {
+                        "module": "quickscale_core.schema.config_schema",
+                        "qualname": "_validate_modules_section",
+                        "type": "function",
                         "max_complexity": 12,
-                        "symbol": "_validate_modules_section",
-                        "type": "function",
                     },
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                    "::_perform_module_embed": {
-                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
+                    "quickscale_cli.commands.module_commands._perform_module_embed": {
+                        "module": "quickscale_cli.commands.module_commands",
+                        "qualname": "_perform_module_embed",
+                        "type": "function",
                         "max_complexity": 22,
-                        "symbol": "_perform_module_embed",
-                        "type": "function",
                     },
-                    "quickscale_cli/src/quickscale_cli/commands/module_commands.py"
-                    "::_update_single_module": {
-                        "file": "quickscale_cli/src/quickscale_cli/commands/module_commands.py",
-                        "max_complexity": 18,
-                        "symbol": "_update_single_module",
+                    "quickscale_cli.commands.module_commands._update_single_module": {
+                        "module": "quickscale_cli.commands.module_commands",
+                        "qualname": "_update_single_module",
                         "type": "function",
+                        "max_complexity": 18,
                     },
                 },
             },
@@ -4461,8 +4648,7 @@ class TestShellIntegration:
                 {
                     "waiver_id": "W-SA114-CPX",
                     "entry_key": (
-                        "complexity:quickscale_core/src/quickscale_core/schema/"
-                        "config_schema.py::_validate_modules_section"
+                        "complexity:quickscale_core.schema.config_schema._validate_modules_section"
                     ),
                     "base_ceiling": 11,
                     "ceiling": 12,
@@ -4474,8 +4660,7 @@ class TestShellIntegration:
                 {
                     "waiver_id": "W-SA114-LF1",
                     "entry_key": (
-                        "complexity:quickscale_cli/src/quickscale_cli/commands/"
-                        "module_commands.py::_perform_module_embed"
+                        "complexity:quickscale_cli.commands.module_commands._perform_module_embed"
                     ),
                     "base_ceiling": 20,
                     "ceiling": 22,
@@ -4487,8 +4672,7 @@ class TestShellIntegration:
                 {
                     "waiver_id": "W-SA114-LF2",
                     "entry_key": (
-                        "complexity:quickscale_cli/src/quickscale_cli/commands/"
-                        "module_commands.py::_update_single_module"
+                        "complexity:quickscale_cli.commands.module_commands._update_single_module"
                     ),
                     "base_ceiling": 17,
                     "ceiling": 18,
@@ -4636,21 +4820,16 @@ class TestShellIntegration:
     # ------------------------------------------------------------------
 
     def test_helper_exit_2_absolute_path_rejected(self, tmp_path: Path) -> None:
-        """An absolute file path in complexity entry is rejected."""
+        """An absolute file path in a file_length entry is rejected."""
         data = {
             "schema_version": 1,
             "dead_code": {"allowed_messages": []},
-            "complexity": {
-                "allowed_functions": {
-                    "/etc/passwd::func": {
-                        "file": "/etc/passwd",
-                        "max_complexity": 5,
-                        "symbol": "func",
-                        "type": "function",
-                    },
+            "complexity": {"allowed_functions": {}},
+            "file_length": {
+                "allowed_files": {
+                    "/etc/passwd": {"max_lines": 900, "reason": "absolute path test"},
                 },
             },
-            "large_files": {"allowed_files": {}},
             "duplication": {"allowed_blocks": 0},
         }
         temp_baseline = tmp_path / "baseline_abs_path.json"
@@ -4663,30 +4842,29 @@ class TestShellIntegration:
         _assert_exact_error_envelope(
             result,
             source="current_baseline",
-            path="complexity.allowed_functions['/etc/passwd::func'].file",
+            path="file_length.allowed_files['/etc/passwd']",
             message=(
-                "complexity.allowed_functions['/etc/passwd::func'].file='/etc/passwd' "
+                "file_length.allowed_files['/etc/passwd']='/etc/passwd' "
                 "must be repo-relative, not absolute"
             ),
         )
 
     def test_helper_exit_2_backslash_path_rejected(self, tmp_path: Path) -> None:
         """
-        A path with backslashes in a complexity key is rejected.
+        A path with backslashes in a file_length key is rejected.
 
         SA125-DEC-001 retired the large_files surface this originally exercised;
-        the repo-relative path rule is unchanged and is proven on complexity.
+        the repo-relative path rule is unchanged and is proven on file_length.
         """
         data = {
             "schema_version": 1,
             "dead_code": {"allowed_messages": []},
-            "complexity": {
-                "allowed_functions": {
-                    "windows\\path\\file.py::func": {
-                        "file": "windows\\path\\file.py",
-                        "max_complexity": 5,
-                        "symbol": "func",
-                        "type": "function",
+            "complexity": {"allowed_functions": {}},
+            "file_length": {
+                "allowed_files": {
+                    "windows\\path\\file.py": {
+                        "max_lines": 900,
+                        "reason": "backslash path test",
                     },
                 },
             },
@@ -4701,15 +4879,54 @@ class TestShellIntegration:
         assert result.returncode == 2, (
             f"Expected exit 2 for backslash path, got {result.returncode}"
         )
-        invalid_key = r"windows\path\file.py::func"
         invalid_path = r"windows\path\file.py"
         _assert_exact_error_envelope(
             result,
             source="current_baseline",
-            path=f"complexity.allowed_functions[{invalid_key!r}].file",
+            path=f"file_length.allowed_files[{invalid_path!r}]",
             message=(
-                f"complexity.allowed_functions[{invalid_key!r}].file="
+                f"file_length.allowed_files[{invalid_path!r}]="
                 f"{invalid_path!r} must use POSIX separators, not backslashes"
+            ),
+        )
+
+    def test_helper_exit_2_legacy_complexity_key_rejected(self, tmp_path: Path) -> None:
+        """A legacy path::symbol complexity entry is rejected in the current baseline."""
+        legacy_key = (
+            "quickscale_core/src/quickscale_core/schema/config_schema.py::_validate_modules_section"
+        )
+        data = {
+            "schema_version": 1,
+            "dead_code": {"allowed_messages": []},
+            "complexity": {
+                "allowed_functions": {
+                    legacy_key: {
+                        "file": "quickscale_core/src/quickscale_core/schema/config_schema.py",
+                        "symbol": "_validate_modules_section",
+                        "type": "function",
+                        "max_complexity": 11,
+                    },
+                },
+            },
+            "large_files": {"allowed_files": {}},
+            "duplication": {"allowed_blocks": 0},
+        }
+        temp_baseline = tmp_path / "baseline_legacy_key.json"
+        temp_baseline.write_text(json.dumps(data), encoding="utf-8")
+        result = self._run_helper(
+            extra_args=["--base-ref", DEFAULT_BASE_REF],
+            env={"QUALITY_BASELINE_FILE": str(temp_baseline)},
+        )
+        assert result.returncode == 2, (
+            f"Expected exit 2 for a legacy complexity key, got {result.returncode}"
+        )
+        _assert_exact_error_envelope(
+            result,
+            source="current_baseline",
+            path=f"complexity.allowed_functions[{legacy_key!r}]",
+            message=(
+                "legacy path::symbol complexity keys are accepted only in the "
+                "merge-base baseline; current entries must use module.qualname"
             ),
         )
 
@@ -4734,7 +4951,7 @@ class TestShellIntegration:
                     "waivers": [
                         {
                             "waiver_id": "W-UNICODE-DATE",
-                            "entry_key": "complexity:nonexistent.py::func",
+                            "entry_key": "complexity:nonexistent.func",
                             "base_ceiling": 5,
                             "ceiling": 10,
                             "owner": "test@example.com",
@@ -4787,17 +5004,17 @@ class TestShellIntegration:
             "dead_code": {"allowed_messages": []},
             "complexity": {
                 "allowed_functions": {
-                    "new_unwaived_complexity.py::func_a": {
-                        "file": "new_unwaived_complexity.py",
+                    "new_unwaived_complexity.func_a": {
+                        "module": "new_unwaived_complexity",
+                        "qualname": "func_a",
+                        "type": "function",
                         "max_complexity": 5,
-                        "symbol": "func_a",
-                        "type": "function",
                     },
-                    "new_unwaived_complexity.py::func_b": {
-                        "file": "new_unwaived_complexity.py",
-                        "max_complexity": 8,
-                        "symbol": "func_b",
+                    "new_unwaived_complexity.func_b": {
+                        "module": "new_unwaived_complexity",
+                        "qualname": "func_b",
                         "type": "function",
+                        "max_complexity": 8,
                     },
                 },
             },
@@ -5076,11 +5293,11 @@ class TestShellSubprocess:
         try:
             # Create a modified baseline with an unwaived increase
             current = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
-            current["complexity"]["allowed_functions"]["test_shell_exit1.py::func"] = {
-                "file": "test_shell_exit1.py",
-                "max_complexity": 5,
-                "symbol": "func",
+            current["complexity"]["allowed_functions"]["test_shell_exit1.func"] = {
+                "module": "test_shell_exit1",
+                "qualname": "func",
                 "type": "function",
+                "max_complexity": 5,
             }
             temp_baseline = tmp_path / "baseline_exit1.json"
             temp_baseline.write_text(json.dumps(current), encoding="utf-8")
@@ -5134,7 +5351,7 @@ class TestShellSubprocess:
             assert json.loads(json_lines[0]) == _canonical_record(
                 error_code="CC-RISE",
                 section="complexity",
-                canonical_key="complexity:test_shell_exit1.py::func",
+                canonical_key="complexity:test_shell_exit1.func",
                 old_value=0,
                 new_value=5,
                 waiver_file=str(_REPO_ROOT / "scripts" / "quality_waivers.json"),
@@ -5403,7 +5620,7 @@ class TestShellSubprocess:
                         "waivers": [
                             {
                                 "waiver_id": "W-ORPHAN-DIAG-001",
-                                "entry_key": "complexity:orphan_test.py::no_such_func",
+                                "entry_key": "complexity:orphan_test.no_such_func",
                                 "base_ceiling": 5,
                                 "ceiling": 10,
                                 "owner": "test@example.com",
@@ -5602,11 +5819,9 @@ class TestShellSubprocess:
             # difference against the merge base is exactly these three
             # increases, independent of any waivers the repository carries.
             pinned_keys = (
-                "quickscale_core/src/quickscale_core/schema/config_schema.py"
-                "::_validate_modules_section",
-                "quickscale_core/src/quickscale_core/schema/state_schema.py::StateManager.load",
-                "quickscale_core/src/quickscale_core/generator/generator.py"
-                "::get_generator_emission_mapping",
+                "quickscale_core.schema.config_schema._validate_modules_section",
+                "quickscale_core.schema.state_schema.StateManager.load",
+                "quickscale_core.generator.generator.get_generator_emission_mapping",
             )
             bumped = dict(higher_baseline["complexity"]["allowed_functions"])
             bumped[pinned_keys[0]] = dict(bumped[pinned_keys[0]], max_complexity=13)
@@ -5625,8 +5840,8 @@ class TestShellSubprocess:
                     {
                         "waiver_id": "W-NE-CPX",
                         "entry_key": (
-                            "complexity:quickscale_core/src/quickscale_core/schema/"
-                            "config_schema.py::_validate_modules_section"
+                            "complexity:quickscale_core.schema.config_schema"
+                            "._validate_modules_section"
                         ),
                         "base_ceiling": 12,
                         "ceiling": 13,
@@ -5638,8 +5853,7 @@ class TestShellSubprocess:
                     {
                         "waiver_id": "W-NE-CPX2",
                         "entry_key": (
-                            "complexity:quickscale_core/src/quickscale_core/schema/"
-                            "state_schema.py::StateManager.load"
+                            "complexity:quickscale_core.schema.state_schema.StateManager.load"
                         ),
                         "base_ceiling": 28,
                         "ceiling": 30,
@@ -5651,8 +5865,8 @@ class TestShellSubprocess:
                     {
                         "waiver_id": "W-NE-CPX3",
                         "entry_key": (
-                            "complexity:quickscale_core/src/quickscale_core/generator/"
-                            "generator.py::get_generator_emission_mapping"
+                            "complexity:quickscale_core.generator.generator"
+                            ".get_generator_emission_mapping"
                         ),
                         "base_ceiling": 35,
                         "ceiling": 37,
