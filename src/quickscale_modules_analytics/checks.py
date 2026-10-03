@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.core.checks import CheckMessage, Error
 
-from quickscale_modules_analytics.services import (
+from quickscale_modules_analytics._settings import (
     AnalyticsRuntimeSettingsSnapshot,
 )
 

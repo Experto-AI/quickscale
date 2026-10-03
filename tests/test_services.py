@@ -222,7 +222,7 @@ def test_configure_analytics_client_missing_enabled_setting_raises_attribute_err
 
     with (
         patch(
-            "quickscale_modules_analytics.services.settings",
+            "quickscale_modules_analytics._settings.settings",
             runtime_settings,
         ),
         pytest.raises(AttributeError, match="QUICKSCALE_ANALYTICS_ENABLED"),

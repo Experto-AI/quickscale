@@ -46,9 +46,9 @@ modules:
 
 ## Public surface
 
-- `get_analytics_runtime_settings()` returns an `AnalyticsRuntimeSettingsSnapshot`;
-  `is_analytics_active()` and `analytics_enabled_for_request(request)` answer whether capture
-  runs for the current process and request.
+- `is_enabled()` answers whether the module is switched on; `is_analytics_active()` and
+  `analytics_enabled_for_request(request)` answer whether capture runs for the current process and
+  request. The settings snapshot and its accessor are private to the module's `_settings.py`.
 - `configure_analytics_client()` initializes the PostHog client; `capture_event()` sends an event
   the sending module names; `get_distinct_id()` resolves the active distinct ID.
 - `get_template_analytics_context()` builds the dictionary the template tags render.

@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Protocol, cast
 
 import posthog
 from django.conf import settings
 from django.http import HttpRequest
+
+from quickscale_modules_analytics._settings import (
+    AnalyticsRuntimeSettingsSnapshot as AnalyticsRuntimeSettingsSnapshot,
+    get_analytics_runtime_settings as get_analytics_runtime_settings,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -34,65 +38,10 @@ class AnalyticsClient(Protocol):
     def shutdown(self) -> None: ...
 
 
-@dataclass(frozen=True)
-class AnalyticsRuntimeSettingsSnapshot:
-    """Immutable runtime view of the analytics settings contract."""
-
-    enabled: bool
-    provider: str
-    posthog_api_key_env_var: str
-    posthog_host_env_var: str
-    posthog_host: str
-    exclude_debug: bool
-    exclude_staff: bool
-    anonymous_by_default: bool
-
-    @classmethod
-    def from_settings(cls) -> AnalyticsRuntimeSettingsSnapshot:
-        """Create a runtime snapshot from Django settings.
-
-        Rule 3: every value is read directly; apply wrote the canonical
-        values and the module's startup check has validated them, so the
-        snapshot neither defaults nor coerces.
-        """
-        return cls(
-            enabled=bool(settings.QUICKSCALE_ANALYTICS_ENABLED),
-            provider=str(settings.QUICKSCALE_ANALYTICS_PROVIDER),
-            posthog_api_key_env_var=str(
-                settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
-            ),
-            posthog_host_env_var=str(
-                settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR
-            ),
-            posthog_host=str(settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST),
-            exclude_debug=bool(settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG),
-            exclude_staff=bool(settings.QUICKSCALE_ANALYTICS_EXCLUDE_STAFF),
-            anonymous_by_default=bool(
-                settings.QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT
-            ),
-        )
-
-    def resolve_posthog_api_key(self) -> str:
-        """Resolve the PostHog API key from the applied secret setting (rule 35)."""
-        return str(settings.QUICKSCALE_ANALYTICS_POSTHOG_API_KEY).strip()
-
-    def resolve_posthog_host(self) -> str:
-        """Resolve the PostHog host override from the applied setting, else the fallback."""
-        return (
-            str(settings.QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE).strip()
-            or self.posthog_host.strip()
-        )
-
-
 _CLIENT_LOCK = Lock()
 _ANALYTICS_CLIENT: AnalyticsClient | None = None
 _ANALYTICS_LAST_SETTINGS: AnalyticsRuntimeSettingsSnapshot | None = None
 _ANALYTICS_DISABLED_REASON: str = "unconfigured"
-
-
-def get_analytics_runtime_settings() -> AnalyticsRuntimeSettingsSnapshot:
-    """Return the active analytics settings snapshot."""
-    return AnalyticsRuntimeSettingsSnapshot.from_settings()
 
 
 def _close_existing_client() -> None:
@@ -325,11 +274,9 @@ def is_enabled() -> bool:
 __all__ = [
     "ANALYTICS_POSTHOG_DEFAULT_HOST",
     "ANALYTICS_PROVIDER_POSTHOG",
-    "AnalyticsRuntimeSettingsSnapshot",
     "analytics_enabled_for_request",
     "capture_event",
     "configure_analytics_client",
-    "get_analytics_runtime_settings",
     "get_distinct_id",
     "get_template_analytics_context",
     "is_analytics_active",
