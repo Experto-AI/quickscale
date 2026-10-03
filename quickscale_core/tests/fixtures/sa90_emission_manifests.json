@@ -39,7 +39,8 @@
       "v88-dockerfile-start-sh": "Regenerated 2026-09-14 \u2014 Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa235": "Regenerated 2026-10-03 - module UI paths move to manifest-declared spa_routes rendered after the module includes (SA235, rule 41): the React shell view moves to testproject/views.py, testproject/urls.py renders the manifest-declared routes from SPA_MODULE_URLPATTERNS after POST_HOME_MODULE_URLPATTERNS instead of reserving blog/listings/forms/crm literals, testproject/urls_modules.py gains the SPA list, and the public social pages render the shared seam with named social routes. The CRM seam path becomes `quickscale_crm_shell`, so templates/index.html changed with it. All changed fixture hashes updated per variant; all unrelated paths, hashes, and modes remain authoritative."
+      "sa235": "Regenerated 2026-10-03 - module UI paths move to manifest-declared spa_routes rendered after the module includes (SA235, rule 41): the React shell view moves to testproject/views.py, testproject/urls.py renders the manifest-declared routes from SPA_MODULE_URLPATTERNS after POST_HOME_MODULE_URLPATTERNS instead of reserving blog/listings/forms/crm literals, testproject/urls_modules.py gains the SPA list, and the public social pages render the shared seam with named social routes. The CRM seam path becomes `quickscale_crm_shell`, so templates/index.html changed with it. All changed fixture hashes updated per variant; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa235-context-processor-billing-urls": "Regenerated 2026-10-03 \u2014 the generated context processor resolves billing's template URL from the module's named routes (quickscale_billing:pricing_page and quickscale_billing:dashboard) instead of repeating /billing/... path strings, the retired organization-scoped /orgs/<slug>/billing/pricing/ value is gone, and the projected QUICKSCALE_BILLING_ENABLED setting gates the value so an absent or switched-off billing yields None (SA235, rule 41). 1 fixture hash updated per variant: testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -499,7 +500,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "644",
-      "sha256": "b5ac29a31e330b953953617581d3f184c513d8da250a535e2d5ad6b80c13db69"
+      "sha256": "ecda9c70070f0bd21fbdfe96a1ce4b1512f8a86153e80cd423827a0bf285895b"
     },
     "testproject/settings/__init__.py": {
       "mode": "644",
@@ -977,7 +978,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "644",
-      "sha256": "b5ac29a31e330b953953617581d3f184c513d8da250a535e2d5ad6b80c13db69"
+      "sha256": "ecda9c70070f0bd21fbdfe96a1ce4b1512f8a86153e80cd423827a0bf285895b"
     },
     "testproject/settings/__init__.py": {
       "mode": "644",
@@ -1455,7 +1456,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "644",
-      "sha256": "b5ac29a31e330b953953617581d3f184c513d8da250a535e2d5ad6b80c13db69"
+      "sha256": "ecda9c70070f0bd21fbdfe96a1ce4b1512f8a86153e80cd423827a0bf285895b"
     },
     "testproject/settings/__init__.py": {
       "mode": "644",

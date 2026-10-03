@@ -1822,6 +1822,10 @@ def _template_mount_literal_violations(corpus: Corpus) -> list[str]:
                     f"'/{mount}'",
                     f'"{mount}"',
                     f"'{mount}'",
+                    # A quoted absolute path under the mount (``"/billing/api/"``)
+                    # repeats the mount just as the bare mount does.
+                    f'"/{anchor}/',
+                    f"'/{anchor}/",
                 )
                 if route_pattern.search(text) or any(literal in text for literal in literals):
                     violations.append(
