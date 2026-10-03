@@ -1,6 +1,8 @@
 """Focused tests for org billing bridge management commands."""
 
 from __future__ import annotations
+import quickscale_modules_billing._locks as _locks
+import quickscale_modules_billing._credits as _credits
 
 import concurrent.futures
 import json as json_lib
@@ -56,8 +58,6 @@ def test_credit_mutation_serializes_with_organization_purge(
     """A credit commits under the organization mutex before purge proceeds."""
     from django.db import close_old_connections
 
-    from quickscale_modules_billing import services as billing_services
-
     user = get_user_model().objects.create_user(
         username="credit-purge-race",
         email="credit-purge-race@example.com",
@@ -76,7 +76,7 @@ def test_credit_mutation_serializes_with_organization_purge(
     credit_has_lock = threading.Event()
     allow_credit_to_finish = threading.Event()
     purge_attempted_lock = threading.Event()
-    original_billing_lock = billing_services._lock_organization_for_billing_mutation
+    original_billing_lock = _locks._lock_organization_for_billing_mutation
     original_purge_lock = Command._lock_organization
 
     def pause_after_credit_lock(organization_arg):
@@ -91,7 +91,7 @@ def test_credit_mutation_serializes_with_organization_purge(
         return original_purge_lock(command, organization_id)
 
     monkeypatch.setattr(
-        billing_services,
+        _locks,
         "_lock_organization_for_billing_mutation",
         pause_after_credit_lock,
     )
@@ -101,7 +101,7 @@ def test_credit_mutation_serializes_with_organization_purge(
         close_old_connections()
         set_current_org_id(organization.pk)
         try:
-            billing_services.credit_user(
+            _credits.credit_user(
                 user,
                 organization=organization,
                 amount=25,
@@ -759,7 +759,7 @@ def test_purge_organization_refuses_live_stripe_subscription(
 
     with (
         patch(
-            "quickscale_modules_billing.services.cancel_current_subscription"
+            "quickscale_modules_billing._subscription_mutations.cancel_current_subscription"
         ) as cancel_subscription,
         pytest.raises(CommandError) as exc_info,
     ):
@@ -1028,7 +1028,7 @@ def test_purge_organization_refuses_open_purchase_checkout(dry_run: bool) -> Non
 
     with (
         patch(
-            "quickscale_modules_billing.services.get_stripe_client",
+            "quickscale_modules_billing._stripe_client.get_stripe_client",
             return_value=stripe_client,
         ),
         pytest.raises(CommandError, match="purchase checkout session.*still open"),
@@ -1058,7 +1058,7 @@ def test_purge_organization_allows_expired_subscription_checkout(
     from django.apps import apps
     from django.db import connection
 
-    from quickscale_modules_billing.services import (
+    from quickscale_modules_billing._subscription_checkout import (
         reconcile_organization_removal_subscription_checkout,
     )
 
@@ -1143,7 +1143,7 @@ def test_purge_organization_refuses_completed_checkout_past_local_expiry(
     from django.apps import apps
     from django.db import connection
 
-    from quickscale_modules_billing.services import (
+    from quickscale_modules_billing._subscription_checkout import (
         reconcile_organization_removal_subscription_checkout,
     )
     from quickscale_modules_orgs.current_org import org_scope
