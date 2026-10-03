@@ -29,7 +29,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA235, SA237, SA238 | Deferred |
-| SA241 | Record the React-frontend and public-page prerender decisions for SA153 | post-v88 | 2 | — | Deferred |
+| SA241 | Record the React-frontend and public-page prerender decisions for SA153 | post-v88 | 3 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191, SA241 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
@@ -39,8 +39,8 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA237 ──► SA241
-Track 3: SA238 ──► SA216
+Track 2: SA237
+Track 3: SA238 ──► SA241 ──► SA216
      critical path: SA238 → SA191 → SA153
 ```
 
@@ -57,9 +57,8 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** SA235 (Track 1) and SA237 (Track 2) are in progress. SA238 (Track 3) starts
-now that SA234 and its other dependencies have landed; SA216 follows it. SA241 follows SA237 and
-lands before SA153. SA235, SA237, and SA238 each record their proposed rule (41, 44–46 in the
+**Parallel start.** SA235 (Track 1) and SA237 (Track 2) are in progress. SA238 (Track 3) can start
+now; SA241 follows it on Track 3 and lands before SA153, then SA216. SA235, SA237, and SA238 each record their proposed rule (41, 44–46 in the
 [inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and close
 their own item, harness clause, and inventory section; SA191 waits for all of them.
 
@@ -98,7 +97,8 @@ A track is **truly green** only when all three states are yes.
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
   blog rate limiter, the generated `pyproject.toml.j2` `[build-system]` block, orgs'
-  `quickscale_orgs_create_site_org` command, and the personal-data inventory, and, for the
+  `quickscale_orgs_create_site_org` command, the personal-data inventory, and the frontend
+  decisions in `frontend.md` (SA241), and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
   theme's React API client, module settings snapshots and the module split facades' loggers and
@@ -122,10 +122,6 @@ reset/checkout destructively. Merge `v89` into the worktree, resolve there, run 
 suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
-
-- [x] **SA233 — Key the quality ratchet by qualified name and retire the rename waivers.**
-
-- [x] **SA234 — Retarget test patches to defining modules and remove facade back-imports.**
 
 - [ ] **SA235 — Declare module UI paths in manifests and render host routes from discovery.**
 
