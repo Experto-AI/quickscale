@@ -190,7 +190,7 @@ release. No tool carries a deployed project's data from vintage N to N+k.
 
 **Counter-evidence:** searched the decision record, the playbook, the roadmap, and the user manual
 for a data-carry plan. The only plan is SA204 (freeze), which is still `Deferred` and sequenced
-after SA153 (`roadmap.md:29,39`). The reseed decision still removes SA191 from the trigger.
+after SA153 ([roadmap scheduling table](../technical/roadmap.md#scheduling-table)). The reseed decision still removes SA191 from the trigger.
 
 **Why it compounds:** the growth variable is **model changes × deployed projects holding data**.
 SA221's label rename alone would need a hand-written `django_migrations`/content-type rewrite for

@@ -29,22 +29,31 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
 | SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | SA234 | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA235, SA237, SA238 | Deferred |
-| SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
+| SA240 | Add the idempotent `quickscale_orgs_create_site_org` command for SA191's cutover | post-v88 | 3 | — | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA235, SA237, SA238, SA240 | Deferred |
+| SA241 | Record the React-frontend and public-page prerender decisions for SA153 | post-v88 | 2 | — | Deferred |
+| SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191, SA241 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
-| SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | — | Deferred |
+| SA242 | Inventory every personal-data field about a user behind a failing test | post-v88 | 3 | — | Deferred |
+| SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | SA242 | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
-Track 2: SA234 ──► SA237
-Track 3: SA238 ──► SA216
+Track 2: SA234 ──► SA237 ──► SA241
+Track 3: SA240 ──► SA238 ──► SA242 ──► SA216
      critical path: SA234 → SA238 → SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
+
+**Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
+with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
+handoff note (what landed, what is next, what to watch) committed with the work. A ticket closes
+when its last slice lands; slices are not scheduled. A slice becomes its own ticket only when it
+can start earlier or on another track (SA240, SA241, SA242).
 
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
 ported, and SA204 has not frozen the migration history. SA234 must untangle the split facades
@@ -52,9 +61,10 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** SA235 (Track 1) and SA234 (Track 2) can start now; SA238 (Track 3) waits on
-SA234. SA215's closing pass landed and closed inventory sections 1–41 (the two cells the
-seventh pass corrected are carried by SA235). The coherence audit's
+**Parallel start.** SA235 (Track 1), SA234 (Track 2), and SA240 (Track 3) can start now; SA238
+(Track 3) waits on SA234, and SA242 may fill Track 3 while it waits. SA241 (Track 2) follows
+SA237 and must land before SA153. SA215's closing pass landed and closed inventory sections 1–41
+(the two cells the seventh pass corrected are carried by SA235). The coherence audit's
 seventh pass (sections 42–47, D43–D48) is carried by SA235, SA237, and SA238 (SA236 closed rules
 42–43). Each begins by recording its decision (proposed rules 41 and 44–46 in the
 [inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
@@ -71,7 +81,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA235 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA234 | yes | yes | yes | **yes** | no |
-| 3 | SA238 | no | no | yes | no | **yes** |
+| 3 | SA240 | yes | yes | yes | **yes** | **yes** |
 
 ### Ownership and merge coordination
 
@@ -97,7 +107,8 @@ A track is **truly green** only when all three states are yes.
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
-  blog rate limiter, and the generated `pyproject.toml.j2` `[build-system]` block, and, for the
+  blog rate limiter, the generated `pyproject.toml.j2` `[build-system]` block, orgs'
+  `quickscale_orgs_create_site_org` command (SA240), and the personal-data inventory (SA242), and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
   theme's React API client, module settings snapshots and the module split facades' loggers and
@@ -233,6 +244,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   a view class in an unscanned file name, each with a control case. No module facade re-exports a
   private name. The release notes list every log channel that moved since 0.88.0.
 
+  **Slices:**
+  - [ ] (a) Rule 46 decision entry and log channels: private files log on the facade's channel,
+    the rule 28 clause, and the release-note list of moved channels.
+  - [ ] (b) Re-exports: trim module facades to public names and retarget their tests' patches.
+  - [ ] (c) Rule 19 finds view code by content, with its control case.
+
   **Surfaces:** loggers and facades in auth, backups, billing (Track 2), notifications, and orgs,
   with their tests; harness rule 19 and rule 28; release notes; decisions.
 
@@ -296,8 +313,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `listings` and `forms` ship a rewritten `0001_initial` that depends on `orgs` and a NOT NULL
   organization FK. Rehearse first: restore a production dump into a scratch PostgreSQL 18 and
   confirm the history inconsistency with `migrate --plan` against the recipient. The cutover
-  rebuilds a fresh database. A new idempotent `orgs` command, `create_site_org <slug> <name>`,
-  creates the site's organization in the same privileged deploy step as `migrate`. The catalog is
+  rebuilds a fresh database. SA240's `quickscale_orgs_create_site_org` command creates the site's
+  organization in the same deploy step as `migrate`. The catalog is
   then reseeded through `bap-web`'s own seed command, tenant-scoped to that organization under the
   restricted runtime role — never under BYPASSRLS. Users are
   re-invited; form submissions and other transactional rows are not carried. Media is carried over
@@ -331,9 +348,45 @@ suite, and merge only the reviewed delivery through the serialized queue.
     and the written rollback restores the previous deploy *and* that database.
   - No property-portal features (SA153) and no frontend stack change.
 
+  **Slices:**
+  - [ ] (a) Rehearsal: restore the production dump into scratch PostgreSQL 18 and record the
+    `migrate --plan` inconsistency against a fresh recipient.
+  - [ ] (b) Recipient and code port: generate the recipient, port the donor by the migration
+    prompt, re-express the `modules/forms` edits, and record upstream candidates.
+  - [ ] (c) Test parity: the donor's pytest and Vitest suites, SA208's check, FORCE-RLS counts,
+    and `check_tenant_isolation`.
+  - [ ] (d) Live parity: Playwright e2e and screenshot diffs, with the live baselines captured and
+    kept.
+  - [ ] (e) Cutover: reseed step under the runtime role, cutover script, and written rollback,
+    rehearsed on the scratch database.
+
   **Surfaces:** the new `bap-web-new` repository and its reseed step; the migration prompt; the
-  `orgs` `create_site_org` command (a Track 3 surface, through the serialized merge queue); the
   `forms` module only for upstreamed customizations.
+
+- [ ] **SA240 — Add the idempotent `quickscale_orgs_create_site_org` command for SA191's cutover.**
+
+  **Context:** SA191 rebuilds `bap-web` on a fresh database and must create the site's
+  organization in the deploy step that runs `migrate`, before the catalog is reseeded under the
+  restricted runtime role. Today a project can create one only through orgs' admin or services
+  (the [migration prompt](../planning/bap-web-migration-prompt.md) says so). Split out of SA191 so
+  Track 3 delivers it while SA191 waits on the conventions.
+
+  **Scope:** `quickscale_orgs_create_site_org <slug> <name>` (the Module Conventions command
+  name): creates the organization once, is a no-op on rerun with the same arguments, and fails on
+  a slug that exists under a different name or is reserved (`RESERVED_ORG_SLUGS`). First establish
+  which role can create an organization. If the runtime role can, the command runs under it like
+  orgs' other commands. If it needs the superuser role, a decision entry adds it as the third
+  sanctioned privileged command in all four places that declare the two-command contract
+  ([decisions.md](decisions.md) § RLS enforcement rule), including the CLI producer (Track 2,
+  through the serialized merge queue) and the generated `start.sh`.
+
+  **Acceptance:** tests prove creation, an idempotent rerun, and the conflicting-name and
+  reserved-slug failures, and that the command runs under the role the scope settled on and fails
+  closed under any other. orgs' README documents it.
+
+  **Surfaces:** orgs management commands, tests, and README; if privileged, orgs' `checks.py`, the
+  `quickscale_core.runtime` settings facade, the CLI producer, the generated `start.sh`, and
+  decisions.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -350,8 +403,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   inform later reusable module changes.
 
   A client-rendered page gives crawlers and link-preview bots an empty document, so catalog and
-  detail pages must be prerendered or server-rendered for Open Graph and indexing. Choosing that
-  mechanism adds to the approved frontend stack and needs its decision entry.
+  detail pages must be prerendered or server-rendered for Open Graph and indexing. SA241 chooses
+  that mechanism and records it, with the React-frontend decision, before this ticket starts.
 
   The launch needs property fields and galleries, explicit currency labels, attribute filtering
   and keyword search applied by the API, Spanish public pages, listing-linked inquiries into `crm`,
@@ -362,11 +415,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   New child tables, including gallery images, follow the child-table decision in
   [decisions.md](decisions.md) and the `test_rls_boundary.py` coverage pattern.
 
-  **Acceptance:** first record in decisions that React is the standard frontend for new application
-  and public pages; `auth` and `billing` stay Django-rendered on the shared design (SA192); the
-  existing module-shipped Django pages (blog, listings, CRM dashboard) stay Django-rendered on that
-  design until an SA154 item promotes a React replacement; Django admin stays as shipped. Then the
-  `bap-web` project migrated by SA191 serves an organization-scoped React property catalog and
+  **Acceptance:** under SA241's decisions, the `bap-web` project migrated by SA191 serves an organization-scoped React property catalog and
   detail page with ordered image galleries; bedrooms, bathrooms, area, property type, sale/rent,
   and explicitly labeled currency fields; keyword and attribute filters that the API applies
   server-side. Property pages use the React app's visual design and render in Spanish. A listing
@@ -377,14 +426,40 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and passes the generated project's `check_tenant_isolation` through marker-derived enrollment, with no
   edit under vendored module source. Prove the search → detail → inquiry journey and isolation
   between organizations through both the API and the rendered pages. Correct reusable-module feature
-  claims that the module does not provide. Adding a frontend dependency for prerendering follows the
-  decisions rule for the approved frontend stack. The marker-derived purge plan covers property
-  rows without a vendored module edit. Every `*_id` field on a property model is classified through
+  claims that the module does not provide. Prerendering uses the mechanism SA241 approved. The
+  marker-derived purge plan covers property rows without a vendored module edit. Every `*_id` field on a property model is classified through
   SA208's project-side declaration, and the SA208 system check passes in the project.
 
+  **Slices:**
+  - [ ] (a) Models: property fields, currency labels, and ordered gallery child tables, with
+    forced RLS, boundary tests, SA208 classification, and purge coverage, as `0002+` migrations.
+  - [ ] (b) Read API: published listings of the requested organization, with server-side keyword
+    and attribute filters, and API-level isolation tests.
+  - [ ] (c) React catalog and detail pages in Spanish on the app's design.
+  - [ ] (d) Listing inquiry into a CRM record with a listing reference, and the search → detail
+    → inquiry journey.
+  - [ ] (e) Prerender or server render, Open Graph tags, sitemap, and `robots.txt`, with the
+    crawler test and rendered-page isolation.
+
   **Surfaces:** the project-owned property extension, its API and React pages, and the project's
-  prerender build and deploy step; listings/blog/forms/CRM seams only where needed; decisions;
-  extension documentation.
+  prerender build and deploy step; listings/blog/forms/CRM seams only where needed; extension
+  documentation.
+
+- [ ] **SA241 — Record the React-frontend and public-page prerender decisions for SA153.**
+
+  **Context:** SA153 needs two decisions before any code: which pages are React, and how React
+  public pages reach crawlers that run no JavaScript. Split out of SA153 so they are settled while
+  SA191 is in flight.
+
+  **Acceptance:** decisions record that React is the standard frontend for new application and
+  public pages; `auth` and `billing` stay Django-rendered on the shared design (SA192); the
+  existing module-shipped Django pages (blog, listings, CRM dashboard) stay Django-rendered on that
+  design until an SA154 item promotes a React replacement; Django admin stays as shipped. A second
+  entry chooses the prerender or server-render mechanism for catalog and detail pages, compares the
+  options considered, and adds any new frontend dependency under the approved-stack rule.
+
+  **Surfaces:** decisions; `frontend.md` where it states the frontend split (SA235 also edits it,
+  so whichever lands second resolves it at merge).
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 
@@ -438,6 +513,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - A decision records who owns a pre-facade donor `production.py` (today donor-owned by policy
     and refused at preflight).
 
+  **Slices:**
+  - [ ] (a) `make beta-migrate-iterate`: one non-interactive iteration driven by the donor's
+    `quickscale.yml`.
+  - [ ] (b) Classification of every donor file, with unclassified files as blockers.
+  - [ ] (c) Project-owned apps (copy, register, mount, regenerate migrations) and frontend
+    dependency merge.
+  - [ ] (d) The `showcase_react` design layer, its ownership entry and upgrade test, and the
+    donor design port.
+  - [ ] (e) The generated `MIGRATION_PROMPT.md` and its snapshot test.
+  - [ ] (f) Ledger iterations to a clean final run, the playbook rewrite, and the pre-facade
+    `production.py` decision.
+
   **Surfaces:** `quickscale_devtools/.../beta_migration/`, its tests and smoke gate; the migration
   playbook and gap ledger; the `showcase_react` theme, generator, and
   `generated_file_ownership.md` (design layer); decisions.
@@ -473,8 +560,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   IP and user agent), which belong to the organization; a restore grace period; a data export.
 
   **Scope:**
-  - *Inventory first.* The table above becomes a checked list, one entry per model field holding
-    personal data, including third-party apps. An unlisted field fails a test.
+  - *Inventory first.* SA242 delivers the table above as a checked list; this ticket's handlers
+    are written against it.
   - *Anonymize capability.* Each module that holds personal data about a user declares an
     anonymize handler on its `AppConfig` (Module Conventions rule 4's capability mechanism, extending
     the removal obligations in orgs' `removal.py` with an `ANONYMIZE` `RemovalAction`); auth
@@ -505,6 +592,32 @@ suite, and merge only the reviewed delivery through the serialized queue.
   (`auth/views.py`, orgs' removal path) plus module code that SA215 also edited (the dependency edge
   closed with SA215);
   billing is a Track 2 surface, so SA216 lands through the serialized merge queue.
+
+  **Slices:**
+  - [ ] (a) The `ANONYMIZE` removal action and auth's collector, with each module's handler and
+    its tests.
+  - [ ] (b) `AccountDeleteView` disables and scrubs; re-registration and sign-in tests; the
+    rollback test.
+  - [ ] (c) Remove the account-deletion lookup and turn `ACCOUNT_DELETE` into the anonymize
+    boundary; decisions, organizations.md, and auth's README.
+
+- [ ] **SA242 — Inventory every personal-data field about a user behind a failing test.**
+
+  **Context:** SA216's scrub is only as complete as its list of personal data. Split out of SA216
+  so the list is confirmed, including third-party tables, while Track 3 waits on SA234.
+
+  **Scope:** turn SA216's table into a checked-in inventory, one entry per model field that holds
+  personal data about a user, across modules and installed third-party apps, each with its
+  treatment. A test walks every installed model and fails on a candidate field — a user foreign
+  key, an `EmailField`, a `GenericIPAddressField`, a file field, or a free-text field on a model
+  that references a user — that is neither listed nor explicitly excluded with a reason. It runs in
+  orgs' test settings, the cross-module harness the user-FK conformance gate
+  (`orgs/tests/test_user_fk_conformance.py`) already uses.
+
+  **Acceptance:** the test passes on `v89`, fails with a control case for an unlisted field, and
+  any difference from SA216's table is corrected in that table.
+
+  **Surfaces:** the inventory and its test in orgs' tests; SA216's table.
 
 ## Deferred constraints and references
 
