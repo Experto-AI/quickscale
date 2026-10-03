@@ -6,8 +6,8 @@
 ## Goal and finish line
 
 The immediate goal is one convention across all modules, as recorded in
-[decisions.md § Module Conventions](decisions.md#module-conventions): the convention tickets deliver
-it across all three tracks and SA215's conformance test closes it. `bap-web` is then ported once, onto the
+[decisions.md § Module Conventions](decisions.md#module-conventions), finished by SA234, SA235,
+SA237, and SA238. `bap-web` is then ported once, onto the
 standardized names (SA191), and carries the first property portal in a project-owned extension
 (SA153). Capabilities are generalized only after that project proves their value.
 
@@ -50,8 +50,7 @@ Arrows within a track are queue order; the table holds the actual dependency edg
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
 with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
 handoff note (what landed, what is next, what to watch) committed with the work. A ticket closes
-when its last slice lands; slices are not scheduled. A slice becomes its own ticket only when it
-can start earlier or on another track (SA240, SA241, SA242).
+when its last slice lands; slices are not scheduled.
 
 **Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
 ported, and SA204 has not frozen the migration history. SA234 must untangle the split facades
@@ -59,17 +58,11 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** SA235 (Track 1) and SA234 (Track 2) can start now; SA238 (Track 3) waits on
-SA234, and SA216 may fill Track 3 while it waits. SA241 (Track 2) follows
-SA237 and must land before SA153. SA215's closing pass landed and closed inventory sections 1–41
-(the two cells the seventh pass corrected are carried by SA235). The coherence audit's
-seventh pass (sections 42–47, D43–D48) is carried by SA235, SA237, and SA238 (SA236 closed rules
-42–43). Each begins by recording its decision (proposed rules 41 and 44–46 in the
-[inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
-its own item, harness clause, and inventory section, and SA191 waits for all of them.
-
-**Off the critical path.** SA216 follows SA215 because both change auth's views, orgs' removal
-path, and the user-referencing models.
+**Parallel start.** SA235 (Track 1) and SA234 (Track 2) are in progress. SA238 (Track 3) starts
+when SA234 merges; SA216 fills Track 3 until then. SA241 follows SA237 and lands before SA153.
+SA235, SA237, and SA238 each record their proposed rule (41, 44–46 in the
+[inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and close
+their own item, harness clause, and inventory section; SA191 waits for all of them.
 
 ### Track states
 
@@ -78,7 +71,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA235 | yes | yes | yes | **yes** | **yes** |
-| 2 | SA234 | yes | yes | yes | **yes** | no |
+| 2 | SA234 | yes | yes | yes | **yes** | **yes** |
 | 3 | SA238 | no | no | yes | no | **yes** |
 
 ### Ownership and merge coordination
@@ -106,21 +99,18 @@ A track is **truly green** only when all three states are yes.
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
   blog rate limiter, the generated `pyproject.toml.j2` `[build-system]` block, orgs'
-  `quickscale_orgs_create_site_org` command (SA240), and the personal-data inventory (SA242), and, for the
+  `quickscale_orgs_create_site_org` command, and the personal-data inventory, and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
   theme's React API client, module settings snapshots and the module split facades' loggers and
-  re-exports, and the conformance harness with its registry row (SA215).
+  re-exports, and the conformance harness with its registry row.
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
-  a ticket that does lands through the serialized merge queue. SA215 touches every module and crosses every
-  track, so it lands in module-sized slices through that queue, merging `v89` before each slice.
-  The seventh-pass convention tickets (SA235–SA238) also cross tracks: each adds its own harness
-  clause (a Track 3 surface), and SA235 touches orgs' `TenantMiddleware`. They land through the
-  same queue.
+  a ticket that does lands through the serialized merge queue. The convention tickets cross
+  tracks: each adds its own harness clause (a Track 3 surface), and SA235 touches orgs'
+  `TenantMiddleware`.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
-  [decisions.md](decisions.md) (SA204, SA153, and SA215, which update the names it
-  quotes from the shipped state). Each track resolves the shared set at its
+  [decisions.md](decisions.md). Each track resolves the shared set at its
   own merge, after the previous merge lands, then runs the consistency test.
 - Docker-heavy work follows the [execution policy](validation_policy.md#candidate-review-and-integration).
 
@@ -133,8 +123,6 @@ reset/checkout destructively. Merge `v89` into the worktree, resolve there, run 
 suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
-
-- [x] **SA233 — Key the quality ratchet by qualified name and retire the rename waivers.**
 
 - [ ] **SA234 — Retarget test patches to defining modules and remove facade back-imports.**
 
@@ -204,8 +192,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   so its shallow paths keep a host reservation and it declares no `spa_routes`, and billing's
   `/billing/...` copies in `context_processors.py.j2` remain.
 
-- [x] **SA236 — Make settings snapshots private and guard optional senders on `is_enabled()`.**
-
 - [ ] **SA237 — One org-role check and root-only type-stub exemptions.**
 
   **Context:** billing's post-lock re-check (`_subscription_mutations.py`) re-implements orgs' role
@@ -250,14 +236,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** loggers and facades in auth, backups, billing (Track 2), notifications, and orgs,
   with their tests; harness rule 19 and rule 28; release notes; decisions.
-
-- [x] **SA239 — Derive blog and storage upload extensions from the validated image format.**
-
-- [x] **SA215 — Enforce the remaining module conventions and close the inventory.**
-
-- [x] **SA231 — Split long files and complex functions in batches, then make the quality gate fail.**
-
-- [x] **SA232 — Split the long CLI command, `dr_engine`, and billing files.**
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
@@ -311,7 +289,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `listings` and `forms` ship a rewritten `0001_initial` that depends on `orgs` and a NOT NULL
   organization FK. Rehearse first: restore a production dump into a scratch PostgreSQL 18 and
   confirm the history inconsistency with `migrate --plan` against the recipient. The cutover
-  rebuilds a fresh database. SA240's `quickscale_orgs_create_site_org` command creates the site's
+  rebuilds a fresh database. The `quickscale_orgs_create_site_org` command creates the site's
   organization in the same deploy step as `migrate`. The catalog is
   then reseeded through `bap-web`'s own seed command, tenant-scoped to that organization under the
   restricted runtime role — never under BYPASSRLS. Users are
@@ -360,8 +338,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the new `bap-web-new` repository and its reseed step; the migration prompt; the
   `forms` module only for upstreamed customizations.
-
-- [x] **SA240 — Add the idempotent `quickscale_orgs_create_site_org` command for SA191's cutover.**
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -515,28 +491,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
   This ticket keeps the row, disables it, and scrubs the personal data at once, so records stay
   attributed to "Deleted user #<id>" (as Django admin shows it).
 
-  **Personal data about a user today** (from the models on `v89`; the first slice confirms it,
-  including third-party tables):
-
-  | Where | What | Proposed treatment |
-  |---|---|---|
-  | auth `User` | `username`, `email`, `first_name`, `last_name`, password, `last_login` | scrub: `deleted-<id>` / `deleted-<id>@invalid`, blank names, unusable password, `is_active = False` |
-  | django-allauth `EmailAddress` | the person's email addresses and their verified state | delete (rows exist only for login) |
-  | Django sessions | active logins | delete |
-  | blog `AuthorProfile` | `bio`, `avatar` file | blank the bio; delete the file through storage |
-  | orgs `OrganizationMembership` | membership, role; `invited_by` on surviving rows | delete the person's memberships (the last-owner guard still applies); surviving rows keep the inviter link |
-  | orgs `OrganizationInvitation` | invitations *sent* (`invited_by`); the recipient `email` on pending, accepted, and expired invitations | pending invitations withdrawn; accepted and expired rows keep the sender link and have the address scrubbed |
-  | notifications `NotificationMessage` / `NotificationDelivery` / `NotificationDeliveryEvent` | `recipient_email`, rendered subject, text, and context sent to them, provider failure text, and the stored provider payload (matched by address; there is no user link) | scrub the address, the rendered body, and provider-carried text; keep status for delivery statistics |
-  | billing `Subscription`, `CreditBalance`, `CreditTransaction`, `PurchaseCheckout`, `WebhookEvent` | the user as actor; customer email and name inside the stored Stripe event payload | keep the link; scrub customer email and name from the webhook payload; the organization's Stripe customer email belongs to the org owner and changes only with ownership |
-  | crm `ContactNote` / `DealNote`, `Deal.owner`, forms `Form.created_by`, blog `Post.author` / `BlogMediaAsset.uploaded_by`, backups actor | the user as actor | keep the link; nothing to scrub on the row |
-  | analytics (PostHog) | events under the user's `distinct_id` | outside the database: documented as the operator's deletion step |
+  **Personal data:** the checked inventory in orgs'
+  `tests/_personal_data_inventory.py` lists every field and its treatment; its conformance test
+  fails on any uninventoried candidate. The handlers implement that inventory.
 
   Out of scope: data about people who are *not* users (crm `Contact`, forms submissions with their
   IP and user agent), which belong to the organization; a restore grace period; a data export.
 
   **Scope:**
-  - *Inventory first.* SA242 delivers the table above as a checked list; this ticket's handlers
-    are written against it.
   - *Anonymize capability.* Each module that holds personal data about a user declares an
     anonymize handler on its `AppConfig` (Module Conventions rule 4's capability mechanism, extending
     the removal obligations in orgs' `removal.py` with an `ANONYMIZE` `RemovalAction`); auth
@@ -563,10 +525,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** auth (`views.py`, `AppConfig`, README); orgs (`removal.py`, the
   account-deletion lookup, memberships, invitations); blog, notifications, billing, crm, forms,
-  backups (anonymize handlers where the inventory lists them); decisions.md and [organizations.md](organizations.md). These are Track 3 surfaces
-  (`auth/views.py`, orgs' removal path) plus module code that SA215 also edited (the dependency edge
-  closed with SA215);
-  billing is a Track 2 surface, so SA216 lands through the serialized merge queue.
+  backups (anonymize handlers where the inventory lists them); decisions.md and [organizations.md](organizations.md). Billing is a Track 2
+  surface, so SA216 lands through the serialized merge queue.
 
   **Slices:**
   - [ ] (a) The `ANONYMIZE` removal action and auth's collector, with each module's handler and
@@ -575,8 +535,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
     rollback test.
   - [ ] (c) Remove the account-deletion lookup and turn `ACCOUNT_DELETE` into the anonymize
     boundary; decisions, organizations.md, and auth's README.
-
-- [x] **SA242 — Inventory every personal-data field about a user behind a failing test.**
 
 ## Deferred constraints and references
 

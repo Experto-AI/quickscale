@@ -236,8 +236,9 @@ shaped renames still pending (SA215 rules) **before** the freeze, because they a
   generated projects (billing, `dr_engine`). The trigger is already firing: SA231's closing batch
   and every SA191 edit touch these packages. The population went from 0 to 51 back-importing modules,
   and the waivers from 0 to 55, in 9 days.
-- **Horizon & trigger:** `now`. The trigger is the SA231 closing batch, which registers `make
-  quality` as failing and re-keys the baseline; the next split; or the 2027-03-31 waiver expiry.
+- **Horizon & trigger:** `now`. The trigger is the next split, or any SA191 edit to `apply`.
+- **Partly fixed:** SA233 keyed the quality ratchet by qualified name and retired the 55 rename
+  waivers. Still open: the back-imports and the private-name surface pins (SA234).
 - **Confidence:** High. The mechanism was read in code and tests, censused, and no enforcer was
   found (below).
 - **Context dependence:** `wrong-regardless` for the cycle. Its severity scales with cadence,
@@ -326,17 +327,14 @@ must be re-keyed by hand, and the next split mints more.
    by qualified name, not path. This contains the risk without removing the cycle. Revoke it at
    the next split.
 
-**Recommendation:** option 3's ratchet re-key inside SA231's closing batch, which is already
-planned and stops the waiver minting, plus option 1 per package as each is next edited, starting
-with `apply_command` before SA191. Drop "existing tests stay unchanged" from SA231's scope.
+**Recommendation:** option 1 per package, starting with `apply_command` before SA191 (SA234).
 - **Size:** `M`.
 - **Reversibility:** `two-way door`. Only test targets and intra-package imports change; public
   import paths stay.
 - **Guard:** an import-cycle check (for example an import-linter `independence`/no-cycle contract,
   or an AST check) that fails when a `_*.py` module imports its own package's facade, plus a
   quality baseline keyed by `module.qualname`.
-- **First step:** re-key `quality_baseline.json` by qualified name in SA231's closing batch, and
-  delete the 55 waivers.
+- **First step:** SA234's decision entry, then the `apply_command` codemod.
 
 ---
 
@@ -385,8 +383,7 @@ That is 4 stations, with nothing holding 2 and 3 consistent. **Verdict: finding 
 
 ## Fix order and interactions
 
-- Finding 2's ratchet re-key belongs inside SA231's closing batch (Track 1, before SA191). Doing it
-  after the gate turns failing would force 55 waivers to be renewed.
+- Finding 2's remaining work (SA234) lands before SA191 edits `apply`.
 - Finding 1's freeze (SA204) must land before any post-SA153 module schema change.
 - The two findings are otherwise independent and can run in parallel.
 
@@ -427,8 +424,6 @@ That is 4 stations, with nothing holding 2 and 3 consistent. **Verdict: finding 
 
 ## Questions that would change the ranking
 
-- **`split-facades-patch-coupled`:** are more SA231-style splits planned after the closing batch?
-  If not, the compounding rate flattens and option 3 becomes sufficient.
 - **`clean-break-schema-no-data-path`:** will `experto-ai-web` migrate too? That doubles the
   affected population. (Carried; unanswered.)
 - **The closed `generated-file-ownership-unmodeled`:** is "regenerate and port" the permanent
@@ -440,6 +435,8 @@ That is 4 stations, with nothing holding 2 and 3 consistent. **Verdict: finding 
 
 - 2026-10-03 — `clean-break-schema-no-data-path`: **still-open**, rank 1. The census grew (22
   rewrites in the delta); SA204 is still deferred after SA153.
+- 2026-10-03 — `split-facades-patch-coupled`: **partly fixed** by SA233 (ratchet keyed by
+  qualified name, rename waivers retired); the back-imports remain under SA234.
 - 2026-10-03 — `split-facades-patch-coupled`: **new**, rank 2. It was minted by SA231/SA232's
   relocation of god-module coupling into facade back-imports.
 - 2026-10-03 — W2, W3, W4, W6, W7: **carried**, triggers not fired (evidence above). W7's station
