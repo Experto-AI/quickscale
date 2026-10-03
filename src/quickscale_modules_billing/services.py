@@ -307,7 +307,6 @@ __all__ = [
     "BillingConfigurationError",
     "BillingDisabledError",
     "BillingError",
-    "BillingSettingsSnapshot",
     "BillingSubscriptionAnomalyError",
     "BillingValidationError",
     "BillingWebhookError",
