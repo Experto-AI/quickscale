@@ -322,9 +322,9 @@ Suggested material for that section:
 
 > **Conventions.** Names, file set, URLs, templates, APIs, checks, and tests follow
 > [decisions.md § Module Conventions](decisions.md#module-conventions), enforced by its conformance
-> test. Names below that use the `quickscale_modules_<name>` app label describe the shipped state
-> until SA215 renames them to `quickscale_<name>` (templates and static files already use
-> `quickscale_<name>`).
+> test. SA215 renamed the app label from `quickscale_modules_<name>` to `quickscale_<name>`
+> (templates and static files already used it); the Python package path stays
+> `quickscale_modules_<name>`.
 
 Mechanics for creating a new `quickscale_modules/<name>` package. The *rules* this
 checklist serves are authoritative elsewhere and this document does not restate them:
@@ -454,7 +454,7 @@ derivation:
       derivation_type: static
       expression:
         value:
-          - quickscale_modules_<name>      # the module's own app label
+          - quickscale_modules_<name>      # the module's own app package (label quickscale_<name>)
           # plus any third-party apps it requires, e.g. rest_framework
       description: "<name> Django app label"
 ```

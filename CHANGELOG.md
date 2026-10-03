@@ -359,9 +359,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     secret from projected Django settings that `quickscale apply` renders from each module's
     `_env_var` option, and a switched-on module whose required secret is empty fails startup.
   - **Module conventions are enforced by a registered gate.** `make check-module-conventions` runs
-    one conformance check over every module manifest and module source tree; each covered rule has a
-    control case proving it rejects a violation, and rules whose convention work is still pending
-    are recorded in the check itself.
+    one conformance check over every module manifest and module source tree; every statically
+    checkable convention rule has a control case proving it rejects a violation, and the rules
+    enforced outside it — write-effect rollback tests, the user-FK gate, and `apply`'s wiring
+    check — are named in the check itself.
   - **Manifest loading keeps its import surface while the implementation splits.** The module
     manifest loader stays the import path every caller uses and re-exports its full former surface,
     while its parsing logic lives in focused sibling modules.

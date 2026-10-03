@@ -1,6 +1,7 @@
 # Module Conventions Inventory
 
 Audited: c10b529e (v89) · 2026-10-03 · working tree dirty (uncommitted edits to `docs/others/arch-audit.md` and `tech-audit.md` only; no source) · prompt: deep-coherence-audit v1 · passes: 2 (this re-run; 8 in all)
+**SA215 closing pass:** 2026-10-02 · see [Closing pass](#closing-pass-sa215-2026-10-02)
 
 ## Coherence audit re-run (2026-10-03)
 
@@ -184,10 +185,12 @@ that ticket now says so.
 - **Declared conventions.** [decisions.md § Module Conventions](../technical/decisions.md#module-conventions)
   rules 1–30 when audited (1–40 after D33–D42), linked from module-extension.md's authoring
   checklist (where a module author looks).
-  Checks that exist today: the core ↔ module import linter, `.env.example` conformance, SA35's
-  `on_delete` gate (rule 27), the PostgreSQL isolation gate, core's page-style contract, and
-  `scripts/check_security_gates.py`. **The conformance test (rule 30, now rule 40) does not exist
-  yet**, so every rule except rule 27 is enforced by nothing (see [Enforcement gaps](#enforcement-gaps)).
+  Checks: the rule 40 conformance harness
+  ([`scripts/check_module_conventions.py`](../../scripts/check_module_conventions.py)), the core ↔
+  module import linter, `.env.example` conformance, the user-FK `on_delete` gate (rule 27), the
+  PostgreSQL isolation gate, core's page-style contract, and `scripts/check_security_gates.py`.
+  See the [Closing pass](#closing-pass-sa215-2026-10-02) for what the harness covers and the rules
+  it delegates.
 - **Reference members.** crm (on `TenantModel`, `services.py`, the most complete test set) and
   notifications (`transaction.on_commit`, one error base, keyword-only services). Neither is complete:
   crm has hand-written `is_staff` checks, and notifications' README documents none of its options.
@@ -212,6 +215,60 @@ them wrong (corrections in place).
 
 Superseded by the 2026-10-03 index above; the sixth pass's statuses are kept in the
 [reconciliation log](#reconciliation-log).
+
+## Closing pass (SA215, 2026-10-02)
+
+Rule 40's conformance harness (`scripts/check_module_conventions.py`, registered gate
+`check-module-conventions`) covers rules 1–20, 22–26, 28–29, and 31–39 over every `module.yml`,
+every module's source, and core's and the CLI's option handling, with a control case per covered
+rule in `scripts/test_check_module_conventions.py`; the live tree passes. Rules 27 and 30 stay out
+of the harness by rule 40's own carve-out; rule 21 is a review rule under rule 21 itself. Their
+owning checks:
+
+- **Rule 21 (effects of a write)** is a review rule with a rollback test per module; SA216 rebuilds
+  the account-removal path that uses it.
+- **Rule 27 (`on_delete` on `User`)** is enforced by the user-FK conformance gate
+  (`orgs/tests/test_user_fk_conformance.py`). Its reach is the apps that suite installs, so a
+  generated project's own apps remain a review-rule boundary; the reason is recorded in
+  decisions.md rule 27.
+- **Rule 30 (settings written by module wiring)** is enforced in `apply` by
+  `quickscale_core.module_wiring.collect_wiring`, which fails on an unequal shared key and
+  deep-merges `REST_FRAMEWORK`; its control cases are in
+  `quickscale_core/tests/test_module_wiring.py`.
+
+The enforcement gaps the audit recorded are closed or accepted:
+
+- Gap 1 (no conformance test) is closed by the harness above.
+- Gaps 2 and 4–12 are closed by the convention tickets and the harness clauses they landed: the
+  page-style contract is discovery-driven and flat, the isolation gates derive their module sets and
+  social ships its `test_rls_boundary.py`, the README check reads option keys and command names,
+  references by name are checked over the layer table, the root `mypy.ini` carries one section per
+  module with no per-module `[tool.mypy]`, option `validation:` blocks are read by core, the
+  manifest loader refuses version specifiers, `collect_wiring` refuses unequal shared values (gap
+  10's first clause; its generated-composition clause is recorded below), the gate is renamed, and
+  `TENANT_TABLE_REGISTRY` is test-owned.
+- Gap 3 (the user-FK gate sees only its suite's apps) is accepted, as recorded in decisions.md
+  rule 27.
+- Four residuals are accepted alongside the fixed checks: a module's `test_isolation.py` is
+  invoked explicitly by the PostgreSQL gate and does not self-enroll; rule 38's README match is a
+  substring anywhere in the file (a floor, as D41 records); rule 19's detector follows the
+  view-module names (`views.py`, `debug_views.py`, `_view*.py`, `*_views.py`), so view code a rule 28
+  split files under another private name stays outside the check; and the generated `base.py` still
+  spreads a module's `REST_FRAMEWORK` keys over the template defaults, so a module can override the
+  `anon`/`user` throttle rates, which no gate owns.
+
+The names decisions.md quoted from the audit-time shipped state now carry the renamed forms
+(`QUICKSCALE_MODE` → `QUICKSCALE_ORGS_MODE`, `backups_create` → `quickscale_backups_create`,
+`quickscale_modules_<module>` app labels → `quickscale_<module>`). The audit-time prose of the
+[Coherence audit re-run](#coherence-audit-re-run-2026-09-28) section and the evidence cells in
+sections 1–41 below remain the 2026-09-28 audit record, not a description of the current tree; the
+2026-10-03 index statuses and this closing pass are the current state.
+
+Two sections 1–41 items are not closed by this pass but are carried, with the corrections the
+2026-10-03 pass above records: `theme-module-presence` (the social seam pages still hand-write
+module flags and paths) and `module-lists-outside-members` (the generated shell routes stay
+literal). Their fix is host-template and seam work, owned by SA235 together with its mount-path
+item, so they are the pass's deferred remainder rather than accepted exceptions.
 
 ---
 
@@ -2861,6 +2918,15 @@ any difference from this summary. Rules 2, 9, 11, 13, 14, 18, 22, and 27 were am
 12. **A shipped-source oracle.** `TENANT_TABLE_REGISTRY` is recorded as a CI parity oracle but lives
     in orgs' `tenancy.py` (D37).
 
+**Closing note (SA215, 2026-10-02).** Gaps 1, 2, and 4–12 are closed (gap 10's generated-composition
+clause excepted, as the [Closing pass](#closing-pass-sa215-2026-10-02) records): the rule 40 harness
+covers the statically checkable rules, the page-style contract is discovery-driven, the isolation
+gates derive their module sets, the README check reads option and command names, references by name
+are checked, the root `mypy.ini` carries one section per module, option `validation:` blocks are
+read, `required_modules` refuses specifiers, `collect_wiring` refuses unequal values, the gate is
+renamed, and the tenant registry is test-owned. Gap 3 is accepted with its reason in decisions.md
+rule 27. The list above is the audit-time record, not a description of the current tree.
+
 ## Consistent by design
 
 - **Outbound vendor clients follow their SDKs:** billing builds a `StripeClient` per call; analytics
@@ -3078,6 +3144,9 @@ in the code.
 - 2026-09-28 — `module-lists-outside-members`: decided (rule 37, D40) — maintainer decision; members not yet changed.
 - 2026-09-28 — `readme-content-accuracy`: decided (rule 38, D41) — maintainer decision; members not yet changed.
 - 2026-09-28 — `manifest-dependency-spec`: decided (rule 39, D42) — maintainer decision; members not yet changed.
+- 2026-10-02 — closing pass (SA215): every index item resolved. The convention tickets landed the
+  code changes and rule 40's harness enforces the statically checkable rules over the shipped tree;
+  rules 21, 27, and 30 keep their delegated checks. Sections 1–41 remain the 2026-09-28 evidence.
 
 **2026-10-03 (seventh pass, `58e73cc7..c10b529e`).** "Verified" means two things: the rule 40
 harness passed at `c10b529e` with the rule covered, **and** this pass checked independently by

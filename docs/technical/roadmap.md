@@ -29,20 +29,19 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA236 | Make settings snapshots private and guard optional senders on `is_enabled()` | post-v88 | 3 | — | Deferred |
 | SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
 | SA238 | Split-facade conventions: log channels, re-exports, and view discovery by content | post-v88 | 3 | SA234 | Deferred |
-| SA215 | Enforce the remaining module conventions and close the inventory | post-v88 | 3 | — | Deferred |
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | SA215 | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA215, SA235, SA236, SA237, SA238 | Deferred |
+| SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA235, SA236, SA237, SA238 | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | SA215 | Deferred |
-| SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | SA215 | Deferred |
+| SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
+| SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA235 ──► SA191 ──► SA153 ──► SA204 ──► SA214 ──► SA154 (inventory)
 Track 2: SA234 ──► SA237
-Track 3: SA215 (closing pass, in progress) ──► SA236 ──► SA238 ──► SA216
+Track 3: SA236 ──► SA238 ──► SA216
      critical path: SA234 → SA238 → SA191 → SA153
 ```
 
@@ -54,14 +53,15 @@ before SA191 edits `apply`, and SA238's re-export rule follows SA234's contract,
 runs ahead of SA191. SA204 freezes migration history before any post-SA153 module schema change.
 SA154 is an inventory, not work.
 
-**Parallel start.** All three tracks can start now: SA235 (Track 1), SA234 (Track 2), and SA215
-(Track 3, resuming its closing pass). SA215 closes inventory sections 1–41. The coherence audit's
+**Parallel start.** All three tracks can start now: SA235 (Track 1), SA234 (Track 2), and SA236
+(Track 3). SA215's closing pass landed and closed inventory sections 1–41 (the two cells the
+seventh pass corrected are carried by SA235). The coherence audit's
 seventh pass (sections 42–47, D43–D48) is carried by SA235–SA238. Each begins by recording its
 decision (proposed rules 41–46 in the
 [inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
 its own item, harness clause, and inventory section, and SA191 waits for all of them.
 
-**Off the critical path.** SA216 waits for SA215 because both change auth's views, orgs' removal
+**Off the critical path.** SA216 follows SA215 because both change auth's views, orgs' removal
 path, and the user-referencing models.
 
 ### Track states
@@ -72,7 +72,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA235 | yes | yes | yes | **yes** | **yes** |
 | 2 | SA234 | yes | yes | yes | **yes** | no |
-| 3 | SA215 | yes | yes | yes | **yes** | no |
+| 3 | SA236 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -248,25 +248,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA239 — Derive blog and storage upload extensions from the validated image format.**
 
-- [ ] **SA215 — Enforce the remaining module conventions and close the inventory.**
-
-  **Context:** the twelve modules grew one at a time and follow different conventions. The drift
-  items (D1–D42) are in
-  [module-conventions-inventory.md](../planning/module-conventions-inventory.md), the rules in
-  [decisions.md § Module Conventions](decisions.md#module-conventions); the convention tickets are the code,
-  and this ticket closes them. The seventh pass's D43–D48 (sections 42–47) are closed by SA235–SA238, not here.
-
-  **Scope:** the conformance test extended to every rule of 1–39 it does not yet cover, with a
-  control case per rule; the release notes; the inventory's closing pass. A drift item no
-  convention ticket fixed is fixed here or recorded as an accepted exception.
-
-  **Acceptance:** every inventory drift item (sections 1–41) is fixed or recorded as an accepted
-  exception with its reason; the conformance test passes and rejects a violation of each rule; a
-  freshly generated project with all twelve modules passes `make ci-e2e`; the release notes list every
-  moved public URL with its operator step (Stripe and Resend webhook endpoints); decisions.md
-  names quoted from the shipped state are updated; the inventory is marked resolved.
-
-  **Surfaces:** the conformance test; release notes; decisions; the inventory.
+- [x] **SA215 — Enforce the remaining module conventions and close the inventory.**
 
 - [x] **SA231 — Split long files and complex functions in batches, then make the quality gate fail.**
 
@@ -530,7 +512,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** auth (`views.py`, `AppConfig`, README); orgs (`removal.py`, the
   account-deletion lookup, memberships, invitations); blog, notifications, billing, crm, forms,
   backups (anonymize handlers where the inventory lists them); decisions.md and [organizations.md](organizations.md). These are Track 3 surfaces
-  (`auth/views.py`, orgs' removal path) plus module code that SA215 also edits, hence the dependency;
+  (`auth/views.py`, orgs' removal path) plus module code that SA215 also edited (the dependency edge
+  closed with SA215);
   billing is a Track 2 surface, so SA216 lands through the serialized merge queue.
 
 ## Deferred constraints and references
