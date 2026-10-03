@@ -440,7 +440,7 @@ class TestReactThemeGeneration:
 
         assert (
             'react_shell_view = TemplateView.as_view(template_name="index.html")'
-            in react_shell_prelude
+            in views_py
         )
         assert "@login_required" in views_py
         assert (
@@ -469,12 +469,14 @@ class TestReactThemeGeneration:
             'r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$"'
             not in react_shell_prelude
         )
-        # The named crm-shell route lets the React seam reverse modulePaths.crm
-        # (Module Conventions rule 31).
-        assert 're_path(r"^crm/?$", react_shell_view, name="crm-shell")' in (
-            react_shell_prelude
-        )
-        assert 'r"^(profile|blog|listings|settings)/?$"' in react_shell_prelude
+        # SA235 (rule 41): the CRM React shell route is manifest-declared and
+        # rendered from the managed wiring after the module's own includes.
+        assert 're_path(r"^crm/?$"' not in react_shell_prelude
+        assert 'name="crm-shell"' not in react_shell_prelude
+        assert 'r"^(profile|settings)/?$"' in react_shell_prelude
+        assert 'r"^(profile|blog|listings|settings)/?$"' not in react_shell_prelude
+        # Forms keeps its shallow host reservation: its module entrypoint
+        # renders only a mount-point div (rule 41 exception).
         assert 'r"^forms/[^/]+/?$"' in react_shell_prelude
         # T1.7: forms routes are flat — no org-scoped forms patterns.
         assert 'r"^orgs/[^/]+/forms/?$"' not in react_shell_prelude
@@ -485,6 +487,9 @@ class TestReactThemeGeneration:
         assert urls_py.index("urlpatterns += react_shell_urlpatterns") < urls_py.index(
             "urlpatterns += PRE_HOME_MODULE_URLPATTERNS"
         )
+        assert urls_py.index(
+            "urlpatterns += POST_HOME_MODULE_URLPATTERNS"
+        ) < urls_py.index("urlpatterns += SPA_MODULE_URLPATTERNS")
 
     def test_orgs_api_paths_bypass_the_react_shell(self, tmp_path):
         """Every /orgs/api/... path falls through the shell to the module include."""
@@ -888,6 +893,27 @@ class TestReactThemeAuthUrls:
             assert url in content, f"ProfilePage missing expected auth link: {url}"
 
 
+def _seam_urlconf() -> types.ModuleType:
+    """A minimal URLconf resolving the seam's named routes for renders."""
+    from django.urls import include, path
+
+    def _view(request):
+        return None
+
+    urlconf = types.ModuleType("_quickscale_seam_test_urls")
+    urlconf.urlpatterns = [
+        path("", _view, name="home"),
+        path("crm", _view, name="quickscale_crm_shell"),
+        path("social", _view, name="social-link-tree"),
+        path("social/embeds", _view, name="social-embeds"),
+        path(
+            "analytics/",
+            include(([path("", _view, name="dashboard")], "quickscale_analytics")),
+        ),
+    ]
+    return urlconf
+
+
 @pytest.mark.integration
 class TestReactThemeModuleActivationMatrix:
     """Validate React module activation behavior for none/some/all selections."""
@@ -1071,7 +1097,7 @@ class TestReactThemeModuleActivationMatrix:
             "\n        }", 1
         )[0]
 
-        assert "{% url 'crm-shell' %}" in module_paths_section
+        assert "{% url 'quickscale_crm_shell' %}" in module_paths_section
         assert "{% url 'quickscale_analytics:dashboard' %}" in module_paths_section
         assert "{% url 'social-link-tree' %}" in module_paths_section
         assert "{% url 'social-embeds' %}" in module_paths_section
@@ -1086,7 +1112,7 @@ class TestReactThemeModuleActivationMatrix:
             )
 
         urls_py = (output_path / "react_seam_paths" / "urls.py").read_text()
-        assert 'name="crm-shell"' in urls_py
+        assert "SPA_MODULE_URLPATTERNS" in urls_py
 
     def test_react_theme_billing_window_config_flag(self, tmp_path):
         """Generated React index template should expose billing as a module flag only, not as a module path."""
@@ -1397,8 +1423,8 @@ class TestReactThemeModuleActivationMatrix:
         assert urls_py.index('r"^social/?$"') < urls_py.index(
             're_path(r".*", react_shell_view)'
         )
-        assert 'href="/social"' in base_template
-        assert 'href="/social/embeds"' in base_template
+        assert 'href="{{ settings.QUICKSCALE_SOCIAL_LINK_TREE_PATH }}"' in base_template
+        assert 'href="{{ settings.QUICKSCALE_SOCIAL_EMBEDS_PATH }}"' in base_template
         assert 'id="root" class="qs-social-react-shell"' in link_tree_template
         assert "Social module not active" in link_tree_template
         assert "{% load static %}" in link_tree_template
@@ -1409,7 +1435,10 @@ class TestReactThemeModuleActivationMatrix:
         assert "frontend/assets/index.css" not in link_tree_template
         assert "frontend/assets/index.js" in link_tree_template
         assert "surface: 'link_tree'" in link_tree_template
-        assert "endpoint: '/_quickscale/social/'" in link_tree_template
+        assert (
+            'endpoint: "{{ settings.QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH }}"'
+            in link_tree_template
+        )
         assert 'id="root" class="qs-social-react-shell"' in embeds_template
         assert "Social module not active" in embeds_template
         assert "{% load static %}" in embeds_template
@@ -1420,7 +1449,10 @@ class TestReactThemeModuleActivationMatrix:
         assert "frontend/assets/index.css" not in embeds_template
         assert "frontend/assets/index.js" in embeds_template
         assert "surface: 'embeds'" in embeds_template
-        assert "endpoint: '/_quickscale/social/embeds/'" in embeds_template
+        assert (
+            'endpoint: "{{ settings.QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH }}"'
+            in embeds_template
+        )
 
     def test_react_public_social_embeds_render_site_root_static_asset_urls(
         self, tmp_path, monkeypatch
@@ -1441,6 +1473,13 @@ class TestReactThemeModuleActivationMatrix:
                 USE_I18N=False,
                 USE_TZ=False,
             )
+
+        from django.urls import clear_url_caches
+
+        monkeypatch.setattr(
+            django_settings, "ROOT_URLCONF", _seam_urlconf(), raising=False
+        )
+        clear_url_caches()
 
         settings_base = (
             output_path / project_name / "settings" / "base.py"
@@ -1471,6 +1510,10 @@ class TestReactThemeModuleActivationMatrix:
                         QUICKSCALE_SOCIAL_ENABLED=True,
                         QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=True,
                         QUICKSCALE_SOCIAL_EMBEDS_ENABLED=True,
+                        QUICKSCALE_SOCIAL_LINK_TREE_PATH="/social",
+                        QUICKSCALE_SOCIAL_EMBEDS_PATH="/social/embeds",
+                        QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH="/_quickscale/social/",
+                        QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH="/_quickscale/social/embeds/",
                     ),
                 }
             )
@@ -1502,6 +1545,13 @@ class TestReactThemeModuleActivationMatrix:
                 USE_TZ=False,
             )
 
+        from django.urls import clear_url_caches
+
+        monkeypatch.setattr(
+            django_settings, "ROOT_URLCONF", _seam_urlconf(), raising=False
+        )
+        clear_url_caches()
+
         static_tags = Library()
 
         @static_tags.simple_tag
@@ -1527,6 +1577,10 @@ class TestReactThemeModuleActivationMatrix:
                             QUICKSCALE_SOCIAL_ENABLED=False,
                             QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=True,
                             QUICKSCALE_SOCIAL_EMBEDS_ENABLED=True,
+                            QUICKSCALE_SOCIAL_LINK_TREE_PATH="/social",
+                            QUICKSCALE_SOCIAL_EMBEDS_PATH="/social/embeds",
+                            QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH="/_quickscale/social/",
+                            QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH="/_quickscale/social/embeds/",
                         ),
                     }
                 )
@@ -1546,6 +1600,10 @@ class TestReactThemeModuleActivationMatrix:
                             QUICKSCALE_SOCIAL_ENABLED=True,
                             QUICKSCALE_SOCIAL_LINK_TREE_ENABLED=True,
                             QUICKSCALE_SOCIAL_EMBEDS_ENABLED=True,
+                            QUICKSCALE_SOCIAL_LINK_TREE_PATH="/social",
+                            QUICKSCALE_SOCIAL_EMBEDS_PATH="/social/embeds",
+                            QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH="/_quickscale/social/",
+                            QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH="/_quickscale/social/embeds/",
                         ),
                     }
                 )

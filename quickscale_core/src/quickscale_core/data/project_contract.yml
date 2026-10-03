@@ -179,6 +179,13 @@ steps:
     adoption_steps:
       - "Compare and manually adopt the current templates/index.html: window.__QUICKSCALE__.modules carries a key for every shipped module (present as false when the module is absent) and its modulePaths entries reverse named routes with {% url %} instead of literal paths — crm through the crm-shell route, social through social-link-tree or social-embeds, and analytics through quickscale_analytics:dashboard. A project that keeps a literal path can link to a route apply no longer mounts."
       - "Compare and manually adopt the current <package>/urls.py: the /crm/ React shell route is named crm-shell so the seam's crm path reverses it; a project that moved that route updates the name instead of editing the seam."
+  - id: sa235-module-shell-routes
+    minimum: "0.89.0"
+    title: "Adopt manifest-declared module React shell routes"
+    adoption_steps:
+      - "Compare and manually adopt the current <package>/views.py and <package>/urls.py: the React shell view `react_shell_view` now lives in views.py, urls.py imports it and imports SPA_MODULE_URLPATTERNS from <package>/urls_modules.py, and appends `urlpatterns += SPA_MODULE_URLPATTERNS` after `urlpatterns += POST_HOME_MODULE_URLPATTERNS`. The retired `^(profile|blog|listings|settings)/?$` and `^crm/?$` (named crm-shell) reservations are gone, so /blog/ and /listings/ serve the module indexes; forms keeps its host reservations because its module entrypoint renders only a mount-point div. This supersedes the sa219-discovery-seam-producer step's crm-shell guidance."
+      - "Run `quickscale apply` after updating the embedded modules: it regenerates <package>/urls_modules.py from each installed and enabled module's manifest-declared spa_routes, so the CRM shell route reverses as quickscale_crm_shell and a switched-off module contributes no shell route. A project that keeps importing react_shell_view from urls.py or lacks the SPA list fails to import its URLconf after the embedded-module update."
+      - "Compare and manually adopt the current templates/index.html, templates/base.html, and templates/social/*.html: the two public social pages render the shared seam (flags and {% url %}-based modulePaths) through generator/seam.py, the shared navigation reads the module's projected QUICKSCALE_SOCIAL_* path settings, and the CRM modulePaths entry reverses quickscale_crm_shell."
   - id: sa219-billing-projected-secrets
     minimum: "0.89.0"
     title: "Adopt the projected Stripe secret settings billing reads at runtime"

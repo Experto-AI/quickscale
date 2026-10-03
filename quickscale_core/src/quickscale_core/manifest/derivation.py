@@ -186,8 +186,8 @@ class WiringProjection:
     Attributes:
         wiring_field: The :class:`~quickscale_core.module_wiring.ModuleWiringSpec`
             field this projection contributes to.  Recognised values are
-            ``"apps"``, ``"middleware"``, ``"url_includes"``, and
-            ``"pre_home_url_includes"``.
+            ``"apps"``, ``"middleware"``, ``"url_includes"``,
+            ``"pre_home_url_includes"``, and ``"spa_routes"``.
         source_options: Configuration option keys that determine whether and
             what to contribute.
         derivation_type: How the contribution is computed.  Uses the same
@@ -204,6 +204,7 @@ class WiringProjection:
 
     wiring_field: (
         str  # "apps" | "middleware" | "url_includes" | "pre_home_url_includes"
+        # | "spa_routes"
     )
     source_options: list[str] = _field(default_factory=list)
     derivation_type: str = "static"

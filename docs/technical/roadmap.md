@@ -194,6 +194,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `base.html.j2`, `generator/seam.py`; orgs' `TenantMiddleware`; the harness; `frontend.md`;
   decisions.
 
+  **Progress (SA235).** Rule 41 is recorded with option A (the module indexes stay reachable).
+  The three flat modules (blog, listings, crm) declare `spa_routes`, which `apply` renders after
+  the module includes and each adapter drops when its module is off; their shadowing shell
+  reservations left `urls.py.j2`. The seam, both public social pages, `base.html.j2`, and
+  `TenantMiddleware` read routes or paths by name; the harness's rules 7, 31, and 37 now read
+  `generator/templates/**/*.j2` with controls; a generated-project test proves the module root
+  URL names resolve to their own views. Remaining: social's and orgs' React surfaces do not yet
+  declare manifest `spa_routes` (orgs' mode-inverted `/orgs*` reservations stay host-rendered and
+  social's public pages stay host routes), forms' entrypoint renders only an inert mount-point div
+  so its shallow paths keep a host reservation and it declares no `spa_routes`, and billing's
+  `/billing/...` copies in `context_processors.py.j2` remain.
+
 - [x] **SA236 — Make settings snapshots private and guard optional senders on `is_enabled()`.**
 
 - [ ] **SA237 — One org-role check and root-only type-stub exemptions.**

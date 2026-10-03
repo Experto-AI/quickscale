@@ -28,7 +28,10 @@ def _validate_wiring_contribution(
             f"{path} must be a list of contributions for '{wiring_field}'",
             module_name,
         )
-    if wiring_field in ("url_includes", "pre_home_url_includes"):
+    if wiring_field in ("url_includes", "pre_home_url_includes", "spa_routes"):
+        pair_label = (
+            "[route, name]" if wiring_field == "spa_routes" else "[route, include]"
+        )
         for index, item in enumerate(value):
             if (
                 not isinstance(item, (list, tuple))
@@ -36,7 +39,7 @@ def _validate_wiring_contribution(
                 or not all(isinstance(part, str) for part in item)
             ):
                 raise ManifestError(
-                    f"{path}[{index}] must be a [route, include] pair of strings",
+                    f"{path}[{index}] must be a {pair_label} pair of strings",
                     module_name,
                 )
     else:

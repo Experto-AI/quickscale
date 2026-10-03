@@ -38,7 +38,8 @@
       "sa225-skip-guard": "Regenerated 2026-09-28 \u2014 docker-compose.yml clears QUICKSCALE_SKIP_MODULE_CHECKS in the backend environment so a build-skip value in the loaded .env can never reach a serving process. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
       "v88-dockerfile-start-sh": "Regenerated 2026-09-14 \u2014 Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
+      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa235": "Regenerated 2026-10-03 - module UI paths move to manifest-declared spa_routes rendered after the module includes (SA235, rule 41): the React shell view moves to testproject/views.py, testproject/urls.py renders the manifest-declared routes from SPA_MODULE_URLPATTERNS after POST_HOME_MODULE_URLPATTERNS instead of reserving blog/listings/forms/crm literals, testproject/urls_modules.py gains the SPA list, and the public social pages render the shared seam with named social routes. The CRM seam path becomes `quickscale_crm_shell`, so templates/index.html changed with it. All changed fixture hashes updated per variant; all unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -474,19 +475,19 @@
     },
     "templates/base.html": {
       "mode": "644",
-      "sha256": "3898d9b34402ffba01246e2978f63fe3acfeab96de2440f768001f892f96b643"
+      "sha256": "5b87ddfd198975510794c60cea2944064f6acaa654f0ef8191b071e19429f5c1"
     },
     "templates/index.html": {
       "mode": "644",
-      "sha256": "143967305c394178a6283ee75ac723f46f8e024e87d7ea525c0b01da2a3e1cf3"
+      "sha256": "49db763c46c01aaef3798e218e24bdf160883d8820b70f5f3215a4859480dcb5"
     },
     "templates/social/embeds.html": {
       "mode": "644",
-      "sha256": "240fe1bfc9adfec11b4e9f745b4c4daf383e78cf2fba61a2d001f8f23a545756"
+      "sha256": "6d349d016417018a725f9bbb6653db20fdf533ecadef82040cd2b0f96a48a3dd"
     },
     "templates/social/link_tree.html": {
       "mode": "644",
-      "sha256": "6cd776f1fd174262af7a9ef63b980d05d1cac9ae63702531a41f29d652c059f7"
+      "sha256": "e28c8b2752a8fc418e2f3a01295b14f5c2ce4c882ba403b3969173977f6feed0"
     },
     "testproject/__init__.py": {
       "mode": "644",
@@ -522,15 +523,15 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "3b8239c90c47b3c74f9440222ea8626501e815b0d04db02df4789f45f09fe622"
+      "sha256": "77ad1922ceedd733da988067f82c5940df80a798a6e76173acf673ba0edc09f9"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
-      "sha256": "2ec1b29c982773cc901fd4a4b2593133917efd475a45d3da8bbf26d2e7ff0c18"
+      "sha256": "0d4faf429732c343c58c34c9cab2ce9bc97445724132128131163171f031742e"
     },
     "testproject/views.py": {
       "mode": "644",
-      "sha256": "362a2784676589406901f93c1e314d49d2c886163fae826603cb277c19635377"
+      "sha256": "8ebb9100cc322abea690f66ec419f80de7d8499578e89e681d51a44889290e5c"
     },
     "testproject/wsgi.py": {
       "mode": "644",
@@ -952,19 +953,19 @@
     },
     "templates/base.html": {
       "mode": "644",
-      "sha256": "3898d9b34402ffba01246e2978f63fe3acfeab96de2440f768001f892f96b643"
+      "sha256": "5b87ddfd198975510794c60cea2944064f6acaa654f0ef8191b071e19429f5c1"
     },
     "templates/index.html": {
       "mode": "644",
-      "sha256": "143967305c394178a6283ee75ac723f46f8e024e87d7ea525c0b01da2a3e1cf3"
+      "sha256": "49db763c46c01aaef3798e218e24bdf160883d8820b70f5f3215a4859480dcb5"
     },
     "templates/social/embeds.html": {
       "mode": "644",
-      "sha256": "240fe1bfc9adfec11b4e9f745b4c4daf383e78cf2fba61a2d001f8f23a545756"
+      "sha256": "6d349d016417018a725f9bbb6653db20fdf533ecadef82040cd2b0f96a48a3dd"
     },
     "templates/social/link_tree.html": {
       "mode": "644",
-      "sha256": "6cd776f1fd174262af7a9ef63b980d05d1cac9ae63702531a41f29d652c059f7"
+      "sha256": "e28c8b2752a8fc418e2f3a01295b14f5c2ce4c882ba403b3969173977f6feed0"
     },
     "testproject/__init__.py": {
       "mode": "644",
@@ -1000,15 +1001,15 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "3b8239c90c47b3c74f9440222ea8626501e815b0d04db02df4789f45f09fe622"
+      "sha256": "77ad1922ceedd733da988067f82c5940df80a798a6e76173acf673ba0edc09f9"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
-      "sha256": "2ec1b29c982773cc901fd4a4b2593133917efd475a45d3da8bbf26d2e7ff0c18"
+      "sha256": "0d4faf429732c343c58c34c9cab2ce9bc97445724132128131163171f031742e"
     },
     "testproject/views.py": {
       "mode": "644",
-      "sha256": "362a2784676589406901f93c1e314d49d2c886163fae826603cb277c19635377"
+      "sha256": "8ebb9100cc322abea690f66ec419f80de7d8499578e89e681d51a44889290e5c"
     },
     "testproject/wsgi.py": {
       "mode": "644",
@@ -1430,19 +1431,19 @@
     },
     "templates/base.html": {
       "mode": "644",
-      "sha256": "3898d9b34402ffba01246e2978f63fe3acfeab96de2440f768001f892f96b643"
+      "sha256": "5b87ddfd198975510794c60cea2944064f6acaa654f0ef8191b071e19429f5c1"
     },
     "templates/index.html": {
       "mode": "644",
-      "sha256": "143967305c394178a6283ee75ac723f46f8e024e87d7ea525c0b01da2a3e1cf3"
+      "sha256": "49db763c46c01aaef3798e218e24bdf160883d8820b70f5f3215a4859480dcb5"
     },
     "templates/social/embeds.html": {
       "mode": "644",
-      "sha256": "240fe1bfc9adfec11b4e9f745b4c4daf383e78cf2fba61a2d001f8f23a545756"
+      "sha256": "6d349d016417018a725f9bbb6653db20fdf533ecadef82040cd2b0f96a48a3dd"
     },
     "templates/social/link_tree.html": {
       "mode": "644",
-      "sha256": "6cd776f1fd174262af7a9ef63b980d05d1cac9ae63702531a41f29d652c059f7"
+      "sha256": "e28c8b2752a8fc418e2f3a01295b14f5c2ce4c882ba403b3969173977f6feed0"
     },
     "testproject/__init__.py": {
       "mode": "644",
@@ -1478,15 +1479,15 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "3b8239c90c47b3c74f9440222ea8626501e815b0d04db02df4789f45f09fe622"
+      "sha256": "77ad1922ceedd733da988067f82c5940df80a798a6e76173acf673ba0edc09f9"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
-      "sha256": "2ec1b29c982773cc901fd4a4b2593133917efd475a45d3da8bbf26d2e7ff0c18"
+      "sha256": "0d4faf429732c343c58c34c9cab2ce9bc97445724132128131163171f031742e"
     },
     "testproject/views.py": {
       "mode": "644",
-      "sha256": "362a2784676589406901f93c1e314d49d2c886163fae826603cb277c19635377"
+      "sha256": "8ebb9100cc322abea690f66ec419f80de7d8499578e89e681d51a44889290e5c"
     },
     "testproject/wsgi.py": {
       "mode": "644",

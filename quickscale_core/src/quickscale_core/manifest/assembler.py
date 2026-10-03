@@ -140,6 +140,7 @@ def assemble_wiring_spec(
         settings=dict(result.derived_settings),
         pre_home_url_includes=result.pre_home_url_includes,
         url_includes=result.url_includes,
+        spa_routes=result.spa_routes,
         managed_files=_build_managed_files_mapping(result),
     )
 

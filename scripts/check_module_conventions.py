@@ -136,10 +136,36 @@ MODULE_LAYERS: dict[str, int] = {
 MODULE_IMPORT_PREFIX = "quickscale_modules_"
 SNAKE_CASE = re.compile(r"^[a-z][a-z0-9_]*$")
 ENV_VAR_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
-# Rule 31's seam producer, relative to the core package.  The template renders
+# Rule 31's seam producers, relative to the core package.  The templates render
 # the discovered module set; the theme's TypeScript may still name its own
 # React surfaces (rule 37's allowlist).
 THEME_SEAM_TEMPLATE = "generator/templates/themes/showcase_react/templates/index.html.j2"
+THEME_SEAM_TEMPLATES: tuple[str, ...] = (
+    THEME_SEAM_TEMPLATE,
+    "generator/templates/themes/showcase_react/templates/social/link_tree.html.j2",
+    "generator/templates/themes/showcase_react/templates/social/embeds.html.j2",
+)
+# Rule 7's and rule 37's scan root for the generator's Jinja templates
+# (enforcement gap 13): the mount and module-list detectors read these too.
+GENERATOR_TEMPLATE_ROOT = "generator/templates/"
+# Rule 41's stated exception: the tenancy mode decides which side owns /orgs*
+# (solo mounts orgs before home, saas after), so orgs' React shell
+# reservations in the host URL template stay host-rendered.
+RULE_7_ALLOWED_TEMPLATE_MOUNTS: dict[tuple[str, str], str] = {
+    ("generator/templates/project_name/urls.py.j2", "orgs"): (
+        "rule 41 exception: tenancy-mode shell reservations stay host-rendered"
+    ),
+    ("generator/templates/project_name/urls.py.j2", "forms"): (
+        "rule 41 exception: forms' module entrypoint renders only a mount-point div, "
+        "so the host shell keeps its shallow paths working until it hydrates"
+    ),
+    ("generator/templates/templates/404.html.j2", "auth"): (
+        "the 404 hint tests the requested path against the module's mount; it declares no route"
+    ),
+    ("generator/templates/templates/404.html.j2", "billing"): (
+        "the 404 hint tests the requested path against the module's mount; it declares no route"
+    ),
+}
 # Rule 35's one listed exception: orgs' RLS boot guard reads core's runtime-role
 # variables before settings load.
 CORE_RUNTIME_ROLE_ENV_VARS = (
@@ -312,8 +338,12 @@ RULE_37_ALLOWED_LITERALS: dict[tuple[str, str, str], str] = {
     ("scripts", "check_org_context_primitives.py", "EXEMPT_MODULES"): (
         "the documented orgs lint exemption"
     ),
-}
-#: Two or more distinct module names in one literal is a module enumeration
+    (
+        "core",
+        "generator/templates/project_name/urls.py.j2",
+        "<template alternation:blog|listings|members|settings>",
+    ): "rule 41 exception: orgs' tenancy-mode shell reservations stay host-rendered",
+}  #: Two or more distinct module names in one literal is a module enumeration
 #: (rule 37's prohibition).  A single name counts when it is an assigned
 #: constant, which is a registry or an exclusion; the recorded allowlist above
 #: carries the legitimate exclusions, and a one-name expression inside a call
@@ -1757,6 +1787,47 @@ def rule_7_urls(corpus: Corpus) -> list[str]:
         root_view_name = _string_assignments(tree).get("root_view_name")
         if root_view_name is not None:
             violations.extend(_route_name_violations(module.name, root_view_name, "api root"))
+    violations.extend(_template_mount_literal_violations(corpus))
+    return violations
+
+
+def _template_mount_literal_violations(corpus: Corpus) -> list[str]:
+    """
+    Rule 7 over the generator's Jinja templates (enforcement gap 13).
+
+    A declared module mount written as a host route literal in a ``.j2``
+    file shadows the module the same way a copied mount does in Python; the
+    rule-41 exceptions are the entries in ``RULE_7_ALLOWED_TEMPLATE_MOUNTS``.
+    """
+    violations: list[str] = []
+    declared = {module.name: _declared_mounts(module) for module in corpus.modules}
+    for rel, text in corpus.core_files.items():
+        if not (rel.startswith(GENERATOR_TEMPLATE_ROOT) and rel.endswith(".j2")):
+            continue
+        for module_name, mounts in declared.items():
+            if (rel, module_name) in RULE_7_ALLOWED_TEMPLATE_MOUNTS:
+                continue
+            for mount in mounts:
+                if not mount:
+                    continue
+                anchor = mount.rstrip("/")
+                # An anchored route claims the mount only while the mount's
+                # segment ends there; ``^blogroll`` and ``^blog-roll`` are not
+                # blog's mount.
+                route_pattern = re.compile(rf"""[r]?["']\^{re.escape(anchor)}(?![A-Za-z0-9_-])""")
+                literals = (
+                    f'path("{mount}',
+                    f"path('{mount}",
+                    f'"/{mount}"',
+                    f"'/{mount}'",
+                    f'"{mount}"',
+                    f"'{mount}'",
+                )
+                if route_pattern.search(text) or any(literal in text for literal in literals):
+                    violations.append(
+                        f"rule 7: core {rel}: module '{module_name}' mount "
+                        f"'{mount}' is written as a literal"
+                    )
     return violations
 
 
@@ -3990,14 +4061,34 @@ def rule_31_theme_seam(corpus: Corpus) -> list[str]:
     template fails; an empty synthetic corpus does not.
     """
     violations: list[str] = []
-    template = corpus.core_files.get(THEME_SEAM_TEMPLATE)
-    if template is None:
+    index_template = corpus.core_files.get(THEME_SEAM_TEMPLATE)
+    if index_template is None:
         if corpus.core_files:
             violations.append("rule 31: the core tree carries no theme index.html.j2 seam producer")
         return violations
-    for placeholder in ("{{ seam_module_flags }}", "{{ seam_module_paths }}"):
-        if placeholder not in template:
-            violations.append(f"rule 31: the theme's index.html.j2 does not render {placeholder}")
+    for rel in THEME_SEAM_TEMPLATES:
+        template = corpus.core_files.get(rel)
+        if template is None:
+            continue
+        for placeholder in ("{{ seam_module_flags }}", "{{ seam_module_paths }}"):
+            if placeholder not in template:
+                violations.append(f"rule 31: {rel} does not render {placeholder}")
+        for module in corpus.modules:
+            name = module.name
+            for mount in _declared_mounts(module):
+                if not mount:
+                    continue
+                for literal in (f'"{mount}"', f"'{mount}'", f'"/{mount}"', f"'/{mount}'"):
+                    if literal in template:
+                        violations.append(
+                            f"rule 31: {rel} writes {name}'s mount {mount!r} literally"
+                        )
+            if rel != THEME_SEAM_TEMPLATE:
+                for literal in (f'"{name}":', f"'{name}':"):
+                    if literal in template:
+                        violations.append(f"rule 31: {rel} writes module {name!r} as a key")
+            if re.search(rf"(?m)^\s*{re.escape(name)}\s*:", template):
+                violations.append(f"rule 31: {rel} writes module {name!r} as a bare key")
     for module in corpus.modules:
         name = module.name
         literals = (
@@ -4009,24 +4100,11 @@ def rule_31_theme_seam(corpus: Corpus) -> list[str]:
             f"'{name}/'",
         )
         for literal in literals:
-            if literal in template:
+            if literal in index_template:
                 violations.append(
                     f"rule 31: the theme's index.html.j2 names module {name!r} literally"
                 )
-        for mount in _declared_mounts(module):
-            if not mount or mount == f"{name}/":
-                continue
-            for literal in (f'"{mount}"', f"'{mount}'", f'"/{mount}"', f"'/{mount}'"):
-                if literal in template:
-                    violations.append(
-                        f"rule 31: the theme's index.html.j2 writes {name}'s mount "
-                        f"{mount!r} literally"
-                    )
-        if re.search(rf"(?m)^\s*{re.escape(name)}\s*:", template):
-            violations.append(
-                f"rule 31: the theme's index.html.j2 writes module {name!r} as a bare key"
-            )
-    if "INSTALLED_APPS" in template:
+    if "INSTALLED_APPS" in index_template:
         violations.append("rule 31: the theme's index.html.j2 carries an INSTALLED_APPS test")
     return violations
 
@@ -4604,6 +4682,12 @@ def rule_28_file_names(corpus: Corpus) -> list[str]:
     return violations
 
 
+#: Rule 37's template spellings of a module enumeration (enforcement gap 13).
+_TEMPLATE_BRACKET_LITERAL = re.compile(r"[\[(]([^\])]*)[\])]")
+_TEMPLATE_QUOTED_NAME = re.compile(r"['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]")
+_TEMPLATE_PIPE_GROUP = re.compile(r"\((?:\?:)?([A-Za-z0-9_|]+)\)")
+
+
 def _module_literal_names(
     tree: ast.Module, vocabulary: set[str]
 ) -> list[tuple[int, str, list[str]]]:
@@ -4660,6 +4744,39 @@ def _module_literal_names(
     return found
 
 
+def _template_module_literals(text: str, vocabulary: set[str]) -> list[tuple[int, str, list[str]]]:
+    """
+    Return literal module enumerations found in a Jinja template's text.
+
+    Templates carry no AST, so the detector reads the two spellings an
+    enumeration takes there: a bracketed literal of quoted names, and a
+    pipe-separated route alternation (``(blog|listings|...)``).  A single
+    name is a reference, not an enumeration, and does not count.
+    """
+    found: list[tuple[int, str, list[str]]] = []
+    for match in _TEMPLATE_BRACKET_LITERAL.finditer(text):
+        names = sorted(
+            {
+                quoted.group(1)
+                for quoted in _TEMPLATE_QUOTED_NAME.finditer(match.group(1))
+                if quoted.group(1) in vocabulary
+            }
+        )
+        if len(names) >= RULE_37_MINIMUM_MODULE_NAMES:
+            found.append((text.count("\n", 0, match.start()) + 1, "<template literal>", names))
+    for match in _TEMPLATE_PIPE_GROUP.finditer(text):
+        names = sorted(part for part in match.group(1).split("|") if part in vocabulary)
+        if len(names) >= RULE_37_MINIMUM_MODULE_NAMES:
+            found.append(
+                (
+                    text.count("\n", 0, match.start()) + 1,
+                    f"<template alternation:{match.group(1)}>",
+                    names,
+                )
+            )
+    return found
+
+
 def rule_37_module_lists(corpus: Corpus) -> list[str]:
     """Rule 37: no literal module-name list outside the modules."""
     violations: list[str] = []
@@ -4670,13 +4787,24 @@ def rule_37_module_lists(corpus: Corpus) -> list[str]:
         ("scripts", corpus.script_files),
     ):
         for rel, text in files.items():
-            if not rel.endswith(".py"):
+            is_python = rel.endswith(".py")
+            is_template = (
+                tree_name == "core"
+                and rel.startswith(GENERATOR_TEMPLATE_ROOT)
+                and rel.endswith(".j2")
+            )
+            if not is_python and not is_template:
                 continue
-            if tree_name == "scripts" and rel.split("/")[-1].startswith("test_"):
+            if tree_name == "scripts" and is_python and rel.split("/")[-1].startswith("test_"):
                 continue
-            if (tree_name, rel) in RULE_37_ALLOWED_LITERAL_FILES:
+            if is_python and (tree_name, rel) in RULE_37_ALLOWED_LITERAL_FILES:
                 continue
-            for lineno, symbol, names in _module_literal_names(_parse(text), vocabulary):
+            found = (
+                _module_literal_names(_parse(text), vocabulary)
+                if is_python
+                else _template_module_literals(text, vocabulary)
+            )
+            for lineno, symbol, names in found:
                 if (tree_name, rel, symbol) in RULE_37_ALLOWED_LITERALS:
                     continue
                 count = len(names)

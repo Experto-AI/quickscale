@@ -153,9 +153,10 @@ class TestReactNoModulesGeneration:
     def test_urls_has_react_shell_and_spa_catch_all(self) -> None:
         """Generated urls.py must include the React shell view and SPA catch-all."""
         urls_py = (self.output_path / self.PROJECT_NAME / "urls.py").read_text()
+        views_py = (self.output_path / self.PROJECT_NAME / "views.py").read_text()
         assert (
             'react_shell_view = TemplateView.as_view(template_name="index.html")'
-            in urls_py
+            in views_py
         )
         assert "react_shell_urlpatterns" in urls_py
         assert "urlpatterns += react_shell_urlpatterns" in urls_py

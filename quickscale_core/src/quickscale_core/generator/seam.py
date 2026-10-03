@@ -35,7 +35,7 @@ _NON_SEAM_MODULES = frozenset({"orgs"})
 #: theme's own module surface, which rule 37 lists as its allowed literal-name
 #: exception; the mount a module actually uses stays in its manifest (rule 7).
 _SEAM_MODULE_PATHS: tuple[tuple[str, str], ...] = (
-    ("crm", "{% url 'crm-shell' %}"),
+    ("crm", "{% url 'quickscale_crm_shell' %}"),
     (
         "social",
         "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}"

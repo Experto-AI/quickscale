@@ -19,7 +19,7 @@ from quickscale_core.manifest.resolver_expressions import (
     _select_conditional_value,
 )
 
-_WIRING_URL_FIELDS = frozenset({"url_includes", "pre_home_url_includes"})
+_WIRING_URL_FIELDS = frozenset({"url_includes", "pre_home_url_includes", "spa_routes"})
 _WIRING_LIST_FIELDS = frozenset({"apps", "middleware"})
 _WIRING_ALL_FIELDS = _WIRING_URL_FIELDS | _WIRING_LIST_FIELDS
 
@@ -169,6 +169,7 @@ def _project_all_wiring(
         "middleware": [],
         "url_includes": [],
         "pre_home_url_includes": [],
+        "spa_routes": [],
     }
 
     for projection in derivation_schema.get_all_wiring_projections():
