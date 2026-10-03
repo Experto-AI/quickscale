@@ -110,6 +110,14 @@ derivation:
             - quickscale_modules_blog.markdownx_urls
       description: "Blog URL includes; the Markdownx editor mount is staff-guarded"
 
+    - wiring_field: spa_routes
+      derivation_type: static
+      expression:
+        value:
+          - - ^blog/?$
+            - shell
+      description: "Blog React shell route; rendered after the module's own includes (rule 41)"
+
   option_derivations:
     api_rate_limit:
       normalization_rules:

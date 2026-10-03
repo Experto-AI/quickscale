@@ -13,7 +13,7 @@ Class-based views
     2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
 Including another URLconf
     1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+    2. Add a URL to urlpatterns:  path('<app>/', include('<app>.urls'))
 """
 
 import importlib
@@ -29,10 +29,12 @@ from django.views.generic import TemplateView
 from {{ package_name }}.urls_modules import (
     POST_HOME_MODULE_URLPATTERNS,
     PRE_HOME_MODULE_URLPATTERNS,
+    SPA_MODULE_URLPATTERNS,
 )
 from {{ package_name }}.views import (  # noqa: F401
     custom_404_view,
     orgs_react_shell_view,
+    react_shell_view,
 )
 
 
@@ -45,8 +47,6 @@ def healthcheck(request: HttpRequest) -> HttpResponse:
     return HttpResponse("OK", content_type="text/plain", status=200)
 
 
-react_shell_view = TemplateView.as_view(template_name="index.html")
-
 react_shell_urlpatterns = [
     path("", react_shell_view, name="home"),
     re_path(r"^orgs/?$", orgs_react_shell_view),
@@ -57,10 +57,10 @@ react_shell_urlpatterns = [
         r"^orgs/(?!api(?:/|$))[^/]+/(blog|listings|members|settings)/?$",
         orgs_react_shell_view,
     ),
-    # The CRM SPA route is named: the React seam's modulePaths.crm entry
-    # reverses it (Module Conventions rule 31) instead of writing a literal.
-    re_path(r"^crm/?$", react_shell_view, name="crm-shell"),
-    re_path(r"^(profile|blog|listings|settings)/?$", react_shell_view),
+    re_path(r"^(profile|settings)/?$", react_shell_view),
+    # Forms' module entrypoint template renders only a mount-point div with no
+    # bundle or seam, so the host shell keeps its shallow paths working until
+    # the module page hydrates (rule 41 exception).
     re_path(r"^forms/?$", react_shell_view),
     re_path(r"^forms/[^/]+/?$", react_shell_view),
 ]
@@ -85,6 +85,12 @@ urlpatterns += [
     ),
 ]
 urlpatterns += POST_HOME_MODULE_URLPATTERNS
+
+# Module React shell routes (rule 41) come after the modules' own includes, so
+# a module's server-rendered index keeps its path and the React page stays
+# reachable where the module serves no such route.  Apply regenerates the list
+# from each installed and enabled module's manifest-declared ``spa_routes``.
+urlpatterns += SPA_MODULE_URLPATTERNS
 
 # Custom error handlers with helpful module guidance
 handler404 = "{{ package_name }}.views.custom_404_view"

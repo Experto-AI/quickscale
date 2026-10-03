@@ -63,6 +63,14 @@ derivation:
             - quickscale_modules_listings.markdownx_urls
       description: "Listings URL includes; the Markdownx editor mount is staff-guarded"
 
+    - wiring_field: spa_routes
+      derivation_type: static
+      expression:
+        value:
+          - - ^listings/?$
+            - shell
+      description: "Listings React shell route; rendered after the module's own includes (rule 41)"
+
   option_derivations:
     per_page:
       normalization_rules:

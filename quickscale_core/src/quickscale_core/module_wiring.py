@@ -39,6 +39,13 @@ class ModuleWiringSpec:
     settings: Mapping[str, Any] = field(default_factory=dict)
     pre_home_url_includes: tuple[tuple[str, str], ...] = ()
     url_includes: tuple[tuple[str, str], ...] = ()
+    spa_routes: tuple[tuple[str, str], ...] = ()
+    """``(route, name)`` React shell routes for a module's UI paths (rule 41).
+
+    Each route is a root-anchored regex the project renders after the
+    module's own includes, and only while the module is installed and
+    enabled.
+    """
     managed_files: Mapping[str, str] = field(default_factory=dict)
     settings_schema: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
     """Compiled ``MODULE_SETTINGS_SCHEMA`` entry for this module (rule 3)."""
@@ -179,6 +186,22 @@ def collect_url_wiring(
     return pre_home_urls, post_home_urls
 
 
+def collect_spa_routes(
+    module_specs: Mapping[str, ModuleWiringSpec],
+) -> list[tuple[str, str, str]]:
+    """Collect module React shell routes as ``(module, route, name)`` tuples.
+
+    Routes come from each spec's manifest-declared ``spa_routes``; a module
+    contributes routes only while it is installed and enabled, because its
+    adapter drops them with its other public URL wiring when it is off.
+    """
+    routes: list[tuple[str, str, str]] = []
+    for module_name, spec in _sort_module_items(module_specs):
+        for route, name in spec.spa_routes:
+            routes.append((module_name, route, name))
+    return routes
+
+
 def collect_settings_schema(
     module_specs: Mapping[str, ModuleWiringSpec],
 ) -> dict[str, dict[str, Mapping[str, object]]]:
@@ -242,6 +265,7 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
 def render_urls_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
     """Render `<package>/urls_modules.py` content."""
     pre_home_urls, post_home_urls = collect_url_wiring(module_specs)
+    spa_routes = collect_spa_routes(module_specs)
 
     header = (
         '"""QuickScale managed module URL wiring.\n\n'
@@ -256,19 +280,43 @@ def render_urls_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
         ]
         return "\n".join(pattern_lines)
 
-    if pre_home_urls or post_home_urls:
+    def _spa_route_lines(routes: list[tuple[str, str, str]]) -> str:
+        lines = []
+        for module_name, route, name in routes:
+            full_name = f"quickscale_{module_name}_{name}"
+            lines.append(
+                f"    re_path({route!r}, react_shell_view, name={full_name!r}),"
+            )
+        return "\n".join(lines)
+
+    if pre_home_urls or post_home_urls or spa_routes:
         pre_home_body = _pattern_lines(pre_home_urls)
         post_home_body = _pattern_lines(post_home_urls)
+        spa_body = _spa_route_lines(spa_routes)
+        imports = "from django.urls import URLPattern, URLResolver, include, path"
+        if spa_routes:
+            imports += ", re_path"
+        views_import = "\nfrom .views import react_shell_view\n" if spa_routes else ""
+        spa_list = (
+            "SPA_MODULE_URLPATTERNS: list[ManagedURLPattern] = [\n"
+            + f"{spa_body}\n"
+            + "]\n\n"
+            if spa_routes
+            else "SPA_MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n\n"
+        )
         return (
             header
-            + "from django.urls import URLPattern, URLResolver, include, path\n\n"
-            + "ManagedURLPattern = URLPattern | URLResolver\n\n"
+            + imports
+            + "\n"
+            + views_import
+            + "\nManagedURLPattern = URLPattern | URLResolver\n\n"
             + "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = [\n"
             + f"{pre_home_body}\n"
             + "]\n\n"
             + "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = [\n"
             + f"{post_home_body}\n"
             + "]\n\n"
+            + spa_list
             + "MODULE_URLPATTERNS: list[ManagedURLPattern] = (\n"
             + "    PRE_HOME_MODULE_URLPATTERNS + POST_HOME_MODULE_URLPATTERNS\n"
             + ")\n"
@@ -280,6 +328,7 @@ def render_urls_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
             + "ManagedURLPattern = URLPattern | URLResolver\n\n"
             + "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
             + "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
+            + "SPA_MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
             + "MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
         )
 

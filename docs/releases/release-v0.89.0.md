@@ -77,10 +77,23 @@ annotation to the name.
 The React shell seam is now rendered from the shipped module inventory. `templates/index.html`
 carries a key for every shipped module (present as `false` when the module is absent), and its
 `modulePaths` entries reverse named routes with `{% url %}` instead of literal paths: `crm`
-through the `crm-shell` route the generated `<package>/urls.py` names, `social` through
-`social-link-tree` or `social-embeds`, and `analytics` through `quickscale_analytics:dashboard`.
-Existing projects compare and manually adopt the current `templates/index.html` and
-`<package>/urls.py` together, because a seam path reverses a route the urls.py names.
+through the manifest-declared `quickscale_crm_shell` route `apply` renders in
+`<package>/urls_modules.py`, `social` through `social-link-tree` or `social-embeds`, and
+`analytics` through `quickscale_analytics:dashboard`. The two public social pages render the same
+seam content through `generator/seam.py`. Existing projects compare and manually adopt the current
+`templates/index.html`, `templates/social/*.html`, `<package>/urls.py`, `<package>/views.py`, and
+`<package>/urls_modules.py` together, because a seam path reverses a route the urls.py names.
+
+An existing project adopts the module shell route move in its project-owned
+`<package>/urls.py`: remove the retired `^(profile|blog|listings|settings)/?$` and `^crm/?$`
+(named `crm-shell`) reservations, keep the orgs, profile/settings, and forms reservations, move
+the `react_shell_view` definition into `<package>/views.py`, import `SPA_MODULE_URLPATTERNS` from
+`<package>/urls_modules.py`, and append `urlpatterns += SPA_MODULE_URLPATTERNS` after
+`urlpatterns += POST_HOME_MODULE_URLPATTERNS`.
+`quickscale apply` then regenerates `urls_modules.py` from each installed and enabled module's
+manifest-declared `spa_routes`. Custom code that reversed `crm-shell` uses
+`quickscale_crm_shell`; custom code that reversed `quickscale_blog:post_list` or
+`quickscale_listings:listing_list` now reaches the module's own view at `/blog/` and `/listings/`.
 
 Billing's Stripe credentials now reach module code as the projected
 `QUICKSCALE_BILLING_PUBLISHABLE_KEY`, `QUICKSCALE_BILLING_SECRET_KEY`, and
@@ -199,6 +212,17 @@ names (`quickscale_crm:api-root`, `quickscale_crm:tag-list`, `quickscale_forms:f
 `quickscale_forms:admin-submission-export`, `quickscale_analytics:analytics-dashboard`, and the
 rest) to their snake_case forms under `quickscale_crm:`, `quickscale_forms:`, and
 `quickscale_analytics:`.
+
+**Module shell routes.** The generated `urls.py` no longer reserves the blog, listings, or crm
+React shell paths ahead of the modules' own includes: `/blog/` and `/listings/` now serve
+`quickscale_blog:post_list` and `quickscale_listings:listing_list`, and `/crm` and `/crm/` are
+covered by the crm manifest's declared `spa_routes`, named `quickscale_crm_shell` (the retired
+`crm-shell`). Forms keeps its shallow host reservations because its module entrypoint renders only
+a mount-point div, so the shell must keep serving those paths. The
+generated `urls_modules.py` gains `SPA_MODULE_URLPATTERNS`, which `quickscale apply` regenerates
+from each installed and enabled module's manifest, so a switched-off module contributes no shell
+route. The operator step is the `<package>/urls.py` adoption above; projects that had customized
+the shadowing reservations must remove them or their module indexes stay unreachable.
 
 **Analytics events and email.** Forms' submission event is renamed from `form_submit` to
 `quickscale_forms_submitted`, and analytics no longer exposes per-event helpers

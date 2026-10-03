@@ -54,22 +54,10 @@
   window.__QUICKSCALE__ = {
     projectName: "{% endraw %}{{ project_name }}{% raw %}",
     modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: {% if 'quickscale_modules_social' in settings.INSTALLED_APPS and settings.QUICKSCALE_SOCIAL_ENABLED %}true{% else %}false{% endif %},
+{%endraw%}{{ seam_module_flags }}{%raw%}
     },
     modulePaths: {
-      crm: "/crm/",
-      social: "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}/social{% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}/social/embeds{% else %}/social{% endif %}",
-      analytics: "/analytics/",
+{%endraw%}{{ seam_module_paths }}{%raw%}
     },
     owner: {
       mode: "solo",
@@ -78,11 +66,11 @@
     publicPage: {
       module: 'social',
       surface: 'embeds',
-      endpoint: '/_quickscale/social/embeds/',
+      endpoint: "{{ settings.QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH }}",
       navigation: {
         home: '/',
-        linkTree: '/social',
-        embeds: '/social/embeds',
+        linkTree: "{{ settings.QUICKSCALE_SOCIAL_LINK_TREE_PATH }}",
+        embeds: "{{ settings.QUICKSCALE_SOCIAL_EMBEDS_PATH }}",
       },
     },
   }

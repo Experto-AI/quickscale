@@ -630,7 +630,8 @@ the shipped state until SA215 renames them (`QUICKSCALE_MODE`, `backups_create`,
 **7. URLs.**
 - ✅ The manifest's `url_includes` sets a module's mount (`blog/`, `accounts/` for auth, `orgs/`
   for orgs) and is the only place; a module's `urls.py` holds no prefix and `adapter.py` declares
-  no URL include. The site root belongs to the project; no module mounts at `""`.
+  no URL include. The site root belongs to the project; no module mounts at `""`. A module's React
+  shell routes are declared by rule 41.
 - ✅ Moving a public URL is a breaking change recorded in the release notes, with the operator
   step it needs (webhook endpoints registered with Stripe and Resend move with their module).
 - ✅ APIs at `<mount>api/<resource>/`; webhooks at `<mount>webhooks/<vendor>/`.
@@ -967,7 +968,8 @@ test checks both. Other files in `tests/` are `conftest.py`,
   shipped module, as the seam validator requires. A key is `true` only when the module is installed
   and its `QUICKSCALE_<MODULE>_ENABLED` is on (rule 1). A `modulePaths` entry is resolved from the
   module's URL names when it is installed (`{% url %}`), never written as a literal (rule 7). The
-  seam itself is unchanged
+  two public social pages render the same seam content through `generator/seam.py`, with no
+  hand-written per-module line. The seam itself is unchanged
   (§[Frontend Theme Source De-Specialization](#frontend-theme-despecialization-dormant-files)).
 - ✅ The theme's TypeScript (the `QuickScaleModules` type, the seam validator, the SPA pages) still
   names the modules that have React surfaces, as [frontend.md](frontend.md) § Module frontend
@@ -1091,6 +1093,28 @@ modules, option keys and command names in READMEs, and `required_modules` specif
 `implies` — with a control case proving each rule rejects a violation. The layer table, each
 foundation's published extension bases, and every listed exception live in one test-owned
 mapping that mirrors this section.
+
+**41. Module UI paths.**
+- ✅ A path that serves a module's UI, React shell routes included, is declared by that module's
+  manifest (`spa_routes`) and rendered by `apply` from the discovered, installed, and enabled set,
+  after the module's own URL includes; a module that is installed but switched off contributes
+  none.
+- ✅ Project-namespace route names for module pages served by the module's own URLconf are
+  `quickscale_<module>:<name>` (rule 2). A host-rendered shell route carries the module stem in a
+  flat project route name (`quickscale_crm_shell`): Django resolves one resolver per namespace, so
+  a second include cannot share the module's `quickscale_<module>` namespace and a colon form
+  cannot reverse.
+- ✅ `TenantMiddleware`'s orgs path guards read their prefixes from orgs' URL names rather than
+  literals.
+- ❌ A module path written as a literal in generator or theme templates, or in another module's
+  code. ❌ Two routes that resolve the same path.
+- **Exceptions.** orgs' `/orgs*` React shell reservations stay in `urls.py.j2` because the
+  tenancy mode decides which side owns the path (solo mounts orgs before home, saas after);
+  forms' shallow reservations (`/forms`, `/forms/<slug>/`) stay host-rendered until its module
+  entrypoint hydrates, because that entrypoint currently renders only a mount-point div;
+  `TenantMiddleware`'s exempt prefixes (`/accounts/`, `/admin/`, `/healthcheck/`) are not orgs
+  paths; and the generated 404 hint's path tests are diagnostics against a requested path, not
+  route declarations.
 
 ---
 

@@ -539,6 +539,76 @@ def test_url_include_literal_control() -> None:
     assert _violations(checker.rule_7_urls, annotated_empty) == []
 
 
+def test_url_mount_template_literal_control() -> None:
+    """A mount literal in a generator `.j2` file fails rule 7 (gap 13)."""
+    module = _golden_module()
+    template = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": ('re_path(r"^demo/?$", demo_shell)\n')
+        },
+    )
+    assert any(
+        "mount 'demo/' is written as a literal" in violation
+        for violation in checker.rule_7_urls(template)
+    )
+    outside_root = replace(
+        _corpus(module),
+        core_files={"generator/notes.j2": 're_path(r"^demo/?$", demo_shell)\n'},
+    )
+    assert checker.rule_7_urls(outside_root) == []
+    assert checker.rule_7_urls(_corpus(module)) == []
+    single_quoted = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": ("re_path(r'^demo/?$', demo_shell)\n")
+        },
+    )
+    assert any(
+        "mount 'demo/' is written as a literal" in violation
+        for violation in checker.rule_7_urls(single_quoted)
+    )
+    ordinary_string = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": ('re_path("^demo/?$", demo_shell)\n')
+        },
+    )
+    assert any(
+        "mount 'demo/' is written as a literal" in violation
+        for violation in checker.rule_7_urls(ordinary_string)
+    )
+    # A route whose path only shares the mount's prefix is not a copy of the
+    # mount and must stay allowed.
+    longer_prefix = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": (
+                're_path("^demographics/?$", demographics_shell)\n'
+            )
+        },
+    )
+    assert checker.rule_7_urls(longer_prefix) == []
+    hyphenated_prefix = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": (
+                're_path("^demo-roll/?$", demo_roll_shell)\n'
+                "re_path(r'^demo-roll/?$', demo_roll_shell)\n"
+            )
+        },
+    )
+    assert checker.rule_7_urls(hyphenated_prefix) == []
+    html_literal = replace(
+        _corpus(module),
+        core_files={"generator/templates/project_name/sample.j2": '<a href="/demo/">Demo</a>\n'},
+    )
+    assert any(
+        "mount 'demo/' is written as a literal" in violation
+        for violation in checker.rule_7_urls(html_literal)
+    )
+
+
 def test_template_page_control() -> None:
     module = _golden_module()
     broken = _with_files(
@@ -4274,6 +4344,41 @@ def test_theme_seam_control() -> None:
     assert checker.rule_31_theme_seam(named_url) == []
 
 
+def test_theme_seam_social_producer_control() -> None:
+    """The public social producers carry the rendered seam, not module lines."""
+    social_template = checker.THEME_SEAM_TEMPLATES[1]
+    corpus = replace(
+        _corpus(_golden_module()),
+        core_files={
+            checker.THEME_SEAM_TEMPLATE: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
+            social_template: ("{{ seam_module_flags }}\ndemo: true,\n{{ seam_module_paths }}\n"),
+        },
+    )
+    violations = checker.rule_31_theme_seam(corpus)
+    assert any(social_template in violation and "bare key" in violation for violation in violations)
+    clean = replace(
+        corpus,
+        core_files={
+            checker.THEME_SEAM_TEMPLATE: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
+            social_template: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
+        },
+    )
+    assert checker.rule_31_theme_seam(clean) == []
+    override = replace(
+        corpus,
+        core_files={
+            checker.THEME_SEAM_TEMPLATE: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
+            social_template: (
+                '{{ seam_module_flags }}\n"demo": "/demo/",\n{{ seam_module_paths }}\n'
+            ),
+        },
+    )
+    assert any(
+        "writes demo's mount 'demo/' literally" in violation
+        for violation in checker.rule_31_theme_seam(override)
+    )
+
+
 def test_secrets_control() -> None:
     module = _golden_module()
     assert _violations(checker.rule_35_secrets, module) == []
@@ -5067,6 +5172,70 @@ def test_module_list_controls() -> None:
         },
     )
     assert checker.rule_37_module_lists(presentation) == []
+
+
+def test_module_list_template_control() -> None:
+    """A module enumeration in a generator `.j2` file fails rule 37 (gap 13)."""
+    corpus = _corpus(
+        _golden_module("alpha"),
+        _golden_module("beta"),
+        _golden_module("gamma"),
+    )
+    template_literal = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/sample.j2": (
+                "{% for m in ['alpha', 'beta'] %}{{ m }}{% endfor %}\n"
+            )
+        },
+    )
+    assert any(
+        "literal <template literal> lists 2 module names: alpha, beta" in violation
+        for violation in checker.rule_37_module_lists(template_literal)
+    )
+    template_alternation = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/sample.j2": ('re_path(r"^(alpha|beta)/?$", view)\n')
+        },
+    )
+    assert any(
+        "literal <template alternation:alpha|beta> lists 2 module names: alpha, beta" in violation
+        for violation in checker.rule_37_module_lists(template_alternation)
+    )
+    non_capturing_alternation = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/sample.j2": ('re_path(r"^(?:alpha|beta)/?$", view)\n')
+        },
+    )
+    assert any(
+        "literal <template alternation:alpha|beta> lists 2 module names: alpha, beta" in violation
+        for violation in checker.rule_37_module_lists(non_capturing_alternation)
+    )
+    # The exception is bound to the approved orgs reservation, not to every
+    # alternation in the host URL template: an unrelated alternation there is
+    # still rejected.
+    unrelated_alternation = replace(
+        corpus,
+        core_files={
+            "generator/templates/project_name/urls.py.j2": ('re_path(r"^(alpha|beta)/?$", view)\n')
+        },
+    )
+    assert any(
+        "lists 2 module names: alpha, beta" in violation
+        for violation in checker.rule_37_module_lists(unrelated_alternation)
+    )
+    orgs_corpus = _corpus(_golden_module("blog"), _golden_module("listings"))
+    orgs_reservation = replace(
+        orgs_corpus,
+        core_files={
+            "generator/templates/project_name/urls.py.j2": (
+                're_path(r"^orgs/(?!api(?:/|$))[^/]+/(blog|listings|members|settings)/?$", view)\n'
+            )
+        },
+    )
+    assert checker.rule_37_module_lists(orgs_reservation) == []
 
 
 def test_layer_table_mirrors_the_shipped_modules() -> None:

@@ -8,6 +8,7 @@ from quickscale_core.module_wiring import (
     ModuleWiringSpec,
     _merge_unique,
     _sort_module_items,
+    collect_spa_routes,
     collect_wiring,
     collect_url_wiring,
     render_settings_modules_py,
@@ -360,9 +361,39 @@ class TestRenderUrlsModulesPy:
         assert 'path("accounts/", include("allauth.urls"))' in content
         assert "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = [" in content
         assert "MODULE_URLPATTERNS: list[ManagedURLPattern] = (" in content
+        assert "SPA_MODULE_URLPATTERNS: list[ManagedURLPattern] = []" in content
         assert (
             "from django.urls import URLPattern, URLResolver, include, path" in content
         )
+
+    def test_render_urls_modules_py_renders_spa_routes(self) -> None:
+        """Manifest-declared React shell routes render under the module stem."""
+        specs = {
+            "crm": ModuleWiringSpec(
+                url_includes=(("crm/", "quickscale_modules_crm.urls"),),
+                spa_routes=(("^crm/?$", "shell"),),
+            )
+        }
+        content = render_urls_modules_py(specs)
+        assert "SPA_MODULE_URLPATTERNS: list[ManagedURLPattern] = [" in content
+        assert (
+            "re_path('^crm/?$', react_shell_view, name='quickscale_crm_shell')"
+            in content
+        )
+        assert "from .views import react_shell_view" in content
+        assert "re_path" in content.split("\n\n")[0] or "re_path" in content
+        compile(content, "<string>", "exec")  # should not raise
+
+    def test_collect_spa_routes_reports_module_route_and_name(self) -> None:
+        """collect_spa_routes emits (module, route, name) in module-name order."""
+        specs = {
+            "crm": ModuleWiringSpec(spa_routes=(("^crm/?$", "shell"),)),
+            "blog": ModuleWiringSpec(spa_routes=(("^blog/?$", "shell"),)),
+        }
+        assert collect_spa_routes(specs) == [
+            ("blog", "^blog/?$", "shell"),
+            ("crm", "^crm/?$", "shell"),
+        ]
 
     def test_render_urls_modules_py_multiple_patterns(self) -> None:
         """Multiple URL patterns all appear in the output."""
@@ -517,6 +548,7 @@ class TestModuleWiringSpec:
         assert spec.settings == {}
         assert spec.pre_home_url_includes == ()
         assert spec.url_includes == ()
+        assert spec.spa_routes == ()
         assert spec.managed_files == {}
 
     def test_spec_with_all_fields(self) -> None:
@@ -541,10 +573,13 @@ class TestModuleWiringSpec:
             spec.apps = ("app2",)  # type: ignore[misc]
 
 
-def test_generated_urls_template_places_react_shell_reservations_before_modules() -> (
-    None
-):
-    """React and HTML home routes should outrank managed module URLs."""
+def test_generated_urls_template_renders_module_spa_routes_after_module_urls() -> None:
+    """Rule 41: module React shell routes render after the modules' includes.
+
+    The host shell keeps only the theme and tenancy reservations; a module's
+    server-rendered index keeps its path, and the module's declared React
+    shell routes load from the managed wiring after every module include.
+    """
     template_path = (
         Path(__file__).resolve().parents[1]
         / "src"
@@ -559,33 +594,46 @@ def test_generated_urls_template_places_react_shell_reservations_before_modules(
     react_shell_marker = "urlpatterns += react_shell_urlpatterns"
     pre_home_marker = "urlpatterns += PRE_HOME_MODULE_URLPATTERNS"
     post_home_marker = "urlpatterns += POST_HOME_MODULE_URLPATTERNS"
+    spa_marker = "urlpatterns += SPA_MODULE_URLPATTERNS"
+    catch_all_marker = 're_path(r".*", react_shell_view)'
     # SA94: retired showcase_html removed the non-React home marker.
     assert react_shell_marker in content
     assert pre_home_marker in content
     assert post_home_marker in content
+    assert spa_marker in content
     assert r"^orgs/(?!api(?:/|$))[^/]+/(blog|listings|members|settings)/?$" in content
     assert r"^orgs/[^/]+/forms/[^/]+/?$" not in content
     assert r"^orgs/[^/]+/billing/" not in content
     assert r"^orgs/invitations/" not in content
+    # The orgs/theme reservations stay ahead of the module URL lists.
     assert content.index(react_shell_marker) < content.index(pre_home_marker)
+    # The module React shell routes come after every module include, and
+    # before the SPA catch-all.
+    assert content.index(post_home_marker) < content.index(spa_marker)
+    assert content.index(spa_marker) < content.index(catch_all_marker)
 
-    # CR-T120-002: Prove the final route-ownership contract.
-    # React shell owns /crm (and /crm/ via the /?$ anchor), through the named
-    # crm-shell route the React seam reverses (Module Conventions rule 31).
-    assert r"^crm/?$" in content
-    assert 'name="crm-shell"' in content
-    assert r"^(profile|blog|listings|settings)/?$" in content
-    # The shell reservation uses /?$ which does NOT claim /crm/dashboard/.
-    assert r"^crm/dashboard" not in content
+    # Rule 41: no module path literal remains in the generator template.  The
+    # module shell routes are manifest-declared and rendered from discovery.
+    assert r"^crm/?$" not in content
+    assert 'name="crm-shell"' not in content
+    assert r"^(profile|blog|listings|settings)/?$" not in content
+    assert r"^blog/?$" not in content
+    assert r"^listings/?$" not in content
+    # Forms keeps its host reservations: its module entrypoint renders only a
+    # mount-point div (rule 41's stated exception), so the shell must win.
+    assert r"^forms/?$" in content
+    assert r"^forms/[^/]+/?$" in content
 
 
-def test_crm_module_dashboard_route_moved_to_crm_dashboard() -> None:
-    """CR-T120-003: CRM dashboard route moved from /crm/ to /crm/dashboard/.
+def test_crm_module_shell_route_declared_in_manifest() -> None:
+    """CR-T120-003 + SA235: the CRM React shell route is manifest-declared.
 
-    The React SPA owns both /crm and /crm/; the Django staff dashboard
-    lives at /crm/dashboard/ to avoid shadowing.
+    The React SPA owns /crm and /crm/ through the CRM manifest's ``spa_routes``
+    entry, rendered after the module's own include; the Django staff dashboard
+    lives at /crm/dashboard/ to avoid shadowing.  The generated template holds
+    no CRM path literal (rule 41).
     """
-    crm_urls_path = (
+    template_path = (
         Path(__file__).resolve().parents[1]
         / "src"
         / "quickscale_core"
@@ -594,14 +642,20 @@ def test_crm_module_dashboard_route_moved_to_crm_dashboard() -> None:
         / "project_name"
         / "urls.py.j2"
     )
-    template_content = crm_urls_path.read_text()
-
-    # The template's React shell owns /crm (flat, not nested under orgs),
-    # through the named crm-shell route the React seam reverses (rule 31).
-    assert r"^crm/?$" in template_content
-    assert 'name="crm-shell"' in template_content
+    template_content = template_path.read_text()
+    assert r"^crm/?$" not in template_content
+    assert 'name="crm-shell"' not in template_content
     assert r"^orgs/[^/]+/crm" not in template_content
     assert r"/crm/dashboard" not in template_content
+
+    crm_manifest = (
+        Path(__file__).resolve().parents[2]
+        / "quickscale_modules"
+        / "crm"
+        / "module.yml"
+    ).read_text()
+    assert "wiring_field: spa_routes" in crm_manifest
+    assert "- ^crm/?$" in crm_manifest
 
     # The actual CRM module urls.py is module-relative: the manifest's
     # url_includes entry mounts it at crm/, so the dashboard registers at
