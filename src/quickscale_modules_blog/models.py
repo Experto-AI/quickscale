@@ -11,11 +11,12 @@ from uuid import uuid4
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import models
+from django.db.models.fields.files import ImageFieldFile
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 from markdownx.models import MarkdownxField
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from quickscale_modules_orgs.models import TenantModel
 
@@ -90,15 +91,79 @@ def _prepare_thumbnail_image(image: Image.Image, image_format: str) -> Image.Ima
     return image
 
 
-def blog_media_upload_to(_: "BlogMediaAsset", filename: str) -> str:
-    """Build a stable, collision-resistant upload path for blog media assets."""
+#: SA239: the fixed extension for each Pillow format, so the stored name never
+#: takes its extension from the client-supplied filename.  Mirrors storage's
+#: map, which the builder cannot use when storage is not installed.
+_IMAGE_EXTENSION_BY_FORMAT: dict[str, str] = {
+    "JPEG": ".jpg",
+    "PNG": ".png",
+    "WEBP": ".webp",
+    "GIF": ".gif",
+}
+
+
+def _content_image_format(content: Any) -> str | None:
+    """Return the Pillow format of an incoming upload, or ``None`` if unreadable."""
+    if content is None:
+        return None
+    try:
+        content.seek(0)
+        with Image.open(content) as image:
+            image_format = str(image.format or "").upper()
+    except (
+        Image.DecompressionBombError,
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+    ):
+        return None
+    finally:
+        content.seek(0)
+    return image_format or None
+
+
+class _BlogMediaAssetFile(ImageFieldFile):
+    """FieldFile that records a new upload's validated format (SA239).
+
+    ``FieldFile.save`` receives the bytes in every flow — model assignment and
+    a direct ``instance.file.save(name, content)`` — while ``upload_to``
+    receives only the instance and the client filename.  This hook has the
+    bytes, so it records the format for the filename builder to map; an upload
+    Pillow cannot read records ``None`` and is stored as ``.bin``.
+    """
+
+    _validated_image_format: str | None = None
+
+    def save(self, name: str, content: Any, save: bool = True) -> None:
+        self._validated_image_format = _content_image_format(content)
+        super().save(name, content, save=save)
+
+
+class _BlogMediaAssetImageField(models.ImageField):
+    """``ImageField`` for ``BlogMediaAsset.file`` with the recording FieldFile."""
+
+    attr_class = _BlogMediaAssetFile
+
+
+def blog_media_upload_to(instance: "BlogMediaAsset", filename: str) -> str:
+    """Build a stable, collision-resistant upload path for blog media assets.
+
+    SA239: the stored extension is the fixed mapping of the format Pillow
+    read from the upload, never the client-supplied filename's suffix.
+    """
+    image_format = getattr(
+        getattr(instance, "file", None), "_validated_image_format", None
+    )
     services = _storage.storage_services()
     if services is not None:
         return services.build_upload_path(
-            "blog", asset_kind="uploads", filename=filename
+            "blog",
+            asset_kind="uploads",
+            filename=filename,
+            image_format=image_format,
         )
 
-    extension = Path(filename).suffix.lower() or ".bin"
+    extension = _IMAGE_EXTENSION_BY_FORMAT.get(image_format or "", ".bin")
     stem = slugify(Path(filename).stem) or "image"
     return f"blog/uploads/{timezone.now():%Y/%m}/{stem}-{uuid4().hex[:12]}{extension}"
 
@@ -213,7 +278,7 @@ class BlogMediaAsset(TenantModel):
         FEATURED = "featured", "Featured"
         GENERAL = "general", "General"
 
-    file = models.ImageField(upload_to=blog_media_upload_to)
+    file = _BlogMediaAssetImageField(upload_to=blog_media_upload_to)
     alt = models.CharField(
         max_length=200,
         blank=True,
