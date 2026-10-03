@@ -25,13 +25,13 @@ from quickscale_modules_social._contracts import (
     SOCIAL_STATUS_DISABLED,
     SOCIAL_STATUS_EMPTY,
     SOCIAL_STATUS_ENABLED,
-    get_social_runtime_settings,
     normalize_social_provider_allowlist,
     normalize_social_url,
     resolve_social_embed_metadata,
     resolve_social_target,
     social_payload_status_code,
 )
+from quickscale_modules_social._settings import get_social_runtime_settings
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 from quickscale_modules_social.services import (
     build_social_embeds_payload,

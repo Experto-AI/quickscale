@@ -16,11 +16,11 @@ from quickscale_modules_social._contracts import (
     SOCIAL_PROVIDER_CHOICES,
     SocialConfigurationError,
     SocialEmbedResolution,
-    get_social_runtime_settings,
     resolve_social_embed_metadata,
     resolve_social_target,
     social_provider_supports_embeds,
 )
+from quickscale_modules_social._settings import get_social_runtime_settings
 from quickscale_modules_orgs.models import TenantModel
 
 if TYPE_CHECKING:

@@ -25,10 +25,12 @@ from quickscale_modules_social._contracts import (
     SOCIAL_STATUS_ENABLED,
     SOCIAL_STATUS_ERROR,
     SocialConfigurationError,
-    SocialRuntimeSettingsSnapshot,
     get_social_provider_metadata,
-    get_social_runtime_settings,
     social_provider_supports_embeds,
+)
+from quickscale_modules_social._settings import (
+    SocialRuntimeSettingsSnapshot,
+    get_social_runtime_settings,
 )
 from quickscale_modules_social.exceptions import SocialError
 from quickscale_modules_social.models import SocialEmbed, SocialLink

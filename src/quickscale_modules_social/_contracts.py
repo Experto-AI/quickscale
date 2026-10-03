@@ -8,7 +8,6 @@ import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from django.conf import settings
 from django.db import models
 
 from quickscale_modules_social.exceptions import SocialConfigurationError
@@ -89,19 +88,6 @@ class ResolvedSocialTarget:
 
     provider: str
     url: str
-
-
-@dataclass(frozen=True)
-class SocialRuntimeSettingsSnapshot:
-    """Read-only runtime view of the authoritative social settings."""
-
-    link_tree_enabled: bool
-    layout_variant: str
-    embeds_enabled: bool
-    provider_allowlist: tuple[str, ...]
-    cache_ttl_seconds: int
-    links_per_page: int
-    embeds_per_page: int
 
 
 @dataclass(frozen=True)
@@ -452,27 +438,6 @@ def normalize_social_url(url: str, *, provider: Any | None = None) -> str:
     return resolve_social_target(url, provider=provider).url
 
 
-def get_social_runtime_settings() -> SocialRuntimeSettingsSnapshot:
-    """Return the authoritative social runtime settings.
-
-    Rule 3: every value is read directly from Django settings, which the
-    module's generic startup check has validated against the manifest's
-    schema — the layout choices, the provider allowlist's closed set and
-    non-emptiness, the numeric bounds, and the cross-option rules that keep
-    one public surface enabled and embeds backed by an embed-capable
-    provider.  Apply writes canonical values, so no coercion happens here.
-    """
-    return SocialRuntimeSettingsSnapshot(
-        link_tree_enabled=settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED,
-        layout_variant=settings.QUICKSCALE_SOCIAL_LAYOUT_VARIANT,
-        embeds_enabled=settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED,
-        provider_allowlist=tuple(settings.QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST),
-        cache_ttl_seconds=settings.QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS,
-        links_per_page=settings.QUICKSCALE_SOCIAL_LINKS_PER_PAGE,
-        embeds_per_page=settings.QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE,
-    )
-
-
 __all__ = [
     "DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST",
     "DEFAULT_SOCIAL_PROVIDER_ALLOWLIST",
@@ -496,9 +461,7 @@ __all__ = [
     "ResolvedSocialTarget",
     "SocialConfigurationError",
     "SocialProviderMetadata",
-    "SocialRuntimeSettingsSnapshot",
     "get_social_provider_metadata",
-    "get_social_runtime_settings",
     "normalize_social_provider",
     "normalize_social_provider_allowlist",
     "normalize_social_url",
