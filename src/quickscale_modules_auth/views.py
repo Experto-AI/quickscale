@@ -1,14 +1,12 @@
 """Views for account management.
 
-Module Conventions rule 28: the account-deletion view is a re-exporting
-facade over private ``_<name>.py`` sibling modules.  This module keeps the
-declared rule 34 account-deletion boundary's entry point — its
-``form_valid`` route through the shared removal coordinator — the rule 4
-capability collection with its ``collect_capabilities`` and
-``_installed_app_config`` patch seams, and the
-``quickscale_modules_auth.views`` log channel; the remaining helpers live
-in focused sibling modules re-exported here so every prior import path and
-test seam keeps resolving.
+Module Conventions rule 28: the account-deletion view is a facade over
+private ``_<name>.py`` sibling modules.  This module keeps the declared
+rule 34 account-deletion boundary's entry point — its ``form_valid`` route
+through the shared removal coordinator — the rule 4 capability collection
+with its ``collect_capabilities`` and ``_installed_app_config`` patch seams,
+and the ``quickscale_modules_auth.views`` log channel; private helpers stay
+on the module that defines them (decisions.md, Split-Facade Seams).
 """
 
 from __future__ import annotations
@@ -25,31 +23,20 @@ from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
 from django.urls import reverse_lazy
 from django.views.generic import DeleteView
+
+import quickscale_modules_auth._account_deletion_flow as _account_deletion_flow
+import quickscale_modules_auth._account_deletion_guard as _account_deletion_guard
+import quickscale_modules_auth._account_deletion_handlers as _account_deletion_handlers
+import quickscale_modules_auth._account_deletion_providers as _account_deletion_providers
+import quickscale_modules_auth._account_deletion_references as _account_deletion_references
+import quickscale_modules_auth.exceptions as _exceptions
+
 from quickscale_core.runtime import collect_capabilities
-from quickscale_modules_auth._account_deletion_flow import (
-    _AccountDeletionFlowMixin,
-    _PreparedDeletionState,
-)
-from quickscale_modules_auth._account_deletion_guard import _AccountDeletionGuardMixin
-from quickscale_modules_auth._account_deletion_handlers import (
-    _AccountDeletionHandlerPlumbingMixin,
-    _handler_name as _handler_name,
-    _is_exception_type_tuple as _is_exception_type_tuple,
-    _is_string_tuple as _is_string_tuple,
-    _provider_error_is_blocking as _provider_error_is_blocking,
-)
-from quickscale_modules_auth._account_deletion_providers import (
-    _AccountDeletionProviderMixin,
-)
-from quickscale_modules_auth._account_deletion_references import (
-    _AccountDeletionReferenceMixin,
-)
 from quickscale_modules_auth._logging import logger
 from quickscale_modules_auth._profile_views import (
     ProfileUpdateView as ProfileUpdateView,
     ProfileView as ProfileView,
 )
-from quickscale_modules_auth.exceptions import _AccountDeletionProviderBlocked
 from quickscale_modules_orgs.models import Organization
 from quickscale_modules_orgs.removal import (
     RemovalAction,
@@ -97,11 +84,11 @@ def _installed_app_config(label: str) -> Any:
 
 
 class AccountDeleteView(
-    _AccountDeletionFlowMixin,
-    _AccountDeletionGuardMixin,
-    _AccountDeletionHandlerPlumbingMixin,
-    _AccountDeletionProviderMixin,
-    _AccountDeletionReferenceMixin,
+    _account_deletion_flow._AccountDeletionFlowMixin,
+    _account_deletion_guard._AccountDeletionGuardMixin,
+    _account_deletion_handlers._AccountDeletionHandlerPlumbingMixin,
+    _account_deletion_providers._AccountDeletionProviderMixin,
+    _account_deletion_references._AccountDeletionReferenceMixin,
     LoginRequiredMixin,
     DeleteView,
 ):
@@ -151,7 +138,7 @@ class AccountDeleteView(
                 state.lock_org_ids,
                 state.handlers,
             )
-        except _AccountDeletionProviderBlocked as exc:
+        except _exceptions._AccountDeletionProviderBlocked as exc:
             return self._provider_blocked_response(form, exc)
 
         deletion_succeeded = False
@@ -226,7 +213,7 @@ class AccountDeleteView(
                 )
                 deletion_succeeded = True
                 return success_response
-            except _AccountDeletionProviderBlocked as exc:
+            except _exceptions._AccountDeletionProviderBlocked as exc:
                 return self._provider_blocked_response(form, exc)
             finally:
                 if not deletion_succeeded:
@@ -242,7 +229,7 @@ class AccountDeleteView(
         self,
         form: Any,
         user: Any,
-        state: _PreparedDeletionState,
+        state: _account_deletion_flow._PreparedDeletionState,
         coordinator: RemovalCoordinator,
     ) -> HttpResponse | None:
         """Run the deletion's provider stages and discharge RECONCILE.
@@ -268,7 +255,7 @@ class AccountDeleteView(
                 cancellation_transitions=state.cancellation_transitions,
             )
             coordinator.discharge_stage(RemovalAction.RECONCILE)
-        except _AccountDeletionProviderBlocked as exc:
+        except _exceptions._AccountDeletionProviderBlocked as exc:
             return self._provider_blocked_response(form, exc)
         return None
 
@@ -308,24 +295,28 @@ class AccountDeleteView(
 
     def _validate_account_deletion_handler(self, handler: Any) -> None:
         """Fail closed when one declared handler's capability is incomplete."""
-        name = _handler_name(handler)
+        name = _account_deletion_handlers._handler_name(handler)
         missing = [
             method
             for method in _ACCOUNT_DELETION_HANDLER_METHODS
             if not callable(getattr(handler, method, None))
         ]
         if missing:
-            raise _AccountDeletionProviderBlocked(
+            raise _exceptions._AccountDeletionProviderBlocked(
                 f"The account-deletion capability declared by {name} is "
                 f"incomplete; missing {', '.join(missing)}."
             )
-        if not _is_string_tuple(handler.account_deletion_handled_app_labels()):
-            raise _AccountDeletionProviderBlocked(
+        if not _account_deletion_handlers._is_string_tuple(
+            handler.account_deletion_handled_app_labels()
+        ):
+            raise _exceptions._AccountDeletionProviderBlocked(
                 f"The account-deletion capability declared by {name} must "
                 "return a non-empty tuple of app labels."
             )
-        if not _is_exception_type_tuple(handler.account_deletion_fail_closed_errors()):
-            raise _AccountDeletionProviderBlocked(
+        if not _account_deletion_handlers._is_exception_type_tuple(
+            handler.account_deletion_fail_closed_errors()
+        ):
+            raise _exceptions._AccountDeletionProviderBlocked(
                 f"The account-deletion capability declared by {name} must "
                 "return a non-empty tuple of exception types."
             )
@@ -334,13 +325,13 @@ class AccountDeleteView(
             not isinstance(scope, str)
             or scope not in _ACCOUNT_DELETION_RECONCILE_SCOPES
         ):
-            raise _AccountDeletionProviderBlocked(
+            raise _exceptions._AccountDeletionProviderBlocked(
                 f"The account-deletion capability declared by {name} declares "
                 f"an unknown reconcile scope {scope!r}."
             )
         for label in handler.account_deletion_handled_app_labels():
             if _installed_app_config(label) is not handler:
-                raise _AccountDeletionProviderBlocked(
+                raise _exceptions._AccountDeletionProviderBlocked(
                     f"The account-deletion capability declared by {name} claims "
                     f"the app label {label!r} but is not that app's config; a "
                     "provider must declare its own app config as its handler."
