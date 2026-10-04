@@ -36,6 +36,7 @@ from quickscale_core.runtime import (
     register_module_settings_check,
 )
 from quickscale_modules_orgs.removal import (
+    OWNED_PERSONAL_DATA,
     OWNED_TENANT_ROWS,
     PURGE_TOMBSTONE,
     SOCIAL_CACHE_STATE,
@@ -74,9 +75,10 @@ class QuickscaleOrgsConfig(AppConfig):
 
         Every domain declares the obligations it owns from its own
         ``AppConfig``; ``orgs`` aggregates them for both removal boundaries.
-        These three are orgs' own: the marker-derived tenant rows it deletes,
-        the organization-scoped social cache state those rows leave behind,
-        and the purge tombstone it records.
+        These four are orgs' own: the marker-derived tenant rows it deletes,
+        the memberships and invitation addresses it anonymizes when the
+        account is removed, the organization-scoped social cache state those
+        rows leave behind, and the purge tombstone it records.
         """
         return (
             OrganizationRemovalObligation(
@@ -87,6 +89,11 @@ class QuickscaleOrgsConfig(AppConfig):
                     "Account deletion removes the person while retaining "
                     "organization data."
                 ),
+            ),
+            OrganizationRemovalObligation(
+                name=OWNED_PERSONAL_DATA,
+                purge_action=RemovalAction.DELETE,
+                account_delete_action=RemovalAction.ANONYMIZE,
             ),
             OrganizationRemovalObligation(
                 name=SOCIAL_CACHE_STATE,
@@ -164,6 +171,35 @@ class QuickscaleOrgsConfig(AppConfig):
             keys.extend(cache_keys(organization_id))
         if keys:
             cache.delete_many(keys)
+
+    def anonymize_account(
+        self,
+        user: Any,
+        original_email: str,
+        original_name: str,
+        original_username: str,
+    ) -> None:
+        """Scrub orgs' personal data as the ``owned-personal-data`` executor.
+
+        The account-deletion boundary runs this hook inside its anonymization
+        transaction: the person leaves every organization and their invitation
+        addresses are scrubbed, pending ones withdrawn.  The pre-scrub identity
+        arguments let handler order not matter.
+        """
+        from quickscale_modules_orgs import _anonymization
+
+        _anonymization.anonymize_account(
+            user, original_email, original_name, original_username
+        )
+
+    def anonymize_handlers(self) -> tuple[Any, ...]:
+        """Declare orgs' account-anonymization handler (rule 4).
+
+        The account-deletion boundary collects every installed app's declared
+        handler through the shared core helper and runs them in one
+        transaction; orgs declares its own app config as its handler.
+        """
+        return (self,)
 
     def ready(self) -> None:
         # ---- Rule 10 — startup checks through the shared helper --------

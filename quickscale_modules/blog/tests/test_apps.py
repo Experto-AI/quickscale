@@ -13,6 +13,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 
 from quickscale_modules_blog.apps import QuickscaleBlogConfig
+from quickscale_modules_orgs.removal import BLOG_PERSONAL_DATA, RemovalAction
 
 
 def test_app_config_exposes_expected_metadata() -> None:
@@ -26,6 +27,22 @@ def test_app_config_exposes_expected_metadata() -> None:
 def test_app_config_declares_its_removal_label_prefix() -> None:
     """Rule 34: the purge summary takes blog's display prefix from here."""
     assert QuickscaleBlogConfig.removal_label_prefix == "Blog"
+
+
+def test_app_config_declares_the_author_profile_personal_data_obligation() -> None:
+    """The profile fields are blog's own anonymize obligation."""
+    config = QuickscaleBlogConfig(
+        "quickscale_modules_blog",
+        import_module("quickscale_modules_blog"),
+    )
+
+    (obligation,) = config.removal_obligations()
+
+    assert obligation.name == BLOG_PERSONAL_DATA
+    assert obligation.account_delete_action is RemovalAction.ANONYMIZE
+    assert obligation.purge_action is RemovalAction.SKIP
+    assert callable(config.anonymize_account)
+    assert config.anonymize_handlers() == (config,)
 
 
 def test_media_url_check_is_skipped_when_disabled(settings: Any) -> None:

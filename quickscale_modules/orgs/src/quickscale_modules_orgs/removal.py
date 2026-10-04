@@ -7,9 +7,9 @@ or a ``removal_obligations()`` method returning
 declaration.  :func:`organization_removal_obligations` aggregates the
 declarations of every installed app, so the aggregate names no module's labels
 or fields; an app may still declare provider state stored on another installed
-model.  An app-owned stage (``INVALIDATE``, ``RECONCILE``) needs the matching
-executor hook on the declaring app's config, so no declaration is discharged
-without work to run.  An obligation whose provider fields are
+model.  An app-owned stage (``INVALIDATE``, ``RECONCILE``, ``ANONYMIZE``) needs
+the matching executor hook on the declaring app's config, so no declaration is
+discharged without work to run.  An obligation whose provider fields are
 ``boundary_guarded`` names the declaring app's guard, reconciliation, and
 mutation-lock hooks in its ``boundary_guarded_hooks`` declaration, so the
 boundary runs the declaring module's own provider-state code.  Each removal
@@ -62,10 +62,14 @@ from quickscale_modules_orgs._removal_provider_ids import (
     external_provider_obligation_mismatches as _external_provider_obligation_mismatches,
 )
 from quickscale_modules_orgs._removal_types import (
+    AUTH_PERSONAL_DATA as AUTH_PERSONAL_DATA,
+    BILLING_PERSONAL_DATA as BILLING_PERSONAL_DATA,
     BILLING_PROVIDER_STATE as BILLING_PROVIDER_STATE,
+    BLOG_PERSONAL_DATA as BLOG_PERSONAL_DATA,
     COORDINATOR_DISCHARGE_ACTIONS as COORDINATOR_DISCHARGE_ACTIONS,
     NOT_PROVIDER_BACKED as NOT_PROVIDER_BACKED,
     ORGANIZATION_MODEL_LABEL as ORGANIZATION_MODEL_LABEL,
+    OWNED_PERSONAL_DATA as OWNED_PERSONAL_DATA,
     OWNED_TENANT_ROWS as OWNED_TENANT_ROWS,
     PROVIDER_BACKED as PROVIDER_BACKED,
     PURGE_TOMBSTONE as PURGE_TOMBSTONE,
