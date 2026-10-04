@@ -298,6 +298,7 @@ def _assert_successful_execution(
     before_donor: dict[str, str],
     before_recipient: dict[str, str],
     label: str = "fresh-first",
+    expected_verification_count: int = 7,
 ) -> None:
     """Assert that a compatible generated-project migration completed."""
     _require(report["status"] == "ready", f"{label} execution was not ready")
@@ -315,7 +316,7 @@ def _assert_successful_execution(
         f"{label} execution did not mutate recipient project {recipient}",
     )
     _require(
-        len(report["verification_results"]) == 7
+        len(report["verification_results"]) == expected_verification_count
         and all(
             result["status"] == "passed" and result["return_code"] == 0
             for result in report["verification_results"]
@@ -582,6 +583,110 @@ def _case_iterate(root: Path, environment: dict[str, str], spy_log: Path) -> Non
     )
 
 
+def _write_project_app(project: Path, name: str) -> None:
+    """Write a minimal project-owned Django app into a generated donor."""
+    app = project / name
+    _require(
+        not (app / "__init__.py").exists(),
+        f"project app {name} already exists in {project}",
+    )
+    (app / "migrations").mkdir(parents=True)
+    (app / "__init__.py").write_text("")
+    (app / "apps.py").write_text(
+        "from django.apps import AppConfig\n"
+        "\n"
+        "\n"
+        f"class {name.title()}Config(AppConfig):\n"
+        '    default_auto_field = "django.db.models.BigAutoField"\n'
+        f'    name = "{name}"\n'
+    )
+    (app / "models.py").write_text(
+        "from django.db import models\n"
+        "\n"
+        "\n"
+        f"class {name.title()}(models.Model):\n"
+        "    title = models.CharField(max_length=200)\n"
+    )
+    (app / "views.py").write_text(
+        "from django.http import HttpResponse\n"
+        "\n"
+        "\n"
+        f"def {name}_index(request):\n"
+        '    return HttpResponse("ok")\n'
+    )
+    (app / "urls.py").write_text(
+        "from django.urls import path\n"
+        "\n"
+        "from . import views\n"
+        "\n"
+        "urlpatterns = [\n"
+        f'    path("", views.{name}_index, name="{name}-index"),\n'
+        "]\n"
+    )
+    (app / "migrations" / "0001_initial.py").write_text(
+        f'DONOR_MIGRATION_MARKER = "{name}-donor-migration"\n'
+    )
+
+    package_json_path = project / "frontend" / "package.json"
+    package_data = json.loads(package_json_path.read_text())
+    package_data.setdefault("dependencies", {})["axios"] = "^1.7.0"
+    package_json_path.write_text(json.dumps(package_data, indent=2) + "\n")
+
+
+def _case_project_apps(root: Path, environment: dict[str, str], spy_log: Path) -> None:
+    """Carry a donor project-owned app through copy, registration, mount, and merge."""
+    spy_log.write_text("")
+    donor = _generate_project(root / "donor", "app-site")
+    recipient = _generate_project(root / "recipient", "app-site")
+    _write_project_app(donor, "properties")
+    donor_before = _snapshot_tree(donor)
+    recipient_before = _snapshot_tree(recipient)
+
+    report, _stdout = _run_migration(
+        donor=donor,
+        recipient=recipient,
+        report_path=root / "project-apps.json",
+        environment=environment,
+    )
+    _assert_successful_execution(
+        report,
+        donor=donor,
+        recipient=recipient,
+        before_donor=donor_before,
+        before_recipient=recipient_before,
+        label="project-apps",
+        expected_verification_count=8,
+    )
+    _require(
+        (recipient / "properties" / "models.py").is_file(),
+        "project-owned app was not copied into the recipient",
+    )
+    _require(
+        not (recipient / "properties" / "migrations").exists(),
+        "donor migrations were carried instead of regenerated",
+    )
+    settings_text = (recipient / "app_site" / "settings" / "base.py").read_text()
+    _require(
+        '"properties",' in settings_text,
+        "project-owned app was not registered in INSTALLED_APPS",
+    )
+    urls_text = (recipient / "app_site" / "urls.py").read_text()
+    _require(
+        'include("properties.urls")' in urls_text,
+        "project-owned app URLs were not mounted",
+    )
+    merged = json.loads((recipient / "frontend" / "package.json").read_text())
+    _require(
+        merged.get("dependencies", {}).get("axios") == "^1.7.0",
+        "donor frontend dependency was not merged",
+    )
+    spy = spy_log.read_text()
+    _require(
+        "run python manage.py makemigrations properties" in spy,
+        f"project-app migrations were not regenerated:\n{spy}",
+    )
+
+
 def main() -> int:
     print("🔍 Beta migration generated-project smoke gate")
     previous_skip_lock = os.environ.get("QS_SKIP_POETRY_LOCK")
@@ -601,6 +706,9 @@ def main() -> int:
             print("  🔍 iterate regeneration and execution")
             _case_iterate(root / "iterate", environment, spy_log)
             print("    ✅ iterate covered dry-run planning, staged apply, and execution")
+            print("  🔍 project-owned app copy, registration, URL mount, and dependency merge")
+            _case_project_apps(root / "project-apps", environment, spy_log)
+            print("    ✅ project-apps covered app migration and frontend dependency merge")
     finally:
         if previous_skip_lock is None:
             os.environ.pop("QS_SKIP_POETRY_LOCK", None)

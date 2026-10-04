@@ -54,6 +54,7 @@ from .model import (
     _append_blocker,
     _append_check,
 )
+from .project_apps import _detect_project_owned_apps
 from collections.abc import Iterator
 from functools import lru_cache
 from pathlib import Path
@@ -163,11 +164,17 @@ def _recipient_counterpart(
     return candidate if candidate.is_file() else None
 
 
-def _is_recognized_project_root(relative_path: str, package: str) -> bool:
+def _is_recognized_project_root(
+    relative_path: str, package: str, app_names: tuple[str, ...] = ()
+) -> bool:
     """Return whether a non-emitted path sits under a recognized donor root."""
     parts = relative_path.split("/")
     if len(parts) > 1:
-        return parts[0] in DONOR_RECOGNIZED_PROJECT_DIRS or parts[0] == package
+        return (
+            parts[0] in DONOR_RECOGNIZED_PROJECT_DIRS
+            or parts[0] == package
+            or parts[0] in app_names
+        )
     return relative_path in DONOR_RECOGNIZED_PROJECT_ROOT_FILES
 
 
@@ -206,7 +213,9 @@ def _classify_donor_file(
             return "generated-untouched"
         return "generated-customized"
 
-    if _is_recognized_project_root(relative_path, donor.identity.package):
+    if _is_recognized_project_root(
+        relative_path, donor.identity.package, donor.project_apps
+    ):
         return "project-owned"
 
     return None
@@ -403,6 +412,7 @@ def _audit_donor_inventory(
 
     classification = DonorFileClassification()
     failures: list[str] = []
+    app_names = _detect_project_owned_apps(donor_path, donor_path / package)
     for relative_path in _iter_donor_paths(donor_path, classification, failures):
         try:
             (donor_path / relative_path).read_bytes()
@@ -413,7 +423,7 @@ def _audit_donor_inventory(
             continue
         if relative_path in emission_paths:
             continue
-        if not _is_recognized_project_root(relative_path, package):
+        if not _is_recognized_project_root(relative_path, package, app_names):
             classification.unclassified.append(relative_path)
 
     if classification.unclassified or failures:

@@ -16,6 +16,8 @@ from .constants import (
     REGENERATION_APPLY_STDIN,
     REGENERATION_APPLY_TIMEOUT_SECONDS,
 )
+from .package_json_editing import _validate_donor_frontend_manifest
+from .project_apps import _validate_donor_project_apps
 from .model import (
     BetaMigrationInput,
     BetaMigrationReport,
@@ -369,6 +371,12 @@ def _plan_beta_migration_iterate(
                 donor_path=inputs.donor,
                 package=donor_config.project.package,
                 theme=donor_config.project.theme,
+            )
+            _validate_donor_frontend_manifest(report, donor_path=inputs.donor)
+            _validate_donor_project_apps(
+                report,
+                donor_path=inputs.donor,
+                package=donor_config.project.package,
             )
             if not report.blockers:
                 report.planned_actions = _iterate_planned_actions(

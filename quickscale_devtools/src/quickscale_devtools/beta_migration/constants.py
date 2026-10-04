@@ -110,7 +110,12 @@ FRESH_FIRST_REPLACED_ROOT_FILES = ("frontend/src/App.tsx",)
 FRESH_FIRST_COPY_MISSING_DIRS = ("frontend/src/pages",)
 
 
-FRESH_FIRST_MERGED_ROOT_FILES = ("pyproject.toml",)
+FRESH_FIRST_MERGED_ROOT_FILES = ("pyproject.toml", "frontend/package.json")
+
+
+# The generated ``settings/base.py`` ends its INSTALLED_APPS literal with this
+# comment; project-owned apps are registered immediately above it.
+INSTALLED_APPS_APPEND_SENTINEL = "# Add your apps here"
 
 
 FRESH_FIRST_PROTECTED_PACKAGE_FILES = (

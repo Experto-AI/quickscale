@@ -23,7 +23,10 @@ Steps completed:
 - copy-custom-router-and-pages
 - copy-custom-components-and-utilities
 - copy-selected-django-files
+- copy-project-owned-apps
+- register-and-mount-project-owned-apps
 - sync-missing-path-dependencies
+- merge-frontend-dependencies
 - preserve-managed-recipient-files
 - run-verification-stack
 
@@ -43,6 +46,7 @@ Recipient paths changed (11):
 Diff summary:
 - Module diff: donor-only=['social'], recipient-only=['(none)']
 - Path dependency diff: donor-only=['quickscale-module-social'], recipient-only=['(none)']
+- Frontend dependency merge: donor-only=['(none)'], version conflicts=['(none)']
 
 Verification commands:
 - `poetry lock` — passed
@@ -80,7 +84,7 @@ Verification commands:
 - Never copy `.git`, `media/`, `.env`, or `poetry.lock` between the two trees.
 - Do not hand-patch QuickScale-managed files such as `settings/modules.py`, `urls_modules.py`, and the generated wiring; regenerate them through the supported QuickScale workflow.
 - In-place edits under vendored module source (`modules/<name>/`) are outside the extension contract: upstream them into the module or re-express them as project-owned code before the recipient is handed over.
-- Add no frontend dependency the recipient does not already declare; report merge conflicts instead of forcing them.
+- The migration merged the donor's declared frontend dependencies and reported every version conflict; keep the recipient's declared versions and add no dependency it does not already declare.
 
 ## Done criteria
 
