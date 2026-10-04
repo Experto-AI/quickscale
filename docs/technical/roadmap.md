@@ -422,8 +422,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
     the five handlers, and the view's in-transaction collector are reviewed and green; next are
     (b) and (c); watch the escaped and overlapping identity matching in notifications'
     shared-message scrub.
-  - [ ] (b) `AccountDeleteView` disables and scrubs; re-registration and sign-in tests; the
-    rollback test.
+  - [x] (b) `AccountDeleteView` disables and scrubs; re-registration and sign-in tests; the
+    rollback test. Handoff: the view stops being a `DeleteView` and keeps the row, disabled
+    and scrubbed; re-registration and sign-in tests prove the same email can register again
+    while the old credentials cannot sign in, the existing rollback test stays green, and
+    the coupled orgs survivor regression asserts the retained row; next is (c); watch the
+    detach pass, which still nulls nullable provenance until (c) removes it.
   - [ ] (c) Remove the account-deletion lookup and turn `ACCOUNT_DELETE` into the anonymize
     boundary; decisions, organizations.md, and auth's README.
 
