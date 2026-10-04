@@ -76,8 +76,6 @@ audited: c10b529e
 items:
   # seventh pass — new, ranked (see D43–D48); proposed, not decided
   - {id: mount-path-copies, status: open, aspect: A, cost: [collision, tax], members_diverging: [blog, listings, forms, crm, orgs, social, core-generator], population: modules-with-mounts(10), check: conformance, closed_world: true, handoff: [tech], first_seen: 2026-10-03, last_verified: 2026-10-03}
-  - {id: org-role-check-copies, status: open, aspect: E, cost: [ambiguity], members_diverging: [billing], population: tenant-modules(6), check: conformance, closed_world: false, handoff: [], first_seen: 2026-10-03, last_verified: 2026-10-03}
-  - {id: mypy-overrides-unread, status: open, aspect: N, cost: [ambiguity, tax], members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, storage], population: modules(12), check: conformance, closed_world: true, handoff: [], first_seen: 2026-10-03, last_verified: 2026-10-03}
   - {id: split-facade-conventions, status: open, aspect: L, cost: [tax, ambiguity], members_diverging: [auth, backups, billing, notifications, orgs], population: split-facades(10 files, 5 modules), check: conformance+review, closed_world: false, handoff: [arch], first_seen: 2026-10-03, last_verified: 2026-10-03}
   # decided, members still to change
   - {id: theme-module-presence, status: decided, rule: "rule 31 (D34)", aspect: P, cost: [ambiguity, defect], members_diverging: [core-generator (social/link_tree.html.j2, social/embeds.html.j2)], population: seam-producers(3), check: conformance, closed_world: false, handoff: [tech], first_seen: 2026-09-28, last_verified: 2026-10-03}
@@ -86,6 +84,8 @@ items:
   # resolved — every member conforms and the rule 40 harness (or the named check) holds it
   - {id: settings-snapshot-readers, status: resolved, rule: "rule 42 (D44)", aspect: B, check: conformance, closed_world: true, first_seen: 2026-10-03, last_verified: 2026-10-03}
   - {id: optional-sender-guard, status: resolved, rule: "rule 43 (D45)", aspect: C, check: conformance, closed_world: true, first_seen: 2026-10-03, last_verified: 2026-10-03}
+  - {id: org-role-check-copies, status: resolved, rule: "rule 44 (D46)", aspect: E, check: conformance+review, closed_world: false, first_seen: 2026-10-03, last_verified: 2026-10-03}
+  - {id: mypy-overrides-unread, status: resolved, rule: "rule 45 (D47)", aspect: N, check: conformance, closed_world: true, first_seen: 2026-10-03, last_verified: 2026-10-03}
   - {id: shared-setting-writes, status: resolved, rule: "rule 30 (D33)", aspect: A, check: "collect_wiring (apply)", closed_world: true, resolved_by: cb750c51, first_seen: 2026-09-28, last_verified: 2026-10-03}
   - {id: throttle-scopes-and-rates, status: resolved, rule: "rule 32 (D35)", aspect: A, check: conformance, closed_world: true, resolved_by: c3c99253, first_seen: 2026-09-28, last_verified: 2026-10-03}
   - {id: namespace-prefix-principle, status: resolved, rule: "rule 33 (D36)", aspect: A, check: conformance, closed_world: true, resolved_by: 6fe010b4, first_seen: 2026-09-28, last_verified: 2026-10-03}
@@ -142,16 +142,16 @@ slice that holds each rule is in its commit message.
 | `write-effects-on-commit` | F | defect (unproven) | 1 / 5 | decided |
 | `settings-snapshot-readers` | B | ambiguity, tax | 5 / 12 | resolved (rule 42) |
 | `optional-sender-guard` | C | ambiguity | 2 / 2 | resolved (rule 43) |
-| `org-role-check-copies` | E | ambiguity | 1 / 6 | **open** |
-| `mypy-overrides-unread` | N | ambiguity, tax | 10 / 12 | **open** |
+| `org-role-check-copies` | E | ambiguity | 1 / 6 | resolved (rule 44) |
+| `mypy-overrides-unread` | N | ambiguity, tax | 10 / 12 | resolved (rule 45) |
 | `module-lists-outside-members` | L | tax, ambiguity | 1 list / 10 | decided (correction) |
 | `split-facade-conventions` | L, K | tax, ambiguity | 5 / 5 split modules | **open** |
 | 41 items of passes 1–6 | A–O | see index | 0 | resolved |
 
-Of the 44 prior items, 41 are resolved and 3 are still decided with members to change. Two of the
-six new items are resolved (rules 42–43, SA236); the remaining four are open. Each is small, and
-none needs a new mechanism; each is a decision plus one harness clause. The two corrections and
-`mount-path-copies` sit in generator templates that
+Of the 44 prior items, 41 are resolved and 3 are still decided with members to change. Four of the
+six new items are resolved (rules 42–45, SA236 and SA237); the remaining two are open. Each is
+small, and none needs a new mechanism; each is a decision plus one harness clause. The two
+corrections and `mount-path-copies` sit in generator templates that
 rule 40's `.py`-only scan never reads. That one gap is the main lesson of this pass
 ([Enforcement gaps](#enforcement-gaps) 13).
 
@@ -2933,6 +2933,11 @@ removed, decisions.md rules 3 and 20 name notifications' row as a read-only mirr
 rule 42 rejects a snapshot read from another module. Gaps 13–16 stay open for SA235, SA237, and
 SA238.
 
+**SA237 close (2026-10-03).** Gaps 15–16 are closed: billing's post-lock re-check calls
+`user_has_org_role` with `OrgRole.OWNER`, the ten modules' `[[tool.mypy.overrides]]` blocks are
+deleted, `anymail` joins the root `mypy.ini`, and harness rule 45 rejects any per-module
+`[tool.mypy]` table. Gaps 13–14 stay open for SA235 and SA238.
+
 ## Consistent by design
 
 - **Outbound vendor clients follow their SDKs:** billing builds a `StripeClient` per call; analytics
@@ -3209,6 +3214,6 @@ setting directly; module lists in `scripts/` derived from discovery. Cells not r
 - 2026-10-03 — `mount-path-copies`: open (new; D43 proposed).
 - 2026-10-03 — `settings-snapshot-readers`: resolved (SA236 — verified by harness rule 42; the five modules' snapshots live in a private `_settings.py` built by `from_settings()` and their names left `services.__all__`).
 - 2026-10-03 — `optional-sender-guard`: resolved (SA236 — verified by harness rule 43; orgs guards on `notifications.services.is_enabled()`, forms catches only `NotificationError`, and the `dispatch_after_commit` hazard is removed).
-- 2026-10-03 — `org-role-check-copies`: open (new; D46 proposed).
-- 2026-10-03 — `mypy-overrides-unread`: open (new; D47 proposed).
+- 2026-10-03 — `org-role-check-copies`: resolved (SA237 — verified by harness rule 44; billing's post-lock re-check calls `user_has_org_role` with `OrgRole.OWNER` and keeps its call-site `is_active` test).
+- 2026-10-03 — `mypy-overrides-unread`: resolved (SA237 — verified by harness rule 45; the ten modules' `[[tool.mypy.overrides]]` blocks are deleted and `anymail` joins the root `mypy.ini`).
 - 2026-10-03 — `split-facade-conventions`: open (new; D48 proposed).

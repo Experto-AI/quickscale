@@ -136,10 +136,6 @@ def _require_owner_provider_mutation_authorization(
         "quickscale_orgs",
         "Organization",
     )
-    membership_model = apps.get_model(
-        "quickscale_orgs",
-        "OrganizationMembership",
-    )
     current_user = user_model._default_manager.filter(pk=user_pk).first()
     current_organization = organization_model._default_manager.filter(
         pk=organization_pk
@@ -152,13 +148,10 @@ def _require_owner_provider_mutation_authorization(
         raise BillingValidationError(
             "Billing authorization changed while the provider mutation was waiting."
         )
-    if not bool(getattr(current_user, "is_superuser", False)) and not (
-        membership_model._default_manager.filter(
-            user=current_user,
-            organization=current_organization,
-            role="owner",
-        ).exists()
-    ):
+    from quickscale_modules_orgs.models import OrgRole
+    from quickscale_modules_orgs.permissions import user_has_org_role
+
+    if not user_has_org_role(current_user, current_organization, OrgRole.OWNER):
         raise BillingValidationError(
             "Billing authorization changed while the provider mutation was waiting."
         )

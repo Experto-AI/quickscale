@@ -48,10 +48,6 @@ select = ["E4", "E7", "E9", "F", "S"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S"]
 
-[[tool.mypy.overrides]]
-module = "storages.*"
-ignore_missing_imports = true
-
 [tool.django-stubs]
 django_settings_module = "tests.settings"
 

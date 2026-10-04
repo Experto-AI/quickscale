@@ -1,4 +1,4 @@
-"""Personal-data inventory conformance gate (SA242).
+"""Personal-data inventory conformance gate.
 
 The gate walks every installed model in the cross-module orgs harness --
 ``tests/settings.py`` installs every first-party module plus Django contrib,
@@ -33,7 +33,7 @@ USER_MODEL_LABEL = settings.AUTH_USER_MODEL.lower()
 
 
 class CandidateKind(enum.Enum):
-    """A rule from SA242's scope that flags a field for classification."""
+    """A candidate rule that flags a field for classification."""
 
     USER_REFERENCE = "user reference"
     EMAIL = "email"
