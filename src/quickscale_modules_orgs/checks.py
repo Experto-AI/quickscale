@@ -33,7 +33,7 @@ The checks:
 
 Module Conventions rule 28: the AST helpers that compare live constants and
 follow a boundary implementation's entry path live in ``_checks_structure``
-and are re-exported here, while the registered checks, the privileged-command
+and are called there, while the registered checks, the privileged-command
 declaration (pinned by ``quickscale_core.tests.test_privileged_command_contract``),
 the RLS boot guard's ``os.environ`` reads (rule 35), and the
 ``_boundary_implementations`` patch seam stay on this module.
@@ -69,20 +69,8 @@ from django.apps import apps
 from django.core.checks import CheckMessage, Error, Warning, register
 from django.db import connection
 
-from quickscale_modules_orgs._checks_structure import (
-    _boundary_wiring_messages as _boundary_wiring_messages,
-    _called_function_names as _called_function_names,
-    _calls_coordinator_finish as _calls_coordinator_finish,
-    _compare_constants as _compare_constants,
-    _constant_falsey as _constant_falsey,
-    _constant_value as _constant_value,
-    _discharge_stage_names as _discharge_stage_names,
-    _entry_function_source as _entry_function_source,
-    _function_bodies as _function_bodies,
-    _obligation_mismatch_messages as _obligation_mismatch_messages,
-    _reachable_nodes as _reachable_nodes,
-    _uninspectable_refusal_field_messages as _uninspectable_refusal_field_messages,
-)
+import quickscale_modules_orgs._checks_structure as _checks_structure
+
 from quickscale_modules_orgs.removal import (
     ORGANIZATION_MODEL_LABEL as ORGANIZATION_MODEL_LABEL,
     REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE as REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE,
@@ -501,8 +489,10 @@ def check_removal_obligation_discharge(app_configs: object, **kwargs: object) ->
 
     messages: list = []
     for obligation in obligations:
-        messages.extend(_obligation_mismatch_messages(obligation))
+        messages.extend(_checks_structure._obligation_mismatch_messages(obligation))
     messages.extend(
-        _boundary_wiring_messages(boundary_implementations=_boundary_implementations)
+        _checks_structure._boundary_wiring_messages(
+            boundary_implementations=_boundary_implementations
+        )
     )
     return messages

@@ -358,7 +358,7 @@ class TestRefreshForceRlsPoliciesPostgres:
         ]
 
         with patch(
-            "quickscale_modules_orgs.tenancy.get_tenant_models",
+            "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
             return_value=models,
         ):
             refresh_force_rls_policies(pg_schema_editor)
@@ -375,7 +375,8 @@ class TestRefreshForceRlsPoliciesPostgres:
         cursor.fetchall.return_value = [("crm_tag_live_policy",)]
 
         with patch(
-            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[model]
+            "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
+            return_value=[model],
         ):
             refresh_force_rls_policies(pg_schema_editor)
 
@@ -391,7 +392,8 @@ class TestRefreshForceRlsPoliciesPostgres:
         cursor.fetchall.return_value = [("ordered_policy",)]
 
         with patch(
-            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[model]
+            "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
+            return_value=[model],
         ):
             refresh_force_rls_policies(pg_schema_editor)
 
@@ -424,7 +426,7 @@ class TestRefreshForceRlsPoliciesPostgres:
 
         with (
             patch(
-                "quickscale_modules_orgs.tenancy.get_tenant_models",
+                "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
                 return_value=[model],
             ),
         ):
@@ -440,7 +442,8 @@ class TestRefreshForceRlsPoliciesPostgres:
     ) -> None:
         """Refresh remains usable when no tenant models are discovered."""
         with patch(
-            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[]
+            "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
+            return_value=[],
         ):
             refresh_force_rls_policies(pg_schema_editor)
 
@@ -459,7 +462,7 @@ class TestRefreshForceRlsPoliciesPostgres:
 
         with (
             patch(
-                "quickscale_modules_orgs.tenancy.get_tenant_models",
+                "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
                 return_value=[model],
             ),
             pytest.raises(RuntimeError, match="exactly one FOR ALL policy"),
@@ -567,7 +570,8 @@ class TestRefreshForceRlsPoliciesMissingNames:
     def test_no_tenant_models_are_skipped(self, pg_schema_editor: MagicMock) -> None:
         """No error should be raised when no tenant models are installed."""
         with patch(
-            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[]
+            "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
+            return_value=[],
         ):
             refresh_force_rls_policies(pg_schema_editor)
         pg_schema_editor.execute.assert_not_called()
@@ -662,7 +666,7 @@ def test_project_tenant_refresh_preserves_quote_requiring_identifiers_exactly() 
 
         with (
             patch(
-                "quickscale_modules_orgs.tenancy.get_tenant_models",
+                "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
                 return_value=[model],
             ),
             connection.schema_editor() as schema_editor,
@@ -731,10 +735,11 @@ def test_project_tenant_refresh_rejects_missing_or_ambiguous_policy_before_ddl(
 
     with (
         patch(
-            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[model]
+            "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
+            return_value=[model],
         ),
-        patch("quickscale_modules_orgs.tenancy.revert_force_rls") as revert,
-        patch("quickscale_modules_orgs.tenancy.apply_force_rls") as apply,
+        patch("quickscale_modules_orgs._tenancy_rls.revert_force_rls") as revert,
+        patch("quickscale_modules_orgs._tenancy_rls.apply_force_rls") as apply,
         pytest.raises(RuntimeError, match="exactly one FOR ALL policy"),
     ):
         refresh_force_rls_policies(editor)
@@ -759,10 +764,11 @@ def test_project_tenant_refresh_rejects_invalid_policy_name_before_ddl(
 
     with (
         patch(
-            "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[model]
+            "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
+            return_value=[model],
         ),
-        patch("quickscale_modules_orgs.tenancy.revert_force_rls") as revert,
-        patch("quickscale_modules_orgs.tenancy.apply_force_rls") as apply,
+        patch("quickscale_modules_orgs._tenancy_rls.revert_force_rls") as revert,
+        patch("quickscale_modules_orgs._tenancy_rls.apply_force_rls") as apply,
         pytest.raises(RuntimeError, match="valid policy name"),
     ):
         refresh_force_rls_policies(editor)
@@ -785,13 +791,16 @@ def test_project_tenant_refresh_discovers_all_targets_before_revert() -> None:
     events: list[str] = []
 
     with (
-        patch("quickscale_modules_orgs.tenancy.get_tenant_models", return_value=models),
         patch(
-            "quickscale_modules_orgs.tenancy.revert_force_rls",
+            "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
+            return_value=models,
+        ),
+        patch(
+            "quickscale_modules_orgs._tenancy_rls.revert_force_rls",
             side_effect=lambda *_args: events.append("revert"),
         ) as revert,
         patch(
-            "quickscale_modules_orgs.tenancy.apply_force_rls",
+            "quickscale_modules_orgs._tenancy_rls.apply_force_rls",
             side_effect=lambda *_args: events.append("apply"),
         ) as apply,
     ):
@@ -824,7 +833,8 @@ def test_project_tenant_refresh_skips_missing_project_table() -> None:
     cursor.fetchone.return_value = (False,)
 
     with patch(
-        "quickscale_modules_orgs.tenancy.get_tenant_models", return_value=[model]
+        "quickscale_modules_orgs._tenancy_discovery.get_tenant_models",
+        return_value=[model],
     ):
         refresh_force_rls_policies(editor)
 
