@@ -43,10 +43,6 @@ select = ["E4", "E7", "E9", "F", "S"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S"]
 
-[[tool.mypy.overrides]]
-module = "posthog.*"
-ignore_missing_imports = true
-
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
 pythonpath = [".", "src"]
