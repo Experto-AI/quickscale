@@ -323,6 +323,32 @@ def _design_reference_failures(
     return tuple(failures)
 
 
+def _resolve_donor_module(donor_path: Path, project_path: str) -> str | None:
+    """Resolve a relative module specifier to the donor file it loads.
+
+    Node-style resolution: the exact path, then the supported file
+    extensions, then a directory's index file or ``package.json``.  Returns
+    the donor-relative path of the resolved file, or None when nothing in the
+    donor resolves (the reference was already dangling there).
+    """
+    base = donor_path / project_path
+    if base.is_file():
+        return project_path
+    for suffix in _JS_MODULE_SUFFIXES + (".json",):
+        candidate = Path(str(base) + suffix)
+        if candidate.is_file():
+            return candidate.relative_to(donor_path).as_posix()
+    if base.is_dir():
+        for name in tuple(f"index{suffix}" for suffix in _JS_MODULE_SUFFIXES) + (
+            "index.json",
+            "package.json",
+        ):
+            candidate = base / name
+            if candidate.is_file():
+                return candidate.relative_to(donor_path).as_posix()
+    return None
+
+
 def _module_reference_failures(
     donor_path: Path,
     emission_paths: frozenset[str],
@@ -340,10 +366,11 @@ def _module_reference_failures(
         if project_path.startswith(".."):
             failures.append(_reference_failure(label, target, project_path))
             continue
-        if not (donor_path / project_path).is_file():
+        resolved = _resolve_donor_module(donor_path, project_path)
+        if resolved is None:
             continue  # Already dangling in the donor; migration loses nothing.
-        if not _recipient_preserves_path(donor_path, emission_paths, project_path):
-            failures.append(_reference_failure(label, target, project_path))
+        if not _recipient_preserves_path(donor_path, emission_paths, resolved):
+            failures.append(_reference_failure(label, target, resolved))
     return tuple(failures)
 
 

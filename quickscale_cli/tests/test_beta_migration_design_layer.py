@@ -644,6 +644,58 @@ def test_iterate_blocks_before_regeneration_when_a_stylesheet_cannot_be_decoded(
     assert not _iterate_stage_dir(recipient).exists()
 
 
+def test_iterate_blocks_when_an_extensionless_module_target_is_uncarried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Extensionless module specifiers must resolve to their donor target."""
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-design-site")
+    marker = recipient / "keep-marker.txt"
+    marker.write_text("previous recipient\n")
+
+    (donor / "frontend" / "src" / "colors.json").write_text('{"primary": "red"}\n')
+    (donor / "frontend" / "design" / "helpers.cjs").write_text(
+        'module.exports = require("../src/colors");\n'
+    )
+
+    def fail_run(*args: object, **kwargs: object) -> None:
+        raise AssertionError("a blocked donor must not reach staged apply")
+
+    monkeypatch.setattr(subprocess, "run", fail_run)
+    report = run_beta_migration(
+        BetaMigrationInput(mode="iterate", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "Donor design-source preflight failed" in blocker
+        and "frontend/src/colors.json" in blocker
+        for blocker in report.blockers
+    )
+    assert marker.read_text() == "previous recipient\n"
+    assert not _iterate_stage_dir(recipient).exists()
+
+
+def test_extensionless_module_import_of_a_carried_target_is_allowed(
+    tmp_path: Path,
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    assets = donor / "frontend" / "src" / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    (assets / "colors.json").write_text('{"primary": "red"}\n')
+    donor_preset = donor / "frontend" / "design" / "tailwind.preset.js"
+    donor_preset.write_text(
+        'import colors from "../src/assets/colors";\n' + donor_preset.read_text()
+    )
+
+    report = plan_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+
+
 def test_iterate_blocks_before_regeneration_when_a_layer_module_import_is_uncarried(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
