@@ -176,22 +176,36 @@ CORE_RUNTIME_ROLE_ENV_VARS = (
 # in ``checks.py`` and names it to the startup check; a manifest names its
 # retired option keys under ``retired_options``.
 RETIRED_SETTINGS_NAME = "RETIRED_SETTINGS"
-# Rule 19's forbidden tokens and the listed operator paths where a superuser
-# check is sanctioned (audited cross-tenant operator access).  The scan set is
-# the Django view modules plus their rule 28 private siblings named
-# ``_view*.py`` or ``*_views.py``; it follows those filenames, so view code a
-# split files under another private name stays outside the check.  A token is
-# sanctioned only by an explicit ``OPERATOR_VIEW_TOKENS`` entry.
-VIEW_FILE_NAMES = ("views.py", "debug_views.py")
-VIEW_FILE_PRIVATE_PREFIX = "_view"
-VIEW_FILE_PRIVATE_SUFFIX = "_views.py"
+# Rule 19's forbidden tokens, the listed operator paths where a superuser check
+# is sanctioned (audited cross-tenant operator access), and the listed traffic
+# filter.  Rule 46's discovery finds view code by content: a class that
+# subclasses a Django or DRF view (directly or through a class the same file
+# defines), or any function taking a ``request`` parameter.  View code a split
+# files under any private name is therefore scanned, and a token is sanctioned
+# only by an explicit mapping entry.
+VIEW_MODULE_PREFIXES = (
+    "django.contrib.auth.views",
+    "django.views",
+    "rest_framework.views",
+    "rest_framework.generics",
+    "rest_framework.viewsets",
+)
 FORBIDDEN_VIEW_TOKENS = ("is_staff", "is_superuser", "IsAdminUser", "redirect_to_login")
-OPERATOR_VIEW_TOKENS: dict[tuple[str, str], frozenset[str]] = {
+OPERATOR_TOKENS: dict[tuple[str, str], frozenset[str]] = {
     ("forms", "views.py"): frozenset({"is_superuser"}),
     ("orgs", "_api_views.py"): frozenset({"is_superuser"}),
+    ("orgs", "_debug.py"): frozenset({"is_superuser"}),
     ("orgs", "_view_context.py"): frozenset({"is_superuser"}),
     ("orgs", "_view_org_management.py"): frozenset({"is_superuser"}),
+    ("orgs", "admin.py"): frozenset({"is_superuser"}),
     ("orgs", "debug_views.py"): frozenset({"is_superuser"}),
+    ("orgs", "middleware.py"): frozenset({"is_superuser"}),
+    ("orgs", "permissions.py"): frozenset({"is_superuser"}),
+}
+# Rule 19's listed exception for analytics' EXCLUDE_STAFF: the filter reads
+# ``is_staff`` to hide analytics from staff requests, not to authorize one.
+TRAFFIC_FILTER_TOKENS: dict[tuple[str, str], frozenset[str]] = {
+    ("analytics", "services.py"): frozenset({"is_staff"}),
 }
 TICKET_IN_TEST = re.compile(r"(?<![A-Za-z0-9])(?:SA|AF)\d+|CR-SA\d+")
 RATE_LITERAL = re.compile(r"\d+/(?:second|minute|hour|day)")
@@ -3041,23 +3055,107 @@ def _view_token(node: ast.AST) -> str | None:
     return None
 
 
-def _is_view_file(rel: str) -> bool:
-    """
-    Return whether a module file is named as one of rule 19's view modules.
+def _is_view_module(module: str) -> bool:
+    """Return whether ``module`` is a Django or DRF module that defines views."""
+    return any(
+        module == prefix or module.startswith(f"{prefix}.") for prefix in VIEW_MODULE_PREFIXES
+    )
 
-    ``views.py`` and ``debug_views.py`` are the Django view modules; the
-    private ``_view*.py`` and ``*_views.py`` siblings are the names rule 28
-    splits give the view code they move out of them.  The scan set follows
-    those names, so a split that files view code under another private name
-    stays outside this check.
+
+def _view_bindings(tree: ast.Module) -> tuple[set[str], dict[str, str]]:
     """
-    if not rel.endswith(".py"):
+    Resolve a module's Django and DRF view bindings.
+
+    Returns the names bound to view classes and the namespace aliases bound to
+    view modules, mapped to their dotted targets, so ``from rest_framework
+    import views``, ``import rest_framework.views as drf_views``, and a fully
+    qualified ``rest_framework.views.APIView`` all resolve.  A base imported
+    from another project module is not resolved.
+    """
+    names: set[str] = set()
+    namespaces: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                target = f"{node.module}.{alias.name}"
+                binding = alias.asname or alias.name
+                if _is_view_module(node.module):
+                    names.add(binding)
+                if _is_view_module(target):
+                    namespaces[binding] = target
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                root = alias.asname or alias.name.split(".")[0]
+                namespaces[root] = alias.name if alias.asname else root
+    return names, namespaces
+
+
+def _dotted_name(node: ast.expr) -> str | None:
+    """Return the dotted spelling of a name or attribute chain, if it has one."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        value = _dotted_name(node.value)
+        return f"{value}.{node.attr}" if value is not None else None
+    return None
+
+
+def _is_view_base(node: ast.expr, names: set[str], namespaces: dict[str, str]) -> bool:
+    """Return whether a class base resolves to a Django or DRF view class."""
+    if isinstance(node, ast.Name):
+        return node.id in names
+    dotted = _dotted_name(node)
+    if dotted is None:
         return False
-    basename = Path(rel).name
-    return (
-        basename in VIEW_FILE_NAMES
-        or basename.startswith(VIEW_FILE_PRIVATE_PREFIX)
-        or basename.endswith(VIEW_FILE_PRIVATE_SUFFIX)
+    root, _, rest = dotted.partition(".")
+    if not rest:
+        return dotted in names
+    resolved = f"{namespaces.get(root, root)}.{rest}"
+    return any(resolved.startswith(f"{prefix}.") for prefix in VIEW_MODULE_PREFIXES)
+
+
+def _defines_view_class(tree: ast.Module) -> bool:
+    """Return whether a module defines a Django or DRF view subclass."""
+    names, namespaces = _view_bindings(tree)
+    if not names and not namespaces:
+        return False
+    classes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+    view_classes: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for node in classes:
+            if node.name in view_classes:
+                continue
+            if any(
+                _is_view_base(base, names, namespaces)
+                or (isinstance(base, ast.Name) and base.id in view_classes)
+                for base in node.bases
+            ):
+                view_classes.add(node.name)
+                changed = True
+    return bool(view_classes)
+
+
+def _takes_request(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return whether a function or method declares a ``request`` parameter."""
+    parameters = node.args.posonlyargs + node.args.args + node.args.kwonlyargs
+    return any(parameter.arg == "request" for parameter in parameters)
+
+
+def _defines_view_code(tree: ast.Module) -> bool:
+    """
+    Rule 46's discovery: return whether a module defines view code.
+
+    View code is a Django or DRF view subclass or a function taking
+    ``request``; the scan set no longer follows file names, so a split that
+    files view code under any private name stays inside the check.
+    """
+    if _defines_view_class(tree):
+        return True
+    return any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _takes_request(node)
+        for node in ast.walk(tree)
     )
 
 
@@ -3068,20 +3166,25 @@ def rule_19_authorization(corpus: Corpus) -> list[str]:
     The statically checkable clause: ``is_staff``, ``is_superuser``,
     ``IsAdminUser``, and hand-written ``redirect_to_login`` — imported or
     aliased, read as an attribute, or passed as a string — appear only in the
-    listed operator paths across every view module and its private split
-    siblings (``_view*.py``/``*_views.py``).  The "logged in is one of the
-    three idioms" and "README lists the minimum role" clauses stay review
-    rules: rule 9 sanctions ``AllowAny`` plus a view's own authentication, and
-    the README prose is not a code property.
+    listed operator paths.  Rule 46 finds the view code to scan by content
+    rather than by file name: every file that defines a Django or DRF view
+    subclass or a function taking ``request``, wherever a rule 28 split files
+    it.  The "logged in is one of the three idioms" and "README lists the
+    minimum role" clauses stay review rules: rule 9 sanctions ``AllowAny`` plus
+    a view's own authentication, and the README prose is not a code property.
     """
     violations: list[str] = []
     for module in corpus.modules:
         for rel, text in module.files.items():
-            if not _is_view_file(rel):
+            if not rel.endswith(".py"):
                 continue
-            basename = Path(rel).name
-            allowed = OPERATOR_VIEW_TOKENS.get((module.name, basename), frozenset())
             tree = _parse(text)
+            if not _defines_view_code(tree):
+                continue
+            key = (module.name, Path(rel).name)
+            allowed = OPERATOR_TOKENS.get(key, frozenset()) | TRAFFIC_FILTER_TOKENS.get(
+                key, frozenset()
+            )
             docstrings = _docstring_nodes(tree)
             for node in ast.walk(tree):
                 token = _view_token(node)
