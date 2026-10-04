@@ -203,3 +203,11 @@ steps:
     title: "Adopt the organization-role CRM workspace wording"
     adoption_steps:
       - "Compare and manually adopt the current showcase_react CrmPage.tsx copy and the CRM dashboard template: the workspace text and the dashboard link describe organization-role access (viewers read, members write) instead of a staff-only dashboard; Django admin remains staff-gated."
+
+  - id: sa214-design-layer
+    minimum: "0.89.0"
+    title: "Adopt the project-owned design layer"
+    adoption_steps:
+      - "Create project-owned frontend/design/ holding the current design source: tokens.css with the current frontend/src/index.css content (the Tailwind directives plus the :root/.dark custom properties), tailwind.preset.js with the current frontend/tailwind.config.js darkMode, theme, and plugins, plus fonts/ and brand/ for project-owned webfonts and brand assets."
+      - "Reduce frontend/src/index.css to `@import \"../design/tokens.css\";` and frontend/tailwind.config.js to a config whose presets consume ./design/tailwind.preset.js while its content globs stay in the entry config. The Django-rendered shell and the React host then resolve one token source, and frontend/design/ is never overwritten by a later upgrade or apply."
+      - "Make future color, radius, font, and brand changes in frontend/design/ (tokens.css, the preset, fonts/, brand/) instead of frontend/src/index.css or frontend/tailwind.config.js."

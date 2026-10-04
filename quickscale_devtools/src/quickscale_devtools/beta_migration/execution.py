@@ -9,6 +9,7 @@ from .constants import (
     MANUAL_HANDOFF_REASON,
     VERIFICATION_COMMAND_TIMEOUT_SECONDS,
 )
+from .design_layer import _execute_port_donor_design
 from .identity import _build_identity_reconciliation_plan
 from .model import (
     BetaMigrationInput,
@@ -525,6 +526,7 @@ def _execute_fresh_first(report: BetaMigrationReport) -> BetaMigrationReport:
         ),
         ("sync-missing-path-dependencies", _execute_sync_missing_path_dependencies),
         ("merge-frontend-dependencies", _execute_merge_frontend_dependencies),
+        ("port-donor-design", _execute_port_donor_design),
         ("preserve-managed-recipient-files", _execute_preserve_managed_recipient_files),
         ("run-verification-stack", _execute_verification_stack),
         ("write-handoff-prompt", _execute_write_handoff_prompt),

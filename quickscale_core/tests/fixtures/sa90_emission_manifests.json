@@ -20,11 +20,12 @@
       "sa200": "Regenerated 2026-09-23 \u2014 generated production settings gate SECURE_PROXY_SSL_HEADER on USE_X_FORWARDED_FOR and the correlation-id middleware bounds a client X-Request-ID (SA200). Hashes updated per variant: testproject/settings/base.py, testproject/settings/production.py.",
       "sa206": "Regenerated 2026-09-23 \u2014 the generated settings import the executable runtime contracts (middleware, proxy-trust derivation, privileged-command/runtime-database selection, SECRET_KEY guard) from the versioned quickscale_core.runtime settings facade; pyproject.toml declares the bounded quickscale-core lockstep pin (SA206). Hashes updated per variant: pyproject.toml, testproject/settings/base.py, testproject/settings/production.py.",
       "sa210": "Regenerated 2026-09-24 \u2014 pyproject.toml.j2 emits a bounded poetry-core build requirement (poetry-core>=2.0,<3.0) into every generated project (SA210). 1 fixture hash updated per variant: pyproject.toml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa214-d": "Regenerated 2026-10-04 \u2014 the showcase_react theme moved its design tokens, Tailwind directives, and Tailwind theme into the project-owned frontend/design/ layer (SA214 slice d): frontend/src/index.css is now the importing entry point and frontend/tailwind.config.js consumes the design layer's preset. New generated paths: frontend/design/tokens.css, frontend/design/tailwind.preset.js, frontend/design/fonts/README.md, and frontend/design/brand/README.md; frontend/src/index.css and frontend/tailwind.config.js were re-hashed in all three variants. All unrelated paths, hashes, and modes remain authoritative.",
       "sa217": "Regenerated 2026-09-30 \u2014 the managed settings schema now reaches generated settings/modules.py and base.py imports it (SA217); testproject/settings/base.py and testproject/settings/modules.py were re-hashed in all three variants, and their canonical (umask-independent) mode is recorded as 644.",
-      "sa218": "Regenerated 2026-09-28 \u2014 generated settings install quickscale_core.runtime.conventions.exception_handler as REST_FRAMEWORK[EXCEPTION_HANDLER] (SA218). 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa219-foundation-enabled-flags": "Regenerated 2026-10-01 \u2014 every remaining React module flag requires installed-and-enabled: auth, storage, backups, notifications, analytics, and billing gained the `and settings.QUICKSCALE_<MODULE>_ENABLED` clause and social's flag now requires installed-and-enabled instead of its feature pair (SA219, rule 31). The five foundation modules (auth, backups, orgs, social, storage) declare `enabled`, their public URL mounts drop when off, the backups scheduled runs refuse, the backups/storage rule-35 checks stay silent, and apply refuses to switch off a module an installed module requires. templates/index.html, templates/base.html, templates/social/link_tree.html, templates/social/embeds.html, testproject/settings/modules.py, testproject/urls.py, and testproject/context_processors.py changed where those surfaces render; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa219-discovery-seam-producer": "Regenerated 2026-10-01 \u2014 the React seam producer is rendered from the shipped module inventory (SA219, rule 31): templates/index.html carries a key for every shipped module and modulePaths reverses named routes ({% url %}) instead of mount literals, and testproject/urls.py names the /crm/ React shell route crm-shell for that reversal. 2 fixture hashes updated per variant: templates/index.html and testproject/urls.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa217-schema-import-exposure": "Regenerated 2026-10-01 \u2014 the generated <package>/settings/base.py import of MODULE_SETTINGS_SCHEMA is annotated `# noqa: F401` with a comment: Django settings expose every uppercase global in the module and the generic startup check validates against settings.MODULE_SETTINGS_SCHEMA, so the import is intentional and the project's own ruff check no longer reports it unused. 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa218": "Regenerated 2026-09-28 \u2014 generated settings install quickscale_core.runtime.conventions.exception_handler as REST_FRAMEWORK[EXCEPTION_HANDLER] (SA218). 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa219-discovery-seam-producer": "Regenerated 2026-10-01 \u2014 the React seam producer is rendered from the shipped module inventory (SA219, rule 31): templates/index.html carries a key for every shipped module and modulePaths reverses named routes ({% url %}) instead of mount literals, and testproject/urls.py names the /crm/ React shell route crm-shell for that reversal. 2 fixture hashes updated per variant: templates/index.html and testproject/urls.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa219-foundation-enabled-flags": "Regenerated 2026-10-01 \u2014 every remaining React module flag requires installed-and-enabled: auth, storage, backups, notifications, analytics, and billing gained the `and settings.QUICKSCALE_<MODULE>_ENABLED` clause and social's flag now requires installed-and-enabled instead of its feature pair (SA219, rule 31). The five foundation modules (auth, backups, orgs, social, storage) declare `enabled`, their public URL mounts drop when off, the backups scheduled runs refuse, the backups/storage rule-35 checks stay silent, and apply refuses to switch off a module an installed module requires. templates/index.html, templates/base.html, templates/social/link_tree.html, templates/social/embeds.html, testproject/settings/modules.py, testproject/urls.py, and testproject/context_processors.py changed where those surfaces render; all unrelated paths, hashes, and modes remain authoritative.",
       "sa219-orgs-mode-setting": "Regenerated 2026-10-01 \u2014 the orgs runtime mode setting renamed QUICKSCALE_MODE to QUICKSCALE_ORGS_MODE, so templates/index.html (owner.mode) and testproject/context_processors.py (billing dashboard URL) were re-hashed in all three variants. All unrelated paths, hashes, and modes remain authoritative.",
       "sa221": "Regenerated 2026-09-28 \u2014 module identity rename (SA221): admin templates, React admin links, and generated Makefile/ci.yml now use the quickscale_<module> app labels.",
       "sa223": "Regenerated 2026-09-30 \u2014 the React theme's useApi.ts parses the one QuickScale error shape and a new src/test/useApiErrors.test.ts pins it; both emitted paths were re-hashed in all three variants.",
@@ -36,11 +37,11 @@
       "sa225": "Regenerated 2026-09-28 \u2014 docker-compose.yml backend environment forwards the default vendor credential variables (Stripe, Resend, PostHog, AWS, backups remote) from the environment Compose sees, so a secret placed in the project's .env reaches the container and an enabled module's empty-secret startup check can pass. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
       "sa225-build-placeholders": "Regenerated 2026-09-28 \u2014 the Dockerfile collectstatic step carries command-scoped placeholder credentials for the enabled modules' empty-secret startup checks, so an all-module image build succeeds while runtime still requires the real secrets. 1 fixture hash updated per variant: Dockerfile. All unrelated paths, hashes, and modes remain authoritative.",
       "sa225-skip-guard": "Regenerated 2026-09-28 \u2014 docker-compose.yml clears QUICKSCALE_SKIP_MODULE_CHECKS in the backend environment so a build-skip value in the loaded .env can never reach a serving process. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa235": "Regenerated 2026-10-03 - module UI paths move to manifest-declared spa_routes rendered after the module includes (SA235, rule 41): the React shell view moves to testproject/views.py, testproject/urls.py renders the manifest-declared routes from SPA_MODULE_URLPATTERNS after POST_HOME_MODULE_URLPATTERNS instead of reserving blog/listings/forms/crm literals, testproject/urls_modules.py gains the SPA list, and the public social pages render the shared seam with named social routes. The CRM seam path becomes `quickscale_crm_shell`, so templates/index.html changed with it. All changed fixture hashes updated per variant; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa235-context-processor-billing-urls": "Regenerated 2026-10-03 \u2014 the generated context processor resolves billing's template URL from the module's named routes (quickscale_billing:pricing_page and quickscale_billing:dashboard) instead of repeating /billing/... path strings, the retired organization-scoped /orgs/<slug>/billing/pricing/ value is gone, and the projected QUICKSCALE_BILLING_ENABLED setting gates the value so an absent or switched-off billing yields None (SA235, rule 41). 1 fixture hash updated per variant: testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative.",
       "v88-dockerfile-start-sh": "Regenerated 2026-09-14 \u2014 Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa235": "Regenerated 2026-10-03 - module UI paths move to manifest-declared spa_routes rendered after the module includes (SA235, rule 41): the React shell view moves to testproject/views.py, testproject/urls.py renders the manifest-declared routes from SPA_MODULE_URLPATTERNS after POST_HOME_MODULE_URLPATTERNS instead of reserving blog/listings/forms/crm literals, testproject/urls_modules.py gains the SPA list, and the public social pages render the shared seam with named social routes. The CRM seam path becomes `quickscale_crm_shell`, so templates/index.html changed with it. All changed fixture hashes updated per variant; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa235-context-processor-billing-urls": "Regenerated 2026-10-03 \u2014 the generated context processor resolves billing's template URL from the module's named routes (quickscale_billing:pricing_page and quickscale_billing:dashboard) instead of repeating /billing/... path strings, the retired organization-scoped /orgs/<slug>/billing/pricing/ value is gone, and the projected QUICKSCALE_BILLING_ENABLED setting gates the value so an absent or switched-off billing yields None (SA235, rule 41). 1 fixture hash updated per variant: testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative."
+      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -137,6 +138,22 @@
     "frontend/components.json": {
       "mode": "644",
       "sha256": "9766ddc53e447165b4e8f8ae98883f4bfc5119501f84ab38bea8f4b216051f65"
+    },
+    "frontend/design/brand/README.md": {
+      "mode": "644",
+      "sha256": "6d6aa3f9620b8a05662e0887480d965d0860fe778c6aefaecd0b835aa2cefc7b"
+    },
+    "frontend/design/fonts/README.md": {
+      "mode": "644",
+      "sha256": "c88b54694d8a1cf63ff9133eb5d3566a1ef8fbe02ac4666c7b9f4a4ab610a3ec"
+    },
+    "frontend/design/tailwind.preset.js": {
+      "mode": "644",
+      "sha256": "cb5c72ff6daa003c5c72900ab072c1af7d000b96303dc4f684bad5f87b5c6774"
+    },
+    "frontend/design/tokens.css": {
+      "mode": "644",
+      "sha256": "c3a2108ff50fcd8f53ae2121389bbdb21ed44fe754d0932d039692a3675dfa70"
     },
     "frontend/e2e/home.spec.ts": {
       "mode": "644",
@@ -284,7 +301,7 @@
     },
     "frontend/src/index.css": {
       "mode": "644",
-      "sha256": "7a5463db4088894cfd6aec1ecf11e0718ba19036d16ab54a86575a9bc7260982"
+      "sha256": "7b1756ef2c94f8fd0f31c5ac5cc8bf9e1ea5239e4d06c18cab03d7b178132cdb"
     },
     "frontend/src/lib/analytics.ts": {
       "mode": "644",
@@ -424,7 +441,7 @@
     },
     "frontend/tailwind.config.js": {
       "mode": "644",
-      "sha256": "b293006473d7ad3ee9034d647eb88d26d7db09bdef68795dd0c1cefc66d08f20"
+      "sha256": "8c32c768c45b68a1f2df1cb9c3a69b70cc78487533a40ac9419b92b6b2113fc8"
     },
     "frontend/tsconfig.json": {
       "mode": "644",
@@ -616,6 +633,22 @@
       "mode": "644",
       "sha256": "9766ddc53e447165b4e8f8ae98883f4bfc5119501f84ab38bea8f4b216051f65"
     },
+    "frontend/design/brand/README.md": {
+      "mode": "644",
+      "sha256": "6d6aa3f9620b8a05662e0887480d965d0860fe778c6aefaecd0b835aa2cefc7b"
+    },
+    "frontend/design/fonts/README.md": {
+      "mode": "644",
+      "sha256": "c88b54694d8a1cf63ff9133eb5d3566a1ef8fbe02ac4666c7b9f4a4ab610a3ec"
+    },
+    "frontend/design/tailwind.preset.js": {
+      "mode": "644",
+      "sha256": "cb5c72ff6daa003c5c72900ab072c1af7d000b96303dc4f684bad5f87b5c6774"
+    },
+    "frontend/design/tokens.css": {
+      "mode": "644",
+      "sha256": "c3a2108ff50fcd8f53ae2121389bbdb21ed44fe754d0932d039692a3675dfa70"
+    },
     "frontend/e2e/home.spec.ts": {
       "mode": "644",
       "sha256": "7775a474730218499691f30a44c837b33536580ab2c52de9558f395c62a5e197"
@@ -762,7 +795,7 @@
     },
     "frontend/src/index.css": {
       "mode": "644",
-      "sha256": "7a5463db4088894cfd6aec1ecf11e0718ba19036d16ab54a86575a9bc7260982"
+      "sha256": "7b1756ef2c94f8fd0f31c5ac5cc8bf9e1ea5239e4d06c18cab03d7b178132cdb"
     },
     "frontend/src/lib/analytics.ts": {
       "mode": "644",
@@ -902,7 +935,7 @@
     },
     "frontend/tailwind.config.js": {
       "mode": "644",
-      "sha256": "b293006473d7ad3ee9034d647eb88d26d7db09bdef68795dd0c1cefc66d08f20"
+      "sha256": "8c32c768c45b68a1f2df1cb9c3a69b70cc78487533a40ac9419b92b6b2113fc8"
     },
     "frontend/tsconfig.json": {
       "mode": "644",
@@ -1094,6 +1127,22 @@
       "mode": "644",
       "sha256": "9766ddc53e447165b4e8f8ae98883f4bfc5119501f84ab38bea8f4b216051f65"
     },
+    "frontend/design/brand/README.md": {
+      "mode": "644",
+      "sha256": "6d6aa3f9620b8a05662e0887480d965d0860fe778c6aefaecd0b835aa2cefc7b"
+    },
+    "frontend/design/fonts/README.md": {
+      "mode": "644",
+      "sha256": "c88b54694d8a1cf63ff9133eb5d3566a1ef8fbe02ac4666c7b9f4a4ab610a3ec"
+    },
+    "frontend/design/tailwind.preset.js": {
+      "mode": "644",
+      "sha256": "cb5c72ff6daa003c5c72900ab072c1af7d000b96303dc4f684bad5f87b5c6774"
+    },
+    "frontend/design/tokens.css": {
+      "mode": "644",
+      "sha256": "c3a2108ff50fcd8f53ae2121389bbdb21ed44fe754d0932d039692a3675dfa70"
+    },
     "frontend/e2e/home.spec.ts": {
       "mode": "644",
       "sha256": "7775a474730218499691f30a44c837b33536580ab2c52de9558f395c62a5e197"
@@ -1240,7 +1289,7 @@
     },
     "frontend/src/index.css": {
       "mode": "644",
-      "sha256": "7a5463db4088894cfd6aec1ecf11e0718ba19036d16ab54a86575a9bc7260982"
+      "sha256": "7b1756ef2c94f8fd0f31c5ac5cc8bf9e1ea5239e4d06c18cab03d7b178132cdb"
     },
     "frontend/src/lib/analytics.ts": {
       "mode": "644",
@@ -1380,7 +1429,7 @@
     },
     "frontend/tailwind.config.js": {
       "mode": "644",
-      "sha256": "b293006473d7ad3ee9034d647eb88d26d7db09bdef68795dd0c1cefc66d08f20"
+      "sha256": "8c32c768c45b68a1f2df1cb9c3a69b70cc78487533a40ac9419b92b6b2113fc8"
     },
     "frontend/tsconfig.json": {
       "mode": "644",

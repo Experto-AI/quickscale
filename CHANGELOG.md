@@ -62,6 +62,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     before `migrate` runs, blocks when a donor migration owns an operation model regeneration
     cannot reproduce, and merges donor-only `frontend/package.json` dependencies while reporting
     every version conflict.
+  - **Generated projects own their design layer.** Fresh `showcase_react` projects ship
+    `frontend/design/` holding the tokens stylesheet, the Tailwind preset, project fonts, and brand
+    assets; the React entry imports it, Django-rendered pages resolve the same tokens, no upgrade
+    or `quickscale apply` run overwrites it, and `make beta-migrate-fresh` ports a donor's design
+    into it.
   - **Runtime database role provisioning is consistent.** Generated local setup, Railway deployment, and `OPERATIONS.md` use the shared `quickscale_runtime` name and one grant set that includes database `CONNECT`.
   - **Module pages share the project shell and design tokens, and their tests share one stub.** Auth, billing, blog, listings, and CRM Django pages use the generated React theme's tokens — the live Vite `frontend/src/index.css` in DEBUG, the compiled stylesheet otherwise — and Vite accepts only the exact browser-visible Host derived from `QUICKSCALE_FRONTEND_HOST_PORT` or `QUICKSCALE_FRONTEND_ORIGIN`. The blog, CRM, listings, and analytics module test settings point at one repository-owned test `base.html`, while auth and billing keep local stubs that preserve their older shell assertions.
   - **Payment-path transaction boundaries and Stripe query safety.** Account deletion runs its

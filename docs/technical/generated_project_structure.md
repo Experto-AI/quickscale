@@ -144,6 +144,11 @@ myapp/
 │   │   └── main.tsx
 │   ├── public/
 │   │   └── favicon.svg
+│   ├── design/
+│   │   ├── tokens.css
+│   │   ├── tailwind.preset.js
+│   │   ├── fonts/
+│   │   └── brand/
 │   ├── components.json
 │   ├── package.json
 │   ├── tailwind.config.js
@@ -164,6 +169,7 @@ myapp/
 
 Notes:
 - Fresh `showcase_react` generations include `frontend/src/lib/analytics.ts` as dormant PostHog starter wiring. It initializes only when `VITE_POSTHOG_KEY` contains a real key.
+- Fresh `showcase_react` generations ship the project-owned design layer at `frontend/design/`: `tokens.css` holds the design tokens and Tailwind entry the React host imports, `tailwind.preset.js` carries the Tailwind preset that `frontend/tailwind.config.js` consumes, and `fonts/` and `brand/` hold project-owned webfonts and brand assets. The Django-rendered shell resolves the same tokens through the entry stylesheet, and no upgrade or `quickscale apply` run overwrites the layer.
 - Fresh `showcase_react` generations also include `frontend/src/pages/SocialLinkTreePublicPage.tsx` and `frontend/src/pages/SocialEmbedsPublicPage.tsx`, plus Django `templates/social/*.html` wrappers that keep `/social` and `/social/embeds` under Django ownership while hydrating the shared React bundle through `window.__QUICKSCALE__.publicPage`.
 - Fresh `showcase_react` generations surface billing as a module flag only (`modules.billing`). The generated SPA does not currently include billing dashboard cards, sidebar navigation entries, org-dashboard billing cards, module paths for billing, or full-document links into billing Django pages (restoring those entry points is separate implementation work, not a blocked item). QuickScale does not generate a starter-owned `BillingPage.tsx`.
 - That public-page scaffolding is fresh-generation-only; existing projects must manually adopt any equivalent public pages they want.

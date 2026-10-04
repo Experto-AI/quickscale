@@ -1016,6 +1016,12 @@ class TestSa90MappingDrivenGeneration:
         assert "frontend/src/main.tsx" in react_map
         assert "frontend/package.json" in react_map
 
+        # Project-owned design layer (SA214 slice d)
+        assert "frontend/design/tokens.css" in react_map
+        assert "frontend/design/tailwind.preset.js" in react_map
+        assert "frontend/design/fonts/README.md" in react_map
+        assert "frontend/design/brand/README.md" in react_map
+
         # Shared files should be present
         assert "Makefile" in react_map
 

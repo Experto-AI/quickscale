@@ -27,16 +27,21 @@ Steps completed:
 - register-and-mount-project-owned-apps
 - sync-missing-path-dependencies
 - merge-frontend-dependencies
+- port-donor-design
 - preserve-managed-recipient-files
 - run-verification-stack
 
-Recipient paths changed (11):
+Recipient paths changed (15):
 - `bap_web/context_processors.py`
 - `bap_web/middleware.py`
 - `bap_web/settings/production.py`
 - `bap_web/sitemaps.py`
 - `bap_web/urls.py`
 - `bap_web/views.py`
+- `frontend/design/brand/README.md`
+- `frontend/design/fonts/README.md`
+- `frontend/design/tailwind.preset.js`
+- `frontend/design/tokens.css`
 - `frontend/src/App.tsx`
 - `frontend/src/assets`
 - `frontend/src/components/layout`

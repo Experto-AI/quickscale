@@ -425,7 +425,8 @@ def test_intentionally_unmanaged_entries_correspond_to_emitted_paths() -> None:
             if pkg_prefixed in emitted_paths:
                 continue
         # Directory-level match: any emitted file starts with this path + "/"
-        if any(ep.startswith(path + "/") for ep in emitted_paths):
+        directory = path.rstrip("/")
+        if any(ep.startswith(directory + "/") for ep in emitted_paths):
             continue
         # The path itself is an emitted directory
         if any(ep == path for ep in emitted_paths):

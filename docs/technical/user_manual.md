@@ -402,7 +402,22 @@ project-owned generated-file changes before recording adoption or using
 5. With DEBUG enabled, run `pnpm dev` in `frontend/`. For non-DEBUG deployments, run `pnpm build`
    so `static/frontend/assets/index.css` exists.
 
-Both stylesheet paths originate from the project-owned `frontend/src/index.css`: change colors and
+For the design-layer step declared in the project-level contract, adopt all of the following
+project-owned changes before recording adoption or using `--acknowledge-contract-vintage`:
+
+1. Create `frontend/design/` and move the current design source into it: `tokens.css` receives the
+   current `frontend/src/index.css` content (Tailwind directives plus the `:root`/`.dark` custom
+   properties), and `tailwind.preset.js` receives the current `frontend/tailwind.config.js`
+   `darkMode`, `theme`, and `plugins` values. Add `fonts/` for project webfonts and `brand/` for
+   brand assets when you need them.
+2. Reduce `frontend/src/index.css` to `@import "../design/tokens.css";` and `frontend/tailwind.config.js`
+   to a config whose `presets` consume `./design/tailwind.preset.js` while its `content` globs stay
+   in the entry config.
+3. Keep future color, radius, font, and brand changes in `frontend/design/`: nothing overwrites
+   that folder on an upgrade or `quickscale apply` run, so it is the one design source for the
+   React host and the Django-rendered shell.
+
+Both stylesheet paths originate from the project-owned `frontend/design/tokens.css`: change colors and
 radii there once, then keep Vite running for local development or rebuild for deployment. Module
 styles consume those variables and do not require Tailwind to scan module templates. The default
 browser-facing Vite port remains 5173; set `QUICKSCALE_FRONTEND_HOST_PORT` to a canonical decimal
@@ -429,7 +444,7 @@ searches `templates/` before module templates, so your copy wins. The cost is dr
 longer receives the module's fixes to that template, including security and accessibility fixes,
 and nothing warns you. Override as few templates as possible, keep a list of them, and do not
 override a template only to restyle it. Module pages extend your `base.html`, so change shared
-colors and radii in `frontend/src/index.css`, change shell structure in `base.html`, run `pnpm dev`
+colors and radii in `frontend/design/tokens.css`, change shell structure in `base.html`, run `pnpm dev`
 for DEBUG development or rebuild for deployment, and leave each page's own styling to the module
 so updates keep delivering it.
 

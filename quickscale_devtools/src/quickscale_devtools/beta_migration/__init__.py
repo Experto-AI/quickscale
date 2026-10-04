@@ -38,6 +38,8 @@ from .compatibility import (  # noqa: F401  (re-exported module surface)
 )
 from .constants import (  # noqa: F401  (re-exported module surface)
     COMMON_REQUIRED_SPECS,
+    DESIGN_LAYER_LEGACY_SOURCES,
+    DESIGN_LAYER_RELATIVE_DIR,
     DONOR_ARTIFACT_DIR_COMPONENTS,
     DONOR_ARTIFACT_NAMES,
     DONOR_ARTIFACT_PATH_PREFIXES,
@@ -101,6 +103,12 @@ from .constants import (  # noqa: F401  (re-exported module surface)
     _STATIC_MANAGE_COMMAND,
     _STATIC_RUNTIME_COMMAND,
     _UNCONDITIONAL_RUNTIME_COMMANDS,
+)
+from .design_layer import (  # noqa: F401  (re-exported module surface)
+    _design_layer_has_files,
+    _design_port_sources,
+    _execute_port_donor_design,
+    _validate_design_port_targets,
 )
 from .dockerfile import (  # noqa: F401  (re-exported module surface)
     _docker_segment_command_indexes,
@@ -376,6 +384,8 @@ __all__ = [
     "BetaMigrationMode",
     "BetaMigrationReport",
     "COMMON_REQUIRED_SPECS",
+    "DESIGN_LAYER_LEGACY_SOURCES",
+    "DESIGN_LAYER_RELATIVE_DIR",
     "DONOR_ARTIFACT_DIR_COMPONENTS",
     "DONOR_ARTIFACT_NAMES",
     "DONOR_ARTIFACT_PATH_PREFIXES",
@@ -512,6 +522,8 @@ __all__ = [
     "_default_app_config",
     "_default_entry_is_canonical",
     "_dependency_sections",
+    "_design_layer_has_files",
+    "_design_port_sources",
     "_detect_project_owned_apps",
     "_display_relative_path",
     "_donor_app_registration",
@@ -531,6 +543,7 @@ __all__ = [
     "_execute_fresh_first",
     "_execute_identity_reconciliation",
     "_execute_merge_frontend_dependencies",
+    "_execute_port_donor_design",
     "_execute_preserve_managed_recipient_files",
     "_execute_regenerate_recipient",
     "_execute_register_and_mount_project_owned_apps",
@@ -628,6 +641,7 @@ __all__ = [
     "_toml_literal",
     "_urls_helper_names",
     "_utc_now_iso",
+    "_validate_design_port_targets",
     "_validate_distinct_paths",
     "_validate_donor_frontend_manifest",
     "_validate_donor_project_apps",

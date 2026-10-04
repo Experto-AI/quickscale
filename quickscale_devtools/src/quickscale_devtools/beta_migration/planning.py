@@ -3,11 +3,13 @@
 from .classification import _classify_donor_files
 from .compatibility import _validate_runtime_compatibility
 from .constants import (
+    DESIGN_LAYER_RELATIVE_DIR,
     DRY_RUN_REASON,
     FRESH_FIRST_DONOR_DJANGO_FILES,
     FRESH_FIRST_UTILITY_DIRS,
     PHASE_BOUNDARY_REASON,
 )
+from .design_layer import _design_port_sources, _validate_design_port_targets
 from .identity import _validate_identity_reconciliation
 from .model import (
     BetaMigrationInput,
@@ -172,6 +174,22 @@ def _fresh_first_actions(
                 commands=merge_commands,
             )
         )
+    design_sources = _design_port_sources(donor.path)
+    actions.append(
+        PlannedAction(
+            step="port-donor-design",
+            description=(
+                "Copy the donor's design into the recipient's never-overwritten "
+                f"{DESIGN_LAYER_RELATIVE_DIR}/ layer: every donor design-layer file when "
+                "the donor has one, otherwise the legacy frontend/src/index.css and "
+                "frontend/tailwind.config.js design sources."
+            ),
+            targets=[
+                str(recipient.path / DESIGN_LAYER_RELATIVE_DIR),
+                *[str(source) for source, _ in design_sources],
+            ],
+        )
+    )
     actions.extend(
         [
             PlannedAction(
@@ -437,6 +455,7 @@ def _prepare_report_plan(report: BetaMigrationReport) -> None:
     _validate_fresh_first_path_dependency_targets(report)
     _validate_fresh_first_frontend_dependency_targets(report)
     _validate_project_app_targets(report)
+    _validate_design_port_targets(report)
     _validate_identity_reconciliation(report)
     if not report.blockers:
         _build_report_planned_actions(report)

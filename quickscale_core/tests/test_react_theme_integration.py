@@ -47,6 +47,12 @@ class TestReactThemeGeneration:
         assert (frontend_path / "src" / "main.tsx").exists()
         assert (frontend_path / "src" / "App.tsx").exists()
         assert (frontend_path / "src" / "index.css").exists()
+
+        # Project-owned design layer (SA214 slice d)
+        assert (frontend_path / "design" / "tokens.css").exists()
+        assert (frontend_path / "design" / "tailwind.preset.js").exists()
+        assert (frontend_path / "design" / "fonts").is_dir()
+        assert (frontend_path / "design" / "brand").is_dir()
         assert (frontend_path / "src" / "posthog-js.d.ts").exists()
         assert (frontend_path / "src" / "hooks" / "useOrgNavigation.ts").exists()
         assert (frontend_path / "src" / "hooks" / "useOrgs.ts").exists()

@@ -182,3 +182,27 @@ generation.  Not migration targets.
 Rationale: User-editable React hooks.  ``useModules.ts`` is
 identity-reconciled on the fresh scaffold; the rest, including
 ``usePublicSocialSurface.ts``, are user-owned after generation.
+
+### Category U13 — Project-owned design layer (never overwritten)
+``frontend/design/`` — the directory entry covers every file the layer ships or
+later holds: ``tokens.css`` (the design-token stylesheet and Tailwind entry the
+React host imports), ``tailwind.preset.js`` (consumed by
+``frontend/tailwind.config.js`` through ``presets``), ``fonts/`` (project-owned
+webfonts), and ``brand/`` (project-owned brand assets imported by components or
+the stylesheet).
+Rationale: One folder the project owns outright. No QuickScale upgrade or
+``quickscale apply`` run replaces or merges its files; the beta-migration tool
+copies the donor's design into it once during migration (SA214 slice d), and
+every edit afterwards belongs to the project. ``frontend/src/index.css``
+remains the React entry that imports the layer, and the Django-rendered shell
+resolves the same tokens through that entry (or its production build). The
+served favicon stays at ``frontend/public/favicon.svg`` instead of moving into
+``brand/`` so the generated ``{% static 'frontend/favicon.svg' %}`` links keep
+working.
+
+### Category U6/U7 update (design consumer files)
+``frontend/tailwind.config.js`` (U6) and ``frontend/src/index.css`` (U7) stay
+user-owned, but since SA214 slice (d) they are also the design layer's
+consumers: the config consumes ``design/tailwind.preset.js`` and the entry
+imports ``design/tokens.css``. They remain non-migration targets; the layer
+above is where design values live.

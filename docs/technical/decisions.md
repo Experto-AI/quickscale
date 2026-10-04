@@ -1927,7 +1927,7 @@ and asserts every emitted file is classified.
 5. **Every ``INTENTIONALLY_UNMANAGED`` entry carries an explicit category and
    rationale.** No entry may be added without stating why that generated file is
    deliberately outside replacement and merge paths. The inventory itself
-   (categories U1–U12) is owned by
+   (categories U1–U13) is owned by
    [generated_file_ownership.md](./generated_file_ownership.md) — it is data the
    conformance gate cross-checks, not policy.
 
@@ -1974,6 +1974,19 @@ and asserts every emitted file is classified.
    cannot remain ``INTENTIONALLY_UNMANAGED`` merely because the mutation is
    implemented by a directory walk or a dedicated merge helper rather than a
    named copy tuple.
+
+10. **The project-owned design layer is never overwritten.** The
+    ``showcase_react`` theme ships ``frontend/design/`` as one folder holding
+    the tokens stylesheet, the Tailwind preset, fonts, and brand assets
+    (``INTENTIONALLY_UNMANAGED`` directory entry). No QuickScale upgrade or
+    ``quickscale apply`` run replaces or merges its files. The beta-migration
+    tool ports the donor's design into it once (the ``port-donor-design``
+    step): every file of a donor that carries its own design layer, or the
+    legacy ``frontend/src/index.css`` and ``frontend/tailwind.config.js``
+    sources for a donor generated before the layer existed. The React entry
+    ``frontend/src/index.css`` imports the layer, and the Django-rendered
+    shell resolves the same tokens through that entry, so React and Django
+    share one design source.
 
 **Removal record:** The in-place beta-migration mode (``make
 beta-migrate-in-place``, ``--continue-after-checkpoint``, its infrastructure

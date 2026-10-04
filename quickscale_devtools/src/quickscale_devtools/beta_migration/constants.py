@@ -113,6 +113,22 @@ FRESH_FIRST_COPY_MISSING_DIRS = ("frontend/src/pages",)
 FRESH_FIRST_MERGED_ROOT_FILES = ("pyproject.toml", "frontend/package.json")
 
 
+# The showcase_react theme's project-owned design layer (SA214 slice d). The
+# migration ports the donor's design into this layer; upgrades and applies
+# never overwrite it, and it is the one design source for React and the
+# Django-rendered shell.
+DESIGN_LAYER_RELATIVE_DIR = "frontend/design"
+
+
+# Legacy donors (generated before the design layer existed) carried the design
+# in the Tailwind entry stylesheet and the Tailwind config. Each pair maps the
+# donor source to its design-layer entry point.
+DESIGN_LAYER_LEGACY_SOURCES = (
+    ("frontend/src/index.css", "frontend/design/tokens.css"),
+    ("frontend/tailwind.config.js", "frontend/design/tailwind.preset.js"),
+)
+
+
 # The generated ``settings/base.py`` ends its INSTALLED_APPS literal with this
 # comment; project-owned apps are registered immediately above it.
 INSTALLED_APPS_APPEND_SENTINEL = "# Add your apps here"
@@ -234,7 +250,8 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     # ---- Frontend root configs (user-owned after generation) ----
     # Generated once, user-editable, and not migration targets.  The
     # frontend build configs (vite, tsconfig, eslint, postcss) are kept
-    # exactly as the fresh scaffold emitted them.
+    # exactly as the fresh scaffold emitted them.  The design layer is listed
+    # below with its own never-overwritten guarantee.
     "frontend/vite.config.ts",
     "frontend/tsconfig.json",
     "frontend/eslint.config.js",
@@ -248,6 +265,12 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "frontend/tailwind.config.js",
     "frontend/index.html",
     "frontend/public/favicon.svg",
+    # ---- Project-owned design layer (never overwritten) ----
+    # One folder holding the tokens stylesheet, the Tailwind preset, fonts,
+    # and brand assets.  No upgrade or ``quickscale apply`` ever replaces or
+    # merges these files; the beta-migration tool copies the donor's design
+    # into them once, and the project edits them freely afterwards.
+    "frontend/design/",
     # ---- Frontend user-owned source files ----
     # Files under frontend/src/ are user-editable application code.
     # Specific files may be migration targets (App.tsx is replaced in

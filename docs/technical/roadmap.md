@@ -346,8 +346,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
     recognized-root allowlist — a new donor root blocks until the maintainer classifies it.
   - [x] (c) Project-owned apps (copy, register, mount, regenerate migrations) and frontend
     dependency merge.
-  - [ ] (d) The `showcase_react` design layer, its ownership entry and upgrade test, and the
-    donor design port.
+  - [x] (d) The `showcase_react` design layer, its ownership entry and upgrade test, and the
+    donor design port. Handoff: the theme emits `frontend/design/` (tokens.css,
+    tailwind.preset.js, fonts/, brand/), the React entry imports it and Django-rendered pages
+    resolve the same tokens, the layer is declared never-overwritten in
+    generated_file_ownership.md with an apply-upgrade test, and the tool's `port-donor-design`
+    step validates and copies the donor layer or its legacy index.css/tailwind.config.js sources;
+    next are (e)–(f); watch the design-layer recipient preflight and the regenerated
+    exact-emission fixture.
   - [ ] (e) The generated `MIGRATION_PROMPT.md` and its snapshot test.
   - [ ] (f) Ledger iterations to a clean final run, the playbook rewrite, and the pre-facade
     `production.py` decision.

@@ -196,6 +196,21 @@ def _write_project(
         json.dumps({"name": slug, "private": True}, indent=2) + "\n"
     )
 
+    # The project-owned design layer every current-release showcase_react
+    # project carries (SA214 slice d). Markers keep donor and recipient
+    # versions distinguishable so copy assertions see the port.
+    design_root = root / "frontend" / "design"
+    (design_root / "fonts").mkdir(parents=True, exist_ok=True)
+    (design_root / "brand").mkdir(parents=True, exist_ok=True)
+    (design_root / "tokens.css").write_text(
+        f"/* {marker}-design-tokens {slug} */\n:root {{ --primary: 240 5.9% 10%; }}\n"
+    )
+    (design_root / "tailwind.preset.js").write_text(
+        f"// {marker}-design-preset {slug}\nexport default {{}};\n"
+    )
+    (design_root / "fonts" / "README.md").write_text(f"# {marker}-design-fonts\n")
+    (design_root / "brand" / "README.md").write_text(f"# {marker}-design-brand\n")
+
     if include_frontend_infra_files:
         (root / ".pre-commit-config.yaml").write_text(f"# {marker}-pre-commit-marker\n")
         (root / "frontend" / "vite.config.ts").write_text(

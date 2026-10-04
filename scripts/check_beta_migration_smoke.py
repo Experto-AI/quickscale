@@ -363,8 +363,8 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
         "fresh-first identity reconciliation was not planned",
     )
     _require(
-        len(report["planned_actions"]) == 9,
-        "fresh-first plan did not contain nine actions",
+        len(report["planned_actions"]) == 10,
+        "fresh-first plan did not contain ten actions",
     )
     _require(
         report["runtime_provenance"]

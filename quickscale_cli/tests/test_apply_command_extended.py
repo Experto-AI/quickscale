@@ -6011,6 +6011,60 @@ class TestManagedAnalyticsApplyRegression:
         assert "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR" in managed_settings
 
 
+class TestManagedDesignLayerApplyRegression:
+    """Existing-project apply must leave the project-owned design layer untouched.
+
+    SA214 slice (d): ``frontend/design/`` is the never-overwritten design
+    layer.  An upgrade regenerates managed backend wiring only, so every
+    design file — including user edits and added fonts or brand assets — must
+    survive byte-for-byte.
+    """
+
+    def test_existing_project_apply_preserves_the_design_layer(self, tmp_path):
+        project_name = "design_layer_existing_project"
+        output_path = tmp_path / project_name
+        generator = ProjectGenerator(theme="showcase_react")
+        generator.generate(project_name, output_path)
+
+        design_root = output_path / "frontend" / "design"
+        tokens = design_root / "tokens.css"
+        preset = design_root / "tailwind.preset.js"
+
+        tokens.write_text(
+            tokens.read_text().replace(
+                "--primary: 240 5.9% 10%;", "--primary: 12 76% 61%;"
+            )
+        )
+        preset.write_text(preset.read_text() + "\n// user-owned preset marker\n")
+        (design_root / "fonts" / "Brand.woff2").write_bytes(b"user-owned-font")
+        (design_root / "brand" / "logo.svg").write_text("<svg>user logo</svg>\n")
+
+        expected_design = {
+            path.relative_to(output_path): path.read_bytes()
+            for path in sorted(design_root.rglob("*"))
+            if path.is_file()
+        }
+        assert expected_design
+
+        ctx = Mock()
+        ctx.output_path = output_path
+        ctx.existing_state = Mock()
+        ctx.delta = Mock()
+        ctx.delta.modules_unchanged = []
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.package = project_name
+        ctx.qs_config.modules = {}
+
+        assert _regenerate_managed_wiring_for_apply(ctx, embedded_modules=[]) is True
+
+        actual_design = {
+            path.relative_to(output_path): path.read_bytes()
+            for path in sorted(design_root.rglob("*"))
+            if path.is_file()
+        }
+        assert actual_design == expected_design
+
+
 # ============================================================================
 # CR-001 regression: apply planning must use ProjectStateManager.load_state()
 # ============================================================================

@@ -33,6 +33,8 @@ ROOT = Path(__file__).resolve().parents[2]
 THEME_ROOT = (
     "quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react"
 )
+THEME_DESIGN_ROOT = f"{THEME_ROOT}/design"
+THEME_TOKEN_SOURCE = f"{THEME_DESIGN_ROOT}/tokens.css"
 NON_PAGE_TEMPLATE_PREFIXES = ("email/", "admin/")
 NON_PAGE_TEMPLATE_NAMES = ("base.html",)
 SOFTWARE_OWNED_TEMPLATE_FOLDERS = ("account", "admin")
@@ -248,7 +250,7 @@ def test_billing_primary_cta_foreground_wins_the_anchor_cascade() -> None:
     billing_styles = (
         PACKAGES["billing"] / "static" / "quickscale_billing" / "css" / "billing.css"
     ).read_text()
-    token_source = (ROOT / THEME_ROOT / "src/index.css").read_text()
+    token_source = (ROOT / THEME_TOKEN_SOURCE).read_text()
 
     assert ".billing-content .billing-pricing__button--primary" in billing_styles
     assert "color: hsl(var(--primary-foreground));" in billing_styles
@@ -290,7 +292,7 @@ def test_semantic_module_lists_restore_markers_after_tailwind_preflight(
 
 
 def test_affected_presentation_references_only_canonical_tokens() -> None:
-    token_source = (ROOT / THEME_ROOT / "src/index.css").read_text()
+    token_source = (ROOT / THEME_TOKEN_SOURCE).read_text()
     canonical_tokens = set(re.findall(r"(--[a-z0-9-]+)\s*:", token_source))
 
     for module_name in MODULE_NAMES:
@@ -328,11 +330,13 @@ def test_generated_shell_defines_the_module_block_contract() -> None:
 
 def test_generated_shell_loads_the_react_token_source() -> None:
     theme = ROOT / THEME_ROOT
-    token_source = (theme / "src/index.css").read_text()
+    token_source = (ROOT / THEME_TOKEN_SOURCE).read_text()
+    entry = (theme / "src/index.css").read_text()
     shell = (theme / "templates/base.html.j2").read_text()
 
     assert "--primary:" in token_source
     assert "--radius:" in token_source
+    assert '@import "../design/tokens.css"' in entry
     assert "frontend/assets/index.css" in shell
     assert "settings.QUICKSCALE_FRONTEND_ORIGIN" in shell
     assert "{% if settings.DEBUG %}" in shell
@@ -353,6 +357,15 @@ def test_generated_shell_resolves_tokens_for_development_and_production(
     ).read_text()
 
     assert (generated_project_path / "frontend" / "src" / "index.css").is_file()
+    generated_design = generated_project_path / "frontend" / "design"
+    assert (generated_design / "tokens.css").is_file()
+    assert (generated_design / "tailwind.preset.js").is_file()
+    assert (generated_design / "fonts").is_dir()
+    assert (generated_design / "brand").is_dir()
+    assert (
+        '@import "../design/tokens.css"'
+        in (generated_project_path / "frontend" / "src" / "index.css").read_text()
+    )
     assert "{% if settings.DEBUG %}" in shell
     live_token_href = (
         "{{ settings.QUICKSCALE_FRONTEND_ORIGIN|default:'http://localhost:5173' }}"
