@@ -12,6 +12,7 @@ from django.core.exceptions import ImproperlyConfigured
 from quickscale_modules_orgs.apps import QuickscaleOrgsConfig
 from quickscale_modules_orgs._redirects import post_login_redirect, post_signup_redirect
 from quickscale_modules_orgs.removal import (
+    OWNED_PERSONAL_DATA,
     OWNED_TENANT_ROWS,
     PURGE_TOMBSTONE,
     SOCIAL_CACHE_STATE,
@@ -40,9 +41,21 @@ def test_app_config_declares_its_removal_obligations() -> None:
 
     assert obligation_names == {
         OWNED_TENANT_ROWS,
+        OWNED_PERSONAL_DATA,
         SOCIAL_CACHE_STATE,
         PURGE_TOMBSTONE,
     }
+
+
+def test_app_config_exposes_the_anonymize_executor() -> None:
+    """The owned-personal-data obligation's executor is on the AppConfig."""
+    config = QuickscaleOrgsConfig(
+        "quickscale_modules_orgs",
+        import_module("quickscale_modules_orgs"),
+    )
+
+    assert callable(config.anonymize_account)
+    assert config.anonymize_handlers() == (config,)
 
 
 def test_app_config_declares_its_removal_boundary_implementation() -> None:

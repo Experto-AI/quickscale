@@ -522,6 +522,66 @@ class TestAccountDeleteViewSurvivorRegression:
         finally:
             reset_current_org_id()
 
+    def test_account_delete_scrubs_a_username_only_inviters_message(self) -> None:
+        """The boundary snapshots the username before auth scrubs the row.
+
+        An invitation message stores the inviter's display name, which falls
+        back to the username when no full name exists; auth's executor runs
+        first in app-label order, so the collector must pass the pre-scrub
+        username for notifications to match it.
+        """
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        from quickscale_modules_notifications.models import (
+            NotificationDelivery,
+            NotificationMessage,
+        )
+
+        inviter = get_user_model().objects.create_user(
+            username="helios_only",
+            email="helios_only@example.com",
+            password="HeliosOnly1!",
+        )
+        message = NotificationMessage.objects.create(
+            template_key="notifications.org_invitation",
+            subject="You're invited to join Acme Labs",
+            from_email="QuickScale <noreply@example.com>",
+            reply_to_email="",
+            rendered_text=(
+                "helios_only invited invitee@example.com to join Acme Labs as Admin."
+            ),
+            rendered_html=(
+                "<p>helios_only invited invitee@example.com to join Acme Labs "
+                "as Admin.</p>"
+            ),
+            context_json={
+                "organization_name": "Acme Labs",
+                "invitee_email": "invitee@example.com",
+                "inviter_name": "helios_only",
+                "role_display": "Admin",
+                "accept_url": "https://example.com/accept/token",
+                "expires_at": "2026-05-26T12:00:00+00:00",
+            },
+        )
+        NotificationDelivery.objects.create(
+            message=message,
+            recipient_email="invitee@example.com",
+        )
+        client = Client()
+        client.force_login(inviter)
+
+        response = client.post(reverse("quickscale_auth:account_delete"))
+
+        assert response.status_code == 302
+        message.refresh_from_db()
+        delivery = message.deliveries.get()
+        assert delivery.recipient_email == "invitee@example.com"
+        assert "helios_only" not in message.rendered_text
+        assert "helios_only" not in message.rendered_html
+        assert message.context_json["inviter_name"] == "[redacted]"
+        assert message.context_json["invitee_email"] == "invitee@example.com"
+
 
 # ---------------------------------------------------------------------------
 # concurrent account-deletion regression
