@@ -34,6 +34,17 @@ It does not cover the QuickScale CLI or the generator's internals except where t
 
 Everything below is an expansion of that sentence.
 
+**Which pages are React.** React is the standard frontend for new application
+and public pages. `auth` and `billing`, and the module-shipped blog, listings,
+and CRM pages, stay Django-rendered on the shared design until an SA154 item
+promotes a React replacement; a module's shipped Django page is not rewritten as
+React outside such a promotion. Django admin stays as shipped. Public catalog
+and detail pages are prerendered React documents: the project's build/deploy
+step renders them to HTML so a crawler that runs no JavaScript receives their
+content and Open Graph tags, and React hydrates the document for the interactive
+layer (see § Public non-SPA React surfaces). Both decisions are owned by
+[decisions.md § Frontend Rendering Decisions](decisions.md#frontend-rendering-decisions-sa241).
+
 ---
 
 ## Where the frontend lives
@@ -252,6 +263,8 @@ Each module surface is in one of three states, and **this is the most important 
 ### Public non-SPA React surfaces
 
 `social` is the one surface where React is mounted **outside** the SPA router. `templates/social/link_tree.html.j2` and `templates/social/embeds.html.j2` are separate Django-rendered pages that mount React via `renderQuickScaleRoot(surface)`. Given a `surface` argument and `modules.social`, the root renderer bypasses `BrowserRouter` entirely and lazy-renders a single public page. This is the mechanism to reuse for any future publicly-addressable, server-routed React surface.
+
+Public pages that must reach crawlers running no JavaScript go one step further: the project's build/deploy step prerenders the React page to HTML that carries its indexable content, Open Graph tags, and structured metadata, and React hydrates that document as the interactive layer. SA153's property catalog and detail pages are the first such surface, under [decisions.md § Frontend Rendering Decisions](decisions.md#frontend-rendering-decisions-sa241); the mechanism uses Vite's built-in SSR build with `react-dom/server` and adds no frontend dependency and no Node rendering runtime.
 
 ---
 

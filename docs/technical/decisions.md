@@ -1173,6 +1173,67 @@ Evidence and options weighed: [arch audit § Finding 2](../others/arch-audit.md)
 
 ---
 
+### Frontend Rendering Decisions (SA241) {#frontend-rendering-decisions-sa241}
+
+**Decision 1 — Frontend split.** React is the standard frontend for new
+application and public pages — including a public page whose crawlable first
+response is prerendered (Decision 2), where the React surface owns the
+interactive page. Django-rendered surfaces stay Django-rendered on
+the shared design (SA192): `auth` and `billing` keep their Django pages, the
+module-shipped Django pages (`blog`, `listings`, and the CRM dashboard) keep
+theirs until an SA154 item promotes a React replacement, and Django admin stays
+as shipped.
+
+- ✅ A new application page, or a new public page, is built as a React surface
+  in the theme and reaches the browser through the one `window.__QUICKSCALE__`
+  seam or a DRF endpoint (§[Frontend Theme Source
+  De-Specialization](#frontend-theme-despecialization-dormant-files)).
+- ✅ A module-shipped Django page keeps its Django rendering and its existing
+  module base and block contract; promoting it to React is an SA154 inventory
+  item, not an incidental edit.
+- ❌ Rewriting a module's shipped Django page as a React page outside an SA154
+  promotion; a second frontend stack, a second seam, or a second design source.
+
+**Decision 2 — Public catalog and detail pages are prerendered React documents
+at the project's build/deploy step.** SA153's public catalog and detail pages
+stay the project's React public surface. The project's prerender step renders
+them with Vite's SSR build into HTML that carries their indexable content, Open
+Graph tags, and structured metadata, and Django serves those documents; React
+hydrates the document for the interactive layer (filters, galleries, inquiry).
+The JSON read API remains the React layer's data contract, and the prerender
+reads the same published, organization-scoped listing data the API serves.
+
+- ✅ The prerender runs in the project's build/deploy step from the published
+  listings that step reads; when published listings change, the project
+  regenerates the affected documents and the sitemap by re-running that step.
+- ✅ `sitemap.xml` and `robots.txt` are generated from the published listings in
+  the same step, never from a hand-maintained list.
+- ✅ React hydrates the prerendered document; the page remains the React surface
+  SA153 delivers, and the API stays its data contract.
+- ✅ No new frontend dependency is added: Vite's built-in SSR build and
+  `react-dom/server` (part of `react-dom`, already in the approved stack) cover
+  the mechanism. A plugin or renderer beyond them records a decision entry
+  first (§[Module & Theme Architecture](#module-theme-architecture),
+  [implementation_contract.md § Runtime
+  Pins](./implementation_contract.md#runtime-pins-and-constraints)).
+- ❌ Django-rendered property pages — they replace the React public surface
+  SA153 delivers; a runtime React SSR service or Node sidecar — a Node runtime
+  outside the shipped Python-only, single-service deployment; an on-demand
+  headless-browser prerender; a crawler-only document (no user-agent detection).
+
+**Options considered for Decision 2:**
+
+| Option | Why not chosen |
+|---|---|
+| Django server-render of the public document | Replaces the React public property surface SA153 delivers with Django-rendered property pages, which SA153's scope prohibits |
+| Runtime React SSR in a Node renderer (Vite SSR build plus a Node process) | Adds a Node runtime and service to a Python-only, single-service deployment and a second data path; a new operational surface outside the shipped contract |
+| On-demand headless-browser prerender (Playwright plus a cache) | A browser runtime in production plus cache invalidation; fragile, and outside the shipped stack |
+| Prerender the React pages in the project's build/deploy step (chosen) | Keeps the React surface SA153 delivers; no new runtime and no new dependency; the documents are regenerated with the content that produced them |
+
+**Related docs:** [frontend.md](frontend.md) | [roadmap.md](./roadmap.md)
+
+---
+
 ### Module Implementation Requirements {#module-implementation-checklist}
 
 **Rule:** Every QuickScale module must be complete, embeddable, and usable

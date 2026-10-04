@@ -27,8 +27,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA237 | Deferred |
-| SA241 | Record the React-frontend and public-page prerender decisions for SA153 | post-v88 | 3 | — | Deferred |
-| SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191, SA241 | Deferred |
+| SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
 | SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | — | Deferred |
@@ -38,7 +37,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: SA237
-Track 3: SA241 ──► SA216
+Track 3: SA216
      critical path: SA191 → SA153
 ```
 
@@ -56,8 +55,8 @@ any post-SA153 module schema change. SA154 is an inventory, not work.
 **Parallel start.** SA214 runs ahead of SA191 on Track 1 against a pinned pre-SA191 `bap-web`
 donor. SA237 records rules 44–45 (proposed in the
 [inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
-its own item, harness clause, and inventory section. SA241 follows SA238 on Track 3 and lands
-before SA153, then SA216.
+its own item, harness clause, and inventory section. SA241 landed on Track 3 ahead of SA153;
+SA216 follows on that track.
 
 ### Track states
 
@@ -67,7 +66,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA214 | yes | yes | yes | **yes** | no |
 | 2 | SA237 | yes | yes | yes | **yes** | no |
-| 3 | SA241 | yes | yes | yes | **yes** | **yes** |
+| 3 | SA216 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -299,20 +298,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; extension
   documentation.
 
-- [ ] **SA241 — Record the React-frontend and public-page prerender decisions for SA153.**
-
-  **Context:** SA153 needs two decisions before any code: which pages are React, and how React
-  public pages reach crawlers that run no JavaScript. Split out of SA153 so they are settled while
-  SA191 is in flight.
-
-  **Acceptance:** decisions record that React is the standard frontend for new application and
-  public pages; `auth` and `billing` stay Django-rendered on the shared design (SA192); the
-  existing module-shipped Django pages (blog, listings, CRM dashboard) stay Django-rendered on that
-  design until an SA154 item promotes a React replacement; Django admin stays as shipped. A second
-  entry chooses the prerender or server-render mechanism for catalog and detail pages, compares the
-  options considered, and adds any new frontend dependency under the approved-stack rule.
-
-  **Surfaces:** decisions; `frontend.md` where it states the frontend split.
+- [x] **SA241 — Record the React-frontend and public-page prerender decisions for SA153.**
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 
