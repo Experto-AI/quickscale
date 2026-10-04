@@ -67,14 +67,19 @@ class TestAccountDeleteView:
         assert response.status_code == 200
 
     def test_account_delete_post(self, authenticated_client, user):
-        """Test account deletion — permitted when user has no blocking orgs"""
+        """Removal disables and scrubs the row instead of deleting it."""
         from django.contrib.auth import get_user_model
 
         user_model = get_user_model()
-        user_id = user.id
         response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 302
-        assert not user_model.objects.filter(id=user_id).exists()
+        scrubbed = user_model.objects.get(pk=user.pk)
+        assert scrubbed.is_active is False
+        assert scrubbed.username == f"deleted-{user.pk}"
+        assert scrubbed.email == f"deleted-{user.pk}@invalid"
+        assert scrubbed.first_name == ""
+        assert scrubbed.last_name == ""
+        assert not scrubbed.has_usable_password()
 
     # ------------------------------------------------------------------
     # last-owner guard
@@ -166,7 +171,9 @@ class TestAccountDeleteView:
         assert response.status_code == 302
         from django.contrib.auth import get_user_model as g_user_model
 
-        assert not g_user_model().objects.filter(id=user.id).exists()
+        retained = g_user_model().objects.get(id=user.id)
+        assert retained.is_active is False
+        assert retained.email == f"deleted-{user.id}@invalid"
 
     def test_account_delete_allowed_when_sole_member_of_shared_org(
         self, authenticated_client, user
@@ -555,7 +562,9 @@ class TestAccountDeleteView:
         ):
             authenticated_client.post(reverse("quickscale_auth:account_delete"))
 
-        assert not get_user_model().objects.filter(pk=user.pk).exists()
+        retained = get_user_model().objects.get(pk=user.pk)
+        assert retained.is_active is False
+        assert retained.email == f"deleted-{user.pk}@invalid"
         stripe_client.retrieve_checkout_session.assert_not_called()
 
     def test_account_delete_blocks_open_purchase_checkout(
@@ -697,7 +706,8 @@ class TestAccountDeleteView:
             )
 
         assert response.status_code == 302
-        assert not get_user_model().objects.filter(pk=user.pk).exists()
+        retained = get_user_model().objects.get(pk=user.pk)
+        assert retained.is_active is False
         stripe_client.retrieve_subscription.assert_called_once_with(
             stripe_subscription_id="sub_account_cancellation_rls"
         )
@@ -844,7 +854,8 @@ class TestAccountDeleteView:
             )
 
         assert response.status_code == 302
-        assert not get_user_model().objects.filter(pk=user.pk).exists()
+        retained = get_user_model().objects.get(pk=user.pk)
+        assert retained.is_active is False
         assert Organization.objects.filter(pk=organization.pk).exists()
         assert events == [
             ("lock-enter", organization.pk),
@@ -1053,10 +1064,10 @@ class TestAccountDeleteView:
         ]
         assert mock_resume.call_args.kwargs["transition"] is first_transition
 
-    def test_account_delete_compensates_when_local_delete_fails(
-        self, authenticated_client, user
+    def test_account_delete_compensates_when_the_scrub_fails(
+        self, authenticated_client, user, monkeypatch
     ):
-        """A rolled-back local deletion resumes its successful cancellation."""
+        """A rolled-back scrub resumes its successful cancellation."""
         from types import SimpleNamespace
         from unittest.mock import ANY, patch
 
@@ -1067,8 +1078,8 @@ class TestAccountDeleteView:
         )
 
         organization = Organization.objects.create(
-            name="Delete Failure",
-            slug="delete-failure",
+            name="Scrub Failure",
+            slug="scrub-failure",
             is_personal=True,
         )
         OrganizationMembership.objects.create(
@@ -1078,6 +1089,14 @@ class TestAccountDeleteView:
         )
         transition = SimpleNamespace(changed=True)
 
+        def fail_scrub(*args, **kwargs):
+            del args, kwargs
+            raise RuntimeError("scrub failed")
+
+        monkeypatch.setattr(
+            "quickscale_modules_auth._anonymization.scrub_account", fail_scrub
+        )
+
         with (
             patch(
                 "quickscale_modules_billing._subscription_mutations.cancel_current_subscription",
@@ -1086,10 +1105,7 @@ class TestAccountDeleteView:
             patch(
                 "quickscale_modules_billing._subscription_mutations.resume_current_subscription"
             ) as mock_resume,
-            patch.object(
-                type(user), "delete", side_effect=RuntimeError("delete failed")
-            ),
-            pytest.raises(RuntimeError, match="delete failed"),
+            pytest.raises(RuntimeError, match="scrub failed"),
         ):
             authenticated_client.post(reverse("quickscale_auth:account_delete"))
 
@@ -1755,7 +1771,9 @@ class TestAccountDeleteView:
         response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
 
         assert response.status_code == 302
-        assert not get_user_model().objects.filter(pk=user.pk).exists()
+        retained = get_user_model().objects.get(pk=user.pk)
+        assert retained.is_active is False
+        assert retained.email == f"deleted-{user.pk}@invalid"
         with org_scope(organization):
             balance.refresh_from_db()
             transaction_row.refresh_from_db()
@@ -1778,7 +1796,7 @@ class TestAccountDeleteView:
     def test_account_delete_retries_when_billing_reference_changes(
         self, authenticated_client, user
     ):
-        """A late FK reference rolls back cleanly and asks the user to retry."""
+        """A late constraint failure rolls back cleanly and asks the user to retry."""
         from unittest.mock import patch
 
         from django.contrib import messages as messages_framework
@@ -1787,7 +1805,7 @@ class TestAccountDeleteView:
 
         with patch.object(
             type(user),
-            "delete",
+            "save",
             side_effect=IntegrityError("late billing reference"),
         ):
             response = authenticated_client.post(
@@ -1806,11 +1824,11 @@ class TestAccountDeleteView:
     # ------------------------------------------------------------------
 
     def test_account_delete_success_message(self, authenticated_client, user):
-        """A permitted deletion fires the success message.
+        """A permitted removal fires the success message.
 
         We spy on ``messages.success`` rather than reading from the
         session after the redirect because Django's auth middleware
-        calls ``logout()`` → ``session.flush()`` when the deleted user
+        calls ``logout()`` → ``session.flush()`` when the disabled user
         cannot be resolved on the next request, which clears messages.
         """
         from unittest.mock import patch, ANY
@@ -1822,7 +1840,7 @@ class TestAccountDeleteView:
         assert response.status_code == 302
         mock_success.assert_called_once_with(
             ANY,
-            "Your account has been deleted successfully.",
+            "Your account has been deactivated and its personal data removed.",
         )
 
 
@@ -1874,16 +1892,18 @@ class TestAccountDeleteViewSA35:
         )
 
         response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
-        # Deletion must succeed — no last-owner or other guard blocks it.
+        # Removal must succeed — no last-owner or other guard blocks it.
         assert response.status_code == 302
-        assert not get_user_model().objects.filter(id=user.id).exists()
+        retained = get_user_model().objects.get(id=user.id)
+        assert retained.is_active is False
+        assert retained.email == f"deleted-{user.id}@invalid"
 
     def test_account_delete_preserves_other_membership_records(
         self, authenticated_client, user, user_data
     ):
         """When a user is one of multiple owners of a shared org, their
-        deletion removes only *their* membership record without affecting
-        other members or the org itself."""
+        removal disables their account and deletes only *their* membership
+        record without affecting other members or the org itself."""
         from django.contrib.auth import get_user_model
 
         from quickscale_modules_orgs.models import (
@@ -1920,8 +1940,12 @@ class TestAccountDeleteViewSA35:
 
         response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
         assert response.status_code == 302
-        # User is gone.
-        assert not get_user_model().objects.filter(id=user_id).exists()
+        # The account row is retained, disabled, and scrubbed.
+        retained = get_user_model().objects.get(id=user_id)
+        assert retained.is_active is False
+        assert retained.email == f"deleted-{user_id}@invalid"
+        # The person's membership is removed.
+        assert not OrganizationMembership.objects.filter(user_id=user_id).exists()
         # Org still exists.
         assert Organization.objects.filter(id=org_id).exists()
         # Other user still exists.
@@ -2096,7 +2120,8 @@ class TestAccountDeleteViewDeclaredHandlers:
             )
 
         assert response.status_code == 302
-        assert not get_user_model().objects.filter(pk=user.pk).exists()
+        retained = get_user_model().objects.get(pk=user.pk)
+        assert retained.is_active is False
         assert calls == [
             "discover",
             "lock",
@@ -2583,3 +2608,60 @@ class TestAccountDeleteViewAnonymization:
         assert account is not None
         assert account.email == user.email
         assert account.is_active is True
+
+
+@pytest.mark.django_db
+class TestAccountDeleteViewAccountReuse:
+    """A removed account frees its identity for a new registration."""
+
+    def test_the_same_email_can_register_again_and_sign_in(
+        self, authenticated_client, user, user_data
+    ):
+        """The address is reusable and signs in on the new account."""
+        from django.contrib.auth import get_user_model
+        from django.test import Client
+
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
+        assert response.status_code == 302
+
+        signup_client = Client()
+        signup = signup_client.post(
+            reverse("account_signup"),
+            {
+                "email": user_data["email"],
+                "username": "reborn-user",
+                "password1": user_data["password"],
+                "password2": user_data["password"],
+            },
+        )
+        assert signup.status_code == 302
+        user_model = get_user_model()
+        reborn = user_model.objects.get(email=user_data["email"])
+        assert reborn.pk != user.pk
+        assert reborn.is_active is True
+
+        returning_client = Client()
+        sign_in = returning_client.post(
+            reverse("account_login"),
+            {"login": user_data["email"], "password": user_data["password"]},
+        )
+        assert sign_in.status_code == 302
+        assert returning_client.session.get("_auth_user_id") == str(reborn.pk)
+
+    def test_the_disabled_account_cannot_sign_in_with_old_credentials(
+        self, authenticated_client, user, user_data
+    ):
+        """Neither the old email nor the old username authenticates."""
+        from django.test import Client
+
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
+        assert response.status_code == 302
+
+        fresh_client = Client()
+        for login_name in (user_data["email"], user_data["username"]):
+            attempt = fresh_client.post(
+                reverse("account_login"),
+                {"login": login_name, "password": user_data["password"]},
+            )
+            assert attempt.status_code == 200
+            assert fresh_client.session.get("_auth_user_id") is None
