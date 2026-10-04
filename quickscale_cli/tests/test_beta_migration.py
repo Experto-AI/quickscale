@@ -1054,10 +1054,10 @@ _INLINE_CONTRACT_PRODUCTION_SETTINGS = (
 )
 
 
-def test_inline_command_contract_blocks_before_mutation(
+def test_inline_command_contract_is_rewritten_onto_the_facade(
     tmp_path: Path,
 ) -> None:
-    """Donor settings that keep the retired inline contract must be refused."""
+    """A recognized pre-facade contract is planned for rewrite, not refused."""
     donor = _write_project(
         tmp_path / "donor",
         slug="fresh-donor",
@@ -1082,19 +1082,263 @@ def test_inline_command_contract_blocks_before_mutation(
         )
     )
 
-    assert report.status == "blocked"
+    assert report.status == "ready", report.blockers
     assert report.changed_files == []
     assert report.verification_results == []
+    assert any(
+        action.step == "rewrite-pre-facade-production-settings"
+        for action in report.planned_actions
+    )
+    assert any(
+        check.name == "runtime-launcher-settings-compatibility"
+        and check.status == "passed"
+        and "rewrites the donor's pre-facade database selection" in check.detail
+        for check in report.preflight_checks
+    )
+
+
+def test_pre_facade_extra_database_configuration_is_refused(tmp_path: Path) -> None:
+    """A donor DATABASES shape the rewrite would strip is still refused."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_path = donor / "fresh_donor" / "settings" / "production.py"
+    settings_path.write_text(
+        '"""Pre-facade settings with a second connection."""\n'
+        "import dj_database_url\n"
+        "from decouple import config\n"
+        "\n"
+        'database_url = config("DATABASE_URL", default=None)\n'
+        "DATABASES = {\n"
+        '    "default": dj_database_url.parse(database_url, ssl_require=True),\n'
+        '    "analytics": dj_database_url.parse(database_url),\n'
+        "}\n"
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
     assert any(
         "does not select its database through the QuickScale runtime settings facade"
         in blocker
         for blocker in report.blockers
     )
-    assert any(
-        check.name == "runtime-launcher-settings-compatibility"
-        and check.status == "failed"
-        for check in report.preflight_checks
+
+
+def test_pre_facade_span_with_subscript_target_is_refused(tmp_path: Path) -> None:
+    """A statement the rewrite would drop without binding a name is refused."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
     )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_path = donor / "fresh_donor" / "settings" / "production.py"
+    settings_path.write_text(
+        '"""Pre-facade settings with an in-block side effect."""\n'
+        "import dj_database_url\n"
+        "from decouple import config\n"
+        "\n"
+        'database_url = config("DATABASE_URL", default=None)\n'
+        'SOMEWHERE["key"] = True\n'
+        'DATABASES = {"default": dj_database_url.parse(database_url)}\n'
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "does not select its database through the QuickScale runtime settings facade"
+        in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_pre_facade_boundary_line_with_another_statement_is_refused(
+    tmp_path: Path,
+) -> None:
+    """A statement sharing a replaced boundary line must refuse the rewrite."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_path = donor / "fresh_donor" / "settings" / "production.py"
+    settings_path.write_text(
+        '"""Pre-facade settings sharing a boundary line."""\n'
+        "import dj_database_url\n"
+        "from decouple import config\n"
+        "\n"
+        'database_url = config("DATABASE_URL", default=None)\n'
+        'DATABASES = {"default": dj_database_url.parse(database_url)}; '
+        'ALLOWED_HOSTS = ["example.com"]\n'
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert any(
+        "does not select its database through the QuickScale runtime settings facade"
+        in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_pre_facade_rewrite_binds_os_and_preserves_named_command_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An aliased os import and reused command-read names survive the rewrite."""
+    from quickscale_devtools.beta_migration.settings_facade import (
+        _plan_pre_facade_settings_rewrite,
+    )
+
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    settings_path = donor / "fresh_donor" / "settings" / "production.py"
+    settings_path.write_text(
+        '"""Pre-facade settings with an aliased os import."""\n'
+        "import os as operating_system\n"
+        "import dj_database_url\n"
+        "from decouple import config\n"
+        "\n"
+        'database_url = config("DATABASE_URL", default=None)\n'
+        'privileged_mode = os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")\n'
+        'non_db_mode = os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")\n'
+        'DATABASES = {"default": dj_database_url.parse(database_url)}\n'
+        "\n"
+        "CUSTOM_MIGRATION_MODE = privileged_mode\n"
+        "CUSTOM_NON_DB_MODE = non_db_mode\n"
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=True,
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    rewrite = _plan_pre_facade_settings_rewrite(settings_path)
+    assert rewrite is not None
+    assert "\nimport os\n" in rewrite.rewritten_text
+    assert "privileged_mode = os.environ.get(" in rewrite.rewritten_text
+    assert "non_db_mode = os.environ.get(" in rewrite.rewritten_text
+
+    monkeypatch.setenv(
+        "RUNTIME_DATABASE_URL", "postgresql://runtime:pass@localhost:5432/app"
+    )
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/app")
+    monkeypatch.delenv("QUICKSCALE_PRIVILEGED_COMMAND", raising=False)
+    monkeypatch.delenv("QUICKSCALE_NON_DB_COMMAND", raising=False)
+    namespace: dict[str, object] = {}
+    exec(compile(rewrite.rewritten_text, str(settings_path), "exec"), namespace)
+    assert namespace["CUSTOM_MIGRATION_MODE"] == ""
+    assert namespace["CUSTOM_NON_DB_MODE"] == ""
+    databases = namespace["DATABASES"]
+    assert databases["default"]["ENGINE"] == "django.db.backends.postgresql"
+
+
+def test_inline_command_contract_execution_rewrites_the_recipient(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Execution rewrites only the contract and keeps the donor's other settings."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="bap-web",
+        package="bap_web",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="bap-web",
+        package="bap_web",
+        marker="recipient",
+    )
+    donor_settings = donor / "bap_web" / "settings" / "production.py"
+    donor_settings.write_text(
+        _INLINE_CONTRACT_PRODUCTION_SETTINGS
+        + 'ALLOWED_HOSTS = ["buenosairesproperties.com"]\n'
+    )
+    _install_verification_success_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+    recipient_settings = recipient / "bap_web" / "settings" / "production.py"
+    rewritten = recipient_settings.read_text()
+    assert (
+        "from quickscale_core.runtime.settings import resolve_runtime_database_url"
+        in rewritten
+    )
+    assert "_db_url = resolve_runtime_database_url(" in rewritten
+    assert "_KNOWN_PRIVILEGED_COMMANDS" not in rewritten
+    assert 'ALLOWED_HOSTS = ["buenosairesproperties.com"]' in rewritten
+    assert any(
+        step.step == "rewrite-pre-facade-production-settings"
+        and "ALLOWED_HOSTS" in step.detail
+        for step in report.completed_steps
+    )
+    assert str(recipient_settings) in report.changed_files
 
 
 _FACADE_CALL_IN_DEAD_FUNCTION_SETTINGS = (

@@ -48,7 +48,7 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Malformed authentication headers fail closed.** Non-ASCII notifications webhook signatures
     now return their normal authentication failure instead of raising a server error.
   - **Webhook endpoints answer the one error shape.** The Stripe and notifications webhooks are DRF views that answer `200` with `{"status": "accepted", "duplicate": <bool>}`, `400` with a stable `webhook_signature_invalid` or `webhook_payload_invalid` code, or `404` when the module is off; a bad signature is no longer answered `403`, and notifications verifies its signature before parsing the body.
-  - **Beta migration is single-mode.** `make beta-migrate-fresh` reports effective runtime provenance, rejects dynamic command settings and launcher/package skew before mutation, reconciles the complete generated slug/package seam, and runs isolated generated-project coverage through `make check-beta-migration-smoke`; the in-place migration path and its continuation are removed.
+  - **Beta migration is single-mode.** `make beta-migrate-fresh` reports effective runtime provenance, rewrites a recognized pre-facade donor `settings/production.py` database block onto the versioned runtime settings facade while carrying the donor's other settings, rejects dynamic command settings and launcher/package skew before mutation, reconciles the complete generated slug/package seam, and runs isolated generated-project coverage through `make check-beta-migration-smoke`; the in-place migration path and its continuation are removed.
   - **Beta migration hands off through one prompt.** A `make beta-migrate-fresh` run that
     completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient with what was
     migrated, the remaining manual actions and their paths and governing rules, the hard
@@ -58,10 +58,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     or build-artifact and blocks the run, naming the file, when one matches no class.
   - **Beta migration carries project-owned apps and frontend dependencies.** The maintainer tool
     copies a donor's top-level Django apps without their migration history, registers and
-    URL-mounts them through user-owned settings and URL files, regenerates their migrations
-    before `migrate` runs, blocks when a donor migration owns an operation model regeneration
-    cannot reproduce, and merges donor-only `frontend/package.json` dependencies while reporting
-    every version conflict.
+    URL-mounts them through user-owned settings and URL files, regenerates their model state
+    before `migrate` runs, carries a donor migration operation model regeneration cannot reproduce
+    into an appended migration (blocking when it cannot be carried safely), and merges donor-only
+    `frontend/package.json` dependencies while reporting every version conflict.
   - **Generated projects own their design layer.** Fresh `showcase_react` projects ship
     `frontend/design/` holding the tokens stylesheet, the Tailwind preset, project fonts, and brand
     assets; the React entry imports it, Django-rendered pages resolve the same tokens, no upgrade

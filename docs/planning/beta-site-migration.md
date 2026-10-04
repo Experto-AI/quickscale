@@ -17,15 +17,16 @@ make beta-migrate-iterate DONOR=/abs/path/to/existing-beta-site RECIPIENT=/abs/p
 Rules for the current maintainer tool:
 - `make beta-migrate-fresh` runs deterministic file mutation on the throwaway recipient and executes the local verification stack by default; add `DRY_RUN=1` to emit the plan/report without mutating files
 - before any mutation every donor file is classified — generated-untouched, generated-customized, project-owned, module-edited, or build artifact — and a donor file that matches no class blocks the run and is named in the report
-- project-owned Django apps beside `manage.py` are detected, copied without their donor migrations, registered in the recipient's user-owned `settings/base.py`, URL-mounted through the recipient's user-owned `urls.py`, and their migrations are regenerated against the current released models before `migrate` runs; a donor migration operation the autodetector cannot reproduce (for example a FORCE-RLS `RunPython`) blocks the run and is named instead of being dropped silently; donor-added frontend dependencies are merged into the recipient's `frontend/package.json`, keeping the recipient's version and reporting every conflict
-- `make beta-migrate-iterate` runs one migration iteration: it reads slug, package, theme, and modules from the donor's `quickscale.yml`, regenerates the throwaway recipient through the staging sequence below and `quickscale apply --split-refs-from-branches`, then runs the fresh-first workflow against it; `DRY_RUN=1` plans the regeneration only
+- project-owned Django apps beside `manage.py` are detected, copied without their donor migrations, registered in the recipient's user-owned `settings/base.py`, URL-mounted through the recipient's user-owned `urls.py`, and their model state is regenerated against the current released models before `migrate` runs; a donor migration operation the autodetector cannot reproduce (for example a FORCE-RLS `RunSQL` or a data `RunPython`) is carried into an appended migration after the regenerated initial state, and an operation that cannot be carried safely (unresolved reference, dynamic `operations` declaration, or another app's migration in its dependencies) blocks the run and is named instead of being dropped silently; donor-added frontend dependencies are merged into the recipient's `frontend/package.json`, keeping the recipient's version and reporting every conflict
+- a recognized pre-facade donor `settings/production.py` is not refused and not copied raw: the tool rewrites only its inline database/command-selection block onto `quickscale_core.runtime.settings.resolve_runtime_database_url`, reusing the donor's canonical read names, and carries every other donor setting unchanged, naming the rewritten line span and each carried setting in the report; unrecognized shapes are still refused before mutation
+- `make beta-migrate-iterate` runs one migration iteration: it reads slug, package, theme, and modules from the donor's `quickscale.yml`, regenerates the throwaway recipient through a staging directory and `quickscale apply --split-refs-from-branches`, then runs the fresh-first workflow against it; `DRY_RUN=1` plans the regeneration only
 - implemented in `quickscale_devtools.beta_migration`; `scripts/beta_migrate.py` is only the thin maintainer wrapper, not a QuickScale module or public `quickscale` CLI command
 - reports which project's `settings/production.py`, `start.sh`, and `Dockerfile` form the effective runtime, rejects unresolved command settings or launcher/package skew before mutation, and keeps fresh-first `.quickscale/state.yml` identity metadata aligned with the reconciled scaffold
 - a run that completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient — what was migrated, every remaining manual action with its paths and governing rule, the hard constraints, and the done criteria — for a coding assistant to complete the remainder; dry runs and runs blocked before or during execution write no prompt
 - `DONOR` and `RECIPIENT` are the only required operator inputs and must be provided explicitly on every run
 - prefer deterministic Python transforms over bash-heavy pipelines
 - if a step cannot be resolved safely, stop and emit a partial report with `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions` for a maintainer or AI coding assistant to continue
-- the reference workflows below remain canonical for the current automation boundary and the manual continuation steps
+- the tool owns the fresh-first phases end to end; the remaining operator actions are local smoke testing and the repository/release handoff
 
 ---
 
@@ -54,31 +55,15 @@ make publish-modules           # push current module code to the splits/<module>
 
 ### One iteration
 
-`apply` generates the project in the directory named after the slug, and never writes
-`quickscale.yml` itself: the file `plan` wrote is the only copy and the migration requires it in
-the recipient root. So run `plan` without `-o` from a staging directory, `apply` from the
-`<slug>` directory it creates, and move that whole directory to the target path:
-
-```bash
-STAGE=/home/victor/code/.bap-web-new.stage
-RECIPIENT=/home/victor/code/bap-web-new
-rm -rf "$STAGE" "$RECIPIENT" && mkdir -p "$STAGE" && cd "$STAGE"
-quickscale plan bap-web        # writes bap-web/quickscale.yml; donor's theme and modules; no Docker
-cd bap-web && quickscale apply --split-refs-from-branches
-mv "$STAGE/bap-web" "$RECIPIENT" && rm -rf "$STAGE"
-rm -rf "$RECIPIENT/.venv"      # a moved virtualenv keeps its old path; the verification stack reinstalls it
-test -f "$RECIPIENT/quickscale.yml"
-cd /home/victor/code/quickscale
-make beta-migrate-fresh DONOR=/home/victor/code/bap-web RECIPIENT="$RECIPIENT"
-```
+`make beta-migrate-iterate DONOR=/home/victor/code/bap-web RECIPIENT=/home/victor/code/bap-web-new`
+is the one non-interactive iteration procedure. It reads slug, package, theme, and modules from the
+donor's `quickscale.yml`, regenerates the throwaway recipient through a staging directory and
+`quickscale apply --split-refs-from-branches`, then runs the fresh-first workflow against it.
+`DRY_RUN=1` plans the regeneration only. The recipient is never hand-edited between iterations.
 
 Check the iteration by the run report, the remaining items in `$RECIPIENT/MIGRATION_PROMPT.md`,
 and the donor's pytest and Vitest suites run in the recipient. Live-site Playwright and screenshot
-parity run in the final iteration only. The automated form of this block is one non-interactive
-target, `make beta-migrate-iterate DONOR=/home/victor/code/bap-web RECIPIENT="$RECIPIENT"`: it
-reads slug, package, theme, and modules from the donor's `quickscale.yml`, performs the staging
-regeneration above, and then runs the fresh-first workflow. The snippets above remain its reference
-implementation until the SA214 loop closes.
+parity run in the final iteration only.
 
 ### After a fix
 
@@ -100,8 +85,13 @@ The final iteration runs with every row closed.
 
 | ID | Found in iteration | Gap | Kind | Resolution | Evidence | Status |
 |---|---|---|---|---|---|---|
-| G-001 | 0 (2026-09-26) | The fresh-first preflight blocks: donor `bap_web/settings/production.py` (generated on v0.62.0) predates the SA206 runtime settings facade and selects its database inline. The donor is read-only, so the block cannot be cleared on the donor side. | tool fix | The tool stops treating an old donor's `production.py` as authoritative: it ports only the donor's real customizations onto the recipient's generated, facade-based `production.py` (or rewrites the donor's database block onto the facade), and reports each carried customization. | — | open |
-| G-002 | review (SA214 c) | A donor project-owned app's migrations can own operations the autodetector cannot reproduce — FORCE-RLS policies, composite tenant constraints, data migrations. Regenerating plain model operations would silently drop tenant isolation. | tool fix | The tool fails closed and names each operation; it must regenerate or carry the required recipient-local policies and constraints before the final iteration can run clean. | — | open |
+| G-001 | 0 (2026-09-26) | The fresh-first preflight blocks: donor `bap_web/settings/production.py` (generated on v0.62.0) predates the SA206 runtime settings facade and selects its database inline. The donor is read-only, so the block cannot be cleared on the donor side. | tool fix | The tool stops treating an old donor's `production.py` as authoritative: it rewrites the donor's database block onto the facade, carries every other donor setting unchanged, and reports each carried customization. | `test_inline_command_contract_is_rewritten_onto_the_facade`, `test_inline_command_contract_execution_rewrites_the_recipient`, `test_ledger_fixture_donor_carries_app_tokens_module_edit_and_pre_facade_settings`, `make check-beta-migration-smoke`; the pinned-donor dry run plans the rewrite and names all 28 carried settings | closed |
+| G-002 | review (SA214 c) | A donor project-owned app's migrations can own operations the autodetector cannot reproduce — FORCE-RLS policies, composite tenant constraints, data migrations. Regenerating plain model operations would silently drop tenant isolation. | tool fix | The tool regenerates the model state and carries each non-regenerable operation into an appended migration, naming it; an operation that cannot be carried safely blocks before mutation. | `test_migration_owned_operations_are_carried_after_makemigrations`, `test_tuple_migration_operations_are_carried_after_makemigrations`, `test_unresolvable_operation_reference_blocks_before_mutation`, `test_external_migration_dependency_blocks_before_mutation`, `test_dynamic_operations_declaration_blocks_before_mutation`, `test_ledger_fixture_donor_carries_app_tokens_module_edit_and_pre_facade_settings`; the pinned-donor dry run plans `properties/0002` → `0002_carried_propertylisting_seeded_from_catalog.py` | closed |
+| G-003 | pinned-donor dry run (SA214 f) | The pinned donor's root documentation and tooling paths (`roadmap.md`, `formularios.md`, `properties-plan.md`, `adaptive.yml`, `docs/`, `.pnpm-store/`, `.tmp/`, `.claude/`, `coverage.xml`) matched no class, so the classification audit blocked. | tool fix | The taxonomy recognizes top-level Markdown documents and `adaptive.yml` as project-owned, `docs/` as a recognized project root, and the tooling stores plus the coverage report as build artifacts. | `test_donor_documentation_and_tooling_paths_classify`; the pinned-donor dry run reports zero unclassified files | closed |
+
+**Loop status (SA214 f).** Every row is closed on landed tool fixes and their tests, and the pinned
+dry run is clean. The release-time execution iteration still needs published module splits
+(`make publish-modules`) and a PostgreSQL 18 service; that rehearsal is the slice's remaining work.
 
 - **ID** — `G-NNN`, never reused.
 - **Kind** — `tool fix`, `playbook step`, `project decision`, or `upstream to module`.
@@ -134,14 +124,17 @@ The compatibility preflight uses these effective runtime sources while preservin
 |---|---|---|---|
 | Fresh-first | donor | recipient | recipient |
 
-The donor-owned `settings/production.py` must call the versioned QuickScale runtime settings
-facade (`from quickscale_core.runtime.settings import resolve_runtime_database_url`) instead of
-carrying an inline copy of the command-mode contract; the facade declares the command allowlists
-once. The preflight is a canonical-shape whitelist: the four inputs must be read through their
-canonical forms (`config("RUNTIME_DATABASE_URL", default=None)`, `config("DATABASE_URL",
-default=None)`, `os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")`,
+The effective `settings/production.py` must select its database through the versioned QuickScale
+runtime settings facade (`from quickscale_core.runtime.settings import resolve_runtime_database_url`);
+the facade declares the command allowlists once. A donor file that already calls the facade is used
+as-is; a recognized pre-facade file has only its inline database/command-selection block rewritten
+onto the facade by the migration, with every other donor setting carried unchanged. The preflight is
+a canonical-shape whitelist: the four inputs must be read through their canonical forms
+(`config("RUNTIME_DATABASE_URL", default=None)`, `config("DATABASE_URL", default=None)`,
+`os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND", "")`,
 `os.environ.get("QUICKSCALE_NON_DB_COMMAND", "")`), passed to the facade call by name, and
-`DATABASES["default"]` must parse the call's result — with no later statement superseding it.
+`DATABASES["default"]` must parse the call's result — with no later statement superseding it. An
+inline copy the rewrite does not recognize is refused before any mutation.
 Every use of `QUICKSCALE_PRIVILEGED_COMMAND` or `QUICKSCALE_NON_DB_COMMAND` in the effective
 launchers must use a supported static assignment form. Computed, continued, concatenated, unknown, or otherwise
 unresolved values, persistent Docker `ENV` assignments, mismatched `manage.py` arguments, and
@@ -152,321 +145,35 @@ exactly one canonical `CMD ["./start.sh"]` runtime entrypoint.
 
 ---
 
-## Reference workflow — fresh-first approach
-
-### Inputs
-
-```
-DONOR     = path to the existing beta site         (e.g. ~/Code/experto-ai-web)
-RECIPIENT = path to the fresh QuickScale scaffold  (e.g. /tmp/test80)
-```
-
-The RECIPIENT must already exist — run `quickscale plan <slug> && quickscale apply` to create it.
-**Best practice: use the same slug as the existing project** (`experto-ai-web`, `bap-web`) to avoid
-package name substitutions in transplanted Django files.
-
-Set both variables explicitly for the shipped command. The command is the sole
-executable mutation workflow in this section; the phase snippets below document
-its implementation for report-based recovery and must not be rerun after a
-successful command.
-
----
-
-### Executor phase 0 — Derive variables (reference only)
-
-Do not run this snippet before or after the command. It documents how the
-executor resolves identity fields from the two required paths.
-
-```python
-import tomllib, yaml, os
-
-DONOR = os.environ["DONOR"]
-RECIPIENT = os.environ["RECIPIENT"]
-
-with open(f"{DONOR}/pyproject.toml", "rb") as f:
-    d_toml = tomllib.load(f)
-with open(f"{RECIPIENT}/pyproject.toml", "rb") as f:
-    r_toml = tomllib.load(f)
-
-DONOR_PKG = d_toml["tool"]["poetry"]["packages"][0]["include"]  # e.g. "experto_ai_web"
-RECIPIENT_PKG = r_toml["tool"]["poetry"]["packages"][0]["include"]  # e.g. "test80"
-
-with open(f"{DONOR}/quickscale.yml") as f:
-    d_qs = yaml.safe_load(f)
-with open(f"{RECIPIENT}/quickscale.yml") as f:
-    r_qs = yaml.safe_load(f)
-
-DONOR_SLUG = d_qs["project"]["slug"]  # e.g. "experto-ai-web"
-RECIPIENT_SLUG = r_qs["project"]["slug"]  # e.g. "test80"
-
-SAME_IDENTITY = (
-    DONOR_PKG == RECIPIENT_PKG and DONOR_SLUG == RECIPIENT_SLUG
-)  # package and slug are separate identity fields
-```
-
----
-
-### Step 1 — Run the shipped fresh-first migration
-
-If the fresh scaffold has a different package or slug, let the shipped maintainer command perform
-the identity reconciliation. Package and slug are separate fields even when the source scaffold
-uses the same one-word token for both (for example, `test80`). A global `sed` replacement cannot
-distinguish those meanings and is not a safe fallback.
-
-```bash
-make beta-migrate-fresh DONOR="$DONOR" RECIPIENT="$RECIPIENT"
-```
-
-**Do not rerun executor phases 2–8 after Step 1.** The command already performs
-identity reconciliation, frontend and Django copies, project-owned app migration
-(copy, registration, URL mount, and migration regeneration), path-dependency sync,
-frontend dependency merge, and
-the complete local verification stack. Those phases are non-executable reference
-for reviewing the report or resuming from its last completed deterministic step.
-Steps 9–10 are the remaining operator actions.
-
-If an agent must resume from a partial report after this step, it must preserve the same
-path-specific semantics as the executor:
-
-- update `quickscale.yml`'s `project.slug` and `project.package` as structured fields, then rename
-  the Django package directory
-- require an existing `.quickscale/state.yml` identity to match the recipient before mutation, then
-  update its project slug/package and package-prefixed `managed_files` keys under the state advisory lock
-- write the donor slug to `[tool.poetry].name`, but use the donor package for Poetry's package
-  include, Django settings references, coverage source, and django-stubs settings
-- reconcile every generated identity-bearing recipient file, including
-  package-init docstrings, `.env*`, `db/init.sql`, generated docs/templates/tests,
-  CI/lint commands, and `frontend/package.json`, without transferring structural
-  ownership from the fresh scaffold
-- replace derived package values as units (`<package>_app`,
-  `<package>_app_password`, and `<package>-frontend`) before raw package tokens
-- in `docker-compose.yml`, use slug semantics for container names, resource labels,
-  and default image names; use package semantics for Django settings, database
-  names, and runtime role/password references
-- use slug semantics for any legacy baked identity in `frontend/src/hooks/useModules.ts`; current
-  post-SA106 hooks are project-agnostic, so this is normally a no-op
-
-After reconciliation, treat `RECIPIENT_PKG` as `DONOR_PKG` and `RECIPIENT_SLUG` as `DONOR_SLUG`
-for the remaining steps.
-
----
-
-### Executor phase 2 — Transplant App.tsx (reference only)
-
-The existing project's `App.tsx` is the custom SPA router — replace the scaffold's default version.
-The fresh recipient's `useModules.ts` is already project-agnostic per SA106 (no baked/default
-projectName or embedded project slug; runtime identity flows from
-`window.__QUICKSCALE__.projectName`), so only the custom router is transplanted here.
-
-```bash
-cp "$DONOR/frontend/src/App.tsx" "$RECIPIENT/frontend/src/App.tsx"
-```
-
----
-
-### Executor phase 3 — Transplant custom pages (reference only)
-
-Copy only pages that exist in the existing project (DONOR) but NOT in the fresh scaffold (RECIPIENT).
-These are the truly custom pages (Home, About, Services, CaseStudies, Properties, etc.).
-Pages that already exist in the RECIPIENT (fresh scaffold pages like Dashboard, BlogPage, etc.) are
-kept as-is — they are newer and should not be overwritten.
-
-```python
-import shutil, os
-
-DONOR = os.environ["DONOR"]
-RECIPIENT = os.environ["RECIPIENT"]
-
-donor_pages = set(os.listdir(f"{DONOR}/frontend/src/pages"))
-recipient_pages = set(os.listdir(f"{RECIPIENT}/frontend/src/pages"))
-
-custom_only = donor_pages - recipient_pages  # pages only in the existing project
-
-for page in sorted(custom_only):
-    src = f"{DONOR}/frontend/src/pages/{page}"
-    dst = f"{RECIPIENT}/frontend/src/pages/{page}"
-    shutil.copy(src, dst)
-    print(f"Copied page: {page}")
-```
-
----
-
-### Executor phase 4 — Transplant custom component directories (reference only)
-
-Copy all component directories from the existing project EXCEPT `ui/` (keep the fresh scaffold's
-shadcn components). Overwrite any same-named dirs in the RECIPIENT — the existing project's
-`layout/`, `home/`, `shared/` etc. contain the real custom content.
-New module component dirs in RECIPIENT that don't exist in DONOR (`social/`, `forms/`) are preserved.
-
-```python
-import shutil, os
-
-DONOR = os.environ["DONOR"]
-RECIPIENT = os.environ["RECIPIENT"]
-
-donor_dirs = set(os.listdir(f"{DONOR}/frontend/src/components"))
-SKIP = {"ui"}  # always keep recipient's fresh shadcn ui components
-
-for d in sorted(donor_dirs - SKIP):
-    src = f"{DONOR}/frontend/src/components/{d}"
-    dst = f"{RECIPIENT}/frontend/src/components/{d}"
-    if os.path.isdir(src):
-        if os.path.exists(dst):
-            shutil.rmtree(dst)
-        shutil.copytree(src, dst)
-        print(f"Copied component dir: {d}/")
-```
-
----
-
-### Executor phase 5 — Transplant src utilities (reference only)
-
-Copy static assets, data, types, and stores from the existing project if they exist.
-The fresh scaffold may not have these directories at all.
-
-```bash
-for dir in assets data types stores; do
-    if [ -d "$DONOR/frontend/src/$dir" ]; then
-        rm -rf "$RECIPIENT/frontend/src/$dir"
-        cp -r  "$DONOR/frontend/src/$dir" "$RECIPIENT/frontend/src/$dir"
-        echo "Copied: frontend/src/$dir/"
-    fi
-done
-```
-
----
-
-### Executor phase 6 — Transplant custom Django files (reference only)
-
-Copy the existing project's hand-written Django files into the RECIPIENT's package directory.
-If slugs differ they were already fixed in Step 1, so `DONOR_PKG == RECIPIENT_PKG` at this point.
-
-```python
-import shutil, os
-
-DONOR = os.environ["DONOR"]
-RECIPIENT = os.environ["RECIPIENT"]
-DONOR_PKG = os.environ["DONOR_PKG"]  # already set equal to RECIPIENT_PKG
-
-FILES = [
-    "urls.py",  # custom URL routing (healthcheck, sitemap, SPA catch-all)
-    "views.py",  # custom views (404, robots.txt)
-    "middleware.py",  # custom middleware (experto-ai-web only)
-    "sitemaps.py",  # sitemap definitions (experto-ai-web only)
-    "context_processors.py",  # custom context processors
-    "settings/production.py",  # production overrides
-]
-
-for f in FILES:
-    src = f"{DONOR}/{DONOR_PKG}/{f}"
-    dst = f"{RECIPIENT}/{DONOR_PKG}/{f}"
-    if os.path.exists(src):
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copy(src, dst)
-        print(f"Copied: {DONOR_PKG}/{f}")
-    # else: file doesn't exist in donor (e.g. no middleware.py in bap-web) — skip silently
-```
-
-**Do NOT copy** from the existing project:
-- `settings/modules.py` — auto-managed by `quickscale apply`; RECIPIENT's is correct
-- `settings/base.py` — keep RECIPIENT's (it's the latest scaffold version)
-- `settings/local.py` — keep RECIPIENT's (it uses the new scaffold patterns)
-- `urls_modules.py` — auto-managed; RECIPIENT's is correct
-
----
-
-### Executor phase 7 — Update pyproject.toml path dependencies (reference only)
-
-The fresh scaffold's `pyproject.toml` already has the right non-module deps (updated versions,
-`django-markdownx`, etc.). The only thing to add is path dependencies for any modules in the
-existing project that the fresh scaffold doesn't have (if slugs were the same and the fresh
-scaffold was generated with fewer modules).
-
-This step transfers dependency metadata only; it never copies embedded module source. Every added
-path dependency must already resolve to an existing directory inside the recipient (for example,
-`modules/blog`). The shipped command blocks before mutation if a donor-only dependency would point
-to a missing or external path. Regenerate the fresh scaffold with all desired modules, or embed the
-missing module in the recipient through the supported QuickScale workflow, before retrying.
-
-In the recommended case (same slug, fresh scaffold generated with all desired modules), this step
-is a no-op. Run it anyway as a safety check.
-
-```python
-import tomllib, tomli_w, os
-from pathlib import Path
-
-DONOR = os.environ["DONOR"]
-RECIPIENT = os.environ["RECIPIENT"]
-recipient_root = Path(RECIPIENT).resolve()
-
-with open(f"{DONOR}/pyproject.toml", "rb") as f:
-    d = tomllib.load(f)
-with open(f"{RECIPIENT}/pyproject.toml", "rb") as f:
-    r = tomllib.load(f)
-
-# Find path deps in donor that are missing from recipient
-donor_paths = {
-    k: v
-    for k, v in d["tool"]["poetry"]["dependencies"].items()
-    if isinstance(v, dict) and "path" in v
-}
-recipient_deps = r["tool"]["poetry"]["dependencies"]
-
-# Fail closed exactly like the shipped command: every added path dependency
-# must resolve to an existing directory inside the recipient.
-for k, v in donor_paths.items():
-    if k in recipient_deps:
-        continue
-    target = (recipient_root / v["path"]).resolve()
-    if not target.is_relative_to(recipient_root) or not target.is_dir():
-        raise SystemExit(
-            f"Refusing to add {k}: {v['path']!r} does not resolve to an existing "
-            f"directory inside {recipient_root}"
-        )
-
-added = []
-for k, v in donor_paths.items():
-    if k not in recipient_deps:
-        recipient_deps[k] = v
-        added.append(k)
-
-if added:
-    with open(f"{RECIPIENT}/pyproject.toml", "wb") as f:
-        tomli_w.dump(r, f)
-    print(f"Added missing path deps: {added}")
-else:
-    print("pyproject.toml path deps already complete — no changes needed")
-```
-
----
-
-### Executor phase 8 — Run migrations and verify (reference only)
-
-```bash
-cd "$RECIPIENT"
-
-# Reinstall Python deps (pyproject.toml may have changed)
-poetry lock && poetry install
-
-# Install frontend deps
-cd frontend && pnpm install && cd ..
-
-# Build frontend — must succeed before testing
-cd frontend && pnpm build && cd ..
-
-# Regenerate project-owned app migrations (donor history is dropped on copy;
-# skip this when the donor has no project-owned apps)
-poetry run python manage.py makemigrations <app labels>
-
-# Apply all Django migrations (new modules from fresh scaffold)
-quickscale manage migrate
-
-# Run all tests
-pytest
-cd frontend && pnpm test && cd ..
-```
-
----
+## Fresh-first workflow — owned by the tool
+
+`make beta-migrate-fresh` is the sole executable mutation workflow; do not re-derive its phases by
+hand. One run performs, in order:
+
+1. field-aware identity reconciliation (including the locked authoritative `.quickscale/state.yml`
+   and `start.sh`);
+2. App.tsx and donor-only page copies, then component-directory and utility-directory transplant;
+3. selected Django file copies; a recognized pre-facade donor `settings/production.py` has only its
+   inline database/command-selection block rewritten onto
+   `quickscale_core.runtime.settings.resolve_runtime_database_url`, with every other donor setting
+   carried unchanged and named in the report;
+4. project-owned app copy, registration, URL mounting, and recipient-local `makemigrations`
+   regeneration; operations the autodetector cannot reproduce are carried into appended migrations
+   after the regenerated initial state, and an operation that cannot be carried safely blocks before
+   mutation;
+5. missing path-dependency sync and donor-only frontend dependency merge (the recipient's version
+   wins on a conflict, and every conflict is reported);
+6. the donor design port into the never-overwritten `frontend/design/` layer;
+7. the local verification stack (`poetry lock`, `poetry install`, `pnpm install`, `pnpm build`,
+   `makemigrations`, `quickscale manage migrate`, `pytest`, `pnpm test`).
+
+A run that completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient with
+every remaining manual action, its paths, and the governing rule. Dry runs and blocked runs write
+no prompt.
+
+If a run stops partial, resume from the report's last completed deterministic step
+(`completed_steps`, `skipped_steps`, `changed_files`, `verification_results`) instead of rerunning
+earlier file mutations. The two operator actions below remain after a successful run.
 
 ### Step 9 — Smoke-test locally
 
@@ -666,7 +373,7 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] Fresh-first report confirms App.tsx, custom pages/components, utilities, Django files, and missing path deps were copied
 [ ] Tool report contains seven passed verification results: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test` — plus a passed recipient-local `poetry run python manage.py makemigrations <app>` for every migrated model-bearing app
 [ ] Local smoke-test completed — existing pages intact and new module pages work
-[ ] Effective donor-owned production settings call `quickscale_core.runtime.settings.resolve_runtime_database_url` before the current maintainer tool is invoked
+[ ] Effective production settings select their database through `quickscale_core.runtime.settings.resolve_runtime_database_url` — already facade-based in the donor, or rewritten by the tool from a recognized pre-facade block while the donor stays read-only
 [ ] Result committed or staged in the target repo
 [ ] Module env vars set in Railway (storage, notifications if added)
 [ ] Merged to main and Railway deployment confirmed
@@ -717,17 +424,19 @@ The final design uses two explicit one-shot command env vars — `QUICKSCALE_PRI
 
 The Redis-dependent launcher-first sequence used during SA63/SA68 delivery is
 historical deployment context, not a compatibility path accepted by the current
-maintainer tool. The tool now requires the effective donor-owned
-`settings/production.py` to call the `quickscale_core.runtime.settings` facade
-(`resolve_runtime_database_url`) before the migration starts, regardless of
+maintainer tool. The tool now requires the effective
+`settings/production.py` to select its database through the
+`quickscale_core.runtime.settings` facade (`resolve_runtime_database_url`) —
+rewriting a recognized pre-facade block on the recipient side — regardless of
 whether `REDIS_URL` is set.
 
 A pre-SA68 production settings file that still uses the former
-`"migrate" in sys.argv` branch is therefore incompatible with the current
-command. Reconcile that donor-owned file first by importing and calling the
-runtime settings facade while preserving its unrelated site configuration;
-do not replace it wholesale. Commit and verify that facade adoption before
-invoking `make beta-migrate-fresh`. Do not use
+`"migrate" in sys.argv` branch matches the recognized pre-facade shape: the
+migration rewrites that database/command block onto the facade while carrying
+the donor's unrelated site configuration unchanged, so the read-only donor is
+never edited. A shape the rewrite cannot preserve is refused before mutation;
+only then must the operator reconcile the donor file (or report it as a gap)
+before invoking `make beta-migrate-fresh`. Do not use
 Redis presence to justify a launcher-first run of the current automation.
 
 ### Non-blocking validation findings preserved
@@ -742,7 +451,7 @@ Use this when the maintainer tool is only partially implemented or stops before 
 1. Read this playbook, the current [v0.89.0 release note](../releases/release-v0.89.0.md), and the historical [v0.81.0 tooling note](../releases/release-v0.81.0.md) before changing the automation behavior.
 2. Treat the provided `DONOR` and `RECIPIENT` values as authoritative rather than inferring roles from directory names.
 3. Resume from the last completed deterministic step in the tool's report — and from `MIGRATION_PROMPT.md` in the recipient after a completed run — instead of rerunning earlier destructive steps.
-4. Fresh-first continuation order: field-aware identity fix (including locked authoritative state reconciliation and `start.sh`) → frontend copies → Django file copies → project-owned app migration (copy, registration, and URL mount) → path dependencies → frontend dependency merge → local verification (including the recipient-local `makemigrations` for every migrated app) → manual repo handoff.
+4. Fresh-first continuation order: field-aware identity fix (including locked authoritative state reconciliation and `start.sh`) → frontend copies → Django file copies (a recognized pre-facade `settings/production.py` is rewritten onto the runtime settings facade) → project-owned app migration (copy, registration, URL mount, model-state regeneration, and the carry of non-regenerable migration operations) → path dependencies → frontend dependency merge → donor design port → local verification (including the recipient-local `makemigrations` for every migrated app) → manual repo handoff.
 5. If a step would require guessing about module adoption, deploy timing, or secrets, stop, record the skipped work in `skipped_steps`, and leave the operator follow-up in `pending_manual_actions`.
 6. The minimum handoff payload for partial automation is `mode`, `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions`.
 

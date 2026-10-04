@@ -330,8 +330,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
     tokens, a module edit, and a pre-facade `production.py`; the handoff prompt has a snapshot
     test; the beta-migration smoke gate passes; the playbook points at the tool instead of
     duplicating it as shell snippets.
-  - A decision records who owns a pre-facade donor `production.py` (today donor-owned by policy
-    and refused at preflight).
+  - A decision records who owns a pre-facade donor `production.py`: the migration rewrites a
+    recognized pre-facade database block onto the facade while the donor stays read-only
+    ([decisions.md § Generated-File Ownership](decisions.md#generated-file-ownership-taxonomy)).
 
   **Slices:**
   - [x] (a) `make beta-migrate-iterate`: one non-interactive iteration driven by the donor's
@@ -362,7 +363,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
     document and the smoke gate asserts it; next is (f), starting with G-001; watch prompt
     stability as the report schema grows.
   - [ ] (f) Ledger iterations to a clean final run, the playbook rewrite, and the pre-facade
-    `production.py` decision.
+    `production.py` decision. Handoff: the tool now rewrites a recognized pre-facade
+    `production.py` onto the facade (G-001), carries non-regenerable project-owned-app migration
+    operations into appended migrations with fail-closed safe-carry boundaries (G-002), and
+    classifies donor root documentation and tooling paths (G-003); the pinned-donor dry run is clean
+    with zero unclassified files and both carries planned; next is the release-time full execution
+    iteration with published module splits (`make publish-modules`) and PostgreSQL 18; watch the
+    rewrite's recognized-shape boundary and the carry planner's same-app dependency chain.
 
   **Surfaces:** `quickscale_devtools/.../beta_migration/`, its tests and smoke gate; the migration
   playbook and gap ledger; the `showcase_react` theme, generator, and

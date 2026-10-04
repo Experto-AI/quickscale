@@ -152,13 +152,16 @@ FRESH_FIRST_PROTECTED_ROOT_FILES = ("railway.json",)
 
 DONOR_ARTIFACT_DIR_COMPONENTS: tuple[str, ...] = (
     ".cache",
+    ".claude",
     ".git",
     ".hg",
     ".idea",
     ".mypy_cache",
+    ".pnpm-store",
     ".pytest_cache",
     ".ruff_cache",
     ".svn",
+    ".tmp",
     ".tox",
     ".venv",
     ".vscode",
@@ -182,6 +185,7 @@ DONOR_ARTIFACT_NAMES: tuple[str, ...] = (
     ".coverage",
     ".env",
     "Thumbs.db",
+    "coverage.xml",
 )
 
 DONOR_ARTIFACT_ROOT_FILES: tuple[str, ...] = ("poetry.lock",)
@@ -195,6 +199,7 @@ DONOR_ENV_FILE_EXEMPT = ".env.example"
 DONOR_RECOGNIZED_PROJECT_DIRS: tuple[str, ...] = (
     ".github",
     "db",
+    "docs",
     "frontend",
     "scripts",
     "static",
@@ -202,7 +207,10 @@ DONOR_RECOGNIZED_PROJECT_DIRS: tuple[str, ...] = (
     "tests",
 )
 
-DONOR_RECOGNIZED_PROJECT_ROOT_FILES: tuple[str, ...] = ("quickscale.yml",)
+DONOR_RECOGNIZED_PROJECT_ROOT_FILES: tuple[str, ...] = (
+    "adaptive.yml",
+    "quickscale.yml",
+)
 
 
 INTENTIONALLY_UNMANAGED: tuple[str, ...] = (

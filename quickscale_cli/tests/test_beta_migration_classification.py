@@ -236,6 +236,42 @@ def test_unclassified_donor_file_blocks_and_a_recognized_location_is_the_control
     assert _classification(controlled).unclassified == []
 
 
+def test_donor_documentation_and_tooling_paths_classify(tmp_path, generated_pair):
+    """Root docs are project-owned; tooling stores and reports are artifacts."""
+    donor, recipient = _copy_pair(tmp_path, generated_pair)
+    documentation = {
+        "roadmap.md": donor / "roadmap.md",
+        "docs/design.md": donor / "docs" / "design.md",
+        "adaptive.yml": donor / "adaptive.yml",
+    }
+    for relative, path in documentation.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"{relative}\n")
+    artifacts = {
+        ".pnpm-store": donor / ".pnpm-store" / "v10" / "index.json",
+        ".tmp": donor / ".tmp" / "test_unit" / "coverage.xml",
+        ".claude": donor / ".claude" / "settings.local.json",
+        "coverage.xml": donor / "coverage.xml",
+    }
+    for relative, path in artifacts.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("artifact\n")
+
+    report = _plan(donor, recipient)
+
+    assert report.status == "ready", report.blockers
+    classification = _classification(report)
+    assert classification.unclassified == []
+    assert {
+        "adaptive.yml",
+        "docs/design.md",
+        "roadmap.md",
+    } <= set(classification.project_owned)
+    assert {"coverage.xml", ".tmp", ".pnpm-store", ".claude"} <= set(
+        classification.build_artifacts
+    )
+
+
 def test_build_artifacts_are_never_classified_as_content(tmp_path, generated_pair):
     """Dependency trees, caches, media, and build output are artifacts only."""
     donor, recipient = _copy_pair(tmp_path, generated_pair)

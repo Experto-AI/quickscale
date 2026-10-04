@@ -9,6 +9,7 @@ reporting every version conflict.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import shutil
@@ -18,6 +19,7 @@ import types
 from pathlib import Path
 
 import pytest
+from django.db.migrations.graph import MigrationGraph
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.schema.state_schema import (
     ManagedFileRecord,
@@ -106,18 +108,23 @@ def project_pair(
 
 def _install_subprocess_stub(
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    on_command=None,
 ) -> list[tuple[tuple[str, ...], Path]]:
-    """Stub subprocess.run and record every verification command."""
+    """Stub subprocess.run and record every verification command.
+
+    ``on_command`` (when given) observes each stubbed command, so a test can
+    materialize the artifacts the real command would produce — for example the
+    recipient's regenerated ``makemigrations`` output.
+    """
     calls: list[tuple[tuple[str, ...], Path]] = []
 
     def fake_run(command, cwd=None, **kwargs):
         command_tuple = tuple(command)
-        calls.append(
-            (
-                command_tuple,
-                Path(str(cwd)) if cwd is not None else Path.cwd(),
-            )
-        )
+        working_dir = Path(str(cwd)) if cwd is not None else Path.cwd()
+        calls.append((command_tuple, working_dir))
+        if on_command is not None:
+            on_command(command_tuple, working_dir)
         return subprocess.CompletedProcess(
             command_tuple, 0, stdout="stub stdout", stderr=""
         )
@@ -1312,10 +1319,65 @@ def test_excluded_artifact_python_does_not_block_the_preflight(
     assert not (recipient / "properties" / "node_modules").exists()
 
 
-def test_migration_owned_operations_block_before_any_mutation(
+def _migration_dependency_edges(path: Path) -> list[tuple[str, str]]:
+    """Return the literal dependency edges declared by a migration file."""
+    tree = ast.parse(path.read_text())
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(
+            isinstance(target, ast.Name) and target.id == "dependencies"
+            for target in node.targets
+        ):
+            continue
+        if not isinstance(node.value, ast.List):
+            return []
+        return [
+            (element.elts[0].value, element.elts[1].value)
+            for element in node.value.elts
+            if isinstance(element, ast.Tuple) and len(element.elts) == 2
+        ]
+    return []
+
+
+def _materialize_regenerated_migration(
+    app_name: str,
+    *,
+    carried_name: str,
+    observed: list[tuple[str, bool]],
+):
+    """Return a stub observer that writes makemigrations' regenerated 0001.
+
+    The observer also records whether the carried migration exists at the
+    makemigrations and migrate commands, proving the carry lands between them.
+    """
+
+    def observe(command: tuple[str, ...], working_dir: Path) -> None:
+        carried = working_dir / app_name / "migrations" / carried_name
+        if "makemigrations" in command:
+            observed.append(("makemigrations", carried.exists()))
+            migrations_dir = working_dir / app_name / "migrations"
+            migrations_dir.mkdir(parents=True, exist_ok=True)
+            (migrations_dir / "__init__.py").write_text("")
+            (migrations_dir / "0001_initial.py").write_text(
+                "from django.db import migrations\n"
+                "\n"
+                "\n"
+                "class Migration(migrations.Migration):\n"
+                "    initial = True\n"
+                "    dependencies = []\n"
+                "    operations = []\n"
+            )
+        elif "migrate" in command:
+            observed.append(("migrate", carried.exists()))
+
+    return observe
+
+
+def test_migration_owned_operations_are_carried_after_makemigrations(
     project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A migration-owned RunPython cannot be regenerated; the run must block."""
+    """A migration-owned RunPython is carried into an appended migration."""
     donor, recipient = project_pair
     _add_project_app(donor, "properties")
     (donor / "properties" / "migrations" / "0001_initial.py").write_text(
@@ -1331,23 +1393,39 @@ def test_migration_owned_operations_block_before_any_mutation(
         "    dependencies = []\n"
         "    operations = [migrations.RunPython(forward)]\n"
     )
-    calls = _install_subprocess_stub(monkeypatch)
+    observed: list[tuple[str, bool]] = []
+    _install_subprocess_stub(
+        monkeypatch,
+        on_command=_materialize_regenerated_migration(
+            "properties",
+            carried_name="0002_carried_initial.py",
+            observed=observed,
+        ),
+    )
 
     report = run_beta_migration(
         BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
     )
 
-    assert report.status == "blocked"
-    assert report.changed_files == []
-    assert calls == []
-    assert any("RunPython" in blocker for blocker in report.blockers)
-    assert not (recipient / "properties").exists()
+    assert report.status == "ready", report.blockers
+    carried_path = recipient / "properties" / "migrations" / "0002_carried_initial.py"
+    assert carried_path.is_file()
+    carried_text = carried_path.read_text()
+    assert "migrations.RunPython(forward)" in carried_text
+    assert 'dependencies = [("properties", "0001_initial")]' in carried_text
+    assert str(carried_path) in report.changed_files
+    assert any(
+        step.step == "carry-project-app-migration-operations"
+        and "RunPython" in step.detail
+        for step in report.completed_steps
+    )
+    assert observed == [("makemigrations", False), ("migrate", True)]
 
 
-def test_tuple_migration_operations_block_before_any_mutation(
+def test_tuple_migration_operations_are_carried_after_makemigrations(
     project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A tuple-valued operations declaration is inspected, not ignored."""
+    """A tuple-valued operations declaration is carried, not ignored."""
     donor, recipient = project_pair
     _add_project_app(donor, "properties")
     (donor / "properties" / "migrations" / "0001_initial.py").write_text(
@@ -1361,6 +1439,44 @@ def test_tuple_migration_operations_block_before_any_mutation(
         '        migrations.RunSQL("ALTER TABLE properties_property FORCE ROW LEVEL SECURITY"),\n'
         "    )\n"
     )
+    observed: list[tuple[str, bool]] = []
+    _install_subprocess_stub(
+        monkeypatch,
+        on_command=_materialize_regenerated_migration(
+            "properties",
+            carried_name="0002_carried_initial.py",
+            observed=observed,
+        ),
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+    carried_text = (
+        recipient / "properties" / "migrations" / "0002_carried_initial.py"
+    ).read_text()
+    assert "migrations.RunSQL(" in carried_text
+    assert "FORCE ROW LEVEL SECURITY" in carried_text
+    assert observed == [("makemigrations", False), ("migrate", True)]
+
+
+def test_unresolvable_operation_reference_blocks_before_mutation(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A carried operation referencing no module-level name fails closed."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0001_initial.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        "    initial = True\n"
+        "    dependencies = []\n"
+        "    operations = [migrations.RunPython(missing_function)]\n"
+    )
     calls = _install_subprocess_stub(monkeypatch)
 
     report = run_beta_migration(
@@ -1370,8 +1486,581 @@ def test_tuple_migration_operations_block_before_any_mutation(
     assert report.status == "blocked"
     assert report.changed_files == []
     assert calls == []
-    assert any("RunSQL" in blocker for blocker in report.blockers)
+    assert any("missing_function" in blocker for blocker in report.blockers)
     assert not (recipient / "properties").exists()
+
+
+def test_external_migration_dependency_blocks_before_mutation(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A carried operation depending on another app's migration fails closed."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0001_initial.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        "\n"
+        "def forward(apps, schema_editor):\n"
+        "    pass\n"
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        "    initial = True\n"
+        '    dependencies = [("auth", "0001_initial")]\n'
+        "    operations = [migrations.RunPython(forward)]\n"
+    )
+    calls = _install_subprocess_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert calls == []
+    assert any("depends on app 'auth'" in blocker for blocker in report.blockers)
+    assert not (recipient / "properties").exists()
+
+
+def test_dynamic_operations_declaration_blocks_before_mutation(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An operations declaration the tool cannot read statically fails closed."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0001_initial.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        "\n"
+        "def build_operations():\n"
+        "    return []\n"
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        "    initial = True\n"
+        "    dependencies = []\n"
+        "    operations = build_operations()\n"
+    )
+    calls = _install_subprocess_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert calls == []
+    assert any(
+        "operations declaration cannot be resolved statically" in blocker
+        for blocker in report.blockers
+    )
+    assert not (recipient / "properties").exists()
+
+
+def test_ledger_fixture_donor_carries_app_tokens_module_edit_and_pre_facade_settings(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One fixture donor covers both ledger fixes and the classification classes.
+
+    The donor holds a project-owned app with an unreproducible migration
+    operation, customized design tokens, a module edit, and a pre-facade
+    ``settings/production.py``; a single fresh-first run must carry, port,
+    classify, and rewrite all four without a blocker.
+    """
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0002_backfill.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        "\n"
+        "def backfill(apps, schema_editor):\n"
+        "    pass\n"
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [("properties", "0001_initial")]\n'
+        "    operations = [migrations.RunPython(backfill)]\n"
+    )
+    (donor / "beta_site" / "settings" / "production.py").write_text(
+        '"""Pre-facade donor production settings."""\n'
+        "import dj_database_url\n"
+        "from decouple import config\n"
+        "\n"
+        'database_url = config("DATABASE_URL", default=None)\n'
+        'DATABASES = {"default": dj_database_url.parse(database_url)}\n'
+        "\n"
+        'CUSTOM_SITE_SETTING = "donor-kept"\n'
+    )
+    tokens_path = donor / "frontend" / "design" / "tokens.css"
+    tokens_path.write_text(
+        tokens_path.read_text() + "\n:root { --donor-brand: gold; }\n"
+    )
+    module_edit = donor / "modules" / "auth" / "donor_note.py"
+    module_edit.parent.mkdir(parents=True)
+    module_edit.write_text("DONOR_MODULE_EDIT = True\n")
+
+    observed: list[tuple[str, bool]] = []
+    _install_subprocess_stub(
+        monkeypatch,
+        on_command=_materialize_regenerated_migration(
+            "properties",
+            carried_name="0002_carried_backfill.py",
+            observed=observed,
+        ),
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+    rewritten = (recipient / "beta_site" / "settings" / "production.py").read_text()
+    assert "resolve_runtime_database_url(" in rewritten
+    assert 'CUSTOM_SITE_SETTING = "donor-kept"' in rewritten
+    carried = recipient / "properties" / "migrations" / "0002_carried_backfill.py"
+    assert carried.is_file()
+    assert "migrations.RunPython(backfill)" in carried.read_text()
+    assert (
+        "--donor-brand: gold"
+        in (recipient / "frontend" / "design" / "tokens.css").read_text()
+    )
+    classification = report.donor_file_classification
+    assert classification is not None
+    assert classification.unclassified == []
+    assert "modules/auth/donor_note.py" in classification.module_edited
+    assert observed == [("makemigrations", False), ("migrate", True)]
+    prompt = (recipient / "MIGRATION_PROMPT.md").read_text()
+    assert "RunPython" in prompt
+
+
+def test_operations_mutated_after_declaration_blocks_before_mutation(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dynamic operations mutation must not escape inspection."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0001_initial.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        "    initial = True\n"
+        "    dependencies = []\n"
+        "    operations = []\n"
+        '    operations.append(migrations.RunSQL("ALTER TABLE properties_property '
+        'FORCE ROW LEVEL SECURITY"))\n'
+    )
+    calls = _install_subprocess_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert calls == []
+    assert any(
+        "operations are built dynamically" in blocker for blocker in report.blockers
+    )
+    assert not (recipient / "properties").exists()
+
+
+def test_operations_slice_assignment_blocks_before_mutation(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A slice assignment to operations must not escape inspection."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0001_initial.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        "    initial = True\n"
+        "    dependencies = []\n"
+        "    operations = []\n"
+        "    operations[:] = [migrations.RunSQL("
+        '"ALTER TABLE properties_property FORCE ROW LEVEL SECURITY")]\n'
+    )
+    calls = _install_subprocess_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert calls == []
+    assert any(
+        "operations are built dynamically" in blocker for blocker in report.blockers
+    )
+    assert not (recipient / "properties").exists()
+
+
+def test_module_level_mutation_of_a_carried_binding_blocks(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mutated module-level binding must not be carried as its declaration."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0002_mutated.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        'SQL = ["ALTER TABLE properties_property ENABLE ROW LEVEL SECURITY"]\n'
+        'SQL.append("ALTER TABLE properties_property FORCE ROW LEVEL SECURITY")\n'
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [("properties", "0001_initial")]\n'
+        "    operations = [migrations.RunSQL(SQL)]\n"
+    )
+    calls = _install_subprocess_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert calls == []
+    assert any(
+        "module-level mutation of 'SQL'" in blocker for blocker in report.blockers
+    )
+    assert not (recipient / "properties").exists()
+
+
+def test_loop_built_carried_binding_blocks_before_mutation(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mutation inside module-level control flow must block, not vanish."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0002_loop_sql.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        'SQL = ["ALTER TABLE properties_property ENABLE ROW LEVEL SECURITY"]\n'
+        "\n"
+        'for table in ["properties_property"]:\n'
+        '    SQL.append(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")\n'
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [("properties", "0001_initial")]\n'
+        "    operations = [migrations.RunSQL(SQL)]\n"
+    )
+    calls = _install_subprocess_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert calls == []
+    assert any(
+        "module-level mutation of 'SQL'" in blocker for blocker in report.blockers
+    )
+    assert not (recipient / "properties").exists()
+
+
+@pytest.mark.parametrize(
+    "migration_body",
+    [
+        'if True:\n        SQL = SQL + ["ALTER TABLE properties_property '
+        'FORCE ROW LEVEL SECURITY"]\n',
+        "match 1:\n"
+        "    case 1:\n"
+        '        SQL.append("ALTER TABLE properties_property '
+        'FORCE ROW LEVEL SECURITY")\n',
+        "try:\n"
+        "    raise RuntimeError\n"
+        "except* RuntimeError:\n"
+        '    SQL.append("ALTER TABLE properties_property '
+        'FORCE ROW LEVEL SECURITY")\n',
+        "if True:\n"
+        '    SQL, reverse_sql = (SQL + ["ALTER TABLE properties_property '
+        'FORCE ROW LEVEL SECURITY"], [])\n',
+        "for SQL in [["
+        '"ALTER TABLE properties_property ENABLE ROW LEVEL SECURITY"]]:\n'
+        "    pass\n",
+        "if (SQL := SQL + ["
+        '"ALTER TABLE properties_property FORCE ROW LEVEL SECURITY"]):\n'
+        "    pass\n",
+        'match ["ALTER TABLE properties_property ENABLE ROW LEVEL SECURITY"]:\n'
+        "    case SQL:\n"
+        "        pass\n",
+    ],
+    ids=[
+        "conditional-rebinding",
+        "match-body-append",
+        "try-star-append",
+        "unpacking-rebinding",
+        "loop-target-rebinding",
+        "walrus-rebinding",
+        "match-capture-rebinding",
+    ],
+)
+def test_control_flow_mutation_of_a_carried_binding_blocks(
+    project_pair: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    migration_body: str,
+) -> None:
+    """Every module-executed mutation path must block, not silently drop."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0002_control_flow.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        'SQL = ["ALTER TABLE properties_property ENABLE ROW LEVEL SECURITY"]\n'
+        "\n" + migration_body + "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [("properties", "0001_initial")]\n'
+        "    operations = [migrations.RunSQL(SQL)]\n"
+    )
+    calls = _install_subprocess_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert calls == []
+    assert any(
+        "module-level mutation of 'SQL'" in blocker for blocker in report.blockers
+    )
+    assert not (recipient / "properties").exists()
+
+
+def test_nested_receiver_mutation_of_a_carried_binding_blocks(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mutating call on a nested container of a required binding blocks."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0002_nested.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        'SQL = {"forward": ["ALTER TABLE properties_property '
+        'ENABLE ROW LEVEL SECURITY"]}\n'
+        'SQL["forward"].append("ALTER TABLE properties_property '
+        'FORCE ROW LEVEL SECURITY")\n'
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [("properties", "0001_initial")]\n'
+        '    operations = [migrations.RunSQL(SQL["forward"])]\n'
+    )
+    calls = _install_subprocess_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert report.changed_files == []
+    assert calls == []
+    assert any(
+        "module-level mutation of 'SQL'" in blocker for blocker in report.blockers
+    )
+    assert not (recipient / "properties").exists()
+
+
+def test_carried_operation_keeps_multiline_string_literal_values(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-indenting a carried operation must not change its string values."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0002_sql.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [("properties", "0001_initial")]\n'
+        "    operations = [\n"
+        '        migrations.RunSQL("""INSERT INTO notes (body) VALUES (\'hello\n'
+        'world\')"""),\n'
+        "    ]\n"
+    )
+    observed: list[tuple[str, bool]] = []
+    _install_subprocess_stub(
+        monkeypatch,
+        on_command=_materialize_regenerated_migration(
+            "properties",
+            carried_name="0002_carried_sql.py",
+            observed=observed,
+        ),
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+    carried = (
+        recipient / "properties" / "migrations" / "0002_carried_sql.py"
+    ).read_text()
+    assert "'hello\nworld'" in carried
+    assert "'hello\n        world'" not in carried
+
+
+def test_multiple_carried_migrations_chain_by_module_name(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each carried migration depends on the previous migration's module name."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    for number, stem in ((2, "first"), (3, "second")):
+        previous = "0001_initial" if number == 2 else "0002_first"
+        (donor / "properties" / "migrations" / f"{number:04d}_{stem}.py").write_text(
+            "from django.db import migrations\n"
+            "\n"
+            "\n"
+            f"def {stem}(apps, schema_editor):\n"
+            "    pass\n"
+            "\n"
+            "\n"
+            "class Migration(migrations.Migration):\n"
+            f'    dependencies = [("properties", "{previous}")]\n'
+            f"    operations = [migrations.RunPython({stem})]\n"
+        )
+    observed: list[tuple[str, bool]] = []
+    _install_subprocess_stub(
+        monkeypatch,
+        on_command=_materialize_regenerated_migration(
+            "properties",
+            carried_name="0002_carried_first.py",
+            observed=observed,
+        ),
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+    first = recipient / "properties" / "migrations" / "0002_carried_first.py"
+    second = recipient / "properties" / "migrations" / "0003_carried_second.py"
+    assert first.is_file()
+    assert second.is_file()
+    assert 'dependencies = [("properties", "0001_initial")]' in first.read_text()
+    assert 'dependencies = [("properties", "0002_carried_first")]' in second.read_text()
+
+    graph = MigrationGraph()
+    for path in (recipient / "properties" / "migrations").glob("*.py"):
+        if path.name == "__init__.py":
+            continue
+        graph.add_node(("properties", path.stem), None)
+        for app_label, dependency_name in _migration_dependency_edges(path):
+            graph.add_dependency(
+                None,
+                ("properties", path.stem),
+                (app_label, dependency_name),
+            )
+    assert ("properties", "0003_carried_second") in graph.leaf_nodes()
+
+
+def test_carried_definition_keeps_decorators(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A carried callback keeps the decorator it was defined with."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0002_decorated.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        "\n"
+        "def wrap(function):\n"
+        "    return function\n"
+        "\n"
+        "\n"
+        "@wrap\n"
+        "def decorated(apps, schema_editor):\n"
+        "    pass\n"
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [("properties", "0001_initial")]\n'
+        "    operations = [migrations.RunPython(decorated)]\n"
+    )
+    observed: list[tuple[str, bool]] = []
+    _install_subprocess_stub(
+        monkeypatch,
+        on_command=_materialize_regenerated_migration(
+            "properties",
+            carried_name="0002_carried_decorated.py",
+            observed=observed,
+        ),
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+    carried = (
+        recipient / "properties" / "migrations" / "0002_carried_decorated.py"
+    ).read_text()
+    assert "@wrap" in carried
+    assert "def decorated(apps, schema_editor):" in carried
+
+
+def test_carried_migration_chains_after_a_multi_file_initial_graph(
+    project_pair: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A carry chains from the terminal migration of a multi-file initial graph."""
+    donor, recipient = project_pair
+    _add_project_app(donor, "properties")
+    (donor / "properties" / "migrations" / "0002_backfill.py").write_text(
+        "from django.db import migrations\n"
+        "\n"
+        "\n"
+        "def backfill(apps, schema_editor):\n"
+        "    pass\n"
+        "\n"
+        "\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [("properties", "0001_initial")]\n'
+        "    operations = [migrations.RunPython(backfill)]\n"
+    )
+
+    def materialize(command: tuple[str, ...], working_dir: Path) -> None:
+        if "makemigrations" not in command:
+            return
+        migrations_dir = working_dir / "properties" / "migrations"
+        migrations_dir.mkdir(parents=True, exist_ok=True)
+        (migrations_dir / "__init__.py").write_text("")
+        (migrations_dir / "0001_initial.py").write_text(
+            "from django.db import migrations\n"
+            "\n"
+            "\n"
+            "class Migration(migrations.Migration):\n"
+            "    initial = True\n"
+            "    dependencies = []\n"
+            "    operations = []\n"
+        )
+        (migrations_dir / "0002_initial.py").write_text(
+            "from django.db import migrations\n"
+            "\n"
+            "\n"
+            "class Migration(migrations.Migration):\n"
+            "    initial = True\n"
+            '    dependencies = [("properties", "0001_initial"), ("auth", "0001_initial")]\n'
+            "    operations = []\n"
+        )
+
+    _install_subprocess_stub(monkeypatch, on_command=materialize)
+
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+    carried = recipient / "properties" / "migrations" / "0003_carried_backfill.py"
+    assert carried.is_file()
+    assert 'dependencies = [("properties", "0002_initial")]' in carried.read_text()
 
 
 def test_iterate_validates_donor_apps_before_regeneration(

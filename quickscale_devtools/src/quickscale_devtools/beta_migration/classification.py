@@ -167,7 +167,12 @@ def _recipient_counterpart(
 def _is_recognized_project_root(
     relative_path: str, package: str, app_names: tuple[str, ...] = ()
 ) -> bool:
-    """Return whether a non-emitted path sits under a recognized donor root."""
+    """Return whether a non-emitted path sits under a recognized donor root.
+
+    Top-level Markdown documents are donor-owned project documentation: the
+    generator emits its own root documents by name, so any other root ``.md``
+    file is recognized rather than blocking as unclassified.
+    """
     parts = relative_path.split("/")
     if len(parts) > 1:
         return (
@@ -175,7 +180,10 @@ def _is_recognized_project_root(
             or parts[0] == package
             or parts[0] in app_names
         )
-    return relative_path in DONOR_RECOGNIZED_PROJECT_ROOT_FILES
+    return (
+        relative_path in DONOR_RECOGNIZED_PROJECT_ROOT_FILES
+        or relative_path.endswith(".md")
+    )
 
 
 def _classify_donor_file(

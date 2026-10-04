@@ -23,6 +23,7 @@ Steps completed:
 - copy-custom-router-and-pages
 - copy-custom-components-and-utilities
 - copy-selected-django-files
+- rewrite-pre-facade-production-settings
 - copy-project-owned-apps
 - register-and-mount-project-owned-apps
 - sync-missing-path-dependencies

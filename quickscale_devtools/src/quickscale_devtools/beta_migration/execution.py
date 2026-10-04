@@ -39,8 +39,13 @@ from .preflight import (
 )
 from .project_apps import (
     _copy_project_app,
+    _execute_carry_project_app_migrations,
     _mount_project_app_urls,
     _register_project_apps,
+)
+from .settings_facade import (
+    _plan_pre_facade_settings_rewrite,
+    _write_rewritten_settings,
 )
 from .regeneration import (
     _execute_regenerate_recipient,
@@ -236,6 +241,42 @@ def _execute_copy_selected_django_files(report: BetaMigrationReport) -> None:
         report,
         step="copy-selected-django-files",
         detail=f"Copied donor Django files: {', '.join(copied_files) or '(none)'}",
+    )
+
+
+def _execute_rewrite_pre_facade_production_settings(
+    report: BetaMigrationReport,
+) -> None:
+    """Rewrite a recognized pre-facade donor database selection onto the facade."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    donor_settings = report.donor.package_dir / "settings" / "production.py"
+    rewrite = _plan_pre_facade_settings_rewrite(donor_settings)
+    if rewrite is None:
+        _append_completed_step(
+            report,
+            step="rewrite-pre-facade-production-settings",
+            detail=(
+                "Donor settings/production.py already selects its database through the "
+                "QuickScale runtime settings facade; no rewrite was required."
+            ),
+        )
+        return
+
+    recipient_settings = report.recipient.package_dir / "settings" / "production.py"
+    _write_rewritten_settings(recipient_settings, rewrite)
+    _record_changed_file(report, recipient_settings)
+    carried = ", ".join(rewrite.carried_settings) or "(none)"
+    _append_completed_step(
+        report,
+        step="rewrite-pre-facade-production-settings",
+        detail=(
+            "Rewrote the donor's pre-facade database selection "
+            f"(lines {rewrite.contract_lines[0]}-{rewrite.contract_lines[1]}) through the "
+            f"QuickScale runtime settings facade in {recipient_settings}; carried donor "
+            f"settings unchanged: {carried}."
+        ),
     )
 
 
@@ -483,6 +524,10 @@ def _execute_verification_stack(report: BetaMigrationReport) -> None:
 
     for spec in _verification_command_specs(report):
         _run_verification_command(report, spec)
+        if "makemigrations" in spec.argv:
+            # The regenerated initial migration exists now; append the carried
+            # donor operations before the stack's migrate command runs.
+            _execute_carry_project_app_migrations(report)
 
     _append_completed_step(
         report,
@@ -519,6 +564,10 @@ def _execute_fresh_first(report: BetaMigrationReport) -> BetaMigrationReport:
             _execute_copy_custom_components_and_utilities,
         ),
         ("copy-selected-django-files", _execute_copy_selected_django_files),
+        (
+            "rewrite-pre-facade-production-settings",
+            _execute_rewrite_pre_facade_production_settings,
+        ),
         ("copy-project-owned-apps", _execute_copy_project_owned_apps),
         (
             "register-and-mount-project-owned-apps",

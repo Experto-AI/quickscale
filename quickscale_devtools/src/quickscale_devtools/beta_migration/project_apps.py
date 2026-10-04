@@ -23,15 +23,19 @@ from .model import (
     ProjectSnapshot,
     _append_blocker,
     _append_check,
+    _append_completed_step,
     _record_changed_file,
     _remove_path,
 )
 from ..handoff_prompt import _write_text_atomically
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 import ast
+import builtins
 import os
 import shutil
+import symtable
 
 
 PROJECT_APP_MARKERS: tuple[str, ...] = (
@@ -882,6 +886,938 @@ def _migration_owned_operations(app_dir: Path) -> list[str]:
     return flagged
 
 
+@dataclass(frozen=True)
+class CarriedMigration:
+    """One recipient migration appending donor operations that cannot regenerate.
+
+    ``name`` is the recipient-relative migration file name; ``content`` is a
+    complete, compile-checked migration module that carries only the donor's
+    non-autodetector operations plus the module-level code they reference.
+    """
+
+    donor_name: str
+    name: str
+    content: str
+    operation_names: tuple[str, ...]
+
+
+_BUILTIN_NAMES: frozenset[str] = frozenset(dir(builtins))
+
+_SUPPORTED_MIGRATION_CLASS_ATTRIBUTES: frozenset[str] = frozenset(
+    {"atomic", "dependencies", "initial", "operations"}
+)
+
+_OPERATIONS_MUTATING_METHODS: frozenset[str] = frozenset(
+    {"append", "extend", "insert", "remove", "pop", "clear", "sort", "reverse"}
+)
+
+_NAMESPACE_MUTATING_METHODS: frozenset[str] = frozenset(
+    {
+        "add",
+        "append",
+        "clear",
+        "discard",
+        "extend",
+        "insert",
+        "pop",
+        "remove",
+        "reverse",
+        "setdefault",
+        "sort",
+        "update",
+    }
+)
+
+
+def _module_executed_statements(
+    statements: list[ast.stmt], *, nested: bool = False
+) -> Iterator[tuple[ast.stmt, bool]]:
+    """Yield statements that execute at module import, with a nested flag.
+
+    Function and class bodies are deliberately not entered: their locals are
+    not module state, so only the statements run while the migration module is
+    imported can mutate a required binding.  ``nested`` is True for statements
+    inside control flow, where a plain-name binding is a rebinding the carry
+    does not reproduce.
+    """
+    for node in statements:
+        yield node, nested
+        child_statements: list[ast.stmt] = []
+        if isinstance(node, ast.If):
+            child_statements = [*node.body, *node.orelse]
+        elif isinstance(node, (ast.For, ast.AsyncFor, ast.While)):
+            child_statements = [*node.body, *node.orelse]
+        elif isinstance(node, ast.Try):
+            child_statements = node.body
+            for handler in node.handlers:
+                child_statements = [*child_statements, *handler.body]
+            child_statements = [*child_statements, *node.orelse, *node.finalbody]
+        elif isinstance(node, ast.TryStar):
+            child_statements = node.body
+            for handler in node.handlers:
+                child_statements = [*child_statements, *handler.body]
+            child_statements = [*child_statements, *node.orelse, *node.finalbody]
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            child_statements = node.body
+        elif isinstance(node, ast.Match):
+            child_statements = [
+                statement for case in node.cases for statement in case.body
+            ]
+        if child_statements:
+            yield from _module_executed_statements(child_statements, nested=True)
+
+
+def _module_executed_expression_nodes(node: ast.stmt) -> Iterator[ast.AST]:
+    """Yield nodes a module-executed statement evaluates, skipping scopes.
+
+    Decorators, defaults, annotations, and base classes are evaluated at
+    import like any other expression, while a nested function, class, or
+    lambda body is not.
+    """
+    pending: list[ast.AST] = []
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        pending.extend(node.decorator_list)
+        arguments = node.args
+        pending.extend(arg for arg in arguments.defaults if arg is not None)
+        pending.extend(arg for arg in arguments.kw_defaults if arg is not None)
+        for argument in [
+            *arguments.posonlyargs,
+            *arguments.args,
+            *arguments.kwonlyargs,
+        ]:
+            if argument.annotation is not None:
+                pending.append(argument.annotation)
+        for optional_argument in (arguments.vararg, arguments.kwarg):
+            if (
+                optional_argument is not None
+                and optional_argument.annotation is not None
+            ):
+                pending.append(optional_argument.annotation)
+        if node.returns is not None:
+            pending.append(node.returns)
+    elif isinstance(node, ast.ClassDef):
+        pending.extend(node.bases)
+        pending.extend(node.keywords)
+        pending.extend(node.decorator_list)
+    else:
+        pending.extend(
+            child
+            for child in ast.iter_child_nodes(node)
+            if not isinstance(
+                child,
+                (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda),
+            )
+        )
+    while pending:
+        current = pending.pop()
+        yield current
+        if isinstance(
+            current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        ):
+            continue
+        pending.extend(ast.iter_child_nodes(current))
+
+
+def _target_names(target: ast.expr) -> Iterator[str]:
+    """Yield every module name a binding target binds, unpacking nested targets."""
+    if isinstance(target, ast.Name):
+        yield target.id
+    elif isinstance(target, (ast.Tuple, ast.List)):
+        for element in target.elts:
+            yield from _target_names(element)
+    elif isinstance(target, ast.Starred):
+        yield from _target_names(target.value)
+    elif isinstance(target, (ast.Subscript, ast.Attribute)):
+        # An inner mutation of the object a name refers to.
+        yield from _target_names(target.value)
+
+
+def _statement_binding_targets(node: ast.stmt) -> list[ast.expr]:
+    """Return the binding targets a module-executed statement establishes."""
+    if isinstance(node, ast.Assign):
+        return list(node.targets)
+    if isinstance(node, ast.AugAssign):
+        return [node.target]
+    if isinstance(node, ast.AnnAssign):
+        return [node.target]
+    if isinstance(node, ast.Delete):
+        return list(node.targets)
+    if isinstance(node, (ast.For, ast.AsyncFor)):
+        return [node.target]
+    if isinstance(node, (ast.With, ast.AsyncWith)):
+        return [
+            item.optional_vars for item in node.items if item.optional_vars is not None
+        ]
+    return []
+
+
+def _match_pattern_names(pattern: ast.pattern) -> Iterator[str]:
+    """Yield every name a module-executed ``match`` pattern captures."""
+    if isinstance(pattern, ast.MatchAs) and pattern.name:
+        yield pattern.name
+    elif isinstance(pattern, ast.MatchStar) and pattern.name:
+        yield pattern.name
+    elif isinstance(pattern, ast.MatchMapping) and pattern.rest:
+        yield pattern.rest
+    for child in ast.iter_child_nodes(pattern):
+        if isinstance(child, ast.pattern):
+            yield from _match_pattern_names(child)
+
+
+def _module_level_mutation(tree: ast.Module, names: set[str]) -> str | None:
+    """Return the first mutation of one of *names* that module import runs.
+
+    A binding mutated after its declaration (``SQL.append(...)`` in a loop,
+    ``MAPPING["key"] = ...``, an ``if``-nested rebinding or unpacking,
+    a loop target, ``SQL += [...]``, ``del SQL[...]``) is not reproduced by
+    carrying the declaration's source segment, so carrying a reference to it
+    would change the operation silently.
+    """
+    for node, nested in _module_executed_statements(tree.body):
+        for target in _statement_binding_targets(node):
+            bound = set(_target_names(target))
+            if not bound & names:
+                continue
+            if (
+                not nested
+                and isinstance(node, (ast.Assign, ast.AnnAssign))
+                and isinstance(target, ast.Name)
+            ):
+                continue  # the module-level declaration itself is carried
+            return sorted(bound & names)[0]
+        if isinstance(node, (ast.Try, ast.TryStar)):
+            for handler in node.handlers:
+                if handler.name in names:
+                    return handler.name
+        if isinstance(node, ast.Match):
+            for case in node.cases:
+                captured = set(_match_pattern_names(case.pattern))
+                if captured & names:
+                    return sorted(captured & names)[0]
+        for child in _module_executed_expression_nodes(node):
+            if (
+                isinstance(child, ast.NamedExpr)
+                and isinstance(child.target, ast.Name)
+                and child.target.id in names
+            ):
+                return child.target.id
+            if (
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and child.func.attr in _NAMESPACE_MUTATING_METHODS
+            ):
+                receiver_names = set(_target_names(child.func.value))
+                if receiver_names & names:
+                    return sorted(receiver_names & names)[0]
+    return None
+
+
+def _module_level_bindings(tree: ast.Module) -> dict[str, list[ast.stmt]]:
+    """Map every name bound at module level to the statements that bind it."""
+    bindings: dict[str, list[ast.stmt]] = {}
+    for node in tree.body:
+        names: list[str] = []
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.append(node.name)
+        elif isinstance(node, ast.Import):
+            names.extend(
+                alias.asname or alias.name.split(".", maxsplit=1)[0]
+                for alias in node.names
+            )
+        elif isinstance(node, ast.ImportFrom):
+            names.extend(alias.asname or alias.name for alias in node.names)
+        elif isinstance(node, ast.Assign):
+            names.extend(
+                target.id for target in node.targets if isinstance(target, ast.Name)
+            )
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            if isinstance(node.target, ast.Name):
+                names.append(node.target.id)
+        for name in names:
+            bindings.setdefault(name, []).append(node)
+    return bindings
+
+
+def _referenced_names(node: ast.AST) -> set[str]:
+    """Return every name a node reads."""
+    return {
+        child.id
+        for child in ast.walk(node)
+        if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
+    }
+
+
+def _validate_operations_declaration(
+    migration_class: ast.ClassDef, *, donor_name: str
+) -> None:
+    """Reject any dynamic construction of the operations list.
+
+    A later ``operations.append(...)`` would otherwise escape the literal-list
+    inspection and be removed with the donor history, silently dropping the
+    operation it added.
+    """
+    for statement in migration_class.body:
+        if isinstance(
+            statement,
+            (
+                ast.If,
+                ast.For,
+                ast.AsyncFor,
+                ast.While,
+                ast.Try,
+                ast.With,
+                ast.AsyncWith,
+            ),
+        ):
+            raise ValueError(
+                f"{donor_name}: the Migration class contains a dynamic "
+                "statement that cannot be inspected"
+            )
+
+    def _mutates_operations(target: ast.expr, *, declaration: bool) -> bool:
+        if isinstance(target, ast.Name):
+            # A plain name target is the single operations declaration; any
+            # other plain-name binding of it (augmented or deleted) is dynamic.
+            return target.id == "operations" and not declaration
+        return (
+            isinstance(target, (ast.Subscript, ast.Attribute))
+            and isinstance(target.value, ast.Name)
+            and target.value.id == "operations"
+        )
+
+    for node in ast.walk(migration_class):
+        mutation = False
+        if isinstance(node, ast.AugAssign):
+            mutation = _mutates_operations(node.target, declaration=False)
+        elif isinstance(node, ast.AnnAssign):
+            mutation = _mutates_operations(node.target, declaration=True)
+        elif isinstance(node, ast.Assign):
+            mutation = any(
+                _mutates_operations(target, declaration=True) for target in node.targets
+            )
+        elif isinstance(node, ast.Delete):
+            mutation = any(
+                _mutates_operations(target, declaration=False)
+                for target in node.targets
+            )
+        if mutation:
+            raise ValueError(f"{donor_name}: operations are built dynamically")
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "operations"
+            and node.func.attr in _OPERATIONS_MUTATING_METHODS
+        ):
+            raise ValueError(f"{donor_name}: operations are built dynamically")
+
+
+def _definition_source_segment(text: str, statement: ast.stmt) -> str | None:
+    """Return a definition's source including its decorators.
+
+    ``ast.get_source_segment`` starts a decorated function or class at the
+    ``def``/``class`` line, so the decorator lines must be included explicitly
+    or the carried definition would silently lose its wrapper.
+    """
+    decorators = getattr(statement, "decorator_list", [])
+    start = statement.lineno
+    if decorators:
+        start = min(start, *(decorator.lineno for decorator in decorators))
+    end = statement.end_lineno
+    if end is None:
+        return ast.get_source_segment(text, statement)
+    lines = text.splitlines(keepends=True)
+    return "".join(lines[start - 1 : end])
+
+
+def _symtable_global_names(table: symtable.SymbolTable) -> set[str]:
+    """Return the module-level names a symbol table (and its children) read."""
+    names = {
+        symbol.get_name()
+        for symbol in table.get_symbols()
+        if symbol.is_referenced() and symbol.is_global()
+    }
+    for child in table.get_children():
+        names |= _symtable_global_names(child)
+    return names
+
+
+def _evaluated_definition_names(statement: ast.stmt) -> set[str]:
+    """Return the names a def/class statement reads in its enclosing scope.
+
+    Decorators, default values, annotations, and base classes are evaluated
+    where the definition is created, not inside it, so they are module
+    dependencies like any other reference.
+    """
+    nodes: list[ast.AST] = []
+    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        nodes.extend(statement.decorator_list)
+        arguments = statement.args
+        nodes.extend(arg for arg in arguments.defaults if arg is not None)
+        nodes.extend(arg for arg in arguments.kw_defaults if arg is not None)
+        for argument in [
+            *arguments.posonlyargs,
+            *arguments.args,
+            *arguments.kwonlyargs,
+        ]:
+            if argument.annotation is not None:
+                nodes.append(argument.annotation)
+        for optional_argument in (arguments.vararg, arguments.kwarg):
+            if (
+                optional_argument is not None
+                and optional_argument.annotation is not None
+            ):
+                nodes.append(optional_argument.annotation)
+        if statement.returns is not None:
+            nodes.append(statement.returns)
+    elif isinstance(statement, ast.ClassDef):
+        nodes.extend(statement.bases)
+        nodes.extend(statement.keywords)
+        nodes.extend(statement.decorator_list)
+    names: set[str] = set()
+    for node in nodes:
+        names |= _referenced_names(node)
+    return names
+
+
+def _definition_required_names(text: str) -> dict[str, set[str]]:
+    """Map each top-level def/class name to the module names it requires.
+
+    The interpreter's own symbol tables decide scope, so function parameters,
+    local assignments, comprehension targets, and class namespaces are never
+    mistaken for module-level dependencies.
+    """
+    try:
+        module_table = symtable.symtable(text, "<migration>", "exec")
+        tree = ast.parse(text)
+    except SyntaxError:
+        return {}
+    children = {child.get_name(): child for child in module_table.get_children()}
+    required: dict[str, set[str]] = {}
+    for statement in tree.body:
+        if not isinstance(
+            statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            continue
+        table = children.get(statement.name)
+        names = _symtable_global_names(table) if table is not None else set()
+        names |= _evaluated_definition_names(statement)
+        required[statement.name] = names
+    return required
+
+
+def _class_attribute_declaration(node: ast.ClassDef, attribute: str) -> ast.expr | None:
+    """Return the class body's value for an attribute, or None when absent.
+
+    Raises when the attribute is declared more than once or through an
+    augmented assignment, because its effective value cannot be established
+    statically.
+    """
+    value: ast.expr | None = None
+    declarations = 0
+    for statement in node.body:
+        if isinstance(statement, ast.AugAssign):
+            if (
+                isinstance(statement.target, ast.Name)
+                and statement.target.id == attribute
+            ):
+                raise ValueError(f"{attribute} is built dynamically")
+            continue
+        if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = (
+            statement.targets
+            if isinstance(statement, ast.Assign)
+            else [statement.target]
+        )
+        if not any(
+            isinstance(target, ast.Name) and target.id == attribute
+            for target in targets
+        ):
+            continue
+        declarations += 1
+        value = statement.value
+    if declarations > 1:
+        raise ValueError(f"{attribute} is declared more than once")
+    return value
+
+
+def _validate_migration_class_attributes(
+    migration_class: ast.ClassDef, *, donor_name: str
+) -> None:
+    """Fail closed on Migration class statements the carry cannot reproduce."""
+    for statement in migration_class.body:
+        if isinstance(statement, ast.Expr):
+            continue  # class docstring
+        if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            raise ValueError(
+                f"{donor_name}: the Migration class contains a statement that "
+                "cannot be carried"
+            )
+        for target in (
+            statement.targets
+            if isinstance(statement, ast.Assign)
+            else [statement.target]
+        ):
+            if not isinstance(target, ast.Name) or (
+                target.id not in _SUPPORTED_MIGRATION_CLASS_ATTRIBUTES
+            ):
+                raise ValueError(
+                    f"{donor_name}: the Migration class declares unsupported "
+                    f"attribute {getattr(target, 'id', '?')!r}"
+                )
+
+
+def _validate_migration_dependencies(
+    migration_class: ast.ClassDef, *, label: str, donor_name: str
+) -> None:
+    """Fail closed unless every dependency edge is a same-app literal."""
+    dependencies = _class_attribute_declaration(migration_class, "dependencies")
+    if dependencies is None:
+        return
+    if not isinstance(dependencies, (ast.List, ast.Tuple)):
+        raise ValueError(f"{donor_name}: dependencies cannot be resolved statically")
+    for element in dependencies.elts:
+        if not (isinstance(element, (ast.Tuple, ast.List)) and len(element.elts) == 2):
+            raise ValueError(
+                f"{donor_name}: dependencies cannot be resolved statically"
+            )
+        app_label, migration_name = element.elts
+        if not (
+            isinstance(app_label, ast.Constant)
+            and isinstance(app_label.value, str)
+            and isinstance(migration_name, ast.Constant)
+            and isinstance(migration_name.value, str)
+        ):
+            raise ValueError(
+                f"{donor_name}: dependencies cannot be resolved statically"
+            )
+        if app_label.value != label:
+            raise ValueError(
+                f"{donor_name}: depends on app {app_label.value!r}; only "
+                "same-app dependencies can be carried safely"
+            )
+
+
+def _migration_class_is_atomic(
+    migration_class: ast.ClassDef, *, donor_name: str
+) -> bool:
+    """Return whether the Migration class declares a literal ``atomic = False``."""
+    atomic = _class_attribute_declaration(migration_class, "atomic")
+    if atomic is None:
+        return False
+    if isinstance(atomic, ast.Constant) and atomic.value is False:
+        return True
+    raise ValueError(f"{donor_name}: atomic cannot be resolved statically")
+
+
+def _validate_migration_class(
+    migration_class: ast.ClassDef, *, label: str, donor_name: str
+) -> bool:
+    """Validate a donor Migration class and return whether it is non-atomic."""
+    _validate_migration_class_attributes(migration_class, donor_name=donor_name)
+    _validate_migration_dependencies(
+        migration_class, label=label, donor_name=donor_name
+    )
+    return _migration_class_is_atomic(migration_class, donor_name=donor_name)
+
+
+def _carried_operation_elements(
+    operations: ast.List | ast.Tuple,
+    *,
+    donor_name: str,
+) -> list[ast.Call]:
+    """Return the operations the autodetector cannot regenerate.
+
+    A non-call element, or a call whose operation name cannot be read, fails
+    closed because the tool cannot classify or carry it.
+    """
+    kept: list[ast.Call] = []
+    elements = operations.elts
+    for element in elements:
+        if not isinstance(element, ast.Call):
+            raise ValueError(
+                f"{donor_name}:{getattr(element, 'lineno', '?')} unresolved operation"
+            )
+        operation_name = _migration_operation_name(element)
+        if operation_name is None:
+            raise ValueError(
+                f"{donor_name}:{getattr(element, 'lineno', '?')} unresolved operation"
+            )
+        if operation_name not in _AUTODETECTOR_OPERATION_NAMES:
+            kept.append(element)
+    return kept
+
+
+def _render_carried_migration(
+    *,
+    text: str,
+    tree: ast.Module,
+    kept_operations: list[ast.Call],
+    donor_name: str,
+    name: str,
+    label: str,
+    dependency: str,
+    atomic: bool,
+) -> CarriedMigration:
+    """Render one appended migration carrying the donor's unreproducible ops."""
+    bindings = _module_level_bindings(tree)
+    if "migrations" not in bindings:
+        raise ValueError(
+            f"{donor_name}: no module-level 'migrations' import is available to carry"
+        )
+
+    needed: set[str] = {"migrations"}
+    for operation in kept_operations:
+        needed |= _referenced_names(operation)
+
+    definition_requirements = _definition_required_names(text)
+    selected: list[ast.stmt] = []
+    seen: set[int] = set()
+    required_bindings: set[str] = set()
+    frontier = set(needed)
+    while frontier:
+        required_name = frontier.pop()
+        if required_name in _BUILTIN_NAMES:
+            continue
+        statements = bindings.get(required_name)
+        if statements is None:
+            raise ValueError(
+                f"{donor_name}: a carried operation references "
+                f"{required_name!r}, which is not defined at module level"
+            )
+        required_bindings.add(required_name)
+        for statement in statements:
+            if id(statement) in seen:
+                continue
+            seen.add(id(statement))
+            selected.append(statement)
+            if (
+                isinstance(
+                    statement,
+                    (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+                )
+                and statement.name in definition_requirements
+            ):
+                frontier |= definition_requirements[statement.name]
+            else:
+                frontier |= _referenced_names(statement)
+    mutation = _module_level_mutation(tree, required_bindings)
+    if mutation is not None:
+        raise ValueError(
+            f"{donor_name}: module-level mutation of {mutation!r} cannot be "
+            "carried safely; re-express the operation without a mutated binding"
+        )
+    selected.sort(key=lambda node: (node.lineno, node.col_offset))
+
+    header_segments = [
+        segment
+        for segment in (
+            _definition_source_segment(text, statement) for statement in selected
+        )
+        if segment is not None
+    ]
+    operation_segments: list[str] = []
+    operation_names: list[str] = []
+    for operation in kept_operations:
+        segment = ast.get_source_segment(text, operation)
+        if segment is None:
+            raise ValueError(
+                f"{donor_name}:{operation.lineno}: operation source cannot be extracted"
+            )
+        operation_names.append(
+            f"{_migration_operation_name(operation)} (line {operation.lineno})"
+        )
+        # Indent only the first physical line: the operation sits inside a
+        # bracketed list, so continuation lines need no re-indentation and
+        # re-indenting them would alter multiline string literal values.
+        operation_segments.append("        " + segment)
+
+    lines = [
+        f'"""Carried donor migration operations from {donor_name}.',
+        "",
+        "Generated by the QuickScale beta migration: the donor operations below",
+        "cannot be regenerated from the current models, so the recipient carries",
+        "them in an appended migration after the regenerated initial state.",
+        '"""',
+        "",
+        "\n\n".join(header_segments),
+        "",
+        "class Migration(migrations.Migration):",
+        f'    dependencies = [("{label}", "{dependency}")]',
+    ]
+    if atomic:
+        lines.append("    atomic = False")
+    lines.append("")
+    lines.append("    operations = [")
+    lines.append(",\n".join(operation_segments))
+    lines.append("    ]")
+    content = "\n".join(lines) + "\n"
+    try:
+        compile(content, name, "exec")
+    except SyntaxError as error:
+        raise ValueError(
+            f"{donor_name}: carried operations cannot be rendered as valid Python: {error}"
+        ) from error
+    return CarriedMigration(
+        donor_name=donor_name,
+        name=name,
+        content=content,
+        operation_names=tuple(operation_names),
+    )
+
+
+def _plan_carried_migrations(
+    app_dir: Path,
+    label: str,
+    *,
+    base_dependency: str = "0001_initial",
+    start_index: int = 2,
+) -> list[CarriedMigration]:
+    """Plan recipient migrations carrying every unreproducible donor operation.
+
+    Raises ValueError naming the exact migration and construct when any donor
+    migration cannot be carried safely, so the caller fails closed before
+    mutation instead of dropping the operation silently.  ``base_dependency``
+    names the regenerated migration the first carry chains from, and
+    ``start_index`` its file number; execution re-plans with the recipient's
+    actual regenerated graph, which can be a multi-file initial state.
+    """
+    migrations_dir = app_dir / "migrations"
+    if not migrations_dir.is_dir():
+        return []
+    carried: list[CarriedMigration] = []
+    index = start_index
+    for migration_path in sorted(migrations_dir.glob("*.py")):
+        if migration_path.name == "__init__.py":
+            continue
+        try:
+            text = migration_path.read_text()
+        except OSError as exc:
+            raise ValueError(
+                f"{migration_path.name}: unreadable migration ({exc})"
+            ) from exc
+        try:
+            tree = ast.parse(text, filename=str(migration_path))
+        except SyntaxError as exc:
+            raise ValueError(
+                f"{migration_path.name}: unparseable migration ({exc})"
+            ) from exc
+        migration_class = _class_named(tree, "Migration")
+        if migration_class is None:
+            declares_operations = any(
+                isinstance(node, ast.Assign)
+                and any(
+                    isinstance(target, ast.Name) and target.id == "operations"
+                    for target in node.targets
+                )
+                for node in ast.walk(tree)
+            )
+            if declares_operations:
+                raise ValueError(
+                    f"{migration_path.name}: no Migration class declares its operations"
+                )
+            continue
+        _validate_operations_declaration(
+            migration_class, donor_name=migration_path.name
+        )
+        operations = _class_attribute_declaration(migration_class, "operations")
+        if operations is None:
+            continue
+        if not isinstance(operations, (ast.List, ast.Tuple)):
+            raise ValueError(
+                f"{migration_path.name}: operations declaration cannot be resolved "
+                "statically"
+            )
+        kept_operations = _carried_operation_elements(
+            operations, donor_name=migration_path.name
+        )
+        if not kept_operations:
+            continue
+        atomic = _validate_migration_class(
+            migration_class, label=label, donor_name=migration_path.name
+        )
+        suffix = migration_path.stem.lstrip("0123456789_") or "operations"
+        name = f"{index:04d}_carried_{suffix}.py"
+        dependency = (
+            carried[-1].name.removesuffix(".py") if carried else base_dependency
+        )
+        carried.append(
+            _render_carried_migration(
+                text=text,
+                tree=tree,
+                kept_operations=kept_operations,
+                donor_name=migration_path.name,
+                name=name,
+                label=label,
+                dependency=dependency,
+                atomic=atomic,
+            )
+        )
+        index += 1
+    return carried
+
+
+def _project_app_carry_plan(
+    donor: ProjectSnapshot,
+) -> list[tuple[str, CarriedMigration]]:
+    """Return every app migration the fresh-first execution must carry.
+
+    A planning failure skips the app here only because the preflight has
+    already validated it and recorded a blocker on failure; execution plans
+    each app directly and fails closed instead of using this preview.
+    """
+    plan: list[tuple[str, CarriedMigration]] = []
+    for app_name in donor.project_apps:
+        app_dir = donor.path / app_name
+        try:
+            label = _project_app_label(
+                app_dir,
+                registration=_donor_app_registration(
+                    donor.path, donor.identity.package, app_name
+                ),
+            )
+            migrations = _plan_carried_migrations(app_dir, label)
+        except OSError, SyntaxError, ValueError:
+            continue
+        plan.extend((app_name, migration) for migration in migrations)
+    return plan
+
+
+def _migration_dependency_names(
+    migration_class: ast.ClassDef, *, label: str
+) -> set[str]:
+    """Return the same-app migration names a Migration class depends on."""
+    dependencies = _class_attribute_declaration(migration_class, "dependencies")
+    if not isinstance(dependencies, (ast.List, ast.Tuple)):
+        return set()
+    names: set[str] = set()
+    for element in dependencies.elts:
+        if not (isinstance(element, (ast.Tuple, ast.List)) and len(element.elts) == 2):
+            continue
+        app_label, migration_name = element.elts
+        if (
+            isinstance(app_label, ast.Constant)
+            and app_label.value == label
+            and isinstance(migration_name, ast.Constant)
+            and isinstance(migration_name.value, str)
+        ):
+            names.add(migration_name.value)
+    return names
+
+
+def _regenerated_migration_terminal(
+    migrations_dir: Path, *, label: str, donor_name: str
+) -> tuple[str, int]:
+    """Return the terminal regenerated migration and the next free number.
+
+    ``makemigrations`` can emit more than one initial migration when project
+    apps reference each other, so a carry must chain from the recipient's
+    actual terminal leaf instead of assuming ``0001_initial``, and its number
+    must not collide with that multi-file graph.
+    """
+    names: set[str] = set()
+    dependencies: dict[str, set[str]] = {}
+    highest = 1
+    for path in sorted(migrations_dir.glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        stem = path.stem
+        names.add(stem)
+        prefix = stem.split("_", 1)[0]
+        if prefix.isdigit():
+            highest = max(highest, int(prefix))
+        try:
+            tree = ast.parse(path.read_text(), filename=str(path))
+        except (OSError, SyntaxError) as exc:
+            raise ValueError(
+                f"Cannot inspect the regenerated migration {path.name} for "
+                f"{donor_name}: {exc}"
+            ) from exc
+        migration_class = _class_named(tree, "Migration")
+        if migration_class is not None:
+            dependencies[stem] = _migration_dependency_names(
+                migration_class, label=label
+            )
+    if not names:
+        raise ValueError(
+            f"makemigrations produced no migration for {label}; cannot carry "
+            f"{donor_name}."
+        )
+    referenced = {name for deps in dependencies.values() for name in deps}
+    leaves = sorted(name for name in names if name not in referenced)
+    if len(leaves) != 1:
+        rendered = ", ".join(leaves) or "(none)"
+        raise ValueError(
+            f"The regenerated migrations for {label} have {len(leaves)} terminal "
+            f"migrations ({rendered}); cannot chain {donor_name} safely."
+        )
+    return leaves[0], highest + 1
+
+
+def _execute_carry_project_app_migrations(report: BetaMigrationReport) -> None:
+    """Write the planned carried migrations after makemigrations regenerated 0001.
+
+    The verification stack calls this immediately after its recipient-local
+    ``makemigrations`` command, so the appended migrations run with ``migrate``
+    in the same stack.  Each app is re-planned against the recipient's actual
+    regenerated migration graph, and any planning failure propagates so an
+    accepted operation is never silently dropped.
+    """
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    written: list[tuple[str, CarriedMigration]] = []
+    for app_name in report.donor.project_apps:
+        app_dir = report.donor.path / app_name
+        label = _project_app_label(
+            app_dir,
+            registration=_donor_app_registration(
+                report.donor.path, report.donor.identity.package, app_name
+            ),
+        )
+        preview = _plan_carried_migrations(app_dir, label)
+        if not preview:
+            continue
+        migrations_dir = report.recipient.path / app_name / "migrations"
+        if not migrations_dir.is_dir():
+            raise ValueError(
+                f"Cannot carry {preview[0].donor_name}: the recipient's "
+                f"{app_name}/migrations directory does not exist after makemigrations."
+            )
+        base_dependency, start_index = _regenerated_migration_terminal(
+            migrations_dir, label=label, donor_name=preview[0].donor_name
+        )
+        plan = _plan_carried_migrations(
+            app_dir, label, base_dependency=base_dependency, start_index=start_index
+        )
+        for migration in plan:
+            target = migrations_dir / migration.name
+            if target.exists():
+                raise ValueError(
+                    f"Refusing to overwrite the existing recipient migration {target}."
+                )
+            _write_validated_python(target, migration.content)
+            _record_changed_file(report, target)
+            written.append((app_name, migration))
+
+    if not written:
+        return
+    rendered = "; ".join(
+        f"{app_name}:{migration.donor_name} -> {migration.name} "
+        f"({', '.join(migration.operation_names)})"
+        for app_name, migration in written
+    )
+    _append_completed_step(
+        report,
+        step="carry-project-app-migration-operations",
+        detail=(
+            "Carried donor project-owned-app migration operations the autodetector "
+            f"cannot regenerate into appended recipient migrations: {rendered}."
+        ),
+    )
+
+
 def _donor_project_app_failures(donor_path: Path, package: str) -> list[str]:
     """Return donor-side problems for every detected project-owned app."""
     failures: list[str] = []
@@ -894,19 +1830,54 @@ def _donor_project_app_failures(donor_path: Path, package: str) -> list[str]:
                     str(python_path),
                     "exec",
                 )
-            if (app_dir / "apps.py").is_file():
-                _project_app_label(
-                    app_dir,
-                    registration=_donor_app_registration(donor_path, package, app_name),
-                )
+            label = _project_app_label(
+                app_dir,
+                registration=_donor_app_registration(donor_path, package, app_name),
+            )
         except (OSError, SyntaxError, ValueError) as exc:
             failures.append(f"{app_name}: {exc}")
             continue
-        failures.extend(
-            f"{app_name}: migration-owned operation {item} cannot be regenerated"
-            for item in _migration_owned_operations(app_dir)
-        )
+        try:
+            carried = _plan_carried_migrations(app_dir, label)
+        except (OSError, ValueError) as exc:
+            failures.append(f"{app_name}: {exc}")
+            continue
+        if carried and not _project_app_has_models(app_dir):
+            failures.append(
+                f"{app_name}: migration-owned operations are present but the app "
+                "declares no models, so they cannot be carried onto a regenerated "
+                "migration"
+            )
     return failures
+
+
+def _carry_plan_detail(donor_path: Path, package: str) -> str:
+    """Render each planned carried migration, or an empty string when none."""
+    parts: list[str] = []
+    for app_name in _detect_project_owned_apps(donor_path, donor_path / package):
+        app_dir = donor_path / app_name
+        try:
+            label = _project_app_label(
+                app_dir,
+                registration=_donor_app_registration(donor_path, package, app_name),
+            )
+            migrations = _plan_carried_migrations(app_dir, label)
+        except OSError, SyntaxError, ValueError:
+            continue
+        parts.extend(
+            f"{app_name}: {migration.donor_name} -> {migration.name} "
+            f"({'; '.join(migration.operation_names)})"
+            for migration in migrations
+        )
+    return "; ".join(parts)
+
+
+def _carry_pass_detail(donor_path: Path, package: str, *, prefix: str) -> str:
+    """Render the passed-check detail naming carried migration operations."""
+    carried_detail = _carry_plan_detail(donor_path, package)
+    if carried_detail:
+        return f"{prefix} Carried migration operations: {carried_detail}."
+    return f"{prefix} Every migration operation is autodetector-reproducible."
 
 
 def _validate_donor_project_apps(
@@ -929,9 +1900,13 @@ def _validate_donor_project_apps(
         report,
         name="donor-project-owned-apps",
         status="passed",
-        detail=(
-            "Validated the donor's project-owned apps before regeneration: carried "
-            "Python compiles and every migration operation is autodetector-reproducible."
+        detail=_carry_pass_detail(
+            donor_path,
+            package,
+            prefix=(
+                "Validated the donor's project-owned apps before regeneration: "
+                "carried Python compiles."
+            ),
         ),
     )
 
@@ -1059,8 +2034,12 @@ def _validate_project_app_targets(report: BetaMigrationReport) -> None:
         report,
         name="fresh-first-project-owned-apps",
         status="passed",
-        detail=(
-            f"Validated {len(apps)} project-owned app(s) for copy, registration, "
-            f"URL mounting, and migration regeneration: {', '.join(apps)}."
+        detail=_carry_pass_detail(
+            report.donor.path,
+            report.donor.identity.package,
+            prefix=(
+                f"Validated {len(apps)} project-owned app(s) for copy, registration, "
+                f"URL mounting, and migration regeneration: {', '.join(apps)}."
+            ),
         ),
     )

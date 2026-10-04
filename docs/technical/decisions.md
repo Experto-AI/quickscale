@@ -1663,9 +1663,10 @@ settings copies. One facade ships every contract fix through the existing
 - ✅ The privileged-command contract test holds the facade's
   `KNOWN_PRIVILEGED_COMMANDS` declaration in place of the retired template
   copy.
-- ✅ The beta-migration donor validator checks that donor settings call
-  `resolve_runtime_database_url` instead of parsing an inline copy of the
-  contract.
+- ✅ The beta-migration tool checks that effective settings select their
+  database through `resolve_runtime_database_url`: it rewrites a recognized
+  pre-facade block onto the facade and refuses an unrecognized inline copy of
+  the contract.
 - ❌ No generated settings module re-declares the contract inline.
 
 **Adoption:** existing projects adopt the facade through the declared
@@ -1888,15 +1889,25 @@ and asserts every emitted file is classified.
 
 **Key policy rules:**
 
-1. **``settings/production.py`` is donor-owned by policy, not an omission.**
-   The fresh-first migration path intentionally copies the **donor's**
+1. **``settings/production.py`` is donor-owned; the tool owns rewriting a
+   recognized pre-facade database-selection block onto the facade.** The
+   fresh-first migration path copies the **donor's**
    ``settings/production.py`` onto the fresh recipient (via
    ``FRESH_FIRST_REQUIRED_DONOR_PACKAGE_FILES`` and
    ``FRESH_FIRST_DONOR_DJANGO_FILES``).  The donor's production settings carry
    the real deploy-time configuration and must not be replaced by the fresh
-   scaffold's defaults.  Since SA206 the donor copy must call the versioned
-   ``quickscale_core.runtime.settings`` facade; the donor validator refuses an
-   inline copy of the command-mode contract before any mutation.
+   scaffold's defaults.  Since SA206 the effective file must call the versioned
+   ``quickscale_core.runtime.settings`` facade.  When the donor file predates
+   the facade, the migration rewrites only its inline database/command-selection
+   block onto ``resolve_runtime_database_url`` (reusing the donor's canonical
+   read names) and carries every other donor setting unchanged, naming the
+   rewritten line span and each carried setting in the report; it never asks
+   the read-only donor repository to adopt the facade.  Shapes the rewrite does
+   not recognize, and rewritten files whose database selection still does not
+   resolve through the facade, are refused before any mutation.  Ownership of
+   the site customizations therefore stays donor-side, while ownership of the
+   database-selection contract moves to the tool, which re-expresses it
+   versioned rather than copying it forward.
 
 2. **``start.sh`` follows the recipient scaffold's identity.**  The fresh
    scaffold's ``start.sh`` is the effective launcher and is reconciled in
@@ -1987,6 +1998,29 @@ and asserts every emitted file is classified.
     ``frontend/src/index.css`` imports the layer, and the Django-rendered
     shell resolves the same tokens through that entry, so React and Django
     share one design source.
+
+11. **Project-owned app migrations: model state is regenerated, operations the
+    autodetector cannot reproduce are carried.** The fresh-first migration
+    drops a donor project-owned app's migration history and regenerates the
+    model state with a recipient-local ``makemigrations``.  Non-autodetector
+    operations (``RunPython``/``RunSQL``/``SeparateDatabaseAndState`` or a
+    custom operation) are never silently dropped: after ``makemigrations``
+    succeeds, the tool renders each into an appended recipient migration that
+    carries the module-level code the operation references, chained from the
+    regenerated terminal migration (which can be a multi-file initial graph).
+    It fails closed before any mutation, naming
+    the migration, line, and construct, when an operation cannot be carried
+    safely — an unresolved module-level reference, no ``Migration`` class
+    declaring the operations, a dynamic ``operations`` declaration, or a
+    dependency on another app's migration.  The report, the planned action, and
+    the handoff prompt name every carried operation.  This is the migration
+    tool's answer to the clean-break migration history: the recipient's model
+    state is fresh, while migration-owned invariants travel with it.  The tool
+    does not statically prove that a carried callback is compatible with the
+    regenerated final model state; a callback that depends on state a later
+    donor migration removed fails loudly at the recipient's ``migrate`` before
+    any deploy, and the named carry inventory is what the handoff review
+    checks.
 
 **Removal record:** The in-place beta-migration mode (``make
 beta-migrate-in-place``, ``--continue-after-checkpoint``, its infrastructure

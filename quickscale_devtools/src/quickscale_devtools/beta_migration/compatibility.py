@@ -16,7 +16,12 @@ from .model import (
     _append_check,
 )
 from .runtime_commands import _extract_launcher_runtime_commands
-from .settings_facade import _load_settings_facade_contract
+from .settings_facade import (
+    PreFacadeSettingsRewrite,
+    _load_known_runtime_commands,
+    _load_settings_facade_contract,
+    _plan_pre_facade_settings_rewrite,
+)
 from .shell import _active_launcher_line, _shell_tokens
 from .start_sh import _start_sh_reachable_logical_lines
 import json
@@ -233,6 +238,104 @@ def _select_effective_runtime_files(
     )
 
 
+def _record_runtime_compatibility_failure(
+    report: BetaMigrationReport, detail: str
+) -> None:
+    """Record one failed runtime-compatibility check and its blocker."""
+    _append_check(
+        report,
+        name="runtime-launcher-settings-compatibility",
+        status="failed",
+        detail=detail,
+    )
+    _append_blocker(report, detail)
+
+
+def _resolve_runtime_command_contract(
+    report: BetaMigrationReport, settings_path: Path
+) -> tuple[dict[str, set[str]], PreFacadeSettingsRewrite | None] | None:
+    """Return the facade's command allowlists plus any planned rewrite.
+
+    Returns None after recording the failure when the effective settings do not
+    select their database through the facade and no recognized pre-facade
+    rewrite applies.
+    """
+    try:
+        return _load_settings_facade_contract(settings_path), None
+    except ValueError as exc:
+        rewrite = _plan_pre_facade_settings_rewrite(settings_path)
+        if rewrite is None:
+            _record_runtime_compatibility_failure(report, str(exc))
+            return None
+        try:
+            return _load_known_runtime_commands(), rewrite
+        except ValueError as facade_exc:
+            _record_runtime_compatibility_failure(report, str(facade_exc))
+            return None
+
+
+def _collect_launcher_command_mismatches(
+    report: BetaMigrationReport,
+    launcher_paths: tuple[Path, Path],
+    *,
+    known_commands: dict[str, set[str]],
+    expected_package: str,
+) -> tuple[
+    dict[str, set[str]],
+    dict[tuple[str, str], list[Path]],
+    list[str],
+    list[str],
+]:
+    """Collect launcher command references and every mismatch they carry."""
+    referenced_commands: dict[str, set[str]] = {
+        "QUICKSCALE_PRIVILEGED_COMMAND": set(),
+        "QUICKSCALE_NON_DB_COMMAND": set(),
+    }
+    command_sources: dict[tuple[str, str], list[Path]] = {}
+    package_mismatches: list[str] = []
+    launcher_command_mismatches: list[str] = []
+    for launcher_path in launcher_paths:
+        launcher_text = _render_effective_launcher_text(report, launcher_path)
+        launcher_commands = _extract_launcher_runtime_commands(
+            launcher_path,
+            known_commands=known_commands,
+            launcher_text=launcher_text,
+        )
+        for environment_name, commands in launcher_commands.items():
+            referenced_commands[environment_name].update(commands)
+            for command in commands:
+                command_sources.setdefault((environment_name, command), []).append(
+                    launcher_path
+                )
+                expected_launcher = _RUNTIME_COMMAND_LAUNCHERS[environment_name]
+                if launcher_path.name != expected_launcher:
+                    launcher_command_mismatches.append(
+                        f"{environment_name}={command} appears in {launcher_path}; "
+                        f"it is only supported in {expected_launcher}"
+                    )
+            if launcher_path.name == _RUNTIME_COMMAND_LAUNCHERS[environment_name]:
+                for command in sorted(
+                    _REQUIRED_RUNTIME_COMMANDS[environment_name] - commands
+                ):
+                    launcher_command_mismatches.append(
+                        f"required {environment_name}={command} invocation is "
+                        f"missing from the effective {launcher_path.name}"
+                    )
+        package_mismatch = _launcher_package_mismatch(
+            launcher_path,
+            launcher_text,
+            expected_package=expected_package,
+        )
+        if package_mismatch is not None:
+            package_mismatches.append(package_mismatch)
+    return (
+        referenced_commands,
+        command_sources,
+        launcher_command_mismatches,
+        package_mismatches,
+    )
+
+
 def _validate_runtime_compatibility(report: BetaMigrationReport) -> None:
     """Fail closed when effective launchers invoke unsupported command modes."""
     donor = report.donor
@@ -241,59 +344,25 @@ def _validate_runtime_compatibility(report: BetaMigrationReport) -> None:
         return
 
     settings_path, launcher_paths = _select_effective_runtime_files(report)
+    resolved = _resolve_runtime_command_contract(report, settings_path)
+    if resolved is None:
+        return
+    known_commands, pre_facade_rewrite = resolved
+
     try:
-        known_commands = _load_settings_facade_contract(settings_path)
-        expected_package = donor.identity.package
-        referenced_commands: dict[str, set[str]] = {
-            "QUICKSCALE_PRIVILEGED_COMMAND": set(),
-            "QUICKSCALE_NON_DB_COMMAND": set(),
-        }
-        command_sources: dict[tuple[str, str], list[Path]] = {}
-        package_mismatches: list[str] = []
-        launcher_command_mismatches: list[str] = []
-        for launcher_path in launcher_paths:
-            launcher_text = _render_effective_launcher_text(report, launcher_path)
-            launcher_commands = _extract_launcher_runtime_commands(
-                launcher_path,
-                known_commands=known_commands,
-                launcher_text=launcher_text,
-            )
-            for environment_name, commands in launcher_commands.items():
-                referenced_commands[environment_name].update(commands)
-                for command in commands:
-                    command_sources.setdefault((environment_name, command), []).append(
-                        launcher_path
-                    )
-                    expected_launcher = _RUNTIME_COMMAND_LAUNCHERS[environment_name]
-                    if launcher_path.name != expected_launcher:
-                        launcher_command_mismatches.append(
-                            f"{environment_name}={command} appears in {launcher_path}; "
-                            f"it is only supported in {expected_launcher}"
-                        )
-                if launcher_path.name == _RUNTIME_COMMAND_LAUNCHERS[environment_name]:
-                    for command in sorted(
-                        _REQUIRED_RUNTIME_COMMANDS[environment_name] - commands
-                    ):
-                        launcher_command_mismatches.append(
-                            f"required {environment_name}={command} invocation is "
-                            f"missing from the effective {launcher_path.name}"
-                        )
-            package_mismatch = _launcher_package_mismatch(
-                launcher_path,
-                launcher_text,
-                expected_package=expected_package,
-            )
-            if package_mismatch is not None:
-                package_mismatches.append(package_mismatch)
-    except ValueError as exc:
-        detail = str(exc)
-        _append_check(
+        (
+            referenced_commands,
+            command_sources,
+            launcher_command_mismatches,
+            package_mismatches,
+        ) = _collect_launcher_command_mismatches(
             report,
-            name="runtime-launcher-settings-compatibility",
-            status="failed",
-            detail=detail,
+            launcher_paths,
+            known_commands=known_commands,
+            expected_package=donor.identity.package,
         )
-        _append_blocker(report, detail)
+    except ValueError as exc:
+        _record_runtime_compatibility_failure(report, str(exc))
         return
 
     unsupported: list[str] = []
@@ -308,16 +377,10 @@ def _validate_runtime_compatibility(report: BetaMigrationReport) -> None:
 
     if unsupported or launcher_command_mismatches or package_mismatches:
         mismatches = [*unsupported, *launcher_command_mismatches, *package_mismatches]
-        detail = "Effective runtime launcher/settings mismatch: " + "; ".join(
-            mismatches
-        )
-        _append_check(
+        _record_runtime_compatibility_failure(
             report,
-            name="runtime-launcher-settings-compatibility",
-            status="failed",
-            detail=detail,
+            "Effective runtime launcher/settings mismatch: " + "; ".join(mismatches),
         )
-        _append_blocker(report, detail)
         return
 
     detail_parts = []
@@ -327,6 +390,15 @@ def _validate_runtime_compatibility(report: BetaMigrationReport) -> None:
     ):
         rendered = ", ".join(sorted(referenced_commands[environment_name])) or "(none)"
         detail_parts.append(f"{environment_name}: {rendered}")
+    rewrite_note = ""
+    if pre_facade_rewrite is not None:
+        carried = ", ".join(pre_facade_rewrite.carried_settings) or "(none)"
+        rewrite_note = (
+            f" The migration rewrites the donor's pre-facade database selection "
+            f"(lines {pre_facade_rewrite.contract_lines[0]}-{pre_facade_rewrite.contract_lines[1]}) "
+            f"through the QuickScale runtime settings facade and carries these donor "
+            f"settings unchanged: {carried}."
+        )
     _append_check(
         report,
         name="runtime-launcher-settings-compatibility",
@@ -334,5 +406,6 @@ def _validate_runtime_compatibility(report: BetaMigrationReport) -> None:
         detail=(
             f"Effective launchers are compatible with {settings_path}: "
             + "; ".join(detail_parts)
+            + rewrite_note
         ),
     )

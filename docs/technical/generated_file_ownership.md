@@ -30,10 +30,12 @@ fresh-first requirements.  Since SA206 every generated settings module imports
 its executable runtime contracts (middleware, proxy-trust derivation,
 privileged-command/runtime-database selection, SECRET_KEY guard) from the
 versioned ``quickscale_core.runtime.settings`` facade and keeps only user
-configuration; a donor ``production.py`` must call
-``resolve_runtime_database_url``, because the donor validator refuses an inline
-copy of the command-mode contract before any mutation.  This changes what those
-files contain, not who owns them.
+configuration; an effective ``production.py`` must select its database through
+``resolve_runtime_database_url``.  A recognized pre-facade donor file has only
+its inline database/command-selection block rewritten onto the facade by the
+beta-migration tool, with the donor's other settings carried unchanged; an
+inline copy whose shape the rewrite cannot preserve is refused before any
+mutation.  This changes what those files contain, not who owns them.
 
 ## Categories
 

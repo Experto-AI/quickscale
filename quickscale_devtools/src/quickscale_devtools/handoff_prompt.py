@@ -136,6 +136,15 @@ def render_handoff_prompt(report: BetaMigrationReport) -> str:
     lines += ["", "## What was migrated", "", "Steps completed:"]
     lines += _render_bullet_lines([step.step for step in report.completed_steps])
 
+    carried_steps = [
+        step
+        for step in report.completed_steps
+        if step.step == "carry-project-app-migration-operations"
+    ]
+    if carried_steps:
+        lines += ["", "Carried migration operations:"]
+        lines += _render_bullet_lines([step.detail for step in carried_steps])
+
     changed_paths = sorted(
         {
             relative

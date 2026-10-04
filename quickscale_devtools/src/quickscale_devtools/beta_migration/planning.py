@@ -27,7 +27,8 @@ from .model import (
 from .package_json_editing import (
     _validate_fresh_first_frontend_dependency_targets,
 )
-from .project_apps import _validate_project_app_targets
+from .project_apps import _project_app_carry_plan, _validate_project_app_targets
+from .settings_facade import _plan_pre_facade_settings_rewrite
 from .preflight import (
     _blocked_due_to_missing_snapshots,
     _fresh_first_identity_targets,
@@ -110,19 +111,49 @@ def _fresh_first_actions(
             ],
         ),
     ]
+    donor_production_settings = donor.package_dir / "settings" / "production.py"
+    pre_facade_rewrite = _plan_pre_facade_settings_rewrite(donor_production_settings)
+    if pre_facade_rewrite is not None:
+        actions.append(
+            PlannedAction(
+                step="rewrite-pre-facade-production-settings",
+                description=(
+                    "Rewrite the donor's pre-facade database-selection contract onto the "
+                    "versioned QuickScale runtime settings facade in the recipient while "
+                    "carrying every other donor production setting unchanged and reporting "
+                    "the carried set."
+                ),
+                targets=[
+                    str(donor_production_settings),
+                    str(recipient.package_dir / "settings" / "production.py"),
+                ],
+                commands=[
+                    "Carried donor settings: "
+                    + (", ".join(pre_facade_rewrite.carried_settings) or "(none)")
+                ],
+            )
+        )
     if project_apps:
+        carry_plan = _project_app_carry_plan(donor)
+        carry_commands = [
+            f"Carried migration operations: {app_name}:{migration.donor_name} -> "
+            f"{migration.name} ({'; '.join(migration.operation_names)})"
+            for app_name, migration in carry_plan
+        ]
         actions.append(
             PlannedAction(
                 step="copy-project-owned-apps",
                 description=(
                     "Copy the donor's project-owned Django apps into the recipient and drop "
                     "their donor migration history so it is regenerated against the current "
-                    "released models before migrate runs."
+                    "released models before migrate runs; operations the autodetector cannot "
+                    "regenerate are carried into appended migrations after makemigrations."
                 ),
                 targets=[
                     *[str(donor.path / app_name) for app_name in project_apps],
                     *[str(recipient.path / app_name) for app_name in project_apps],
                 ],
+                commands=carry_commands,
             )
         )
         actions.append(
