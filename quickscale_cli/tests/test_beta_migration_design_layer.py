@@ -4,8 +4,10 @@ The fresh-first workflow must copy the donor's design into the recipient's
 never-overwritten ``frontend/design/`` layer: every file of a donor that has
 its own design layer, or the two legacy sources (``frontend/src/index.css``
 and ``frontend/tailwind.config.js``) for a donor generated before the layer
-existed.  The recipient must carry the layer, and a donor with no design
-source at all blocks before mutation.
+existed.  The recipient must carry the layer; a donor with no design source
+at all keeps the fresh recipient design, while references the migration
+cannot preserve — an uncarried target or an undecodable stylesheet — block
+before mutation.
 """
 
 from __future__ import annotations
@@ -601,6 +603,41 @@ def test_iterate_blocks_before_replacing_the_recipient_on_a_bad_design_source(
     assert any(
         "Donor design-source preflight failed" in blocker
         and "frontend/src/extra.css" in blocker
+        for blocker in report.blockers
+    )
+    assert marker.read_text() == "previous recipient\n"
+    assert not _iterate_stage_dir(recipient).exists()
+
+
+def test_iterate_blocks_before_regeneration_when_a_stylesheet_cannot_be_decoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An undecodable stylesheet must fail closed, not skip reference checks."""
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-design-site")
+    marker = recipient / "keep-marker.txt"
+    marker.write_text("previous recipient\n")
+
+    (donor / "frontend" / "src" / "extra.css").write_text("/* donor partial */\n")
+    custom = donor / "frontend" / "design" / "custom.css"
+    custom.write_bytes(
+        (
+            '@charset "ISO-8859-1";\n@import "../src/extra.css";\n/* caf\u00e9 */\n'
+        ).encode("latin-1")
+    )
+
+    def fail_run(*args: object, **kwargs: object) -> None:
+        raise AssertionError("a blocked donor must not reach staged apply")
+
+    monkeypatch.setattr(subprocess, "run", fail_run)
+    report = run_beta_migration(
+        BetaMigrationInput(mode="iterate", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "Donor design-source preflight failed" in blocker
+        and "frontend/design/custom.css" in blocker
         for blocker in report.blockers
     )
     assert marker.read_text() == "previous recipient\n"

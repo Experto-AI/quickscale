@@ -326,7 +326,11 @@ def _donor_design_failures(
             relative = layer_file.relative_to(donor_path).as_posix()
             try:
                 text = layer_file.read_text(encoding="utf-8")
-            except OSError, UnicodeDecodeError:
+            except (OSError, UnicodeDecodeError) as exc:
+                failures.append(
+                    f"cannot read design-layer stylesheet {relative} for reference "
+                    f"validation: {exc}"
+                )
                 continue
             failures.extend(
                 _design_reference_failures(
@@ -343,7 +347,11 @@ def _donor_design_failures(
     if legacy_stylesheet.is_file():
         try:
             stylesheet_text = legacy_stylesheet.read_text(encoding="utf-8")
-        except OSError, UnicodeDecodeError:
+        except (OSError, UnicodeDecodeError) as exc:
+            failures.append(
+                f"cannot read legacy stylesheet {_LEGACY_STYLESHEET_SOURCE} for "
+                f"reference validation: {exc}"
+            )
             stylesheet_text = ""
         failures.extend(
             _design_reference_failures(
@@ -359,7 +367,11 @@ def _donor_design_failures(
     if legacy_config.is_file():
         try:
             config_text = legacy_config.read_text(encoding="utf-8")
-        except OSError, UnicodeDecodeError:
+        except (OSError, UnicodeDecodeError) as exc:
+            failures.append(
+                f"cannot read legacy Tailwind config {_LEGACY_CONFIG_SOURCE} for "
+                f"reference validation: {exc}"
+            )
             config_text = ""
         module_references = _legacy_config_module_references(config_text)
         if module_references:
