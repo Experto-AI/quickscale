@@ -200,3 +200,139 @@ def test_plan_blocks_when_the_donor_has_no_design_source(tmp_path: Path) -> None
         "Design-layer preflight failed" in blocker and "nor a legacy" in blocker
         for blocker in report.blockers
     )
+
+
+def test_plan_blocks_when_a_recipient_design_destination_is_a_symlink(
+    tmp_path: Path,
+) -> None:
+    """A linked recipient design root must be refused before any mutation.
+
+    The executor removes each destination before copying, so a linked design
+    root could make it delete donor files through the link.
+    """
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    donor_design = donor / "frontend" / "design"
+    donor_before = {
+        path.relative_to(donor): path.read_bytes()
+        for path in sorted(donor_design.rglob("*"))
+        if path.is_file()
+    }
+    shutil.rmtree(recipient / "frontend" / "design")
+    (recipient / "frontend" / "design").symlink_to(
+        donor_design, target_is_directory=True
+    )
+
+    report = plan_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "symbolic link" in blocker and "frontend/design" in blocker
+        for blocker in report.blockers
+    )
+    donor_after = {
+        path.relative_to(donor): path.read_bytes()
+        for path in sorted(donor_design.rglob("*"))
+        if path.is_file()
+    }
+    assert donor_after == donor_before
+
+
+def test_plan_blocks_when_a_recipient_design_subdirectory_is_a_symlink(
+    tmp_path: Path,
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    linked_target = recipient / "frontend" / "src" / "assets"
+    linked_target.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(recipient / "frontend" / "design" / "fonts")
+    (recipient / "frontend" / "design" / "fonts").symlink_to(
+        linked_target, target_is_directory=True
+    )
+
+    report = plan_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "symbolic link" in blocker and "frontend/design/fonts" in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_legacy_stylesheet_relative_references_are_rebased(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+
+    donor_design = donor / "frontend" / "design"
+    stylesheet = (
+        (donor_design / "tokens.css")
+        .read_text()
+        .replace("--primary: 240 5.9% 10%;", "--primary: 200 50% 40%;")
+    )
+    shutil.rmtree(donor_design)
+    assets = donor / "frontend" / "src" / "assets"
+    assets.mkdir(parents=True)
+    (assets / "Brand.woff2").write_bytes(b"donor-font")
+    (donor / "frontend" / "src" / "extra.css").write_text("/* donor partial */\n")
+    (donor / "frontend" / "src" / "index.css").write_text(
+        '@import "./extra.css";\n'
+        + stylesheet
+        + '\n@font-face { font-family: "Brand"; src: url("./assets/Brand.woff2") format("woff2"); }\n'
+        + ".hero { background-image: url(assets/Hero.png); }\n"
+        + '.absolute { background: url("/static/absolute.png"); }\n'
+        + '.inline { background: url("data:image/png;base64,AAAA"); }\n'
+        + '.shared { background: url("../shared/z.png"); }\n'
+    )
+    (donor / "frontend" / "tailwind.config.js").write_text(
+        "// donor legacy config\nexport default {};\n"
+    )
+
+    _install_subprocess_stub(monkeypatch)
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+    tokens = (recipient / "frontend" / "design" / "tokens.css").read_text()
+    assert '@import "../src/extra.css";' in tokens
+    assert 'url("../src/assets/Brand.woff2")' in tokens
+    assert "url(../src/assets/Hero.png)" in tokens
+    assert 'url("/static/absolute.png")' in tokens
+    assert 'url("data:image/png;base64,AAAA")' in tokens
+    assert 'url("../shared/z.png")' in tokens
+    assert 'url("./assets/' not in tokens
+
+
+def test_design_layer_build_artifacts_are_not_copied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+
+    donor_layer = donor / "frontend" / "design"
+    (donor_layer / ".env").write_text("DONOR_SECRET=do-not-copy\n")
+    (donor_layer / "node_modules" / "pkg").mkdir(parents=True)
+    (donor_layer / "node_modules" / "pkg" / "index.js").write_text(
+        "module.exports = 1;\n"
+    )
+    (donor_layer / "cache").mkdir()
+    (donor_layer / "cache" / "state.pyc").write_bytes(b"cache-bytes")
+    (donor_layer / "fonts" / "Brand.woff2").write_bytes(b"donor-font")
+
+    _install_subprocess_stub(monkeypatch)
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+    recipient_layer = recipient / "frontend" / "design"
+    assert (recipient_layer / "fonts" / "Brand.woff2").read_bytes() == b"donor-font"
+    assert not (recipient_layer / ".env").exists()
+    assert not (recipient_layer / "node_modules").exists()
+    assert not (recipient_layer / "cache").exists()
