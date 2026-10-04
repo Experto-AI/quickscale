@@ -354,7 +354,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
     step validates and copies the donor layer or its legacy index.css/tailwind.config.js sources;
     next are (e)–(f); watch the design-layer recipient preflight and the regenerated
     exact-emission fixture.
-  - [ ] (e) The generated `MIGRATION_PROMPT.md` and its snapshot test.
+  - [x] (e) The generated `MIGRATION_PROMPT.md` and its snapshot test. Handoff: delivered by
+    `1e628dd5` and kept green through slices (b)–(d) — the fresh-first and iterate flows write
+    `MIGRATION_PROMPT.md` from the report (what was migrated, remaining manual actions with their
+    paths and governing rules, hard constraints, done criteria) only after the verification stack
+    completes, via a symlink-safe atomic replace; the `handoff_prompt.md` fixture pins the
+    document and the smoke gate asserts it; next is (f), starting with G-001; watch prompt
+    stability as the report schema grows.
   - [ ] (f) Ledger iterations to a clean final run, the playbook rewrite, and the pre-facade
     `production.py` decision.
 
