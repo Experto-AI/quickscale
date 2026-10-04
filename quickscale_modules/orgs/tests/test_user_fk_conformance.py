@@ -260,7 +260,7 @@ def test_account_deletion_reference_discovery_query_count_ignores_tenant_count()
 # The conformance tests above prove user-FKs are SET_NULL at the schema
 # level.  This test proves the full AccountDeleteView path preserves
 # cross-module content (blog Post and CRM ContactNote/DealNote) when a
-# real user account is deleted through the view.
+# real user account is removed through the view.
 #
 # This lives in the orgs harness because it needs blog, crm, and auth
 # all installed simultaneously.
@@ -299,9 +299,8 @@ class TestAccountDeleteViewSurvivorRegression:
 
         The personal org has the user as sole owner and sole member, so
         the last-owner guard in AccountDeleteView passes (no other members
-        to protect).  The model-level last-owner guard is bypassed because
-        CASCADE bulk-deletes the membership row during user.delete()
-        without calling Membership.delete().
+        to protect).  The membership row itself is removed by the orgs
+        module's anonymize handler.
         """
         from quickscale_modules_orgs.models import (
             Organization,
@@ -430,8 +429,8 @@ class TestAccountDeleteViewSurvivorRegression:
         This is the view-level end-to-end regression that the ORM-only
         survivor test cannot cover: it exercises the full auth view stack
         (session, authentication, last-owner guard, form_valid dispatch,
-        user.delete()) with cross-module content present on the user
-        being deleted.
+        disable-and-scrub) with cross-module content present for the user
+        being removed.
         """
         user = _sa35_user
         client = _sa35_authenticated_client
@@ -474,16 +473,18 @@ class TestAccountDeleteViewSurvivorRegression:
         post_id = post.pk
         user_id = user.pk
 
-        # ---- Act: delete via AccountDeleteView ----
+        # ---- Act: remove via AccountDeleteView ----
         from django.urls import reverse
 
         response = client.post(reverse("quickscale_auth:account_delete"))
 
-        # ---- Assert: deletion succeeded ----
+        # ---- Assert: removal succeeded (row retained, disabled) ----
         assert response.status_code == 302, (
-            f"Expected 302 redirect on account deletion, got {response.status_code}"
+            f"Expected 302 redirect on account removal, got {response.status_code}"
         )
-        assert not User.objects.filter(pk=user_id).exists(), "User should be deleted"
+        retained_user = User.objects.get(pk=user_id)
+        assert retained_user.is_active is False, "User should be disabled"
+        assert retained_user.email == f"deleted-{user_id}@invalid"
 
         # ---- Assert: blog Post survives with author=NULL ----
         from quickscale_modules_blog.models import Post
@@ -492,7 +493,7 @@ class TestAccountDeleteViewSurvivorRegression:
         try:
             post.refresh_from_db()
             assert post.author is None, (
-                "Blog Post.author should be NULL after user deletion"
+                "Blog Post.author should be NULL after account removal"
             )
             assert Post.all_objects.filter(pk=post_id).exists(), (
                 "Blog Post record should still exist"
@@ -501,13 +502,13 @@ class TestAccountDeleteViewSurvivorRegression:
             # ---- Assert: CRM ContactNote survives with created_by=NULL ----
             contact_note.refresh_from_db()
             assert contact_note.created_by is None, (
-                "CRM ContactNote.created_by should be NULL after user deletion"
+                "CRM ContactNote.created_by should be NULL after account removal"
             )
 
             # ---- Assert: CRM DealNote survives with created_by=NULL ----
             deal_note.refresh_from_db()
             assert deal_note.created_by is None, (
-                "CRM DealNote.created_by should be NULL after user deletion"
+                "CRM DealNote.created_by should be NULL after account removal"
             )
         finally:
             reset_current_org_id()
@@ -517,7 +518,7 @@ class TestAccountDeleteViewSurvivorRegression:
         try:
             project_listing.refresh_from_db()
             assert project_listing.created_by is None, (
-                "ProjectListing.created_by should be NULL after user deletion"
+                "ProjectListing.created_by should be NULL after account removal"
             )
         finally:
             reset_current_org_id()
@@ -588,15 +589,18 @@ class TestAccountDeleteViewSurvivorRegression:
 #
 # Two co-owners of the same shared org (with a third non-owner member)
 # attempt to delete their accounts concurrently.  ``AccountDeleteView``
-# now wraps the guard check + user deletion in ``transaction.atomic()``
+# wraps the guard check + account removal in ``transaction.atomic()``
 # and locks all owner orgs with ``select_for_update``, so concurrent
 # deletions are serialized: exactly one succeeds, and the org never
 # loses all its owners while non-owner members remain.
 #
 # This test proves the serialization works by simulating the same
 # locking pattern: each thread acquires ``select_for_update`` on the
-# shared org row, checks ``is_last_owner_with_members``, and deletes
-# the user only if not blocked.
+# shared org row, checks ``is_last_owner_with_members``, and removes
+# the account only if not blocked.  It simulates the operator hard-delete
+# path (Django admin) under the view's lock order; self-service removal
+# disables and scrubs instead, and its membership cleanup is covered by
+# ``TestAccountDeleteViewSA35`` and the orgs anonymize executor's tests.
 # ---------------------------------------------------------------------------
 
 
@@ -723,14 +727,16 @@ def test_concurrent_account_deletion_locking_protects_last_owner() -> None:
 # lock-order deadlock regression
 #
 # AccountDeleteView locks org rows first (via select_for_update before
-# user.delete()), while OrganizationMembership.save()/delete() previously
+# the account removal), while OrganizationMembership.save()/delete() previously
 # locked the membership row first.  Under concurrent execution — e.g. an
 # account deletion racing with a membership removal from the members page
 # or API — a classic lock-order inversion deadlock could occur.
 #
 # Both paths now normalize the lock order to: org row first, then
 # membership row.  This test proves the deadlock is resolved: two
-# threads running the competing paths complete without hanging.
+# threads running the competing paths complete without hanging.  The
+# account thread simulates the operator hard-delete step because the
+# lock order is what this regression pins.
 # ---------------------------------------------------------------------------
 
 
