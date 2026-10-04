@@ -2941,7 +2941,7 @@ alternation stays a rule 41 exception) and the two social seam producers render 
 **SA237 close (2026-10-03).** Gaps 15–16 are closed: billing's post-lock re-check calls
 `user_has_org_role` with `OrgRole.OWNER`, the ten modules' `[[tool.mypy.overrides]]` blocks are
 deleted, `anymail` joins the root `mypy.ini`, and harness rule 45 rejects any per-module
-`[tool.mypy]` table. Gaps 13–14 stay open for SA235 and SA238.
+`[tool.mypy]` table. Gap 14 stays open for SA238.
 
 ## Consistent by design
 

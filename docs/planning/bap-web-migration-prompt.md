@@ -3,13 +3,13 @@
 Hand everything below the line to a coding assistant, started in `/home/victor/code/bap-web-new`.
 This is a one-off, prompt-driven migration; the fresh-first tool (SA214) is not used for it.
 
-**SA215 has landed; the port stays parked until its remaining dependency (SA237) lands.**
+**SA215 and SA237 have landed; the port's dependencies are cleared.**
 SA215 renamed module settings, app labels, URL
 namespaces, and commands ([decisions.md § Module Conventions](../technical/decisions.md#module-conventions)).
 SA215 also moved module back offices (blog, listings, crm, forms) from `is_staff` to org roles
 (rule 19), so the port gives `bap-web`'s editors an org role (`admin` or as the module README
-states), never `is_staff`. Start it only after the
-[schedule](../technical/roadmap.md#scheduling-table) clears SA237, regenerate `bap-web-new`
+states), never `is_staff`. Start it now; the
+[schedule](../technical/roadmap.md#scheduling-table) is clear. Regenerate `bap-web-new`
 from that checkout, and update the version numbers below; the current `bap-web-new` was generated
 before the renames.
 
