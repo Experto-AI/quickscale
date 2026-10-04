@@ -320,9 +320,11 @@ def _entity_chain_continues_local_part(prefix: str) -> bool:
 
     An ampersand entity is a genuine local-part character, so it always
     continues the address; a quote entity only continues one when the text
-    before it is itself local-part text or entities.
+    before it is itself local-part text or entities.  The whole trailing chain
+    is walked, however long, so an ampersand behind several quote entities is
+    still recognized.
     """
-    for _ in range(4):
+    while prefix:
         if prefix.endswith(_AMPERSAND_ENTITY):
             return True
         matched = next(

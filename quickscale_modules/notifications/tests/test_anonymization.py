@@ -561,6 +561,40 @@ def test_anonymize_preserves_an_ampersand_leading_unrelated_address() -> None:
 
 
 @pytest.mark.django_db
+def test_anonymize_preserves_an_ampersand_behind_quote_entities() -> None:
+    """The whole entity chain is walked, so a deep ampersand still continues."""
+    from quickscale_modules_notifications.services import render_notification
+
+    user = _user("o'connor@example.com")
+    other_address = "&''''o'connor@example.com"
+    rendered = render_notification(
+        template_key="notifications.generic",
+        context={"headline": "Other", "body": f"Contact {other_address} now"},
+    )
+    message = _message(
+        subject=rendered.subject,
+        rendered_text=rendered.text_body,
+        rendered_html=rendered.html_body,
+        context_json={"body": f"Contact {other_address} now"},
+        last_error="",
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="o'connor@example.com"
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="beta@example.com"
+    )
+
+    anonymize_account(user, "o'connor@example.com", "", user.get_username())
+
+    message.refresh_from_db()
+    assert "&amp;&#x27;&#x27;&#x27;&#x27;o&#x27;connor@example.com" in (
+        message.rendered_html
+    )
+    assert message.context_json == {"body": f"Contact {other_address} now"}
+
+
+@pytest.mark.django_db
 def test_anonymize_redacts_a_quoted_escaped_apostrophe_address() -> None:
     """A rendered quotation delimiter is not mistaken for a local part."""
     from quickscale_modules_notifications.services import render_notification
