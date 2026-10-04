@@ -11,7 +11,11 @@ from django.core.management.base import SystemCheckError
 from django.core.management.commands import migrate, runserver
 
 from quickscale_modules_auth.apps import QuickscaleAuthConfig
-from quickscale_modules_orgs.removal import RemovalBoundary
+from quickscale_modules_orgs.removal import (
+    AUTH_PERSONAL_DATA,
+    RemovalAction,
+    RemovalBoundary,
+)
 
 
 def _auth_config() -> QuickscaleAuthConfig:
@@ -30,6 +34,23 @@ def test_app_config_declares_its_account_deletion_boundary_implementation() -> N
         "quickscale_modules_auth.views",
         "AccountDeleteView.form_valid",
     )
+
+
+def test_app_config_declares_the_account_personal_data_obligation() -> None:
+    """The account row is auth's own anonymize obligation, skipped at purge."""
+    (obligation,) = _auth_config().removal_obligations()
+
+    assert obligation.name == AUTH_PERSONAL_DATA
+    assert obligation.account_delete_action is RemovalAction.ANONYMIZE
+    assert obligation.purge_action is RemovalAction.SKIP
+
+
+def test_app_config_exposes_the_anonymize_executor() -> None:
+    """The declared ANONYMIZE action's executor lives on the AppConfig."""
+    config = _auth_config()
+
+    assert callable(config.anonymize_account)
+    assert config.anonymize_handlers() == (config,)
 
 
 def test_ready_raises_improperly_configured_when_setting_missing(settings) -> None:
