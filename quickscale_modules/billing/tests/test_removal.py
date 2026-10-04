@@ -17,7 +17,12 @@ from quickscale_modules_billing.models import Plan, Subscription
 from quickscale_modules_billing._removal import (
     guard_organization_removal_provider_state,
 )
-from quickscale_modules_orgs.removal import BoundaryGuardedHooks
+from quickscale_modules_orgs.removal import (
+    BILLING_PERSONAL_DATA,
+    BILLING_PROVIDER_STATE,
+    BoundaryGuardedHooks,
+    RemovalAction,
+)
 
 
 def _billing_config() -> QuickscaleBillingConfig:
@@ -41,13 +46,18 @@ def _plan() -> Plan:
 
 def test_removal_obligation_declares_its_boundary_guard_hooks() -> None:
     """The guarded obligation names billing's own executor hooks."""
-    (obligation,) = _billing_config().removal_obligations()
+    provider_state, personal_data = _billing_config().removal_obligations()
 
-    assert obligation.boundary_guarded_hooks == BoundaryGuardedHooks(
+    assert provider_state.name == BILLING_PROVIDER_STATE
+    assert provider_state.boundary_guarded_hooks == BoundaryGuardedHooks(
         guard="guard_organization_removal_provider_state",
         reconcile="reconcile_organization_removal_provider_state",
         mutation_lock="organization_removal_provider_mutation_lock",
     )
+    assert personal_data.name == BILLING_PERSONAL_DATA
+    assert personal_data.account_delete_action is RemovalAction.ANONYMIZE
+    assert personal_data.purge_action is RemovalAction.SKIP
+    assert callable(_billing_config().anonymize_account)
 
 
 def test_guard_hook_delegates_to_the_service() -> None:

@@ -26,6 +26,7 @@ class RemovalAction(Enum):
     DELETE = "delete"
     INVALIDATE = "invalidate"
     RECORD = "record"
+    ANONYMIZE = "anonymize"
     SKIP = "skip"
 
 
@@ -84,8 +85,12 @@ class OrganizationRemovalObligation:
         return self.account_delete_action
 
 
+AUTH_PERSONAL_DATA = "auth-personal-data"
+BILLING_PERSONAL_DATA = "billing-personal-data"
 BILLING_PROVIDER_STATE = "billing-provider-state"
+BLOG_PERSONAL_DATA = "blog-personal-data"
 OWNED_TENANT_ROWS = "owned-tenant-rows"
+OWNED_PERSONAL_DATA = "owned-personal-data"
 SOCIAL_CACHE_STATE = "social-cache-state"
 PURGE_TOMBSTONE = "purge-tombstone"
 
@@ -124,7 +129,9 @@ COORDINATOR_DISCHARGE_ACTIONS: dict[RemovalBoundary, frozenset[RemovalAction]] =
             RemovalAction.RECORD,
         }
     ),
-    RemovalBoundary.ACCOUNT_DELETE: frozenset({RemovalAction.RECONCILE}),
+    RemovalBoundary.ACCOUNT_DELETE: frozenset(
+        {RemovalAction.RECONCILE, RemovalAction.ANONYMIZE}
+    ),
 }
 
 #: ``AppConfig`` hook each app-owned stage needs on the declaring app.  The
@@ -136,6 +143,7 @@ COORDINATOR_DISCHARGE_ACTIONS: dict[RemovalBoundary, frozenset[RemovalAction]] =
 STAGE_EXECUTOR_HOOKS: dict[RemovalAction, str] = {
     RemovalAction.INVALIDATE: "invalidate_organization_cache",
     RemovalAction.RECONCILE: "reconcile_account_deletion_provider_state",
+    RemovalAction.ANONYMIZE: "anonymize_account",
 }
 
 #: AppConfig attribute through which an app declares the removal boundary

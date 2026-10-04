@@ -417,8 +417,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   surface, so SA216 lands through the serialized merge queue.
 
   **Slices:**
-  - [ ] (a) The `ANONYMIZE` removal action and auth's collector, with each module's handler and
-    its tests.
+  - [x] (a) The `ANONYMIZE` removal action and auth's collector, with each module's handler and
+    its tests. Handoff: the action and coordinator route, the `anonymize_handlers` capability,
+    the five handlers, and the view's in-transaction collector are reviewed and green; next are
+    (b) and (c); watch the escaped and overlapping identity matching in notifications'
+    shared-message scrub.
   - [ ] (b) `AccountDeleteView` disables and scrubs; re-registration and sign-in tests; the
     rollback test.
   - [ ] (c) Remove the account-deletion lookup and turn `ACCOUNT_DELETE` into the anonymize

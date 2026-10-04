@@ -168,7 +168,8 @@ coordinator. `purge_organization` discharges one stage at a time — its refusal
 guards (`REFUSE`), the marker-derived row deletion (`DELETE`), the purge
 tombstone (`RECORD`), and organization-scoped cache invalidation
 (`INVALIDATE`) — while account deletion discharges provider reconciliation
-(`RECONCILE`); `SKIP` records an obligation a boundary deliberately does not
+(`RECONCILE`) and runs each installed app's account anonymization
+(`ANONYMIZE`); `SKIP` records an obligation a boundary deliberately does not
 execute. A declared provider field refuses the purge while it carries a value;
 a module whose own guard decides provider liveness marks the field
 `boundary_guarded=True` and declares the `BoundaryGuardedHooks` its guarded
@@ -179,10 +180,15 @@ provider-confirmed expired checkout id, and an optional `mutation_lock` hook
 whose context manager the boundary holds across both. The app-owned stages name
 their executor: an
 `INVALIDATE` declaration needs the declaring app's
-`invalidate_organization_cache` hook and a `RECONCILE` declaration needs its
-`reconcile_account_deletion_provider_state` hook, so the boundary runs the
+`invalidate_organization_cache` hook, a `RECONCILE` declaration needs its
+`reconcile_account_deletion_provider_state` hook, and an `ANONYMIZE`
+declaration needs its `anonymize_account` hook, so the boundary runs the
 declaring app's own work instead of marking a declaration discharged for
-nothing. A module may also declare `removal_label_prefix` to name how its
+nothing. An `ANONYMIZE` declaration must also declare the `anonymize_handlers`
+capability (a method returning `(self,)`, the app's own config) so auth's
+account-deletion collector runs that executor; the boundary fails the deletion
+closed when a declared obligation's owner contributes no handler. A module may
+also declare `removal_label_prefix` to name how its
 models appear in the purge summary, and each removal boundary's owner declares
 where its implementation lives through `removal_boundary_implementations`, so
 the check follows the owner's declaration instead of a hardcoded table and

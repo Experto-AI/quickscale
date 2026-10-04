@@ -14,12 +14,17 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
 )
 from quickscale_modules_orgs.removal import (
+    AUTH_PERSONAL_DATA,
+    BILLING_PERSONAL_DATA,
     BILLING_PROVIDER_STATE,
+    BLOG_PERSONAL_DATA,
     NOT_PROVIDER_BACKED,
+    OWNED_PERSONAL_DATA,
     OWNED_TENANT_ROWS,
     PROVIDER_BACKED,
     PURGE_TOMBSTONE,
     SOCIAL_CACHE_STATE,
+    STAGE_EXECUTOR_HOOKS,
     BoundaryGuardedHooks,
     ExternalProviderField,
     OrganizationRemovalObligation,
@@ -228,20 +233,30 @@ def test_declared_provider_backed_fields_rejects_unknown_classification() -> Non
 
 
 def test_each_installed_app_declares_its_own_obligations() -> None:
-    """Billing and orgs declare their obligations from their own AppConfig."""
+    """Each personal-data holder declares its obligations from its AppConfig."""
     from django.apps import apps
 
     billing_obligations = declared_removal_obligations(
         apps.get_app_config("quickscale_billing")
     )
     assert [obligation.name for obligation in billing_obligations] == [
-        BILLING_PROVIDER_STATE
+        BILLING_PROVIDER_STATE,
+        BILLING_PERSONAL_DATA,
     ]
+    auth_obligations = declared_removal_obligations(
+        apps.get_app_config("quickscale_auth")
+    )
+    assert [obligation.name for obligation in auth_obligations] == [AUTH_PERSONAL_DATA]
+    blog_obligations = declared_removal_obligations(
+        apps.get_app_config("quickscale_blog")
+    )
+    assert [obligation.name for obligation in blog_obligations] == [BLOG_PERSONAL_DATA]
     orgs_obligations = declared_removal_obligations(
         apps.get_app_config("quickscale_orgs")
     )
     assert [obligation.name for obligation in orgs_obligations] == [
         OWNED_TENANT_ROWS,
+        OWNED_PERSONAL_DATA,
         SOCIAL_CACHE_STATE,
         PURGE_TOMBSTONE,
     ]
@@ -252,7 +267,11 @@ def test_discovered_aggregate_is_the_declared_set() -> None:
     names = [obligation.name for obligation in organization_removal_obligations()]
 
     assert set(names) == {
+        AUTH_PERSONAL_DATA,
+        BILLING_PERSONAL_DATA,
         BILLING_PROVIDER_STATE,
+        BLOG_PERSONAL_DATA,
+        OWNED_PERSONAL_DATA,
         OWNED_TENANT_ROWS,
         SOCIAL_CACHE_STATE,
         PURGE_TOMBSTONE,
@@ -569,16 +588,36 @@ def test_coordinator_fails_closed_when_a_stage_never_ran() -> None:
         coordinator.finish()
 
 
-def test_account_delete_coordinator_requires_the_reconcile_stage() -> None:
-    """Account deletion discharges billing's reconcile stage, and only it."""
+def test_account_delete_coordinator_requires_both_stages() -> None:
+    """Account deletion discharges provider reconciliation and anonymization."""
     coordinator = RemovalCoordinator(RemovalBoundary.ACCOUNT_DELETE)
     with pytest.raises(RuntimeError, match="did not discharge"):
         coordinator.finish()
 
-    discharged = coordinator.discharge_stage(RemovalAction.RECONCILE)
+    reconciled = coordinator.discharge_stage(RemovalAction.RECONCILE)
+    assert [obligation.name for obligation in reconciled] == [BILLING_PROVIDER_STATE]
+    with pytest.raises(RuntimeError, match="did not discharge"):
+        coordinator.finish()
 
-    assert [obligation.name for obligation in discharged] == [BILLING_PROVIDER_STATE]
-    assert coordinator.finish() == discharged
+    anonymized = coordinator.discharge_stage(RemovalAction.ANONYMIZE)
+    assert {obligation.name for obligation in anonymized} == {
+        AUTH_PERSONAL_DATA,
+        BILLING_PERSONAL_DATA,
+        BLOG_PERSONAL_DATA,
+        OWNED_PERSONAL_DATA,
+    }
+    assert set(coordinator.finish()) == {*reconciled, *anonymized}
+
+
+def test_anonymize_is_an_app_owned_stage_with_a_declared_executor() -> None:
+    """The anonymize action names the declaring app's hook and has a route."""
+    assert STAGE_EXECUTOR_HOOKS[RemovalAction.ANONYMIZE] == "anonymize_account"
+    assert RemovalAction.ANONYMIZE in coordinator_discharge_actions(
+        RemovalBoundary.ACCOUNT_DELETE
+    )
+    assert RemovalAction.ANONYMIZE not in coordinator_discharge_actions(
+        RemovalBoundary.PURGE
+    )
 
 
 def test_coordinator_discharge_and_finish_are_idempotent() -> None:
@@ -597,13 +636,18 @@ def test_coordinator_discharge_and_finish_are_idempotent() -> None:
 
     assert {obligation.name for obligation in discharged} == {
         BILLING_PROVIDER_STATE,
+        OWNED_PERSONAL_DATA,
         OWNED_TENANT_ROWS,
         SOCIAL_CACHE_STATE,
         PURGE_TOMBSTONE,
     }
     assert coordinator.finish() == discharged
     assert coordinator.pending() == ()
-    assert coordinator.skipped() == ()
+    assert {obligation.name for obligation in coordinator.skipped()} == {
+        AUTH_PERSONAL_DATA,
+        BILLING_PERSONAL_DATA,
+        BLOG_PERSONAL_DATA,
+    }
 
 
 def test_coordinator_records_skips_without_discharging_them() -> None:

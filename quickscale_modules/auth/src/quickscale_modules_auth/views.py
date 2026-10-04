@@ -29,6 +29,7 @@ import quickscale_modules_auth._account_deletion_guard as _account_deletion_guar
 import quickscale_modules_auth._account_deletion_handlers as _account_deletion_handlers
 import quickscale_modules_auth._account_deletion_providers as _account_deletion_providers
 import quickscale_modules_auth._account_deletion_references as _account_deletion_references
+import quickscale_modules_auth._anonymization as _anonymization
 import quickscale_modules_auth.exceptions as _exceptions
 
 from quickscale_core.runtime import collect_capabilities
@@ -173,6 +174,7 @@ class AccountDeleteView(
                             recheck.locked_organizations,
                             coordinator=coordinator,
                         )
+                        self._anonymize_account(user, coordinator)
                         success_response = super().form_valid(form)
                         # Fail closed inside the deletion transaction: a
                         # discovered obligation this boundary never
@@ -276,6 +278,29 @@ class AccountDeleteView(
                     organization.pk,
                     obligation.account_delete_skip_reason,
                 )
+
+    def _anonymize_account(
+        self,
+        user: Any,
+        coordinator: RemovalCoordinator,
+    ) -> None:
+        """Run every installed app's anonymize executor, then discharge the stage.
+
+        The pre-scrub identity — address, full name, and username — is
+        captured once and passed to every hook.  A handler may run in any
+        order, and auth's own handler mutates the account row, so the
+        username must be snapshotted too: the invitation display falls back to
+        it when the person has no full name.  The caller holds one transaction
+        around this call, so a failing executor rolls the whole account
+        deletion back; file effects are scheduled on commit (Module
+        Conventions rule 21).
+        """
+        original_email = user.email
+        original_name = user.get_full_name().strip()
+        original_username = str(getattr(user, "username", "") or "").strip()
+        for _, hook in _anonymization.discover_anonymize_hooks():
+            hook(user, original_email, original_name, original_username)
+        coordinator.discharge_stage(RemovalAction.ANONYMIZE)
 
     def _account_deletion_handlers(self) -> tuple[Any, ...]:
         """Return every installed app's declared account-deletion handler.

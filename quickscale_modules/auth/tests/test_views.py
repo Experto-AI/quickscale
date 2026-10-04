@@ -2521,3 +2521,65 @@ class TestAccountDeleteViewDeclaredHandlers:
             ("enter", first_organization_id),
             ("exit", first_organization_id),
         ]
+
+
+@pytest.mark.django_db
+class TestAccountDeleteViewAnonymization:
+    """The declared anonymize executors run inside the deletion transaction."""
+
+    def test_account_delete_scrubs_declared_module_personal_data(
+        self, authenticated_client, user
+    ):
+        """A later handler receives the pre-scrub identity, not the scrubbed row."""
+        from quickscale_modules_billing.models import WebhookEvent
+
+        event = WebhookEvent.objects.create(
+            stripe_event_id="evt-account-close",
+            event_type="customer.updated",
+            payload={"customer_details": {"email": user.email, "name": "Test User"}},
+        )
+
+        response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
+
+        assert response.status_code == 302
+        event.refresh_from_db()
+        assert event.payload["customer_details"] == {
+            "email": "[redacted]",
+            "name": "[redacted]",
+        }
+
+    def test_account_delete_rolls_back_anonymization_when_an_executor_fails(
+        self, authenticated_client, user, monkeypatch
+    ):
+        """A failing executor rolls the whole deletion back, scrubs included."""
+        from django.contrib.auth import get_user_model
+
+        import quickscale_modules_billing._anonymization as billing_anonymization
+        from quickscale_modules_billing.models import WebhookEvent
+
+        event = WebhookEvent.objects.create(
+            stripe_event_id="evt-account-close-failure",
+            event_type="customer.updated",
+            payload={"customer_details": {"email": user.email, "name": "Test User"}},
+        )
+        scrub = billing_anonymization.anonymize_account
+
+        def redact_then_fail(
+            user_arg, original_email, original_name, original_username
+        ):
+            scrub(user_arg, original_email, original_name, original_username)
+            raise RuntimeError("post-redaction failure")
+
+        monkeypatch.setattr(
+            billing_anonymization, "anonymize_account", redact_then_fail
+        )
+
+        with pytest.raises(RuntimeError, match="post-redaction failure"):
+            authenticated_client.post(reverse("quickscale_auth:account_delete"))
+
+        event.refresh_from_db()
+        assert event.payload["customer_details"]["email"] == user.email
+        account = get_user_model().objects.filter(pk=user.pk).first()
+        assert account is not None
+        assert account.email == user.email
+        assert account.is_active is True
