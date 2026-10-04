@@ -7,7 +7,6 @@ from .constants import (
     FRESH_FIRST_REPLACED_ROOT_FILES,
     FRESH_FIRST_UTILITY_DIRS,
     MANUAL_HANDOFF_REASON,
-    VERIFICATION_COMMAND_SPECS,
     VERIFICATION_COMMAND_TIMEOUT_SECONDS,
 )
 from .identity import _build_identity_reconciliation_plan
@@ -29,7 +28,19 @@ from .planning import (
     _fresh_first_actions,
     _prepare_beta_migration_report,
 )
-from .preflight import _protected_recipient_paths
+from .package_json_editing import (
+    _collect_missing_frontend_dependencies,
+    _insert_frontend_dependencies,
+)
+from .preflight import (
+    _protected_recipient_paths,
+    _verification_command_specs_for,
+)
+from .project_apps import (
+    _copy_project_app,
+    _mount_project_app_urls,
+    _register_project_apps,
+)
 from .regeneration import (
     _execute_regenerate_recipient,
     _plan_beta_migration_iterate,
@@ -71,6 +82,8 @@ def _refresh_recipient_snapshot(report: BetaMigrationReport) -> ProjectSnapshot:
             refreshed,
             identity_reconciliation_required=report.identity_reconciliation_required,
             path_dependency_diff=report.path_dependency_diff,
+            project_apps=report.donor.project_apps,
+            frontend_dependency_merge=report.frontend_dependency_merge,
         )
     return refreshed
 
@@ -225,6 +238,38 @@ def _execute_copy_selected_django_files(report: BetaMigrationReport) -> None:
     )
 
 
+def _execute_copy_project_owned_apps(report: BetaMigrationReport) -> None:
+    """Copy the donor's project-owned apps without their migration history."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    for app_name in report.donor.project_apps:
+        _copy_project_app(report.donor, report.recipient, app_name)
+        _record_changed_file(report, report.recipient.path / app_name)
+
+    _append_completed_step(
+        report,
+        step="copy-project-owned-apps",
+        detail=(
+            "Copied donor project-owned apps without migrations: "
+            f"{', '.join(report.donor.project_apps) or '(none)'}"
+        ),
+    )
+
+
+def _execute_register_and_mount_project_owned_apps(
+    report: BetaMigrationReport,
+) -> None:
+    """Register copied apps in user-owned settings and mount their URLs."""
+    registration_detail = _register_project_apps(report)
+    mount_detail = _mount_project_app_urls(report)
+    _append_completed_step(
+        report,
+        step="register-and-mount-project-owned-apps",
+        detail=f"{registration_detail} {mount_detail}",
+    )
+
+
 def _execute_sync_missing_path_dependencies(report: BetaMigrationReport) -> None:
     """Add any missing donor path dependencies to the recipient pyproject.toml."""
     if report.recipient is None:
@@ -251,6 +296,45 @@ def _execute_sync_missing_path_dependencies(report: BetaMigrationReport) -> None
         detail=(
             "Added missing donor path dependencies to recipient pyproject.toml: "
             f"{', '.join(missing_dependencies.keys())}"
+        ),
+    )
+
+
+def _execute_merge_frontend_dependencies(report: BetaMigrationReport) -> None:
+    """Merge donor-only frontend dependencies into the recipient manifest."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    missing_dependencies = _collect_missing_frontend_dependencies(report)
+    package_json_path = report.recipient.path / "frontend" / "package.json"
+    if not any(missing_dependencies.values()):
+        _append_completed_step(
+            report,
+            step="merge-frontend-dependencies",
+            detail=(
+                "Recipient frontend/package.json already declared every donor frontend "
+                "dependency."
+            ),
+        )
+        return
+
+    _insert_frontend_dependencies(package_json_path, missing_dependencies)
+    _record_changed_file(report, package_json_path)
+    added_names = sorted(
+        name for entries in missing_dependencies.values() for name in entries
+    )
+    conflicts = (
+        report.frontend_dependency_merge.conflicts
+        if report.frontend_dependency_merge is not None
+        else []
+    )
+    _append_completed_step(
+        report,
+        step="merge-frontend-dependencies",
+        detail=(
+            f"Added donor frontend dependencies {', '.join(added_names)} to "
+            f"frontend/package.json; reported version conflicts: "
+            f"{'; '.join(conflicts) or '(none)'}."
         ),
     )
 
@@ -292,7 +376,7 @@ def _build_verification_subprocess_context(
     if (
         len(spec.argv) >= 2
         and spec.argv[0] == "poetry"
-        and spec.argv[1] in {"lock", "install"}
+        and spec.argv[1] in {"lock", "install", "run"}
     ):
         subprocess_kwargs["env"] = build_isolated_poetry_env()
     return working_dir, subprocess_kwargs
@@ -380,12 +464,23 @@ def _run_verification_command(
         )
 
 
+def _verification_command_specs(
+    report: BetaMigrationReport,
+) -> tuple[VerificationCommandSpec, ...]:
+    """Return the app-aware verification stack for the report's donor.
+
+    Planning renders its command list from the same builder, so the plan and
+    the executed stack agree on the app migration regeneration command.
+    """
+    return _verification_command_specs_for(report.donor)
+
+
 def _execute_verification_stack(report: BetaMigrationReport) -> None:
     """Execute the shared verification stack and capture subprocess output."""
     if report.recipient is None:
         raise ValueError("Recipient snapshot is unavailable.")
 
-    for spec in VERIFICATION_COMMAND_SPECS:
+    for spec in _verification_command_specs(report):
         _run_verification_command(report, spec)
 
     _append_completed_step(
@@ -423,7 +518,13 @@ def _execute_fresh_first(report: BetaMigrationReport) -> BetaMigrationReport:
             _execute_copy_custom_components_and_utilities,
         ),
         ("copy-selected-django-files", _execute_copy_selected_django_files),
+        ("copy-project-owned-apps", _execute_copy_project_owned_apps),
+        (
+            "register-and-mount-project-owned-apps",
+            _execute_register_and_mount_project_owned_apps,
+        ),
         ("sync-missing-path-dependencies", _execute_sync_missing_path_dependencies),
+        ("merge-frontend-dependencies", _execute_merge_frontend_dependencies),
         ("preserve-managed-recipient-files", _execute_preserve_managed_recipient_files),
         ("run-verification-stack", _execute_verification_stack),
         ("write-handoff-prompt", _execute_write_handoff_prompt),

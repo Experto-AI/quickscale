@@ -17,6 +17,7 @@ make beta-migrate-iterate DONOR=/abs/path/to/existing-beta-site RECIPIENT=/abs/p
 Rules for the current maintainer tool:
 - `make beta-migrate-fresh` runs deterministic file mutation on the throwaway recipient and executes the local verification stack by default; add `DRY_RUN=1` to emit the plan/report without mutating files
 - before any mutation every donor file is classified — generated-untouched, generated-customized, project-owned, module-edited, or build artifact — and a donor file that matches no class blocks the run and is named in the report
+- project-owned Django apps beside `manage.py` are detected, copied without their donor migrations, registered in the recipient's user-owned `settings/base.py`, URL-mounted through the recipient's user-owned `urls.py`, and their migrations are regenerated against the current released models before `migrate` runs; a donor migration operation the autodetector cannot reproduce (for example a FORCE-RLS `RunPython`) blocks the run and is named instead of being dropped silently; donor-added frontend dependencies are merged into the recipient's `frontend/package.json`, keeping the recipient's version and reporting every conflict
 - `make beta-migrate-iterate` runs one migration iteration: it reads slug, package, theme, and modules from the donor's `quickscale.yml`, regenerates the throwaway recipient through the staging sequence below and `quickscale apply --split-refs-from-branches`, then runs the fresh-first workflow against it; `DRY_RUN=1` plans the regeneration only
 - implemented in `quickscale_devtools.beta_migration`; `scripts/beta_migrate.py` is only the thin maintainer wrapper, not a QuickScale module or public `quickscale` CLI command
 - reports which project's `settings/production.py`, `start.sh`, and `Dockerfile` form the effective runtime, rejects unresolved command settings or launcher/package skew before mutation, and keeps fresh-first `.quickscale/state.yml` identity metadata aligned with the reconciled scaffold
@@ -100,6 +101,7 @@ The final iteration runs with every row closed.
 | ID | Found in iteration | Gap | Kind | Resolution | Evidence | Status |
 |---|---|---|---|---|---|---|
 | G-001 | 0 (2026-09-26) | The fresh-first preflight blocks: donor `bap_web/settings/production.py` (generated on v0.62.0) predates the SA206 runtime settings facade and selects its database inline. The donor is read-only, so the block cannot be cleared on the donor side. | tool fix | The tool stops treating an old donor's `production.py` as authoritative: it ports only the donor's real customizations onto the recipient's generated, facade-based `production.py` (or rewrites the donor's database block onto the facade), and reports each carried customization. | — | open |
+| G-002 | review (SA214 c) | A donor project-owned app's migrations can own operations the autodetector cannot reproduce — FORCE-RLS policies, composite tenant constraints, data migrations. Regenerating plain model operations would silently drop tenant isolation. | tool fix | The tool fails closed and names each operation; it must regenerate or carry the required recipient-local policies and constraints before the final iteration can run clean. | — | open |
 
 - **ID** — `G-NNN`, never reused.
 - **Kind** — `tool fix`, `playbook step`, `project decision`, or `upstream to module`.
@@ -216,7 +218,9 @@ make beta-migrate-fresh DONOR="$DONOR" RECIPIENT="$RECIPIENT"
 ```
 
 **Do not rerun executor phases 2–8 after Step 1.** The command already performs
-identity reconciliation, frontend and Django copies, path-dependency sync, and
+identity reconciliation, frontend and Django copies, project-owned app migration
+(copy, registration, URL mount, and migration regeneration), path-dependency sync,
+frontend dependency merge, and
 the complete local verification stack. Those phases are non-executable reference
 for reviewing the report or resuming from its last completed deterministic step.
 Steps 9–10 are the remaining operator actions.
@@ -450,6 +454,10 @@ cd frontend && pnpm install && cd ..
 # Build frontend — must succeed before testing
 cd frontend && pnpm build && cd ..
 
+# Regenerate project-owned app migrations (donor history is dropped on copy;
+# skip this when the donor has no project-owned apps)
+poetry run python manage.py makemigrations <app labels>
+
 # Apply all Django migrations (new modules from fresh scaffold)
 quickscale manage migrate
 
@@ -522,7 +530,7 @@ What happens to each file during the fresh-first workflow.
 | `frontend/src/hooks/useModules.ts` | keep RECIPIENT's — project-agnostic per SA106 (no baked identity; runtime from `window.__QUICKSCALE__`) |
 | `frontend/src/main.tsx` | keep RECIPIENT's (byte-identical only among projects from the same theme version; legacy pre-SA107 or customized recipients must compare/review for boot-validation and public-surface-handoff parity — parity is not proven) |
 | `pyproject.toml` | keep RECIPIENT's; add any missing path deps from donor |
-| `frontend/package.json` | keep RECIPIENT's |
+| `frontend/package.json` | keep RECIPIENT's identity and scripts; merge donor-only `dependencies`/`devDependencies` and report every version conflict, keeping the recipient's version |
 | `quickscale.yml` | keep RECIPIENT's (already has target modules) |
 | `.quickscale/state.yml` | keep RECIPIENT's authoritative state; reconcile project identity and package-prefixed managed-file keys under the state lock |
 | `<pkg>/settings/modules.py` | auto-generated — keep RECIPIENT's |
@@ -539,6 +547,7 @@ What happens to each file during the fresh-first workflow.
 | `<pkg>/urls.py`, `views.py`, `middleware.py`, `sitemaps.py`, `context_processors.py` | copy from donor |
 | `<pkg>/settings/production.py` | copy from donor |
 | `<pkg>/settings/base.py`, `local.py` | keep RECIPIENT's |
+| `<project app>/` (beside `manage.py`) | detect, copy from donor without `migrations/`, register in `<pkg>/settings/base.py`, mount its `urls.py` in `<pkg>/urls.py`, regenerate migrations before `migrate` |
 | `media/`, `.env`, `poetry.lock` | never copy; the throwaway recipient's `.env` receives identity-only reconciliation for local verification and remains excluded from repo replacement |
 
 ---
@@ -655,7 +664,7 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] Fresh-first throwaway recipient prepared
 [ ] Fresh-first report confirms complete field-aware identity reconciliation, including authoritative `.quickscale/state.yml`, derived database/frontend values, and `start.sh`
 [ ] Fresh-first report confirms App.tsx, custom pages/components, utilities, Django files, and missing path deps were copied
-[ ] Tool report contains seven passed verification results: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
+[ ] Tool report contains seven passed verification results: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test` — plus a passed recipient-local `poetry run python manage.py makemigrations <app>` for every migrated model-bearing app
 [ ] Local smoke-test completed — existing pages intact and new module pages work
 [ ] Effective donor-owned production settings call `quickscale_core.runtime.settings.resolve_runtime_database_url` before the current maintainer tool is invoked
 [ ] Result committed or staged in the target repo
@@ -733,7 +742,7 @@ Use this when the maintainer tool is only partially implemented or stops before 
 1. Read this playbook, the current [v0.89.0 release note](../releases/release-v0.89.0.md), and the historical [v0.81.0 tooling note](../releases/release-v0.81.0.md) before changing the automation behavior.
 2. Treat the provided `DONOR` and `RECIPIENT` values as authoritative rather than inferring roles from directory names.
 3. Resume from the last completed deterministic step in the tool's report — and from `MIGRATION_PROMPT.md` in the recipient after a completed run — instead of rerunning earlier destructive steps.
-4. Fresh-first continuation order: field-aware identity fix (including locked authoritative state reconciliation and `start.sh`) → frontend copies → Django file copies → path dependencies → local verification → manual repo handoff.
+4. Fresh-first continuation order: field-aware identity fix (including locked authoritative state reconciliation and `start.sh`) → frontend copies → Django file copies → project-owned app migration (copy, registration, and URL mount) → path dependencies → frontend dependency merge → local verification (including the recipient-local `makemigrations` for every migrated app) → manual repo handoff.
 5. If a step would require guessing about module adoption, deploy timing, or secrets, stop, record the skipped work in `skipped_steps`, and leave the operator follow-up in `pending_manual_actions`.
 6. The minimum handoff payload for partial automation is `mode`, `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions`.
 

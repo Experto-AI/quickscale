@@ -13,6 +13,7 @@ from .model import (
     BetaMigrationInput,
     BetaMigrationReport,
     DiffSummary,
+    FrontendDependencyMerge,
     PendingManualAction,
     PlannedAction,
     ProjectSnapshot,
@@ -21,6 +22,10 @@ from .model import (
     _append_skipped_step,
     _make_report,
 )
+from .package_json_editing import (
+    _validate_fresh_first_frontend_dependency_targets,
+)
+from .project_apps import _validate_project_app_targets
 from .preflight import (
     _blocked_due_to_missing_snapshots,
     _fresh_first_identity_targets,
@@ -45,9 +50,11 @@ def _fresh_first_actions(
     *,
     identity_reconciliation_required: bool,
     path_dependency_diff: DiffSummary,
+    project_apps: tuple[str, ...] = (),
+    frontend_dependency_merge: FrontendDependencyMerge | None = None,
 ) -> list[PlannedAction]:
     """Build the fresh-first planned action list."""
-    return [
+    actions: list[PlannedAction] = [
         PlannedAction(
             step="identity-reconciliation",
             description=(
@@ -100,6 +107,36 @@ def _fresh_first_actions(
                 *[str(path) for path in _protected_recipient_paths(recipient)],
             ],
         ),
+    ]
+    if project_apps:
+        actions.append(
+            PlannedAction(
+                step="copy-project-owned-apps",
+                description=(
+                    "Copy the donor's project-owned Django apps into the recipient and drop "
+                    "their donor migration history so it is regenerated against the current "
+                    "released models before migrate runs."
+                ),
+                targets=[
+                    *[str(donor.path / app_name) for app_name in project_apps],
+                    *[str(recipient.path / app_name) for app_name in project_apps],
+                ],
+            )
+        )
+        actions.append(
+            PlannedAction(
+                step="register-and-mount-project-owned-apps",
+                description=(
+                    "Register each copied app in the recipient's user-owned settings/base.py "
+                    "INSTALLED_APPS and mount its urls.py in the recipient's user-owned urls.py."
+                ),
+                targets=[
+                    str(recipient.package_dir / "settings" / "base.py"),
+                    str(recipient.package_dir / "urls.py"),
+                ],
+            )
+        )
+    actions.append(
         PlannedAction(
             step="sync-missing-path-dependencies",
             description=(
@@ -110,38 +147,66 @@ def _fresh_first_actions(
             commands=[
                 f"Missing path dependencies to add: {', '.join(path_dependency_diff.donor_only) or '(none)'}"
             ],
-        ),
-        PlannedAction(
-            step="preserve-managed-recipient-files",
-            description=(
-                "Keep the fresh scaffold's managed backend/runtime files in place during fresh-first."
+        )
+    )
+    if frontend_dependency_merge is not None and (
+        frontend_dependency_merge.donor_only or frontend_dependency_merge.conflicts
+    ):
+        merge_commands = [
+            "Frontend dependencies to add: "
+            f"{', '.join(frontend_dependency_merge.donor_only) or '(none)'}"
+        ]
+        merge_commands.extend(
+            f"Frontend version conflict (recipient version kept): {conflict}"
+            for conflict in frontend_dependency_merge.conflicts
+        )
+        actions.append(
+            PlannedAction(
+                step="merge-frontend-dependencies",
+                description=(
+                    "Add the donor-only frontend dependencies to the recipient's "
+                    "frontend/package.json, keep the recipient's version on a version "
+                    "conflict, and report every conflict."
+                ),
+                targets=[str(recipient.path / "frontend" / "package.json")],
+                commands=merge_commands,
+            )
+        )
+    actions.extend(
+        [
+            PlannedAction(
+                step="preserve-managed-recipient-files",
+                description=(
+                    "Keep the fresh scaffold's managed backend/runtime files in place during fresh-first."
+                ),
+                targets=[str(path) for path in _protected_recipient_paths(recipient)],
             ),
-            targets=[str(path) for path in _protected_recipient_paths(recipient)],
-        ),
-        PlannedAction(
-            step="run-verification-stack",
-            description="Run the shared verification subprocess stack in the recipient working tree.",
-            commands=_render_verification_commands(recipient.path),
-            targets=[str(recipient.path)],
-        ),
-        PlannedAction(
-            step="write-handoff-prompt",
-            description=(
-                "Write MIGRATION_PROMPT.md into the recipient from the run report so a coding "
-                "assistant can complete the remaining work."
+            PlannedAction(
+                step="run-verification-stack",
+                description="Run the shared verification subprocess stack in the recipient working tree.",
+                commands=_render_verification_commands(recipient.path, donor=donor),
+                targets=[str(recipient.path)],
             ),
-            targets=[str(recipient.path / HANDOFF_PROMPT_FILENAME)],
-        ),
-        PlannedAction(
-            step="manual-handoff",
-            description=(
-                "After local verification succeeds, keep smoke testing, repo replacement, PR/merge, "
-                "deploy, env vars, and rollback as explicit operator steps."
+            PlannedAction(
+                step="write-handoff-prompt",
+                description=(
+                    "Write MIGRATION_PROMPT.md into the recipient from the run report so a coding "
+                    "assistant can complete the remaining work."
+                ),
+                targets=[str(recipient.path / HANDOFF_PROMPT_FILENAME)],
             ),
-            requires_review=True,
-            targets=[str(recipient.path)],
-        ),
-    ]
+            PlannedAction(
+                step="manual-handoff",
+                description=(
+                    "After local verification succeeds, keep smoke testing, repo replacement, PR/merge, "
+                    "deploy, env vars, and rollback as explicit operator steps."
+                ),
+                requires_review=True,
+                targets=[str(recipient.path)],
+            ),
+        ]
+    )
+    return actions
 
 
 def _build_pending_manual_actions(
@@ -354,6 +419,8 @@ def _build_report_planned_actions(report: BetaMigrationReport) -> None:
         report.recipient,
         identity_reconciliation_required=report.identity_reconciliation_required,
         path_dependency_diff=report.path_dependency_diff,
+        project_apps=report.donor.project_apps,
+        frontend_dependency_merge=report.frontend_dependency_merge,
     )
     _append_completed_step(
         report,
@@ -368,6 +435,8 @@ def _prepare_report_plan(report: BetaMigrationReport) -> None:
     _populate_report_diffs(report)
     _classify_donor_files(report)
     _validate_fresh_first_path_dependency_targets(report)
+    _validate_fresh_first_frontend_dependency_targets(report)
+    _validate_project_app_targets(report)
     _validate_identity_reconciliation(report)
     if not report.blockers:
         _build_report_planned_actions(report)

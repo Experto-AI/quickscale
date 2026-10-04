@@ -122,6 +122,15 @@ class DonorFileClassification:
 
 
 @dataclass(frozen=True)
+class FrontendDependencyMerge:
+    """Planned donor/recipient frontend dependency merge."""
+
+    donor_only: list[str] = field(default_factory=list)
+    recipient_only: list[str] = field(default_factory=list)
+    conflicts: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class ProjectSnapshot:
     """Resolved project information used for planning and execution."""
 
@@ -134,6 +143,7 @@ class ProjectSnapshot:
     config_path: Path
     pyproject_path: Path
     package_dir: Path
+    project_apps: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -205,6 +215,7 @@ class BetaMigrationReport:
     identity_reconciliation_required: bool = False
     module_diff: DiffSummary | None = None
     path_dependency_diff: DiffSummary | None = None
+    frontend_dependency_merge: FrontendDependencyMerge | None = None
     donor_file_classification: DonorFileClassification | None = None
     runtime_provenance: RuntimeFileProvenance | None = None
     preflight_checks: list[PreflightCheck] = field(default_factory=list)

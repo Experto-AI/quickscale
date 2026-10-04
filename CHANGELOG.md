@@ -56,6 +56,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Beta migration classifies every donor file before mutation.** The maintainer tool sorts
     each donor file into generated-untouched, generated-customized, project-owned, module-edited,
     or build-artifact and blocks the run, naming the file, when one matches no class.
+  - **Beta migration carries project-owned apps and frontend dependencies.** The maintainer tool
+    copies a donor's top-level Django apps without their migration history, registers and
+    URL-mounts them through user-owned settings and URL files, regenerates their migrations
+    before `migrate` runs, blocks when a donor migration owns an operation model regeneration
+    cannot reproduce, and merges donor-only `frontend/package.json` dependencies while reporting
+    every version conflict.
   - **Runtime database role provisioning is consistent.** Generated local setup, Railway deployment, and `OPERATIONS.md` use the shared `quickscale_runtime` name and one grant set that includes database `CONNECT`.
   - **Module pages share the project shell and design tokens, and their tests share one stub.** Auth, billing, blog, listings, and CRM Django pages use the generated React theme's tokens — the live Vite `frontend/src/index.css` in DEBUG, the compiled stylesheet otherwise — and Vite accepts only the exact browser-visible Host derived from `QUICKSCALE_FRONTEND_HOST_PORT` or `QUICKSCALE_FRONTEND_ORIGIN`. The blog, CRM, listings, and analytics module test settings point at one repository-owned test `base.html`, while auth and billing keep local stubs that preserve their older shell assertions.
   - **Payment-path transaction boundaries and Stripe query safety.** Account deletion runs its

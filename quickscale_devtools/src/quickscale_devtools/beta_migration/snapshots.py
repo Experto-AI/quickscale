@@ -7,6 +7,7 @@ from .model import (
     _append_blocker,
     _append_check,
 )
+from .project_apps import _detect_project_owned_apps
 from .toml_editing import (
     _extract_path_dependencies,
     _extract_poetry_package,
@@ -48,6 +49,7 @@ def _load_project_snapshot(project_path: Path) -> ProjectSnapshot:
         config_path=config_path,
         pyproject_path=pyproject_path,
         package_dir=package_dir,
+        project_apps=_detect_project_owned_apps(project_path, package_dir),
     )
 
 

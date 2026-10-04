@@ -402,7 +402,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     emission inventory, records the inventory in the report and stdout, and blocks before mutation on
     an unclassified or unreadable file; next are slices (c)–(f), starting with G-001; watch the
     recognized-root allowlist — a new donor root blocks until the maintainer classifies it.
-  - [ ] (c) Project-owned apps (copy, register, mount, regenerate migrations) and frontend
+  - [x] (c) Project-owned apps (copy, register, mount, regenerate migrations) and frontend
     dependency merge.
   - [ ] (d) The `showcase_react` design layer, its ownership entry and upgrade test, and the
     donor design port.

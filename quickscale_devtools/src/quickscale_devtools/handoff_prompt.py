@@ -21,8 +21,9 @@ HARD_CONSTRAINTS: tuple[str, ...] = (
     "In-place edits under vendored module source (`modules/<name>/`) are outside the "
     "extension contract: upstream them into the module or re-express them as project-owned "
     "code before the recipient is handed over.",
-    "Add no frontend dependency the recipient does not already declare; report merge "
-    "conflicts instead of forcing them.",
+    "The migration merged the donor's declared frontend dependencies and reported every "
+    "version conflict; keep the recipient's declared versions and add no dependency it "
+    "does not already declare.",
 )
 
 DONE_CRITERIA: tuple[str, ...] = (
@@ -153,6 +154,15 @@ def render_handoff_prompt(report: BetaMigrationReport) -> str:
     lines.append(
         f"- Path dependency diff: {_render_diff_summary(report.path_dependency_diff)}"
     )
+    if report.frontend_dependency_merge is None:
+        lines.append("- Frontend dependency merge: unavailable")
+    else:
+        merge = report.frontend_dependency_merge
+        lines.append(
+            "- Frontend dependency merge: "
+            f"donor-only={merge.donor_only or ['(none)']}, "
+            f"version conflicts={merge.conflicts or ['(none)']}"
+        )
 
     if report.verification_results:
         lines += ["", "Verification commands:"]

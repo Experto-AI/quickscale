@@ -17,10 +17,12 @@ from .model import (
     PathKind,
     ProjectSnapshot,
     RequiredPathSpec,
+    VerificationCommandSpec,
     _append_blocker,
     _append_check,
     _shell_cwd,
 )
+from .project_apps import _project_app_migration_labels
 from pathlib import Path
 from quickscale_core.utils.theme_validation import (
     SOLE_VALID_THEME,
@@ -251,9 +253,44 @@ def _fresh_first_identity_targets(snapshot: ProjectSnapshot) -> list[Path]:
     return paths
 
 
-def _render_verification_commands(recipient_root: Path) -> list[str]:
+def _verification_command_specs_for(
+    donor: ProjectSnapshot | None,
+) -> tuple[VerificationCommandSpec, ...]:
+    """Return the verification stack, adding app migration regeneration.
+
+    A donor with model-bearing project-owned apps adds one recipient-local
+    ``makemigrations`` command before ``migrate``; planning and execution share
+    this builder so a dry-run plan matches the executed sequence.
+    """
+    specs = list(VERIFICATION_COMMAND_SPECS)
+    if donor is None:
+        return tuple(specs)
+    labels = _project_app_migration_labels(donor)
+    if not labels:
+        return tuple(specs)
+
+    insert_at = len(specs)
+    for index, candidate in enumerate(specs):
+        if candidate.argv[:3] == ("quickscale", "manage", "migrate"):
+            insert_at = index
+            break
+    specs.insert(
+        insert_at,
+        VerificationCommandSpec(
+            display_command=(
+                "poetry run python manage.py makemigrations " + " ".join(labels)
+            ),
+            argv=("poetry", "run", "python", "manage.py", "makemigrations", *labels),
+        ),
+    )
+    return tuple(specs)
+
+
+def _render_verification_commands(
+    recipient_root: Path, *, donor: ProjectSnapshot | None = None
+) -> list[str]:
     commands: list[str] = []
-    for spec in VERIFICATION_COMMAND_SPECS:
+    for spec in _verification_command_specs_for(donor):
         working_dir = (
             recipient_root / spec.cwd_suffix
             if spec.cwd_suffix != "."

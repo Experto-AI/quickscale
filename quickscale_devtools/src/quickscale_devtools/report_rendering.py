@@ -111,6 +111,15 @@ def render_report_summary(report: BetaMigrationReport) -> str:
         ),
         f"Module diff: {_render_diff_summary(report.module_diff)}",
         f"Path dependency diff: {_render_diff_summary(report.path_dependency_diff)}",
+        (
+            "Frontend dependency merge: unavailable"
+            if report.frontend_dependency_merge is None
+            else (
+                "Frontend dependency merge: "
+                f"donor-only={report.frontend_dependency_merge.donor_only or ['(none)']}, "
+                f"version conflicts={report.frontend_dependency_merge.conflicts or ['(none)']}"
+            )
+        ),
         f"Planned actions: {len(report.planned_actions)}",
         f"Changed files: {len(report.changed_files)}",
         f"Verification results: {verification_passed} passed, {verification_failed} failed",
