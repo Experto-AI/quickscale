@@ -642,3 +642,97 @@ def test_iterate_blocks_before_regeneration_when_a_stylesheet_cannot_be_decoded(
     )
     assert marker.read_text() == "previous recipient\n"
     assert not _iterate_stage_dir(recipient).exists()
+
+
+def test_iterate_blocks_before_regeneration_when_a_layer_module_import_is_uncarried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A carried design-layer module may not import an uncarried file."""
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-design-site")
+    marker = recipient / "keep-marker.txt"
+    marker.write_text("previous recipient\n")
+
+    (donor / "frontend" / "src" / "colors.js").write_text("export default {};\n")
+    donor_preset = donor / "frontend" / "design" / "tailwind.preset.js"
+    donor_preset.write_text(
+        'import colors from "../src/colors.js";\n' + donor_preset.read_text()
+    )
+
+    def fail_run(*args: object, **kwargs: object) -> None:
+        raise AssertionError("a blocked donor must not reach staged apply")
+
+    monkeypatch.setattr(subprocess, "run", fail_run)
+    report = run_beta_migration(
+        BetaMigrationInput(mode="iterate", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "Donor design-source preflight failed" in blocker
+        and "frontend/src/colors.js" in blocker
+        for blocker in report.blockers
+    )
+    assert marker.read_text() == "previous recipient\n"
+    assert not _iterate_stage_dir(recipient).exists()
+
+
+def test_design_layer_module_import_of_a_carried_dependency_is_allowed(
+    tmp_path: Path,
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    assets = donor / "frontend" / "src" / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    (assets / "colors.js").write_text("export default {};\n")
+    donor_preset = donor / "frontend" / "design" / "tailwind.preset.js"
+    donor_preset.write_text(
+        'import colors from "../src/assets/colors.js";\n' + donor_preset.read_text()
+    )
+
+    report = plan_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+
+
+def test_iterate_blocks_before_regeneration_on_a_transitive_stylesheet_dependency(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An imported partial's own uncarried imports must block before mutation."""
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-design-site")
+    marker = recipient / "keep-marker.txt"
+    marker.write_text("previous recipient\n")
+
+    donor_design = donor / "frontend" / "design"
+    stylesheet = (donor_design / "tokens.css").read_text()
+    shutil.rmtree(donor_design)
+    assets = donor / "frontend" / "src" / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    (assets / "brand.css").write_text('@import "../extra.css";\n')
+    (donor / "frontend" / "src" / "extra.css").write_text("/* donor partial */\n")
+    (donor / "frontend" / "src" / "index.css").write_text(
+        '@import "./assets/brand.css";\n' + stylesheet
+    )
+    (donor / "frontend" / "tailwind.config.js").write_text(
+        "// donor legacy config\nexport default {};\n"
+    )
+
+    def fail_run(*args: object, **kwargs: object) -> None:
+        raise AssertionError("a blocked donor must not reach staged apply")
+
+    monkeypatch.setattr(subprocess, "run", fail_run)
+    report = run_beta_migration(
+        BetaMigrationInput(mode="iterate", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "Donor design-source preflight failed" in blocker
+        and "frontend/src/extra.css" in blocker
+        for blocker in report.blockers
+    )
+    assert marker.read_text() == "previous recipient\n"
+    assert not _iterate_stage_dir(recipient).exists()

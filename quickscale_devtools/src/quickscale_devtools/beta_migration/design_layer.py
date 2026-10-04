@@ -80,6 +80,8 @@ _CONFIG_MODULE_REFERENCE = re.compile(
 
 _SCHEME_REFERENCE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 
+_JS_MODULE_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".jsx", ".tsx")
+
 
 def _design_layer_files(donor_path: Path) -> tuple[Path, ...]:
     """Return the donor design-layer files that may be carried.
@@ -254,6 +256,13 @@ def _recipient_preserves_path(
     return project_path in emission_paths
 
 
+def _reference_failure(label: str, target: str, project_path: str) -> str:
+    return (
+        f"{label} references files the migration does not carry: "
+        f"{target} -> {project_path}"
+    )
+
+
 def _design_reference_failures(
     donor_path: Path,
     emission_paths: frozenset[str],
@@ -261,31 +270,85 @@ def _design_reference_failures(
     *,
     base_dir: str,
     label: str,
+    visited: set[str] | None = None,
 ) -> tuple[str, ...]:
-    """Return relative stylesheet references the migration cannot preserve."""
+    """Return relative stylesheet references the migration cannot preserve.
+
+    Each preserved stylesheet target outside the design layer is followed, so
+    an imported partial's own relative imports are validated with that
+    partial's base directory; every design-layer stylesheet is scanned
+    directly by the caller, and ``visited`` keeps cycles bounded.
+    """
+    if visited is None:
+        visited = set()
+    layer_paths = {
+        path.relative_to(donor_path).as_posix()
+        for path in _design_layer_files(donor_path)
+    }
     failures: list[str] = []
     for target in _stylesheet_reference_targets(text):
         project_path = _relative_reference_project_path(target, base_dir)
         if project_path is None:
             continue
         if project_path.startswith(".."):
-            failures.append(
-                f"{label} references files the migration does not carry: "
-                f"{target} -> {project_path}"
-            )
+            failures.append(_reference_failure(label, target, project_path))
             continue
         if not (donor_path / project_path).is_file():
             continue  # Already dangling in the donor; migration loses nothing.
         if not _recipient_preserves_path(donor_path, emission_paths, project_path):
+            failures.append(_reference_failure(label, target, project_path))
+            continue
+        if project_path in layer_paths or project_path in visited:
+            continue
+        if not project_path.lower().endswith(".css"):
+            continue
+        visited.add(project_path)
+        try:
+            nested_text = (donor_path / project_path).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
             failures.append(
-                f"{label} references files the migration does not carry: "
-                f"{target} -> {project_path}"
+                f"cannot read stylesheet {project_path} for reference validation: {exc}"
             )
+            continue
+        failures.extend(
+            _design_reference_failures(
+                donor_path,
+                emission_paths,
+                nested_text,
+                base_dir=Path(project_path).parent.as_posix(),
+                label=project_path,
+                visited=visited,
+            )
+        )
     return tuple(failures)
 
 
-def _legacy_config_module_references(config_text: str) -> tuple[str, ...]:
-    """Return relative JavaScript module specifiers in a legacy Tailwind config.
+def _module_reference_failures(
+    donor_path: Path,
+    emission_paths: frozenset[str],
+    text: str,
+    *,
+    base_dir: str,
+    label: str,
+) -> tuple[str, ...]:
+    """Return relative JavaScript module references the migration cannot preserve."""
+    failures: list[str] = []
+    for target in _relative_module_references(text):
+        project_path = _relative_reference_project_path(target, base_dir)
+        if project_path is None:
+            continue
+        if project_path.startswith(".."):
+            failures.append(_reference_failure(label, target, project_path))
+            continue
+        if not (donor_path / project_path).is_file():
+            continue  # Already dangling in the donor; migration loses nothing.
+        if not _recipient_preserves_path(donor_path, emission_paths, project_path):
+            failures.append(_reference_failure(label, target, project_path))
+    return tuple(failures)
+
+
+def _relative_module_references(text: str) -> tuple[str, ...]:
+    """Return relative JavaScript module specifiers, deduplicated.
 
     Content globs are plain string literals and are deliberately not matched;
     only module-loading syntax (``require()``, ``import ... from``, bare
@@ -294,9 +357,14 @@ def _legacy_config_module_references(config_text: str) -> tuple[str, ...]:
     return tuple(
         dict.fromkeys(
             match.group("target").strip()
-            for match in _CONFIG_MODULE_REFERENCE.finditer(config_text)
+            for match in _CONFIG_MODULE_REFERENCE.finditer(text)
         )
     )
+
+
+def _legacy_config_module_references(config_text: str) -> tuple[str, ...]:
+    """Return relative JavaScript module specifiers in a legacy Tailwind config."""
+    return _relative_module_references(config_text)
 
 
 def _donor_design_failures(
@@ -321,27 +389,44 @@ def _donor_design_failures(
     layer_files = _design_layer_files(donor_path)
     if layer_files:
         for layer_file in layer_files:
-            if layer_file.suffix.lower() != ".css":
-                continue
+            suffix = layer_file.suffix.lower()
             relative = layer_file.relative_to(donor_path).as_posix()
+            if suffix == ".css":
+                reference_kind = "stylesheet"
+            elif suffix in _JS_MODULE_SUFFIXES:
+                reference_kind = "module"
+            else:
+                continue
             try:
                 text = layer_file.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as exc:
                 failures.append(
-                    f"cannot read design-layer stylesheet {relative} for reference "
-                    f"validation: {exc}"
+                    f"cannot read design-layer {reference_kind} {relative} for "
+                    f"reference validation: {exc}"
                 )
                 continue
-            failures.extend(
-                _design_reference_failures(
-                    donor_path,
-                    emission_paths,
-                    text,
-                    base_dir=Path(relative).parent.as_posix(),
-                    label=relative,
+            base_dir = Path(relative).parent.as_posix()
+            if suffix == ".css":
+                failures.extend(
+                    _design_reference_failures(
+                        donor_path,
+                        emission_paths,
+                        text,
+                        base_dir=base_dir,
+                        label=relative,
+                    )
                 )
-            )
-        return tuple(failures)
+            else:
+                failures.extend(
+                    _module_reference_failures(
+                        donor_path,
+                        emission_paths,
+                        text,
+                        base_dir=base_dir,
+                        label=relative,
+                    )
+                )
+        return tuple(dict.fromkeys(failures))
 
     legacy_stylesheet = donor_path / _LEGACY_STYLESHEET_SOURCE
     if legacy_stylesheet.is_file():
@@ -379,7 +464,7 @@ def _donor_design_failures(
                 "the legacy Tailwind config loads relative modules that relocation "
                 "to the design layer cannot preserve: " + ", ".join(module_references)
             )
-    return tuple(failures)
+    return tuple(dict.fromkeys(failures))
 
 
 def _append_design_check_failure(
