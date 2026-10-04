@@ -696,6 +696,42 @@ def test_extensionless_module_import_of_a_carried_target_is_allowed(
     assert report.status == "ready", report.blockers
 
 
+def test_iterate_blocks_when_a_module_target_is_a_package_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Package-manifest directory loading is unsupported and must fail closed."""
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-design-site")
+    marker = recipient / "keep-marker.txt"
+    marker.write_text("previous recipient\n")
+
+    (donor / "frontend" / "src" / "colors.json").write_text('{"primary": "red"}\n')
+    package_dir = donor / "frontend" / "src" / "assets" / "helpers"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text('{"main": "../../colors.json"}\n')
+    (donor / "frontend" / "design" / "helpers.cjs").write_text(
+        'module.exports = require("../src/assets/helpers");\n'
+    )
+
+    def fail_run(*args: object, **kwargs: object) -> None:
+        raise AssertionError("a blocked donor must not reach staged apply")
+
+    monkeypatch.setattr(subprocess, "run", fail_run)
+    report = run_beta_migration(
+        BetaMigrationInput(mode="iterate", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "Donor design-source preflight failed" in blocker
+        and "package-manifest" in blocker
+        and "frontend/src/assets/helpers/package.json" in blocker
+        for blocker in report.blockers
+    )
+    assert marker.read_text() == "previous recipient\n"
+    assert not _iterate_stage_dir(recipient).exists()
+
+
 def test_iterate_blocks_before_regeneration_when_a_layer_module_import_is_uncarried(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

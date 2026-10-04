@@ -323,30 +323,37 @@ def _design_reference_failures(
     return tuple(failures)
 
 
-def _resolve_donor_module(donor_path: Path, project_path: str) -> str | None:
+def _resolve_donor_module(
+    donor_path: Path, project_path: str
+) -> tuple[bool, str | None]:
     """Resolve a relative module specifier to the donor file it loads.
 
-    Node-style resolution: the exact path, then the supported file
-    extensions, then a directory's index file or ``package.json``.  Returns
-    the donor-relative path of the resolved file, or None when nothing in the
-    donor resolves (the reference was already dangling there).
+    Node-style resolution for the supported forms: the exact path, then the
+    supported file extensions, then a directory's index file.  A directory
+    that carries a ``package.json`` is reported unsupported (``supported``
+    False) because its ``main``/``exports`` fields redirect loading in ways
+    the migration does not model; callers fail closed on it.  ``(True, None)``
+    means the reference resolves to nothing and was already dangling in the
+    donor.
     """
     base = donor_path / project_path
     if base.is_file():
-        return project_path
+        return True, project_path
     for suffix in _JS_MODULE_SUFFIXES + (".json",):
         candidate = Path(str(base) + suffix)
         if candidate.is_file():
-            return candidate.relative_to(donor_path).as_posix()
+            return True, candidate.relative_to(donor_path).as_posix()
     if base.is_dir():
+        package_json = base / "package.json"
+        if package_json.is_file():
+            return False, package_json.relative_to(donor_path).as_posix()
         for name in tuple(f"index{suffix}" for suffix in _JS_MODULE_SUFFIXES) + (
             "index.json",
-            "package.json",
         ):
             candidate = base / name
             if candidate.is_file():
-                return candidate.relative_to(donor_path).as_posix()
-    return None
+                return True, candidate.relative_to(donor_path).as_posix()
+    return True, None
 
 
 def _module_reference_failures(
@@ -366,7 +373,13 @@ def _module_reference_failures(
         if project_path.startswith(".."):
             failures.append(_reference_failure(label, target, project_path))
             continue
-        resolved = _resolve_donor_module(donor_path, project_path)
+        supported, resolved = _resolve_donor_module(donor_path, project_path)
+        if not supported:
+            failures.append(
+                f"{label} loads a package-manifest directory the migration does "
+                f"not support: {target} -> {resolved}"
+            )
+            continue
         if resolved is None:
             continue  # Already dangling in the donor; migration loses nothing.
         if not _recipient_preserves_path(donor_path, emission_paths, resolved):
