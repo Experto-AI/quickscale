@@ -12,13 +12,17 @@ stage copies the donor's design into that layer before verification:
   ``frontend/src/index.css`` and ``frontend/tailwind.config.js``; those files
   are carried into the layer's ``tokens.css`` and ``tailwind.preset.js``
   entry points, and relative ``url()``/``@import`` references in the
-  relocated stylesheet are rebased for its new directory so they keep
-  resolving.
+  relocated stylesheet are rebased for its new directory.
 
-Only files under the recipient's ``frontend/design/`` are written; the donor
-tree stays read-only, and a recipient destination whose path contains a
-symbolic link is refused before any mutation, so a linked destination can
-never redirect a delete into the donor or outside the recipient.
+The relocation is fail-closed about references it cannot preserve: a relative
+stylesheet reference whose donor target exists but would not exist in the
+recipient after migration, and a relative JavaScript module reference in the
+legacy Tailwind config (which relocation cannot rebase without guessing), each
+block the run before any mutation and name the reference.  Only files under
+the recipient's ``frontend/design/`` are written; the donor tree stays
+read-only, and a recipient destination whose path contains a symbolic link is
+refused before any mutation, so a linked destination can never redirect a
+delete into the donor or outside the recipient.
 """
 
 from __future__ import annotations
@@ -29,8 +33,13 @@ import shutil
 from pathlib import Path
 from typing import Match
 
-from .classification import _is_build_artifact
-from .constants import DESIGN_LAYER_LEGACY_SOURCES, DESIGN_LAYER_RELATIVE_DIR
+from .classification import _donor_emission_paths, _is_build_artifact
+from .constants import (
+    DESIGN_LAYER_LEGACY_SOURCES,
+    DESIGN_LAYER_RELATIVE_DIR,
+    FRESH_FIRST_COMPONENT_DIR_SKIP,
+    FRESH_FIRST_UTILITY_DIRS,
+)
 from .model import (
     BetaMigrationReport,
     _append_blocker,
@@ -42,13 +51,22 @@ from .model import (
 
 _LEGACY_STYLESHEET_SOURCE = "frontend/src/index.css"
 _LEGACY_STYLESHEET_TARGET = "frontend/design/tokens.css"
+_LEGACY_STYLESHEET_BASE = "frontend/src"
+_LEGACY_CONFIG_SOURCE = "frontend/tailwind.config.js"
 
+# Quoted targets keep interior parentheses; an unquoted target cannot contain
+# an unescaped closing parenthesis in valid CSS.
 _URL_REFERENCE = re.compile(
-    r"url\(\s*(?P<quote>['\"]?)(?P<target>[^'\")]+)(?P=quote)\s*\)"
+    r"url\(\s*(?:'(?P<single>[^']+)'|\"(?P<double>[^\"]+)\"|(?P<bare>[^'\")]+))\s*\)"
 )
 
 _IMPORT_REFERENCE = re.compile(
-    r"@import\s+(?P<quote>['\"])(?P<target>[^'\"]+)(?P=quote)"
+    r"@import\s+(?:'(?P<single>[^']+)'|\"(?P<double>[^\"]+)\")"
+)
+
+_CONFIG_MODULE_REFERENCE = re.compile(
+    r"(?:require\s*\(\s*|(?:^|[^\w$.])from\s+|import\s*\(\s*|import\s+)"
+    r"(?P<quote>['\"])(?P<target>\.{1,2}/[^'\"]+)(?P=quote)"
 )
 
 _SCHEME_REFERENCE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
@@ -145,28 +163,94 @@ def _rebase_legacy_reference(target: str) -> str | None:
     return "../src/" + stripped
 
 
-def _rewrite_url_reference(match: Match[str]) -> str:
-    target = match.group("target")
-    rebased = _rebase_legacy_reference(target)
-    if rebased is None:
-        return match.group(0)
-    quote = match.group("quote")
-    return f"url({quote}{rebased}{quote})"
+def _stylesheet_reference_targets(text: str) -> tuple[str, ...]:
+    """Return every relative reference target in a stylesheet, deduplicated."""
+    targets: list[str] = []
+    for match in _URL_REFERENCE.finditer(text):
+        target = (
+            match.group("single") or match.group("double") or match.group("bare") or ""
+        ).strip()
+        if target:
+            targets.append(target)
+    for match in _IMPORT_REFERENCE.finditer(text):
+        target = (match.group("single") or match.group("double") or "").strip()
+        if target:
+            targets.append(target)
+    return tuple(dict.fromkeys(targets))
 
 
-def _rewrite_import_reference(match: Match[str]) -> str:
-    target = match.group("target")
-    rebased = _rebase_legacy_reference(target)
-    if rebased is None:
-        return match.group(0)
-    quote = match.group("quote")
-    return f"@import {quote}{rebased}{quote}"
+def _relative_reference_project_path(target: str) -> str | None:
+    """Map a relative stylesheet reference to its project-relative path.
+
+    Returns None for references that are not relative (absolute, scheme
+    qualified, fragment-only, CSS-variable based, or protocol-relative).
+    """
+    stripped = target.strip()
+    if not stripped or stripped.startswith(("/", "#", "?", "var(", "//")):
+        return None
+    if _SCHEME_REFERENCE.match(stripped):
+        return None
+    return (Path(_LEGACY_STYLESHEET_BASE) / stripped).as_posix()
 
 
-def _relocate_legacy_stylesheet(text: str) -> str:
-    """Rebase relative references in a legacy stylesheet for the design layer."""
-    rebound = _URL_REFERENCE.sub(_rewrite_url_reference, text)
-    return _IMPORT_REFERENCE.sub(_rewrite_import_reference, rebound)
+def _recipient_preserves_path(report: BetaMigrationReport, project_path: str) -> bool:
+    """Return whether the migrated recipient is guaranteed to hold *project_path*.
+
+    The fresh-first copy steps transplant whole donor utility directories and
+    every donor component directory except ``ui/``; every generator-emitted
+    path is regenerated by the recipient itself.  Nothing else survives a
+    fresh-first migration, so a reference to anything else cannot be
+    preserved.
+    """
+    if report.donor is None:
+        return False
+    parts = Path(project_path).parts
+    if len(parts) >= 3 and parts[0] == "frontend" and parts[1] == "src":
+        if parts[2] in FRESH_FIRST_UTILITY_DIRS:
+            return True
+        if (
+            parts[2] == "components"
+            and len(parts) >= 4
+            and parts[3] not in FRESH_FIRST_COMPONENT_DIR_SKIP
+        ):
+            return True
+    try:
+        return project_path in _donor_emission_paths(report.donor)
+    except OSError, ValueError:
+        return False
+
+
+def _legacy_reference_failures(
+    report: BetaMigrationReport, stylesheet_text: str
+) -> tuple[str, ...]:
+    """Return relative stylesheet references the migration cannot preserve."""
+    if report.donor is None:
+        return ()
+    failures: list[str] = []
+    for target in _stylesheet_reference_targets(stylesheet_text):
+        project_path = _relative_reference_project_path(target)
+        if project_path is None:
+            continue
+        if not (report.donor.path / project_path).is_file():
+            continue  # Already dangling in the donor; migration loses nothing.
+        if not _recipient_preserves_path(report, project_path):
+            failures.append(f"{target} -> {project_path}")
+    return tuple(failures)
+
+
+def _legacy_config_module_references(config_text: str) -> tuple[str, ...]:
+    """Return relative JavaScript module specifiers in a legacy Tailwind config.
+
+    Content globs are plain string literals and are deliberately not matched;
+    only module-loading syntax (``require()``, ``import ... from``, bare
+    ``import``, and dynamic ``import()``) counts.
+    """
+    return tuple(
+        dict.fromkeys(
+            match.group("target").strip()
+            for match in _CONFIG_MODULE_REFERENCE.finditer(config_text)
+        )
+    )
 
 
 def _validate_design_port_targets(report: BetaMigrationReport) -> None:
@@ -175,7 +259,10 @@ def _validate_design_port_targets(report: BetaMigrationReport) -> None:
     The recipient must carry the never-overwritten design layer (a current
     release always emits it) with no symbolic link on any destination path,
     and the donor must expose at least one readable, eligible design source:
-    its own layer files or the two legacy sources.
+    its own layer files or the two legacy sources.  A legacy stylesheet or
+    Tailwind config whose relative references relocation cannot preserve
+    blocks here, naming each reference, instead of silently losing design
+    resources.
     """
     if report.blockers or report.donor is None or report.recipient is None:
         return
@@ -233,6 +320,56 @@ def _validate_design_port_targets(report: BetaMigrationReport) -> None:
         return
 
     donor_has_layer = bool(_design_layer_files(report.donor.path))
+    if not donor_has_layer:
+        legacy_stylesheet = report.donor.path / _LEGACY_STYLESHEET_SOURCE
+        if legacy_stylesheet.is_file():
+            try:
+                stylesheet_text = legacy_stylesheet.read_text(encoding="utf-8")
+            except OSError, UnicodeDecodeError:
+                stylesheet_text = ""
+            reference_failures = _legacy_reference_failures(report, stylesheet_text)
+            if reference_failures:
+                detail = (
+                    "Design-layer preflight failed: the legacy stylesheet references "
+                    "files the migration does not carry to the rebased design layer: "
+                    + "; ".join(reference_failures)
+                    + ". Move those files into the donor design layer or extend the "
+                    "migration before porting."
+                )
+                _append_check(
+                    report,
+                    name="fresh-first-design-layer",
+                    status="failed",
+                    detail=detail,
+                )
+                _append_blocker(report, detail)
+                return
+
+        legacy_config = report.donor.path / _LEGACY_CONFIG_SOURCE
+        if legacy_config.is_file():
+            try:
+                config_text = legacy_config.read_text(encoding="utf-8")
+            except OSError, UnicodeDecodeError:
+                config_text = ""
+            module_references = _legacy_config_module_references(config_text)
+            if module_references:
+                detail = (
+                    "Design-layer preflight failed: the legacy Tailwind config loads "
+                    "relative modules that relocation to the design layer cannot "
+                    "preserve: "
+                    + ", ".join(module_references)
+                    + ". Inline them or move them into the donor design layer before "
+                    "porting."
+                )
+                _append_check(
+                    report,
+                    name="fresh-first-design-layer",
+                    status="failed",
+                    detail=detail,
+                )
+                _append_blocker(report, detail)
+                return
+
     source_description = (
         "the donor's design layer"
         if donor_has_layer
@@ -248,6 +385,33 @@ def _validate_design_port_targets(report: BetaMigrationReport) -> None:
             f"{DESIGN_LAYER_RELATIVE_DIR}/ layer."
         ),
     )
+
+
+def _rewrite_url_reference(match: Match[str]) -> str:
+    target = (
+        match.group("single") or match.group("double") or match.group("bare") or ""
+    ).strip()
+    rebased = _rebase_legacy_reference(target)
+    if rebased is None or not target:
+        return match.group(0)
+    quote = match.group("single") is not None or match.group("double") is not None
+    wrapped = f'"{rebased}"' if quote else rebased
+    return f"url({wrapped})"
+
+
+def _rewrite_import_reference(match: Match[str]) -> str:
+    target = (match.group("single") or match.group("double") or "").strip()
+    rebased = _rebase_legacy_reference(target)
+    if rebased is None:
+        return match.group(0)
+    quote = '"' if match.group("double") is not None else "'"
+    return f"@import {quote}{rebased}{quote}"
+
+
+def _relocate_legacy_stylesheet(text: str) -> str:
+    """Rebase relative references in a legacy stylesheet for the design layer."""
+    rebound = _URL_REFERENCE.sub(_rewrite_url_reference, text)
+    return _IMPORT_REFERENCE.sub(_rewrite_import_reference, rebound)
 
 
 def _port_design_file(

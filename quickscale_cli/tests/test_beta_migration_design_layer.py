@@ -279,9 +279,9 @@ def test_legacy_stylesheet_relative_references_are_rebased(
     assets = donor / "frontend" / "src" / "assets"
     assets.mkdir(parents=True)
     (assets / "Brand.woff2").write_bytes(b"donor-font")
-    (donor / "frontend" / "src" / "extra.css").write_text("/* donor partial */\n")
+    (assets / "extra.css").write_text("/* donor partial */\n")
     (donor / "frontend" / "src" / "index.css").write_text(
-        '@import "./extra.css";\n'
+        '@import "./assets/extra.css";\n'
         + stylesheet
         + '\n@font-face { font-family: "Brand"; src: url("./assets/Brand.woff2") format("woff2"); }\n'
         + ".hero { background-image: url(assets/Hero.png); }\n"
@@ -300,13 +300,76 @@ def test_legacy_stylesheet_relative_references_are_rebased(
 
     assert report.status == "ready", report.blockers
     tokens = (recipient / "frontend" / "design" / "tokens.css").read_text()
-    assert '@import "../src/extra.css";' in tokens
+    assert '@import "../src/assets/extra.css";' in tokens
     assert 'url("../src/assets/Brand.woff2")' in tokens
     assert "url(../src/assets/Hero.png)" in tokens
     assert 'url("/static/absolute.png")' in tokens
     assert 'url("data:image/png;base64,AAAA")' in tokens
     assert 'url("../shared/z.png")' in tokens
     assert 'url("./assets/' not in tokens
+    assert (recipient / "frontend" / "src" / "assets" / "extra.css").is_file()
+
+
+def test_plan_blocks_when_the_legacy_stylesheet_references_an_uncarried_file(
+    tmp_path: Path,
+) -> None:
+    """A relative reference whose target the migration cannot preserve blocks.
+
+    Only utility directories, component directories, and generator-emitted
+    paths survive fresh-first; a stylesheet reference to anything else would
+    silently break, so it must be named before mutation.
+    """
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    donor_design = donor / "frontend" / "design"
+    stylesheet = (donor_design / "tokens.css").read_text()
+    shutil.rmtree(donor_design)
+    (donor / "frontend" / "src" / "extra.css").write_text("/* donor partial */\n")
+    (donor / "frontend" / "src" / "index.css").write_text(
+        '@import "./extra.css";\n' + stylesheet
+    )
+    (donor / "frontend" / "tailwind.config.js").write_text(
+        "// donor legacy config\nexport default {};\n"
+    )
+
+    report = plan_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "references files the migration does not carry" in blocker
+        and "frontend/src/extra.css" in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_plan_blocks_when_the_legacy_tailwind_config_loads_a_relative_module(
+    tmp_path: Path,
+) -> None:
+    """Relocation cannot rebase relative module specifiers without guessing."""
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    donor_design = donor / "frontend" / "design"
+    (donor / "frontend" / "src" / "index.css").write_text(
+        (donor_design / "tokens.css").read_text()
+    )
+    shutil.rmtree(donor_design)
+    (donor / "frontend" / "tailwind.config.js").write_text(
+        'import colors from "./src/data/colors.js";\n'
+        "export default { theme: { extend: { colors } } };\n"
+    )
+
+    report = plan_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "relative modules that relocation" in blocker
+        and "./src/data/colors.js" in blocker
+        for blocker in report.blockers
+    )
 
 
 def test_design_layer_build_artifacts_are_not_copied(
