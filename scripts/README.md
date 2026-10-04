@@ -16,6 +16,8 @@ Preferred maintainer-facing command map:
 | `./scripts/install_global.sh` | `make install` |
 | `poetry run python scripts/beta_migrate.py fresh-first --donor /abs/path --recipient /abs/path` | `make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path` |
 | `poetry run python scripts/beta_migrate.py fresh-first --donor /abs/path --recipient /abs/path --dry-run --report-path /abs/path/report.json` | `make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path DRY_RUN=1 REPORT=/abs/path/report.json` |
+| `poetry run python scripts/beta_migrate.py iterate --donor /abs/path --recipient /abs/path` | `make beta-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path` |
+| `poetry run python scripts/beta_migrate.py iterate --donor /abs/path --recipient /abs/path --dry-run --report-path /abs/path/report.json` | `make beta-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path DRY_RUN=1 REPORT=/abs/path/report.json` |
 | `./scripts/quickscale_legacy_symlink.sh mount` | `make legacy-mount` |
 | `./scripts/quickscale_legacy_symlink.sh unmount` | `make legacy-unmount` |
 | `./scripts/quickscale_legacy_symlink.sh status` | `make legacy-status` |
@@ -74,7 +76,7 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 
 ### Beta-site maintainer workflows
 
-- [beta_migrate.py](./beta_migrate.py) — maintainer-only beta-site migration helper. `make beta-migrate-fresh` mutates the throwaway recipient and runs the local verification stack by default; add `DRY_RUN=1` to emit the plan/report without mutation. Use `REPORT=/abs/path/report.json` to persist the JSON handoff file.
+- [beta_migrate.py](./beta_migrate.py) — maintainer-only beta-site migration helper. `make beta-migrate-fresh` mutates the throwaway recipient and runs the local verification stack by default; add `DRY_RUN=1` to emit the plan/report without mutation. `make beta-migrate-iterate` runs one migration iteration: it regenerates the throwaway recipient from the donor's `quickscale.yml` (slug, package, theme, and modules) through a staging directory and `quickscale apply --split-refs-from-branches`, then runs the fresh-first workflow against it. Use `REPORT=/abs/path/report.json` to persist the JSON handoff file.
 
 ### Quality, validation, and docs maintenance
 

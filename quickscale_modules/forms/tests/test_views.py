@@ -493,7 +493,7 @@ class TestFormSubmitAPIView:
             raise Exception("SMTP connection refused")
 
         monkeypatch.setattr(
-            "quickscale_modules_notifications.services._send_email_message",
+            "quickscale_modules_notifications._delivery._send_email_message",
             failing_send,
         )
 

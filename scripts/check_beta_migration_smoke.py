@@ -119,6 +119,9 @@ def _install_verification_shims(root: Path, spy_log: Path) -> Path:
         "#!/bin/sh\n"
         'printf "%s\\n" "$0 $*" >> "$QS_SMOKE_SPY_LOG"\n'
         'if [ "${0##*/}" = "quickscale" ] && [ "${1:-}" = "apply" ]; then\n'
+        '  if [ -n "${QS_SMOKE_APPLY_FIXTURE:-}" ]; then\n'
+        '    cp -R "$QS_SMOKE_APPLY_FIXTURE"/. "$PWD"/\n'
+        "  fi\n"
         "  exit 0\n"
         "fi\n"
         "exit 0\n"
@@ -206,6 +209,7 @@ def _probe_generated_runtime(project: Path) -> None:
 
 def _run_migration(
     *,
+    mode: str = "fresh-first",
     donor: Path,
     recipient: Path,
     report_path: Path,
@@ -216,7 +220,7 @@ def _run_migration(
     command = [
         sys.executable,
         str(BETA_MIGRATE),
-        "fresh-first",
+        mode,
         "--donor",
         str(donor),
         "--recipient",
@@ -293,21 +297,22 @@ def _assert_successful_execution(
     recipient: Path,
     before_donor: dict[str, str],
     before_recipient: dict[str, str],
+    label: str = "fresh-first",
 ) -> None:
-    """Assert that a compatible generated-project fresh-first migration completed."""
-    _require(report["status"] == "ready", "fresh-first execution was not ready")
+    """Assert that a compatible generated-project migration completed."""
+    _require(report["status"] == "ready", f"{label} execution was not ready")
     _require(
         report["phase"] == "fresh-first-executed",
-        f"fresh-first execution did not report its completed phase: {report['phase']}",
+        f"{label} execution did not report its completed phase: {report['phase']}",
     )
-    _require(report["changed_files"], "fresh-first execution listed no changed files")
+    _require(report["changed_files"], f"{label} execution listed no changed files")
     _require(
         _snapshot_tree(donor) == before_donor,
-        f"fresh-first execution unexpectedly mutated donor project {donor}",
+        f"{label} execution unexpectedly mutated donor project {donor}",
     )
     _require(
         _snapshot_tree(recipient) != before_recipient,
-        f"fresh-first execution did not mutate recipient project {recipient}",
+        f"{label} execution did not mutate recipient project {recipient}",
     )
     _require(
         len(report["verification_results"]) == 7
@@ -315,22 +320,22 @@ def _assert_successful_execution(
             result["status"] == "passed" and result["return_code"] == 0
             for result in report["verification_results"]
         ),
-        "fresh-first execution did not complete the verification stack: "
+        f"{label} execution did not complete the verification stack: "
         f"{report['verification_results']}",
     )
     prompt_path = recipient / "MIGRATION_PROMPT.md"
     _require(
         prompt_path.is_file(),
-        "fresh-first execution did not write the recipient handoff prompt",
+        f"{label} execution did not write the recipient handoff prompt",
     )
     prompt_text = prompt_path.read_text()
     _require(
         "## Remaining work" in prompt_text and "## Hard constraints" in prompt_text,
-        "fresh-first handoff prompt is missing its remaining-work or constraints section",
+        f"{label} handoff prompt is missing its remaining-work or constraints section",
     )
     _require(
         str(recipient) not in prompt_text,
-        "fresh-first handoff prompt leaked the recipient root path",
+        f"{label} handoff prompt leaked the recipient root path",
     )
 
 
@@ -518,6 +523,65 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
     )
 
 
+def _case_iterate(root: Path, environment: dict[str, str], spy_log: Path) -> None:
+    """One iteration: regenerate the recipient from the donor config, then migrate."""
+    spy_log.write_text("")
+    donor = _generate_project(root / "donor-root", "iterate-donor")
+    fixture = _generate_project(root / "fixture-root", "iterate-donor")
+    recipient = root / "iterate-recipient"
+    iterate_environment = dict(environment)
+    iterate_environment["QS_SMOKE_APPLY_FIXTURE"] = str(fixture)
+
+    donor_before = _snapshot_tree(donor)
+    planned, _stdout = _run_migration(
+        mode="iterate",
+        donor=donor,
+        recipient=recipient,
+        report_path=root / "iterate-plan.json",
+        environment=iterate_environment,
+        dry_run=True,
+    )
+    _require(planned["status"] == "ready", "iterate dry run was not ready")
+    _require(planned["phase"] == "dry-run", "iterate dry-run phase was not dry-run")
+    _require(
+        not recipient.exists(),
+        "iterate dry run created the throwaway recipient",
+    )
+    _assert_non_mutating_run(
+        donor=donor,
+        recipient=recipient,
+        before_donor=donor_before,
+        before_recipient={},
+        spy_log=spy_log,
+    )
+
+    executed, _stdout = _run_migration(
+        mode="iterate",
+        donor=donor,
+        recipient=recipient,
+        report_path=root / "iterate-execution.json",
+        environment=iterate_environment,
+    )
+    _assert_successful_execution(
+        executed,
+        donor=donor,
+        recipient=recipient,
+        before_donor=donor_before,
+        before_recipient={},
+        label="iterate",
+    )
+    _require(recipient.is_dir(), "iterate did not create the throwaway recipient")
+    spy = spy_log.read_text()
+    _require(
+        "quickscale apply --split-refs-from-branches --no-docker" in spy,
+        f"iterate did not run the staged apply:\n{spy}",
+    )
+    _require(
+        not (root / ".iterate-recipient.stage").exists(),
+        "iterate left its staging directory behind",
+    )
+
+
 def main() -> int:
     print("🔍 Beta migration generated-project smoke gate")
     previous_skip_lock = os.environ.get("QS_SKIP_POETRY_LOCK")
@@ -534,6 +598,9 @@ def main() -> int:
             print("  🔍 fresh-first compatibility, provenance, skew, and execution")
             _case_fresh_first(root / "fresh-first", environment, spy_log)
             print("    ✅ fresh-first covered non-mutation, fail-closed skew, and execution")
+            print("  🔍 iterate regeneration and execution")
+            _case_iterate(root / "iterate", environment, spy_log)
+            print("    ✅ iterate covered dry-run planning, staged apply, and execution")
     finally:
         if previous_skip_lock is None:
             os.environ.pop("QS_SKIP_POETRY_LOCK", None)

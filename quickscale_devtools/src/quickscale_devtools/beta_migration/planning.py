@@ -1,5 +1,6 @@
 """Beta migration report planning and planned-action assembly."""
 
+from .classification import _classify_donor_files
 from .compatibility import _validate_runtime_compatibility
 from .constants import (
     DRY_RUN_REASON,
@@ -16,6 +17,7 @@ from .model import (
     PlannedAction,
     ProjectSnapshot,
     _append_completed_step,
+    _append_parse_arguments_step,
     _append_skipped_step,
     _make_report,
 )
@@ -30,6 +32,7 @@ from .preflight import (
     _validate_required_paths,
     _validate_theme_preflight_checks,
 )
+from .regeneration import _plan_beta_migration_iterate
 from .snapshots import _compute_diff, _load_project_snapshot, _record_snapshot_load
 from .toml_editing import _validate_fresh_first_path_dependency_targets
 from ..handoff_prompt import HANDOFF_PROMPT_FILENAME
@@ -363,6 +366,7 @@ def _prepare_report_plan(report: BetaMigrationReport) -> None:
     if report.blockers or _blocked_due_to_missing_snapshots(report):
         return
     _populate_report_diffs(report)
+    _classify_donor_files(report)
     _validate_fresh_first_path_dependency_targets(report)
     _validate_identity_reconciliation(report)
     if not report.blockers:
@@ -392,20 +396,21 @@ def _prepare_beta_migration_report(
     inputs: BetaMigrationInput,
     *,
     execution_intent: Literal["plan", "run"],
+    report: BetaMigrationReport | None = None,
 ) -> BetaMigrationReport:
-    """Build the shared report skeleton for planning and execution paths."""
-    report = _make_report(
-        inputs, phase=_select_report_phase(inputs, execution_intent=execution_intent)
-    )
-    _append_completed_step(
-        report,
-        step="parse-cli-arguments",
-        detail=(
-            "Parsed maintainer workflow arguments. Dry run requested."
-            if inputs.dry_run
-            else "Parsed maintainer workflow arguments."
-        ),
-    )
+    """Build the shared report skeleton for planning and execution paths.
+
+    When ``report`` is passed, its existing steps are kept and only the
+    post-regeneration preparation runs against it (the iterate mode).
+    """
+    if report is None:
+        report = _make_report(
+            inputs,
+            phase=_select_report_phase(inputs, execution_intent=execution_intent),
+        )
+        _append_parse_arguments_step(report, inputs)
+    else:
+        report.phase = _select_report_phase(inputs, execution_intent=execution_intent)
 
     donor_ok = _validate_project_root(report, label="DONOR", path=inputs.donor)
     recipient_ok = _validate_project_root(
@@ -461,4 +466,9 @@ def _prepare_beta_migration_report(
 
 
 def plan_beta_migration(inputs: BetaMigrationInput) -> BetaMigrationReport:
+    """Plan the requested beta migration workflow without mutating anything."""
+    if inputs.mode == "iterate":
+        report = _plan_beta_migration_iterate(inputs, execution_intent="plan")
+        report.pending_manual_actions = _build_pending_manual_actions(report)
+        return report
     return _prepare_beta_migration_report(inputs, execution_intent="plan")

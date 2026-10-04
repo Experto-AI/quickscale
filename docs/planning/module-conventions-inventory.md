@@ -74,18 +74,17 @@ and left three prior items still open.
 schema: coherence-audit/v1
 audited: c10b529e
 items:
-  # seventh pass — new, ranked (see D43–D48); proposed, not decided
-  - {id: mount-path-copies, status: open, aspect: A, cost: [collision, tax], members_diverging: [blog, listings, forms, crm, orgs, social, core-generator], population: modules-with-mounts(10), check: conformance, closed_world: true, handoff: [tech], first_seen: 2026-10-03, last_verified: 2026-10-03}
-  - {id: split-facade-conventions, status: open, aspect: L, cost: [tax, ambiguity], members_diverging: [auth, backups, billing, notifications, orgs], population: split-facades(10 files, 5 modules), check: conformance+review, closed_world: false, handoff: [arch], first_seen: 2026-10-03, last_verified: 2026-10-03}
   # decided, members still to change
-  - {id: theme-module-presence, status: decided, rule: "rule 31 (D34)", aspect: P, cost: [ambiguity, defect], members_diverging: [core-generator (social/link_tree.html.j2, social/embeds.html.j2)], population: seam-producers(3), check: conformance, closed_world: false, handoff: [tech], first_seen: 2026-09-28, last_verified: 2026-10-03}
-  - {id: module-lists-outside-members, status: decided, rule: "rule 37 (D40)", aspect: L, cost: [tax, ambiguity], members_diverging: [core-generator (project_name/urls.py.j2)], population: lists(10), check: conformance, closed_world: false, handoff: [arch], first_seen: 2026-09-28, last_verified: 2026-10-03}
   - {id: write-effects-on-commit, status: decided, rule: "rule 21 (D24)", aspect: F, cost: [defect], members_diverging: [notifications], population: modules-with-effects(5), check: review+rollback-test, closed_world: false, handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-03}
   # resolved — every member conforms and the rule 40 harness (or the named check) holds it
   - {id: settings-snapshot-readers, status: resolved, rule: "rule 42 (D44)", aspect: B, check: conformance, closed_world: true, first_seen: 2026-10-03, last_verified: 2026-10-03}
   - {id: optional-sender-guard, status: resolved, rule: "rule 43 (D45)", aspect: C, check: conformance, closed_world: true, first_seen: 2026-10-03, last_verified: 2026-10-03}
+  - {id: mount-path-copies, status: resolved, rule: "rule 41 (D43)", aspect: A, check: conformance, closed_world: true, first_seen: 2026-10-03, last_verified: 2026-10-03}
   - {id: org-role-check-copies, status: resolved, rule: "rule 44 (D46)", aspect: E, check: conformance+review, closed_world: false, first_seen: 2026-10-03, last_verified: 2026-10-03}
   - {id: mypy-overrides-unread, status: resolved, rule: "rule 45 (D47)", aspect: N, check: conformance, closed_world: true, first_seen: 2026-10-03, last_verified: 2026-10-03}
+  - {id: split-facade-conventions, status: resolved, rule: "rule 46 (D48)", aspect: L, check: conformance+review, closed_world: false, handoff: [arch], first_seen: 2026-10-03, last_verified: 2026-10-04}
+  - {id: theme-module-presence, status: resolved, rule: "rule 31 (D34)", aspect: P, check: conformance, closed_world: false, first_seen: 2026-09-28, last_verified: 2026-10-03}
+  - {id: module-lists-outside-members, status: resolved, rule: "rule 37 (D40)", aspect: L, check: conformance, closed_world: false, first_seen: 2026-09-28, last_verified: 2026-10-03}
   - {id: shared-setting-writes, status: resolved, rule: "rule 30 (D33)", aspect: A, check: "collect_wiring (apply)", closed_world: true, resolved_by: cb750c51, first_seen: 2026-09-28, last_verified: 2026-10-03}
   - {id: throttle-scopes-and-rates, status: resolved, rule: "rule 32 (D35)", aspect: A, check: conformance, closed_world: true, resolved_by: c3c99253, first_seen: 2026-09-28, last_verified: 2026-10-03}
   - {id: namespace-prefix-principle, status: resolved, rule: "rule 33 (D36)", aspect: A, check: conformance, closed_world: true, resolved_by: 6fe010b4, first_seen: 2026-09-28, last_verified: 2026-10-03}
@@ -137,23 +136,23 @@ slice that holds each rule is in its commit message.
 
 | ID | Aspect | Cost | Diverging / population | Status |
 |---|---|---|---|---|
-| `theme-module-presence` | P | ambiguity, defect (latent) | 2 / 3 seam producers | decided (correction) |
-| `mount-path-copies` | A | collision, tax | 6 modules' mounts copied in host code / 10 | **open** |
+| `theme-module-presence` | P | ambiguity, defect (latent) | 2 / 3 seam producers | resolved (rule 31) |
+| `mount-path-copies` | A | collision, tax | 6 modules' mounts copied in host code / 10 | resolved (rule 41) |
 | `write-effects-on-commit` | F | defect (unproven) | 1 / 5 | decided |
 | `settings-snapshot-readers` | B | ambiguity, tax | 5 / 12 | resolved (rule 42) |
 | `optional-sender-guard` | C | ambiguity | 2 / 2 | resolved (rule 43) |
 | `org-role-check-copies` | E | ambiguity | 1 / 6 | resolved (rule 44) |
 | `mypy-overrides-unread` | N | ambiguity, tax | 10 / 12 | resolved (rule 45) |
-| `module-lists-outside-members` | L | tax, ambiguity | 1 list / 10 | decided (correction) |
-| `split-facade-conventions` | L, K | tax, ambiguity | 5 / 5 split modules | **open** |
+| `module-lists-outside-members` | L | tax, ambiguity | 1 list / 10 | resolved (rule 37) |
+| `split-facade-conventions` | L, K | tax, ambiguity | 5 / 5 split modules | resolved (rule 46) |
 | 41 items of passes 1–6 | A–O | see index | 0 | resolved |
 
-Of the 44 prior items, 41 are resolved and 3 are still decided with members to change. Four of the
-six new items are resolved (rules 42–45, SA236 and SA237); the remaining two are open. Each is
-small, and none needs a new mechanism; each is a decision plus one harness clause. The two
-corrections and `mount-path-copies` sit in generator templates that
-rule 40's `.py`-only scan never reads. That one gap is the main lesson of this pass
-([Enforcement gaps](#enforcement-gaps) 13).
+Of the 44 prior items, 43 are resolved and 1 is still decided with members to change. All six
+new items are resolved (rule 41 with rules 42–43, SA235 and SA236; rules 44–45 with SA237;
+rule 46 with SA238). Each is small, and none needs a new mechanism; each is a decision plus one
+harness clause. The two corrections and `mount-path-copies` sat in generator templates that rule
+40's `.py`-only scan never read; rules 7, 31, and 37 now read `generator/templates/**/*.j2`,
+closing that gap ([Enforcement gaps](#enforcement-gaps) 13).
 
 ## Coherence audit re-run (2026-09-28, sixth pass)
 
@@ -250,11 +249,9 @@ The enforcement gaps the audit recorded are closed or accepted:
   `TENANT_TABLE_REGISTRY` is test-owned.
 - Gap 3 (the user-FK gate sees only its suite's apps) is accepted, as recorded in decisions.md
   rule 27.
-- Four residuals are accepted alongside the fixed checks: a module's `test_isolation.py` is
+- Three residuals are accepted alongside the fixed checks: a module's `test_isolation.py` is
   invoked explicitly by the PostgreSQL gate and does not self-enroll; rule 38's README match is a
-  substring anywhere in the file (a floor, as D41 records); rule 19's detector follows the
-  view-module names (`views.py`, `debug_views.py`, `_view*.py`, `*_views.py`), so view code a rule 28
-  split files under another private name stays outside the check; and the generated `base.py` still
+  substring anywhere in the file (a floor, as D41 records); and the generated `base.py` still
   spreads a module's `REST_FRAMEWORK` keys over the template defaults, so a module can override the
   `anon`/`user` throttle rates, which no gate owns.
 
@@ -1226,8 +1223,9 @@ superuser-true and otherwise compares the membership role against `OrgRole`.
 | views and APIs of blog, crm, forms, listings, billing, orgs | `permissions` helpers (`OrgRoleMixin`, `HasOrgRole`, `user_has_org_role`) | `OrgRole.*` |
 | billing `_subscription_mutations.py:146–163` (re-check after the provider lock) | hand-written: `is_superuser` short-circuit + `OrganizationMembership.filter(role="owner")` + `is_active` | string `"owner"` |
 
-The harness's rule 19 scan follows view file names (`VIEW_FILE_NAMES`, `_view*`, `*_views.py`) and
-does not read service modules.
+The harness's rule 19 scan finds view code by content (rule 46), not by file name: it reads a
+service module only where that module defines a view subclass or a function taking `request`, and
+billing's `_subscription_mutations.py` defines neither, so it stays outside the check.
 
 **Drift**
 - billing re-implements the role check with a string literal and an extra `is_active` test that
@@ -1277,7 +1275,7 @@ what the private files are called, or which logger they use.
 | Private names re-exported by the facade (`_x as _x`) | billing `services.py` 121; notifications `services.py` 29; orgs 74 across `tenancy` 26, `removal` 14, `views` 12, `checks` 12, `current_org` 10; auth `views.py` 4; backups `admin.py` 0 |
 | Facade states why it re-exports | "test patch targets keep working" (billing, notifications); "drop-in replacement" (backups); none (orgs, auth) |
 | Private file naming | `_<facade>_<part>` (backups `_admin_*`, orgs `_tenancy_*`, `_removal_*`, `_view_*`); `_<subject>` (billing `_checkout`, `_credits`; notifications `_delivery`); `_<part>_views` (auth `_profile_views`, orgs `_api_views`) |
-| View files | `_view_<part>.py` (orgs 4) and `_<part>_views.py` (auth 1, orgs 1). Harness rule 19 scans both spellings; any third spelling is unscanned (`check_module_conventions.py:153–158` says so) |
+| View files | `_view_<part>.py` (orgs 4) and `_<part>_views.py` (auth 1, orgs 1). Harness rule 19 finds view code by content (rule 46), so the split's chosen name is free |
 | Logger after a split | auth pins the old channel (`_logging.py`: `getLogger("quickscale_modules_auth.views")`, because a test asserts on it); billing (`_subscription_mutations`), notifications (`_delivery`), and orgs (`_debug`) log under the private file's `__name__`; backups' private files do not log (15 `getLogger(__name__)` in `src/` in all) |
 
 Already the same (keep): every facade keeps its public import path; every private file is
@@ -1420,9 +1418,10 @@ library reads, because renaming it would simply stop working. These are listed, 
 | notifications | `QUICKSCALE_NOTIFICATIONS_PROVIDER` *(undeclared)* | same name | new, declared |
 | backups | `QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID`, `…_SECRET_ACCESS_KEY` *(undeclared fallbacks in `dr_engine`)* | removed | fallbacks deleted under D8 |
 
-**`QUICKSCALE_ORGS_MODE` is the widest rename:** besides the orgs module it is read by the generated
-`context_processors.py.j2` and the `showcase_react` `index.html.j2`, so every generated project's
-templates change with it.
+**`QUICKSCALE_ORGS_MODE` is the widest rename:** besides the orgs module it was read by the generated
+`context_processors.py.j2` and is read by the `showcase_react` `index.html.j2`, so every generated
+project's templates changed with the rename (SA235 later moved billing's template URL to route
+names).
 
 ### D2 — Standard suffixes — decided
 
@@ -2930,8 +2929,14 @@ rule 27. The list above is the audit-time record, not a description of the curre
 
 **SA236 close (2026-10-03).** Gaps 17–19 are closed: the `dispatch_after_commit` parameter is
 removed, decisions.md rules 3 and 20 name notifications' row as a read-only mirror, and harness
-rule 42 rejects a snapshot read from another module. Gaps 13–16 stay open for SA235, SA237, and
-SA238.
+rule 42 rejects a snapshot read from another module.
+
+**SA235 close (2026-10-03).** Gap 13 is closed: the rule 40 harness's rules 7, 31, and 37 read
+`generator/templates/**/*.j2` with control cases (rule 7 also rejects a quoted path beneath a
+declared mount), and the pass's two corrected cells render from discovery —
+`project_name/urls.py.j2` carries no flat-module shell list (the orgs reservation's allowlisted
+alternation stays a rule 41 exception) and the two social seam producers render through
+`generator/seam.py`. Gaps 14–16 stay open for SA237 and SA238.
 
 **SA237 close (2026-10-03).** Gaps 15–16 are closed: billing's post-lock re-check calls
 `user_has_org_role` with `OrgRole.OWNER`, the ten modules' `[[tool.mypy.overrides]]` blocks are
@@ -3169,12 +3174,14 @@ setting directly; module lists in `scripts/` derived from discovery. Cells not r
 
 - 2026-10-03 — `shared-setting-writes`: resolved (`cb750c51` — verified: `collect_wiring` raises `_setting_conflict` naming both modules, `module_wiring.py:71,122,159`).
 - 2026-10-03 — `theme-module-presence`: still-open as decided (rule 31) — `index.html.j2` conforms (`b825bb6d`); correction: two social seam producers, present at `58e73cc7`, still hand-write flags and paths (§33).
+- 2026-10-03 — `theme-module-presence`: resolved (SA235 — the two social seam producers render flags and `{% url %}`-based paths through `generator/seam.py`; harness rules 31 and 37 read `.j2`).
 - 2026-10-03 — `throttle-scopes-and-rates`: resolved (`c3c99253` — verified by harness rule 32).
 - 2026-10-03 — `namespace-prefix-principle`: resolved (`6fe010b4` and successors — verified by harness rule 33; stems not recounted).
 - 2026-10-03 — `upward-name-references`: resolved (`2352acf1` — verified by harness rule 34; `TENANT_TABLE_REGISTRY` test-owned, `e28ab43d`).
 - 2026-10-03 — `secret-resolution-path`: resolved (`17d4985d` — verified: harness rule 35 and the `os.getenv` count).
 - 2026-10-03 — `type-check-config`: resolved (`c75b5588` — verified by harness rule 36); successor drift split out as `mypy-overrides-unread`.
 - 2026-10-03 — `module-lists-outside-members`: still-open as decided (rule 37) — 9 of 10 lists derive from discovery or are listed; correction: `project_name/urls.py.j2` shell routes, present at `58e73cc7`, were missed (§39).
+- 2026-10-03 — `module-lists-outside-members`: resolved (SA235 — the generated `urls.py.j2` flat-module shell list is gone while the orgs reservation's allowlisted alternation stays a rule 41 exception; module routes render from `spa_routes` discovery, held by harness rule 37 over `.j2`).
 - 2026-10-03 — `readme-content-accuracy`: resolved (`49b709f2` — verified by harness rule 38).
 - 2026-10-03 — `manifest-dependency-spec`: resolved (`92c9566f` — verified by harness rule 39).
 - 2026-10-03 — `settings-names`: resolved (`79b3f079` — verified by harness rule 1).
@@ -3211,9 +3218,10 @@ setting directly; module lists in `scripts/` derived from discovery. Cells not r
 - 2026-10-03 — `test-file-names`: resolved (`730456cb` — verified by harness rule 29).
 - 2026-10-03 — `user-fk-on-delete`: resolved (`fa0b882b` — the gate still holds; its reach is Enforcement gap 3).
 - 2026-10-03 — `py-typed`: resolved (`6ea37301` — verified by harness rule 11).
-- 2026-10-03 — `mount-path-copies`: open (new; D43 proposed).
+- 2026-10-03 — `mount-path-copies`: resolved (SA235 — verified by harness rules 7, 31, and 37 over `generator/templates/**/*.j2`; module React shell routes render from manifest-declared `spa_routes` after the module includes, the social seam pages render through `generator/seam.py`, and `TenantMiddleware` reads orgs' URL names).
 - 2026-10-03 — `settings-snapshot-readers`: resolved (SA236 — verified by harness rule 42; the five modules' snapshots live in a private `_settings.py` built by `from_settings()` and their names left `services.__all__`).
 - 2026-10-03 — `optional-sender-guard`: resolved (SA236 — verified by harness rule 43; orgs guards on `notifications.services.is_enabled()`, forms catches only `NotificationError`, and the `dispatch_after_commit` hazard is removed).
 - 2026-10-03 — `org-role-check-copies`: resolved (SA237 — verified by harness rule 44; billing's post-lock re-check calls `user_has_org_role` with `OrgRole.OWNER` and keeps its call-site `is_active` test).
 - 2026-10-03 — `mypy-overrides-unread`: resolved (SA237 — verified by harness rule 45; the ten modules' `[[tool.mypy.overrides]]` blocks are deleted and `anymail` joins the root `mypy.ini`).
 - 2026-10-03 — `split-facade-conventions`: open (new; D48 proposed).
+- 2026-10-04 — `split-facade-conventions`: resolved (SA238 — verified by harness rules 19 and 28; the rule 28 clause rejects `getLogger(__name__)` in a private file with a facade, and rule 19 finds view code by content — a Django or DRF view subclass or a function taking `request` — so a split's view code is scanned under any private name).

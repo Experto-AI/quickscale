@@ -126,7 +126,8 @@ from quickscale_core.runtime import (  # noqa: F401
 from django.conf import settings
 from django.utils import timezone as django_timezone
 
-from quickscale_modules_backups._admin_upload import _copy_admin_upload_crash_safe
+import quickscale_modules_backups._admin_upload as _admin_upload
+
 from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
 
 
@@ -419,7 +420,7 @@ def _persist_trusted_admin_upload(
     # place so that a copy failure never destroys the existing local
     # artifact.
     if staged_upload.local_path.resolve() != local_path.resolve():
-        _copy_admin_upload_crash_safe(
+        _admin_upload._copy_admin_upload_crash_safe(
             staged_upload.local_path,
             local_path,
             local_dir,

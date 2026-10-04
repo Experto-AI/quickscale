@@ -1119,9 +1119,12 @@ mapping that mirrors this section.
   tenancy mode decides which side owns the path (solo mounts orgs before home, saas after);
   forms' shallow reservations (`/forms`, `/forms/<slug>/`) stay host-rendered until its module
   entrypoint hydrates, because that entrypoint currently renders only a mount-point div;
-  `TenantMiddleware`'s exempt prefixes (`/accounts/`, `/admin/`, `/healthcheck/`) are not orgs
-  paths; and the generated 404 hint's path tests are diagnostics against a requested path, not
-  route declarations.
+  social's public `/social` and `/social/embeds` pages are the theme's host-rendered pages
+  (flat route names `social-link-tree` and `social-embeds`), not a module mount: the manifest
+  declares social's `_quickscale/social/` transport include, and the project owns those public
+  theme routes; `TenantMiddleware`'s exempt prefixes (`/accounts/`, `/admin/`, `/healthcheck/`)
+  are not orgs paths; and the generated 404 hint's path tests are diagnostics against a
+  requested path, not route declarations.
 **42. Settings snapshots.**
 - ✅ A module that needs one consistent view of several of its own settings builds it in its private
   `_settings.py` as a frozen dataclass with a `from_settings()` classmethod, reading each setting
@@ -1148,6 +1151,14 @@ mapping that mirrors this section.
 - ✅ Third-party type-stub exemptions live in the root `mypy.ini` only.
 - ❌ Any `[tool.mypy]` table, `[[tool.mypy.overrides]]` included, in a module's `pyproject.toml`
   (rule 36); CI runs mypy from the repository root and never reads it.
+
+**46. Splits (D48).**
+- ✅ A split keeps its facade's public import path and its log channel: the private files log on
+  the facade's logger; the facade re-exports public names only and its tests patch the defining
+  module (§[Split-Facade Seams](#split-facade-seams)).
+- ✅ Rule 19 finds view code by content, not by file name: a Django or DRF view subclass, or a
+  function that takes `request`.
+- ❌ A moved log channel without a release-notes line.
 
 ---
 
@@ -1721,7 +1732,7 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - Operator access: management commands and operator paths use `operator_access(reason=...)` for audited elevated access. When a command or admin path truly needs an unfiltered queryset, it may read from model `all_objects` explicitly under that contract. Self-service account deletion does not receive or yield that context: the orgs-owned `account_deletion_user_reference_organization_ids()` seam validates nullable user relations and returns only matching organization IDs, using one indexed query per matching tenant model; all subsequent nulling remains under each organization's ordinary write scope.
 - Org ownership: System org owns all published-public content (blog feed, public listings, social links). Anonymous visitors see System-org rows; solo authenticated = personal org; saas authenticated = active org.
 - Teardown policy: `on_delete=PROTECT` on all tenant-owned FKs + explicit `quickscale_orgs_purge_organization` management command for ordered, FK-safe delete — GDPR-capable, no accidental cascade.
-- **Composite-FK deferability policy:** every Option C composite FK (the child-table `organization_id` + local-key pair added by the `_ADD_COMPOSITE_FK_SQL` helper in `orgs/tenancy.py`) is `NOT DEFERRABLE`. On PostgreSQL 18, `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, so the constraint is already effectively immediate — `NOT DEFERRABLE` is the fail-fast choice consistent with the [fail-hard principle](#fail-hard-principle) and requires no `SET CONSTRAINTS ALL DEFERRED` carve-out for fixture/loaddata restores. A conformance test validates that every Option C composite FK is `NOT DEFERRABLE`.
+- **Composite-FK deferability policy:** every Option C composite FK (the child-table `organization_id` + local-key pair added by the `_ADD_COMPOSITE_FK_SQL` helper in `orgs/_tenancy_equality.py`) is `NOT DEFERRABLE`. On PostgreSQL 18, `SET CONSTRAINTS <name> IMMEDIATE` on a `NOT DEFERRABLE` FK is a no-op, so the constraint is already effectively immediate — `NOT DEFERRABLE` is the fail-fast choice consistent with the [fail-hard principle](#fail-hard-principle) and requires no `SET CONSTRAINTS ALL DEFERRED` carve-out for fixture/loaddata restores. A conformance test validates that every Option C composite FK is `NOT DEFERRABLE`.
 - **`tenant_excluded` marker precedence:** in `is_tenant_model()` (`orgs/tenancy.py`), an explicit `tenant_excluded = "reason"` marker on a model takes precedence over class-hierarchy detection (``TenantModel`` inheritance) — a model marked excluded is never classified as tenant-scoped even if it also inherits tenant machinery.
 - **Intentional CASCADE exception:** `OrganizationInvitation.invited_by` remains `on_delete=CASCADE` because a pending invitation is an action attributed to its sender—if the sender's account is deleted, the invitation has no meaningful sender identity and dissolving it along with the sender is the correct behavior. This is a narrow, documented exception to the general SET_NULL rule for user-FKs in tenant-scoped models (`PROTECT` is not allowed; Module Conventions rule 27). The other two `CASCADE` user-FKs are `OrganizationMembership.user` and blog's `AuthorProfile.user` (rows that mean nothing without their user); every other user-FK in `quickscale_modules_*` is SET_NULL (enforced by a conformance test in the orgs cross-module test harness).
 - **Last-owner `pre_delete` backstop refusal mechanism:** the orgs `pre_delete` receiver on the `User` model raises (does not silently return/no-op) when the deletion would orphan a shared organization's last owner, matching the [fail-hard principle](#fail-hard-principle) — a caller (admin bulk-delete, management command, a future GDPR erasure path) must see a loud failure rather than believe a refused delete succeeded.
@@ -1908,7 +1919,7 @@ beta-migrate-in-place``, ``--continue-after-checkpoint``, its infrastructure
 copy/apply continuation, and the ``IN_PLACE_*`` taxonomy entries) was removed
 when fresh-first became the only migration path.  The remaining taxonomy
 classifies every emitted file against that single path, and the smoke gate
-exercises fresh-first only.
+exercises the fresh-first path, including one iterate regeneration case.
 
 **Related docs:** [roadmap.md](./roadmap.md) | [arch-audit.md](../others/arch-audit.md) (generated-file ownership finding, if currently open)
 

@@ -1,6 +1,7 @@
 """Serialization helpers shared by the org HTML and JSON views.
 
-``views.py`` re-exports these names (Module Conventions rule 28).
+``views.py`` resolves these private helpers from this module (Module
+Conventions rule 28).
 """
 
 from __future__ import annotations

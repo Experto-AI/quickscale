@@ -415,7 +415,7 @@ def test_forms_notify_submission_tracks_each_recipient_through_notifications(
         return f"provider::{recipient}"
 
     monkeypatch.setattr(
-        "quickscale_modules_notifications.services._send_email_message",
+        "quickscale_modules_notifications._delivery._send_email_message",
         fake_send,
     )
 
@@ -466,7 +466,7 @@ def test_forms_submit_keeps_saved_submission_when_tracked_delivery_fails(
         raise RuntimeError(f"provider exploded for {message.to[0]}")
 
     monkeypatch.setattr(
-        "quickscale_modules_notifications.services._send_email_message",
+        "quickscale_modules_notifications._delivery._send_email_message",
         failing_send,
     )
 

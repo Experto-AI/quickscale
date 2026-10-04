@@ -25,9 +25,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
 
 - v0.89.0 — prepared, not published — [Development Maintenance](docs/releases/release-v0.89.0.md). Begins the post-v0.88 maintenance line with source-derived validation expectations.
   - **Split-facade seams use the defining module.** Test seams and collaborator calls across the CLI
-    command and utility facades, `dr_engine`, and billing resolve through the module that defines each
-    name, facades re-export public names only, and a registered `check-split-facade-imports` gate fails
-    when a private module imports its own package's facade.
+    command and utility facades, `dr_engine`, billing, and the auth, backups, notifications, and orgs
+    module facades resolve through the module that defines each name, facades re-export public names
+    only, and a registered `check-split-facade-imports` gate fails when a private module imports its
+    own package's facade.
   - **Gate-parity counts derive from their sources.** The parity suite computes registry-bound and workflow-station expectations from their authoritative declarations, so adding a gate updates derived counts without a hand edit.
   - **Version-derived test expectations.** CLI wiring, module-command, billing, and notifications tests derive the expected current version from package metadata instead of a pinned release string, so version bumps no longer require matching test edits.
   - **Project-owned tenant models join isolation checks.** Models in a project app inherit `TenantModel` (directly or through a module's abstract base) and declare their own FORCE RLS migration so classification and policy refresh cover them while retaining organization ownership and forced row-level security.
@@ -52,6 +53,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient with what was
     migrated, the remaining manual actions and their paths and governing rules, the hard
     constraints, and the done criteria.
+  - **Beta migration classifies every donor file before mutation.** The maintainer tool sorts
+    each donor file into generated-untouched, generated-customized, project-owned, module-edited,
+    or build-artifact and blocks the run, naming the file, when one matches no class.
   - **Runtime database role provisioning is consistent.** Generated local setup, Railway deployment, and `OPERATIONS.md` use the shared `quickscale_runtime` name and one grant set that includes database `CONNECT`.
   - **Module pages share the project shell and design tokens, and their tests share one stub.** Auth, billing, blog, listings, and CRM Django pages use the generated React theme's tokens — the live Vite `frontend/src/index.css` in DEBUG, the compiled stylesheet otherwise — and Vite accepts only the exact browser-visible Host derived from `QUICKSCALE_FRONTEND_HOST_PORT` or `QUICKSCALE_FRONTEND_ORIGIN`. The blog, CRM, listings, and analytics module test settings point at one repository-owned test `base.html`, while auth and billing keep local stubs that preserve their older shell assertions.
   - **Payment-path transaction boundaries and Stripe query safety.** Account deletion runs its
@@ -467,6 +471,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     installed and enabled, so `/blog/` and `/listings/` serve the blog and listings views, the CRM
     shell route reverses as `quickscale_crm_shell`, and the two public social pages render the
     shared `window.__QUICKSCALE__` seam.
+  - **Billing template links resolve by route name.** A generated project's `modules.billing.url`
+    template value reverses billing's pricing and dashboard routes, so its links follow the
+    module's paths in both deployment modes and the retired organization-scoped billing URL is
+    gone.
   - **A site organization is created once.** `quickscale_orgs_create_site_org <slug> <name>`
     creates an organization for a deploy step, is a no-op on a rerun with the same arguments, and
     refuses a slug that already exists under a different name or is reserved (`api`,
@@ -474,6 +482,14 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Personal-data fields are inventoried behind a failing test.** A cross-module conformance
     test walks every installed model and fails when a field that could hold a user's data is
     neither listed with its anonymization treatment nor excluded with a reason.
+  - **Split-module loggers use the facade channel.** A private file behind a facade logs on the
+    facade's channel instead of one named for its own file: forms' notification logging moves to
+    `quickscale_modules_forms.views` and orgs' debug-helper logging to
+    `quickscale_modules_orgs.debug_views`, and the module-conventions harness rejects
+    `getLogger(__name__)` in such a file.
+  - **View discovery follows content, not file names.** The module-conventions harness finds a
+    module's view code by what it defines — a Django or DRF view subclass or a function taking
+    `request` — so a split that files view code under any private name is still checked.
   - **Org-role checks and type-stub exemptions follow one root contract.** Billing's post-lock
     authorization re-check calls the shared `user_has_org_role` helper with `OrgRole.OWNER` while
     keeping its call-site `is_active` test, third-party stub exemptions live only in the root

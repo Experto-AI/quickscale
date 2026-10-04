@@ -794,6 +794,22 @@ class TestReactThemeBaseTemplate:
             "quickscale_core is the generator tool and is not available in deployed projects"
         )
 
+    def test_generated_context_processors_resolve_billing_by_route_name(self, tmp_path):
+        """Billing URLs come from the module's named routes, not path literals (rule 41)."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_context_proc_billing"
+        output_path = tmp_path / project_name
+        generator.generate(project_name, output_path)
+
+        source = (output_path / project_name / "context_processors.py").read_text()
+
+        assert "/billing/" not in source
+        assert "/orgs/" not in source
+        assert "QUICKSCALE_BILLING_ENABLED" in source
+        assert 'reverse(f"quickscale_billing:{route_name}")' in source
+        assert 'route_name = "pricing_page"' in source
+        assert 'route_name = "dashboard"' in source
+
 
 @pytest.mark.integration
 class TestReactThemeAuthUrls:

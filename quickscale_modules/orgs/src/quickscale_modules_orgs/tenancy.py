@@ -5,16 +5,18 @@ for tenant-scoped models across all QuickScale modules (D3 — PROTECT).
 The shipped-module tenant-table parity registry is test-owned
 (``tests/_tenant_table_registry.py``, Module Conventions rule 34).
 
-Module Conventions rule 28: this module is a re-exporting facade.  The
-registry vocabulary lives in ``_tenancy_types``, the FORCE-RLS templates and
-migration helpers in ``_tenancy_rls``, the child-parent equality helpers in
-``_tenancy_equality``, the detection helpers in ``_tenancy_discovery``, and
-the policy inspection in ``_tenancy_policy``.  The marker-derived
-classification path and ``refresh_force_rls_policies`` stay here because
-tests patch ``tenancy.get_tenant_models``, ``tenancy.apply_force_rls``,
-``tenancy.revert_force_rls``, ``tenancy.is_project_app``, and
-``tenancy._get_m2m_through_classification_marker_only`` and expect those
-call sites to resolve through this module's globals.
+Module Conventions rule 28: this module is a facade over the private
+``_tenancy_*`` modules.  The registry vocabulary lives in ``_tenancy_types``,
+the FORCE-RLS templates and migration helpers in ``_tenancy_rls``, the
+child-parent equality helpers in ``_tenancy_equality``, the detection helpers
+in ``_tenancy_discovery``, and the policy inspection in ``_tenancy_policy``;
+the facade re-exports public names and keeps private names on the module that
+defines them.  ``refresh_force_rls_policies`` and the marker-derived
+classification path stay here; the refresh resolves its discovery and RLS
+helpers through ``_tenancy_discovery`` and ``_tenancy_rls`` at call time, and
+tests patch ``tenancy.is_project_app`` and
+``tenancy._get_m2m_through_classification_marker_only`` because those are
+defined here.
 """
 
 from __future__ import annotations
@@ -22,6 +24,9 @@ from __future__ import annotations
 import re as re
 from enum import Enum as Enum, auto as auto
 from typing import Any
+
+import quickscale_modules_orgs._tenancy_discovery as _tenancy_discovery
+import quickscale_modules_orgs._tenancy_rls as _tenancy_rls
 
 from quickscale_modules_orgs._tenancy_discovery import (
     ORG_ID_COLUMN as ORG_ID_COLUMN,
@@ -33,14 +38,6 @@ from quickscale_modules_orgs._tenancy_discovery import (
 from quickscale_modules_orgs._tenancy_equality import (
     CHILD_PARENT_EQUALITY_FUNC_NAME as CHILD_PARENT_EQUALITY_FUNC_NAME,
     CHILD_PARENT_EQUALITY_TRIGGER_NAME_PREFIX as CHILD_PARENT_EQUALITY_TRIGGER_NAME_PREFIX,
-    _ADD_COMPOSITE_FK_SQL as _ADD_COMPOSITE_FK_SQL,
-    _ADD_PARENT_UNIQUE_SQL as _ADD_PARENT_UNIQUE_SQL,
-    _EQUALITY_TRIGGER_DROP_SQL as _EQUALITY_TRIGGER_DROP_SQL,
-    _EQUALITY_TRIGGER_FUNC_SQL as _EQUALITY_TRIGGER_FUNC_SQL,
-    _EQUALITY_TRIGGER_SQL as _EQUALITY_TRIGGER_SQL,
-    _REMOVE_COMPOSITE_FK_SQL as _REMOVE_COMPOSITE_FK_SQL,
-    _REMOVE_PARENT_UNIQUE_SQL as _REMOVE_PARENT_UNIQUE_SQL,
-    _child_equality_trigger_name as _child_equality_trigger_name,
     add_composite_child_fk as add_composite_child_fk,
     add_parent_unique_constraint as add_parent_unique_constraint,
     disable_child_parent_equality as disable_child_parent_equality,
@@ -50,28 +47,10 @@ from quickscale_modules_orgs._tenancy_equality import (
     remove_parent_unique_constraint as remove_parent_unique_constraint,
 )
 from quickscale_modules_orgs._tenancy_policy import (
-    _PolicyRow as _PolicyRow,
-    _all_policy_mismatches as _all_policy_mismatches,
-    _force_rls_policy_mismatches as _force_rls_policy_mismatches,
-    _partition_rls_policies as _partition_rls_policies,
-    _policy_defaults_mismatches as _policy_defaults_mismatches,
-    _select_policy_mismatches as _select_policy_mismatches,
     check_tenant_model_isolation as check_tenant_model_isolation,
     table_has_force_rls as table_has_force_rls,
 )
 from quickscale_modules_orgs._tenancy_rls import (
-    _EXPECTED_OPERATOR_SELECT_EXPRESSION as _EXPECTED_OPERATOR_SELECT_EXPRESSION,
-    _EXPECTED_TENANT_POLICY_EXPRESSION as _EXPECTED_TENANT_POLICY_EXPRESSION,
-    _FORCE_RLS_FORWARD_SQL as _FORCE_RLS_FORWARD_SQL,
-    _FORCE_RLS_REVERSE_SQL as _FORCE_RLS_REVERSE_SQL,
-    _MAX_BASE_POLICY_NAME_BYTES as _MAX_BASE_POLICY_NAME_BYTES,
-    _POSTGRES_IDENTIFIER_MAX_BYTES as _POSTGRES_IDENTIFIER_MAX_BYTES,
-    _SELECT_POLICY_SUFFIX as _SELECT_POLICY_SUFFIX,
-    _SQL_QUOTED_SEGMENT as _SQL_QUOTED_SEGMENT,
-    _normalize_pg_policy_expression as _normalize_pg_policy_expression,
-    _outer_parentheses_enclose_expression as _outer_parentheses_enclose_expression,
-    _render_force_rls_sql as _render_force_rls_sql,
-    _validate_force_rls_policy_names as _validate_force_rls_policy_names,
     apply_force_rls as apply_force_rls,
     revert_force_rls as revert_force_rls,
 )
@@ -116,7 +95,7 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
     if schema_editor.connection.vendor != "postgresql":
         return
 
-    tenant_models = get_tenant_models()
+    tenant_models = _tenancy_discovery.get_tenant_models()
     if not tenant_models:
         return
 
@@ -176,8 +155,8 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
         return
 
     # Drop existing policies then re-create with the current template.
-    revert_force_rls(schema_editor, tuple(existing_targets))
-    apply_force_rls(schema_editor, tuple(existing_targets))
+    _tenancy_rls.revert_force_rls(schema_editor, tuple(existing_targets))
+    _tenancy_rls.apply_force_rls(schema_editor, tuple(existing_targets))
 
 
 # ---------------------------------------------------------------------------

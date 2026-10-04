@@ -607,6 +607,26 @@ def test_url_mount_template_literal_control() -> None:
         "mount 'demo/' is written as a literal" in violation
         for violation in checker.rule_7_urls(html_literal)
     )
+    # A quoted path beneath the mount repeats the mount too.
+    html_subpath_literal = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": ('<a href="/demo/thanks/">Thanks</a>\n')
+        },
+    )
+    assert any(
+        "mount 'demo/' is written as a literal" in violation
+        for violation in checker.rule_7_urls(html_subpath_literal)
+    )
+    quoted_longer_prefix = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/sample.j2": (
+                '<a href="/demographics/list/">Demographics</a>\n'
+            )
+        },
+    )
+    assert checker.rule_7_urls(quoted_longer_prefix) == []
 
 
 def test_template_page_control() -> None:
@@ -4768,8 +4788,9 @@ def test_authorization_controls() -> None:
     admin = _with_files(
         module,
         views=(
-            "from rest_framework.permissions import IsAdminUser\n\n"
-            "class IndexView:\n    permission_classes = [IsAdminUser]\n"
+            "from rest_framework.permissions import IsAdminUser\n"
+            "from rest_framework.views import APIView\n\n"
+            "class IndexView(APIView):\n    permission_classes = [IsAdminUser]\n"
         ),
     )
     assert any(
@@ -4779,8 +4800,9 @@ def test_authorization_controls() -> None:
     aliased_admin = _with_files(
         module,
         views=(
-            "from rest_framework.permissions import IsAdminUser as AdminOnly\n\n"
-            "class IndexView:\n    permission_classes = [AdminOnly]\n"
+            "from rest_framework.permissions import IsAdminUser as AdminOnly\n"
+            "from rest_framework.views import APIView\n\n"
+            "class IndexView(APIView):\n    permission_classes = [AdminOnly]\n"
         ),
     )
     assert any(
@@ -4836,8 +4858,9 @@ def test_authorization_controls() -> None:
         module,
         **{
             "_profile_views.py": (
-                "from rest_framework.permissions import IsAdminUser\n\n"
-                "class IndexView:\n    permission_classes = [IsAdminUser]\n"
+                "from rest_framework.permissions import IsAdminUser\n"
+                "from rest_framework.views import APIView\n\n"
+                "class IndexView(APIView):\n    permission_classes = [IsAdminUser]\n"
             )
         },
     )
@@ -4845,9 +4868,150 @@ def test_authorization_controls() -> None:
         "IsAdminUser" in violation
         for violation in _violations(checker.rule_19_authorization, suffix_sibling)
     )
+    unscanned_class = _with_files(
+        module,
+        **{
+            "_helpers.py": (
+                "from rest_framework.permissions import IsAdminUser\n"
+                "from rest_framework.views import APIView\n\n"
+                "class ProfileAdminView(APIView):\n"
+                "    permission_classes = [IsAdminUser]\n"
+            )
+        },
+    )
+    assert any(
+        "IsAdminUser" in violation
+        for violation in _violations(checker.rule_19_authorization, unscanned_class)
+    )
+    namespace_view = _with_files(
+        module,
+        **{
+            "_handlers.py": (
+                "import rest_framework.views as drf_views\n"
+                "from rest_framework.permissions import IsAdminUser\n\n"
+                "class ProfileAdminView(drf_views.APIView):\n"
+                "    permission_classes = [IsAdminUser]\n"
+            )
+        },
+    )
+    assert any(
+        "IsAdminUser" in violation
+        for violation in _violations(checker.rule_19_authorization, namespace_view)
+    )
+    qualified_view = _with_files(
+        module,
+        **{
+            "_handlers.py": (
+                "import rest_framework.views\n"
+                "from rest_framework.permissions import IsAdminUser\n\n"
+                "class ProfileAdminView(rest_framework.views.APIView):\n"
+                "    permission_classes = [IsAdminUser]\n"
+            )
+        },
+    )
+    assert any(
+        "IsAdminUser" in violation
+        for violation in _violations(checker.rule_19_authorization, qualified_view)
+    )
+    from_namespace_view = _with_files(
+        module,
+        **{
+            "_handlers.py": (
+                "from rest_framework import generics\n"
+                "from rest_framework.permissions import IsAdminUser\n\n"
+                "class ProfileAdminView(generics.ListAPIView):\n"
+                "    permission_classes = [IsAdminUser]\n"
+            )
+        },
+    )
+    assert any(
+        "IsAdminUser" in violation
+        for violation in _violations(checker.rule_19_authorization, from_namespace_view)
+    )
+    django_namespace_view = _with_files(
+        module,
+        **{
+            "_handlers.py": (
+                "from django.views import generic\n\n"
+                "class StaffOnlyPageView(generic.View):\n"
+                '    allowed_flag = "is_staff"\n'
+            )
+        },
+    )
+    assert any(
+        "is_staff" in violation
+        for violation in _violations(checker.rule_19_authorization, django_namespace_view)
+    )
+    auth_namespace_view = _with_files(
+        module,
+        **{
+            "_handlers.py": (
+                "from django.contrib.auth import views\n\n"
+                "class StaffOnlyLoginView(views.LoginView):\n"
+                '    allowed_flag = "is_staff"\n'
+            )
+        },
+    )
+    assert any(
+        "is_staff" in violation
+        for violation in _violations(checker.rule_19_authorization, auth_namespace_view)
+    )
+    auth_view = _with_files(
+        module,
+        **{
+            "_handlers.py": (
+                "from django.contrib.auth.views import LoginView\n\n"
+                "class StaffOnlyLoginView(LoginView):\n"
+                '    allowed_flag = "is_staff"\n'
+            )
+        },
+    )
+    assert any(
+        "is_staff" in violation
+        for violation in _violations(checker.rule_19_authorization, auth_view)
+    )
+    unscanned_function = _with_files(
+        module,
+        **{
+            "_handlers.py": (
+                "from django.contrib.auth.views import redirect_to_login\n\n"
+                "def index(request):\n"
+                "    return redirect_to_login(request.get_full_path())\n"
+            )
+        },
+    )
+    assert any(
+        "redirect_to_login" in violation
+        for violation in _violations(checker.rule_19_authorization, unscanned_function)
+    )
+    non_view = _with_files(
+        module,
+        **{"_helpers.py": "def helper(user):\n    return user.is_staff\n"},
+    )
+    assert _violations(checker.rule_19_authorization, non_view) == []
+    operator_helper = _with_files(
+        _golden_module("orgs"),
+        **{
+            "permissions.py": (
+                "def resolve_request_org(request, route_kwargs):\n"
+                '    if getattr(request.user, "is_superuser", False):\n'
+                "        return None\n"
+                "    return route_kwargs\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_19_authorization, operator_helper) == []
+    traffic_filter = _with_files(
+        _golden_module("analytics"),
+        services=(
+            "def _request_is_staff(request):\n"
+            '    return bool(getattr(request.user, "is_staff", False))\n'
+        ),
+    )
+    assert _violations(checker.rule_19_authorization, traffic_filter) == []
     documented = _with_files(
         module,
-        views='"""Views never use is_staff or redirect_to_login, by rule 19."""\n',
+        views=('def index(request):\n    """redirect_to_login"""\n    return None\n'),
     )
     assert _violations(checker.rule_19_authorization, documented) == []
 
@@ -5114,6 +5278,65 @@ def test_package_file_name_controls() -> None:
         "markdownx_urls.py is not an allowed package file name" in violation
         for violation in _violations(checker.rule_28_file_names, demo_markdownx)
     )
+
+
+def test_private_facade_log_channel_controls() -> None:
+    module = _golden_module()
+    private_logger = "import logging\n\nlogger = logging.getLogger(__name__)\n"
+    facade = _with_files(
+        module,
+        views="from ._helpers import helper\n",
+        **{"_helpers.py": private_logger},
+    )
+    violations = _violations(checker.rule_28_file_names, facade)
+    assert any(
+        "_helpers.py" in violation and "getLogger(__name__)" in violation
+        for violation in violations
+    ), violations
+    absolute = _with_files(
+        module,
+        views="from quickscale_modules_demo._helpers import helper\n",
+        **{"_helpers.py": private_logger},
+    )
+    assert any(
+        "_helpers.py" in violation
+        for violation in _violations(checker.rule_28_file_names, absolute)
+    )
+    package_root = _with_files(
+        module,
+        views="from quickscale_modules_demo import _helpers\n",
+        **{"_helpers.py": private_logger},
+    )
+    assert any(
+        "_helpers.py" in violation
+        for violation in _violations(checker.rule_28_file_names, package_root)
+    )
+    relative_root = _with_files(
+        module,
+        views="from . import _helpers\n",
+        **{"_helpers.py": private_logger},
+    )
+    assert any(
+        "_helpers.py" in violation
+        for violation in _violations(checker.rule_28_file_names, relative_root)
+    )
+    facade_channel = _with_files(
+        facade,
+        **{
+            "_helpers.py": 'import logging\n\nlogger = logging.getLogger("quickscale_demo.views")\n'
+        },
+    )
+    assert _violations(checker.rule_28_file_names, facade_channel) == []
+    orphan = _with_files(module, **{"_helpers.py": private_logger})
+    assert _violations(checker.rule_28_file_names, orphan) == []
+    private_only = _with_files(
+        module,
+        **{
+            "_other.py": "from ._helpers import helper\n",
+            "_helpers.py": private_logger,
+        },
+    )
+    assert _violations(checker.rule_28_file_names, private_only) == []
 
 
 def test_typecheck_config_controls() -> None:
@@ -7056,8 +7279,8 @@ def test_layer_table_mirrors_the_shipped_modules() -> None:
 
 
 # Rules the harness must cover or record as open.  SA215 covered 1-39;
-# SA236 added 42-43 and SA237 added 44-45.  Rule 41 and rule 46 land with
-# SA235 and SA238, which extend this set.
+# SA236 adds 42-43; SA235's rule 41 clauses live in rules 7, 31, and 37, and
+# SA238's rule 46 clauses live in rules 19 and 28.  SA237 adds 44-45.
 RECORDED_RULE_NUMBERS = frozenset({*range(1, 40), 42, 43, 44, 45})
 
 

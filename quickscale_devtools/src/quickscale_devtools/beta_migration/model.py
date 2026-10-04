@@ -8,9 +8,10 @@ from quickscale_core.schema.state_schema import QuickScaleState
 from quickscale_core.utils.project_identity import ProjectIdentity
 from shlex import quote
 from typing import Literal
+import shutil
 
 
-BetaMigrationMode = Literal["fresh-first"]
+BetaMigrationMode = Literal["fresh-first", "iterate"]
 
 
 CheckStatus = Literal["passed", "failed", "skipped"]
@@ -26,6 +27,15 @@ RuntimeFileSource = Literal["donor", "recipient"]
 
 
 IdentityValueKind = Literal["package", "slug"]
+
+
+DonorFileClass = Literal[
+    "generated-untouched",
+    "generated-customized",
+    "project-owned",
+    "module-edited",
+    "build-artifact",
+]
 
 
 IdentityReplacement = tuple[str, str, IdentityValueKind]
@@ -91,6 +101,24 @@ class DiffSummary:
     donor_only: list[str] = field(default_factory=list)
     recipient_only: list[str] = field(default_factory=list)
     shared: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class DonorFileClassification:
+    """One migration class per donor file for the pre-mutation audit.
+
+    ``build_artifacts`` records the top-most skipped artifact paths (a pruned
+    directory stands for the tree beneath it, so dependency installs do not
+    enumerate as files). ``unclassified`` holds every donor file no class
+    matched; a non-empty list blocks the run before mutation.
+    """
+
+    generated_untouched: list[str] = field(default_factory=list)
+    generated_customized: list[str] = field(default_factory=list)
+    project_owned: list[str] = field(default_factory=list)
+    module_edited: list[str] = field(default_factory=list)
+    build_artifacts: list[str] = field(default_factory=list)
+    unclassified: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -177,6 +205,7 @@ class BetaMigrationReport:
     identity_reconciliation_required: bool = False
     module_diff: DiffSummary | None = None
     path_dependency_diff: DiffSummary | None = None
+    donor_file_classification: DonorFileClassification | None = None
     runtime_provenance: RuntimeFileProvenance | None = None
     preflight_checks: list[PreflightCheck] = field(default_factory=list)
     planned_actions: list[PlannedAction] = field(default_factory=list)
@@ -239,6 +268,21 @@ def _append_completed_step(
     report.completed_steps.append(StepRecord(step=step, detail=detail))
 
 
+def _append_parse_arguments_step(
+    report: BetaMigrationReport, inputs: BetaMigrationInput
+) -> None:
+    """Append the shared CLI-parsing step in its established shape."""
+    _append_completed_step(
+        report,
+        step="parse-cli-arguments",
+        detail=(
+            "Parsed maintainer workflow arguments. Dry run requested."
+            if inputs.dry_run
+            else "Parsed maintainer workflow arguments."
+        ),
+    )
+
+
 def _append_skipped_step(
     report: BetaMigrationReport, *, step: str, detail: str
 ) -> None:
@@ -251,3 +295,13 @@ def _record_changed_file(report: BetaMigrationReport, path: Path) -> None:
     normalized = str(path)
     if normalized not in report.changed_files:
         report.changed_files.append(normalized)
+
+
+def _remove_path(path: Path) -> None:
+    """Remove a file or directory tree when it exists."""
+    if not path.exists():
+        return
+    if path.is_dir():
+        shutil.rmtree(path)
+        return
+    path.unlink()

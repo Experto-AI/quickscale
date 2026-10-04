@@ -33,6 +33,7 @@ from quickscale_modules_billing.models import (
 from quickscale_modules_billing.services import (
     handle_stripe_event,
 )
+from quickscale_modules_orgs._tenancy_policy import _force_rls_policy_mismatches
 from quickscale_modules_orgs.current_org import (
     get_current_org_id,
     org_scope,
@@ -40,7 +41,6 @@ from quickscale_modules_orgs.current_org import (
 )
 from quickscale_modules_orgs.models import Organization
 from quickscale_modules_orgs.tenancy import (
-    _force_rls_policy_mismatches,
     apply_force_rls,
 )
 
