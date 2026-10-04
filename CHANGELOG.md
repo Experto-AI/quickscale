@@ -490,6 +490,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **View discovery follows content, not file names.** The module-conventions harness finds a
     module's view code by what it defines — a Django or DRF view subclass or a function taking
     `request` — so a split that files view code under any private name is still checked.
+  - **Frontend rendering decisions are recorded.** React is the standard frontend for new
+    application and public pages, while `auth`, `billing`, the module-shipped blog, listings, and
+    CRM pages, and Django admin keep their Django-rendered surfaces. The property portal's public
+    catalog and detail pages are prerendered React documents whose HTML carries their content and
+    Open Graph tags for crawlers that run no JavaScript, with React hydrating the interactive
+    layer.
   - **Org-role checks and type-stub exemptions follow one root contract.** Billing's post-lock
     authorization re-check calls the shared `user_has_org_role` helper with `OrgRole.OWNER` while
     keeping its call-site `is_active` test, third-party stub exemptions live only in the root
