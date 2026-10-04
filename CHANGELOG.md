@@ -502,6 +502,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     catalog and detail pages are prerendered React documents whose HTML carries their content and
     Open Graph tags for crawlers that run no JavaScript, with React hydrating the interactive
     layer.
+  - **Org-role checks and type-stub exemptions follow one root contract.** Billing's post-lock
+    authorization re-check calls the shared `user_has_org_role` helper with `OrgRole.OWNER` while
+    keeping its call-site `is_active` test, third-party stub exemptions live only in the root
+    `mypy.ini`, and the module-conventions gate rejects a string `role=` on an
+    organization-membership query outside orgs or any per-module `[tool.mypy]` table.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

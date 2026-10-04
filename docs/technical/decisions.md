@@ -1037,8 +1037,8 @@ test checks both. Other files in `tests/` are `conftest.py`,
   `[mypy-quickscale_modules_<module>.*]` section ([module-extension.md](module-extension.md) step
   1.3). The section relaxes at most `disallow_untyped_defs`, `warn_return_any`,
   `warn_unused_ignores`, and the `var-annotated` error code; stricter is allowed.
-- ❌ A per-module `[tool.mypy]` (CI runs mypy from the repository root and does not read it),
-  `ignore_missing_imports` in a module section, or another disabled error code.
+- ❌ A per-module `[tool.mypy]` table (rule 45), `ignore_missing_imports` in a module section, or
+  another disabled error code.
 
 **37. Module lists.**
 - ✅ Code outside `quickscale_modules/` that needs the set of modules (the CLI,
@@ -1072,7 +1072,7 @@ headings.
   is a requirement under rule 20).
 
 **40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
-and the CLI's option handling fails on each of rules 1–39 and 42–43 (rule 21 stays a review rule
+and the CLI's option handling fails on each of rules 1–39 and 42–45 (rule 21 stays a review rule
 with each module's write-effect rollback test; rule 27 through the user-FK conformance gate; rule 30
 in `apply` itself): names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
@@ -1092,10 +1092,11 @@ over from the CSRF pairing gate for webhooks), and response bodies, unlisted pac
 hand-written module lines and literal mount paths in the seam producer, throttle scopes and rates
 and `RunSQL` tables, database function and advisory-lock names,
 stems in shared namespaces, references by name against the layers, `os.getenv` in module code, the
-root `mypy.ini` module sections and any per-module `[tool.mypy]`, literal module lists outside the
-modules, option keys and command names in READMEs, and `required_modules` specifiers and
-`implies`, settings snapshots outside `_settings.py` or in `__all__` and cross-module settings
-objects, and `except Exception` around another module's service call — with a control case proving
+root `mypy.ini` module sections and any per-module `[tool.mypy]` table, literal module lists
+outside the modules, option keys and command names in READMEs, and `required_modules` specifiers
+and `implies`, settings snapshots outside `_settings.py` or in `__all__` and cross-module settings
+objects, `OrganizationMembership` queries outside orgs that filter by a string `role=`, and
+`except Exception` around another module's service call — with a control case proving
 each rule rejects a violation. The layer table, each
 foundation's published extension bases, and every listed exception live in one test-owned
 mapping that mirrors this section.
@@ -1138,6 +1139,18 @@ mapping that mirrors this section.
   tolerable.
 - ❌ Reading another module's settings object; `except Exception` around another module's service
   call (rule 23's listed analytics best-effort exception aside).
+
+**44. One role check.**
+- ✅ Every org-role decision, in a view or a service, calls orgs' `user_has_org_role` (or a helper
+  built on it) with an `OrgRole` member; the one role vocabulary is `OrgRole`, never a string.
+  Billing's post-lock re-check keeps its call-site `is_active` test.
+- ❌ An `OrganizationMembership` query outside orgs whose `role=` keyword spells the role as a
+  string literal. The query spelling stays open-world beyond that and is a review rule.
+
+**45. Stub exemptions.**
+- ✅ Third-party type-stub exemptions live in the root `mypy.ini` only.
+- ❌ Any `[tool.mypy]` table, `[[tool.mypy.overrides]]` included, in a module's `pyproject.toml`
+  (rule 36); CI runs mypy from the repository root and never reads it.
 
 **46. Splits (D48).**
 - ✅ A split keeps its facade's public import path and its log channel: the private files log on

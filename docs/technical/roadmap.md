@@ -6,10 +6,10 @@
 ## Goal and finish line
 
 The immediate goal is one convention across all modules, as recorded in
-[decisions.md § Module Conventions](decisions.md#module-conventions), finished by SA237 and
-SA238. `bap-web` is then ported once, onto the
-standardized names (SA191), and carries the first property portal in a project-owned extension
-(SA153). Capabilities are generalized only after that project proves their value.
+[decisions.md § Module Conventions](decisions.md#module-conventions). `bap-web` is then ported
+once, onto the standardized names (SA191), and carries the first property portal in a
+project-owned extension (SA153). Capabilities are generalized only after that project proves
+their value.
 
 **Release status.** 0.88.0 is published and carries two S1 billing defects fixed on `v89` (with
 real Stripe keys, every webhook and every checkout fails); the fix ships in 0.89.0, which is not
@@ -24,9 +24,8 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
 |---|---|---|---|---|---|
-| SA237 | One org-role check and root-only type-stub exemptions | post-v88 | 2 | — | Deferred |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | SA237 | Deferred |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | — | Deferred |
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
@@ -36,7 +35,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA237
+Track 2: —
 Track 3: SA216
      critical path: SA191 → SA153
 ```
@@ -53,9 +52,9 @@ ported, and SA204 has not frozen the migration history. SA204 freezes migration 
 any post-SA153 module schema change. SA154 is an inventory, not work.
 
 **Parallel start.** SA214 runs ahead of SA191 on Track 1 against a pinned pre-SA191 `bap-web`
-donor. SA237 records rules 44–45 (proposed in the
-[inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closes
-its own item, harness clause, and inventory section. SA241 landed on Track 3 ahead of SA153;
+donor. SA235, SA237, and SA238 have landed, recording rules 41 and 44–46 (proposed in the
+[inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closing
+their own items, harness clauses, and inventory sections. SA241 landed on Track 3 ahead of SA153;
 SA216 follows on that track.
 
 ### Track states
@@ -65,7 +64,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA214 | yes | yes | yes | **yes** | no |
-| 2 | SA237 | yes | yes | yes | **yes** | no |
+| 2 | — | yes | yes | yes | **yes** | no |
 | 3 | SA216 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -100,8 +99,7 @@ A track is **truly green** only when all three states are yes.
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row.
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
-  a ticket that does lands through the serialized merge queue. SA237 and SA238 also cross tracks:
-  each adds its own harness clause (a Track 3 surface).
+  a ticket that does lands through the serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md). Each track resolves the shared set at its
@@ -118,24 +116,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA237 — One org-role check and root-only type-stub exemptions.**
-
-  **Context:** billing's post-lock re-check (`_subscription_mutations.py`) re-implements orgs' role
-  check with the string `"owner"` and an extra `is_active` test. Ten module `pyproject.toml` files
-  carry `[[tool.mypy.overrides]]` blocks that CI never reads. Their coverage is uneven (anymail is
-  missing from the root `mypy.ini`), and the harness exempts them with no listed exception
-  (coherence D46 `org-role-check-copies`, D47 `mypy-overrides-unread`).
-
-  **Scope:** record rules 44 and 45 (recommended option A for each). Billing calls
-  `user_has_org_role(user, org, OrgRole.OWNER)` and keeps `is_active` at the call site. Delete the
-  module overrides blocks, add any stub exemption the root needs, and remove the harness's
-  `overrides` skip.
-
-  **Acceptance:** the harness rejects an `OrganizationMembership` `role=` query outside orgs and
-  any `[tool.mypy]` table in a module, each with a control case. The root mypy run passes.
-
-  **Surfaces:** billing `_subscription_mutations.py`; module `pyproject.toml` files; root
-  `mypy.ini`; the harness (Track 3, through the queue); decisions.
+- [x] **SA237 — One org-role check and root-only type-stub exemptions.**
 
 - [x] **SA238 — Split-facade conventions: log channels, re-exports, and view discovery by content.**
 
