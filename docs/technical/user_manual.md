@@ -413,7 +413,14 @@ project-owned changes before recording adoption or using `--acknowledge-contract
 2. Reduce `frontend/src/index.css` to `@import "../design/tokens.css";` and `frontend/tailwind.config.js`
    to a config whose `presets` consume `./design/tailwind.preset.js` while its `content` globs stay
    in the entry config.
-3. Keep future color, radius, font, and brand changes in `frontend/design/`: nothing overwrites
+3. Preserve relative references while moving the design. A `url()` or `@import` target that was
+   relative to `frontend/src/` resolves one directory off after the move, so rebase it to the
+   equivalent `../src/...` path (or move the referenced file into `frontend/design/`), and rebase
+   relative JavaScript module specifiers in the Tailwind config the same way. Do not rebase
+   Tailwind `content` globs: they resolve against the `frontend/` working directory, so rewriting
+   them would break content scanning. The maintainer migration blocks and names any reference it
+   cannot preserve instead of silently dropping a design resource.
+4. Keep future color, radius, font, and brand changes in `frontend/design/`: nothing overwrites
    that folder on an upgrade or `quickscale apply` run, so it is the one design source for the
    React host and the Django-rendered shell.
 

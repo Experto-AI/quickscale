@@ -279,12 +279,18 @@ def test_legacy_stylesheet_relative_references_are_rebased(
     assets = donor / "frontend" / "src" / "assets"
     assets.mkdir(parents=True)
     (assets / "Brand.woff2").write_bytes(b"donor-font")
+    (assets / "Icon.svg").write_text("<svg>donor-icon</svg>\n")
     (assets / "extra.css").write_text("/* donor partial */\n")
+    components = donor / "frontend" / "src" / "components" / "custom"
+    components.mkdir(parents=True)
+    (components / "panel.css").write_text(".panel { color: red; }\n")
     (donor / "frontend" / "src" / "index.css").write_text(
         '@import "./assets/extra.css";\n'
+        '@import "./components/custom/panel.css";\n'
         + stylesheet
         + '\n@font-face { font-family: "Brand"; src: url("./assets/Brand.woff2") format("woff2"); }\n'
         + ".hero { background-image: url(assets/Hero.png); }\n"
+        + '.icon { background: url("./assets/Icon.svg?v=3"); }\n'
         + '.absolute { background: url("/static/absolute.png"); }\n'
         + '.inline { background: url("data:image/png;base64,AAAA"); }\n'
         + '.shared { background: url("../shared/z.png"); }\n'
@@ -301,13 +307,18 @@ def test_legacy_stylesheet_relative_references_are_rebased(
     assert report.status == "ready", report.blockers
     tokens = (recipient / "frontend" / "design" / "tokens.css").read_text()
     assert '@import "../src/assets/extra.css";' in tokens
+    assert '@import "../src/components/custom/panel.css";' in tokens
     assert 'url("../src/assets/Brand.woff2")' in tokens
     assert "url(../src/assets/Hero.png)" in tokens
+    assert 'url("../src/assets/Icon.svg?v=3")' in tokens
     assert 'url("/static/absolute.png")' in tokens
     assert 'url("data:image/png;base64,AAAA")' in tokens
     assert 'url("../shared/z.png")' in tokens
     assert 'url("./assets/' not in tokens
     assert (recipient / "frontend" / "src" / "assets" / "extra.css").is_file()
+    assert (
+        recipient / "frontend" / "src" / "components" / "custom" / "panel.css"
+    ).is_file()
 
 
 def test_plan_blocks_when_the_legacy_stylesheet_references_an_uncarried_file(
@@ -340,6 +351,75 @@ def test_plan_blocks_when_the_legacy_stylesheet_references_an_uncarried_file(
     assert any(
         "references files the migration does not carry" in blocker
         and "frontend/src/extra.css" in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_plan_blocks_when_a_query_suffixed_reference_target_is_uncarried(
+    tmp_path: Path,
+) -> None:
+    """A ?query/#fragment suffix must not hide an uncarried target.
+
+    The suffix names no file; the filesystem path is what the preservation
+    oracle must resolve and block on.
+    """
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    donor_design = donor / "frontend" / "design"
+    stylesheet = (donor_design / "tokens.css").read_text()
+    shutil.rmtree(donor_design)
+    (donor / "frontend" / "src" / "extra.css").write_text("/* donor partial */\n")
+    (donor / "frontend" / "src" / "index.css").write_text(
+        '@import "./extra.css?v=1";\n' + stylesheet
+    )
+    (donor / "frontend" / "tailwind.config.js").write_text(
+        "// donor legacy config\nexport default {};\n"
+    )
+
+    report = plan_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "references files the migration does not carry" in blocker
+        and "frontend/src/extra.css" in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_plan_blocks_when_a_flat_component_file_reference_is_uncarried(
+    tmp_path: Path,
+) -> None:
+    """The oracle must match the executor's directory-only component copy.
+
+    Fresh-first copies component *directories*; a regular file directly under
+    frontend/src/components/ is never transplanted, so a reference to one must
+    block rather than pass as preserved.
+    """
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    donor_design = donor / "frontend" / "design"
+    stylesheet = (donor_design / "tokens.css").read_text()
+    shutil.rmtree(donor_design)
+    (donor / "frontend" / "src" / "components" / "custom.css").write_text(
+        ".custom { color: red; }\n"
+    )
+    (donor / "frontend" / "src" / "index.css").write_text(
+        '@import "./components/custom.css";\n' + stylesheet
+    )
+    (donor / "frontend" / "tailwind.config.js").write_text(
+        "// donor legacy config\nexport default {};\n"
+    )
+
+    report = plan_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "references files the migration does not carry" in blocker
+        and "frontend/src/components/custom.css" in blocker
         for blocker in report.blockers
     )
 
