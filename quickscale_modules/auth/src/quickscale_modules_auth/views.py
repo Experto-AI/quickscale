@@ -16,19 +16,20 @@ from typing import Any
 
 from django.apps import apps
 from django.contrib import messages
-from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
-from django.http import HttpResponse
+from django.forms import Form
+from django.http import HttpResponse, HttpResponseRedirect
 from django.urls import reverse_lazy
-from django.views.generic import DeleteView
+from django.views.generic import FormView
 
 import quickscale_modules_auth._account_deletion_flow as _account_deletion_flow
 import quickscale_modules_auth._account_deletion_guard as _account_deletion_guard
 import quickscale_modules_auth._account_deletion_handlers as _account_deletion_handlers
 import quickscale_modules_auth._account_deletion_providers as _account_deletion_providers
 import quickscale_modules_auth._account_deletion_references as _account_deletion_references
+import quickscale_modules_auth._anonymization as _anonymization
 import quickscale_modules_auth.exceptions as _exceptions
 
 from quickscale_core.runtime import collect_capabilities
@@ -43,8 +44,6 @@ from quickscale_modules_orgs.removal import (
     RemovalBoundary,
     RemovalCoordinator,
 )
-
-User = get_user_model()
 
 
 #: The operations every app that declares the rule 4
@@ -90,40 +89,37 @@ class AccountDeleteView(
     _account_deletion_providers._AccountDeletionProviderMixin,
     _account_deletion_references._AccountDeletionReferenceMixin,
     LoginRequiredMixin,
-    DeleteView,
+    FormView,
 ):
-    """Delete user account
+    """Disable and scrub the current user account.
 
-    Guards account deletion with SA28 invariants:
-    - Blocks deletion when the user is the sole owner of a shared org
-      that still has other members.
+    The account row is kept: it is disabled and its personal data is
+    scrubbed, so the login identity is gone while the row remains.  Guards
+    account removal with SA28 invariants:
+    - Blocks removal when the user is the sole owner of a shared org that
+      still has other members.
     - Cancels any active subscription on the user's personal org before
       proceeding.
-    - Fires a success message on permitted deletion (form_valid entry
-      point for Django >= 4.0).
+    - Fires a success message on permitted removal (form_valid entry point).
     """
 
-    model = User
+    form_class = Form
     template_name = "quickscale_auth/account/account_delete.html"
-    success_url = reverse_lazy("home")  # Redirect to home after deletion
-
-    def get_object(self, queryset: Any = None) -> Any:
-        """Return the current user"""
-        return self.request.user
+    success_url = reverse_lazy("home")  # Redirect to home after removal
 
     # ------------------------------------------------------------------
     # SA28: last-owner guard, personal-org subscription cancellation,
-    # and success-message dispatch (form_valid, not delete, is the
-    # entry point under Django >= 4.0).
+    # and success-message dispatch; form_valid is the POST entry point.
     # ------------------------------------------------------------------
 
     def form_valid(self, form: Any) -> HttpResponse:
-        """Validate account-deletion invariants before proceeding.
+        """Validate account-removal invariants, then disable and scrub.
 
         Locks and checks owned organizations before and after subscription
         reconciliation. Stripe calls run between those transactions so no
         network effect is held inside a database transaction. The second
-        locked check preserves the last-owner race guard before user deletion.
+        locked check preserves the last-owner race guard before the account
+        row is disabled and scrubbed. The row itself is never deleted.
         """
         user = self.request.user
         coordinator = RemovalCoordinator(RemovalBoundary.ACCOUNT_DELETE)
@@ -153,7 +149,7 @@ class AccountDeleteView(
                 if blocked_response is not None:
                     return blocked_response
 
-                success_response: HttpResponse | None = None
+                success_url: str | None = None
                 try:
                     with transaction.atomic():
                         recheck = self._recheck_locked_deletion_state(form, user, state)
@@ -173,10 +169,11 @@ class AccountDeleteView(
                             recheck.locked_organizations,
                             coordinator=coordinator,
                         )
-                        success_response = super().form_valid(form)
-                        # Fail closed inside the deletion transaction: a
+                        self._anonymize_account(user, coordinator)
+                        success_url = self.get_success_url()
+                        # Fail closed inside the removal transaction: a
                         # discovered obligation this boundary never
-                        # discharged rolls the account deletion back.
+                        # discharged rolls the account removal back.
                         coordinator.finish()
                 except ProtectedError:
                     logger.exception(
@@ -206,13 +203,13 @@ class AccountDeleteView(
                     )
                     return self.form_invalid(form)
 
-                assert success_response is not None  # noqa: S101 - internal invariant guaranteed by the caller
+                assert success_url is not None  # noqa: S101 - internal invariant guaranteed by the caller
                 messages.success(
                     self.request,
-                    "Your account has been deleted successfully.",
+                    "Your account has been deactivated and its personal data removed.",
                 )
                 deletion_succeeded = True
-                return success_response
+                return HttpResponseRedirect(success_url)
             except _exceptions._AccountDeletionProviderBlocked as exc:
                 return self._provider_blocked_response(form, exc)
             finally:
@@ -276,6 +273,29 @@ class AccountDeleteView(
                     organization.pk,
                     obligation.account_delete_skip_reason,
                 )
+
+    def _anonymize_account(
+        self,
+        user: Any,
+        coordinator: RemovalCoordinator,
+    ) -> None:
+        """Run every installed app's anonymize executor, then discharge the stage.
+
+        The pre-scrub identity — address, full name, and username — is
+        captured once and passed to every hook.  A handler may run in any
+        order, and auth's own handler mutates the account row, so the
+        username must be snapshotted too: the invitation display falls back to
+        it when the person has no full name.  The caller holds one transaction
+        around this call, so a failing executor rolls the whole account
+        deletion back; file effects are scheduled on commit (Module
+        Conventions rule 21).
+        """
+        original_email = user.email
+        original_name = user.get_full_name().strip()
+        original_username = str(getattr(user, "username", "") or "").strip()
+        for _, hook in _anonymization.discover_anonymize_hooks():
+            hook(user, original_email, original_name, original_username)
+        coordinator.discharge_stage(RemovalAction.ANONYMIZE)
 
     def _account_deletion_handlers(self) -> tuple[Any, ...]:
         """Return every installed app's declared account-deletion handler.

@@ -36,6 +36,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Reverse accessors and model choices follow one convention.** Relations to another module's models use `quickscale_<module>_<name>` reverse names, `FormFieldValue` orders deterministically, and model choice lists use `TextChoices` members instead of tuple constants.
   - **Organization removal follows installed tenant metadata.** `purge_organization` discovers project-owned tenant models and child-before-parent order automatically, refuses destructive execution and dry runs while a live Stripe subscription or active checkout reservation exists, and reconciles elapsed checkout sessions with Stripe before deletion under the organization-keyed provider advisory mutex; local mutations use organization-row locks. Purge and account deletion share explicit billing, row-deletion, cache, and tombstone obligations declared by each owning app and discharged through one coordinator that fails closed when a boundary skips a declared obligation, with declared provider fields refusing the purge until they are cleared or reconciled and app-owned stages running the declaring app's own hook, without weakening last-owner safeguards, while terminal or provider-confirmed expired billing rows remain purgeable.
   - **Server-rendered module pages share the project shell.** The blog, listings, and CRM base templates extend the project's `base.html` instead of emitting their own `<html>` document, so those pages inherit the site topbar, messages, and footer. Their child templates now fill `blog_content`, `listings_content`, and `crm_content`; a project that overrode one of these templates must rename its content block to match.
+  - **Account removal disables and anonymizes instead of deleting.** Deleting your account
+    deactivates the user row in place and scrubs its personal data — email, names, username,
+    password, sessions, and module-held profile data — so the same address can register again
+    while the old account cannot sign in.
   - **CRM styling moved into a stylesheet.** CRM page styles live in `quickscale_crm/css/crm.css` rather than an inline `<style>` block, and cover CRM content only — the page shell comes from `base.html`.
   - **Module page content keeps its spacing under the shared shell.** Each module base wraps its page content in a `<div class="<module>-content">` and its stylesheet sets the vertical rhythm there, because the project `base.html` reset zeroes default margins.
   - **Frontend architecture is documented.** [docs/technical/frontend.md](docs/technical/frontend.md) defines the `window.__QUICKSCALE__` seam, URL ownership between the React shell and module routes, the Vite/`collectstatic` pipeline, and the template-inheritance rule for server-rendered module surfaces.
@@ -512,6 +516,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     keeping its call-site `is_active` test, third-party stub exemptions live only in the root
     `mypy.ini`, and the module-conventions gate rejects a string `role=` on an
     organization-membership query outside orgs or any per-module `[tool.mypy]` table.
+  - **Account anonymization runs through app-declared handlers.** Each module that holds personal
+    data about a user declares an `anonymize_account` executor and the `anonymize_handlers`
+    capability; account deletion collects them through the shared capability helper, runs them in
+    its transaction, scrubs personal data from the records it retains (deleting stored files on
+    commit), and fails closed when a declared anonymization obligation has no handler.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

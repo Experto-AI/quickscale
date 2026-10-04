@@ -15,6 +15,7 @@ from quickscale_core.runtime import (
     register_module_settings_check,
 )
 from quickscale_modules_orgs.removal import (
+    BILLING_PERSONAL_DATA,
     BILLING_PROVIDER_STATE,
     BoundaryGuardedHooks,
     ExternalProviderField,
@@ -32,12 +33,14 @@ class QuickscaleBillingConfig(AppConfig):
     verbose_name = "QuickScale Billing"
 
     def removal_obligations(self) -> tuple[OrganizationRemovalObligation, ...]:
-        """Declare billing's organization-removal provider-state obligation.
+        """Declare billing's organization-removal obligations.
 
         Billing owns the Stripe identifiers it writes — including the Stripe
         customer id it stores on the organization row — so the declaration
         lives here rather than in vendored ``orgs`` source. Purge refuses
-        while provider state is live and account deletion reconciles it.
+        while provider state is live and account deletion reconciles it.  A
+        second obligation owns the stored webhook payloads, whose customer
+        email and name the account anonymization redacts in place.
         """
         return (
             OrganizationRemovalObligation(
@@ -111,7 +114,35 @@ class QuickscaleBillingConfig(AppConfig):
                     mutation_lock="organization_removal_provider_mutation_lock",
                 ),
             ),
+            OrganizationRemovalObligation(
+                name=BILLING_PERSONAL_DATA,
+                purge_action=RemovalAction.SKIP,
+                account_delete_action=RemovalAction.ANONYMIZE,
+            ),
         )
+
+    def anonymize_account(
+        self,
+        user: Any,
+        original_email: str,
+        original_name: str,
+        original_username: str,
+    ) -> None:
+        """Redact stored provider payloads as billing's declared executor."""
+        from quickscale_modules_billing import _anonymization
+
+        _anonymization.anonymize_account(
+            user, original_email, original_name, original_username
+        )
+
+    def anonymize_handlers(self) -> tuple[Any, ...]:
+        """Declare billing's account-anonymization handler (rule 4).
+
+        The account-deletion boundary collects every installed app's declared
+        handler through the shared core helper and runs them in one
+        transaction; billing declares its own app config as its handler.
+        """
+        return (self,)
 
     def reconcile_organization_removal_provider_state(
         self,
