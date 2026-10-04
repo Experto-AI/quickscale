@@ -18,6 +18,7 @@ import pytest
 from quickscale_core.generator import ProjectGenerator
 from quickscale_devtools.beta_migration import (
     BetaMigrationInput,
+    _iterate_stage_dir,
     plan_beta_migration,
     run_beta_migration,
 )
@@ -184,7 +185,8 @@ def test_plan_blocks_when_the_recipient_lacks_the_design_layer(
     )
 
 
-def test_plan_blocks_when_the_donor_has_no_design_source(tmp_path: Path) -> None:
+def test_plan_keeps_the_fresh_design_when_the_donor_has_none(tmp_path: Path) -> None:
+    """A donor with no design source has nothing to port; nothing blocks."""
     donor = _generate_project(tmp_path / "donor-root", SLUG)
     recipient = _generate_project(tmp_path / "recipient-root", SLUG)
     shutil.rmtree(donor / "frontend" / "design")
@@ -195,10 +197,12 @@ def test_plan_blocks_when_the_donor_has_no_design_source(tmp_path: Path) -> None
         BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
     )
 
-    assert report.status == "blocked"
+    assert report.status == "ready", report.blockers
     assert any(
-        "Design-layer preflight failed" in blocker and "nor a legacy" in blocker
-        for blocker in report.blockers
+        check.name == "fresh-first-design-layer"
+        and check.status == "passed"
+        and "no design source" in check.detail
+        for check in report.preflight_checks
     )
 
 
@@ -291,6 +295,7 @@ def test_legacy_stylesheet_relative_references_are_rebased(
         + '\n@font-face { font-family: "Brand"; src: url("./assets/Brand.woff2") format("woff2"); }\n'
         + ".hero { background-image: url(assets/Hero.png); }\n"
         + '.icon { background: url("./assets/Icon.svg?v=3"); }\n'
+        + '.parentref { background: url("../src/assets/Icon.svg"); }\n'
         + '.absolute { background: url("/static/absolute.png"); }\n'
         + '.inline { background: url("data:image/png;base64,AAAA"); }\n'
         + '.shared { background: url("../shared/z.png"); }\n'
@@ -311,6 +316,7 @@ def test_legacy_stylesheet_relative_references_are_rebased(
     assert 'url("../src/assets/Brand.woff2")' in tokens
     assert "url(../src/assets/Hero.png)" in tokens
     assert 'url("../src/assets/Icon.svg?v=3")' in tokens
+    assert 'url("../src/assets/Icon.svg")' in tokens
     assert 'url("/static/absolute.png")' in tokens
     assert 'url("data:image/png;base64,AAAA")' in tokens
     assert 'url("../shared/z.png")' in tokens
@@ -479,3 +485,123 @@ def test_design_layer_build_artifacts_are_not_copied(
     assert not (recipient_layer / ".env").exists()
     assert not (recipient_layer / "node_modules").exists()
     assert not (recipient_layer / "cache").exists()
+
+
+def test_plan_blocks_when_a_reference_escapes_a_copied_directory(
+    tmp_path: Path,
+) -> None:
+    """Normalization must expose a target that only lexically looks carried.
+
+    ``./assets/../extra.css`` starts with a copied utility directory but
+    actually resolves to the uncarried frontend/src/extra.css.
+    """
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    donor_design = donor / "frontend" / "design"
+    stylesheet = (donor_design / "tokens.css").read_text()
+    shutil.rmtree(donor_design)
+    (donor / "frontend" / "src" / "extra.css").write_text("/* donor partial */\n")
+    (donor / "frontend" / "src" / "index.css").write_text(
+        '@import "./assets/../extra.css";\n' + stylesheet
+    )
+    (donor / "frontend" / "tailwind.config.js").write_text(
+        "// donor legacy config\nexport default {};\n"
+    )
+
+    report = plan_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "references files the migration does not carry" in blocker
+        and "frontend/src/extra.css" in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_plan_blocks_when_a_design_layer_stylesheet_references_an_uncarried_file(
+    tmp_path: Path,
+) -> None:
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    (donor / "frontend" / "src" / "extra.css").write_text("/* donor partial */\n")
+    donor_tokens = donor / "frontend" / "design" / "tokens.css"
+    donor_tokens.write_text('@import "../src/extra.css";\n' + donor_tokens.read_text())
+
+    report = plan_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "references files the migration does not carry" in blocker
+        and "frontend/design/tokens.css" in blocker
+        and "frontend/src/extra.css" in blocker
+        for blocker in report.blockers
+    )
+
+
+def test_design_layer_same_layer_references_are_carried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A design-layer stylesheet may import another file the port itself carries."""
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", SLUG)
+    donor_tokens = donor / "frontend" / "design" / "tokens.css"
+    donor_tokens.write_text('@import "./custom.css";\n' + donor_tokens.read_text())
+    (donor / "frontend" / "design" / "custom.css").write_text(
+        ".custom { color: red; }\n"
+    )
+
+    _install_subprocess_stub(monkeypatch)
+    report = run_beta_migration(
+        BetaMigrationInput(mode="fresh-first", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "ready", report.blockers
+    assert (
+        recipient / "frontend" / "design" / "custom.css"
+    ).read_text() == ".custom { color: red; }\n"
+    assert (
+        '@import "./custom.css";'
+        in (recipient / "frontend" / "design" / "tokens.css").read_text()
+    )
+
+
+def test_iterate_blocks_before_replacing_the_recipient_on_a_bad_design_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A donor-side design failure must block before staged apply and replacement."""
+    donor = _generate_project(tmp_path / "donor-root", SLUG)
+    recipient = _generate_project(tmp_path / "recipient-root", "iterate-design-site")
+    marker = recipient / "keep-marker.txt"
+    marker.write_text("previous recipient\n")
+
+    donor_design = donor / "frontend" / "design"
+    stylesheet = (donor_design / "tokens.css").read_text()
+    shutil.rmtree(donor_design)
+    (donor / "frontend" / "src" / "extra.css").write_text("/* donor partial */\n")
+    (donor / "frontend" / "src" / "index.css").write_text(
+        '@import "./extra.css";\n' + stylesheet
+    )
+    (donor / "frontend" / "tailwind.config.js").write_text(
+        "// donor legacy config\nexport default {};\n"
+    )
+
+    def fail_run(*args: object, **kwargs: object) -> None:
+        raise AssertionError("a blocked donor must not reach staged apply")
+
+    monkeypatch.setattr(subprocess, "run", fail_run)
+    report = run_beta_migration(
+        BetaMigrationInput(mode="iterate", donor=donor, recipient=recipient)
+    )
+
+    assert report.status == "blocked"
+    assert any(
+        "Donor design-source preflight failed" in blocker
+        and "frontend/src/extra.css" in blocker
+        for blocker in report.blockers
+    )
+    assert marker.read_text() == "previous recipient\n"
+    assert not _iterate_stage_dir(recipient).exists()

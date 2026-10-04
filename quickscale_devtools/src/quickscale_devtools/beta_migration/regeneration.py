@@ -18,6 +18,7 @@ from .constants import (
 )
 from .package_json_editing import _validate_donor_frontend_manifest
 from .project_apps import _validate_donor_project_apps
+from .design_layer import _validate_donor_design_sources
 from .model import (
     BetaMigrationInput,
     BetaMigrationReport,
@@ -377,6 +378,12 @@ def _plan_beta_migration_iterate(
                 report,
                 donor_path=inputs.donor,
                 package=donor_config.project.package,
+            )
+            _validate_donor_design_sources(
+                report,
+                donor_path=inputs.donor,
+                package=donor_config.project.package,
+                theme=donor_config.project.theme,
             )
             if not report.blockers:
                 report.planned_actions = _iterate_planned_actions(

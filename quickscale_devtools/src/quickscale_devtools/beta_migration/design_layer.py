@@ -14,15 +14,20 @@ stage copies the donor's design into that layer before verification:
   entry points, and relative ``url()``/``@import`` references in the
   relocated stylesheet are rebased for its new directory.
 
-The relocation is fail-closed about references it cannot preserve: a relative
+The port is fail-closed about references it cannot preserve.  A relative
 stylesheet reference whose donor target exists but would not exist in the
-recipient after migration, and a relative JavaScript module reference in the
-legacy Tailwind config (which relocation cannot rebase without guessing), each
-block the run before any mutation and name the reference.  Only files under
-the recipient's ``frontend/design/`` are written; the donor tree stays
-read-only, and a recipient destination whose path contains a symbolic link is
-refused before any mutation, so a linked destination can never redirect a
-delete into the donor or outside the recipient.
+recipient after migration (paths are normalized first, and query/fragment
+suffixes never hide the filesystem target), and a relative JavaScript module
+reference in the legacy Tailwind config, each block the run before any
+mutation and name the reference.  References inside a donor design-layer
+stylesheet are validated too, against the layer files the port itself
+carries.  Donor-side validation runs before iterate mode regenerates (and
+replaces) the recipient, so an unsupported donor never reaches staged apply.
+
+Only files under the recipient's ``frontend/design/`` are written; the donor
+tree stays read-only, and a recipient destination whose path contains a
+symbolic link is refused before any mutation, so a linked destination can
+never redirect a delete into the donor or outside the recipient.
 """
 
 from __future__ import annotations
@@ -33,7 +38,11 @@ import shutil
 from pathlib import Path
 from typing import Match
 
-from .classification import _donor_emission_paths, _is_build_artifact
+from .classification import (
+    _donor_emission_paths,
+    _is_build_artifact,
+    _theme_emission_paths,
+)
 from .constants import (
     DESIGN_LAYER_LEGACY_SOURCES,
     DESIGN_LAYER_RELATIVE_DIR,
@@ -141,6 +150,19 @@ def _unsafe_recipient_ancestors(
     return tuple(sorted(unsafe))
 
 
+def _split_reference_suffix(target: str) -> tuple[str, str]:
+    """Split a reference into its filesystem path and ``?query``/``#fragment``.
+
+    The suffix never names a file, so existence and preservation checks use
+    the path half while the emitted reference keeps the suffix verbatim.
+    """
+    stripped = target.strip()
+    for index, char in enumerate(stripped):
+        if char in "?#":
+            return stripped[:index], stripped[index:]
+    return stripped, ""
+
+
 def _rebase_legacy_reference(target: str) -> str | None:
     """Return the target rebased for the design layer, or None to keep it.
 
@@ -179,80 +201,86 @@ def _stylesheet_reference_targets(text: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(targets))
 
 
-def _split_reference_suffix(target: str) -> tuple[str, str]:
-    """Split a reference into its filesystem path and ``?query``/``#fragment``.
-
-    The suffix never names a file, so existence and preservation checks use
-    the path half while the emitted reference keeps the suffix verbatim.
-    """
-    stripped = target.strip()
-    for index, char in enumerate(stripped):
-        if char in "?#":
-            return stripped[:index], stripped[index:]
-    return stripped, ""
-
-
-def _relative_reference_project_path(target: str) -> str | None:
-    """Map a relative stylesheet reference to its project-relative path.
+def _relative_reference_project_path(target: str, base_dir: str) -> str | None:
+    """Map a relative stylesheet reference to its normalized project path.
 
     Returns None for references that are not relative (absolute, scheme
     qualified, fragment-only, CSS-variable based, or protocol-relative).
-    Query and fragment suffixes are stripped from the filesystem path.
+    Query and fragment suffixes are stripped, ``.``/``..`` segments are
+    normalized, and a path that escapes the project root stays as ``..`` so
+    callers can refuse it explicitly.
     """
     stripped, _suffix = _split_reference_suffix(target)
     if not stripped or stripped.startswith(("/", "#", "?", "var(", "//")):
         return None
     if _SCHEME_REFERENCE.match(stripped):
         return None
-    return (Path(_LEGACY_STYLESHEET_BASE) / stripped).as_posix()
+    return os.path.normpath((Path(base_dir) / stripped).as_posix())
 
 
-def _recipient_preserves_path(report: BetaMigrationReport, project_path: str) -> bool:
+def _recipient_preserves_path(
+    donor_path: Path,
+    emission_paths: frozenset[str],
+    project_path: str,
+) -> bool:
     """Return whether the migrated recipient is guaranteed to hold *project_path*.
 
     The fresh-first copy steps transplant whole donor utility directories and
     every donor component *directory* except ``ui/``; a regular file directly
-    under ``frontend/src/components/`` is never copied.  Every
-    generator-emitted path is regenerated by the recipient itself.  Nothing
-    else survives a fresh-first migration, so a reference to anything else
-    cannot be preserved.
+    under ``frontend/src/components/`` is never copied.  Every generator
+    design-layer file is carried verbatim, and every generator-emitted path is
+    regenerated by the recipient itself.  Nothing else survives a fresh-first
+    migration, so a reference to anything else cannot be preserved.
     """
-    if report.donor is None:
+    if not project_path or project_path.startswith(".."):
         return False
+    layer_paths = {
+        path.relative_to(donor_path).as_posix()
+        for path in _design_layer_files(donor_path)
+    }
+    if project_path in layer_paths:
+        return True
     parts = Path(project_path).parts
     if len(parts) >= 3 and parts[0] == "frontend" and parts[1] == "src":
         if parts[2] in FRESH_FIRST_UTILITY_DIRS:
             return True
         if parts[2] == "components" and len(parts) >= 4:
-            component_dir = (
-                report.donor.path / "frontend" / "src" / "components" / parts[3]
-            )
+            component_dir = donor_path / "frontend" / "src" / "components" / parts[3]
             if (
                 parts[3] not in FRESH_FIRST_COMPONENT_DIR_SKIP
                 and component_dir.is_dir()
             ):
                 return True
-    try:
-        return project_path in _donor_emission_paths(report.donor)
-    except OSError, ValueError:
-        return False
+    return project_path in emission_paths
 
 
-def _legacy_reference_failures(
-    report: BetaMigrationReport, stylesheet_text: str
+def _design_reference_failures(
+    donor_path: Path,
+    emission_paths: frozenset[str],
+    text: str,
+    *,
+    base_dir: str,
+    label: str,
 ) -> tuple[str, ...]:
     """Return relative stylesheet references the migration cannot preserve."""
-    if report.donor is None:
-        return ()
     failures: list[str] = []
-    for target in _stylesheet_reference_targets(stylesheet_text):
-        project_path = _relative_reference_project_path(target)
+    for target in _stylesheet_reference_targets(text):
+        project_path = _relative_reference_project_path(target, base_dir)
         if project_path is None:
             continue
-        if not (report.donor.path / project_path).is_file():
+        if project_path.startswith(".."):
+            failures.append(
+                f"{label} references files the migration does not carry: "
+                f"{target} -> {project_path}"
+            )
+            continue
+        if not (donor_path / project_path).is_file():
             continue  # Already dangling in the donor; migration loses nothing.
-        if not _recipient_preserves_path(report, project_path):
-            failures.append(f"{target} -> {project_path}")
+        if not _recipient_preserves_path(donor_path, emission_paths, project_path):
+            failures.append(
+                f"{label} references files the migration does not carry: "
+                f"{target} -> {project_path}"
+            )
     return tuple(failures)
 
 
@@ -271,17 +299,148 @@ def _legacy_config_module_references(config_text: str) -> tuple[str, ...]:
     )
 
 
-def _validate_design_port_targets(report: BetaMigrationReport) -> None:
-    """Block before mutation when the design port cannot run.
+def _donor_design_failures(
+    donor_path: Path, emission_paths: frozenset[str]
+) -> tuple[str, ...]:
+    """Return every donor-side reason the design port cannot run.
 
-    The recipient must carry the never-overwritten design layer (a current
-    release always emits it) with no symbolic link on any destination path,
-    and the donor must expose at least one readable, eligible design source:
-    its own layer files or the two legacy sources.  A legacy stylesheet or
-    Tailwind config whose relative references relocation cannot preserve
-    blocks here, naming each reference, instead of silently losing design
-    resources.
+    Works from the donor tree and the generator emission inventory alone, so
+    iterate mode can run it before regeneration replaces the recipient.  A
+    donor that exposes no design source at all has nothing to port; the
+    recipient keeps its fresh design layer, so that case is not a failure.
     """
+    sources = _design_port_sources(donor_path)
+    if not sources:
+        return ()
+
+    failures: list[str] = [
+        f"unreadable donor design source {source}"
+        for source, _ in sources
+        if not source.is_file()
+    ]
+    layer_files = _design_layer_files(donor_path)
+    if layer_files:
+        for layer_file in layer_files:
+            if layer_file.suffix.lower() != ".css":
+                continue
+            relative = layer_file.relative_to(donor_path).as_posix()
+            try:
+                text = layer_file.read_text(encoding="utf-8")
+            except OSError, UnicodeDecodeError:
+                continue
+            failures.extend(
+                _design_reference_failures(
+                    donor_path,
+                    emission_paths,
+                    text,
+                    base_dir=Path(relative).parent.as_posix(),
+                    label=relative,
+                )
+            )
+        return tuple(failures)
+
+    legacy_stylesheet = donor_path / _LEGACY_STYLESHEET_SOURCE
+    if legacy_stylesheet.is_file():
+        try:
+            stylesheet_text = legacy_stylesheet.read_text(encoding="utf-8")
+        except OSError, UnicodeDecodeError:
+            stylesheet_text = ""
+        failures.extend(
+            _design_reference_failures(
+                donor_path,
+                emission_paths,
+                stylesheet_text,
+                base_dir=_LEGACY_STYLESHEET_BASE,
+                label=_LEGACY_STYLESHEET_SOURCE,
+            )
+        )
+
+    legacy_config = donor_path / _LEGACY_CONFIG_SOURCE
+    if legacy_config.is_file():
+        try:
+            config_text = legacy_config.read_text(encoding="utf-8")
+        except OSError, UnicodeDecodeError:
+            config_text = ""
+        module_references = _legacy_config_module_references(config_text)
+        if module_references:
+            failures.append(
+                "the legacy Tailwind config loads relative modules that relocation "
+                "to the design layer cannot preserve: " + ", ".join(module_references)
+            )
+    return tuple(failures)
+
+
+def _append_design_check_failure(
+    report: BetaMigrationReport,
+    *,
+    check_name: str,
+    prefix: str,
+    failures: tuple[str, ...],
+) -> None:
+    detail = prefix + "; ".join(failures) + "."
+    _append_check(report, name=check_name, status="failed", detail=detail)
+    _append_blocker(report, detail)
+
+
+def _validate_donor_design_sources(
+    report: BetaMigrationReport,
+    *,
+    donor_path: Path,
+    package: str,
+    theme: str,
+) -> None:
+    """Block before regeneration when the donor's design cannot be ported.
+
+    Iterate mode deletes and replaces the previous recipient during
+    regeneration, so a donor-side design failure must block before staged
+    apply, not after the recipient is already gone.
+    """
+    if report.blockers:
+        return
+    try:
+        emission_paths = _theme_emission_paths(theme, package)
+    except (OSError, ValueError) as exc:
+        _append_design_check_failure(
+            report,
+            check_name="donor-design-sources",
+            prefix="Donor design-source preflight failed: ",
+            failures=("could not load the generator emission inventory: " + str(exc),),
+        )
+        return
+
+    failures = _donor_design_failures(donor_path, emission_paths)
+    if failures:
+        _append_design_check_failure(
+            report,
+            check_name="donor-design-sources",
+            prefix="Donor design-source preflight failed: ",
+            failures=failures,
+        )
+        return
+    if not _design_port_sources(donor_path):
+        _append_check(
+            report,
+            name="donor-design-sources",
+            status="passed",
+            detail=(
+                "The donor exposes no design source; the recipient keeps its fresh "
+                "design layer."
+            ),
+        )
+        return
+    _append_check(
+        report,
+        name="donor-design-sources",
+        status="passed",
+        detail=(
+            "Validated the donor's design sources and relative references against "
+            "the migration carry selectors before regeneration."
+        ),
+    )
+
+
+def _validate_design_port_targets(report: BetaMigrationReport) -> None:
+    """Block before mutation when the design port cannot run."""
     if report.blockers or report.donor is None or report.recipient is None:
         return
 
@@ -300,29 +459,16 @@ def _validate_design_port_targets(report: BetaMigrationReport) -> None:
 
     sources = _design_port_sources(report.donor.path)
     if not sources:
-        detail = (
-            "Design-layer preflight failed: the donor carries neither design-layer "
-            f"files under {DESIGN_LAYER_RELATIVE_DIR}/ nor a legacy "
-            "frontend/src/index.css or frontend/tailwind.config.js design source."
-        )
         _append_check(
-            report, name="fresh-first-design-layer", status="failed", detail=detail
+            report,
+            name="fresh-first-design-layer",
+            status="passed",
+            detail=(
+                "The donor exposes no design source; the recipient's fresh design "
+                "layer is kept."
+            ),
         )
-        _append_blocker(report, detail)
         return
-
-    unreadable = [str(source) for source, _ in sources if not source.is_file()]
-    if unreadable:
-        detail = (
-            "Design-layer preflight failed: unreadable donor design source(s): "
-            + ", ".join(unreadable)
-        )
-        _append_check(
-            report, name="fresh-first-design-layer", status="failed", detail=detail
-        )
-        _append_blocker(report, detail)
-        return
-
     unsafe = _unsafe_recipient_ancestors(report.recipient.path, sources)
     if unsafe:
         detail = (
@@ -337,57 +483,28 @@ def _validate_design_port_targets(report: BetaMigrationReport) -> None:
         _append_blocker(report, detail)
         return
 
+    try:
+        emission_paths = _donor_emission_paths(report.donor)
+    except (OSError, ValueError) as exc:
+        _append_design_check_failure(
+            report,
+            check_name="fresh-first-design-layer",
+            prefix="Design-layer preflight failed: ",
+            failures=("could not load the generator emission inventory: " + str(exc),),
+        )
+        return
+
+    failures = _donor_design_failures(report.donor.path, emission_paths)
+    if failures:
+        _append_design_check_failure(
+            report,
+            check_name="fresh-first-design-layer",
+            prefix="Design-layer preflight failed: ",
+            failures=failures,
+        )
+        return
+
     donor_has_layer = bool(_design_layer_files(report.donor.path))
-    if not donor_has_layer:
-        legacy_stylesheet = report.donor.path / _LEGACY_STYLESHEET_SOURCE
-        if legacy_stylesheet.is_file():
-            try:
-                stylesheet_text = legacy_stylesheet.read_text(encoding="utf-8")
-            except OSError, UnicodeDecodeError:
-                stylesheet_text = ""
-            reference_failures = _legacy_reference_failures(report, stylesheet_text)
-            if reference_failures:
-                detail = (
-                    "Design-layer preflight failed: the legacy stylesheet references "
-                    "files the migration does not carry to the rebased design layer: "
-                    + "; ".join(reference_failures)
-                    + ". Move those files into the donor design layer or extend the "
-                    "migration before porting."
-                )
-                _append_check(
-                    report,
-                    name="fresh-first-design-layer",
-                    status="failed",
-                    detail=detail,
-                )
-                _append_blocker(report, detail)
-                return
-
-        legacy_config = report.donor.path / _LEGACY_CONFIG_SOURCE
-        if legacy_config.is_file():
-            try:
-                config_text = legacy_config.read_text(encoding="utf-8")
-            except OSError, UnicodeDecodeError:
-                config_text = ""
-            module_references = _legacy_config_module_references(config_text)
-            if module_references:
-                detail = (
-                    "Design-layer preflight failed: the legacy Tailwind config loads "
-                    "relative modules that relocation to the design layer cannot "
-                    "preserve: "
-                    + ", ".join(module_references)
-                    + ". Inline them or move them into the donor design layer before "
-                    "porting."
-                )
-                _append_check(
-                    report,
-                    name="fresh-first-design-layer",
-                    status="failed",
-                    detail=detail,
-                )
-                _append_blocker(report, detail)
-                return
-
     source_description = (
         "the donor's design layer"
         if donor_has_layer
