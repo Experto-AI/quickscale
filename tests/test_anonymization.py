@@ -181,3 +181,67 @@ def test_app_config_declares_the_anonymize_handlers_capability() -> None:
     config = apps.get_app_config("quickscale_billing")
 
     assert config.anonymize_handlers() == (config,)
+
+
+@pytest.mark.django_db
+def test_declared_treatments_hold_on_a_populated_user(
+    user, organization, org_context
+) -> None:
+    """Every declared treatment matches what the executor does to populated rows."""
+    from quickscale_core.runtime import PersonalDataField, PersonalDataTreatment
+    from quickscale_modules_billing.models import (
+        CreditBalance,
+        CreditTransaction,
+        Plan,
+        PurchaseCheckout,
+        Subscription,
+    )
+
+    config = apps.get_app_config("quickscale_billing")
+    declared = {
+        (entry.model_name, entry.field_name): entry.treatment
+        for entry in config.personal_data_declarations()
+        if isinstance(entry, PersonalDataField)
+    }
+    assert declared == {
+        ("Subscription", "user"): PersonalDataTreatment.KEEP_LINK,
+        ("CreditBalance", "user"): PersonalDataTreatment.KEEP_LINK,
+        ("CreditTransaction", "user"): PersonalDataTreatment.KEEP_LINK,
+        ("PurchaseCheckout", "user"): PersonalDataTreatment.KEEP_LINK,
+        ("WebhookEvent", "payload"): PersonalDataTreatment.SCRUB,
+    }
+
+    plan = Plan.objects.create(
+        name="Anonymization Plan",
+        slug="anonymization-plan",
+        stripe_price_id="price_anonymization",
+        credits_per_period=10,
+        price_cents=1000,
+    )
+    subscription = Subscription.objects.create(
+        organization=organization, plan=plan, user=user
+    )
+    balance = CreditBalance.objects.create(organization=organization, user=user)
+    transaction = CreditTransaction.objects.create(
+        organization=organization,
+        user=user,
+        amount=100,
+        balance_after=100,
+        transaction_type=CreditTransaction.TransactionType.PURCHASE,
+    )
+    checkout = PurchaseCheckout.objects.create(
+        organization=organization, plan=plan, user=user
+    )
+    event = WebhookEvent.objects.create(
+        stripe_event_id="evt-declared-treatments",
+        event_type="customer.updated",
+        payload={"data": {"object": {"customer_details": {"email": user.email}}}},
+    )
+
+    anonymize_account(user, user.email, "Test User", user.get_username())
+
+    for row in (subscription, balance, transaction, checkout):
+        row.refresh_from_db()
+        assert row.user_id == user.pk
+    event.refresh_from_db()
+    assert user.email not in str(event.payload)
