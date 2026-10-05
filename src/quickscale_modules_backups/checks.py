@@ -16,7 +16,7 @@ _REMOTE_TARGET_MODE = "private_remote"
 
 
 def check_private_remote_credentials(
-    app_configs: object = None,
+    _app_configs: object = None,
     **kwargs: object,
 ) -> list[CheckMessage]:
     """Fail startup when private_remote backups lack their credentials.
