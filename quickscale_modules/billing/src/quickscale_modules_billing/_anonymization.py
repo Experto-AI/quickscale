@@ -44,7 +44,9 @@ def anonymize_account(
 
     Only payloads that carry the pre-scrub address are rewritten, so another
     customer's event is never touched — including a customer whose address
-    merely contains the person's address as a substring.  ``user`` and
+    merely contains the person's address as a substring.  The rows are
+    pre-filtered in SQL on the address before the Python walk, so an event
+    that never mentions it is never loaded.  ``user`` and
     ``original_username`` are unused: the payload, not a user link or username,
     is the record searched.
     """
@@ -53,7 +55,7 @@ def anonymize_account(
     if not email:
         return
     name = original_name.strip()
-    for event in WebhookEvent.objects.all().iterator():
+    for event in WebhookEvent.objects.filter(payload__icontains=email).iterator():
         if not _contains_email(event.payload, email=email):
             continue
         redacted = _redact_identity(event.payload, email=email, name=name)

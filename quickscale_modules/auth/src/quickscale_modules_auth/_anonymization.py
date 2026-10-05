@@ -22,6 +22,7 @@ from collections.abc import Callable
 from typing import Any
 
 from django.apps import apps
+from django.utils import timezone
 
 from quickscale_core.runtime import collect_capabilities
 from quickscale_modules_orgs.removal import (
@@ -158,13 +159,19 @@ def _delete_login_addresses(user: Any) -> None:
 
 
 def _delete_sessions(user: Any) -> None:
-    """Delete every database session whose stored user id is *user*."""
+    """Delete the person's unexpired database sessions.
+
+    Expired rows cannot authenticate anyone, so only rows whose
+    ``expire_date`` lies in the future are decoded; the rest are left to the
+    session backend's own purge instead of being walked here.
+    """
     try:
         session_model = apps.get_model("sessions", "Session")
     except LookupError:
         return
     user_id = str(user.pk)
-    for session in session_model.objects.all().iterator():
+    live_sessions = session_model.objects.filter(expire_date__gt=timezone.now())
+    for session in live_sessions.iterator():
         if _stored_user_id(session) == user_id:
             session_model.objects.filter(pk=session.pk).delete()
 

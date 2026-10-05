@@ -7,15 +7,23 @@ without ``orgs``, and the declaration vocabulary lives in the orgs package, so
 the anonymize boundary collects this handler through the shared core
 helper exactly like the other declared handlers.
 
-Every stored message that carries the person's identity is scrubbed, not only
-the messages addressed to them: an invitation message is delivered to the
-invitee but renders the inviter's name, so delivery alone cannot select the
-person's records.  A message delivered only to the person has every rendered
-field replaced wholesale, as the inventory's treatment reads; any other
+Only the messages linked to the person are scrubbed: the ones delivered to
+them, the ones whose ``context_json`` records them as the actor through an
+``actor_user_id`` key that ``send_notification`` callers stamp, and — the
+pre-key fallback — the ones whose ``context_json`` carries their unique
+address.  An invitation message is delivered to the invitee but renders the
+inviter's name, so the actor link, not delivery, selects the inviter's
+records.  A message delivered only to the person has every rendered field
+replaced wholesale, as the inventory's treatment reads; any other linked
 message keeps the content that is not about the person and loses each
 occurrence of their address, full name, and username — in the raw and
 HTML-escaped spellings Django rendering stores.  The person's own delivery
-rows and provider event payloads are scrubbed regardless.
+rows and provider event payloads are scrubbed regardless.  The fallback
+matches their address, which is unique, and never their name, which can be an
+ordinary word; a name match cannot select another person's message.  An
+invitation message sent before the actor key existed names only the inviter's
+display name, so it carries no link the fallback can match and stays as
+stored — a recorded limit, not a selector.
 """
 
 from __future__ import annotations
@@ -51,11 +59,14 @@ def anonymize_account(
     original_name: str,
     original_username: str,
 ) -> None:
-    """Scrub the person's deliveries, event payloads, and message content.
+    """Scrub the person's deliveries, event payloads, and linked messages.
 
     ``original_name`` and ``original_username`` are the pre-scrub display
     spellings — the invitation email renders the full name, falling back to
-    the username — removed from any stored message that carries them.
+    the username — removed from every linked message that carries them.  A
+    message is linked when a delivery addresses the person, when its
+    ``context_json`` names them as the actor, or when it carries their unique
+    address; no other message is read or rewritten.
     """
     email = original_email.strip()
     if not email:
@@ -82,20 +93,13 @@ def anonymize_account(
         _scrub_event_payloads(delivery_ids, email=email, replacement=deleted_address)
 
     _scrub_messages(
+        user,
         delivery_ids,
         email=email,
         name=name,
         username=username,
         deleted_address=deleted_address,
     )
-
-
-def _account_username(user: Any, *, email: str, name: str) -> str:
-    """Return the account's username when it is a distinct identity spelling."""
-    username = str(getattr(user, "username", "") or "").strip()
-    if not username or username.casefold() in {email.casefold(), name.casefold()}:
-        return ""
-    return username
 
 
 def _scrub_event_payloads(
@@ -116,6 +120,7 @@ def _scrub_event_payloads(
 
 
 def _scrub_messages(
+    user: Any,
     delivery_ids: list[Any],
     *,
     email: str,
@@ -123,18 +128,40 @@ def _scrub_messages(
     username: str,
     deleted_address: str,
 ) -> None:
-    """Redact every message delivered to the person or carrying their identity."""
+    """Redact the messages linked to the person, and only those.
+
+    Three links select a message: a delivery to the person, an
+    ``actor_user_id`` context entry naming them as the actor, or — the
+    pre-key fallback — their unique address inside ``context_json``.  The
+    fallback verifies a complete address, never a name, so a namesake's
+    address or an ordinary word cannot select another person's message.
+    """
     person_message_ids = set(
         NotificationDelivery.objects.filter(pk__in=delivery_ids).values_list(
             "message_id", flat=True
         )
     )
-    shared_message_ids = set(
-        NotificationDelivery.objects.exclude(pk__in=delivery_ids).values_list(
-            "message_id", flat=True
-        )
+    actor_message_ids = set(
+        NotificationMessage.objects.filter(
+            context_json__actor_user_id=str(user.pk)
+        ).values_list("pk", flat=True)
     )
-    for message in NotificationMessage.objects.all().iterator():
+    fallback_message_ids = {
+        pk
+        for pk, context in NotificationMessage.objects.filter(
+            context_json__icontains=email
+        ).values_list("pk", "context_json")
+        if _context_names_the_address(context, email=email)
+    }
+    candidate_ids = person_message_ids | actor_message_ids | fallback_message_ids
+    if not candidate_ids:
+        return
+    shared_message_ids = set(
+        NotificationDelivery.objects.filter(message_id__in=candidate_ids)
+        .exclude(pk__in=delivery_ids)
+        .values_list("message_id", flat=True)
+    )
+    for message in NotificationMessage.objects.filter(pk__in=candidate_ids).iterator():
         if message.pk in person_message_ids and message.pk not in shared_message_ids:
             _redact_message_wholesale(message)
         else:
@@ -480,6 +507,30 @@ def _identity_form(token: str, target: str) -> str | None:
         if token[count:].casefold() == target:
             return prefix
     return None
+
+
+def _carries_address(value: str, *, email: str) -> bool:
+    """Return whether *value* holds *email* as one complete address."""
+    return _replace_addresses(value, email=email, replacement="") != value
+
+
+def _context_names_the_address(value: Any, *, email: str) -> bool:
+    """Return whether a stored context carries the person's complete address.
+
+    JSON object keys are strings too, so a context key naming the address
+    counts, exactly as the redaction tree treats keys.
+    """
+    if isinstance(value, dict):
+        return any(
+            _context_names_the_address(str(key), email=email)
+            or _context_names_the_address(item, email=email)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_context_names_the_address(item, email=email) for item in value)
+    if isinstance(value, str):
+        return _carries_address(value, email=email)
+    return False
 
 
 def _replace_addresses(value: str, *, email: str, replacement: str) -> str:

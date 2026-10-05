@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.models import Session
 from django.test import Client
+from django.utils import timezone
 
 from quickscale_modules_auth._anonymization import (
     discover_anonymize_hooks,
@@ -74,6 +77,21 @@ def test_scrub_account_deletes_only_the_persons_sessions(user) -> None:
     scrub_account(user, "testuser@example.com", "Test User", user.get_username())
 
     assert _session_user_ids() == {str(other.pk)}
+
+
+@pytest.mark.django_db
+def test_scrub_account_leaves_expired_sessions_to_the_session_purge(user) -> None:
+    """An expired row cannot authenticate, so it is neither decoded nor deleted."""
+    person_client = Client()
+    person_client.force_login(user)
+    session = Session.objects.get()
+    Session.objects.filter(pk=session.pk).update(
+        expire_date=timezone.now() - timedelta(days=1)
+    )
+
+    scrub_account(user, "testuser@example.com", "Test User", user.get_username())
+
+    assert Session.objects.filter(pk=session.pk).exists()
 
 
 @pytest.mark.django_db

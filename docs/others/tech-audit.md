@@ -68,8 +68,8 @@ executed.
 *Category activation:* active: I, II, III, IV, VI, IX, X-generator, X-multi-tenant · inert: V (no
 hot-path delta), VII (workflow diff is gates only), X-frontend (React not read) · produced: I, IV.
 
-**Residual risk.** No PostgreSQL was exercised, so the full-scan timings in
-`anonymize-full-table-scans-under-locks` are inferred, not measured. Devtools, the DR/CLI moves,
+**Residual risk.** No PostgreSQL was exercised, so the full-scan timings of
+`anonymize-full-table-scans-under-locks` were inferred, not measured. Devtools, the DR/CLI moves,
 and React were not read this pass. Silence there means *not looked at*.
 
 ---
@@ -80,28 +80,10 @@ and React were not read this pass. Silence there means *not looked at*.
 schema: tech-audit/v6
 audited: 8e4122f216824edb62134441a00f2413b3854653
 items:
-  - {id: notifications-anonymize-rewrites-all-messages, status: open, severity: S2, category: I,
-     title: "Account anonymization redacts the person's name/username from every tenant's notification messages",
-     effort: Small, confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/_anonymization.py],
-     depends_on: [], chain: [anonymize-full-table-scans-under-locks], first_seen: 2026-10-05, last_verified: 2026-10-05}
-  - {id: anonymize-full-table-scans-under-locks, status: open, severity: S3, category: IV,
-     title: "Anonymization scans whole session/webhook/message tables inside the locked removal transaction",
-     effort: Small, confidence: Medium, reality: generated-app,
-     anchors: [quickscale_modules/auth/src/quickscale_modules_auth/_anonymization.py,
-               quickscale_modules/billing/src/quickscale_modules_billing/_anonymization.py,
-               quickscale_modules/notifications/src/quickscale_modules_notifications/_anonymization.py],
-     fix_files: [quickscale_modules/auth/src/quickscale_modules_auth/_anonymization.py,
-                 quickscale_modules/billing/src/quickscale_modules_billing/_anonymization.py,
-                 quickscale_modules/notifications/src/quickscale_modules_notifications/_anonymization.py],
-     depends_on: [notifications-anonymize-rewrites-all-messages], chain: [], first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: billing-anonymize-name-substring, status: open, severity: S4, category: I,
      title: "Billing payload scrub replaces the name as a bare substring, including in dict keys", effort: Trivial,
      confidence: High, reality: generated-app,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_anonymization.py], first_seen: 2026-10-05, last_verified: 2026-10-05}
-  - {id: notifications-account-username-dead, status: open, severity: S4, category: I,
-     title: "_account_username is defined and never called", effort: Trivial, confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/_anonymization.py], first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: dr-restore-vintage-exact-match, status: watchlist, category: I, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/recovery.py], first_seen: 2026-09-24, last_verified: 2026-10-05}
   - {id: orgs-provider-id-check-blocks-migrate, status: watchlist, category: VI, reality: generated-app,
@@ -116,89 +98,15 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 1 · S3 — 1 · S4 — 2 · total 4 open.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 1 · total 1 open.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
-| `notifications-anonymize-rewrites-all-messages` | S2 | I | Anonymization redacts name/username across every tenant's messages | Small | High | new |
-| `anonymize-full-table-scans-under-locks` | S3 | IV | Whole-table scans inside the locked removal transaction | Small | Medium | new |
 | `billing-anonymize-name-substring` | S4 | I | Name replaced as a bare substring, keys included | Trivial | High | new |
-| `notifications-account-username-dead` | S4 | I | Dead helper | Trivial | High | new |
 
 ---
 
 ## 4. Findings
-
-### Finding 1: Account anonymization redacts the person's name and username from every tenant's notification messages
-
-- **ID:** `notifications-anonymize-rewrites-all-messages`
-- **Severity:** S2. High impact × Common reachability, with no unverified precondition. The trigger
-  is any authenticated user removing their own account. Reality: R2, solo and saas alike, because
-  `NotificationMessage` has no org field and no RLS. It violates oracle 14 ("a short name cannot
-  rewrite an unrelated word").
-- **Category:** I (correctness: wrong scope of a write). The secondary angle is integrity: the
-  write crosses tenants.
-- **Confidence:** High. The full path was read, and the redaction regex was confirmed in scratch
-  (§1e).
-- **Location:** `quickscale_modules/notifications/src/quickscale_modules_notifications/_anonymization.py:118–147`
-  (`_scrub_messages`), `:376` (`_redact_names`). It is called from
-  `quickscale_modules_auth/views.py:159` (`_anonymize_account`).
-- **Defect:** `_scrub_messages` iterates **every** `NotificationMessage` in the database. Messages
-  not delivered to the person still go through `_redact_message_identity`. That function replaces the
-  person's full name and username wherever they appear as whole words, case-insensitively, in the
-  subject, the text and HTML bodies, `last_error`, and `context_json`. The person's display name
-  is user-editable (`forms.py:49`). Their username is user-chosen or derived from the email local
-  part. Neither has a link to the rewritten message, so the identity match is the only selector.
-- **Failure scenario:** held in the private companion (disclosure rule, public repository). In
-  short: the person's display name or username coincides with ordinary text in other users'
-  messages. Their own legitimate account removal then rewrites that text in every message in the
-  system. Messages still pending or retrying are later sent from the rewritten fields
-  (`_delivery.py:90–98`).
-- **Evidence:** `for message in NotificationMessage.objects.all().iterator():` → `else:
-  _redact_message_identity(message, ...)` (`:137–147`). See the private companion for the rest.
-- **Refutation:** held in the private companion. Summary: the tests cover escaped names and shared
-  invitation messages only (`tests/test_anonymization.py:103,141`). No guard bounds the selector
-  by delivery, the message's org, or minimum name length. The docstring's word-boundary claim is
-  true, and it does not prevent the defect.
-- **Fix:** select the messages to redact by a link to the person, never by a scan. Use (a) messages
-  with a delivery to the person (already computed as `person_message_ids`), and (b) messages
-  whose `context_json` records the person as an actor. For (b), have `send_notification` callers
-  store the actor's user pk (for example `actor_user_id`) and select on that. Run the name and
-  username redaction only over that set. **Effort:** Small (Medium if (b) needs a context key
-  added at the invitation call site).
-- **Fix files:** `notifications/_anonymization.py`. Possibly also the orgs invitation send call
-  site, to stamp the inviter's pk.
-- **Depends on:** none.
-- **Verification:** add a test with a second user's message containing a common word, plus a
-  person whose first name is that word. After `anonymize_account`, the unrelated message is
-  byte-identical. Keep the existing shared-invitation test passing.
-- **Fix risk:** historical invitation messages sent before the actor key existed will no longer
-  have the inviter's name scrubbed. Cover them with a one-time fallback limited to messages whose
-  `context_json` names the person's *email*. The email is unique, unlike a name.
-- **Detection signal:** `[redacted]` appearing in subjects or bodies of messages whose recipients
-  never removed an account. Today nothing reports it, so instrument a count of rows rewritten per
-  anonymization at INFO.
-- **Deliberate?** Partly. The docstring intends "every stored message that carries the person's
-  identity". The global name match is the unintended reach. Age: introduced in `3cffb168`
-  (SA216(a), 2026-10-04). It is a recent regression and has never shipped in a release.
-
-### S3
-
-- **`anonymize-full-table-scans-under-locks`** · S3 (Moderate × Rare: it needs a large table) ·
-  `auth/_anonymization.py:160–170` (every `django_session` row is decoded in Python),
-  `billing/_anonymization.py:56` (every `WebhookEvent` payload is walked),
-  `notifications/_anonymization.py:137` (every message). All three run inside the
-  `transaction.atomic()` at `auth/views.py:151`, with org row locks and provider advisory locks
-  held. Nothing in the generated project runs `clearsessions`, and webhook events and messages
-  are retained, so all three tables only grow. Past roughly the gunicorn `--timeout 60`
-  (`start.sh.j2:164`), the worker is killed after the Stripe cancellation stage has run. The
-  `finally` compensation at `views.py:202–206` never executes, and every retry hits the same
-  wall. Fix: filter sessions to `expire_date__gt=now()`. The scrubbed password already
-  invalidates sessions through the session auth hash, so the delete is belt-and-braces. Pre-filter
-  webhook events in SQL (`payload__icontains=email` on the JSONB text cast) before the Python walk.
-  The notifications scan disappears with Finding 1's fix. Optionally ship a `clearsessions` cron
-  note. Effort: Small. Confidence: Medium (timings are inferred, not measured). Depends on:
-  `notifications-anonymize-rewrites-all-messages`.
 
 ### S4
 
@@ -207,9 +115,6 @@ items:
   too (`_redact_identity` rewrites keys). A short name such as "Al" or "Id" mangles field names
   like `total` or `customer_id` and destroys the payload's structure. Fix: use the notifications
   word-boundary match, and leave keys alone.
-- `notifications-account-username-dead` · `notifications/_anonymization.py:93` ·
-  `_account_username` is never called (the username arrives as an argument). Fix: delete it.
-
 ---
 
 ## 5. Safeguard matrix
@@ -234,8 +139,8 @@ Prior rows are carried. Rows added this pass are marked ★.
 | ★ Image build `collectstatic` | n/a | skip bound to `manage.py`/`django-admin` + `argv[1]=="collectstatic"` | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
 | DR backup/restore, CLI tree, release pipeline | carried unchanged — see prior pass | | | | | | | | |
 
-| ★ `AccountDeleteView` → anonymize boundary | `LoginRequiredMixin` | self only | form | autoescape | out of scope | **none**: whole-table scans under locks (`anonymize-full-table-scans-under-locks`) | compensating resume (lost on worker kill, same ID) | messages | INFO skip log |
-| ★ Anonymize executors (write scope) | n/a | **notifications writes outside the person's records** (`notifications-anonymize-rewrites-all-messages`); orgs/blog/auth scoped by user FK; billing scoped by email | n/a | n/a | n/a | n/a | one transaction | n/a | none |
+| ★ `AccountDeleteView` → anonymize boundary | `LoginRequiredMixin` | self only | form | autoescape | out of scope | bounded selections (unexpired sessions, address-matched payloads, linked messages) | compensating resume (lost on worker kill, same ID) | messages | INFO skip log |
+| ★ Anonymize executors (write scope) | n/a | orgs/blog/auth scoped by user FK; billing scoped by email; notifications scoped by delivery, actor link, or address | n/a | n/a | n/a | n/a | one transaction | n/a | none |
 | ★ `quickscale_orgs_create_site_org` | shell (runtime role) | reserved-slug guard | field validators | n/a | n/a | n/a | `get_or_create` | `CommandError` | stdout |
 | ★ SPA module routes (`SPA_MODULE_URLPATTERNS`) | static shell; data via the module APIs above | n/a | n/a | n/a | n/a | n/a | n/a | 404 handler | n/a |
 
@@ -245,24 +150,25 @@ Every empty cell carries a finding ID or a stated reason.
 
 ## 6. Fix order and batching
 
-1. **Batch A (one PR):** `notifications-anonymize-rewrites-all-messages`, then the notifications
-   part of `anonymize-full-table-scans-under-locks`, plus `notifications-account-username-dead`.
-   All three are in the same file.
-2. **Batch B (independent of A):** the auth session filter, the billing SQL pre-filter, and
-   `billing-anonymize-name-substring`.
+1. **Batch A (one PR):** `notifications-anonymize-rewrites-all-messages`, the notifications part
+   of `anonymize-full-table-scans-under-locks`, and `notifications-account-username-dead`. All
+   three were in the same file, and landed with the auth session filter and the billing SQL
+   pre-filter.
+2. **Batch B (still open):** `billing-anonymize-name-substring`, carried by SA245 with the shared
+   redaction helpers.
 
-Land Batch A before the next release, because SA216 has not shipped yet.
+Batch A landed before the next release, because SA216 has not shipped yet.
 
 ---
 
 ## 7. Per-subsystem verdicts
 
-- **auth (SA216)**: `anonymize-full-table-scans-under-locks`. The flow, recheck, and scrub were
-  read in full. The lock/recheck logic is clean.
-- **notifications**: `notifications-anonymize-rewrites-all-messages`,
-  `notifications-account-username-dead`. Anonymization and the send path were read.
-- **billing**: `billing-anonymize-name-substring` and part of the scan finding. Anonymization was
-  read in full.
+- **auth (SA216)**: clean. The flow, recheck, and scrub were read in full; session removal now
+  filters expired rows. The lock/recheck logic is clean.
+- **notifications**: clean. Anonymization and the send path were read; the executor now selects
+  linked messages only.
+- **billing**: `billing-anonymize-name-substring`. Anonymization was read in full; payloads are
+  pre-filtered in SQL.
 - **orgs**: clean. Anonymization, the create-site-org command, and the watchlist re-checks were
   read.
 - **blog**: clean. Anonymization was read in full, and avatar deletion runs on commit with no raise.
@@ -299,10 +205,10 @@ Land Batch A before the next release, because SA216 has not shipped yet.
 
 The five items from the prior pass are carried. One is added:
 
-- Anonymization selects personal data by **matching identity strings** across shared tables,
-  because notification messages and webhook payloads carry no user or org link. Every executor
-  re-implements the email-token matcher: billing and notifications contain duplicate
-  `_identity_form`/`_replace_addresses` functions. The structural decision is whether
+- Billing webhook payloads still select by **matching identity strings**, because they carry no
+  user or org link; notification messages select by delivery, an actor link, or the address.
+  Every executor re-implements the email-token matcher: billing and notifications contain
+  duplicate `_identity_form`/`_replace_addresses` functions. The structural decision is whether
   personal-data rows must carry an owner key (the SA242 inventory could require one).
 
 ---
@@ -313,7 +219,7 @@ The five items from the prior pass are carried. One is added:
 - Add an anonymization conformance test that runs every declared `anonymize_account` against a
   fixture with a **bystander** user whose rows contain the person's name as ordinary text, and
   asserts the bystander rows are unchanged. It would have caught
-  `notifications-anonymize-rewrites-all-messages` and `billing-anonymize-name-substring`.
+  `billing-anonymize-name-substring`; notifications now has the direct common-word test.
 
 ---
 
@@ -353,7 +259,8 @@ one-liners were not re-evaluated beyond a spot check (the Stripe client still se
 ## 12. Questions that would change severity
 
 1. Do generated deployments run `manage.py clearsessions` (or does the host purge
-   `django_session`)? If so, the session part of `anonymize-full-table-scans-under-locks` drops to S4.
+   `django_session`)? Anonymization no longer decodes expired rows, but an expired row that held
+   the person's session data stays until the host purges it.
 
 ---
 
@@ -437,3 +344,11 @@ one-liners were not re-evaluated beyond a spot check (the Stripe client still se
 - 2026-10-05 — `anonymize-full-table-scans-under-locks`: new, open (S3).
 - 2026-10-05 — `billing-anonymize-name-substring`: new, open (S4).
 - 2026-10-05 — `notifications-account-username-dead`: new, open (S4).
+- 2026-10-05 — `notifications-anonymize-rewrites-all-messages`: resolved (SA244). The executor
+  selects linked messages only; the pre-key fallback matches a complete address in
+  `context_json`. Recorded limit: an invitation message sent before the actor key existed names
+  only the inviter's display name, so it carries no address and stays as stored.
+- 2026-10-05 — `anonymize-full-table-scans-under-locks`: resolved (SA244). Session removal filters
+  `expire_date__gt=now()`, billing loads only address-matching payloads, and message selection no
+  longer walks the table.
+- 2026-10-05 — `notifications-account-username-dead`: resolved (SA244). The helper is deleted.

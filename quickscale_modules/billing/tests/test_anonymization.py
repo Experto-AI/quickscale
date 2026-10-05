@@ -176,6 +176,45 @@ def test_anonymize_without_an_address_is_a_no_op(user) -> None:
     assert event.payload == payload
 
 
+@pytest.mark.django_db
+def test_anonymize_prefilters_events_before_the_python_walk(user, monkeypatch) -> None:
+    """Only rows whose payload mentions the address are loaded and examined."""
+    from quickscale_modules_billing import _anonymization as billing_anonymization
+
+    untouched_payload = {"data": {"object": {"customer": "cus_other", "amount": 1900}}}
+    untouched = WebhookEvent.objects.create(
+        stripe_event_id="evt-prefilter-untouched",
+        event_type="charge.succeeded",
+        payload=untouched_payload,
+    )
+    identified_payload = {
+        "data": {"object": {"customer_details": {"email": user.email}}}
+    }
+    identified = WebhookEvent.objects.create(
+        stripe_event_id="evt-prefilter-identified",
+        event_type="customer.updated",
+        payload=identified_payload,
+    )
+    examined: list[object] = []
+    original = billing_anonymization._contains_email
+
+    def spy(value: object, *, email: str) -> bool:
+        examined.append(value)
+        return original(value, email=email)
+
+    monkeypatch.setattr(billing_anonymization, "_contains_email", spy)
+
+    anonymize_account(user, user.email, "Test User", user.get_username())
+
+    untouched.refresh_from_db()
+    identified.refresh_from_db()
+    assert untouched.payload == untouched_payload
+    # The recursive matcher walks only the pre-filtered row's payload; the
+    # untouched event never reaches it.
+    assert untouched_payload not in examined
+    assert identified_payload in examined
+
+
 def test_app_config_declares_the_anonymize_handlers_capability() -> None:
     """Billing declares its handler through the core capability mechanism."""
     config = apps.get_app_config("quickscale_billing")
