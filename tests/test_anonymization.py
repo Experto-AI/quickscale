@@ -77,6 +77,31 @@ def test_anonymize_never_rewrites_payload_keys(user) -> None:
 
 
 @pytest.mark.django_db
+def test_anonymize_keeps_the_sentinel_when_the_name_matches_it(user) -> None:
+    """A name equal to the sentinel's stem cannot rewrite the written address."""
+    event = WebhookEvent.objects.create(
+        stripe_event_id="evt-sentinel-name",
+        event_type="customer.updated",
+        payload={
+            "data": {
+                "object": {
+                    "email": user.email,
+                    "note": f"Contact {user.email} (Deleted)",
+                }
+            }
+        },
+    )
+
+    anonymize_account(user, user.email, "Deleted", user.get_username())
+
+    event.refresh_from_db()
+    assert event.payload["data"]["object"] == {
+        "email": f"deleted-{user.pk}@invalid",
+        "note": f"Contact deleted-{user.pk}@invalid ([redacted])",
+    }
+
+
+@pytest.mark.django_db
 def test_anonymize_leaves_events_without_the_address_untouched(user) -> None:
     """An event that never carried the person's address keeps its record."""
     payload = {"data": {"object": {"customer": "cus_other", "amount": 1900}}}
