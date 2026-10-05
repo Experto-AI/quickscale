@@ -10,10 +10,8 @@ from django.contrib.sessions.models import Session
 from django.test import Client
 from django.utils import timezone
 
-from quickscale_modules_auth._anonymization import (
-    discover_anonymize_hooks,
-    scrub_account,
-)
+from quickscale_modules_auth._anonymization import anonymize_account
+from quickscale_modules_auth._anonymize_boundary import discover_anonymize_hooks
 
 
 def _session_user_ids() -> set[str]:
@@ -25,12 +23,12 @@ def _session_user_ids() -> set[str]:
 
 
 @pytest.mark.django_db
-def test_scrub_account_disables_and_clears_the_account_row(user) -> None:
+def test_anonymize_account_disables_and_clears_the_account_row(user) -> None:
     """The account keeps its row, loses its identity, and cannot sign in."""
     user.last_login = user.date_joined
     user.save(update_fields=["last_login"])
 
-    scrub_account(user, "TestUser@Example.com", "Test User", user.get_username())
+    anonymize_account(user, "TestUser@Example.com", "Test User", user.get_username())
 
     user.refresh_from_db()
     assert user.username == f"deleted-{user.pk}"
@@ -44,7 +42,7 @@ def test_scrub_account_disables_and_clears_the_account_row(user) -> None:
 
 
 @pytest.mark.django_db
-def test_scrub_account_deletes_the_login_addresses(user) -> None:
+def test_anonymize_account_deletes_the_login_addresses(user) -> None:
     """The addresses allauth holds exist only to sign in."""
     from allauth.account.models import EmailAddress
 
@@ -55,13 +53,13 @@ def test_scrub_account_deletes_the_login_addresses(user) -> None:
         primary=True,
     )
 
-    scrub_account(user, "testuser@example.com", "Test User", user.get_username())
+    anonymize_account(user, "testuser@example.com", "Test User", user.get_username())
 
     assert EmailAddress.objects.filter(user=user).count() == 0
 
 
 @pytest.mark.django_db
-def test_scrub_account_deletes_only_the_persons_sessions(user) -> None:
+def test_anonymize_account_deletes_only_the_persons_sessions(user) -> None:
     """The person's sessions go; another account's session stays."""
     other = get_user_model().objects.create_user(
         username="other",
@@ -74,13 +72,13 @@ def test_scrub_account_deletes_only_the_persons_sessions(user) -> None:
     other_client.force_login(other)
     assert _session_user_ids() == {str(user.pk), str(other.pk)}
 
-    scrub_account(user, "testuser@example.com", "Test User", user.get_username())
+    anonymize_account(user, "testuser@example.com", "Test User", user.get_username())
 
     assert _session_user_ids() == {str(other.pk)}
 
 
 @pytest.mark.django_db
-def test_scrub_account_leaves_expired_sessions_to_the_session_purge(user) -> None:
+def test_anonymize_account_leaves_expired_sessions_to_the_session_purge(user) -> None:
     """An expired row cannot authenticate, so it is neither decoded nor deleted."""
     person_client = Client()
     person_client.force_login(user)
@@ -89,13 +87,13 @@ def test_scrub_account_leaves_expired_sessions_to_the_session_purge(user) -> Non
         expire_date=timezone.now() - timedelta(days=1)
     )
 
-    scrub_account(user, "testuser@example.com", "Test User", user.get_username())
+    anonymize_account(user, "testuser@example.com", "Test User", user.get_username())
 
     assert Session.objects.filter(pk=session.pk).exists()
 
 
 @pytest.mark.django_db
-def test_scrub_account_tolerates_a_random_session_key(user) -> None:
+def test_anonymize_account_tolerates_a_random_session_key(user) -> None:
     """A session whose key is not a user id is left alone."""
     session = Session.objects.create(
         session_key="not-a-user",
@@ -103,7 +101,7 @@ def test_scrub_account_tolerates_a_random_session_key(user) -> None:
         expire_date="2999-01-01T00:00:00Z",
     )
 
-    scrub_account(user, "testuser@example.com", "Test User", user.get_username())
+    anonymize_account(user, "testuser@example.com", "Test User", user.get_username())
 
     assert Session.objects.filter(pk=session.pk).exists()
 
@@ -130,15 +128,15 @@ def test_discover_anonymize_hooks_keeps_the_collected_order(
     first = SimpleNamespace(label="zeta_app", anonymize_account=lambda *a: None)
     second = SimpleNamespace(label="alpha_app", anonymize_account=lambda *a: None)
     monkeypatch.setattr(
-        "quickscale_modules_auth._anonymization.collect_capabilities",
+        "quickscale_modules_auth._anonymize_boundary.collect_capabilities",
         lambda capability: (first, second),
     )
     monkeypatch.setattr(
-        "quickscale_modules_auth._anonymization.declared_removal_obligations",
+        "quickscale_modules_auth._anonymize_boundary.declared_removal_obligations",
         lambda config: (),
     )
     monkeypatch.setattr(
-        "quickscale_modules_auth._anonymization.apps.get_app_config",
+        "quickscale_modules_auth._anonymize_boundary.apps.get_app_config",
         lambda label: {"zeta_app": first, "alpha_app": second}[label],
     )
 
@@ -158,11 +156,11 @@ def test_discover_anonymize_hooks_rejects_a_same_label_substitute(
         anonymize_account=lambda *a: None,
     )
     monkeypatch.setattr(
-        "quickscale_modules_auth._anonymization.collect_capabilities",
+        "quickscale_modules_auth._anonymize_boundary.collect_capabilities",
         lambda capability: (substitute,),
     )
     monkeypatch.setattr(
-        "quickscale_modules_auth._anonymization.declared_removal_obligations",
+        "quickscale_modules_auth._anonymize_boundary.declared_removal_obligations",
         lambda config: (),
     )
 
@@ -178,7 +176,7 @@ def test_discover_anonymize_hooks_rejects_a_declaration_without_the_hook(
 
     declaration = SimpleNamespace(label="acme_app")
     monkeypatch.setattr(
-        "quickscale_modules_auth._anonymization.collect_capabilities",
+        "quickscale_modules_auth._anonymize_boundary.collect_capabilities",
         lambda capability: (declaration,),
     )
 
@@ -204,15 +202,15 @@ def test_discover_anonymize_hooks_requires_the_capability_for_a_declaration(
     )
     owner = SimpleNamespace(label="acme_app")
     monkeypatch.setattr(
-        "quickscale_modules_auth._anonymization.collect_capabilities",
+        "quickscale_modules_auth._anonymize_boundary.collect_capabilities",
         lambda capability: (),
     )
     monkeypatch.setattr(
-        "quickscale_modules_auth._anonymization.apps.get_app_configs",
+        "quickscale_modules_auth._anonymize_boundary.apps.get_app_configs",
         lambda: [owner],
     )
     monkeypatch.setattr(
-        "quickscale_modules_auth._anonymization.declared_removal_obligations",
+        "quickscale_modules_auth._anonymize_boundary.declared_removal_obligations",
         lambda config: (obligation,),
     )
 
@@ -221,7 +219,7 @@ def test_discover_anonymize_hooks_requires_the_capability_for_a_declaration(
 
 
 @pytest.mark.django_db
-def test_scrub_account_avoids_a_taken_deleted_username(user) -> None:
+def test_anonymize_account_avoids_a_taken_deleted_username(user) -> None:
     """An existing ``deleted-<pk>`` username shifts the replacement's suffix."""
     other = get_user_model().objects.create_user(
         username=f"deleted-{user.pk}",
@@ -229,7 +227,7 @@ def test_scrub_account_avoids_a_taken_deleted_username(user) -> None:
         password="NamesakePass123!",
     )
 
-    scrub_account(user, "testuser@example.com", "Test User", user.get_username())
+    anonymize_account(user, "testuser@example.com", "Test User", user.get_username())
 
     user.refresh_from_db()
     other.refresh_from_db()

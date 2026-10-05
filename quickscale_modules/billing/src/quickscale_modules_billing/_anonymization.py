@@ -9,29 +9,19 @@ from the payloads that belong to the person.
 An event is the person's only when its stored payload carries the person's
 address: the address is unique to one customer, so a namesake customer's event
 with the same name and a different address is left untouched.  Inside an
-identified payload the address is replaced wherever it occurs and the name is
-replaced wherever it occurs, including inside longer free-text values.
+identified payload the address is replaced with the shared
+``DELETED_ADDRESS(pk)`` sentinel and the name at word boundaries with the
+shared name matcher.  Only values are scrubbed: payload keys are never
+rewritten, so an identity-shaped key cannot destroy the payload's structure.
 """
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
+from quickscale_core.runtime import DELETED_ADDRESS, redact_names, replace_address
+
 from quickscale_modules_billing.models import WebhookEvent
-
-#: Replaces one identity value inside a stored provider payload.
-REDACTED = "[redacted]"
-
-#: Matches one complete email address.  A replacement is decided per complete
-#: match, never per raw substring, so ``test@example.com`` found inside
-#: ``protest@example.com`` cannot rewrite the other customer's address.
-_ADDRESS_PATTERN = re.compile(
-    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"
-)
-
-#: Quote delimiters an address is commonly wrapped in inside free text.
-_QUOTE_CHARS = "'\""
 
 
 def anonymize_account(
@@ -46,45 +36,24 @@ def anonymize_account(
     customer's event is never touched — including a customer whose address
     merely contains the person's address as a substring.  The rows are
     pre-filtered in SQL on the address before the Python walk, so an event
-    that never mentions it is never loaded.  ``user`` and
-    ``original_username`` are unused: the payload, not a user link or username,
-    is the record searched.
+    that never mentions it is never loaded.  ``original_username`` is unused:
+    billing's inventory does not list the username as a stored personal field.
     """
-    del user, original_username
+    del original_username
     email = original_email.strip()
     if not email:
         return
     name = original_name.strip()
+    replacement = DELETED_ADDRESS(user.pk)
     for event in WebhookEvent.objects.filter(payload__icontains=email).iterator():
         if not _contains_email(event.payload, email=email):
             continue
-        redacted = _redact_identity(event.payload, email=email, name=name)
+        redacted = _redact_identity(
+            event.payload, email=email, name=name, replacement=replacement
+        )
         if redacted != event.payload:
             event.payload = redacted
             event.save(update_fields=["payload"])
-
-
-def _complete_addresses(value: str) -> list[str]:
-    """Return every complete email address inside one stored string."""
-    return _ADDRESS_PATTERN.findall(value)
-
-
-def _identity_form(token: str, target: str) -> str | None:
-    """Return the quote prefix under which *token* is *target*, or ``None``.
-
-    A quoted occurrence adds a delimiter quote in front of the address, and an
-    address may itself start with a quote, so the token is compared after
-    dropping zero, one, or more leading quote delimiters; the dropped prefix
-    is returned so a replacement can keep the quoting.  Trailing quotes are
-    outside the domain-ending token and stay in the surrounding text.
-    """
-    for count in range(len(token) + 1):
-        prefix = token[:count]
-        if any(char not in _QUOTE_CHARS for char in prefix):
-            return None
-        if token[count:].casefold() == target:
-            return prefix
-    return None
 
 
 def _contains_email(value: Any, *, email: str) -> bool:
@@ -97,56 +66,34 @@ def _contains_email(value: Any, *, email: str) -> bool:
     if isinstance(value, list):
         return any(_contains_email(item, email=email) for item in value)
     if isinstance(value, str):
-        target = email.casefold()
-        return any(
-            _identity_form(address, target) is not None
-            for address in _complete_addresses(value)
-        )
+        return replace_address(value, address=email, replacement="") != value
     return False
 
 
-def _replace_addresses(value: str, *, email: str, replacement: str) -> str:
-    """Replace every complete occurrence of *email*, leaving other addresses.
+def _redact_identity(value: Any, *, email: str, name: str, replacement: str) -> Any:
+    """Return *value* with identity strings replaced, structure preserved.
 
-    A token is compared as it stands first, so an address whose own local part
-    starts with a quote (``'test@example.com``) still matches; then ordinary
-    quote delimiters may be dropped one at a time, so a quoted occurrence
-    (``''test@example.com'`` around such an address) matches with the dropped
-    quotes preserved around the replacement.  An address merely containing the
-    target (``protest@example.com``) never matches.
+    Dict keys are part of the payload's schema, so only values are scrubbed;
+    an identity-shaped key survives exactly as stored.
     """
-    if not value:
-        return value
-    target = email.casefold()
-
-    def replace(match: re.Match[str]) -> str:
-        prefix = _identity_form(match.group(0), target)
-        if prefix is None:
-            return match.group(0)
-        return f"{prefix}{replacement}"
-
-    return _ADDRESS_PATTERN.sub(replace, value)
-
-
-def _redact_identity(value: Any, *, email: str, name: str) -> Any:
-    """Return *value* with identity strings replaced, structure preserved."""
     if isinstance(value, dict):
         return {
-            _redact_string(str(key), email=email, name=name): _redact_identity(
-                item, email=email, name=name
-            )
+            key: _redact_identity(item, email=email, name=name, replacement=replacement)
             for key, item in value.items()
         }
     if isinstance(value, list):
-        return [_redact_identity(item, email=email, name=name) for item in value]
+        return [
+            _redact_identity(item, email=email, name=name, replacement=replacement)
+            for item in value
+        ]
     if isinstance(value, str):
-        return _redact_string(value, email=email, name=name)
+        return _redact_string(value, email=email, name=name, replacement=replacement)
     return value
 
 
-def _redact_string(value: str, *, email: str, name: str) -> str:
+def _redact_string(value: str, *, email: str, name: str, replacement: str) -> str:
     """Replace the address and the full name inside one string."""
-    value = _replace_addresses(value, email=email, replacement=REDACTED)
+    value = replace_address(value, address=email, replacement=replacement)
     if name:
-        value = re.sub(re.escape(name), REDACTED, value, flags=re.IGNORECASE)
+        value = redact_names(value, name=name)
     return value

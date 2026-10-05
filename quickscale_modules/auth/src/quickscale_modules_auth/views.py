@@ -28,7 +28,7 @@ import quickscale_modules_auth._account_deletion_flow as _account_deletion_flow
 import quickscale_modules_auth._account_deletion_guard as _account_deletion_guard
 import quickscale_modules_auth._account_deletion_handlers as _account_deletion_handlers
 import quickscale_modules_auth._account_deletion_providers as _account_deletion_providers
-import quickscale_modules_auth._anonymization as _anonymization
+import quickscale_modules_auth._anonymize_boundary as _anonymize_boundary
 import quickscale_modules_auth.exceptions as _exceptions
 
 from quickscale_core.runtime import collect_capabilities
@@ -280,7 +280,7 @@ class AccountDeleteView(
         original_email = user.email
         original_name = user.get_full_name().strip()
         original_username = str(getattr(user, "username", "") or "").strip()
-        for _, hook in _anonymization.discover_anonymize_hooks():
+        for _, hook in _anonymize_boundary.discover_anonymize_hooks():
             hook(user, original_email, original_name, original_username)
         coordinator.discharge_stage(RemovalAction.ANONYMIZE)
 

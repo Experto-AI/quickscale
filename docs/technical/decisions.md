@@ -1073,7 +1073,7 @@ headings.
   is a requirement under rule 20).
 
 **40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
-and the CLI's option handling fails on each of rules 1–39 and 42–45 (rule 21 stays a review rule
+and the CLI's option handling fails on each of rules 1–39 and 42–48 (rule 21 stays a review rule
 with each module's write-effect rollback test; rule 27 through the user-FK conformance gate; rule 30
 in `apply` itself): names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
@@ -1097,7 +1097,8 @@ root `mypy.ini` module sections and any per-module `[tool.mypy]` table, literal 
 outside the modules, option keys and command names in READMEs, and `required_modules` specifiers
 and `implies`, settings snapshots outside `_settings.py` or in `__all__` and cross-module settings
 objects, `OrganizationMembership` queries outside orgs that filter by a string `role=`, and
-`except Exception` around another module's service call — with a control case proving
+`except Exception` around another module's service call, identity redaction matchers and
+replacement-value sentinels — with a control case proving
 each rule rejects a violation. The layer table, each
 foundation's published extension bases, and every listed exception live in one test-owned
 mapping that mirrors this section.
@@ -1160,6 +1161,21 @@ mapping that mirrors this section.
 - ✅ Rule 19 finds view code by content, not by file name: a Django or DRF view subclass, or a
   function that takes `request`.
 - ❌ A moved log channel without a release-notes line.
+
+**47. Redaction.**
+- ✅ A module that removes a person's identity from stored text or provider payloads uses core's
+  redaction helpers (`replace_address`, `redact_names`). Names and usernames match at word
+  boundaries, and a structured payload's keys are never rewritten.
+- ❌ A module-local complete-address matcher or identity matcher; substring name matching.
+- **Exception.** notifications' escaped-spelling tokenizer is the one permitted module-level
+  address pattern: it recognizes HTML-entity spellings, which the plain address matcher does not.
+
+**48. Replacement values and entry-point name.**
+- ✅ Every email address an anonymization handler rewrites becomes core's `DELETED_ADDRESS(pk)`,
+  and every name or username becomes core's `REDACTED`; a handler's private entry point is
+  `_anonymization.anonymize_account`, and its app config's `anonymize_account` delegates there.
+- ❌ A literal `[redacted]` or `deleted-<pk>@invalid` spelling in module code.
+- Exception: wholesale-replaced provider prose keeps `REDACTED`.
 
 ---
 

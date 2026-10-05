@@ -537,6 +537,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     per-theme modules under `scripts/module_conventions/` and their control cases under
     `scripts/tests_module_conventions/`, while `scripts/check_module_conventions.py` keeps the same
     command surface and output.
+  - **Anonymization handlers share one redaction matcher and one set of replacement values.** Every
+    handler rewrites an email address to `deleted-<pk>@invalid` and a name or username to
+    `[redacted]` through the `quickscale_core.runtime` helpers, matches names at word boundaries,
+    and never rewrites payload keys, so an account named `Bill` no longer corrupts
+    `billing_details`.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

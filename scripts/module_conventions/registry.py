@@ -48,6 +48,10 @@ from scripts.module_conventions.rules_package import (
     rule_18_package_tooling,
     rule_23_service_surface,
 )
+from scripts.module_conventions.rules_redaction import (
+    rule_47_redaction,
+    rule_48_replacement_values,
+)
 from scripts.module_conventions.rules_routes import (
     rule_7_urls,
     rule_8_templates,
@@ -120,6 +124,8 @@ RULES: tuple[Rule, ...] = (
     Rule(43, "optional senders", rule_43_optional_senders),
     Rule(44, "one role check", rule_44_role_checks),
     Rule(45, "stub exemptions", rule_45_stub_exemptions),
+    Rule(47, "redaction", rule_47_redaction),
+    Rule(48, "replacement values and entry-point name", rule_48_replacement_values),
 )
 
 

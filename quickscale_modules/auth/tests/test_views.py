@@ -1094,7 +1094,7 @@ class TestAccountDeleteView:
             raise RuntimeError("scrub failed")
 
         monkeypatch.setattr(
-            "quickscale_modules_auth._anonymization.scrub_account", fail_scrub
+            "quickscale_modules_auth._anonymization.anonymize_account", fail_scrub
         )
 
         with (

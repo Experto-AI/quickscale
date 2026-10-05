@@ -33,13 +33,46 @@ def test_anonymize_redacts_the_identity_in_an_identified_payload(user) -> None:
 
     event.refresh_from_db()
     assert event.payload["data"]["object"]["customer_details"] == {
-        "email": "[redacted]",
+        "email": f"deleted-{user.pk}@invalid",
         "name": "[redacted]",
     }
-    assert event.payload["data"]["object"]["receipt_email"] == "[redacted]"
+    assert (
+        event.payload["data"]["object"]["receipt_email"] == f"deleted-{user.pk}@invalid"
+    )
     assert event.payload["data"]["object"]["metadata"] == {
         "note": "Contact [redacted] about renewal",
         "names": ["[redacted]"],
+    }
+
+
+@pytest.mark.django_db
+def test_anonymize_never_rewrites_payload_keys(user) -> None:
+    """Identity-shaped keys keep the payload's structure; only values change.
+
+    An account named ``Bill`` must not turn ``billing_details`` into
+    ``[redacted]ing_details``, and a whole-word match inside a value stays.
+    """
+    event = WebhookEvent.objects.create(
+        stripe_event_id="evt-keys",
+        event_type="customer.updated",
+        payload={
+            "data": {
+                "object": {
+                    "email": user.email,
+                    "billing_details": "Billing plan",
+                    "customer_id": "cus_1",
+                }
+            }
+        },
+    )
+
+    anonymize_account(user, user.email, "Bill", user.get_username())
+
+    event.refresh_from_db()
+    assert event.payload["data"]["object"] == {
+        "email": f"deleted-{user.pk}@invalid",
+        "billing_details": "Billing plan",
+        "customer_id": "cus_1",
     }
 
 
@@ -130,7 +163,7 @@ def test_anonymize_redacts_a_quoted_address_in_free_text(user) -> None:
     event.refresh_from_db()
     assert (
         event.payload["data"]["object"]["metadata"]["note"]
-        == "Contact '[redacted]' now"
+        == f"Contact 'deleted-{user.pk}@invalid' now"
     )
 
 
@@ -154,9 +187,10 @@ def test_anonymize_redacts_an_address_whose_local_part_starts_with_a_quote(
     anonymize_account(user, address, "Test User", user.get_username())
 
     event.refresh_from_db()
+    deleted_address = f"deleted-{user.pk}@invalid"
     assert (
         event.payload["data"]["object"]["metadata"]["note"]
-        == "Contact [redacted] and '[redacted]' now"
+        == f"Contact {deleted_address} and '{deleted_address}' now"
     )
 
 
