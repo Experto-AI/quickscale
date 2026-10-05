@@ -52,7 +52,8 @@ def test_layer_table_mirrors_the_shipped_modules() -> None:
 # Rules the harness must cover or record as open.  SA215 covered 1-39;
 # SA236 adds 42-43; SA235's rule 41 clauses live in rules 7, 31, and 37, and
 # SA238's rule 46 clauses live in rules 19 and 28.  SA237 adds 44-45.
-RECORDED_RULE_NUMBERS = frozenset({*range(1, 40), 42, 43, 44, 45})
+# SA245 adds 47-48.
+RECORDED_RULE_NUMBERS = frozenset({*range(1, 40), 42, 43, 44, 45, 47, 48})
 
 
 def test_covered_and_open_rules_partition_the_recorded_rules() -> None:

@@ -24,7 +24,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA245 | Share one redaction matcher and one set of replacement values across anonymization handlers | 3 | — | Required |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
@@ -36,8 +35,8 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: —
-Track 3: SA245
-     critical path: SA191 → SA153; release gate: SA245 before 0.89.0
+Track 3: —
+     critical path: SA191 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -48,10 +47,9 @@ handoff note (what landed, what is next, what to watch) committed with the work.
 when its last slice lands; slices are not scheduled.
 
 **Order.** SA204 freezes migration history before any post-SA153 module schema change; SA154 is
-an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA245 edits the
-anonymization handler files SA244 scoped and still gates 0.89.0. SA246 landed before SA153, so the
-portal's personal fields are classified from the first migration; it touched `apps.py` capabilities
-and orgs' checks, not handler bodies.
+an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA246 landed before SA153,
+so the portal's personal fields are classified from the first migration; it touched `apps.py`
+capabilities and orgs' checks, not handler bodies.
 
 ### Track states
 
@@ -61,7 +59,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA214 | yes | yes | yes | **yes** | yes |
 | 2 | — | yes | yes | yes | **yes** | no |
-| 3 | SA245 | yes | yes | yes | **yes** | no |
+| 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -94,7 +92,7 @@ A track is **truly green** only when all three states are yes.
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row, and the five `_anonymization.py`
-  handlers with core's redaction helpers (SA245).
+  handlers with core's redaction helpers.
 - SA246 moved the personal-data inventory and its walk from Track 3 to Track 2: the per-module
   personal-data declarations, the orgs personal-data system check, and module-extension.md
   § removal.
@@ -118,34 +116,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA244 — Scope account anonymization to the person's records and bound its scans.**
 
-- [ ] **SA245 — Share one redaction matcher and one set of replacement values across anonymization handlers.**
-
-  **Context:** billing and notifications carry byte-identical copies of the address helpers that
-  have already diverged: billing still matches the name as a bare substring and rewrites payload
-  keys, so an account named `Bill` turns `billing_details` into `[redacted]ing_details` (tech
-  audit `billing-anonymize-name-substring`; coherence audit
-  `anonymize-redaction-helper-copies`). The same field kind, an address inside a stored provider
-  payload, becomes `deleted-<pk>@invalid` in notifications and `[redacted]` in billing, with the
-  tokens spelled in five places (`anonymize-replacement-values`). auth's private entry point is
-  `scrub_account` while the other four are `anonymize_account`, and its file also holds the
-  cross-module collector (`anonymize-executor-naming`).
-
-  **Acceptance:**
-  - `quickscale_core.runtime` exposes the redaction helpers (`replace_address`, `redact_names`)
-    and the `DELETED_ADDRESS(pk)` and `REDACTED` values; one core test table pins namesake,
-    overlapping address, quoted address, and untouched-key cases. HTML-entity spellings stay an
-    opt-in of notifications.
-  - billing and notifications use them, with word-bounded name and username matching and no key
-    rewrite; every email address becomes `DELETED_ADDRESS(pk)`, every name or username `REDACTED`
-    (option A of the coherence audit), and wholesale-replaced provider prose keeps `REDACTED`.
-  - auth's handler entry point is `_anonymization.anonymize_account`, and the collector moves to
-    auth's `_anonymize_boundary.py`.
-  - decisions.md § Module Conventions records rules 47 (redaction) and 48 (replacement values and
-    entry-point name); the harness enforces both with control cases (billing's current
-    `_redact_string` and `REDACTED = "[redacted]"`), and the coherence audit's three items close.
-
-  **Surfaces:** `quickscale_core.runtime`, the five `_anonymization.py` handlers, auth's new
-  boundary file, decisions, the conformance harness, and the coherence audit.
+- [x] **SA245 — Share one redaction matcher and one set of replacement values across anonymization handlers.**
 
 - [x] **SA246 — Declare personal data per module and check it where the project's models are installed.**
 

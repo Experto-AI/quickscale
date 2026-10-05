@@ -1094,7 +1094,7 @@ class TestAccountDeleteView:
             raise RuntimeError("scrub failed")
 
         monkeypatch.setattr(
-            "quickscale_modules_auth._anonymization.scrub_account", fail_scrub
+            "quickscale_modules_auth._anonymization.anonymize_account", fail_scrub
         )
 
         with (
@@ -2785,7 +2785,7 @@ class TestAccountDeleteViewAnonymization:
         assert response.status_code == 302
         event.refresh_from_db()
         assert event.payload["customer_details"] == {
-            "email": "[redacted]",
+            "email": f"deleted-{user.pk}@invalid",
             "name": "[redacted]",
         }
 

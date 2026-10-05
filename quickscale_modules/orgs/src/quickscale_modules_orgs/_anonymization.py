@@ -15,6 +15,7 @@ from typing import Any
 
 from django.utils import timezone
 
+from quickscale_core.runtime import DELETED_ADDRESS
 from quickscale_modules_orgs.models import (
     OrganizationInvitation,
     OrganizationMembership,
@@ -48,7 +49,7 @@ def anonymize_account(
     invitations.filter(accepted_at__isnull=True, expires_at__gt=now).update(
         expires_at=now
     )
-    invitations.update(email=f"deleted-{user.pk}@invalid")
+    invitations.update(email=DELETED_ADDRESS(user.pk))
     OrganizationInvitation.objects.filter(
         invited_by=user,
         accepted_at__isnull=True,

@@ -88,6 +88,10 @@ from scripts.module_conventions.rules_package import (
     rule_18_package_tooling,
     rule_23_service_surface,
 )
+from scripts.module_conventions.rules_redaction import (
+    rule_47_redaction,
+    rule_48_replacement_values,
+)
 from scripts.module_conventions.rules_routes import (
     THEME_SEAM_TEMPLATE,
     THEME_SEAM_TEMPLATES,
@@ -155,6 +159,8 @@ __all__ = [
     "rule_43_optional_senders",
     "rule_44_role_checks",
     "rule_45_stub_exemptions",
+    "rule_47_redaction",
+    "rule_48_replacement_values",
     "rule_4_public_surface",
     "rule_5_dependency_direction",
     "rule_6_no_legacy_names",

@@ -176,8 +176,8 @@ def test_anonymize_redacts_an_html_escaped_name_in_a_shared_message() -> None:
 
 
 @pytest.mark.django_db
-def test_anonymize_redacts_identity_bearing_context_keys() -> None:
-    """A JSON key holding the person's address is redacted too."""
+def test_anonymize_leaves_identity_bearing_context_keys_untouched() -> None:
+    """A JSON key holding the person's address keeps the payload's structure."""
     user = _user("alpha@example.com")
     message = _message(
         subject="Shared",
@@ -196,10 +196,64 @@ def test_anonymize_redacts_identity_bearing_context_keys() -> None:
 
     message.refresh_from_db()
     assert message.context_json == {
-        f"deleted-{user.pk}@invalid": "delivery info",
+        "alpha@example.com": "delivery info",
         "body": "shared",
     }
     assert message.subject == "Shared"
+
+
+@pytest.mark.django_db
+def test_anonymize_leaves_provider_payload_keys_untouched() -> None:
+    """A provider payload key keeps its structure; only values are scrubbed."""
+    user = _user("alpha@example.com")
+    message = _message()
+    delivery = NotificationDelivery.objects.create(
+        message=message, recipient_email="alpha@example.com"
+    )
+    event = NotificationDeliveryEvent.objects.create(
+        delivery=delivery,
+        idempotency_key="key-1",
+        event_type="bounced",
+        status_after="bounced",
+        payload_json={
+            "alpha@example.com": "delivery info",
+            "to": "alpha@example.com",
+        },
+    )
+
+    anonymize_account(user, "alpha@example.com", "Alpha Person", user.get_username())
+
+    event.refresh_from_db()
+    assert event.payload_json == {
+        "alpha@example.com": "delivery info",
+        "to": f"deleted-{user.pk}@invalid",
+    }
+
+
+@pytest.mark.django_db
+def test_anonymize_keeps_the_sentinel_when_a_name_matches_it() -> None:
+    """A name equal to the sentinel's stem cannot rewrite the written address."""
+    user = _user("alpha@example.com")
+    message = _message(
+        subject="Contact alpha@example.com",
+        rendered_text="Contact alpha@example.com (Deleted)",
+        rendered_html="",
+        context_json={"body": "Contact alpha@example.com (Deleted)"},
+        last_error="",
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="alpha@example.com"
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="beta@example.com"
+    )
+
+    anonymize_account(user, "alpha@example.com", "Deleted", user.get_username())
+
+    message.refresh_from_db()
+    deleted_address = f"deleted-{user.pk}@invalid"
+    assert message.rendered_text == f"Contact {deleted_address} ([redacted])"
+    assert message.context_json == {"body": f"Contact {deleted_address} ([redacted])"}
 
 
 @pytest.mark.django_db

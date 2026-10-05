@@ -12,7 +12,7 @@ Audited: 8e4122f2 (v89) · 2026-10-05 · working tree dirty (uncommitted `docs/o
 > audit**, kept next to `tech-audit.md` and `arch-audit.md` and in their format. The inventory
 > stays as the evidence and decision record that this audit cites: its sections are the per-aspect
 > tables of passes 1–8, and [decisions.md § Module Conventions](../technical/decisions.md#module-conventions)
-> rules 1–46 are the rules, with rule 49 recorded by SA246 (rules 47–48 are owned by SA245). Every prior ID is carried here with the same name. The inventory's
+> rules 1–49 are the rules. Every prior ID is carried here with the same name. The inventory's
 > index and reconciliation log are frozen at `c10b529e`, and its header points here.
 
 ---
@@ -48,9 +48,10 @@ delta adds two:
 
 **Declared conventions.**
 
-- decisions.md § Module Conventions rules 1–46. Rule 49 (personal-data declarations) is held by
-  the closed-world inventory test and the `W006` check. Rule 40's harness covers 40 of them, and
-  running it at `8e4122f2` gives `All 40 covered module conventions pass`.
+- decisions.md § Module Conventions rules 1–49. Rule 40's harness covers 42 of them, and running it
+  at `8e4122f2` gave `All 40 covered module conventions pass`; SA245 adds rules 47–48 (§12), and
+  rule 49 (personal-data declarations) is held by the closed-world inventory test and the `W006`
+  check (§12).
   - `OPEN_RULES` = 21 (a review rule plus per-module rollback tests), 27 (the user-FK gate), and
     30 (`collect_wiring`).
   - Rules 41 and 46 have no detector of their own. Their clauses run inside rules 7, 31, 37
@@ -120,23 +121,15 @@ member) and host projects outside this repository.
 schema: coherence-audit/v1
 audited: 8e4122f216824edb62134441a00f2413b3854653
 items:
-  - {id: anonymize-redaction-helper-copies, status: open, aspect: C, cost: [defect, tax],
-     members_diverging: [billing, notifications], population: anonymize-handlers(5),
-     check: conformance, closed_world: false, handoff: [tech, arch],
-     first_seen: 2026-10-05, last_verified: 2026-10-05}
-  - {id: anonymize-replacement-values, status: open, aspect: G, cost: [ambiguity, tax],
-     members_diverging: [billing, notifications], population: anonymize-handlers(5),
-     check: conformance, closed_world: true, handoff: [],
-     first_seen: 2026-10-05, last_verified: 2026-10-05}
+  - {id: anonymize-redaction-helper-copies, status: resolved, rule: "rule 47", aspect: C, check: conformance, closed_world: false, resolved_by: abbc09d0, first_seen: 2026-10-05, last_verified: 2026-10-05}
+  - {id: anonymize-replacement-values, status: resolved, rule: "rule 48", aspect: G, check: conformance, closed_world: true, resolved_by: abbc09d0, first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: personal-data-inventory-ownership, status: resolved, rule: "rule 49", aspect: C,
      cost: [tax, ambiguity],
      members_diverging: [auth, backups, billing, blog, crm, forms, listings, notifications],
      population: modules-with-user-data(9), check: "closed-world inventory test + runtime warning (W006)",
      closed_world: true, handoff: [arch],
      first_seen: 2026-10-05, last_verified: 2026-10-05}
-  - {id: anonymize-executor-naming, status: open, aspect: D, cost: [tax],
-     members_diverging: [auth], population: anonymize-handlers(5), check: conformance,
-     closed_world: true, handoff: [], first_seen: 2026-10-05, last_verified: 2026-10-05}
+  - {id: anonymize-executor-naming, status: resolved, rule: "rule 48", aspect: D, check: conformance, closed_world: true, resolved_by: abbc09d0, first_seen: 2026-10-05, last_verified: 2026-10-05}
   # prior items — all resolved; rule numbers are decisions.md § Module Conventions
   - {id: write-effects-on-commit, status: resolved, rule: "rule 21", aspect: F, check: "review + per-module rollback test", closed_world: false, resolved_by: 2eb63262, first_seen: 2026-09-26, last_verified: 2026-10-05}
   - {id: settings-snapshot-readers, status: resolved, rule: "rule 42", aspect: B, check: conformance, closed_world: true, resolved_by: 537204bc, first_seen: 2026-10-03, last_verified: 2026-10-05}
@@ -155,15 +148,15 @@ items:
 
 ## 3. Summary table
 
-**Counts (open):** defect 1 · collision 0 · ambiguity 1 · tax 1 · total 3. Prior: 51 resolved, 0
+**Counts (open):** defect 0 · collision 0 · ambiguity 0 · tax 0 · total 0. Prior: 54 resolved, 0
 regressed.
 
 | ID | Aspect | Cost | Diverging / population | Status |
 |---|---|---|---|---|
-| `anonymize-redaction-helper-copies` | C | defect, tax | 2 / 5 handlers | open |
-| `anonymize-replacement-values` | G | ambiguity, tax | 2 / 5 handlers | open |
+| `anonymize-redaction-helper-copies` | C | defect, tax | 2 / 5 handlers | resolved (see §12, rule 47) |
+| `anonymize-replacement-values` | G | ambiguity, tax | 2 / 5 handlers | resolved (see §12, rule 48) |
 | `personal-data-inventory-ownership` | C | tax, ambiguity | 8 / 9 modules with user data | resolved (rule 49, see §12) |
-| `anonymize-executor-naming` | D | tax | 1 / 5 handlers | open |
+| `anonymize-executor-naming` | D | tax | 1 / 5 handlers | resolved (see §12, rule 48) |
 | `write-effects-on-commit` | F | — | 0 / 6 | resolved (correction, see §12) |
 | 49 other prior items | A–P | — | 0 | resolved |
 
@@ -257,6 +250,8 @@ removed. No drift remains (see the correction in §12).
 
 ### Item 1: Matching — the two text scrubbers are copies that have already diverged
 
+- **Resolved** (SA245, `abbc09d0`) — recorded as rule 47; core's `replace_address`/`redact_names`
+  are the one matcher.
 - **ID:** `anonymize-redaction-helper-copies`
 - **Aspect / population:** C (vocabulary and helper ownership); the anonymization handlers (5),
   of which 2 match text (billing, notifications).
@@ -305,6 +300,8 @@ removed. No drift remains (see the correction in §12).
 
 ### Item 2: Replacement values — one kind of field, two tokens
 
+- **Resolved** (SA245, `abbc09d0`) — recorded as rule 48; the handlers that remove identity from
+  stored text or payloads write core's `DELETED_ADDRESS(pk)` or `REDACTED`.
 - **ID:** `anonymize-replacement-values`
 - **Aspect / population:** G (data basics) and A (shared values); the anonymization handlers (5).
 - **Table:** §4.2. The address inside a stored provider payload becomes `deleted-<pk>@invalid` in
@@ -325,9 +322,11 @@ removed. No drift remains (see the correction in §12).
   - **B.** Address fields with a unique meaning get `deleted-<pk>@invalid`, and addresses inside
     text or payloads get `[redacted]`. notifications changes 2 call sites. The trade-off is that
     payloads lose the account link.
-- **Recommended rule (A):**
-  - ✅ An anonymization handler writes `DELETED_ADDRESS(pk)` for any email address and `REDACTED`
-    for any name or username, importing both from core.
+- **Recommended rule (A):** recorded as rule 48 with its scoping: an account's own unique username
+  field keeps `deleted-<pk>`, and `REDACTED` applies to names and usernames removed from stored
+  text or payloads.
+  - ✅ An anonymization handler writes `DELETED_ADDRESS(pk)` for any email address it removes from
+    stored text or payloads and `REDACTED` for any such name or username, importing both from core.
   - ❌ A literal `"[redacted]"` or `f"deleted-{…}@invalid"` in module code.
   - Exception: `failure_reason`, which is replaced wholesale because provider prose can embed the
     address in unknown forms. It keeps `REDACTED`.
@@ -340,6 +339,9 @@ removed. No drift remains (see the correction in §12).
 
 ### Item 4 (compact): `anonymize-executor-naming`
 
+**Resolved** (SA245, `abbc09d0`) — recorded as rule 48; auth's entry point is
+`_anonymization.anonymize_account` and the collector is in `_anonymize_boundary.py`.
+
 D · handlers 5 · the private entry point is `anonymize_account` in 4 and `scrub_account` in auth
 (1). auth's `_anonymization.py` also holds the cross-module collector, so the file is both a
 handler and the boundary · rule: ✅ `_anonymization.anonymize_account` in every handler, with the
@@ -350,17 +352,18 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
 
 ## 6. Proposed rules (for decisions.md § Module Conventions, as rules 47–49)
 
-47. **Redaction (Item 1).**
+47. **Redaction (Item 1).** — recorded as decisions rule 47 (SA245, `abbc09d0`).
     - ✅ Identity is removed from stored text and payloads by core's redaction helpers. Names and
       usernames match at word boundaries, and payload keys are never rewritten.
     - ❌ A module-local address pattern or identity matcher. ❌ Substring name matching.
-48. **Replacement values (Items 2 and 4).**
-    - ✅ Every email address becomes core's `DELETED_ADDRESS(pk)`, and every name or username
-      becomes `REDACTED`.
+48. **Replacement values (Items 2 and 4).** — recorded as decisions rule 48 (SA245, `abbc09d0`).
+    - ✅ Identity removed from stored text or payloads becomes core's `DELETED_ADDRESS(pk)` for an
+      address and core's `REDACTED` for a name or username; an account's own unique username field
+      keeps its `deleted-<pk>` candidate.
     - ✅ A handler's private entry point is `_anonymization.anonymize_account`.
     - ❌ A literal sentinel in module code.
     - Exception: wholesale-replaced provider prose keeps `REDACTED`.
-49. **Personal-data declarations (Item 3).**
+49. **Personal-data declarations (Item 3).** — recorded as decisions rule 49 (SA246).
     - ✅ A module declares the treatment of its own user-linked fields beside its handler, and
       the inventory test collects the declarations.
     - ❌ One module's test listing another module's fields.
@@ -448,6 +451,15 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
   collects them and keeps its three controls, and orgs' W006 check reports undeclared candidates
   on project-owned models).
 - 2026-10-05 — `anonymize-executor-naming`: **new**, open.
+- 2026-10-05 — `anonymize-redaction-helper-copies`: **resolved** (abbc09d0 — rule 47; core's
+  `replace_address`/`redact_names` are the one matcher, and the control case rejects billing's old
+  `_redact_string`).
+- 2026-10-05 — `anonymize-replacement-values`: **resolved** (abbc09d0 — rule 48; the handlers that
+  remove identity from stored text or payloads write core's `DELETED_ADDRESS(pk)` and `REDACTED`,
+  and the control case rejects billing's old `REDACTED = "[redacted]"`).
+- 2026-10-05 — `anonymize-executor-naming`: **resolved** (abbc09d0 — rule 48; auth's entry point is
+  `_anonymization.anonymize_account`, the collector is in `_anonymize_boundary.py`, and the control
+  case rejects a `scrub_account` delegation).
 - 2026-10-05 — `write-effects-on-commit`: **resolved** (2eb63262 — verified: notifications' rollback test `tests/test_services.py:325–341` exists and `dispatch_after_commit` is gone; blog joins the population with an on-commit test). (Correction: the 2026-10-03 pass listed it as *decided* with notifications still to change; the test landed 2026-10-02, before that pass's SHA.)
 - 2026-10-05 — `settings-snapshot-readers`: **resolved** (537204bc — rule 42 (D44); harness passes at 8e4122f2).
 - 2026-10-05 — `optional-sender-guard`: **resolved** (537204bc — rule 43 (D45); harness passes at 8e4122f2).

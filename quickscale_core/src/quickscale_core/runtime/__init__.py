@@ -2,7 +2,7 @@
 QuickScale runtime API facade — combined re-export surface.
 
 This is the public import path for generated-project code and module-owned
-adapters.  It re-exports all symbols from four sub-modules:
+adapters.  It re-exports all symbols from five sub-modules:
 
 * ``runtime.dr`` — DR adapter functions, primitives, and all backup-dependent
   symbols (orchestration, recovery, persistence, verification).  The sub-module
@@ -16,6 +16,9 @@ adapters.  It re-exports all symbols from four sub-modules:
 * ``runtime.admin`` — the shared Django-admin mixin module admins reuse
   (read-only operational surfaces).  Loaded only when its symbol is requested,
   so a process without Django never imports it.
+* ``runtime.redaction`` — the shared anonymization-redaction helpers and
+  replacement sentinels (Module Conventions rules 47 and 48).  Pure string
+  functions, loaded only when one of their symbols is requested.
 
 Module-owned adapters (e.g. ``quickscale_modules_social.adapter``) should
 import from ``quickscale_core.runtime.manifest`` directly to avoid pulling
@@ -65,15 +68,26 @@ _LAZY_CONVENTIONS_SYMBOLS: frozenset[str] = frozenset(
 #: Django admin stack, so processes that never touch it never import it.
 _LAZY_ADMIN_SYMBOLS: frozenset[str] = frozenset({"ReadOnlyAdminMixin"})
 
+#: Symbols served lazily by ``runtime.redaction`` (SA245).  A process that
+#: never scrubs stored identity never imports the redaction matchers.
+_LAZY_REDACTION_SYMBOLS: frozenset[str] = frozenset(
+    {
+        "DELETED_ADDRESS",
+        "REDACTED",
+        "redact_names",
+        "replace_address",
+    }
+)
+
 # ---------------------------------------------------------------------------
 # Public API — the curated hardcoded literal union of the dr, manifest,
-# conventions, and admin surfaces.  Kept as a literal so the SA9.2
+# conventions, admin, and redaction surfaces.  Kept as a literal so the SA9.2
 # static-analysis checker (check_module_core_compatibility.py) can resolve
 # every symbol without importing the sub-modules.
 #
-# When adding a new public symbol to dr.py, manifest.py, conventions.py, or
-# admin.py, add it here too.  The compatibility checker will catch any
-# mismatch.
+# When adding a new public symbol to dr.py, manifest.py, conventions.py,
+# admin.py, or redaction.py, add it here too.  The compatibility checker will
+# catch any mismatch.
 # ---------------------------------------------------------------------------
 __all__ = [
     # DR adapter surface (from dr)
@@ -180,6 +194,11 @@ __all__ = [
     "register_module_settings_check",
     # Shared admin behavior (from admin)
     "ReadOnlyAdminMixin",
+    # Anonymization redaction helpers and sentinels (from redaction)
+    "DELETED_ADDRESS",
+    "REDACTED",
+    "redact_names",
+    "replace_address",
 ]
 
 
@@ -198,8 +217,13 @@ def _load_admin() -> typing.Any:
     return importlib.import_module("quickscale_core.runtime.admin")
 
 
+def _load_redaction() -> typing.Any:
+    """Load and return the redaction helpers on first redaction access."""
+    return importlib.import_module("quickscale_core.runtime.redaction")
+
+
 def __getattr__(name: str) -> typing.Any:
-    """Resolve an attribute from the manifest, conventions, admin, or DR surface."""
+    """Resolve an attribute from the manifest, conventions, admin, redaction, or DR surface."""
     if name == "manifest":
         return _manifest
     if hasattr(_manifest, name):
@@ -210,6 +234,10 @@ def __getattr__(name: str) -> typing.Any:
         return getattr(_load_conventions(), name)
     if name in _LAZY_ADMIN_SYMBOLS:
         return getattr(_load_admin(), name)
+    if name == "redaction":
+        return _load_redaction()
+    if name in _LAZY_REDACTION_SYMBOLS:
+        return getattr(_load_redaction(), name)
     dr_module = _load_dr()
     if name == "dr":
         return dr_module
