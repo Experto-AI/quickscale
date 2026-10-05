@@ -31,7 +31,7 @@ class QuickscaleAuthConfig(AppConfig):
     ) -> tuple[OrganizationRemovalObligation, ...]:
         """Declare the account's personal data as auth's own obligation.
 
-        The account-deletion boundary disables and scrubs the account; the
+        The anonymize boundary disables and scrubs the account; the
         ``ANONYMIZE`` action names auth's ``anonymize_account`` executor.  An
         organization purge never touches accounts, so that boundary skips it.
         """
@@ -39,7 +39,7 @@ class QuickscaleAuthConfig(AppConfig):
             OrganizationRemovalObligation(
                 name=AUTH_PERSONAL_DATA,
                 purge_action=RemovalAction.SKIP,
-                account_delete_action=RemovalAction.ANONYMIZE,
+                anonymize_action=RemovalAction.ANONYMIZE,
             ),
         )
 
@@ -60,22 +60,22 @@ class QuickscaleAuthConfig(AppConfig):
     def anonymize_handlers(self) -> tuple[Any, ...]:
         """Declare auth's account-anonymization handler (rule 4).
 
-        The account-deletion boundary collects every installed app's declared
-        handler through the shared core helper and runs them in one
-        transaction; auth declares its own app config as its handler.
+        The anonymize boundary collects every installed app's declared handler
+        through the shared core helper and runs them in one transaction; auth
+        declares its own app config as its handler.
         """
         return (self,)
 
     def removal_boundary_implementations(
         self,
     ) -> dict[RemovalBoundary, tuple[str, str, str]]:
-        """Declare auth's account-deletion boundary implementation (rule 34).
+        """Declare auth's anonymize boundary implementation (rule 34).
 
-        Auth owns the account-deletion boundary, so it declares where that
+        Auth owns the anonymize boundary, so it declares where that
         implementation lives instead of orgs' discharge check naming it.
         """
         return {
-            RemovalBoundary.ACCOUNT_DELETE: (
+            RemovalBoundary.ANONYMIZE: (
                 self.name,
                 "quickscale_modules_auth.views",
                 "AccountDeleteView.form_valid",

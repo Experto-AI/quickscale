@@ -6,7 +6,7 @@ the personal-data inventory lists for it, deletes the login addresses held by
 the account backend, and removes the person's sessions.  The same module
 collects the rule 4 ``anonymize_handlers`` capability: every installed app
 that holds personal data about a user declares its handler, and the
-account-deletion boundary runs each declared app's own ``anonymize_account``
+anonymize boundary runs each declared app's own ``anonymize_account``
 executor — the hook named by ``STAGE_EXECUTOR_HOOKS`` for the ``ANONYMIZE``
 action — before discharging the stage through the shared coordinator.
 
@@ -78,7 +78,7 @@ def _require_obligation_owners(
         app_config.label
         for app_config in apps.get_app_configs()
         for obligation in declared_removal_obligations(app_config)
-        if obligation.account_delete_action is RemovalAction.ANONYMIZE
+        if obligation.anonymize_action is RemovalAction.ANONYMIZE
         and app_config.label not in collected_labels
     )
     if missing:

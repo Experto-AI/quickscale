@@ -1686,12 +1686,10 @@ class TestAccountDeleteView:
             for message in messages_framework.get_messages(response.wsgi_request)
         )
 
-    def test_account_delete_detaches_former_member_billing_provenance(
-        self, authenticated_client, user, caplog
+    def test_account_delete_retains_former_member_billing_provenance(
+        self, authenticated_client, user
     ):
-        """Billing references survive a former member with nullable provenance."""
-        import logging
-
+        """Billing references survive a former member, attributed to the row."""
         from django.contrib.auth import get_user_model
         from quickscale_modules_billing.models import (
             CreditBalance,
@@ -1705,11 +1703,6 @@ class TestAccountDeleteView:
             OrgRole,
             Organization,
             OrganizationMembership,
-        )
-        from quickscale_modules_orgs.removal import (
-            OWNED_TENANT_ROWS,
-            PURGE_TOMBSTONE,
-            SOCIAL_CACHE_STATE,
         )
 
         organization = Organization.objects.create(
@@ -1767,7 +1760,6 @@ class TestAccountDeleteView:
             )
         former_membership.delete()
 
-        caplog.set_level(logging.INFO, logger="quickscale_modules_auth.views")
         response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
 
         assert response.status_code == 302
@@ -1779,19 +1771,248 @@ class TestAccountDeleteView:
             transaction_row.refresh_from_db()
             purchase_checkout.refresh_from_db()
             subscription.refresh_from_db()
-        assert balance.user_id is None
-        assert transaction_row.user_id is None
-        assert purchase_checkout.user_id is None
-        assert subscription.user_id is None
-        for obligation_name in (
-            OWNED_TENANT_ROWS,
-            SOCIAL_CACHE_STATE,
-            PURGE_TOMBSTONE,
-        ):
-            assert any(
-                obligation_name in message and str(organization.pk) in message
-                for message in caplog.messages
+        assert balance.user_id == user.pk
+        assert transaction_row.user_id == user.pk
+        assert purchase_checkout.user_id == user.pk
+        assert subscription.user_id == user.pk
+
+    def test_account_delete_blocks_open_purchase_checkout_in_a_former_organization(
+        self, authenticated_client, user
+    ):
+        """A former organization's open one-time Checkout keeps the account intact."""
+        from unittest.mock import MagicMock, patch
+
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_billing.models import Plan, PurchaseCheckout
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Former Member Pending Purchase",
+            slug="former-member-pending-purchase",
+        )
+        owner = get_user_model().objects.create_user(
+            username="former-purchase-owner",
+            email="former-purchase-owner@example.com",
+            password="FormerPurchaseOwner1!",
+        )
+        OrganizationMembership.objects.create(
+            user=owner,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        former_membership = OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.MEMBER,
+        )
+        plan = Plan.objects.create(
+            name="Former Purchase Plan",
+            slug="former-purchase-plan",
+            stripe_price_id="price_former_purchase",
+            credits_per_period=100,
+            price_cents=1900,
+            currency="usd",
+            billing_interval=Plan.BillingInterval.ONE_TIME,
+        )
+        with org_scope(organization):
+            PurchaseCheckout.objects.create(
+                organization=organization,
+                user=user,
+                plan=plan,
+                status=PurchaseCheckout.Status.OPEN,
+                stripe_checkout_session_id="cs_former_purchase_open",
             )
+        former_membership.delete()
+        stripe_client = MagicMock()
+        stripe_client.retrieve_checkout_session.return_value = {
+            "id": "cs_former_purchase_open",
+            "status": "open",
+        }
+
+        with patch(
+            "quickscale_modules_billing._stripe_client.get_stripe_client",
+            return_value=stripe_client,
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        retained = get_user_model().objects.get(pk=user.pk)
+        assert retained.is_active is True
+        assert any(
+            "is still open" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+        stripe_client.retrieve_checkout_session.assert_called_once_with(
+            checkout_session_id="cs_former_purchase_open"
+        )
+
+    def test_account_delete_blocks_unknown_purchase_checkout_in_a_former_organization(
+        self, authenticated_client, user
+    ):
+        """A former organization's unknown purchase outcome keeps the account intact."""
+        from unittest.mock import MagicMock, patch
+
+        from django.contrib import messages as messages_framework
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_billing.models import Plan, PurchaseCheckout
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Former Member Unknown Purchase",
+            slug="former-member-unknown-purchase",
+        )
+        owner = get_user_model().objects.create_user(
+            username="former-unknown-owner",
+            email="former-unknown-owner@example.com",
+            password="FormerUnknownOwner1!",
+        )
+        OrganizationMembership.objects.create(
+            user=owner,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        former_membership = OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.MEMBER,
+        )
+        plan = Plan.objects.create(
+            name="Former Unknown Purchase Plan",
+            slug="former-unknown-purchase-plan",
+            stripe_price_id="price_former_unknown_purchase",
+            credits_per_period=100,
+            price_cents=1900,
+            currency="usd",
+            billing_interval=Plan.BillingInterval.ONE_TIME,
+        )
+        with org_scope(organization):
+            PurchaseCheckout.objects.create(
+                organization=organization,
+                user=user,
+                plan=plan,
+                status=PurchaseCheckout.Status.PREPARING,
+            )
+        former_membership.delete()
+        stripe_client = MagicMock()
+
+        with patch(
+            "quickscale_modules_billing._stripe_client.get_stripe_client",
+            return_value=stripe_client,
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        retained = get_user_model().objects.get(pk=user.pk)
+        assert retained.is_active is True
+        assert any(
+            "creation outcome is unknown" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
+        stripe_client.retrieve_checkout_session.assert_not_called()
+
+    def test_account_delete_locks_a_former_organization_for_the_purchase_check(
+        self, authenticated_client, user
+    ):
+        """The former-organization purchase check runs under that org's mutex."""
+        from contextlib import contextmanager
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+
+        from quickscale_modules_billing.exceptions import BillingValidationError
+        from quickscale_modules_billing.models import Plan, PurchaseCheckout
+        from quickscale_modules_orgs.current_org import org_scope
+        from quickscale_modules_orgs.models import (
+            OrgRole,
+            Organization,
+            OrganizationMembership,
+        )
+
+        organization = Organization.objects.create(
+            name="Former Member Locked Purchase",
+            slug="former-member-locked-purchase",
+        )
+        owner = get_user_model().objects.create_user(
+            username="former-locked-owner",
+            email="former-locked-owner@example.com",
+            password="FormerLockedOwner1!",
+        )
+        OrganizationMembership.objects.create(
+            user=owner,
+            organization=organization,
+            role=OrgRole.OWNER,
+        )
+        former_membership = OrganizationMembership.objects.create(
+            user=user,
+            organization=organization,
+            role=OrgRole.MEMBER,
+        )
+        plan = Plan.objects.create(
+            name="Former Locked Purchase Plan",
+            slug="former-locked-purchase-plan",
+            stripe_price_id="price_former_locked_purchase",
+            credits_per_period=100,
+            price_cents=1900,
+            currency="usd",
+            billing_interval=Plan.BillingInterval.ONE_TIME,
+        )
+        with org_scope(organization):
+            PurchaseCheckout.objects.create(
+                organization=organization,
+                user=user,
+                plan=plan,
+                status=PurchaseCheckout.Status.PREPARING,
+            )
+        former_membership.delete()
+        lock_state = {"held": False}
+        observed: list[tuple[object, bool]] = []
+
+        @contextmanager
+        def record_provider_lock(organization_id):
+            lock_state["held"] = True
+            try:
+                yield
+            finally:
+                lock_state["held"] = False
+
+        def record_purchase_check(organization_id, **kwargs):
+            del kwargs
+            observed.append((organization_id, lock_state["held"]))
+            raise BillingValidationError("purchase state is not terminal")
+
+        with (
+            patch(
+                "quickscale_modules_billing._locks.subscription_provider_mutation_lock",
+                side_effect=record_provider_lock,
+            ),
+            patch(
+                "quickscale_modules_billing._removal.reconcile_purchase_checkouts_for_removal",
+                side_effect=record_purchase_check,
+            ),
+        ):
+            response = authenticated_client.post(
+                reverse("quickscale_auth:account_delete")
+            )
+
+        assert response.status_code == 200
+        assert observed == [(organization.pk, True)]
 
     def test_account_delete_retries_when_billing_reference_changes(
         self, authenticated_client, user
@@ -2047,10 +2268,6 @@ class _StubAccountDeletionHandler:
     ) -> None:
         self._calls.append(("resume", transition))
 
-    def detach_account_deletion_user_references(self, user_id, organization_ids) -> int:
-        self._calls.append("detach")
-        return 0
-
 
 @contextmanager
 def _declared_handlers(*handlers):
@@ -2129,7 +2346,6 @@ class TestAccountDeleteViewDeclaredHandlers:
             "reconcile",
             "cancel",
             "discover",
-            "detach",
         ]
 
     def test_account_delete_blocks_when_a_declared_handler_is_incomplete(
@@ -2665,3 +2881,166 @@ class TestAccountDeleteViewAccountReuse:
             )
             assert attempt.status_code == 200
             assert fresh_client.session.get("_auth_user_id") is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_account_delete_serializes_a_post_check_superuser_checkout() -> None:
+    """A checkout started after the purchase check cannot beat the removal.
+
+    The removal discovers the organization holding the person's billing
+    provenance, runs its purchase check, and holds that organization's
+    provider mutex across the check and its transaction while the account is
+    disabled.  A non-member superuser checkout for that organization, started
+    after the check and before the removal commits, contends on the held
+    mutex, creates no reservation while the removal is paused, and then fails
+    its fresh authorization once the removal commits.
+    """
+    import concurrent.futures
+    import hashlib
+    import threading
+    from unittest.mock import patch
+
+    from django.contrib.auth import get_user_model
+    from django.db import close_old_connections, connection, connections
+    from django.test import Client
+
+    from quickscale_modules_billing.exceptions import BillingValidationError
+    from quickscale_modules_billing.models import Plan, PurchaseCheckout
+    from quickscale_modules_billing.services import create_checkout_session
+    from quickscale_modules_orgs.current_org import org_scope
+    from quickscale_modules_orgs.models import Organization
+
+    User = get_user_model()
+    user = User.objects.create_user(
+        username="post_check_superuser",
+        email="post_check_superuser@example.com",
+        password="PostCheckSuperuser1!",
+        is_superuser=True,
+    )
+    organization = Organization.objects.create(
+        name="Post Check Window",
+        slug="post-check-window",
+    )
+    plan = Plan.objects.create(
+        name="Post Check Plan",
+        slug="post-check-plan",
+        stripe_price_id="price_post_check_plan",
+        credits_per_period=100,
+        price_cents=1900,
+        currency="usd",
+        billing_interval=Plan.BillingInterval.ONE_TIME,
+    )
+    # Terminal billing provenance makes the organization discoverable; it is
+    # not itself a non-terminal purchase.
+    with org_scope(organization):
+        PurchaseCheckout.objects.create(
+            organization=organization,
+            user=user,
+            plan=plan,
+            status=PurchaseCheckout.Status.EXPIRED,
+        )
+    user_pk = user.pk
+    organization_pk = organization.pk
+    plan_pk = plan.pk
+    lock_key = int.from_bytes(
+        hashlib.sha256(
+            f"quickscale_billing:subscription:{organization_pk}".encode()
+        ).digest()[:8],
+        byteorder="big",
+        signed=True,
+    )
+    checked = threading.Event()
+    reached = threading.Event()
+    release = threading.Event()
+    contention: list[bool] = []
+    client = Client()
+    client.force_login(user)
+
+    from quickscale_modules_billing import _removal as billing_removal
+
+    original_check = billing_removal.reconcile_purchase_checkouts_for_removal
+
+    def paused_purchase_check(*args, **kwargs):
+        result = original_check(*args, **kwargs)
+        checked.set()
+        assert release.wait(timeout=30), "the test never released the removal"
+        return result
+
+    def _remove_worker() -> int:
+        close_old_connections()
+        try:
+            with patch(
+                "quickscale_modules_billing._removal.reconcile_purchase_checkouts_for_removal",
+                side_effect=paused_purchase_check,
+            ):
+                response = client.post(reverse("quickscale_auth:account_delete"))
+            return response.status_code
+        finally:
+            connections.close_all()
+
+    def _checkout_worker() -> dict[str, object]:
+        close_old_connections()
+        try:
+            # Prove this distinct connection observes the removal holding the
+            # organization's mutex before the checkout attempts it.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_try_advisory_lock(%s)", [lock_key])
+                (acquired,) = cursor.fetchone()
+                if acquired:
+                    cursor.execute("SELECT pg_advisory_unlock(%s)", [lock_key])
+            contention.append(not acquired)
+            reached.set()
+            try:
+                create_checkout_session(
+                    User.objects.get(pk=user_pk),
+                    plan=Plan.objects.get(pk=plan_pk),
+                    success_url="https://example.com/success",
+                    cancel_url="https://example.com/cancel",
+                    organization=Organization.objects.get(pk=organization_pk),
+                )
+                return {"outcome": "created"}
+            except BillingValidationError as exc:
+                return {"outcome": "refused", "error": str(exc)}
+        finally:
+            connections.close_all()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        removal_future = executor.submit(_remove_worker)
+        try:
+            assert checked.wait(timeout=30), "the removal never ran the purchase check"
+            checkout_future = executor.submit(_checkout_worker)
+            assert reached.wait(timeout=30), "the checkout never probed the mutex"
+            assert contention == [True], (
+                "the removal did not hold the organization mutex"
+            )
+            # The removal is paused after its check, the checkout contends on
+            # the held mutex, and no reservation has appeared.
+            assert not checkout_future.done()
+            with org_scope(Organization.objects.get(pk=organization_pk)):
+                assert not PurchaseCheckout.all_objects.filter(
+                    organization_id=organization_pk,
+                    user_id=user_pk,
+                    status__in=(
+                        PurchaseCheckout.Status.PREPARING,
+                        PurchaseCheckout.Status.OPEN,
+                    ),
+                ).exists()
+        finally:
+            release.set()
+        removal_status = removal_future.result(timeout=60)
+        checkout_result = checkout_future.result(timeout=60)
+
+    assert removal_status == 302
+    assert checkout_result["outcome"] == "refused", checkout_result
+    assert "authorization changed" in str(checkout_result["error"])
+    retained = User.objects.get(pk=user_pk)
+    assert retained.is_active is False
+    with org_scope(Organization.objects.get(pk=organization_pk)):
+        assert not PurchaseCheckout.all_objects.filter(
+            organization_id=organization_pk,
+            user_id=user_pk,
+            status__in=(
+                PurchaseCheckout.Status.PREPARING,
+                PurchaseCheckout.Status.OPEN,
+            ),
+        ).exists()

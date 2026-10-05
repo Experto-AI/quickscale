@@ -114,9 +114,11 @@ SESSION_SAVE_EVERY_REQUEST = True  # Extend session on activity
 - Static assets under `static/quickscale_auth/{css,js}/`.
 - Account flows: login, logout, signup, password change and reset, profile view/edit, and
   account deletion.
-- Account deletion collects installed modules' declared `account_deletion_handlers`
-  capabilities (billing declares the Stripe reconciliation, cancellation, compensation, and
-  provenance-detachment operations) and drives them, so the view imports no provider module.
+- Account removal disables and anonymizes the account in place; the row is retained so authored
+  records stay attributed to the disabled account. The view collects installed modules' declared
+  `account_deletion_handlers` capabilities (billing declares the provenance discovery, Stripe
+  reconciliation, cancellation, and compensation operations) and drives them, so the view
+  imports no provider module.
 - `receivers.py` connects a `user_signed_up` receiver from `ready()` as the post-registration
   hook; `signals.py` is reserved for signals the module sends.
 - `allauth_adapter.py` holds the module's allauth account adapter; it collects installed

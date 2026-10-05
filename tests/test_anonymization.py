@@ -182,7 +182,7 @@ def test_discover_anonymize_hooks_requires_the_capability_for_a_declaration(
     obligation = OrganizationRemovalObligation(
         name="acme-personal-data",
         purge_action=RemovalAction.SKIP,
-        account_delete_action=RemovalAction.ANONYMIZE,
+        anonymize_action=RemovalAction.ANONYMIZE,
     )
     owner = SimpleNamespace(label="acme_app")
     monkeypatch.setattr(

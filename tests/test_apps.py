@@ -26,10 +26,10 @@ def _auth_config() -> QuickscaleAuthConfig:
 
 
 def test_app_config_declares_its_account_deletion_boundary_implementation() -> None:
-    """Auth owns the account-deletion boundary and declares its implementation."""
+    """Auth owns the anonymize boundary and declares its implementation."""
     implementations = _auth_config().removal_boundary_implementations()
 
-    assert implementations[RemovalBoundary.ACCOUNT_DELETE] == (
+    assert implementations[RemovalBoundary.ANONYMIZE] == (
         "quickscale_modules_auth",
         "quickscale_modules_auth.views",
         "AccountDeleteView.form_valid",
@@ -41,7 +41,7 @@ def test_app_config_declares_the_account_personal_data_obligation() -> None:
     (obligation,) = _auth_config().removal_obligations()
 
     assert obligation.name == AUTH_PERSONAL_DATA
-    assert obligation.account_delete_action is RemovalAction.ANONYMIZE
+    assert obligation.anonymize_action is RemovalAction.ANONYMIZE
     assert obligation.purge_action is RemovalAction.SKIP
 
 
