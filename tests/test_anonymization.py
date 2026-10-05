@@ -717,3 +717,69 @@ def test_app_config_declares_the_anonymize_handlers_capability() -> None:
     config = apps.get_app_config("quickscale_notifications")
 
     assert config.anonymize_handlers() == (config,)
+
+
+@pytest.mark.django_db
+def test_declared_treatments_hold_on_a_populated_user() -> None:
+    """Every declared treatment matches what the executor does to populated rows."""
+    from quickscale_core.runtime import PersonalDataField, PersonalDataTreatment
+
+    config = apps.get_app_config("quickscale_notifications")
+    declared = {
+        (entry.model_name, entry.field_name): entry.treatment
+        for entry in config.personal_data_declarations()
+        if isinstance(entry, PersonalDataField)
+    }
+    assert declared == {
+        ("NotificationMessage", "subject"): PersonalDataTreatment.SCRUB,
+        ("NotificationMessage", "rendered_text"): PersonalDataTreatment.SCRUB,
+        ("NotificationMessage", "rendered_html"): PersonalDataTreatment.SCRUB,
+        ("NotificationMessage", "context_json"): PersonalDataTreatment.SCRUB,
+        ("NotificationMessage", "last_error"): PersonalDataTreatment.SCRUB,
+        ("NotificationDelivery", "failure_reason"): PersonalDataTreatment.SCRUB,
+        ("NotificationDelivery", "recipient_email"): PersonalDataTreatment.SCRUB,
+        ("NotificationDeliveryEvent", "payload_json"): PersonalDataTreatment.SCRUB,
+    }
+
+    user = _user("alpha@example.com")
+    message = _message()
+    delivery = NotificationDelivery.objects.create(
+        message=message,
+        recipient_email="alpha@example.com",
+        failure_reason="alpha@example.com mailbox full",
+    )
+    event = NotificationDeliveryEvent.objects.create(
+        delivery=delivery,
+        idempotency_key="declared-treatments",
+        event_type="bounced",
+        status_after="bounced",
+        payload_json={
+            "to": "alpha@example.com",
+            "detail": {"contact": "Reach alpha@example.com now"},
+        },
+    )
+
+    anonymize_account(user, "Alpha@Example.com", "Alpha Person", user.get_username())
+
+    deleted_address = f"deleted-{user.pk}@invalid"
+    message.refresh_from_db()
+    delivery.refresh_from_db()
+    event.refresh_from_db()
+    outcomes = {
+        ("NotificationMessage", "subject"): message.subject == "[redacted]",
+        ("NotificationMessage", "rendered_text"): message.rendered_text == "[redacted]",
+        ("NotificationMessage", "rendered_html"): message.rendered_html == "[redacted]",
+        ("NotificationMessage", "context_json"): message.context_json == {},
+        ("NotificationMessage", "last_error"): message.last_error == "[redacted]",
+        ("NotificationDelivery", "failure_reason"): delivery.failure_reason
+        == "[redacted]",
+        ("NotificationDelivery", "recipient_email"): delivery.recipient_email
+        == deleted_address,
+        ("NotificationDeliveryEvent", "payload_json"): event.payload_json
+        == {
+            "to": deleted_address,
+            "detail": {"contact": f"Reach {deleted_address} now"},
+        },
+    }
+    assert set(outcomes) == set(declared)
+    assert all(outcomes.values()), outcomes
