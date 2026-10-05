@@ -95,7 +95,9 @@ and `get_tenant_models()`. The module also installs the always-on RLS boot guard
   `debug_as_active` tag for VIEW-AS sessions.
 - Admin: `OrganizationAdmin` (with its VIEW-AS entry points), `OrganizationMembershipAdmin`,
   and `OrganizationInvitationAdmin`, plus the reusable `TenantModelAdmin` base other modules
-  register their tenant models on.
+  register their tenant models on and the shared org-aware admin surface
+  (`OrgAwareAdminMixin`, `make_same_org_validated_form`) blog and CRM use for
+  organization-required-on-add, read-only-on-change, and same-org related validation.
 - `removal.py` publishes the removal contract: `RemovalAction`, `RemovalBoundary`,
   `RemovalCoordinator`, `OrganizationRemovalObligation`, and `ExternalProviderField`, with the
   declaration helpers each owning app uses.
