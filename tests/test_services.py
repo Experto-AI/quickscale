@@ -21,15 +21,13 @@ from typing import Any
 import pytest
 from django.conf import settings
 import stripe
-from django.db import IntegrityError, connection, transaction
+from django.db import IntegrityError, transaction
 from django.test import override_settings
-from django.test.utils import CaptureQueriesContext
 
 from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
     Plan,
-    PurchaseCheckout,
     Subscription,
     WebhookEvent,
 )
@@ -1446,74 +1444,6 @@ def test_credit_user_updates_balance_and_suppresses_duplicate_business_object(
     assert duplicate_transaction.pk == first_transaction.pk
     assert balance.balance == 100
     assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
-
-
-@pytest.mark.django_db
-def test_account_deletion_discovers_and_detaches_every_billing_user_reference(
-    user,
-    organization,
-    org_context,
-) -> None:
-    plan = _create_plan(price_id="price_account_reference_detachment")
-    balance = CreditBalance.all_objects.create(
-        user=user,
-        organization=organization,
-        balance=25,
-    )
-    transaction_row = CreditTransaction.all_objects.create(
-        user=user,
-        organization=organization,
-        amount=25,
-        transaction_type=CreditTransaction.TransactionType.PURCHASE,
-        balance_after=25,
-    )
-    purchase_checkout = PurchaseCheckout.all_objects.create(
-        user=user,
-        organization=organization,
-        plan=plan,
-        status=PurchaseCheckout.Status.EXPIRED,
-    )
-    subscription = Subscription.all_objects.create(
-        user=user,
-        organization=organization,
-        plan=plan,
-        status=Subscription.Status.CANCELED,
-    )
-
-    with CaptureQueriesContext(connection) as baseline_queries:
-        organization_ids = _removal.account_deletion_user_reference_organization_ids(
-            user.pk
-        )
-    Organization.objects.bulk_create(
-        [
-            Organization(
-                name=f"Unrelated account deletion org {index}",
-                slug=f"unrelated-account-deletion-org-{index}",
-            )
-            for index in range(50)
-        ]
-    )
-    with CaptureQueriesContext(connection) as expanded_queries:
-        expanded_organization_ids = (
-            _removal.account_deletion_user_reference_organization_ids(user.pk)
-        )
-    detached_count = _removal.detach_account_deletion_user_references(
-        user.pk,
-        organization_ids=organization_ids,
-    )
-
-    balance.refresh_from_db()
-    transaction_row.refresh_from_db()
-    purchase_checkout.refresh_from_db()
-    subscription.refresh_from_db()
-    assert organization_ids == [organization.pk]
-    assert expanded_organization_ids == organization_ids
-    assert len(expanded_queries) == len(baseline_queries)
-    assert detached_count == 4
-    assert balance.user_id is None
-    assert transaction_row.user_id is None
-    assert purchase_checkout.user_id is None
-    assert subscription.user_id is None
 
 
 @pytest.mark.django_db
@@ -3427,7 +3357,7 @@ def test_public_checkout_and_credit_services_are_keyword_only_after_subject() ->
         _checkout.create_checkout_session,
         _subscription_checkout.create_subscription_checkout_session,
         _checkout.create_billing_portal_session,
-        _removal.detach_account_deletion_user_references,
+        _removal.reconcile_purchase_checkouts_for_removal,
         _credits.debit_user,
     ):
         parameters = list(inspect.signature(service).parameters.values())
