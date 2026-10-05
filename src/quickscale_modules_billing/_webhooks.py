@@ -8,7 +8,10 @@ rule 28), so existing import paths and test patch targets keep working.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from quickscale_modules_billing.models import Plan
 
 from django.db import transaction
 from quickscale_modules_orgs.current_org import org_scope
@@ -177,6 +180,123 @@ def _process_verified_stripe_event(
     )
 
 
+def _handle_subscription_checkout_mode(
+    checkout_session_payload: Mapping[str, Any],
+) -> bool:
+    """Record a subscription checkout; True when the session was subscription."""
+    checkout_mode = str(checkout_session_payload.get("mode") or "").strip()
+    if checkout_mode == "subscription":
+        _record_subscription_checkout_completion(checkout_session_payload)
+        return True
+    if checkout_mode and checkout_mode != "payment":
+        raise BillingWebhookError(
+            "Stripe checkout session is not a one-time payment session."
+        )
+    payment_status = str(checkout_session_payload.get("payment_status") or "").strip()
+    if payment_status and payment_status != "paid":
+        raise BillingWebhookError("Stripe checkout session payment is not settled.")
+    return False
+
+
+def _validate_purchase_reservation(
+    reservation: PurchaseCheckout,
+    *,
+    plan: Plan,
+    user: Any,
+) -> None:
+    """Refuse a completed checkout that conflicts with its local reservation."""
+    if reservation.status == PurchaseCheckout.Status.EXPIRED:
+        raise BillingWebhookError(
+            "Completed Stripe checkout conflicts with an expired local "
+            "purchase reservation."
+        )
+    if reservation.plan_id != plan.pk:
+        raise BillingWebhookError(
+            "Completed Stripe checkout plan conflicts with its local "
+            "purchase reservation."
+        )
+    if reservation.user_id is not None and reservation.user_id != getattr(
+        user, "pk", None
+    ):
+        raise BillingWebhookError(
+            "Completed Stripe checkout user conflicts with its local "
+            "purchase reservation."
+        )
+
+
+def _complete_purchase_reservation(
+    reservation: PurchaseCheckout | None,
+    *,
+    checkout_session_payload: Mapping[str, Any],
+    checkout_session_id: str,
+    organization: Any,
+) -> None:
+    """Mark the matching purchase reservation (or loose row) completed."""
+    if reservation is not None:
+        reservation.stripe_checkout_session_id = checkout_session_id
+        reservation.status = PurchaseCheckout.Status.COMPLETED
+        reservation.checkout_expires_at = (
+            _extract_checkout_session_expires_at(checkout_session_payload)
+            or reservation.checkout_expires_at
+        )
+        reservation.save(
+            update_fields=[
+                "stripe_checkout_session_id",
+                "status",
+                "checkout_expires_at",
+            ]
+        )
+        return
+    PurchaseCheckout.all_objects.filter(
+        organization=organization,
+        stripe_checkout_session_id=checkout_session_id,
+        status=PurchaseCheckout.Status.OPEN,
+    ).update(status=PurchaseCheckout.Status.COMPLETED)
+
+
+def _apply_completed_purchase_checkout(
+    *,
+    checkout_session_payload: Mapping[str, Any],
+    organization: Any,
+    plan: Plan,
+    user: Any,
+    credited_amount: Any,
+    checkout_session_id: str,
+    reference_data: Mapping[str, Any],
+    event_payload: Mapping[str, Any],
+) -> CreditTransaction | None:
+    """Credit a completed purchase checkout under the provider mutex."""
+    # Phase 3: each handler owns its provider mutex and org scope so purge,
+    # account deletion, and Checkout completion observe one serial history.
+    with _locks.subscription_provider_mutation_lock(organization):
+        with org_scope(organization):
+            _locks._lock_organization_for_billing_mutation(organization)
+            reservation = _resolve_purchase_checkout_for_session(
+                checkout_session_payload=checkout_session_payload,
+                organization=organization,
+                for_update=True,
+            )
+            if reservation is not None:
+                _validate_purchase_reservation(reservation, plan=plan, user=user)
+            transaction_row = credit_user(
+                user,
+                organization=organization,
+                amount=credited_amount,
+                transaction_type=CreditTransaction.TransactionType.PURCHASE,
+                description=f"{plan.name} credits from Stripe checkout session {checkout_session_id}",
+                stripe_event_id=str(event_payload.get("id") or "").strip(),
+                stripe_object_id=checkout_session_id,
+                stripe_reference_data=dict(reference_data),
+            )
+            _complete_purchase_reservation(
+                reservation,
+                checkout_session_payload=checkout_session_payload,
+                checkout_session_id=checkout_session_id,
+                organization=organization,
+            )
+            return transaction_row
+
+
 def _handle_checkout_session_completed_event(
     event_payload: Mapping[str, Any],
     *,
@@ -187,18 +307,8 @@ def _handle_checkout_session_completed_event(
     if not checkout_session_id:
         raise BillingWebhookError("Stripe checkout session payload is missing an id.")
 
-    checkout_mode = str(checkout_session_payload.get("mode") or "").strip()
-    if checkout_mode == "subscription":
-        _record_subscription_checkout_completion(checkout_session_payload)
+    if _handle_subscription_checkout_mode(checkout_session_payload):
         return None
-    if checkout_mode and checkout_mode != "payment":
-        raise BillingWebhookError(
-            "Stripe checkout session is not a one-time payment session."
-        )
-
-    payment_status = str(checkout_session_payload.get("payment_status") or "").strip()
-    if payment_status and payment_status != "paid":
-        raise BillingWebhookError("Stripe checkout session payment is not settled.")
 
     payment_intent_payload = _retrieve_checkout_payment_intent_payload(
         checkout_session_payload=checkout_session_payload,
@@ -237,65 +347,16 @@ def _handle_checkout_session_completed_event(
     if payment_intent_id:
         reference_data["payment_intent_id"] = payment_intent_id
 
-    # Phase 3: each handler owns its provider mutex and org scope so purge,
-    # account deletion, and Checkout completion observe one serial history.
-    with _locks.subscription_provider_mutation_lock(organization):
-        with org_scope(organization):
-            _locks._lock_organization_for_billing_mutation(organization)
-            reservation = _resolve_purchase_checkout_for_session(
-                checkout_session_payload=checkout_session_payload,
-                organization=organization,
-                for_update=True,
-            )
-            if reservation is not None:
-                if reservation.status == PurchaseCheckout.Status.EXPIRED:
-                    raise BillingWebhookError(
-                        "Completed Stripe checkout conflicts with an expired local "
-                        "purchase reservation."
-                    )
-                if reservation.plan_id != plan.pk:
-                    raise BillingWebhookError(
-                        "Completed Stripe checkout plan conflicts with its local "
-                        "purchase reservation."
-                    )
-                if reservation.user_id is not None and reservation.user_id != getattr(
-                    user, "pk", None
-                ):
-                    raise BillingWebhookError(
-                        "Completed Stripe checkout user conflicts with its local "
-                        "purchase reservation."
-                    )
-            transaction_row = credit_user(
-                user,
-                organization=organization,
-                amount=credited_amount,
-                transaction_type=CreditTransaction.TransactionType.PURCHASE,
-                description=f"{plan.name} credits from Stripe checkout session {checkout_session_id}",
-                stripe_event_id=str(event_payload.get("id") or "").strip(),
-                stripe_object_id=checkout_session_id,
-                stripe_reference_data=reference_data,
-            )
-            if reservation is not None:
-                reservation.stripe_checkout_session_id = checkout_session_id
-                reservation.status = PurchaseCheckout.Status.COMPLETED
-                reservation.checkout_expires_at = (
-                    _extract_checkout_session_expires_at(checkout_session_payload)
-                    or reservation.checkout_expires_at
-                )
-                reservation.save(
-                    update_fields=[
-                        "stripe_checkout_session_id",
-                        "status",
-                        "checkout_expires_at",
-                    ]
-                )
-            else:
-                PurchaseCheckout.all_objects.filter(
-                    organization=organization,
-                    stripe_checkout_session_id=checkout_session_id,
-                    status=PurchaseCheckout.Status.OPEN,
-                ).update(status=PurchaseCheckout.Status.COMPLETED)
-            return transaction_row
+    return _apply_completed_purchase_checkout(
+        checkout_session_payload=checkout_session_payload,
+        organization=organization,
+        plan=plan,
+        user=user,
+        credited_amount=credited_amount,
+        checkout_session_id=checkout_session_id,
+        reference_data=reference_data,
+        event_payload=event_payload,
+    )
 
 
 def _record_subscription_checkout_completion(

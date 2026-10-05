@@ -87,6 +87,32 @@ import quickscale_modules_billing._locks as _locks
 import quickscale_modules_billing._stripe_client as _stripe_client
 
 
+from quickscale_modules_billing._subscription_checkout_steps import (
+    _create_and_persist_checkout_session as _create_and_persist_checkout_session,
+)
+from quickscale_modules_billing._subscription_checkout_steps import (
+    _expire_provider_expired_reservation as _expire_provider_expired_reservation,
+)
+from quickscale_modules_billing._subscription_checkout_steps import (
+    _find_checkout_reservation as _find_checkout_reservation,
+)
+from quickscale_modules_billing._subscription_checkout_steps import (
+    _initial_subscription_checkout_reservation as _initial_subscription_checkout_reservation,
+)
+from quickscale_modules_billing._subscription_checkout_steps import (
+    _persist_completed_checkout_reservation as _persist_completed_checkout_reservation,
+)
+from quickscale_modules_billing._subscription_checkout_steps import (
+    _replace_stale_checkout_reservation as _replace_stale_checkout_reservation,
+)
+from quickscale_modules_billing._subscription_checkout_steps import (
+    _reservation_customer_id as _reservation_customer_id,
+)
+from quickscale_modules_billing._subscription_checkout_steps import (
+    _resolve_checkout_reconciliation_client as _resolve_checkout_reconciliation_client,
+)
+
+
 def create_subscription_checkout_session(
     user: Any,
     *,
@@ -151,35 +177,20 @@ def _create_subscription_checkout_session(
         settings_snapshot=snapshot,
     )
 
-    with transaction.atomic():
-        _locks._lock_organization_for_billing_mutation(organization)
-        reservation, _ = _prepare_subscription_checkout_reservation(
-            user=user,
-            organization=organization,
-            plan=plan,
-            stripe_customer_id=reconciled_customer_id or None,
-        )
-        if reservation.user_id != getattr(user, "pk", None):
-            raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR)
-
-    customer_id = str(reservation.stripe_customer_id or "").strip()
-    if not customer_id:
-        customer_id, _ = get_or_create_stripe_customer(
-            user,
-            organization=organization,
-            stripe_client=resolved_client,
-            settings_snapshot=snapshot,
-        )
-        with transaction.atomic():
-            _locks._lock_organization_for_billing_mutation(organization)
-            reservation = Subscription.all_objects.select_for_update().get(
-                pk=reservation.pk
-            )
-            if not _subscription_reservation_can_be_reused(reservation, plan=plan):
-                raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR)
-            reservation.stripe_customer_id = customer_id
-            reservation.save(update_fields=["stripe_customer_id"])
-
+    reservation = _initial_subscription_checkout_reservation(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_customer_id=reconciled_customer_id or None,
+    )
+    reservation, customer_id = _reservation_customer_id(
+        reservation,
+        user=user,
+        organization=organization,
+        plan=plan,
+        resolved_client=resolved_client,
+        snapshot=snapshot,
+    )
     live_checkout_url = _reuse_live_subscription_checkout_url(
         reservation=reservation,
         stripe_client=resolved_client,
@@ -187,83 +198,29 @@ def _create_subscription_checkout_session(
     if live_checkout_url:
         return live_checkout_url
 
-    if str(reservation.stripe_checkout_session_id or "").strip():
-        with transaction.atomic():
-            _locks._lock_organization_for_billing_mutation(organization)
-            current_reservation = Subscription.all_objects.select_for_update().get(
-                pk=reservation.pk
-            )
-            if _subscription_reservation_can_be_reused(current_reservation, plan=plan):
-                _expire_subscription_reservation(current_reservation)
-                reservation, _ = _create_subscription_reservation(
-                    user=user,
-                    organization=organization,
-                    plan=plan,
-                    stripe_customer_id=customer_id or None,
-                )
-        customer_id = str(reservation.stripe_customer_id or "").strip()
-        live_checkout_url = _reuse_live_subscription_checkout_url(
-            reservation=reservation,
-            stripe_client=resolved_client,
-        )
-        if live_checkout_url:
-            return live_checkout_url
-
-    session_metadata = _build_checkout_session_metadata(
-        user,
-        plan,
+    reservation, live_checkout_url = _replace_stale_checkout_reservation(
+        reservation,
+        user=user,
         organization=organization,
-    )
-    reservation_reference = _subscription_checkout_reference(reservation)
-    session_metadata[_SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY] = (
-        reservation_reference
-    )
-    # A blank-session reservation can survive customer or Checkout provider
-    # failure. Reusing its reference and idempotency key makes a retry safe even
-    # when the first provider response was lost.
-    checkout_session = resolved_client.create_subscription_checkout_session(
+        plan=plan,
         customer_id=customer_id,
-        price_id=plan.stripe_price_id,
+        resolved_client=resolved_client,
+    )
+    # A replacement reservation carries its own provider customer id.
+    customer_id = str(reservation.stripe_customer_id or "").strip()
+    if live_checkout_url:
+        return live_checkout_url
+
+    return _create_and_persist_checkout_session(
+        user=user,
+        plan=plan,
+        organization=organization,
+        reservation=reservation,
+        customer_id=customer_id,
+        resolved_client=resolved_client,
         success_url=normalized_success_url,
         cancel_url=normalized_cancel_url,
-        session_metadata=session_metadata,
-        subscription_metadata=session_metadata,
-        client_reference_id=_user_reference(user),
-        idempotency_key=_build_subscription_checkout_create_idempotency_key(
-            reservation_reference
-        ),
     )
-    checkout_session_id = str(checkout_session.get("id") or "").strip()
-    checkout_url = str(checkout_session.get("url") or "").strip()
-    if not checkout_session_id:
-        raise BillingError(
-            "Stripe subscription checkout session creation did not return an id."
-        )
-
-    with transaction.atomic():
-        _locks._lock_organization_for_billing_mutation(organization)
-        reservation = Subscription.all_objects.select_for_update().get(
-            pk=reservation.pk
-        )
-        if not _subscription_reservation_can_be_reused(reservation, plan=plan):
-            raise BillingValidationError(_CURRENT_RECURRING_SUBSCRIPTION_ERROR)
-        reservation.stripe_customer_id = customer_id
-        reservation.stripe_checkout_session_id = checkout_session_id
-        reservation.checkout_expires_at = _extract_checkout_session_expires_at(
-            checkout_session
-        )
-        reservation.save(
-            update_fields=[
-                "stripe_customer_id",
-                "stripe_checkout_session_id",
-                "checkout_expires_at",
-            ]
-        )
-    if not checkout_url:
-        raise BillingError(
-            "Stripe subscription checkout session creation did not return a hosted URL."
-        )
-    return checkout_url
 
 
 @_translate_stripe_errors("Stripe subscription checkout reconciliation failed.")
@@ -338,30 +295,12 @@ def _reconcile_subscription_checkout(
     if organization is None:
         return SubscriptionCheckoutReconciliation()
 
-    with org_scope(organization):
-        reservation_queryset = Subscription.all_objects.filter(
-            organization=organization,
-            status=Subscription.Status.INCOMPLETE,
-        )
-        if elapsed_only:
-            reservation_queryset = reservation_queryset.filter(
-                checkout_expires_at__lte=timezone.now()
-            )
-        reservation = (
-            reservation_queryset.filter(
-                Q(stripe_subscription_id__isnull=True) | Q(stripe_subscription_id="")
-            )
-            .exclude(stripe_checkout_session_id__isnull=True)
-            .exclude(stripe_checkout_session_id="")
-            .first()
-        )
+    reservation = _find_checkout_reservation(organization, elapsed_only=elapsed_only)
     if reservation is None:
         return SubscriptionCheckoutReconciliation()
 
-    snapshot = settings_snapshot or BillingSettingsSnapshot.from_settings()
-    _ensure_billing_enabled(snapshot)
-    resolved_client = stripe_client or _stripe_client.get_stripe_client(
-        settings_snapshot=snapshot
+    resolved_client = _resolve_checkout_reconciliation_client(
+        stripe_client, settings_snapshot
     )
     checkout_session_id = str(reservation.stripe_checkout_session_id or "").strip()
     checkout_session = _normalize_mapping(
@@ -371,27 +310,12 @@ def _reconcile_subscription_checkout(
     )
     provider_status = str(checkout_session.get("status") or "").strip().lower()
     if provider_status == "expired":
-        persisted_customer_id = str(reservation.stripe_customer_id or "").strip()
-        if persist:
-            with org_scope(organization):
-                _locks._lock_organization_for_billing_mutation(organization)
-                current_reservation = (
-                    Subscription.all_objects.select_for_update()
-                    .filter(pk=reservation.pk)
-                    .first()
-                )
-                if (
-                    current_reservation is not None
-                    and current_reservation.status == Subscription.Status.INCOMPLETE
-                    and not str(
-                        current_reservation.stripe_subscription_id or ""
-                    ).strip()
-                    and str(
-                        current_reservation.stripe_checkout_session_id or ""
-                    ).strip()
-                    == checkout_session_id
-                ):
-                    _expire_subscription_reservation(current_reservation)
+        persisted_customer_id = _expire_provider_expired_reservation(
+            organization,
+            reservation,
+            checkout_session_id=checkout_session_id,
+            persist=persist,
+        )
         return SubscriptionCheckoutReconciliation(
             provider_status=provider_status,
             checkout_session_id=checkout_session_id,
@@ -405,40 +329,14 @@ def _reconcile_subscription_checkout(
             organization=organization,
             checkout_session_payload=checkout_session,
         )
-        if persist:
-            with org_scope(organization):
-                locked_organization = _locks._lock_organization_for_billing_mutation(
-                    organization
-                )
-                current_reservation = (
-                    Subscription.all_objects.select_for_update()
-                    .filter(pk=reservation.pk)
-                    .first()
-                )
-                if (
-                    current_reservation is not None
-                    and current_reservation.status == Subscription.Status.INCOMPLETE
-                    and not str(
-                        current_reservation.stripe_subscription_id or ""
-                    ).strip()
-                    and str(
-                        current_reservation.stripe_checkout_session_id or ""
-                    ).strip()
-                    == checkout_session_id
-                ):
-                    _validate_completed_checkout_provider_identity(
-                        reservation=current_reservation,
-                        organization=locked_organization,
-                        checkout_session_payload=checkout_session,
-                    )
-                    current_reservation.checkout_expires_at = None
-                    update_fields = ["checkout_expires_at"]
-                    if provider_subscription_id:
-                        current_reservation.stripe_subscription_id = (
-                            provider_subscription_id
-                        )
-                        update_fields.append("stripe_subscription_id")
-                    current_reservation.save(update_fields=update_fields)
+        _persist_completed_checkout_reservation(
+            organization,
+            reservation,
+            checkout_session_payload=checkout_session,
+            checkout_session_id=checkout_session_id,
+            provider_subscription_id=provider_subscription_id,
+            persist=persist,
+        )
         provider_label = provider_subscription_id or checkout_session_id
         raise BillingValidationError(
             "Stripe checkout completed and may have created a live subscription "
