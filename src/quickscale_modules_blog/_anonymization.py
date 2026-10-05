@@ -10,7 +10,7 @@ rolled-back account deletion leaves the file in storage, and the profile row's
 field is cleared in the same transaction as the rest of the scrub.  The
 callback cannot raise once the transaction has committed — the account
 deletion is already durable, so a storage error is reported for manual cleanup
-instead of surfacing as a failed removal (which the account-deletion boundary
+instead of surfacing as a failed removal (which the anonymize boundary
 would otherwise compensate as if its transaction had rolled back).
 """
 
@@ -58,7 +58,7 @@ def _delete_stored_file(storage: Any, name: str) -> None:
 
     Runs on commit, after the deletion transaction is durable; an error must
     not escape because the caller cannot roll the removal back, and the
-    account-deletion boundary would read the escaped error as a failed
+    anonymize boundary would read the escaped error as a failed
     deletion and compensate provider state that was already cancelled.
     """
     try:
