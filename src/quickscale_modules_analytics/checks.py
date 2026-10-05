@@ -51,7 +51,7 @@ _PROJECTED_SETTINGS = (
 
 
 def check_analytics_settings(
-    app_configs: object = None,
+    _app_configs: object = None,
     **kwargs: object,
 ) -> list[CheckMessage]:
     """Fail startup on an invalid resolved analytics runtime.
