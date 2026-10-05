@@ -40,6 +40,17 @@ def _message(**overrides: Any) -> NotificationMessage:
     return NotificationMessage.objects.create(**fields)
 
 
+def _rendered_snapshot(message: NotificationMessage) -> tuple[Any, ...]:
+    """Return the rendered fields used for byte-identical comparisons."""
+    return (
+        message.subject,
+        message.rendered_text,
+        message.rendered_html,
+        message.context_json,
+        message.last_error,
+    )
+
+
 @pytest.mark.django_db
 def test_anonymize_scrubs_a_sole_recipient_message_delivery_and_event() -> None:
     """A message sent only to the person is redacted with its tracking rows."""
@@ -235,6 +246,7 @@ def test_anonymize_redacts_an_invitation_message_sent_to_someone_else(
         "organization_name": "Acme Labs",
         "invitee_email": "invitee@example.com",
         "inviter_name": "Helios Admin",
+        "actor_user_id": str(inviter.pk),
         "role_display": "Admin",
         "accept_url": (
             "https://example.com/orgs/invitations/"
@@ -393,7 +405,11 @@ def test_anonymize_redacts_a_username_only_inviters_message() -> None:
         subject="You're invited to join Acme Labs",
         rendered_text="helios invited invitee@example.com to join Acme Labs as Admin.",
         rendered_html="<p>helios invited invitee@example.com to join Acme Labs.</p>",
-        context_json={"inviter_name": "helios", "invitee_email": "invitee@example.com"},
+        context_json={
+            "inviter_name": "helios",
+            "invitee_email": "invitee@example.com",
+            "actor_user_id": str(inviter.pk),
+        },
         last_error="",
     )
     NotificationDelivery.objects.create(
@@ -453,6 +469,9 @@ def test_anonymize_preserves_other_addresses_when_redacting_names() -> None:
             "body": "Ann and helios: ann.smith@example.com / helios@example.net"
         },
         last_error="",
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="ann@example.com"
     )
     NotificationDelivery.objects.create(
         message=message, recipient_email="joanne@example.com"
@@ -515,6 +534,9 @@ def test_anonymize_preserves_an_escaped_unrelated_address_when_redacting_names()
         rendered_html=rendered.html_body,
         context_json={"body": f"Ann wrote to {other_address}"},
         last_error="",
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="ann@example.com"
     )
     NotificationDelivery.objects.create(
         message=message, recipient_email="joanne@example.com"
@@ -710,6 +732,139 @@ def test_anonymize_keeps_an_empty_render_field_empty() -> None:
     assert message.rendered_html == ""
     assert message.last_error == ""
     assert message.subject == "[redacted]"
+
+
+@pytest.mark.django_db
+def test_anonymize_leaves_an_unrelated_message_with_a_common_word_untouched() -> None:
+    """A name that is an ordinary word cannot select an unrelated message."""
+    user = _user("alpha@example.com")
+    message = _message(
+        subject="Ann reviewed the annual planning announcement",
+        rendered_text="Ann reviewed the annual planning announcement before publishing.",
+        rendered_html="<p>Ann reviewed the annual planning announcement.</p>",
+        context_json={
+            "headline": "Ann reviewed Annual planning",
+            "body": "Ann shared the annual planning announcement",
+        },
+        last_error="",
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="beta@example.com"
+    )
+    before = _rendered_snapshot(message)
+
+    anonymize_account(user, "alpha@example.com", "Ann", user.get_username())
+
+    message.refresh_from_db()
+    assert _rendered_snapshot(message) == before
+
+
+@pytest.mark.django_db
+def test_anonymize_leaves_a_substring_address_context_untouched() -> None:
+    """An address merely containing the person's address is not theirs."""
+    user = _user("ann@example.com")
+    message = _message(
+        subject="Ann mentioned Joann",
+        rendered_text="Ann introduced Joann to the team.",
+        rendered_html="<p>Ann introduced Joann to the team.</p>",
+        context_json={"contact": "joann@example.com", "body": "Ann introduced Joann"},
+        last_error="",
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="beta@example.com"
+    )
+    before = _rendered_snapshot(message)
+
+    anonymize_account(user, "ann@example.com", "Ann", user.get_username())
+
+    message.refresh_from_db()
+    assert _rendered_snapshot(message) == before
+
+
+@pytest.mark.django_db
+def test_anonymize_redacts_a_pre_key_message_that_names_the_person_by_address() -> None:
+    """The address fallback covers messages sent before the actor key existed."""
+    user = _user("helios@example.com")
+    message = _message(
+        subject="Helios Admin sent an update",
+        rendered_text=(
+            "Helios Admin updated the workspace. "
+            "Contact helios@example.com for details."
+        ),
+        rendered_html=(
+            "<p>Helios Admin updated the workspace. "
+            "Contact helios@example.com for details.</p>"
+        ),
+        context_json={
+            "author_name": "Helios Admin",
+            "author_email": "helios@example.com",
+            "body": "shared update",
+        },
+        last_error="",
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="beta@example.com"
+    )
+
+    anonymize_account(user, "helios@example.com", "Helios Admin", user.get_username())
+
+    message.refresh_from_db()
+    deleted_address = f"deleted-{user.pk}@invalid"
+    assert "Helios Admin" not in message.rendered_text
+    assert "Helios Admin" not in message.rendered_html
+    assert message.context_json["author_name"] == "[redacted]"
+    assert message.context_json["author_email"] == deleted_address
+    assert message.context_json["body"] == "shared update"
+
+
+@pytest.mark.django_db
+def test_anonymize_leaves_a_pre_actor_key_invitation_without_an_address_link() -> None:
+    """Recorded limit: a pre-key invitation stored no link but the invitee.
+
+    Invitation messages sent before ``actor_user_id`` was stamped carry the
+    inviter's display name, the invitee's delivery, and no inviter address or
+    pk, so no selector links them to the inviter; they stay as stored.
+    """
+    inviter = get_user_model().objects.create_user(
+        username="pre-key-inviter",
+        email="pre-key-inviter@example.com",
+        password="PreKeyPass123!",
+        first_name="Pre-Key",
+        last_name="Inviter",
+    )
+    message = _message(
+        subject="You're invited to join Acme Labs",
+        rendered_text=(
+            "Pre-Key Inviter invited invitee@example.com to join Acme Labs as Admin."
+        ),
+        rendered_html=(
+            "<p>Pre-Key Inviter invited invitee@example.com to join Acme Labs "
+            "as Admin.</p>"
+        ),
+        context_json={
+            "organization_name": "Acme Labs",
+            "invitee_email": "invitee@example.com",
+            "inviter_name": "Pre-Key Inviter",
+            "role_display": "Admin",
+            "accept_url": "https://example.com/accept/token",
+            "expires_at": "2026-05-26T12:00:00+00:00",
+        },
+        last_error="",
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="invitee@example.com"
+    )
+    before = _rendered_snapshot(message)
+
+    anonymize_account(
+        inviter,
+        "pre-key-inviter@example.com",
+        "Pre-Key Inviter",
+        inviter.get_username(),
+    )
+
+    message.refresh_from_db()
+    assert _rendered_snapshot(message) == before
 
 
 def test_app_config_declares_the_anonymize_handlers_capability() -> None:
