@@ -30,12 +30,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
 | SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | — | Deferred |
+| SA242 | Fail `make quality` on critical complexity and very large files | post-v88 | 2 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: —
+Track 2: SA242
 Track 3: SA216
      critical path: SA191 → SA153
 ```
@@ -64,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA214 | yes | yes | yes | **yes** | no |
-| 2 | — | yes | yes | yes | **yes** | no |
+| 2 | SA242 | yes | yes | yes | **yes** | no |
 | 3 | SA216 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -437,6 +438,30 @@ suite, and merge only the reviewed delivery through the serialized queue.
     detach pass, which still nulls nullable provenance until (c) removes it.
   - [ ] (c) Remove the account-deletion lookup and turn `ACCOUNT_DELETE` into the anonymize
     boundary; decisions, organizations.md, and auth's README.
+
+- [ ] **SA242 — Fail `make quality` on critical complexity and very large files.**
+
+  **Context:** `scripts/check_quality.sh` (run by `make quality`) has two tiers per metric:
+  cyclomatic complexity warns at `RADON_HIGH_COMPLEXITY_CC=11` and calls CC >=
+  `RADON_ERROR_COMPLEXITY_CC=21` critical; file length warns at `LARGE_FILE_WARNING_LINES=500`
+  and calls >= `LARGE_FILE_ERROR_LINES=800` critical. The upper tier only prints. Complexity
+  prints `print_error` but the exit code ignores it, and large files print a single
+  `print_warning` for both tiers. The script exits non-zero only on baseline regressions, so a
+  new CC 21+ function or 800+ line file passes whenever the baseline absorbs it. The last run
+  reported 27 functions at CC >= 21 and 1 file at >= 800 lines
+  (`quickscale_devtools/.../beta_migration/project_apps.py`, 1066 lines).
+
+  **Acceptance:** any function at CC >= 21 or Python file at >= 800 lines in the scanned
+  modules is reported as an error naming the function or file and its value, and `make quality`
+  exits non-zero for it independent of the baseline. The lower tier (CC 11–20, 500–799 lines)
+  stays a warning. Every existing violation is fixed: the 27 functions are refactored below
+  CC 21 and `project_apps.py` is split below 800 lines, with no allowlist, so the gate is green
+  on landing. The
+  summary and the Markdown report show the error tier separately from the warning tier. A test
+  pins both thresholds and the exit code on a fixture over each limit.
+
+  Out of scope: changing the threshold values; the dead-code, maintainability, and duplication
+  lanes.
 
 ## Deferred constraints and references
 
