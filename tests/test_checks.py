@@ -19,6 +19,7 @@ Covers every code path in ``check_personal_data_declarations()``:
 
 * W006 — exception during declaration discovery
 * W006 — one message per undeclared candidate
+* W006 — a declared non-keep-link treatment whose app declares no handler
 * Control — a project-app ``EmailField`` on a user-referencing model fails the
   real walk, and a collected declaration silences it
 
