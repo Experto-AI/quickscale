@@ -53,7 +53,7 @@ class QuickscaleAuthConfig(AppConfig):
         """Scrub the account row as auth's declared ``ANONYMIZE`` executor."""
         from quickscale_modules_auth import _anonymization
 
-        _anonymization.scrub_account(
+        _anonymization.anonymize_account(
             user, original_email, original_name, original_username
         )
 
