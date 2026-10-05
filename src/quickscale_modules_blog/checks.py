@@ -55,7 +55,7 @@ RETIRED_SETTINGS: Mapping[str, str] = {
 
 
 def check_media_url(
-    app_configs: object = None,
+    _app_configs: object = None,
     **kwargs: object,
 ) -> list[CheckMessage]:
     """Fail startup when ``MEDIA_URL`` is not explicitly configured."""
