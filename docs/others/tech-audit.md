@@ -1,76 +1,80 @@
 # QuickScale — Deep Technical Audit (defect sweep)
 
-Audited: 8e4122f2 (v89) · 2026-10-05 · working tree dirty (uncommitted `docs/others/arch-audit.md` only; not read as code) · repository public (github.com/Experto-AI/quickscale) · prompt: deep-technical-audit v6
+Audited: e2623cb8 (v89) · 2026-10-05 · working tree dirty (uncommitted `docs/others/arch-audit.md` only; not read as code) · repository public (github.com/Experto-AI/quickscale) · prompt: deep-technical-audit v6
 
-> **Re-run of:** the 2026-10-03 pass at `c10b529e` · **Delta swept:** `c10b529e..8e4122f2`
-> (55 non-merge commits; 352 non-doc files, about +34k/−20k lines). The full diff did not fit the
-> budget. It was read in §2f order; sampling is stated below.
+> **Re-run of:** the 2026-10-05 pass at `8e4122f2` · **Delta swept:** `8e4122f2..e2623cb8`
+> (7 non-merge commits, 4 merges). The production diff was read in full. The SA247 script split was
+> verified by inventory, not read line by line.
 
 ---
 
 ## 1. Orientation summary
 
 Archetype, stack, deployment realities, actors, crown jewels, configuration axes, tooling
-baseline, and oracle items 1–13 are **unchanged from the 2026-10-03 pass** (`git show
-c10b529e:docs/others/tech-audit.md`, §1). In brief: a Python 3.14 / Django project generator
-and module workspace (Poetry monorepo). It has three realities: **R1** generator/CLI, **R2** the
-generated internet-facing Django app (multi-tenant in `QUICKSCALE_ORGS_MODE=saas`; in solo mode every
-user owns a personal org), and **R3** the OIDC release pipeline. The repository is public. Severity
-concentrates in R2.
+baseline, data sensitivity, and oracle items 1–14 are **unchanged from the 2026-10-05 pass at
+`8e4122f2`** (`git show 8e4122f2:docs/others/tech-audit.md`, §1). In brief: a Python 3.14 / Django 6.0
+project generator and module workspace (a Poetry monorepo). It has three realities: **R1**
+generator/CLI, **R2** the generated internet-facing Django app (multi-tenant in saas mode), and
+**R3** the OIDC release pipeline. The repository is public.
 
 **What changed in this delta.**
 
-- **SA216(a–c)** replaced account *deletion* with account **anonymization**. The account row is
-  disabled and scrubbed. Every app that declares `anonymize_handlers` runs its own
-  `anonymize_account` executor (auth, orgs, billing, blog, notifications) inside **one transaction**,
-  while the org row locks and provider advisory locks are held. This is new code on a crown-jewel
-  path (PII, cross-tenant data), and it was read in full.
-- **SA214(a–f)** — devtools beta-migration / design-port oracle (R1, developer machine).
-- **SA235/SA241** — manifest-declared module SPA routes (`SPA_MODULE_URLPATTERNS`).
-- **SA236** — private module settings snapshots and guarded optional senders.
-- **SA240** — `quickscale_orgs_create_site_org` management command.
-- **SA238/SA234/SA242/SA243/SA231/SA233** — facade trims, a split-facade import gate (CI and
-  publish), and quality-gate thresholds. These are process changes.
+- **SA244** (`b179990b`, merged in `322e1ff5`) closed three prior findings in the anonymization
+  path:
+  - Session removal now walks only unexpired rows.
+  - Billing payloads are pre-filtered in SQL with `payload__icontains=email`.
+  - Notifications select only linked messages: by delivery, by `context_json.actor_user_id`, or by
+    an `icontains` pre-filter verified as a complete address.
+- **SA246** (`2f1d0a4e`, `db0fcc55`) adds per-module `personal_data_declarations` (records in
+  `quickscale_core.runtime.conventions`). It also adds the warning-only system check
+  `quickscale_orgs.W006` over project models (`orgs/_personal_data.py`, `checks.py:345`).
+  This is declarative, and no runtime path consumes it except the check.
+- **SA247** (`fe5d808a`, `7969c59b`) splits `scripts/check_module_conventions.py` and its tests into
+  packages. This is R1 developer/CI tooling.
+- `467ced81` (docs plus a one-line interpreter-guard scope), and `d08f513c` (roadmap).
 
-**Oracle addition.** 14. *Anonymization removes the person's identity and nothing else* (the
-SA216 inventory, the `_anonymization.py` docstrings). It also preserves "another customer's event is
-never touched" (billing) and "a short name cannot rewrite an unrelated word" (notifications).
+**Delta classification.** Every behavioral commit carries an SA ticket. `d08f513c` and `467ced81`
+are housekeeping. **No unreviewed-behavioral commit.** The merge commits were checked with
+`git log --merges`. They carry no hunks beyond their parents (they integrate the worktree tracks).
 
-**Data sensitivity.** Unchanged. This delta adds personal-data scrubbing over notification
-messages, Stripe webhook payloads, invitations, author profiles, and sessions.
-
-**Hotspots.** The delta replaces churn ranking. Fix-keyword commits in the delta are concentrated
-in SA214(d) design-port review fixes (R1 only).
+**Hotspots.** The delta replaces churn ranking. It contains no fix-keyword commits outside the SA244
+closures.
 
 ### Coverage statement
 
-**Delta classification.** Every behavioral commit carries an SA ticket. Housekeeping commits are
-the roadmap and audit rebalance commits. **No unreviewed-behavioral commit** was found. Merge
-`21c73ea0` was not diffed with `--cc`.
+*Read in full:* the SA244 diff (auth/billing/notifications `_anonymization.py`), the orgs
+invitation sender (`views.py:150–212`) and the `OrgApiInviteView`/`InviteView` mixin use, the SA246
+diff of `checks.py`, `_personal_data.py`, and `runtime/conventions.py`, and the auth/billing
+declaration blocks.
 
-*Read in full:* auth `views.py` removal entry (`form_valid` through `_anonymize_account`),
-`_account_deletion_flow.py`, `_anonymization.py`; the `_anonymization.py` executors of orgs,
-billing, blog, and notifications; the notifications send path (`services.py:86–134`,
-`_delivery.py:83–98`); `quickscale_orgs_create_site_org`; the SA235 `urls.py.j2` /
-`urls_modules.py.j2` diff; the `.github/workflows` diff (third-party actions remain SHA-pinned).
+*Sampled:* the module `apps.py` declaration blocks (crm, forms, blog, listings, backups,
+notifications).
 
-*Sampled:* the notifications anonymization tests (they cover escaped names and shared messages;
-none covers a name that is a common word).
+*Verified by inventory (SA247):* the old and new checker define the same 188 top-level functions.
+The old and new test suites hold 227 tests each. The new checker passes all 40 covered rules at
+HEAD.
 
-*Skipped:* SA214 devtools (R1 developer tooling), the CLI/DR split moves, the quality-script
-changes, the React sources, and migrations.
+*Skipped:* everything outside the delta. Prior-pass coverage stands for it.
 
-*Audit tools:* git only. *Empirical checks (§1e):* the regex from notifications
-`_redact_names` was copied into scratch and run on synthetic text. It **confirmed** that a
-display name equal to a common word redacts that word in unrelated text. No project code was
-executed.
+*Audit tools:* git; Django 6.0.8 (installed, read-only).
 
-*Category activation:* active: I, II, III, IV, VI, IX, X-generator, X-multi-tenant · inert: V (no
-hot-path delta), VII (workflow diff is gates only), X-frontend (React not read) · produced: I, IV.
+*Empirical checks (§1e):*
 
-**Residual risk.** No PostgreSQL was exercised, so the full-scan timings of
-`anonymize-full-table-scans-under-locks` were inferred, not measured. Devtools, the DR/CLI moves,
-and React were not read this pass. Silence there means *not looked at*.
+1. In scratch space, Django compiled the SQL for `JSONField(...).filter(payload__icontains=…)` on the
+   PostgreSQL backend with no connection. Result: `UPPER("payload"::text) LIKE UPPER('%…%')`, a
+   raw substring with no JSON encoding of the right-hand side. **Refuted** the candidate that the
+   SA244 pre-filter drops matches (see §8).
+2. The pre-split checker (`git show 8e4122f2:…`) ran against HEAD from the repository root. Its 7
+   reported violations come from it scanning the new `scripts/module_conventions/` files, not from a
+   missing rule.
+
+*Category activation:* active: I, II, III, VI, VIII, IX, X-generator, X-multi-tenant · inert: IV,
+V (no I/O or hot-path delta beyond SA244's narrowing), VII (no dependency or workflow delta) ·
+produced: none new.
+
+**Residual risk.** No PostgreSQL instance was available (`pg_isready`: no response), so the SA244
+queries were compiled, not executed. `UPPER` under a non-UTF-8 or `C` collation folds only ASCII
+(see the watchlist). Code outside the delta was not re-read this pass.
 
 ---
 
@@ -78,8 +82,12 @@ and React were not read this pass. Silence there means *not looked at*.
 
 ```yaml
 schema: tech-audit/v6
-audited: 8e4122f216824edb62134441a00f2413b3854653
+audited: e2623cb8bb727d177c337d1431db40e134dcfaf0
 items:
+  - {id: billing-anonymize-name-substring, status: open, severity: S4, category: I,
+     title: "Billing payload scrub replaces the name as a bare substring, including in dict keys", effort: Trivial,
+     confidence: High, reality: generated-app,
+     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_anonymization.py], first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: dr-restore-vintage-exact-match, status: watchlist, category: I, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/recovery.py], first_seen: 2026-09-24, last_verified: 2026-10-05}
   - {id: orgs-provider-id-check-blocks-migrate, status: watchlist, category: VI, reality: generated-app,
@@ -88,26 +96,43 @@ items:
      anchors: [quickscale_modules/crm/src/quickscale_modules_crm/receivers.py], first_seen: 2026-10-03, last_verified: 2026-10-05}
   - {id: orgs-disabled-in-saas-wedges-site, status: watchlist, category: VI, reality: generated-app,
      anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py], first_seen: 2026-10-03, last_verified: 2026-10-05}
+  - {id: anonymize-prefilter-ascii-only-casefold, status: watchlist, category: I, reality: generated-app,
+     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_anonymization.py,
+               quickscale_modules/notifications/src/quickscale_modules_notifications/_anonymization.py],
+     first_seen: 2026-10-05, last_verified: 2026-10-05}
 ```
 
 ---
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 0 · total 0 open.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 1 · total 1 open.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
+| `billing-anonymize-name-substring` | S4 | I | Name replaced as a bare substring, keys included | Trivial | High | carried |
 
 ---
 
 ## 4. Findings
 
-No open findings; the SA245 closure is recorded in §13.
+### S4
+
+- `billing-anonymize-name-substring` · `billing/_anonymization.py:131–152` · within the person's own
+  webhook payloads, `_redact_string` replaces the name as a bare case-insensitive substring
+  (`re.sub(re.escape(name), …)`, `:151`). `_redact_identity` applies it to dict **keys** too
+  (`:135`). A short name such as "Al" or "Id" mangles field names like `total` or `customer_id`.
+  Since SA244, only payloads that contain the person's address are loaded, so the damage stays
+  inside their own events. Fix: use the notifications word-boundary matcher, and leave keys alone.
+  This is carried by SA245, which gates the 0.89.0 release.
 
 ---
 
 ## 5. Safeguard matrix
+
+Carried from the prior pass. This delta adds no entry point: SA246 is a system check, and SA247 is
+developer tooling. One cell changed: anonymize executors — **Timeout/bounds** now reads "SQL
+pre-filtered selections (SA244)".
 
 Prior rows are carried. Rows added this pass are marked ★.
 
@@ -136,127 +161,116 @@ Prior rows are carried. Rows added this pass are marked ★.
 
 Every empty cell carries a finding ID or a stated reason.
 
+
 ---
 
 ## 6. Fix order and batching
 
-1. **Batch A (one PR):** `notifications-anonymize-rewrites-all-messages`, the notifications part
-   of `anonymize-full-table-scans-under-locks`, and `notifications-account-username-dead`. All
-   three were in the same file, and landed with the auth session filter and the billing SQL
-   pre-filter.
-2. **Batch B:** `billing-anonymize-name-substring` landed with the shared redaction helpers
-   (SA245); no batch remains open.
-
-Batch A landed before the next release, because SA216 has not shipped yet.
+1. **Batch B (open):** `billing-anonymize-name-substring`, carried by SA245 (shared redaction
+   helpers), with the bystander conformance test in §10. It is independent of everything else.
+   Batch A (SA244) landed and was verified.
 
 ---
 
 ## 7. Per-subsystem verdicts
 
-- **auth (SA216)**: clean. The flow, recheck, and scrub were read in full; session removal now
-  filters expired rows. The lock/recheck logic is clean.
-- **notifications**: clean. Anonymization and the send path were read; the executor now selects
-  linked messages only.
-- **billing**: clean. Anonymization was read in full; payloads are pre-filtered in SQL, and the
-  scrub now uses core's word-bounded matcher and leaves payload keys alone.
-- **orgs**: clean. Anonymization, the create-site-org command, and the watchlist re-checks were
-  read.
-- **blog**: clean. Anonymization was read in full, and avatar deletion runs on commit with no raise.
-- **core generator (SA235 URLs)**: clean.
-- **pipeline (R3)**: clean. The workflow diff adds a gate job, and actions stay SHA-pinned.
-- **devtools (SA214), CLI/DR moves, React**: not read (residual risk).
+- **auth**: clean. The SA244 session filter was read (`_anonymization.py:161–176`), and the SA246
+  declarations were read.
+- **billing**: `billing-anonymize-name-substring`. The SA244 SQL pre-filter was read and its SQL
+  compiled.
+- **notifications**: clean. Linked-message selection was read in full, and the actor key and address
+  fallback were verified.
+- **orgs**: clean. The SA246 W006 check and `_personal_data.py` were read, and the invitation context
+  stamps `actor_user_id` as a string on both invite views.
+- **core runtime**: clean. The declaration records are frozen dataclasses with no behavior.
+- **scripts (SA247)**: clean by inventory (see the coverage statement).
+- **Other subsystems**: not re-read this pass. The prior verdicts stand.
 
 ---
 
 ## 8. Clean sweeps and rejected candidates
 
-- **Killed:** surviving sessions resuming the disabled account. `set_unusable_password` changes the
-  session auth hash, and `is_active=False` is refused by the backend. Sessions die even under a
-  cache session engine.
-- **Killed:** a social-login account keeping PII after anonymization. allauth `socialaccount` is
-  not installed anywhere in the auth module or templates.
-- **Killed:** a scrubbed username colliding with another account. `_unused_scrubbed_username`
-  probes for a free suffix.
-- **Killed:** a pending invitation to or from the person stays redeemable. Orgs expires both
-  directions (`orgs/_anonymization.py`).
-- **Killed:** a blog avatar delete failing after commit and triggering a false compensation. The
-  callback swallows and logs the error.
-- **Verified:** a failing anonymize executor rolls the whole removal back. It runs inside
-  `transaction.atomic()` (`views.py:151`), and `coordinator.finish()` fails closed.
-- **Verified:** `create_site_org` refuses reserved slugs and validates field validators before
-  `get_or_create`.
-- Prior clean sweeps (auth-safeguard split sweep, raw-byte webhooks, secret projection, SA226
-  isolation, lock release, build-time skip) are carried. This delta did not change their files'
-  safeguards.
+- **Killed:** the SA244 `payload__icontains=email` / `context_json__icontains=email` pre-filter
+  missing real matches because Django JSON-encodes the right-hand side. Empirical check 1: it compiles
+  to `UPPER(col::text) LIKE UPPER('%email%')`, with LIKE wildcards escaped by Django. jsonb text
+  output keeps an address verbatim.
+- **Killed:** the actor-link lookup missing invitations because of a type mismatch. Both writer
+  (`orgs/views.py:200`) and reader (`notifications/_anonymization.py:146`) use `str(pk)`. Both
+  `InviteView` and `OrgApiInviteView` build the context through `InvitationNotificationMixin`.
+- **Verified:** SA244 closures (`notifications-anonymize-rewrites-all-messages`,
+  `anonymize-full-table-scans-under-locks`, `notifications-account-username-dead`) are present in
+  code. The fix-regression pass (§3.8) found no new failure mode: the candidate set is a superset
+  of the person's deliveries, and wholesale replacement is still limited to unshared delivered
+  messages.
+- **Verified:** the SA247 split dropped no rule (188 functions, 227 tests, 40 rules passing).
+- **Rejected (§0 consequential):** the W006 check's `except Exception` turns any error into one
+  warning. It is warning-only by design, and the message carries the exception text.
+- **Rejected (design, not a defect):** the W006 candidate rules do not flag `CharField` name fields.
+  The inventory is a stated heuristic, with the closed-world test as its backstop. Handed to
+  coherence (§13).
+- Prior clean sweeps are carried.
 
 ---
 
 ## 9. Structural smells
 
-The five items from the prior pass are carried. One is added:
-
-- Billing webhook payloads still select by **matching identity strings**, because they carry no
-  user or org link; notification messages select by delivery, an actor link, or the address.
-  Every executor re-implemented the email-token matcher: billing and notifications carried
-  duplicate `_identity_form`/`_replace_addresses` functions until SA245 moved the matcher to core.
-  The structural decision is whether
-  personal-data rows must carry an owner key (the SA242 inventory could require one).
+The six items from the prior passes are carried (`git show 8e4122f2:docs/others/tech-audit.md`, §9, and `c10b529e`, §9). None was added.
 
 ---
 
 ## 10. Tooling gaps
 
-- The prior gaps (image-layer and broader IaC scanning) are carried.
-- Add an anonymization conformance test that runs every declared `anonymize_account` against a
-  fixture with a **bystander** user whose rows contain the person's name as ordinary text, and
-  asserts the bystander rows are unchanged. It would have caught
-  `billing-anonymize-name-substring`; notifications now has the direct common-word test, and
-  rules 47–48 cover the matcher shapes without that end-to-end run.
+- The prior gaps are carried: image-layer and IaC scanning, and the anonymization **bystander**
+  conformance test (it would have caught `billing-anonymize-name-substring`).
+- The SA244 anonymization tests run on PostgreSQL, but nothing pins the `icontains` pre-filter
+  against a non-ASCII address whose stored case differs. A single test would pin
+  `anonymize-prefilter-ascii-only-casefold`.
 
 ---
 
 ## 11. Watchlist and accepted trade-offs
 
-- `dr-restore-vintage-exact-match` — the recorded clean-break decision. Trigger: a patch release
-  without migration change where operators need an older backup. **Not fired**: the vintage check
-  is still present (`dr_engine/_restore.py`, `recovery.py`).
-- `orgs-provider-id-check-blocks-migrate` — deliberate (`orgs/checks.py:421–447`). Trigger: a
-  contract-vintage step that does not list it. **Not fired**: it is listed in
-  `orgs/module.yml` `manual_adoption_steps`.
-- `crm-stage-seed-lost-on-commit-failure` (new) — since SA229, `seed_crm_default_stages_on_org_created`
-  runs on commit. If the seed raises after the org row committed, the user sees a 500 and the org
-  never gets stages: there is no warm-on-read path, and `_resolve_terminal_stage` returns `None`.
-  This fails §0 consequential/live: it needs a database error in the window right after commit.
-  Trigger: any report of a CRM org without stages, or adding a failing step to seeding.
-- `orgs-disabled-in-saas-wedges-site` (new) — `TenantMiddleware` stays installed and redirects to
-  `/orgs/` even when `QUICKSCALE_ORGS_ENABLED=false` drops the mount. The redirect target 404s.
-  Operator-chosen, immediately visible, and blocked whenever any installed module requires orgs.
-  Trigger: an install path that disables orgs automatically.
-- Carried, triggers not fired: the Stripe SDK timeout is still implicit (`_stripe_client.py` sets
-  none); the sender-free `pre_delete` receiver disables fast-delete; `org_scope`'s `finally` issues
-  SQL after the body; DRF throttle history is non-atomic on DatabaseCache; the credit-dedup O(n)
-  scan (now `_credits.py:163`); `QUICKSCALE_PRIVILEGED_COMMAND` as persistent config; analytics
-  JSON escaping; `BackupError` echoing host/user/db; `set_railway_variable` swallowing exceptions;
-  future-dated notification timestamps within the TTL.
-
----
-
-2026-10-05 evaluation: all four IDs **not fired**. The vintage check is still in `_restore.py`. The
-orgs manual-adoption step is still listed in `module.yml`. The crm seed is still on-commit only
-(`receivers.py:29`). The middleware still redirects to the hard-coded `/orgs/`. The carried
-one-liners were not re-evaluated beyond a spot check (the Stripe client still sets no timeout).
+- `dr-restore-vintage-exact-match` — the recorded clean-break decision. **Not fired**: the delta
+  does not touch `dr_engine/`.
+- `orgs-provider-id-check-blocks-migrate` — deliberate. **Not fired**: it is still listed in
+  `orgs/module.yml:35` `manual_adoption_steps`.
+- `crm-stage-seed-lost-on-commit-failure` — **Not fired**: the delta touched only crm `apps.py`
+  (declarations).
+- `orgs-disabled-in-saas-wedges-site` — **Not fired**: `middleware.py` is unchanged.
+- `anonymize-prefilter-ascii-only-casefold` (new, introduced by SA244) — the SQL pre-filter folds
+  case with PostgreSQL `UPPER`, while the Python verifier uses `str.casefold`. If the database
+  ctype is `C`/non-UTF-8, or the address uses non-ASCII letters whose case differs between
+  `User.email` and the stored payload or context, the pre-filter skips a row that the old full walk
+  would have scrubbed. The person's address would then stay in their own event. This fails §0
+  consequential/live today: it needs an internationalized local part, a case mismatch, and a
+  non-UTF-8 collation, and Stripe and the app store the address as entered. Trigger: a database
+  provisioned with a `C` ctype, or address normalization that changes case.
+- The carried one-liners (Stripe SDK timeout, sender-free `pre_delete`, `org_scope` `finally`
+  SQL, DRF throttle history, credit-dedup scan, `QUICKSCALE_PRIVILEGED_COMMAND`, analytics JSON
+  escaping, `BackupError` echo, `set_railway_variable`, future-dated notification timestamps) are
+  untouched by this delta. They are carried, with no trigger fired.
 
 ---
 
 ## 12. Questions that would change severity
 
-1. Do generated deployments run `manage.py clearsessions` (or does the host purge
-   `django_session`)? Anonymization no longer decodes expired rows, but an expired row that held
-   the person's session data stays until the host purges it.
+1. (carried) Do generated deployments run `manage.py clearsessions`? Since SA244, expired session
+   rows are skipped, so they hold the person's session data until the host purges them.
+2. Is the production database always created with a UTF-8 ctype? A `C` ctype gives
+   `anonymize-prefilter-ascii-only-casefold` a live precondition.
 
 ---
 
-## 13. Reconciliation log
+## 13. Coherence hand-offs
+
+- `personal_data_declarations` blocks are hand-written per module with repeated
+  `PersonalDataField(app_label=self.label, …)` boilerplate, and `CharField` identity fields (display
+  names) are declared in some modules but are not W006 candidates. This is a divergence risk, not a
+  defect today.
+
+---
+
+## 14. Reconciliation log
 
 - 2026-09-23 — **process note:** the 2026-09-23 closeout commits (SA198–SA203) regenerated this
   file without log lines for ten prior IDs. Every prior ID was reinstated below after being
@@ -344,7 +358,14 @@ one-liners were not re-evaluated beyond a spot check (the Stripe client still se
   `expire_date__gt=now()`, billing loads only address-matching payloads, and message selection no
   longer walks the table.
 - 2026-10-05 — `notifications-account-username-dead`: resolved (SA244). The helper is deleted.
-- 2026-10-05 — `billing-anonymize-name-substring`: resolved (SA245, abbc09d0). Billing and
-  notifications scrub through core's `replace_address`/`redact_names`; name matching is
-  word-bounded, payload keys are never rewritten, pinned by billing's
-  `test_anonymize_never_rewrites_payload_keys` and the core redaction table.
+- 2026-10-05 — re-run at `e2623cb8` (delta `8e4122f2..e2623cb8`): the SA244 closures of
+  `notifications-anonymize-rewrites-all-messages`, `anonymize-full-table-scans-under-locks`, and
+  `notifications-account-username-dead` were re-verified in code and passed the fix-regression pass.
+  None regressed. New findings: 0.
+- 2026-10-05 — `billing-anonymize-name-substring`: still-open (S4). Unchanged at
+  `_anonymization.py:151`; the SA244 pre-filter now limits it to the person's own payloads.
+- 2026-10-05 — `dr-restore-vintage-exact-match`: carried (trigger not fired).
+- 2026-10-05 — `orgs-provider-id-check-blocks-migrate`: carried (trigger not fired).
+- 2026-10-05 — `crm-stage-seed-lost-on-commit-failure`: carried (trigger not fired).
+- 2026-10-05 — `orgs-disabled-in-saas-wedges-site`: carried (trigger not fired).
+- 2026-10-05 — `anonymize-prefilter-ascii-only-casefold`: new watchlist (introduced by SA244, `b179990b`).

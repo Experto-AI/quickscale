@@ -1,6 +1,6 @@
 # Structural Autopsy: QuickScale
 
-Audited: `8e4122f2` (`v89`) · 2026-10-05 · working tree clean · prompt: deep-architectural-audit v9
+Audited: `e2623cb8` (`v89`) · 2026-10-05 · working tree clean · prompt: deep-architectural-audit v9
 
 > Live structural findings only. Findings are identified by their **slug**; ordinal numbering is
 > pass-local and is not a stable identifier (see
@@ -37,30 +37,31 @@ data only via `TenantManager` under `FORCE RLS` with a boot guard; clean-break m
 every gate registered and in CI parity; templates under `StrictUndefined`; private split modules
 never import their facade (SA234).
 
-**Commit delta** `c10b529e..8e4122f2` (~50 non-merge commits, merge-heavy):
-- **Closeout:** SA233/SA234 (facade seam), SA235 (manifest UI routes), SA236, SA237, SA238
-  (facade trims), SA239, SA240, SA241, SA242 (two tickets sharing the ID in history: the PII
-  inventory `54dd3073` and the critical-complexity gate `151f23e2`), SA243 (fixed quality
-  thresholds), SA214(a–f) (beta-migration port tooling), SA216(a–c) (anonymize boundary).
-- **Housekeeping:** roadmap rebalance/retirement commits, audit re-run commit.
-- **Unlabeled-behavioral, read at depth:**
-  - `8649849c` — labelled a review round, but it lands the reviewed notification-scrub fix that
-    the SA216(a) slice commit left unstaged: the slice commit shipped without it.
-  - `6e0ac9da` (SA239, labelled "derive upload extensions") rewrote blog's `0001_initial` to
-    reference a **private** field class, `quickscale_modules_blog.models._BlogMediaAssetImageField`
-    (`blog/migrations/0001_initial.py:95`). Once SA204 freezes history, that private name is a
-    persisted contract (finding 1).
-  - `54dd3073` also repaired SA240's closure, which had left the roadmap-consistency gate red.
+**Commit delta** `8e4122f2..e2623cb8` (6 non-merge commits):
+- **Closeout:** SA246 (`2f1d0a4e`, `db0fcc55`: per-app `personal_data_declarations` capability,
+  W006 over project models), SA244 (`b179990b`: anonymization scoped to the person's records,
+  bounded scans), SA247 (`fe5d808a`, `7969c59b`: module-conventions harness split into
+  `scripts/module_conventions/` and `scripts/tests_module_conventions/`, behavior unchanged).
+- **Housekeeping:** `d08f513c` (roadmap/audits), `467ced81` (contract doc wording).
+- **Unlabeled-behavioral, read at depth:** none by message, but `b179990b` (SA244) mints a
+  cross-module contract its message calls a scoping fix: the orgs invitation send now stamps an
+  `actor_user_id` key into notification context (`orgs/views.py:200`), and notifications'
+  anonymizer selects on it (`notifications/_anonymization.py:146`). That key appears in no
+  signature, doc, or gate → new finding 2.
 
 **Measurements (§3).** Filter: `--no-merges -M`, commits touching > 30 files dropped; lockfiles,
 `*.md`, JSON, `module.yml`, version files, and tests excluded.
-- **Migration census:** 1 in-place `0001` rewrite in the delta (blog, SA239), down from 22 in the
-  prior delta. Still exactly one migration file per model-bearing module (10).
-- **Private symbols referenced from migrations:** 1 (above); 0 at `c10b529e`.
-- **Personal-data census (new):** the inventory lists **36** fields and **23** exclusions across
-  12 app labels; **5** modules declare `anonymize_handlers` (auth, orgs, billing, blog,
-  notifications). A year ago: 0 / 0. The inventory's *treatment* column has **0** non-test
-  consumers.
+- **Migration census:** 0 module migration rewrites this delta (1 prior, 22 before that); the
+  only new migration is the test project app's `0002_projectlisting_contact_email.py`. Still exactly one migration file per model-bearing module (10).
+- **Private symbols referenced from migrations:** 1 (`blog/migrations/0001_initial.py:95`, re-verified).
+- **Personal-data declarations:** now collected per app (SA246); the central test-only inventory
+  file (485 lines) is deleted, and W006 consumes the treatments at runtime.
+- **Notification senders** (`send_notification` callers outside notifications): **2** (orgs
+  invitations, forms submissions); **1** stamps `actor_user_id`. One year ago: 0 (module did not
+  exist at that revision).
+- **SA247 split:** `check_module_conventions.py` 6,731 → 187 lines over 13 package files under
+  `scripts/`, outside the split-facade gate's 4 `SCAN_ROOTS`; tests import through the facade
+  (`from scripts import check_module_conventions as checker`) and patch nothing through it.
 - **Split-facade gate scope:** 4 hand-listed `SCAN_ROOTS`
   (`scripts/check_split_facade_imports.py`). SA242 split `beta_migration/project_apps.py` (2,193
   lines removed) into 5 *public-named* files that import each other's `_`-prefixed names, so the
@@ -70,7 +71,9 @@ never import their facade (SA234).
 - Ownership: single author throughout.
 
 **Coverage and residual risk.**
-- **Read in full:** the SA216 collector (`auth/_anonymization.py`) and its fail-closed owner
+- **Read in full this pass:** SA246's `_personal_data.py` header and gap functions, the W006 check,
+  the core declaration records; SA244's diff; notifications' message selector; forms' sender.
+- **Read in full (prior pass):** the SA216 collector (`auth/_anonymization.py`) and its fail-closed owner
   check; the personal-data inventory and its gate; `orgs/checks.py` classification and removal
   checks; module-extension § removal obligations; the SA204 roadmap entry; the SA234 gate header
   and scope; the delta's migration diff.
@@ -82,9 +85,10 @@ never import their facade (SA234).
 - **Lens activation.** Active: I, II, III, IV, V,   VII, VIII, IX, XII, XV, XVI, **XVIII** (new:
   user-facing deletion promise), XIX. Inert: VI, X, XIV (single-process generated apps, no scale
   threshold planned); XVII (no metered driver); XX (one contributor). Archetypes: code generator,
-  CLI, multi-tenant. Findings came from I/XVI/XIX (finding 1) and XV/XVIII and the generator
-  host-project lens (finding 2, closed by SA246).
+  CLI, multi-tenant. Findings came from I/XVI/XIX (finding 1) and III/VII/XVIII (finding 2).
 - **Needs runtime confirmation:** a restored `bap-web` dump against current code (finding 1).
+- **Needs runtime confirmation:** whether any deployed project already holds pre-key invitation
+  messages (finding 2's recorded limit).
 - **Open leads:** none.
 
 ## Enforcement census
@@ -98,10 +102,11 @@ never import their facade (SA234).
 | Module layer order | import-graph layer test + rule 34 | Gated, closed-world | unchanged |
 | Module file names | rule 28 allowlists | Gated, closed-world | unchanged |
 | Module options validated | manifest option schema in core (SA217) | Structural | unchanged |
-| Split modules don't import their facade | `check_split_facade_imports.py` over 4 hand-listed roots, `_*.py` files only | Gated, open-world on package scope | **new row** (SA234); W8 |
+| Split modules don't import their facade | `check_split_facade_imports.py` over 4 hand-listed roots, `_*.py` files only | Gated, open-world on package scope | unchanged; SA247 split landed outside it (W8) |
 | Quality thresholds | `scripts/check_quality.sh` fixed fail lines (SA242/SA243) | Gated, closed-world per metric | **replaced**: baseline and waivers deleted |
 | Declared anonymize obligations executed | `_require_obligation_owners` (`auth/_anonymization.py:72`) fails deletion closed; orgs `E002` | Structural | **new row** (SA216) |
-| Every personal-data field has a declared anonymize treatment | each app's `personal_data_declarations` capability; `test_personal_data_inventory.py` (closed-world) and `check_personal_data_declarations` (W006) over project apps | Structural + gated (runtime warning + closed-world test) | **closed by SA246**; declarations collected per app, project apps checked at runtime |
+| Account anonymization reaches every notification about a person | `actor_user_id` context key stamped by each sender (1 of 2) + address fallback | Convention, ungated | **new row** (SA244); finding 2 |
+| Every personal-data field has a declared anonymize treatment | each app's `personal_data_declarations` capability; `test_personal_data_inventory.py` (closed-world) and `check_personal_data_declarations` (W006) over project apps | Structural + gated (runtime warning + closed-world test) | verified this pass (SA246 fix-regression audit passed) |
 | Schema and data survive a QuickScale upgrade | clean-break rule; restore vintage refusal (SA205) | Convention + one refusal gate | unchanged |
 | Template ↔ upgradable-code contract | step-identity declarations (SA207/SA211) | Gated | unchanged |
 | Org-removal obligations discharged | `AppConfig` declarations + one fail-closed coordinator | Domain-declared, runtime conformance | vocabulary renamed to anonymize (SA216(c)) |
@@ -113,12 +118,13 @@ never import their facade (SA234).
 | Rank | ID | Title | Horizon | Confidence | Size | Reversibility | Problem in one line |
 |---:|---|---|---|---|---|---|---|
 | 1 | `clean-break-schema-no-data-path` | Upgrades rewrite schema history with no data carry path | SA153 go-live | High | M | one-way door | Each release may rewrite every module's only migration, and nothing carries a deployed project's data across it. |
+| 2 | `notification-person-link-by-convention` | Notification ↔ person link is an unstamped-by-default context key | SA153 | Medium | S | two-way door | Anonymization finds a person's notifications through a context key each sender must remember to stamp, so every new sender can silently fall outside the deletion promise. |
 
 ## Machine-readable index
 
 ```yaml
 schema: arch-audit/v9
-audited: 8e4122f216824edb62134441a00f2413b3854653
+audited: e2623cb8bb727d177c337d1431db40e134dcfaf0
 items:
   - {id: clean-break-schema-no-data-path, status: open, rank: 1,
      title: "Upgrades rewrite schema history with no data carry path",
@@ -127,6 +133,14 @@ items:
      anchors: [docs/technical/decisions.md, docs/technical/roadmap.md,
                quickscale_modules/blog/src/quickscale_modules_blog/migrations/0001_initial.py],
      first_seen: 2026-09-23, last_verified: 2026-10-05}
+  - {id: notification-person-link-by-convention, status: open, rank: 2,
+     title: "Notification-to-person link is a convention-stamped context key",
+     lenses: [III, VII, XVIII], horizon: sa153, confidence: Medium, size: S,
+     reversibility: two-way door, depends_on: [], amplifies: [],
+     anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/services.py,
+               quickscale_modules/notifications/src/quickscale_modules_notifications/_anonymization.py,
+               quickscale_modules/orgs/src/quickscale_modules_orgs/views.py],
+     first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: W2, status: watchlist, title: "Two filesystem-lock implementations", lenses: [IX]}
   - {id: W3, status: watchlist, title: "Hand-pinned residue in CI provisioning", lenses: [XV]}
   - {id: W4, status: watchlist, title: "trigger_inputs legacy name for an exact allowlist", lenses: [XV]}
@@ -198,6 +212,75 @@ under RLS; the first incident is a failed production deploy.
 
 ---
 
+## Finding 2: Notification-to-person link is a convention-stamped context key
+
+- **ID:** `notification-person-link-by-convention`
+- **Rank rationale:** Medium × Medium, linear. Blast radius is the user-facing deletion promise
+  (one module's records); SA153 plausibly adds inquiry/agent notifications; each new sender adds a
+  fixed chance of a silent miss.
+- **Horizon & trigger:** SA153 — the first new `send_notification` caller that renders a user's
+  name without their address.
+- **Confidence:** Medium. Mechanism read in code and senders censused (2); whether a real sender
+  renders a name without an address is inferred, not observed beyond the invitation case.
+- **Context dependence:** `wrong-for-now` (privacy promise); generated-project reality.
+
+**Problem:** the only structural link from a stored notification to the person it is *about* is
+an `actor_user_id` key inside free-form `context_json`, which each caller must remember to stamp;
+`send_notification` has no parameter, column, or check for it.
+
+**Evidence** (newly established):
+- `notifications/services.py:86-94` — `send_notification(*, template_key, recipients, context,
+  tags, metadata, mailer)`: no subject/actor argument.
+- `notifications/_anonymization.py:144-147` selects `context_json__actor_user_id=str(user.pk)`;
+  module docstring `:12`: "an `actor_user_id` key that `send_notification` callers stamp".
+- Census: 2 callers outside notifications; **1** stamps it (`orgs/views.py:200`); forms
+  (`forms/_email.py:104`) does not, relying on the address fallback.
+- The docstring records the limit already: pre-key invitations "stay as stored".
+- `grep actor_user_id docs/` → 0 hits: the rule is in no Module Conventions rule or extension doc.
+
+**Counter-evidence:** searched the conventions harness (`scripts/module_conventions/`), W006
+(`orgs/checks.py`), `module-extension.md`, and SA245's roadmap entry for a rule or gate requiring
+senders to declare the person; found none. W006 checks *model fields*, so a name inside JSON is
+invisible to it. Partial mitigation: the address fallback catches any message whose context holds
+the person's complete address.
+
+**Why it compounds:** growth variable is **notification senders** (shipped modules and project
+apps; `send_notification` is public). Each one that renders a person by name or username alone and
+forgets the key leaves that text behind after "its personal data removed", with no failing signal.
+Built on top: orgs invitations, SA244's selector, SA245's planned shared matcher.
+
+**Detection signal:** none today. Instrument: count, per template key, messages lacking both
+`actor_user_id` and a recipient delivery; or a test that renders each registered template with a
+sentinel user and asserts the anonymizer selects it.
+
+**Steelman:** most senders put the person's address in context, which the fallback catches; the
+invitation is the one known name-only case and it is stamped. Accept while the sender set stays
+at two shipped modules and no project app sends notifications.
+
+**Correct shape:** the persons a message is about are declared at the send boundary (a required
+argument or a template-level declaration) and stored where the anonymizer reads them, so a sender
+cannot omit the link silently.
+
+**Do-nothing cost:** each new sender needs someone to know an undocumented key; a miss is a
+retained name discovered only by a user complaint.
+
+**Options:**
+1. **Promote the key to a keyword argument** (`about_users=`) of `send_notification`, stored on
+   the message (column or reserved context key written by notifications itself); required-or-empty
+   explicit. S, incremental, removes the convention.
+2. Declare per template key which context fields name a user (template registry metadata);
+   anonymizer derives the selector. M; also covers name-only fields.
+3. **Accept and document** in Module Conventions with a harness rule flagging `send_notification`
+   calls without the key; revoke at SA153.
+
+**Recommendation:** option 1, folded into SA245 since it edits the same handler.
+- **Size:** `S`. **Reversibility:** `two-way door`.
+- **Guard:** the keyword is required (no default), so every caller states it; a conventions rule
+  fails a direct `context_json` write of the key.
+- **First step:** add the keyword and have orgs pass it instead of stamping context.
+
+---
+
 ## Change-cost probe
 
 **Probe A: SA191 rebuild `bap-web`** — stations unchanged (facade import in donor
@@ -213,28 +296,30 @@ agent contact email.**
    (or reasoned exclusion) on the app's `personal_data_declarations` capability, and for a
    treatment other than `KEEP_LINK` an `anonymize_account` executor with `anonymize_handlers`.
    Omitting the declaration now warns at runtime (`W006`) and fails the closed-world test.
-   **Verdict: finding 2 evidence; closed by SA246.**
+   **Exonerated by SA246.**
+3. An "inquiry received" email to the agent naming the inquirer: a new `send_notification`
+   caller; nothing requires stating whom it is about. **Verdict: finding 2 evidence.**
 
 **Probe C: add a module option** — unchanged since SA217. **Exonerated.**
 
 ## Fix-regression audit (closeouts in this delta)
 
-- **SA234 (facade seam):** back-imports removed, `check_split_facade_imports.py` passes (exit 0),
-  fail direction preserved (exit 2 on inspection failure). Minted a hand-listed scan scope (W8).
-  `split-facades-patch-coupled` stays **closed**.
-- **SA242/SA243 (quality gate):** the shrink-only baseline and the 55 split-minted waivers are
-  deleted; fixed thresholds have no per-function station to re-key. The prior finding's waiver
-  station is **removed, not relocated**. The 800-line fail line will keep forcing splits; SA242's
-  own split already landed outside SA234's gate (W8).
-- **SA216 (anonymize boundary):** removed the null-out pass and billing detach machinery; declared
-  obligations stay fail-closed (sound decision preserved). **Minted** a central, test-only
-  personal-data inventory → new finding 2.
-- **SA235 (manifest UI routes):** one declaration per module, extends SA223's pattern. Sound.
-- **SA237/SA238:** consolidations; no new station observed.
+- **SA246 (personal-data declarations):** the central test-only inventory is deleted; each app
+  declares its rows on its own `AppConfig`, and W006 walks project models where installed
+  (`_personal_data.py:217-231`). Mechanism **removed, not relocated**. Fail direction: warning-only
+  by design (startup must not block), with the closed-world test as the hard gate for shipped
+  modules. Minted: core now hosts the declaration records (`runtime/conventions.py`) — a generic
+  type at the lowest layer, the correct dependency direction. W006 checks that a handler *exists*
+  for a declared treatment, not that it executes each row; per-module tests cover that for
+  shipped modules. `personal-data-coverage-shipped-only` stays **resolved**.
+- **SA244 (anonymization scoping):** the over-broad selectors are gone and scans are bounded.
+  **Minted** the `actor_user_id` convention → new finding 2.
+- **SA247 (harness split):** behavior-preserving; devtool, outside product packages; no facade
+  patching in tests. No new structural commitment beyond W8's existing note.
 
 ## Fix order and interactions
 
-Independent. Finding 1's freeze must precede any post-SA153 module schema change, and if SA153
+Finding 2 is independent of finding 1 and should ride SA245 (same file). Finding 1's freeze must precede any post-SA153 module schema change, and if SA153
 adds personal fields to shipped modules, those land as `0002+` migrations *and* declaration
 entries, so the freeze's first migrations are born classified.
 
@@ -251,7 +336,7 @@ entries, so the freeze's first migrations are born classified.
 ## Watchlist
 
 - **W2: two filesystem-lock implementations** (`advisory_lock.py`, `dr_engine/_lock.py`).
-  Trigger: a third. **Not fired** — neither changed.
+  Trigger: a third. **Not fired** — neither changed (`git diff 8e4122f2..HEAD` empty).
 - **W3: hand-pinned residue in `provision_ci_postgres.sh`.** Trigger: a 13th module. **Not
   fired** — 12 modules.
 - **W4: `trigger_inputs` legacy name.** Trigger: a skip keyed on it. **Not fired** — the only
@@ -264,8 +349,15 @@ entries, so the freeze's first migrations are born classified.
   `beta_migration/project_apps.py` into five public-named files importing each other's private
   names, outside the 4 `SCAN_ROOTS`. Fails gate 3 today (one-off devtool, no patch coupling seen).
   Trigger: a product-package split outside the roots, or a test patching a facade path again.
+  **Not fired** — SA247's split is under `scripts/` (devtool) and its tests patch nothing through
+  the facade.
 
 ## Rejected candidates
+
+- **Core owning personal-data vocabulary (SA246) as a layer inversion:** the records are
+  generic types consumed by modules, not module-specific words; the direction is correct.
+- **W006 being warning-only:** deliberate (must not block startup); the closed-world test is the
+  hard gate for shipped code, and project apps get a visible warning. Steelman holds.
 
 - **SA243's fixed thresholds as a regression of the ratchet:** fixed fail lines are closed-world
   per metric and hold no per-function state; flat cost.
@@ -286,11 +378,19 @@ entries, so the freeze's first migrations are born classified.
 
 ## Coherence hand-offs
 
-- Anonymization scrubbers range from 56 lines (orgs) to 503 (notifications) with independently
-  written escaping logic (`8649849c`'s entity-chain fix lives only in notifications) — a candidate
-  for `deep-coherence-audit` on shared scrub helpers.
+- Anonymization scrubbers' independently written escaping logic — **now scheduled as SA245**;
+  carried here until it lands.
 
 ## Reconciliation log
+
+- 2026-10-05 (pass 2, `e2623cb8`) — `clean-break-schema-no-data-path`: **still-open**, rank 1.
+  No module migration changed; private-symbol reference re-verified.
+- 2026-10-05 (pass 2) — `notification-person-link-by-convention`: **new**, rank 2, minted by SA244.
+- 2026-10-05 (pass 2) — `personal-data-coverage-shipped-only`: resolution **confirmed** by the
+  fix-regression audit.
+- 2026-10-05 (pass 2) — W2, W3, W4, W6, W7, W8: **carried**, triggers not fired.
+- 2026-10-05 (pass 2) — Questions: one carried. Red flags: none prior, none this pass. Coherence
+  hand-off (shared scrub helpers) is now scheduled as SA245.
 
 - 2026-10-05 — `clean-break-schema-no-data-path`: **still-open**, rank 1. One in-place rewrite
   (blog, SA239) that pinned a private symbol; SA204 still deferred after SA153.

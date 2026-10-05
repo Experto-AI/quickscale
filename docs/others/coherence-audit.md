@@ -1,6 +1,24 @@
 # QuickScale — Deep Coherence Audit (cross-module conformance)
 
-Audited: 8e4122f2 (v89) · 2026-10-05 · working tree dirty (uncommitted `docs/others/arch-audit.md` and `tech-audit.md` only; not read as code) · repository public (github.com/Experto-AI/quickscale) · prompt: deep-coherence-audit v1 · passes: 2 (this re-run; 10 in all)
+Audited: f00ed460 (v89) · 2026-10-05 · working tree dirty (uncommitted `docs/others/arch-audit.md` and `tech-audit.md` only; not read as code) · repository public (github.com/Experto-AI/quickscale) · prompt: deep-coherence-audit v1 · passes: 2 (this re-run; 12 in all)
+
+> **Re-run of 2026-10-05 (b):** the earlier same-day pass at `8e4122f2`. **Delta swept:**
+> `8e4122f2..f00ed460` (12 non-merge commits). Classification:
+> - **Convention-applying:** SA245 (`abbc09d0` … `199eb250`, rules 47–48), SA246 (`2f1d0a4e`,
+>   `db0fcc55`, rule 49), SA244 (`b179990b`, handler scope; harness rules 47–48 still pass).
+> - **Convention-breaking:** none new; SA246 left orgs' test pinning other modules' fields
+>   (Item 5, `semantic-personal-data-central-pin`).
+> - **Unrelated / tooling:** SA247 (`fe5d808a`, `7969c59b`) splits the harness into
+>   `scripts/module_conventions/` and `scripts/tests_module_conventions/` with no behavior change;
+>   `467ced81` docs; `d08f513c` roadmap.
+> - **Harness at `f00ed460`:** `All 42 covered module conventions pass (rules 1–39 less 21, 27,
+>   30; 42–45, 47, 48)`.
+> - **Companion leads read:** tech-audit §13 (`personal_data_declarations` boilerplate; CharField
+>   identity fields are not W006 candidates) — passed §0 as Item 5; arch-audit's SA245 lead is
+>   now landed and closes with `anonymize-redaction-helper-copies`.
+>
+> Sections 1–4 below are the `8e4122f2` pass's orientation, kept as written; this block supersedes
+> them where they differ.
 
 > **Re-run of:** the 2026-10-03 pass at `c10b529e`. **Delta swept:** `c10b529e..8e4122f2`
 > (55 non-merge commits; 152 module files, about +8.1k/−3.3k lines in `quickscale_modules/`).
@@ -119,8 +137,12 @@ member) and host projects outside this repository.
 
 ```yaml
 schema: coherence-audit/v1
-audited: 8e4122f216824edb62134441a00f2413b3854653
+audited: f00ed460
 items:
+  - {id: semantic-personal-data-central-pin, status: open, aspect: C, cost: [tax, ambiguity],
+     members_diverging: [auth, billing, notifications], population: modules-with-user-data(9),
+     rule: "rule 49 ❌ clause", check: "per-module declaration flag + inventory test", closed_world: false,
+     handoff: [], first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: anonymize-redaction-helper-copies, status: resolved, rule: "rule 47", aspect: C, check: conformance, closed_world: false, resolved_by: abbc09d0, first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: anonymize-replacement-values, status: resolved, rule: "rule 48", aspect: G, check: conformance, closed_world: true, resolved_by: abbc09d0, first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: personal-data-inventory-ownership, status: resolved, rule: "rule 49", aspect: C,
@@ -148,11 +170,12 @@ items:
 
 ## 3. Summary table
 
-**Counts (open):** defect 0 · collision 0 · ambiguity 0 · tax 0 · total 0. Prior: 54 resolved, 0
-regressed.
+**Counts (open):** defect 0 · collision 0 · ambiguity 1 · tax 1 (same item) · total 1. Prior: 54
+resolved, 0 regressed.
 
 | ID | Aspect | Cost | Diverging / population | Status |
 |---|---|---|---|---|
+| `semantic-personal-data-central-pin` | C | ambiguity, tax | 3 / 9 modules with user data | open |
 | `anonymize-redaction-helper-copies` | C | defect, tax | 2 / 5 handlers | resolved (see §12, rule 47) |
 | `anonymize-replacement-values` | G | ambiguity, tax | 2 / 5 handlers | resolved (see §12, rule 48) |
 | `personal-data-inventory-ownership` | C | tax, ambiguity | 8 / 9 modules with user data | resolved (rule 49, see §12) |
@@ -247,6 +270,51 @@ removed. No drift remains (see the correction in §12).
 ---
 
 ## 5. Drift items (ranked: defect > collision > ambiguity > tax)
+
+### Item 5: Personal-data ownership — non-candidate fields are still pinned in orgs' test
+
+- **ID:** `semantic-personal-data-central-pin`
+- **Aspect / population:** C (vocabulary ownership); the 9 modules with user data.
+- **Table:** how a personal-data field the candidate walk cannot see (CharField names, JSON
+  payloads, rendered text) is kept from being silently dropped:
+
+  | Variant | Members |
+  |---|---|
+  | declared in own `AppConfig` **and** re-listed in orgs' `_SEMANTIC_PERSONAL_DATA_KEYS` (`orgs/tests/test_personal_data_inventory.py:162–179`) | auth (5 fields), notifications (7), billing (1) |
+  | declared only, nothing pins it | blog `AuthorProfile.bio`¹ |
+  | non-candidate personal field neither declared nor excluded | none found at `f00ed460`² |
+  | no user data | analytics, social, storage |
+
+  ¹ `bio` is a TextField on a user-referencing model, so the walk sees it; listed for contrast.
+  ² crm `Contact.first_name/last_name` are non-user data (contact ≠ user) — consistent with crm's
+  `Contact.email` exclusion; blog `BlogMediaAsset.original_filename` is organization media metadata.
+- **Drift:** rule 49 moved every module's rows to its own `AppConfig`, but 13 rows of three other
+  modules are still named in orgs' test so that deleting the declaration fails. The next module
+  with a name or payload field must either edit orgs' tests (forbidden by rule 49's ❌) or go
+  unpinned.
+- **Cost class:** **ambiguity** — rule 49's ❌ "one module's … test listing another module's
+  fields" and the test disagree; **tax** — the next author has two examples (pinned, unpinned).
+- **Declared rule:** decisions.md rule 49 ❌ clause (line ~1198).
+- **Options:**
+  - **A.** A `semantic=True` flag (or `PersonalDataTreatment` sub-kind) on `PersonalDataField`;
+    the inventory test asserts every module that declares a semantic row still declares it by
+    checking each module's own test snapshot. Small; keeps ownership local.
+  - **B.** Each module's own test pins its non-candidate rows (`test_personal_data.py` in auth,
+    billing, notifications); orgs' list keeps only `sessions`. Smallest change; per-module tax.
+  - **C.** Widen the candidate walk to name-like `CharField`s on user-referencing models. Catches
+    new fields automatically but adds exclusions everywhere (crm, blog, forms) — noisier.
+- **Recommended rule (amend rule 49):**
+  - ✅ A module that declares a personal-data field the candidate walk cannot see pins it in its
+    own tests.
+  - ✅ orgs' inventory test pins only orgs', contrib, and third-party rows.
+  - ❌ A pinned key in orgs' tests whose `app_label` is another installed module.
+- **Enforcement:** in the inventory test, assert every `_SEMANTIC_PERSONAL_DATA_KEYS` app label is
+  in `{orgs, sessions, admin, account}` — closed-world; control: re-add an auth key, the test fails.
+- **Migration:** auth, billing, notifications gain a small test each; orgs' list shrinks to 1 row.
+  No persisted name changes.
+- **Confidence:** High for the table (all 9 `apps.py` declarations and the pin list read);
+  Medium on "none found" in the third row (name-like CharFields grepped, not every model read).
+- **Hand-off:** none.
 
 ### Item 1: Matching — the two text scrubbers are copies that have already diverged
 
@@ -381,8 +449,17 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
    instead of "auth's account-deletion collector".)*
 4. **Delegated rules are hard to see.** Rules 41 and 46 have no detector of their own. Their
    clauses ride rules 7/31/37 and 19/28, and only a comment in the partition test says so
-   (`test_check_module_conventions.py:7282`). The harness's success line ("40 covered") does not
-   list 41 or 46, so a reader cannot tell "delegated" from "missing".
+   (`scripts/tests_module_conventions/test_core.py:53–57`). (Correction: the `8e4122f2` pass
+   cited `test_check_module_conventions.py:7282`; SA247 deleted that file.) The success line
+   ("42 covered") does not list 41, 46, or 49, so a reader cannot tell "delegated" from "missing".
+6. **The rule partition is open-world on the rule list.** `RECORDED_RULE_NUMBERS`
+   (`test_core.py:58`) is hand-kept and omits 41, 46, and 49; rule 49 is in neither `RULES` nor
+   `OPEN_RULES`, though decisions.md rule 40 names its gate. A rule 50 added to decisions.md would
+   pass the partition unnoticed. Fix: parse the `**N.` headings of decisions.md § Module
+   Conventions and require each to be covered, open, or listed as delegated with its carriers.
+7. **Frozen evidence anchors.** `module-conventions-inventory.md` cites
+   `check_module_conventions.py:142/4465/4653` and `test_check_module_conventions.py`, which SA247
+   moved. The inventory is frozen evidence; accepted as historical, not re-anchored.
 5. **Carried from the inventory** (accepted, 2026-10-02): `test_isolation.py` does not
    self-enroll; rule 38's README match is a substring floor; the generated `base.py` lets a module
    override `anon`/`user` throttle rates.
@@ -426,6 +503,7 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
 - **C · Shared scrub/redaction behaviour.** Matcher copies, boundary semantics, key handling.
 - **C · Personal-data declaration ownership.** Who lists a module's personal-data fields.
 - **D · Delegated-rule visibility.** Rules whose clauses run inside other rules' detectors.
+- **C · Non-candidate personal-data pins.** Who guards a personal field a metadata walk can't see.
 
 ---
 
@@ -510,3 +588,8 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
 - 2026-10-05 — `test-file-names`: **resolved** (730456cb — rule 29; held by the harness at 8e4122f2, cells not re-read).
 - 2026-10-05 — `user-fk-on-delete`: **resolved** (fa0b882b — rule 27; held by the user-FK gate in orgs tests, not the harness; not re-run this pass).
 - 2026-10-05 — `py-typed`: **resolved** (6ea37301 — rule 24; held by the harness at 8e4122f2, cells not re-read).
+- 2026-10-05 (b) — **re-run** at `f00ed460`; delta `8e4122f2..f00ed460`; 2 passes; harness passes 42 rules.
+- 2026-10-05 (b) — `semantic-personal-data-central-pin`: **new**, open (lead from tech-audit §13).
+- 2026-10-05 (b) — `personal-data-inventory-ownership`: resolved (2f1d0a4e — re-verified: 9 modules declare in `apps.py`; residual central pin split out as `semantic-personal-data-central-pin`).
+- 2026-10-05 (b) — `anonymize-redaction-helper-copies`, `anonymize-replacement-values`, `anonymize-executor-naming`: resolved (abbc09d0, 9203630f, 199eb250 — harness rules 47–48 pass at f00ed460).
+- 2026-10-05 (b) — all other prior IDs: still resolved (harness passes at f00ed460; SA247 split verified behavior-neutral by the same 42-rule success line; cells not re-read).
