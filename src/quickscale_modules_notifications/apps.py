@@ -28,7 +28,7 @@ class QuickscaleNotificationsConfig(AppConfig):
         """Scrub the person's notification records as the declared executor.
 
         Notifications declares no organization-removal obligation: it must
-        stay importable without ``orgs``, so the account-deletion boundary
+        stay importable without ``orgs``, so the anonymize boundary
         collects this handler through the shared core capability helper.
         """
         from quickscale_modules_notifications import _anonymization
@@ -40,7 +40,7 @@ class QuickscaleNotificationsConfig(AppConfig):
     def anonymize_handlers(self) -> tuple[Any, ...]:
         """Declare notifications' account-anonymization handler (rule 4).
 
-        The declaration uses no other module: the account-deletion boundary
+        The declaration uses no other module: the anonymize boundary
         collects it through ``quickscale_core.runtime``, so notifications
         stays independent of ``orgs``.
         """
