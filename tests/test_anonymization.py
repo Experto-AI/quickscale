@@ -231,6 +231,32 @@ def test_anonymize_leaves_provider_payload_keys_untouched() -> None:
 
 
 @pytest.mark.django_db
+def test_anonymize_keeps_the_sentinel_when_a_name_matches_it() -> None:
+    """A name equal to the sentinel's stem cannot rewrite the written address."""
+    user = _user("alpha@example.com")
+    message = _message(
+        subject="Contact alpha@example.com",
+        rendered_text="Contact alpha@example.com (Deleted)",
+        rendered_html="",
+        context_json={"body": "Contact alpha@example.com (Deleted)"},
+        last_error="",
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="alpha@example.com"
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="beta@example.com"
+    )
+
+    anonymize_account(user, "alpha@example.com", "Deleted", user.get_username())
+
+    message.refresh_from_db()
+    deleted_address = f"deleted-{user.pk}@invalid"
+    assert message.rendered_text == f"Contact {deleted_address} ([redacted])"
+    assert message.context_json == {"body": f"Contact {deleted_address} ([redacted])"}
+
+
+@pytest.mark.django_db
 def test_anonymize_leaves_an_overlapping_address_untouched() -> None:
     """An address merely containing the person's address is not theirs."""
     user = _user("test@example.com")
