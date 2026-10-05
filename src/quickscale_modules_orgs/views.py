@@ -191,10 +191,13 @@ class InvitationNotificationMixin:
         self,
         invitation: OrganizationInvitation,
     ) -> dict[str, str]:
+        # ``actor_user_id`` links this message to the inviter for account
+        # anonymization; a display name alone is not a safe selector.
         return {
             "organization_name": invitation.organization.name,
             "invitee_email": invitation.email,
             "inviter_name": self.get_inviter_display_name(),
+            "actor_user_id": str(self.request.user.pk),
             "role_display": str(OrgRole(invitation.role).label),
             "accept_url": self.request.build_absolute_uri(
                 reverse(

@@ -604,6 +604,7 @@ def test_invite_view_creates_invitation_and_dispatches_notification(
         "organization_name": organization.name,
         "invitee_email": "invitee@example.com",
         "inviter_name": "Helios Admin",
+        "actor_user_id": str(admin_user.pk),
         "role_display": "Admin",
         "accept_url": (
             f"http://testserver/orgs/invitations/{invitation.token}/accept/"
