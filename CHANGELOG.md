@@ -532,8 +532,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     project app that needs one, declares the treatment of its own user-linked fields through the
     `personal_data_declarations` capability beside its anonymization handler; a warning-level
     `quickscale_orgs.W006` system check reports a candidate personal-data field on a project-owned
-    model with no declared treatment or reasoned exclusion, and the closed-world inventory test
-    reads the collected declarations.
+    model with no declared treatment or reasoned exclusion, and a declared treatment whose app
+    contributes no handler; the closed-world inventory test reads the collected declarations.
+  - **The module-conventions harness splits by rule theme.** The rule 40 detectors live in
+    per-theme modules under `scripts/module_conventions/` and their control cases under
+    `scripts/tests_module_conventions/`, while `scripts/check_module_conventions.py` keeps the same
+    command surface and output.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

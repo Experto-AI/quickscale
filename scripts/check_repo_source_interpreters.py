@@ -134,7 +134,7 @@ def find_violations(root: Path) -> list[str]:
     violations: list[str] = []
     for shell_file in sorted((root / "scripts").glob("*.sh")):
         violations.extend(_shell_violations(shell_file))
-    for test_file in sorted((root / "scripts").glob("test_*.py")):
+    for test_file in sorted((root / "scripts").rglob("test_*.py")):
         violations.extend(_python_test_violations(test_file))
     return violations
 
