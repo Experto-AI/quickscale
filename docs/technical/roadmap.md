@@ -29,12 +29,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
+| SA243 | Replace the `make quality` baseline ratchet with fixed fail/warn thresholds | post-v88 | 2 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: —
+Track 2: SA243
 Track 3: —
      critical path: SA191 → SA153
 ```
@@ -63,7 +64,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA214 | yes | yes | yes | **yes** | no |
-| 2 | — | yes | yes | yes | **yes** | no |
+| 2 | SA243 | yes | yes | yes | **yes** | no |
 | 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -377,6 +378,41 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [x] **SA216 — Disable and anonymize accounts instead of deleting the user row.**
 
 - [x] **SA242 — Fail `make quality` on critical complexity and very large files.**
+
+- [ ] **SA243 — Replace the `make quality` baseline ratchet with fixed fail/warn thresholds.**
+
+  **Context:** below SA242's hard gate, `scripts/check_quality.sh` still fails `make quality`
+  (exit 1) on any finding that is new or worse than `scripts/quality_baseline.json`. That
+  ratchet comes with a waiver file, a monotonicity script, and roughly 800 lines of
+  baseline-comparison Python inside the shell script. Each metric instead gets one fixed
+  line: fail at or above it, warn below it, no baseline.
+
+  | Metric | Fails (non-zero exit) | Warns only |
+  |---|---|---|
+  | Cyclomatic complexity (radon) | CC >= 21 | CC 11–20 |
+  | File length | >= 800 lines | 500–799 lines |
+  | Duplication (pylint R0801) | a block of >= 20 similar lines | blocks of 6–19 lines |
+  | Dead code (vulture) | 100% confidence | 80–99% confidence |
+
+  The 20-line duplication bar follows the block-size practice of CPD-style tools. Vulture's 100%
+  tier is code that can never run, so it has near-zero false positives. Ruff's `F` rules already
+  fail unused imports and locals. The last report held 63 duplication blocks, about 14 of them
+  at >= 20 lines.
+
+  **Acceptance:** `make quality` exits non-zero only for a finding in a fail column, naming the
+  function, file, or block with its value. A warn-column finding prints and still exits 0.
+  Every existing fail-column finding is fixed on landing (no allowlist or inline waiver), so the
+  gate is green. `quality_baseline.json`, `quality_waivers.json`,
+  `check_quality_baseline_monotonicity.py` and its test, and the baseline-comparison code are
+  deleted. Their references in the Makefile, `gate_registry.json`, the quality and coverage-policy
+  tests, `quality_tools.md`, decisions, the arch audit, and README are removed or rewritten. A
+  test pins each threshold and the exit code on a fixture on each side of each line.
+
+  Out of scope: the maintainability-index lane, and threshold values other than those above.
+
+  **Surfaces:** Track 1's quality ratchet (cross-track; lands through the serialized merge
+  queue): `scripts/check_quality.sh`, the baseline, waiver, and monotonicity files with their
+  tests, `scripts/gate_registry.json`, `quality_tools.md`, decisions, and the arch audit.
 
 ## Deferred constraints and references
 
