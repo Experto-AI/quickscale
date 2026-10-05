@@ -506,6 +506,7 @@ class TestAccountDeleteViewSurvivorRegression:
                 "organization_name": "Acme Labs",
                 "invitee_email": "invitee@example.com",
                 "inviter_name": "helios_only",
+                "actor_user_id": str(inviter.pk),
                 "role_display": "Admin",
                 "accept_url": "https://example.com/accept/token",
                 "expires_at": "2026-05-26T12:00:00+00:00",

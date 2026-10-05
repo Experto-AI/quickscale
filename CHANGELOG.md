@@ -528,6 +528,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     each with its value; the CC 11–20, 500–799-line, 6–19-similar-line, and 80–99%-confidence
     tiers warn and still exit 0. The accepted-debt baseline, waiver ledger, and merge-base
     monotonicity helper are removed.
+  - **Account anonymization is scoped to the person's records.** Removing an account rewrites a
+    notification message only when a delivery to the person, an `actor_user_id` context entry, or
+    the person's full address in that context links the message to them, deletes only unexpired
+    sessions, and loads only billing webhook payloads that mention the address, so another user's
+    message content is never rewritten.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
