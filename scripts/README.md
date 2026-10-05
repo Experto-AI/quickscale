@@ -82,6 +82,7 @@ If a script is part of a larger repo workflow, assume the Makefile is the prefer
 
 - [check_ci_locally.sh](./check_ci_locally.sh) — runs a local CI-style validation flow (prefer `make ci` or `make ci-e2e`). Accepts `--skip-install`, `--from NAME`, and `--only NAME[,...]` over the stage names `install static coverage integration e2e`, for re-running one stage while fixing what a full run surfaced. Any of those marks the run `PARTIAL CI — NOT a full pass` and lists the skipped stages; stage selection is applied at the stage call sites and never inside `run_static_gates_serial` / `run_static_gates_parallel`, which `check_gate_parity.py` observes for gate inventory.
 - [check_quality.sh](./check_quality.sh) — runs broader code-quality analysis (prefer `make quality`)
+- [check_module_conventions.py](./check_module_conventions.py) — thin entry point for the rule 40 conformance check (`make check-module-conventions`). The detectors live by rule theme under [module_conventions/](./module_conventions/), one module per theme plus `core.py` for corpus loading and shared AST helpers; each theme's control cases live in [tests_module_conventions/](./tests_module_conventions/).
 - [lint.sh](./lint.sh) — runs standardized Ruff auto-fixes plus MyPy checks for Python packages (prefer `make lint-fix` / `make typecheck`)
 - [lint_agentic_flow.sh](./lint_agentic_flow.sh) — runs focused linting for agentic-flow work (`make lint-agent`)
 - [lint_frontend.sh](./lint_frontend.sh) — validates the React theme frontend toolchain (`make lint-frontend`)

@@ -76,6 +76,26 @@ def test_guard_rejects_bare_python_test_executor(tmp_path: Path) -> None:
     assert "bare python may execute a repository Python source" in result.stdout
 
 
+def test_guard_rejects_bare_python_test_executor_in_nested_package(tmp_path: Path) -> None:
+    """A subprocess executor in a nested test package is rejected too."""
+    package = tmp_path / "scripts" / "tests_module_conventions"
+    package.mkdir(parents=True)
+    (package / "test_bad.py").write_text(
+        "import subprocess\nsubprocess.run(['python', 'scripts/example.py'])\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(GUARD), "--root", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "bare python may execute a repository Python source" in result.stdout
+
+
 def test_guard_allows_stdlib_python_c_commands(tmp_path: Path) -> None:
     """A Python -c helper is not a repository-source execution."""
     scripts = tmp_path / "scripts"

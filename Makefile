@@ -1108,9 +1108,10 @@ check-secret-scanning:
 # --- Module Conventions Conformance Gate (rule 40) ---
 
 # Run the rule 40 conformance check over every module manifest and module
-# source tree.  Every covered rule's detector has a control case in
-# scripts/test_check_module_conventions.py; rules whose owning convention
-# ticket has not landed are recorded in the check's OPEN_RULES mapping.
+# source tree.  Every covered rule's detector has a control case under
+# scripts/tests_module_conventions/; the detectors live by rule theme under
+# scripts/module_conventions/.  Rules whose owning convention ticket has not
+# landed are recorded in the check's OPEN_RULES mapping.
 check-module-conventions:
 	@$(PYTHON) scripts/check_module_conventions.py
 
