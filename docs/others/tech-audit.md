@@ -104,6 +104,7 @@ items:
 ## 4. Findings
 
 No open findings; the SA245 closure is recorded in §13.
+
 ---
 
 ## 5. Safeguard matrix

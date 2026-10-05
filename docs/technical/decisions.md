@@ -1075,7 +1075,7 @@ headings.
 **40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
 and the CLI's option handling fails on each of rules 1–39 and 42–48 (rule 21 stays a review rule
 with each module's write-effect rollback test; rule 27 through the user-FK conformance gate; rule 30
-in `apply` itself): names, suffixes and types, `_ENABLED`
+in `apply` itself; rules 41 and 46 through the covered rules that carry their clauses): names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
 names, template and static paths, non-DRF JSON and hand-built error bodies, checks outside
@@ -1171,9 +1171,11 @@ mapping that mirrors this section.
   address pattern: it recognizes HTML-entity spellings, which the plain address matcher does not.
 
 **48. Replacement values and entry-point name.**
-- ✅ Every email address an anonymization handler rewrites becomes core's `DELETED_ADDRESS(pk)`,
-  and every name or username becomes core's `REDACTED`; a handler's private entry point is
-  `_anonymization.anonymize_account`, and its app config's `anonymize_account` delegates there.
+- ✅ An anonymization handler rewrites each email address it removes from stored text or provider
+  payloads to core's `DELETED_ADDRESS(pk)`, and each name or username it removes to core's
+  `REDACTED`; a handler's private entry point is `_anonymization.anonymize_account`, and its app
+  config's `anonymize_account` delegates there. An account's own unique username field keeps its
+  `deleted-<pk>` candidate so the address can register again.
 - ❌ A literal `[redacted]` or `deleted-<pk>@invalid` spelling in module code.
 - Exception: wholesale-replaced provider prose keeps `REDACTED`.
 

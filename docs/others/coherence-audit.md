@@ -290,8 +290,8 @@ removed. No drift remains (see the correction in §12).
 
 ### Item 2: Replacement values — one kind of field, two tokens
 
-- **Resolved** (SA245, `abbc09d0`) — recorded as rule 48; every handler writes core's
-  `DELETED_ADDRESS(pk)` or `REDACTED`.
+- **Resolved** (SA245, `abbc09d0`) — recorded as rule 48; the handlers that remove identity from
+  stored text or payloads write core's `DELETED_ADDRESS(pk)` or `REDACTED`.
 - **ID:** `anonymize-replacement-values`
 - **Aspect / population:** G (data basics) and A (shared values); the anonymization handlers (5).
 - **Table:** §4.2. The address inside a stored provider payload becomes `deleted-<pk>@invalid` in
@@ -469,9 +469,9 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
 - 2026-10-05 — `anonymize-redaction-helper-copies`: **resolved** (abbc09d0 — rule 47; core's
   `replace_address`/`redact_names` are the one matcher, and the control case rejects billing's old
   `_redact_string`).
-- 2026-10-05 — `anonymize-replacement-values`: **resolved** (abbc09d0 — rule 48; all five handlers
-  write core's `DELETED_ADDRESS(pk)` and `REDACTED`, and the control case rejects billing's old
-  `REDACTED = "[redacted]"`).
+- 2026-10-05 — `anonymize-replacement-values`: **resolved** (abbc09d0 — rule 48; the handlers that
+  remove identity from stored text or payloads write core's `DELETED_ADDRESS(pk)` and `REDACTED`,
+  and the control case rejects billing's old `REDACTED = "[redacted]"`).
 - 2026-10-05 — `anonymize-executor-naming`: **resolved** (abbc09d0 — rule 48; auth's entry point is
   `_anonymization.anonymize_account`, the collector is in `_anonymize_boundary.py`, and the control
   case rejects a `scrub_account` delegation).

@@ -16,8 +16,9 @@ inviter's name, so the actor link, not delivery, selects the inviter's
 records.  A message delivered only to the person has every rendered field
 replaced wholesale, as the inventory's treatment reads; any other linked
 message keeps the content that is not about the person and loses each
-occurrence of their address, full name, and username — in the raw and
-HTML-escaped spellings Django rendering stores.  The person's own delivery
+occurrence of their address, full name, and username in a value — in the raw
+and HTML-escaped spellings Django rendering stores.  Dictionary keys carry the
+stored structure and are never rewritten.  The person's own delivery
 rows and provider event payloads are scrubbed regardless.  The fallback
 matches their address, which is unique, and never their name, which can be an
 ordinary word; a name match cannot select another person's message.  An
@@ -272,12 +273,14 @@ def _redact_identity_text(
     address (an entity ending another local part included); names and
     usernames are replaced at word boundaries and never inside a complete
     address, so a short name cannot rewrite an unrelated word or another
-    person's address.
+    person's address.  The name pass runs before the address passes so it can
+    never rewrite the ``DELETED_ADDRESS(pk)`` sentinel the address passes
+    write.
     """
-    value = _replace_escaped_email(value, email=email, replacement=email_replacement)
-    value = replace_address(value, address=email, replacement=email_replacement)
     if name or username:
         value = _redact_names_outside_addresses(value, name=name, username=username)
+    value = _replace_escaped_email(value, email=email, replacement=email_replacement)
+    value = replace_address(value, address=email, replacement=email_replacement)
     return value
 
 
@@ -480,8 +483,9 @@ def _carries_address(value: str, *, email: str) -> bool:
 def _context_names_the_address(value: Any, *, email: str) -> bool:
     """Return whether a stored context carries the person's complete address.
 
-    JSON object keys are strings too, so a context key naming the address
-    counts, exactly as the redaction tree treats keys.
+    JSON object keys are strings too, so a context key naming the address still
+    selects the message; keys are never rewritten, so retaining one is the
+    recorded behavior, not a miss.
     """
     if isinstance(value, dict):
         return any(

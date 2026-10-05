@@ -92,8 +92,13 @@ def _redact_identity(value: Any, *, email: str, name: str, replacement: str) -> 
 
 
 def _redact_string(value: str, *, email: str, name: str, replacement: str) -> str:
-    """Replace the address and the full name inside one string."""
-    value = replace_address(value, address=email, replacement=replacement)
+    """Replace the full name and the address inside one string.
+
+    The name pass runs first so it can never rewrite the shared
+    ``DELETED_ADDRESS(pk)`` sentinel the address pass writes, and the name
+    matcher skips complete addresses, so the person's own address is still
+    replaced as a whole.
+    """
     if name:
         value = redact_names(value, name=name)
-    return value
+    return replace_address(value, address=email, replacement=replacement)
