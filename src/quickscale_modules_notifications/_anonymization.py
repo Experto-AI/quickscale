@@ -33,24 +33,17 @@ from typing import Any
 
 from django.utils.html import escape as html_escape
 
+from quickscale_core.runtime import (
+    DELETED_ADDRESS,
+    REDACTED,
+    redact_names,
+    replace_address,
+)
 from quickscale_modules_notifications.models import (
     NotificationDelivery,
     NotificationDeliveryEvent,
     NotificationMessage,
 )
-
-#: Replaces rendered text and provider error text that echoed the person.
-REDACTED = "[redacted]"
-
-#: Matches one complete email address.  A replacement is decided per complete
-#: match, never per raw substring, so ``test@example.com`` found inside
-#: ``protest@example.com`` cannot rewrite another person's address.
-_ADDRESS_PATTERN = re.compile(
-    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"
-)
-
-#: Quote delimiters an address is commonly wrapped in inside free text.
-_QUOTE_CHARS = "'\""
 
 
 def anonymize_account(
@@ -75,7 +68,7 @@ def anonymize_account(
     username = original_username.strip()
     if username.casefold() in {email.casefold(), name.casefold()}:
         username = ""
-    deleted_address = f"deleted-{user.pk}@invalid"
+    deleted_address = DELETED_ADDRESS(user.pk)
 
     delivery_ids = list(
         NotificationDelivery.objects.filter(recipient_email__iexact=email).values_list(
@@ -282,7 +275,7 @@ def _redact_identity_text(
     person's address.
     """
     value = _replace_escaped_email(value, email=email, replacement=email_replacement)
-    value = _replace_addresses(value, email=email, replacement=email_replacement)
+    value = replace_address(value, address=email, replacement=email_replacement)
     if name or username:
         value = _redact_names_outside_addresses(value, name=name, username=username)
     return value
@@ -401,23 +394,16 @@ def _redact_names_outside_addresses(
 
 
 def _redact_names(value: str, *, name: str, username: str) -> str:
-    """Replace name and username spellings at word boundaries in *value*."""
-    if name:
-        for spelling in _identity_spellings(name):
-            value = re.sub(
-                rf"(?<![A-Za-z0-9_]){re.escape(spelling)}(?![A-Za-z0-9_])",
-                REDACTED,
-                value,
-                flags=re.IGNORECASE,
-            )
-    if username:
-        for spelling in _identity_spellings(username):
-            value = re.sub(
-                rf"(?<![A-Za-z0-9_]){re.escape(spelling)}(?![A-Za-z0-9_])",
-                REDACTED,
-                value,
-                flags=re.IGNORECASE,
-            )
+    """Replace name and username spellings at word boundaries in *value*.
+
+    Each raw and HTML-escaped spelling — the rendered store is the opt-in for
+    escaped spellings — goes through the shared word-bounded matcher, which
+    never rewrites a complete address.
+    """
+    for spelling in _identity_spellings(name):
+        value = redact_names(value, name=spelling)
+    for spelling in _identity_spellings(username):
+        value = redact_names(value, username=spelling)
     return value
 
 
@@ -431,18 +417,12 @@ def _redact_identity_tree(
 ) -> Any:
     """Replace the person's identity in every string of a JSON value.
 
-    JSON object keys are strings too, so an identity-keyed context entry is
-    redacted as well as its value.
+    JSON object keys are part of the stored structure, so only values are
+    scrubbed: an identity-shaped key survives exactly as stored.
     """
     if isinstance(value, dict):
         return {
-            _redact_identity_text(
-                str(key),
-                email=email,
-                name=name,
-                username=username,
-                email_replacement=email_replacement,
-            ): _redact_identity_tree(
+            key: _redact_identity_tree(
                 item,
                 email=email,
                 name=name,
@@ -474,12 +454,13 @@ def _redact_identity_tree(
 
 
 def _redact_email(value: Any, *, email: str, replacement: str) -> Any:
-    """Return *value* with the person's address replaced, structure preserved."""
+    """Return *value* with the person's address replaced, structure preserved.
+
+    Only values are scrubbed, exactly as the message-path scrub treats keys.
+    """
     if isinstance(value, dict):
         return {
-            _replace_addresses(str(key), email=email, replacement=replacement): (
-                _redact_email(item, email=email, replacement=replacement)
-            )
+            key: _redact_email(item, email=email, replacement=replacement)
             for key, item in value.items()
         }
     if isinstance(value, list):
@@ -487,31 +468,13 @@ def _redact_email(value: Any, *, email: str, replacement: str) -> Any:
             _redact_email(item, email=email, replacement=replacement) for item in value
         ]
     if isinstance(value, str):
-        return _replace_addresses(value, email=email, replacement=replacement)
+        return replace_address(value, address=email, replacement=replacement)
     return value
-
-
-def _identity_form(token: str, target: str) -> str | None:
-    """Return the quote prefix under which *token* is *target*, or ``None``.
-
-    A quoted occurrence adds a delimiter quote in front of the address, and an
-    address may itself start with a quote, so the token is compared after
-    dropping zero, one, or more leading quote delimiters; the dropped prefix
-    is returned so a replacement can keep the quoting.  Trailing quotes are
-    outside the domain-ending token and stay in the surrounding text.
-    """
-    for count in range(len(token) + 1):
-        prefix = token[:count]
-        if any(char not in _QUOTE_CHARS for char in prefix):
-            return None
-        if token[count:].casefold() == target:
-            return prefix
-    return None
 
 
 def _carries_address(value: str, *, email: str) -> bool:
     """Return whether *value* holds *email* as one complete address."""
-    return _replace_addresses(value, email=email, replacement="") != value
+    return replace_address(value, address=email, replacement="") != value
 
 
 def _context_names_the_address(value: Any, *, email: str) -> bool:
@@ -531,26 +494,3 @@ def _context_names_the_address(value: Any, *, email: str) -> bool:
     if isinstance(value, str):
         return _carries_address(value, email=email)
     return False
-
-
-def _replace_addresses(value: str, *, email: str, replacement: str) -> str:
-    """Replace every complete occurrence of *email*, leaving other addresses.
-
-    A token is compared as it stands first, so an address whose own local part
-    starts with a quote (``'test@example.com``) still matches; then ordinary
-    quote delimiters may be dropped one at a time, so a quoted occurrence
-    (``''test@example.com'`` around such an address) matches with the dropped
-    quotes preserved around the replacement.  An address merely containing the
-    target (``protest@example.com``) never matches.
-    """
-    if not value:
-        return value
-    target = email.casefold()
-
-    def replace(match: re.Match[str]) -> str:
-        prefix = _identity_form(match.group(0), target)
-        if prefix is None:
-            return match.group(0)
-        return f"{prefix}{replacement}"
-
-    return _ADDRESS_PATTERN.sub(replace, value)
