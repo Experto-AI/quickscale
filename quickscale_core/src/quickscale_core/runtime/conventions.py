@@ -23,6 +23,13 @@ This module is the one implementation of the three cross-module conventions:
   installed as ``REST_FRAMEWORK["EXCEPTION_HANDLER"]`` by the generated
   settings.
 
+The module also defines the records a module declares through the
+``personal_data_declarations`` capability (Module Conventions rule 49): each
+module lists the treatment of its own user-linked fields there, and ``orgs``
+reads the collected declarations.  They live in core so every layer — including
+same-layer modules that may not import ``orgs`` — can declare them by importing
+only lower-layer code.
+
 The root ``quickscale_core.runtime`` facade exposes all four lazily, so
 importing the facade in a process without Django (CLI ``plan``/``apply``)
 never imports this module.  :func:`exception_handler` imports DRF inside the
@@ -32,10 +39,12 @@ call, so a project without a DRF-embedding module never imports
 
 from __future__ import annotations
 
+import enum
 import os
 import sys
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from django.apps import AppConfig, apps
@@ -49,6 +58,9 @@ if TYPE_CHECKING:
     from rest_framework.response import Response
 
 __all__ = [
+    "PersonalDataExclusion",
+    "PersonalDataField",
+    "PersonalDataTreatment",
     "collect_capabilities",
     "exception_handler",
     "register_module_checks",
@@ -85,6 +97,51 @@ _MANAGEMENT_ENTRY_POINTS = frozenset({"manage.py", "django-admin", "django-admin
 _VALIDATION_ERROR_CODE = "validation_error"
 _VALIDATION_ERROR_MESSAGE = "Invalid input."
 _NON_FIELD_ERRORS_KEY = "non_field_errors"
+
+
+# ---------------------------------------------------------------------------
+# Personal-data declaration records — rule 49
+# ---------------------------------------------------------------------------
+
+
+class PersonalDataTreatment(enum.Enum):
+    """The treatment an anonymization handler applies to a declared field."""
+
+    SCRUB = "scrub"
+    DELETE = "delete"
+    DELETE_FILE = "delete-file"
+    KEEP_LINK = "keep-link"
+
+
+@dataclass(frozen=True)
+class PersonalDataField:
+    """One model field that holds personal data about a user."""
+
+    app_label: str
+    model_name: str
+    field_name: str
+    treatment: PersonalDataTreatment
+    note: str
+
+    @property
+    def key(self) -> tuple[str, str, str]:
+        """Return the ``(app_label, model_name, field_name)`` lookup key."""
+        return (self.app_label, self.model_name, self.field_name)
+
+
+@dataclass(frozen=True)
+class PersonalDataExclusion:
+    """A candidate field reviewed and confirmed not to hold personal data."""
+
+    app_label: str
+    model_name: str
+    field_name: str
+    reason: str
+
+    @property
+    def key(self) -> tuple[str, str, str]:
+        """Return the ``(app_label, model_name, field_name)`` lookup key."""
+        return (self.app_label, self.model_name, self.field_name)
 
 
 def collect_capabilities(capability: str) -> tuple[object, ...]:

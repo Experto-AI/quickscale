@@ -30,6 +30,10 @@ The checks:
    obligation demands an action its removal boundary has no shared-coordinator
    route for, because only a boundary that bypasses the coordinator could
    discharge it.
+7. ``check_personal_data_declarations`` (SA246) — warns when a project-owned
+   model's personal-data candidate field has no declared treatment or reasoned
+   exclusion, or when a declared treatment's app contributes no anonymization
+   handler.
 
 Module Conventions rule 28: the AST helpers that compare live constants and
 follow a boundary implementation's entry path live in ``_checks_structure``
@@ -38,14 +42,14 @@ declaration (pinned by ``quickscale_core.tests.test_privileged_command_contract`
 the RLS boot guard's ``os.environ`` reads (rule 35), and the
 ``_boundary_implementations`` patch seam stay on this module.
 
-The isolation and classification checks use the same marker-based discovery
-as the management command.  They emit ``WARNING`` level messages so they do
-not block startup in development or pre-migration states.  Use the
-management command for a pass/fail exit code in CI.  They stay registered
-through ``@register`` rather than the eager runner: ``check_tenant_isolation``
-reads live PostgreSQL catalog state, so it cannot run from ``ready()`` in
-processes that must start without a database (and it must never block a
-startup, being warning-only).
+The isolation, classification, and personal-data checks use the same
+marker-based discovery as the management command.  They emit ``WARNING`` level
+messages so they do not block startup in development or pre-migration states.
+Use the management command for a pass/fail exit code in CI.  They stay
+registered through ``@register`` rather than the eager runner:
+``check_tenant_isolation`` reads live PostgreSQL catalog state, so it cannot
+run from ``ready()`` in processes that must start without a database (and none
+of them may block a startup, being warning-only).
 
 The role, stray-manager, provider-ID, and discharge checks run eagerly
 through the helper.  The provider-ID and discharge checks are ``ERROR``
@@ -70,6 +74,7 @@ from django.core.checks import CheckMessage, Error, Warning, register
 from django.db import connection
 
 import quickscale_modules_orgs._checks_structure as _checks_structure
+import quickscale_modules_orgs._personal_data as _personal_data
 
 from quickscale_modules_orgs.removal import (
     ORGANIZATION_MODEL_LABEL as ORGANIZATION_MODEL_LABEL,
@@ -330,6 +335,56 @@ def check_model_classification(_app_configs: object = None, **kwargs: object) ->
         )
 
     return messages
+
+
+# ---------------------------------------------------------------------------
+# SA246 — Personal-data declaration coverage check
+# ---------------------------------------------------------------------------
+
+
+@register("quickscale_orgs")
+def check_personal_data_declarations(
+    _app_configs: object = None, **kwargs: object
+) -> list:
+    """Warn about personal-data declaration gaps.
+
+    Every concrete project-owned model's candidate field — a relation to
+    ``AUTH_USER_MODEL``, an ``EmailField``, a ``GenericIPAddressField``, a file
+    field, or free text on a model that references the user — must be declared
+    with its treatment, or excluded with a reason, through the owning app's
+    ``personal_data_declarations`` capability, and a treatment other than
+    ``KEEP_LINK`` must be executed by that app's own ``anonymize_handlers``
+    capability (Module Conventions rule 49).  Either kind of gap emits
+    ``quickscale_orgs.W006``.
+
+    Returns:
+        A list of ``CheckMessage`` instances.
+    """
+    try:
+        gaps = _personal_data.personal_data_coverage_gaps()
+    except Exception as exc:
+        return [
+            Warning(
+                f"Failed to read the declared personal-data treatments: {exc}",
+                hint="Ensure Django apps are fully loaded before this check runs.",
+                id="quickscale_orgs.W006",
+            )
+        ]
+
+    return [
+        Warning(
+            f"Personal-data declaration gap: {gap}",
+            hint=(
+                "Declare the field's treatment, or an exclusion with a reason, "
+                "in the owning app's 'personal_data_declarations' capability "
+                "beside its anonymization handler; a treatment other than "
+                "KEEP_LINK must also be executed by that app's "
+                "'anonymize_handlers' capability (Module Conventions rule 49)."
+            ),
+            id="quickscale_orgs.W006",
+        )
+        for gap in gaps
+    ]
 
 
 # ---------------------------------------------------------------------------

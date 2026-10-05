@@ -186,6 +186,44 @@ class TestCollectCapabilities:
 
 
 # ===================================================================
+# Personal-data declaration records — rule 49
+# ===================================================================
+
+
+class TestPersonalDataRecords:
+    def test_field_records_carry_their_key_and_treatment(self) -> None:
+        field = conventions.PersonalDataField(
+            app_label="quickscale_demo",
+            model_name="Widget",
+            field_name="owner",
+            treatment=conventions.PersonalDataTreatment.KEEP_LINK,
+            note="Row stays attributed to the disabled account.",
+        )
+
+        assert field.key == ("quickscale_demo", "Widget", "owner")
+        assert field.treatment is conventions.PersonalDataTreatment.KEEP_LINK
+
+    def test_exclusion_records_carry_their_key_and_reason(self) -> None:
+        exclusion = conventions.PersonalDataExclusion(
+            app_label="quickscale_demo",
+            model_name="Widget",
+            field_name="notes",
+            reason="Organization content, not personal data about the user.",
+        )
+
+        assert exclusion.key == ("quickscale_demo", "Widget", "notes")
+        assert exclusion.reason
+
+    def test_treatment_values_are_stable(self) -> None:
+        assert {treatment.value for treatment in conventions.PersonalDataTreatment} == {
+            "scrub",
+            "delete",
+            "delete-file",
+            "keep-link",
+        }
+
+
+# ===================================================================
 # register_module_checks — rule 10
 # ===================================================================
 

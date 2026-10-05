@@ -533,6 +533,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     the person's full address in that context links the message to them, deletes only unexpired
     sessions, and loads only billing webhook payloads that mention the address, so another user's
     message content is never rewritten.
+  - **Personal data is declared per module and checked where it is installed.** Every module, and a
+    project app that needs one, declares the treatment of its own user-linked fields through the
+    `personal_data_declarations` capability beside its anonymization handler; a warning-level
+    `quickscale_orgs.W006` system check reports a candidate personal-data field on a project-owned
+    model with no declared treatment or reasoned exclusion, and a declared treatment whose app
+    contributes no handler; the closed-world inventory test reads the collected declarations.
   - **The module-conventions harness splits by rule theme.** The rule 40 detectors live in
     per-theme modules under `scripts/module_conventions/` and their control cases under
     `scripts/tests_module_conventions/`, while `scripts/check_module_conventions.py` keeps the same

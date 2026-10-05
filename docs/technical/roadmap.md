@@ -24,10 +24,9 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA246 | Declare personal data per module and check it where the project's models are installed | 2 | — | Optional |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
-| SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA246 | Optional |
+| SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | 1 | — | Optional |
 
@@ -35,7 +34,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA246
+Track 2: —
 Track 3: —
      critical path: SA191 → SA153
 ```
@@ -48,10 +47,9 @@ handoff note (what landed, what is next, what to watch) committed with the work.
 when its last slice lands; slices are not scheduled.
 
 **Order.** SA204 freezes migration history before any post-SA153 module schema change; SA154 is
-an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA246 touches `apps.py`
-capabilities and orgs'
-checks, not handler bodies, and lands before SA153 so the portal's personal fields are classified
-from the first migration.
+an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA246 landed before SA153,
+so the portal's personal fields are classified from the first migration; it touched `apps.py`
+capabilities and orgs' checks, not handler bodies.
 
 ### Track states
 
@@ -60,7 +58,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA214 | yes | yes | yes | **yes** | yes |
-| 2 | SA246 | yes | yes | yes | **yes** | no |
+| 2 | — | yes | yes | yes | **yes** | no |
 | 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -81,20 +79,21 @@ A track is **truly green** only when all three states are yes.
   and the billing module (`billing/services.py`, `billing/views.py`, `billing/adapter.py`, and its
   docs), the split facades of the CLI commands, `dr_engine`, and billing with the tests that patch
   them, the blog and storage upload-path builders, and, for the conventions, the manifest option schema and the CLI's `module_config`,
-  module settings names, and `is_enabled()`.
+  module settings names, `is_enabled()`, and the per-module personal-data declarations with the
+  orgs personal-data check.
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
   blog rate limiter, the generated `pyproject.toml.j2` `[build-system]` block, orgs'
-  `quickscale_orgs_create_site_org` command, the personal-data inventory, and the frontend
+  `quickscale_orgs_create_site_org` command, and the frontend
   decisions in `frontend.md`, and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row, and the five `_anonymization.py`
   handlers with core's redaction helpers.
-- SA246 moves the personal-data inventory and its walk from Track 3 to Track 2: the per-module
+- SA246 moved the personal-data inventory and its walk from Track 3 to Track 2: the per-module
   personal-data declarations, the orgs personal-data system check, and module-extension.md
   § removal.
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
@@ -119,30 +118,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA245 — Share one redaction matcher and one set of replacement values across anonymization handlers.**
 
-- [ ] **SA246 — Declare personal data per module and check it where the project's models are installed.**
-
-  **Context:** whether every personal field has an anonymization treatment is checked only by a
-  test in orgs over shipped models (`orgs/tests/_personal_data_inventory.py`), which skips project
-  apps by design and ties the recorded treatment to no handler. A project-owned field such as an
-  SA153 contact email on a user-referencing model is detected by nothing (arch audit
-  `personal-data-coverage-shipped-only`). Eight modules' rows also live in orgs' tests, which the
-  authoring guide never mentions (coherence audit `personal-data-inventory-ownership`).
-
-  **Acceptance:**
-  - Each module declares the treatment of its own user-linked fields beside its handler, collected
-    through `collect_capabilities` like `anonymize_handlers`; orgs' file keeps only orgs, contrib,
-    and third-party rows. The closed-world inventory test reads the collected declarations and
-    keeps its three control cases.
-  - `walk_candidate_fields` and `candidate_kinds` move into `quickscale_modules_orgs` as a
-    warning-level system check over installed apps, on the `check_model_classification` (W005)
-    pattern; a control proves a project-app `EmailField` on a user-referencing model fails it.
-  - Each module's anonymization test asserts its declared treatments on a populated user.
-  - decisions.md records rule 49 (personal-data declarations); module-extension.md § removal
-    documents the declaration and the check and replaces "account-deletion collector" with the
-    anonymize boundary's name.
-
-  **Surfaces:** each module's `apps.py` capability, `orgs/checks.py`, orgs' personal-data inventory
-  and its test, module-extension.md, decisions, and the arch and coherence audits.
+- [x] **SA246 — Declare personal data per module and check it where the project's models are installed.**
 
 - [x] **SA247 — Split the module-conventions checker and its tests into packages without changing behavior.**
 

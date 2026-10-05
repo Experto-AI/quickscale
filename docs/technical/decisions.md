@@ -1075,7 +1075,8 @@ headings.
 **40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
 and the CLI's option handling fails on each of rules 1–39 and 42–48 (rule 21 stays a review rule
 with each module's write-effect rollback test; rule 27 through the user-FK conformance gate; rule 30
-in `apply` itself; rules 41 and 46 through the covered rules that carry their clauses): names, suffixes and types, `_ENABLED`
+in `apply` itself; rules 41 and 46 through the covered rules that carry their clauses; rule 49
+through the closed-world inventory test and orgs' `W006` check): names, suffixes and types, `_ENABLED`
 presence, undeclared and cross-module settings reads, defaults in code, import targets and layers,
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
 names, template and static paths, non-DRF JSON and hand-built error bodies, checks outside
@@ -1178,6 +1179,22 @@ mapping that mirrors this section.
   `deleted-<pk>` candidate so the address can register again.
 - ❌ A literal `[redacted]` or `deleted-<pk>@invalid` spelling in module code.
 - Exception: wholesale-replaced provider prose keeps `REDACTED`.
+
+**49. Personal-data declarations.**
+- ✅ A module declares the treatment of each of its own user-linked fields on its own
+  `AppConfig`, through the `personal_data_declarations` capability beside the module's
+  anonymization handler where it has one. The entries are `PersonalDataField` /
+  `PersonalDataExclusion` records from `quickscale_core.runtime`, so every layer declares them by
+  importing only core. `orgs`' own module keeps only the rows no installed module declares for
+  itself: orgs', Django contrib's, and the third-party rows.
+- ✅ The closed-world inventory test collects the declarations, and orgs' system check
+  (`quickscale_orgs.W006`) reports both kinds of gap where the project's models are installed:
+  a candidate field on a project-owned model with no declared treatment or reasoned exclusion,
+  and a declared treatment whose app contributes no executor.
+- ✅ A declared treatment other than `KEEP_LINK` is executed by the declaring app's own
+  `anonymize_handlers` capability.
+- ❌ One module's source or test listing another module's fields; a field declared with a
+  treatment whose declaring app provides no handler.
 
 ---
 

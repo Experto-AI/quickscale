@@ -79,13 +79,12 @@ never import their facade (SA234).
 - **Skipped:** per-module anonymize handler internals (notifications' 503-line scrubber), SA226
   role authorization, SA228 capability registry, SA229 effects, the design-port oracle (SA214(d)).
   **A reader must not conclude they are sound from this document's silence.**
-- **Lens activation.** Active: I, II, III, IV, V, VII, VIII, IX, XII, XV, XVI, **XVIII** (new:
+- **Lens activation.** Active: I, II, III, IV, V,   VII, VIII, IX, XII, XV, XVI, **XVIII** (new:
   user-facing deletion promise), XIX. Inert: VI, X, XIV (single-process generated apps, no scale
   threshold planned); XVII (no metered driver); XX (one contributor). Archetypes: code generator,
   CLI, multi-tenant. Findings came from I/XVI/XIX (finding 1) and XV/XVIII and the generator
-  host-project lens (finding 2).
-- **Needs runtime confirmation:** a restored `bap-web` dump against current code (finding 1);
-  whether `bap-web`/`experto-ai-web` project apps hold user personal data today (finding 2).
+  host-project lens (finding 2, closed by SA246).
+- **Needs runtime confirmation:** a restored `bap-web` dump against current code (finding 1).
 - **Open leads:** none.
 
 ## Enforcement census
@@ -93,7 +92,7 @@ never import their facade (SA234).
 | Invariant | Where enforced | Posture | Trend since last pass |
 |---|---|---|---|
 | Tenant reads/writes stay organization-scoped | `TenantManager`, `FORCE RLS`, boot guard; every tenant model on `TenantModel` | Structural | unchanged |
-| Project-owned models classified for tenancy | `check_model_classification` (`orgs/checks.py:278`, W005) over project apps at runtime | Structural (runtime check) | unchanged; **contrast row for finding 2** |
+| Project-owned models classified for tenancy | `check_model_classification` (`orgs/checks.py:278`, W005) over project apps at runtime | Structural (runtime check) | unchanged |
 | Tenant-module actions authorized by org role | SA226; one org-role check (SA237) | Structural (not audited at depth) | consolidated (SA237) |
 | Privileged command set | `runtime/settings.py` + gated copy in `orgs/checks.py` | Structural + gated copy-pair | unchanged |
 | Module layer order | import-graph layer test + rule 34 | Gated, closed-world | unchanged |
@@ -102,7 +101,7 @@ never import their facade (SA234).
 | Split modules don't import their facade | `check_split_facade_imports.py` over 4 hand-listed roots, `_*.py` files only | Gated, open-world on package scope | **new row** (SA234); W8 |
 | Quality thresholds | `scripts/check_quality.sh` fixed fail lines (SA242/SA243) | Gated, closed-world per metric | **replaced**: baseline and waivers deleted |
 | Declared anonymize obligations executed | `_require_obligation_owners` (`auth/_anonymization.py:72`) fails deletion closed; orgs `E002` | Structural | **new row** (SA216) |
-| Every user personal-data field has an anonymize treatment | `test_personal_data_inventory.py` — shipped models only, membership only | Gated (test-time, QuickScale repo only) | **new row**; finding 2 |
+| Every personal-data field has a declared anonymize treatment | each app's `personal_data_declarations` capability; `test_personal_data_inventory.py` (closed-world) and `check_personal_data_declarations` (W006) over project apps | Structural + gated (runtime warning + closed-world test) | **closed by SA246**; declarations collected per app, project apps checked at runtime |
 | Schema and data survive a QuickScale upgrade | clean-break rule; restore vintage refusal (SA205) | Convention + one refusal gate | unchanged |
 | Template ↔ upgradable-code contract | step-identity declarations (SA207/SA211) | Gated | unchanged |
 | Org-removal obligations discharged | `AppConfig` declarations + one fail-closed coordinator | Domain-declared, runtime conformance | vocabulary renamed to anonymize (SA216(c)) |
@@ -114,7 +113,6 @@ never import their facade (SA234).
 | Rank | ID | Title | Horizon | Confidence | Size | Reversibility | Problem in one line |
 |---:|---|---|---|---|---|---|---|
 | 1 | `clean-break-schema-no-data-path` | Upgrades rewrite schema history with no data carry path | SA153 go-live | High | M | one-way door | Each release may rewrite every module's only migration, and nothing carries a deployed project's data across it. |
-| 2 | `personal-data-coverage-shipped-only` | Anonymization completeness is a test-time inventory of shipped models | 6–18 months (first project-owned personal field) | High (mechanism) / Medium (likelihood) | S | two-way door | Detection of unhandled personal data exists only as a QuickScale-repo test over shipped modules; project apps are skipped by design, and the inventory's treatments are tied to no handler. |
 
 ## Machine-readable index
 
@@ -129,15 +127,6 @@ items:
      anchors: [docs/technical/decisions.md, docs/technical/roadmap.md,
                quickscale_modules/blog/src/quickscale_modules_blog/migrations/0001_initial.py],
      first_seen: 2026-09-23, last_verified: 2026-10-05}
-  - {id: personal-data-coverage-shipped-only, status: open, rank: 2,
-     title: "Anonymization completeness is a test-time inventory of shipped models",
-     lenses: [XV, XVIII, I], horizon: 6-18-months, confidence: High, size: S,
-     reversibility: two-way door, depends_on: [], amplifies: [],
-     anchors: [quickscale_modules/orgs/tests/_personal_data_inventory.py,
-               quickscale_modules/orgs/tests/test_personal_data_inventory.py,
-               quickscale_modules/auth/src/quickscale_modules_auth/_anonymization.py,
-               quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py],
-     first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: W2, status: watchlist, title: "Two filesystem-lock implementations", lenses: [IX]}
   - {id: W3, status: watchlist, title: "Hand-pinned residue in CI provisioning", lenses: [XV]}
   - {id: W4, status: watchlist, title: "trigger_inputs legacy name for an exact allowlist", lenses: [XV]}
@@ -209,93 +198,6 @@ under RLS; the first incident is a failed production deploy.
 
 ---
 
-## Finding 2: Anonymization completeness is a test-time inventory of shipped models
-
-- **ID:** `personal-data-coverage-shipped-only`
-- **Rank rationale:** Medium × Medium, linear. Blast radius: a user-facing promise ("its personal
-  data removed") silently broken for a field nobody declared — one feature family, not a trust
-  boundary crossing, and no declared regulatory regime. Likelihood: plausible — SA153's inquiry
-  path lands in `crm` (inventoried), but project-owned extension models are the roadmap's
-  declared extension model. Compounding: each project-owned or newly shipped personal field adds a
-  fixed, unchecked station.
-- **Horizon & trigger:** 6–18 months; the first project-owned model with a user relation, email,
-  IP, file, or free text on a user-referencing model — or a regulatory obligation (an EU/Spanish
-  audience for SA153 makes GDPR erasure plausible).
-- **Confidence:** High on mechanism (collector, gate, and checks read; consumers grepped). Medium
-  on likelihood (project-app contents of the live sites not inspected).
-- **Context dependence:** `wrong-for-now`, dimension: compliance / new domain. Lives in the
-  generated-project reality.
-
-**Problem:** the anonymize boundary fails closed only for *declared* obligations; whether every
-personal field *has* a declaration is checked by a QuickScale-repo test over shipped models, so
-project-owned apps get no detection and the inventory's treatment column is enforced by nothing.
-
-**Evidence** (newly established):
-- `auth/_anonymization.py:72-91` (`_require_obligation_owners`) raises only when an app *declared*
-  an `ANONYMIZE` obligation without a handler — an undeclared app contributes nothing, silently.
-- `orgs/tests/test_personal_data_inventory.py:100-111` (`_shipped_models`) skips every model whose
-  module starts with `tests.` and runs only under `orgs/tests/settings.py`; nothing in
-  `generator/templates` or any `src/` imports the walk (0 non-test consumers).
-- `PersonalDataTreatment` (`_personal_data_inventory.py:30-36`) records SCRUB/DELETE/DELETE_FILE/
-  KEEP_LINK per field, but no code compares it with what the handlers do; each module's
-  `test_anonymization.py` hand-tests its own handler.
-- Contrast: tenancy classification of project-owned models *is* a runtime check
-  (`orgs/checks.py:278`, `check_model_classification`, W005) — the repo already owns the pattern.
-- Scope note: the inventory defines personal data as *about a user*; visitor PII (e.g. inquiry
-  contacts in `crm`) is outside SA216's model entirely.
-
-**Counter-evidence:** searched `orgs/checks.py` (E001–E004, W005), the auth collector, the
-module-extension guide, and the generator templates for a runtime or generated-project check over
-personal-data fields; found only the declared-obligation check (fail-closed, but declaration-gated)
-and the guide's prose telling project apps to declare. The `test_user_fk_conformance.py` gate
-covers on-delete rules for user FKs, not anonymization. No out-of-repo control is plausible here.
-
-**Why it compounds:** growth variable is **personal-data fields outside the shipped-module test
-harness** (project apps across `bap-web`, `experto-ai-web`, every future project) plus **shipped
-fields whose handler drifts from their recorded treatment**. Each needs three hand-synced stations
-(inventory entry, `AppConfig` obligation + capability, handler) with only inventory membership
-checked, and only for shipped code. Built on top: SA216's account-removal view, 5 handler
-modules, and the decision record's "personal data removed" model (`decisions.md:1796`).
-
-**Detection signal:** none today. Instrument: after `anonymize_account`, re-walk candidate fields
-for the user and report any non-empty value not marked KEEP_LINK.
-
-**Steelman:** the inventory is two days old and deliberately scoped to what QuickScale ships;
-project apps are the operator's code, and the module-extension guide tells them to declare.
-With no regulatory regime and few project-owned models, a test is proportionate. Don't fix it
-while no generated project holds user personal data outside shipped modules.
-
-**Correct shape:** in every installed project, each candidate personal-data field is classified
-(treated or excluded with a reason) by a check that runs where the project's own models are
-installed, and the recorded treatment is the thing the handler executes or is verified against.
-
-**Do-nothing cost:** each project-owned personal field is a silent gap in a promise shown to the
-user; discovery is an erasure complaint or an audit, and fixing then means scrubbing already
-"anonymized" accounts retroactively.
-
-**Options:**
-1. **Promote the walk to an orgs system check** (warning like W005, or error once declared), with
-   classification declared per app (e.g. a `personal_data_fields()` on `AppConfig` beside
-   `removal_obligations`) instead of one central list in orgs' tests. Size S–M; incremental;
-   removes the project-app gap and the central hand-list.
-2. Add a **post-anonymize verification** test fixture that consumes the inventory's treatment
-   column and asserts it on a populated user — removes treatment/handler drift for shipped code
-   only. Size S.
-3. **Accept and document**: state in decisions that project apps are outside the anonymization
-   guarantee; containment is the guide's prose; revocation trigger is a declared regulatory
-   obligation or a project-owned user personal field.
-
-**Recommendation:** option 1, with option 2's assertion folded into the per-module tests. It
-reuses the W005 pattern this repo already ships and moves ownership of each field's treatment to
-the module that owns the field (rule 4's direction).
-- **Size:** `S`. **Reversibility:** `two-way door`.
-- **Guard:** the system check itself, with controls proving a project-app `EmailField` on a
-  user-referencing model fails it.
-- **First step:** move `walk_candidate_fields`/`candidate_kinds` from `orgs/tests` into
-  `quickscale_modules_orgs` and register it as a warning-level check over project apps.
-
----
-
 ## Change-cost probe
 
 **Probe A: SA191 rebuild `bap-web`** — stations unchanged (facade import in donor
@@ -307,9 +209,11 @@ still reseeded. **Verdict: finding 1 evidence, narrowed.**
 **Probe B: SA153 adds a listing-linked inquiry and a project-owned property model with an
 agent contact email.**
 1. The inquiry lands in `crm` — already inventoried with treatments. **Exonerated.**
-2. The project model's `EmailField` on a model referencing the user: needs an inventory decision,
-   an `AppConfig` obligation + `anonymize_handlers` capability, and a handler. Omitting all three
-   is detected by **nothing** (the walk skips project apps). **Verdict: finding 2 evidence.**
+2. The project model's `EmailField` on a model referencing the user: needs a declared treatment
+   (or reasoned exclusion) on the app's `personal_data_declarations` capability, and for a
+   treatment other than `KEEP_LINK` an `anonymize_account` executor with `anonymize_handlers`.
+   Omitting the declaration now warns at runtime (`W006`) and fails the closed-world test.
+   **Verdict: finding 2 evidence; closed by SA246.**
 
 **Probe C: add a module option** — unchanged since SA217. **Exonerated.**
 
@@ -330,10 +234,9 @@ agent contact email.**
 
 ## Fix order and interactions
 
-Independent. Finding 2's check can land any time; finding 1's freeze must precede any post-SA153
-module schema change, and if SA153 adds personal fields to shipped modules, those land as `0002+`
-migrations *and* inventory entries — doing finding 2 first means the freeze's first migrations are
-born classified.
+Independent. Finding 1's freeze must precede any post-SA153 module schema change, and if SA153
+adds personal fields to shipped modules, those land as `0002+` migrations *and* declaration
+entries, so the freeze's first migrations are born classified.
 
 ## Sound load-bearing decisions
 
@@ -376,9 +279,6 @@ born classified.
 ## Questions that would change the ranking
 
 - **`clean-break-schema-no-data-path`:** will `experto-ai-web` migrate too? (Carried; unanswered.)
-- **`personal-data-coverage-shipped-only`:** do `bap-web`/SA153 serve an EU audience, or do
-  existing project apps hold user personal data? Yes to either promotes it toward rank 1 and
-  `now`. (New.)
 - The prior question on `generated-file-ownership-unmodeled` ("regenerate and port" as the
   permanent model) is **retired**: SA214 tooled the port as an explicitly one-off path.
 
@@ -394,11 +294,15 @@ born classified.
 
 - 2026-10-05 — `clean-break-schema-no-data-path`: **still-open**, rank 1. One in-place rewrite
   (blog, SA239) that pinned a private symbol; SA204 still deferred after SA153.
-- 2026-10-05 — `personal-data-coverage-shipped-only`: **new**, rank 2 — minted by SA216/SA242.
+- 2026-10-05 — `personal-data-coverage-shipped-only`: **closed** by SA246 (per-app
+  `personal_data_declarations` capability; `walk_candidate_fields`/`candidate_kinds` run as the
+  W006 warning over project-owned models; per-module tests assert the declared treatments; the
+  closed-world inventory test reads the collected declarations and keeps its three controls).
+  Archived in CHANGELOG.
 - 2026-10-05 — `split-facades-patch-coupled`: closure **confirmed** by the fix-regression audit
   (gate passes, waiver ledger deleted by SA243); its gate's scope opened W8.
 - 2026-10-05 — W2, W3, W4, W6, W7: **carried**, triggers not fired. W8 **opened**.
-- 2026-10-05 — Questions: one carried, one opened, one retired. Red flags: none prior, none this
+- 2026-10-05 — Questions: one carried, one retired. Red flags: none prior, none this
   pass.
 
 
