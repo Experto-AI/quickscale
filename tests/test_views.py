@@ -2785,7 +2785,7 @@ class TestAccountDeleteViewAnonymization:
         assert response.status_code == 302
         event.refresh_from_db()
         assert event.payload["customer_details"] == {
-            "email": "[redacted]",
+            "email": f"deleted-{user.pk}@invalid",
             "name": "[redacted]",
         }
 
