@@ -32,7 +32,8 @@ The checks:
    discharge it.
 7. ``check_personal_data_declarations`` (SA246) — warns when a project-owned
    model's personal-data candidate field has no declared treatment or reasoned
-   exclusion.
+   exclusion, or when a declared treatment's app contributes no anonymization
+   handler.
 
 Module Conventions rule 28: the AST helpers that compare live constants and
 follow a boundary implementation's entry path live in ``_checks_structure``
