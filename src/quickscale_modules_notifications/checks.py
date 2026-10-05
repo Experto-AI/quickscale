@@ -43,7 +43,7 @@ _PROJECTED_SECRETS = (
 
 
 def check_vendor_secrets(
-    app_configs: object = None,
+    _app_configs: object = None,
     **kwargs: object,
 ) -> list[CheckMessage]:
     """Fail startup when a secret a switched-on notifications feature needs is empty.
