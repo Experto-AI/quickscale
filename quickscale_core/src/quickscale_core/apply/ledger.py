@@ -44,6 +44,7 @@ from quickscale_core.schema.state_schema import (
     ProjectState,
     QuickScaleState,
     StateError,
+    build_state_payload,
 )
 
 # ---------------------------------------------------------------------------
@@ -292,57 +293,10 @@ class RecoveryLedger:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a YAML-friendly mapping suitable for atomic write."""
-        state = self.applied_state
-
-        # Build the applied-state section using the same structure as
-        # StateManager.save() so the format is consistent.
-        from quickscale_core.config import normalize_installed_version
-        from quickscale_core.contracts.module_options import sanitize_module_options
-
-        project_data: dict[str, Any] = {
-            "slug": state.project.slug,
-            "package": state.project.package,
-            "theme": state.project.theme,
-            "project_contract": state.project.project_contract,
-            "created_at": state.project.created_at,
-            "last_applied": state.project.last_applied,
-        }
-        if state.project.adopted_contract_steps is not None:
-            project_data["adopted_contract_steps"] = list(
-                state.project.adopted_contract_steps
-            )
-
-        data: dict[str, Any] = {
-            "version": state.version,
-            "project": project_data,
-        }
-
-        if state.modules:
-            data["modules"] = {
-                name: {
-                    k: v
-                    for k, v in {
-                        "version": normalize_installed_version(module.version),
-                        "commit_sha": module.commit_sha,
-                        "embedded_at": module.embedded_at,
-                        "options": (
-                            sanitize_module_options(name, module.options)
-                            if module.options
-                            else None
-                        ),
-                        "prefix": module.prefix,
-                        "branch": module.branch,
-                        "installed_at": module.installed_at,
-                    }.items()
-                    if v is not None
-                }
-                for name, module in state.modules.items()
-            }
-
-        if state.managed_files:
-            data["managed_files"] = [
-                record.to_dict() for record in state.managed_files.values()
-            ]
+        # The applied-state section is the canonical mapping from
+        # ``state_schema.build_state_payload``; the recovery ledger keeps its
+        # historical omit-when-empty ``modules`` shape.
+        data = build_state_payload(self.applied_state, include_empty_modules=False)
 
         if self.resume_checkpoint is not None:
             data["resume_checkpoint"] = self.resume_checkpoint.to_dict()

@@ -282,6 +282,68 @@ def _parse_state_managed_files(data: dict[str, Any]) -> dict[str, ManagedFileRec
     return managed_files
 
 
+def build_state_payload(
+    state: QuickScaleState,
+    *,
+    include_empty_modules: bool = True,
+) -> dict[str, Any]:
+    """Build the serialized applied-state mapping shared by the writers.
+
+    ``StateManager.save`` writes this mapping to ``state.yml`` and the apply
+    recovery ledger embeds it as its ``applied_state`` section, so the shape
+    lives here once.  An explicit (even empty) ``modules`` key is the
+    authoritative-state marker that stops legacy read-through import (SA207);
+    ``include_empty_modules=False`` preserves the recovery ledger's historical
+    omit-when-empty form.
+    """
+    project_data: dict[str, Any] = {
+        "slug": state.project.slug,
+        "package": state.project.package,
+        "theme": state.project.theme,
+        "project_contract": state.project.project_contract,
+        "created_at": state.project.created_at,
+        "last_applied": state.project.last_applied,
+    }
+    if state.project.adopted_contract_steps is not None:
+        project_data["adopted_contract_steps"] = list(
+            state.project.adopted_contract_steps
+        )
+
+    data: dict[str, Any] = {
+        "version": state.version,
+        "project": project_data,
+    }
+
+    if state.modules or include_empty_modules:
+        data["modules"] = {
+            name: {
+                k: v
+                for k, v in {
+                    "version": normalize_installed_version(module.version),
+                    "commit_sha": module.commit_sha,
+                    "embedded_at": module.embedded_at,
+                    "options": (
+                        sanitize_module_options(name, module.options)
+                        if module.options
+                        else None
+                    ),
+                    "prefix": module.prefix,
+                    "branch": module.branch,
+                    "installed_at": module.installed_at,
+                }.items()
+                if v is not None
+            }
+            for name, module in state.modules.items()
+        }
+
+    if state.managed_files:
+        data["managed_files"] = [
+            record.to_dict() for record in state.managed_files.values()
+        ]
+
+    return data
+
+
 class StateManager:
     """Manages state file operations for QuickScale projects"""
 
@@ -345,54 +407,7 @@ class StateManager:
             # Ensure .quickscale directory exists
             self.state_dir.mkdir(parents=True, exist_ok=True)
 
-            # Build state data
-            project_data: dict[str, Any] = {
-                "slug": state.project.slug,
-                "package": state.project.package,
-                "theme": state.project.theme,
-                "project_contract": state.project.project_contract,
-                "created_at": state.project.created_at,
-                "last_applied": state.project.last_applied,
-            }
-            if state.project.adopted_contract_steps is not None:
-                project_data["adopted_contract_steps"] = list(
-                    state.project.adopted_contract_steps
-                )
-            data: dict[str, Any] = {
-                "version": state.version,
-                "project": project_data,
-            }
-
-            # Phase 2: an explicit (even empty) ``modules`` key is the
-            # authoritative-state marker that stops legacy read-through
-            # import, so it is always written (SA207).
-            data["modules"] = {
-                name: {
-                    k: v
-                    for k, v in {
-                        "version": normalize_installed_version(module.version),
-                        "commit_sha": module.commit_sha,
-                        "embedded_at": module.embedded_at,
-                        "options": (
-                            sanitize_module_options(name, module.options)
-                            if module.options
-                            else None
-                        ),
-                        # Phase 2 consolidated tracking fields.
-                        "prefix": module.prefix,
-                        "branch": module.branch,
-                        "installed_at": module.installed_at,
-                    }.items()
-                    if v is not None
-                }
-                for name, module in state.modules.items()
-            }
-
-            # Phase 2: write consolidated managed-file records when present.
-            if state.managed_files:
-                data["managed_files"] = [
-                    record.to_dict() for record in state.managed_files.values()
-                ]
+            data = build_state_payload(state)
 
             # Write atomically using temporary file
             temp_file = self.state_file.with_suffix(".tmp")

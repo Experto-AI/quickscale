@@ -127,10 +127,10 @@ or Makefile/CI changes to conceal a red gate. Assign one owning ticket, repair
 within its authorized scope, and rerun. Other
 tracks may continue implementation and unexcluded validation provisionally, but
 no other ticket completes merge-back until the owning repair is green. Preserve
-quality monotonicity: no unwaivered warning or critical regressions and no
-unwaivered ceiling increase; a function at CC >= 21 or a file at >= 800 lines
-fails `make quality` regardless of the baseline. Findings outside the
-delivery's scope receive their own ticket.
+quality thresholds: `make quality` has no baseline; a function at CC >= 21, a
+file at >= 800 lines, a duplication block of >= 20 similar lines, or a
+100%-confidence dead-code finding fails the run, while the lower bands warn
+and exit 0. Findings outside the delivery's scope receive their own ticket.
 
 Long commands must produce durable logs and an actual completion exit code. Run
 `make test` and `make quality` detached with `setsid`, write their exit status to a

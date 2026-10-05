@@ -13,9 +13,9 @@ that want a single entry point over both ``.quickscale/state.yml`` and
 ``.quickscale/config.yml``.
 """
 
-from importlib import import_module
 from typing import Any
 
+from quickscale_core._lazy_exports import PROJECT_STATE_EXPORTS, resolve_lazy_export
 from quickscale_core.schema.config_schema import (
     ConfigValidationError,
     DockerConfig,
@@ -35,48 +35,13 @@ _LAZY_EXPORTS = {
     "QuickScaleState": ("quickscale_core.schema.state_schema", "QuickScaleState"),
     "StateError": ("quickscale_core.schema.state_schema", "StateError"),
     "StateManager": ("quickscale_core.schema.state_schema", "StateManager"),
-    "ManagedFileRecord": (
-        "quickscale_core.schema.state_schema",
-        "ManagedFileRecord",
-    ),
-    "ProjectStateManager": (
-        "quickscale_core.project_state",
-        "ProjectStateManager",
-    ),
-    "ManagedFileHash": (
-        "quickscale_core.project_state",
-        "ManagedFileHash",
-    ),
-    "VersionDriftWarning": (
-        "quickscale_core.project_state",
-        "VersionDriftWarning",
-    ),
-    "check_version_drift": (
-        "quickscale_core.project_state",
-        "check_version_drift",
-    ),
-    "compute_file_hashes": (
-        "quickscale_core.project_state",
-        "compute_file_hashes",
-    ),
-    "DEFAULT_MANAGED_WIRING_PATHS": (
-        "quickscale_core.project_state",
-        "DEFAULT_MANAGED_WIRING_PATHS",
-    ),
-    "FILE_HASHES_FILENAME": (
-        "quickscale_core.project_state",
-        "FILE_HASHES_FILENAME",
-    ),
+    **PROJECT_STATE_EXPORTS,
 }
 
 
 def __getattr__(name: str) -> Any:
     """Resolve heavy schema re-exports lazily."""
-    if name not in _LAZY_EXPORTS:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    module_name, attribute_name = _LAZY_EXPORTS[name]
-    module = import_module(module_name)
-    return getattr(module, attribute_name)
+    return resolve_lazy_export(_LAZY_EXPORTS, __name__, name)
 
 
 __all__ = [

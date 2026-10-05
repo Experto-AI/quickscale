@@ -1,6 +1,6 @@
 # Code Quality Analysis Tools
 
-QuickScale provides a comprehensive, baseline-aware quality gate that goes beyond basic linting and type checking. `make quality` runs the baseline monotonicity gate first, then preserves the raw findings in its report artifacts, and compares those findings against the tracked accepted-debt baseline in `scripts/quality_baseline.json`.
+QuickScale provides a comprehensive quality gate that goes beyond basic linting and type checking. `make quality` runs four analyzers, preserves the raw findings in its report artifacts, and applies fixed fail/warn thresholds with no accepted-debt baseline, no waiver ledger, and no monotonicity helper.
 
 ## Running Quality Analysis
 
@@ -10,17 +10,22 @@ make quality
 
 ## What Gets Analyzed
 
+Every metric has exactly two bands: a **fail** column that exits non-zero and a **warn** band that prints and still exits 0. Fail-column findings are named with their function, file, or block and value.
+
+| Metric | Fails (non-zero exit) | Warns only |
+|---|---|---|
+| Dead code (vulture) | 100% confidence | 80-99% confidence |
+| Cyclomatic complexity (radon) | CC >= 21 | CC 11-20 |
+| File length | >= 800 lines | 500-799 lines |
+| Duplication (pylint R0801) | a block of >= 20 similar lines | blocks of 6-19 lines |
+
 ### 1. Dead Code Detection (vulture)
 
-Identifies unused:
-- Imports
-- Functions and methods
-- Classes
-- Variables and attributes
-- Function parameters
+Identifies unused imports, functions, methods, classes, variables, and function parameters at 80% confidence or higher.
 
 **Thresholds:**
-- Minimum confidence: 80% (high confidence findings only)
+- Fail: any finding at 100% confidence
+- Warn: findings at 80-99% confidence
 - Excludes: Django framework patterns (Meta classes, migrations)
 
 **Example findings:**
@@ -29,24 +34,20 @@ quickscale_cli/src/utils/helpers.py:42: unused function 'format_date' (80% confi
 quickscale_core/src/models.py:15: unused import 'datetime' (100% confidence)
 ```
 
+A 100% dead-code finding is code that can never run, so it fails the gate. The lower band is advisory.
+
 ### 2. Complexity Metrics (radon)
 
 **Cyclomatic Complexity (CC):**
 - Measures code complexity based on decision points
-- Thresholds:
-  - **A (1-5):** Simple - no action needed
-  - **B (6-10):** Moderate - acceptable
-  - **C (11-20):** High - consider refactoring
-  - **D (21-30):** Very high - refactor recommended
-  - **E (31+):** Extremely high - refactor required
+- Grades:
+  - **A (1-5):** Simple
+  - **B (6-10):** Moderate
+  - **C (11-20):** High — warning band
+  - **D (21-30):** Very high — failure band
+  - **E (31+):** Extremely high — failure band
 
-Functions at CC >= 21 are reported as an error naming the function and its
-value, and `make quality` exits non-zero for them regardless of the accepted
-baseline. The CC 11-20 tier stays a warning. Nested functions are included
-through Radon's closure reporting; Radon class aggregates are not functions
-and are not part of the critical count. Radon does not report methods of
-classes declared inside functions, so those methods remain outside this
-measurement by analyzer limitation.
+Functions at CC >= 21 are reported as failures naming the function and its value. The CC 11-20 tier stays a warning. Nested functions are included through Radon's closure reporting; Radon class aggregates are not functions and are not part of the failure count. Radon does not report methods of classes declared inside functions, so those methods remain outside this measurement by analyzer limitation.
 
 **Maintainability Index (MI):**
 - Composite metric combining complexity, LOC, and Halstead volume
@@ -55,7 +56,9 @@ measurement by analyzer limitation.
   - **B (10-19):** Moderately maintainable
   - **C (0-9):** Difficult to maintain
 
-**Example findings:**
+MI is collected in the report but has no gate threshold (it is out of scope for the fixed-threshold lane).
+
+**Example finding:**
 ```json
 {
   "quickscale_cli/commands/module_commands.py": [
@@ -69,21 +72,12 @@ measurement by analyzer limitation.
 }
 ```
 
-### 3. Large File Detection (Gated at 800 Lines)
+### 3. Large File Detection
 
-Identifies files that may benefit from splitting:
-- **Warning:** 500-799 lines — advisory
-- **Critical:** >=800 lines — gated
+- **Fail:** >= 800 lines
+- **Warn:** 500-799 lines
 
-A file at or above 800 lines is reported as an error naming the file and its
-line count, and `make quality` exits non-zero for it regardless of the accepted
-baseline. The 500-799-line tier stays an advisory warning. Line counts include
-a final physical line that has no trailing newline.
-
-**Why it matters:**
-- Large files are harder to understand and navigate
-- Indicates potential Single Responsibility Principle violations
-- Makes code review more difficult
+A file at or above 800 lines is reported as a failure naming the file and its line count. Line counts include a final physical line that has no trailing newline, so an exactly-800-line file without a terminal newline cannot slip past the gate.
 
 **Example findings:**
 ```
@@ -93,23 +87,21 @@ a final physical line that has no trailing newline.
 
 ### 4. Code Duplication (pylint)
 
-Detects similar code blocks across files:
-- Minimum: 6 similar lines
-- Ignores: comments, docstrings, imports
+Detects similar code blocks across files, ignoring comments, docstrings, and imports.
 
-**Why it matters:**
-- Violates DRY (Don't Repeat Yourself) principle
-- Increases maintenance burden
-- Bugs must be fixed in multiple places
+- **Fail:** a block of >= 20 similar lines
+- **Warn:** blocks of 6-19 similar lines
 
-**Example findings:**
+The gate runs pylint's `duplicate-code` checker twice, with `--min-similarity-lines` set one below each inclusive floor because pylint compares strictly greater: option 5 for the 6-line warn floor and option 19 for the 20-line fail line. Fail-column blocks are exactly the blocks pylint reports at 19 (>= 20 similar lines); every other block observed at 5 (>= 6 similar lines) is a warning. Each reported block is named by its participating locations and source span, in one-based inclusive source lines (pylint's message ranges are zero-based and end-exclusive). The 20-line bar follows the block-size practice of CPD-style tools.
+
+**Example finding** (`quality_report.json`):
 ```json
 {
-  "message": "Similar lines in 2 files",
-  "locations": [
-    {"path": "file1.py", "line": 42},
-    {"path": "file2.py", "line": 156}
-  ]
+  "message-id": "R0801",
+  "message": "Similar lines in 2 files\n==pkg.a:[10:31]\n==pkg.b:[44:65]\n...",
+  "path": "pkg/a.py",
+  "line": 10,
+  "endLine": 30
 }
 ```
 
@@ -117,462 +109,112 @@ Detects similar code blocks across files:
 
 ### JSON Output (.quickscale/quality_report.json)
 
-Machine-readable format for:
-- CI/CD integration
-- Automated tooling
-- Trend analysis over time
-- Raw finding preservation, even when the gate passes against baseline
+Machine-readable report for CI/CD integration, automated tooling, trend analysis, and raw finding preservation:
 
 ```json
 {
-  "timestamp": "2025-12-07T...",
-  "summary": {
-    "dead_code_issues": 5,
-    "high_complexity_functions": 3,
-    "large_files_warning": 2,
-    "large_files_error": 1,
-    "duplication_blocks": 4,
-    "total_issues": 15
+  "timestamp": "2026-10-05T...",
+  "thresholds": {
+    "vulture": {"warn_min_confidence": 80, "fail_min_confidence": 100},
+    "complexity": {"warn_min_cc": 11, "fail_min_cc": 21},
+    "large_files": {"warn_min_lines": 500, "fail_min_lines": 800},
+    "duplication": {"warn_min_similar_lines": 6, "fail_min_similar_lines": 20}
   },
-  "baseline": { ... },
-  "regressions": { ... },
-  "dead_code": { ... },
-  "complexity": { ... },
-  "large_files": { ... },
-  "duplication": { ... }
+  "summary": {
+    "dead_code_fail": 0,
+    "dead_code_warning": 4,
+    "complexity_fail": 0,
+    "complexity_warning": 12,
+    "large_files_fail": 0,
+    "large_files_warning": 5,
+    "duplication_fail": 0,
+    "duplication_warning": 18,
+    "fail_total": 0,
+    "warning_total": 39
+  },
+  "fail_findings": {
+    "dead_code": [],
+    "complexity": [],
+    "large_files": [],
+    "duplication": []
+  },
+  "warnings": { "...": "same shape as fail_findings" },
+  "dead_code": {"raw_output": "..."},
+  "complexity": {"cyclomatic": {}, "maintainability": {}, "raw_metrics": {}},
+  "large_files": {"files": "..."},
+  "duplication": {"observed": [], "fail_blocks": [], "warning_blocks": []}
 }
 ```
 
 ### Markdown Output (.quickscale/quality_report.md)
 
-Human-readable format optimized for:
-- LLM consumption (Claude, GPT)
-- Code review discussions
-- Documentation
-
-Contains:
-- Executive summary table
-- Detailed findings per category
-- Actionable recommendations
-- Priority-ranked action items
+Human-readable report optimized for review discussions and LLM consumption. Contains the thresholds, a per-metric summary table, the failing findings and warnings lists, and the raw analyzer output per category.
 
 ### Gate Status Output (.quickscale/quality_gate_status.json)
 
-Compact machine-readable summary of the baseline gate result:
-- Baseline load status and any baseline error
-- Warning regression count
-- Critical regression count
-- Total regression count
+Compact machine-readable gate result:
+
+```json
+{
+  "fail_count": 0,
+  "warning_count": 39,
+  "exit_code": 0,
+  "dead_code_fail": 0,
+  "dead_code_warning": 4,
+  "complexity_fail": 0,
+  "complexity_warning": 12,
+  "large_files_fail": 0,
+  "large_files_warning": 5,
+  "duplication_fail": 0,
+  "duplication_warning": 18
+}
+```
 
 ## Exit Codes
 
-- **0:** No warning or critical regressions beyond the tracked baseline, no function at CC >= 21 or file at >= 800 lines, and the monotonicity gate passed
-- **1:** Warning regressions found, the baseline file could not be loaded, or the baseline monotonicity gate failed (policy violation or prerequisite error)
-- **2:** Critical regressions found, or any function at CC >= 21 or file at >= 800 lines
+- **0:** No fail-column finding; warn-column findings may be present and are printed
+- **1:** At least one fail-column finding, missing analyzer dependencies, or unparseable analyzer output
 
-> **Note:** The baseline monotonicity helper uses exit 1 for a policy violation
-> and exit 2 for a prerequisite or schema error. `scripts/check_quality.sh`
-> maps either helper failure to its own exit 1. When that script is run through
-> GNU Make, `make quality` reports the failed recipe as process exit 2; this
-> outer GNU Make status is distinct from the helper/script status.
+## Quality Thresholds Gate {#quality-thresholds-gate}
+
+`make quality` is a fixed-threshold gate. It never reads a baseline file, never consults a waiver, and never compares against Git history. The rules are:
+
+1. Each analyzer runs once per invocation; the report artifacts are written only after all four complete.
+2. A finding in a fail column exits 1 and is named in stdout, the Markdown report, and `quality_gate_status.json`.
+3. A finding in a warn band prints and leaves the exit code at 0.
+4. An analyzer failure is a hard failure, never zero findings: a non-zero analyzer status beyond "findings present", unparseable output, or an analyzer diagnostic object aborts the run with exit 1 and no fresh verdict artifacts.
+5. The only way to clear a fail-column finding is to fix it. There is no allowlist and no inline waiver.
+
+The duplication checker is the one analyzer run twice: the 5-option pass feeds the warn band (and the `duplication.observed` list in the report), and the 19-option pass defines the fail column. A block reported by the fail pass fails; the remaining observed blocks warn. Both boundaries are inclusive in policy — exactly 6 similar lines warns, exactly 20 fails — while pylint's option is exclusive, hence the option values being one below each floor.
 
 ## Integration with Existing Tools
-
-The quality analysis script complements existing tools:
 
 | Command | Purpose | When to Run |
 |---------|---------|-------------|
 | `make lint` | Format + basic linting (ruff) | Before every commit |
 | `make ci` | Primary local development checks (lint + typecheck + unit tests; integration when PostgreSQL available) | Before push to GitHub |
-| `make quality` | Deep quality analysis (dead code, complexity, duplication, file length) + baseline monotonicity gate; a registered gate in `make ci` | Every local CI run, or directly for a quality-only pass |
+| `make quality` | Deep quality analysis (dead code, complexity, duplication, file length) with the fixed thresholds; a registered gate in `make ci` | Every local CI run, or directly for a quality-only pass |
 
 ## Workflow Recommendations
 
 1. **Daily development:** Use `make lint` for quick fixes
 2. **Before push:** Run `make ci` to run primary local development checks before pushing
-3. **Quality-only pass:** Run `make quality` to check the ratchet without the rest of local CI
-4. **Before releases:** Review quality reports and address critical issues
+3. **Quality-only pass:** Run `make quality` to check the thresholds without the rest of local CI
+4. **Before releases:** Review quality reports and address failing findings
 
 ## Interpreting Results
 
-### When to Refactor
+**Immediate action required (fail column):**
+- Functions with CC >= 21
+- Files at or above 800 lines
+- Duplication blocks of 20 or more similar lines
+- Dead code at 100% confidence
 
-**Immediate action required:**
-- Functions with CC >20
-- Duplicate code in critical paths
-
-**Plan for next sprint:**
+**Plan for next sprint (warn band):**
 - Functions with CC 11-20
-- Confirmed dead code (not framework-related)
-
-**Monitor but don't block:**
-- Files 500-799 lines (advisory large-file diagnostic)
-- Dead code with <80% confidence
-- Functions with CC 6-10
-
-**Gated:** functions at or above CC 21 and files at or above 800 lines fail
-`make quality` outright, independent of the accepted baseline. Functions at
-CC 11-20 stay warnings, and a new or grown finding in that tier must be listed
-in the baseline with a ceiling. Files at 500-799 lines are advisory diagnostics
-only and need no baseline entry; `file_length` entries still carry a reason.
-
-## Baseline Monotonicity Gate (SA121)
-
-The quality baseline monotonicity gate enforces the shrink-only policy for
-`scripts/quality_baseline.json`.  It runs as the first step inside
-`make quality`, before any analyzer starts.
-
-### How It Works
-
-The helper (`scripts/check_quality_baseline_monotonicity.py`) compares every
-ceiling in the current baseline file against the blob at the merge-base commit
-in Git.  Any increase requires a matching structured waiver in
-`scripts/quality_waivers.json` or the gate fails.
-
-```bash
-# Run standalone (used by make quality internally)
-QUALITY_BASELINE_BASE_REF=main poetry run python scripts/check_quality_baseline_monotonicity.py
-
-# Or with an explicit ref
-poetry run python scripts/check_quality_baseline_monotonicity.py --base-ref main
-```
-
-### Comparison Scope
-
-Every increase in the following retained baseline values requires a waiver:
-
-| Section | Key | Compared value |
-|---------|-----|----------------|
-| `dead_code` | Per normalized message | Occurrence count (multiplicity) |
-| `complexity` | Per `module.qualname` key | `max_complexity` |
-| `file_length` | Per repo-relative path | `max_lines` |
-| `duplication` | Global | `allowed_blocks` |
-
-The `file_length` section is optional so pre-SA231 merge-base blobs stay valid:
-an absent section contributes no keys, and a key present only on the current
-side is an increase from 0 that needs a waiver. Legacy `large_files` data is
-never indexed.
-
-A missing base key is treated as 0 (any current value > 0 is an increase).
-Deleted, reduced, or unchanged entries pass without action.  A complexity
-**move** is not an increase: when a current key is absent from the merge base
-and an old entry carries the same `qualname` but no longer exists under its own
-key, the old ceiling is re-keyed to the new location.  A value at or below that
-ceiling is a pure move and passes without a waiver; a higher value is a
-worsened qualname and needs one.  When several old entries share the qualname,
-the one sharing the longest module prefix wins, then the highest ceiling.  The
-report comparison only treats a baseline entry as a move source when a
-full-grade radon pass no longer reports it in the tree, so a function reduced
-below the reporting threshold cannot lend its ceiling to an unrelated new
-function.  The merge base may still carry the legacy `path::symbol` form, which
-is canonicalized to `module.qualname` before comparison; the current baseline
-must use `module.qualname`.
-
-### Baseline File Schema
-
-`scripts/quality_baseline.json` must satisfy this exact schema.  Every field is
-required unless marked optional; extra fields are tolerated but ignored.
-
-```json
-{
-  "schema_version": 1,
-  "dead_code": {
-    "allowed_messages": ["string", "..."]
-  },
-  "complexity": {
-    "allowed_functions": {
-      "package.module.function_or_method_name": {
-        "module": "package.module",
-        "qualname": "function_or_method_name",
-        "type": "function|method|class",
-        "max_complexity": 11,
-        "reason": "required when max_complexity >= 21"
-      }
-    }
-  },
-  "file_length": {
-    "allowed_files": {
-      "canonical/repo/relative/path.py": {
-        "max_lines": 800,
-        "reason": "why this file is listed"
-      }
-    }
-  },
-  "duplication": {
-    "allowed_blocks": 0,
-    "allowed_block_identities": ["optional, length equals allowed_blocks"]
-  }
-}
-```
-
-Field-level rules:
-
-- **`schema_version`** — strict non-bool `int`, exactly `1`.  A `bool` value is
-  rejected (Python `bool` subclasses `int` but is explicitly excluded).
-- **`dead_code.allowed_messages`** — list of non-empty strings.  Multiplicity
-  (occurrence count of each distinct message) is the compared value.  Empty
-  strings are rejected; duplicates are valid and simply raise multiplicity.
-- **`complexity.allowed_functions`** — dict mapping canonical
-  `module.qualname` keys to records with `module` and `qualname` (each a
-  non-empty dotted Python identifier path), `type`
-  (`function`/`method`/`class`), and `max_complexity` (strict non-negative
-  non-bool `int`).  The key must equal `module.qualname`.  The module is the
-  function's defining module: the repo path under `src/`, with `/` mapped to
-  `.`, `.py` dropped, and `__init__` mapped to its package.  A `reason`
-  (non-empty string) is required when `max_complexity` is at or above the
-  critical threshold (21); it is optional below it.  The merge-base side of a
-  comparison may still carry the pre-SA233 `file::symbol` form, whose key must
-  equal `file::symbol` and whose `file` is validated by a strict
-  repo-relative path checker; it is canonicalized to `module.qualname`.  The
-  current baseline must use the `module.qualname` form.
-- **`file_length.allowed_files`** — optional section; a dict mapping each
-  accepted file's canonical repo-relative path to a record with `max_lines`
-  (strict non-negative non-bool `int`) and `reason` (non-empty string).  The
-  section is validated when present; a missing section means no accepted files.
-- **`duplication.allowed_blocks`** — strict non-negative non-bool `int`.
-- **`duplication.allowed_block_identities`** — optional; when present, a list
-  of non-empty strings whose length exactly equals `allowed_blocks`, and each
-  observed block is accepted once by identity.  When absent, the ceiling is a
-  count ceiling: up to `allowed_blocks` observed blocks are accepted and a
-  higher observed count is a regression.  Count-ceiling acceptance is the
-  stable form because pylint's R0801 block pairing and line ranges are not
-  deterministic across runs.
-
-The helper builds validated ceiling indexes (`dict[str, int]` keyed by
-canonical key) from the merge-base and current baselines after structural
-validation, and compares those indexes directly.  It never applies
-`.get(..., 0)` to malformed input — a value that fails strict type/range
-validation exits 2 with a `SCHEMA_ERROR` envelope rather than defaulting.
-
-### Base-Ref Precedence
-
-The merge-base is resolved in this order (first match wins):
-
-1. `--base-ref` CLI argument — explicit manual override
-2. `QUALITY_BASELINE_BASE_REF` environment variable — local CI / ad-hoc
-3. `GITHUB_BASE_REF` environment variable — GitHub Actions PR context (tries
-   `origin/<branch>` first, then local `<branch>`)
-4. Durable `main` branch — fallback for local development (tries
-   `origin/main` first, then local `main`)
-
-### Required History
-
-The helper reads the base baseline from the local Git object store. The
-repository must have the necessary history and either `origin/main` or local
-`main` available for the default path. There is **no automatic fetch** and
-**no fallback** to `HEAD^` — if neither default candidate resolves, or if the
-merge-base commit does not contain `scripts/quality_baseline.json`, the gate
-fails with exit 2 and names `--base-ref` and `QUALITY_BASELINE_BASE_REF` as
-remediation. A missing *waiver* file is tolerated and treated as an empty
-ledger (initial-rollout allowance only).
-
-`QUALITY_BASELINE_FILE` may override the current-baseline file path, but the
-merge-base side of the comparison always reads the canonical
-`scripts/quality_baseline.json` path from the Git tree.
-
-### Waiver Schema & Lifecycle
-
-Waivers are stored in `scripts/quality_waivers.json`:
-
-```json
-{
-  "schema_version": 1,
-  "waivers": [
-    {
-      "waiver_id": "W001",
-      "entry_key": "complexity:package.module.function_name",
-      "base_ceiling": 12,
-      "ceiling": 13,
-      "owner": "user@example.com",
-      "reason": "Brief justification",
-      "expires_on": "YYYY-MM-DD",
-      "decision_ref": "quality-baseline-monotonicity"
-    }
-  ]
-}
-```
-
-Each waiver must use the exact canonical `entry_key` format matching the
-monotonicity diagnostic key.  The helper's ``_parse_entry_key`` rejects any
-key that does not match its section's strict canonical syntax:
-
-- ``dead_code:allowed_messages:<nonempty-msg>:multiplicity`` — the message
-  between the prefix and ``:multiplicity`` suffix must be non-empty.
-- ``complexity:<module>.<qualname>`` — a dotted Python identifier path with
-  at least two segments.  Non-identifier characters (including ``/``, ``::``,
-  and control, surrogate, or DEL characters) are rejected.
-- ``file_length:<safe-repo-path>`` — exactly one validated repo-relative path
-  after the prefix; extra colons are rejected.
-- ``duplication:allowed_blocks`` — exact literal match only.
-
-Waivers whose ``entry_key`` fails parsing are assigned the ``malformed``
-state before any lifecycle matching (orphan/stale/active) is attempted.
-
-Key fields:
-
-- **`base_ceiling`** — the value at the merge-base (used for stale-waiver
-  detection: a mismatch is a hard failure and the violation remains unresolved)
-- **`ceiling`** — the maximum allowed current value; if the observed value
-  exceeds this ceiling, the waiver does not resolve the violation
-- **`expires_on`** — strict ASCII YYYY-MM-DD UTC date
-  (``[0-9]{4}-[0-9]{2}-[0-9]{2}``, validated with `fullmatch` before
-  ``date.fromisoformat``); Unicode digit characters (e.g. fullwidth
-  ``２０２６-０１-０１``) are rejected.  Expired waivers
-  (``expires_on < today in UTC``) are assigned the ``expired`` state and do
-  not resolve violations
-- **`decision_ref`** — exact Markdown heading anchor (`{#anchor-name}`) or
-  HTML anchor (`<a id="anchor-name">`) in `docs/technical/decisions.md`;
-  substring text matching is not accepted
-
-### Waiver Lifecycle States
-
-State precedence for each ledger row (first match wins):
-
-1. **malformed** — per-row schema validation failure (missing fields, invalid types, unresolved `decision_ref`)
-2. **duplicate** — `waiver_id` or `entry_key` appears more than once; all copies are disqualified
-3. **expired** — `expires_on < today` (UTC date comparison)
-4. **orphan** — `entry_key` has no corresponding increase (no-op)
-5. **stale_base** — `base_ceiling` does not match the merge-base value
-6. **over_ceiling** — current value exceeds the waiver's `ceiling`
-7. **active** — all checks pass; waiver covers the increase
-
-| State | Meaning | Gate Impact |
-|-------|---------|-------------|
-| `active` | Waiver is valid and covers the increase | Non-blocking |
-| `stale_base` | `base_ceiling` does not match the merge-base value — violation remains unresolved | Hard fail — verdict is `violation` |
-| `over_ceiling` | Current value exceeds `ceiling` — violation remains unresolved | Hard fail — verdict is `violation` |
-| `malformed` | Missing required fields, invalid types, or invalid `decision_ref` — violation remains unresolved | Hard fail — verdict is `violation` |
-| `expired` | `expires_on` has passed (UTC date < today) — violation remains unresolved | Hard fail — verdict is `violation` |
-| `orphan` | Waiver's `entry_key` has no corresponding violation (no-op) | Hard fail — verdict is `violation` |
-| `duplicate` | Duplicate `waiver_id` or `entry_key` — all copies are disqualified from matching violations | Hard fail — verdict is `violation` |
-
-All non-`active` states are blocking.  Every ledger row produces exactly one
-evaluation; `active` is the only non-blocking outcome.
-
-### Error Envelope
-
-When a schema or prerequisite error prevents the comparison, the helper writes
-a deterministic error envelope to ``.quickscale/quality_baseline_policy.json``:
-
-```json
-{
-  "schema_version": 1,
-  "verdict": "error",
-  "error": {
-    "code": "SCHEMA_ERROR",
-    "source": "current_baseline",
-    "path": "dead_code.allowed_messages",
-    "message": "dead_code.allowed_messages must be a list of strings"
-  },
-  "diagnostics": []
-}
-```
-
-Canonical source labels:
-- ``merge_base_baseline`` — the blob from the merge-base commit
-- ``current_baseline`` — the live baseline file
-- ``waiver_ledger`` — the waiver file
-- ``git`` — Git resolution failure (merge-base resolution)
-- ``main`` — unexpected handler error
-
-The helper prints a single `ERROR:` line to stderr (no Python traceback) and
-exits 2.  The shell script maps either helper failure (exit 1 or exit 2) to
-its own exit 1. When invoked by GNU Make, the failed recipe is surfaced as
-`make quality` exit 2.
-
-### Canonical Diagnostic Record
-
-The authoritative diagnostic feed is the ``diagnostics`` list in
-``quality_baseline_policy.json``.  Every diagnostic entry carries the exact
-13-key canonical set: ``error_code``, ``section``, ``canonical_key``,
-``old_value``, ``new_value``, ``waiver_id``, ``waiver_status``,
-``waiver_base_ceiling``, ``waiver_ceiling``, ``waiver_file``,
-``decision_ref``, ``waiver_index``, ``duplicate_kinds``.
-
-All 13 keys are always present.  Unavailable values are ``null`` and
-``duplicate_kinds`` is a deterministic list (empty when no duplicate
-dimensions exist).  This list is sorted and identical across all four
-consumers:
-
-1. ``quality_baseline_policy.json`` — ``diagnostics``
-2. ``quality_report.json`` — ``monotonicity.diagnostics``
-3. ``quality_gate_status.json`` — ``monotonicity_diagnostics``
-4. ``quality_report.md`` — fenced JSON block after ``### Diagnostics``
-
-The shell failure summary (printed to stdout when the monotonicity gate fails)
-also reads from ``diagnostics`` — the same canonical 13-key records.  Raw
-``waiver_evaluations`` dicts are serialised to the policy artifact
-(``quality_baseline_policy.json``) under the ``waiver_evaluations`` key for
-downstream consumers that need the full lifecycle evaluation list.  They are
-**not** printed to stdout — only canonical diagnostic records appear there.
-Waiver lifecycle entries also appear as canonical diagnostic records with
-``waiver_id`` and ``waiver_status`` fields alongside the standard 13-key set
-in the ``diagnostics`` list — the four-consumer canonical feed.
-
-``violations`` and ``unresolved`` are compatibility subsets of the same
-canonical records (same shape, same keys), filtered to include only entries
-with actual increase data (``error_code`` is not null).
-
-### UTC Boundary
-
-All expiry comparisons use ``datetime.now(UTC).date()``.  The waiver
-``expires_on`` date is compared against today's **UTC** date — not local time.
-A waiver whose ``expires_on == today`` remains active even when the system
-timezone offset would place the local date on the following or previous day.
-
-### Shell Cleanup on Failure
-
-When the helper exits non-zero (exit 1 or exit 2), ``check_quality.sh``:
-
-1. Preserves ``.quickscale/quality_baseline_policy.json`` (policy artifact)
-2. Removes stale success artifacts: ``quality_report.json``,
-   ``quality_report.md``, ``quality_gate_status.json``
-3. Aborts without running analyzers (no ``Analyzing …`` output)
-4. Exits 1 (the shell's exit code is always 1 regardless of the helper's
-   more detailed exit 1 vs exit 2 distinction)
-
-### Exit Codes
-
-Integrated into `make quality`:
-
-| Helper exit | `check_quality.sh` exit | `make quality` exit | Behavior |
-|-------------|------------------------|-------------------|----------|
-| 0 (pass) | Proceeds | Normal analyzer result | Proceeds with full analysis; monotonicity verdict added to reports |
-| 1 (violation) | 1 | 2 (failed recipe) | Prints diagnostic summary, preserves policy artifact, clears stale success reports, aborts without running analyzers |
-| 2 (error) | 1 | 2 (failed recipe) | Same cleanup/abort behavior — prerequisite failure (missing ref, bad baseline, git error) |
-
-After the SA124 closeout repairs, the current accepted result has zero warning
-regressions and zero critical regressions, with monotonicity passing. The
-generated quality report is the current evidence for that state; the former
-`development_commands.py::up` and `_social_manifest_apps` warning signatures
-are no longer accepted current-baseline results. Validation evidence must still
-record both helper/script and outer GNU Make statuses whenever a gate fails.
-
-When the gate passes, the verdict and merge-base metadata are included in the
-generated reports:
-
-- **`quality_report.json`** — top-level `"monotonicity"` key with full verdict,
-  violation list, waiver evaluations, and summary
-- **`quality_gate_status.json`** — additive fields `monotonicity_verdict`,
-  `monotonicity_merge_base`, `monotonicity_base_ref`,
-  `monotonicity_waiver_count` (existing keys and readers are unaffected)
-- **`quality_report.md`** — "Baseline Monotonicity Gate (SA121)" section with
-  verdict, merge-base, waiver count, and violation details
-
-### Remediation
-
-If the gate reports unresolved violations:
-
-1. **Check the merge-base ref** — verify `QUALITY_BASELINE_BASE_REF` or
-   `--base-ref` points to the intended baseline
-2. **Identify the increased ceiling** — the diagnostic names the key, old
-   value, new value, and affected section
-3. **Reduce the ceiling** — if the increase is accidental, revert the baseline
-   edit and re-run
-4. **Add a waiver** — if the increase is intentional (e.g. a known refactor),
-   create a waiver in `scripts/quality_waivers.json` with the correct
-   `entry_key`, `base_ceiling`, and `ceiling`
-5. **Re-run** — with the waiver in place, the gate should pass
+- Files of 500-799 lines
+- Duplication blocks of 6-19 similar lines
+- Dead code at 80-99% confidence
 
 ## Configuration
 
@@ -582,12 +224,7 @@ All tools are configured in root-level files:
 - **pylint:** `pyproject.toml` (tool.pylint sections)
 - **radon:** CLI arguments in script (no config file)
 
-`QUALITY_OUTPUT_DIR` overrides the artifact directory (default
-`.quickscale/`); `check_quality.sh` exports it to the monotonicity helper so
-both tools share one directory. The test suite points each run at a temporary
-directory, so tests never write repository artifacts.
-
-Adjust thresholds based on team preferences and project maturity.
+Thresholds live in `scripts/check_quality.sh` at the top of the file. `QUALITY_OUTPUT_DIR` overrides the artifact directory (default `.quickscale/`). The test suite points each run at a temporary directory, so tests never write repository artifacts.
 
 ## Excluding Files
 

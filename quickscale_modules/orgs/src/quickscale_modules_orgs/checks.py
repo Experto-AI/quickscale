@@ -147,7 +147,7 @@ def _is_privileged_command() -> bool:
 
 
 def check_rls_role(
-    app_configs: object = None,
+    _app_configs: object = None,
     **kwargs: object,
 ) -> list[CheckMessage]:
     """Verify the connected PostgreSQL role does not have BYPASSRLS or SUPERUSER.
@@ -200,7 +200,7 @@ def check_rls_role(
 
 
 @register("quickscale_orgs")
-def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
+def check_tenant_isolation(_app_configs: object = None, **kwargs: object) -> list:
     """Discover tenant models and warn if any lack isolation.
 
     This is a startup system check that runs in all environments.  It
@@ -275,7 +275,7 @@ def check_tenant_isolation(app_configs: object, **kwargs: object) -> list:
 
 
 @register("quickscale_orgs")
-def check_model_classification(app_configs: object, **kwargs: object) -> list:
+def check_model_classification(_app_configs: object = None, **kwargs: object) -> list:
     """Warn about concrete project models without tenant markers.
 
     Every concrete model from a project-owned app must either declare the
@@ -341,7 +341,9 @@ def check_model_classification(app_configs: object, **kwargs: object) -> list:
 # system checks. The helper registers it as a system check too.
 
 
-def check_tenant_manager_inheritance(app_configs: object, **kwargs: object) -> list:
+def check_tenant_manager_inheritance(
+    _app_configs: object = None, **kwargs: object
+) -> list:
     """Error when a model carries a ``TenantManager`` without ``TenantModel``.
 
     Inheritance is the only tenant marker: runtime classification and
@@ -386,7 +388,9 @@ def check_tenant_manager_inheritance(app_configs: object, **kwargs: object) -> l
 # ---------------------------------------------------------------------------
 
 
-def check_provider_id_conformance(app_configs: object, **kwargs: object) -> list:
+def check_provider_id_conformance(
+    _app_configs: object = None, **kwargs: object
+) -> list:
     """Error on tenant-model provider-ID fields that nothing classifies.
 
     Walks :func:`get_tenant_models` and reports every non-relational ``*_id``
@@ -451,7 +455,9 @@ def _boundary_implementations() -> dict[RemovalBoundary, tuple[str, str, str]]:
     return removal_boundary_implementations()
 
 
-def check_removal_obligation_discharge(app_configs: object, **kwargs: object) -> list:
+def check_removal_obligation_discharge(
+    _app_configs: object = None, **kwargs: object
+) -> list:
     """Error when the coordinator contract cannot discharge a declaration.
 
     The check fails in four cases:

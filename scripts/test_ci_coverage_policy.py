@@ -860,11 +860,10 @@ class TestRegisteredScriptGateTarget:
             "--no-cov",
             "-q",
             # xdist, distributing by file.  loadfile is load-bearing, not a tuning
-            # knob: the default loadscan distribution splits
-            # test_quality_baseline_monotonicity.py across workers, whose intra-file
-            # shared state then races (measured 2026-08-28: 15 spurious failures).
-            # Keep this exact-match oracle exact -- a subset check here would let the
-            # cache-free and coverage-free guarantees below be silently dropped.
+            # knob: the default loadscan distribution produced spurious failures
+            # (measured 2026-08-28: 15 spurious failures).  Keep this exact-match
+            # oracle exact -- a subset check here would let the cache-free and
+            # coverage-free guarantees below be silently dropped.
             "-n",
             "auto",
             "--dist",

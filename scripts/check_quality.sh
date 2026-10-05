@@ -2,7 +2,12 @@
 # QuickScale Code Quality Analysis Script
 # Integrates: vulture (dead code), radon (complexity), pylint (duplication)
 # Outputs: JSON (machine-readable) + Markdown (LLM-readable)
-# Features: Auto-discovery of Python packages, configurable thresholds
+# Gate: fixed fail/warn thresholds, no baseline and no waivers (SA243).
+#   - vulture:  100% confidence fails; 80-99% warns
+#   - radon CC: >= 21 fails; 11-20 warns
+#   - file size: >= 800 lines fails; 500-799 warns
+#   - pylint duplication: blocks of >= 20 similar lines fail; 6-19 lines warn
+# A warn-column finding prints and still exits 0; a fail-column finding exits 1.
 
 set -euo pipefail
 
@@ -18,11 +23,15 @@ OUTPUT_DIR="${QUALITY_OUTPUT_DIR:-$ROOT/.quickscale}"
 export QUALITY_OUTPUT_DIR="$OUTPUT_DIR"
 JSON_OUTPUT="$OUTPUT_DIR/quality_report.json"
 MD_OUTPUT="$OUTPUT_DIR/quality_report.md"
-BASELINE_FILE="${QUALITY_BASELINE_FILE:-$ROOT/scripts/quality_baseline.json}"
 STATUS_OUTPUT="$OUTPUT_DIR/quality_gate_status.json"
 
 # Ensure output directory exists
 mkdir -p "$OUTPUT_DIR"
+
+# A verdict from a previous run must never survive into a failed run: clear
+# the report and status artifacts before any analysis starts.  A successful
+# run regenerates them below.
+rm -f "$JSON_OUTPUT" "$MD_OUTPUT" "$STATUS_OUTPUT"
 
 # Color codes for output
 RED='\033[0;31m'
@@ -39,21 +48,29 @@ NC='\033[0m' # No Color
 #######################################
 
 # Vulture (Dead Code Detection)
-VULTURE_MIN_CONFIDENCE=80          # Minimum confidence percentage
-VULTURE_SORT_BY_SIZE=true          # Sort results by code size
+VULTURE_MIN_CONFIDENCE=80           # Minimum confidence percentage to report
+VULTURE_ERROR_CONFIDENCE=100        # 100% confidence findings fail the gate
+VULTURE_SORT_BY_SIZE=true           # Sort results by code size
 
 # Radon Complexity Thresholds
 RADON_MIN_COMPLEXITY_GRADE="C"     # Minimum grade to report (A=1-5, B=6-10, C=11-20, D=21-30, E=31+)
 RADON_HIGH_COMPLEXITY_CC=11        # Cyclomatic Complexity threshold for warnings
-RADON_ERROR_COMPLEXITY_CC=21       # NEW: Cyclomatic Complexity threshold for errors
+RADON_ERROR_COMPLEXITY_CC=21       # Cyclomatic Complexity threshold for failures
 RADON_MIN_MI_GRADE="B"             # Maintainability Index minimum grade
 
 # Large File Detection
 LARGE_FILE_WARNING_LINES=500       # Line count to trigger warnings
-LARGE_FILE_ERROR_LINES=800         # Line count to trigger errors (UPDATED from 1000)
+LARGE_FILE_ERROR_LINES=800         # Line count to trigger failures
 
-# Code Duplication (pylint)
-PYLINT_MIN_SIMILARITY_LINES=6      # Minimum similar lines to detect duplication
+# Code Duplication (pylint).  The policy bands are inclusive — a block of
+# exactly 6 similar lines warns, a block of exactly 20 fails — but pylint's
+# --min-similarity-lines option is exclusive (it reports blocks strictly
+# longer than the option value).  The option values are the inclusive floors
+# minus one so the policy holds at the boundaries.
+PYLINT_WARN_MIN_LINES=6            # Warn band floor: blocks of >= 6 similar lines
+PYLINT_FAIL_MIN_LINES=20           # Fail line: blocks of >= 20 similar lines
+PYLINT_WARN_OPTION_LINES=$((PYLINT_WARN_MIN_LINES - 1))
+PYLINT_FAIL_OPTION_LINES=$((PYLINT_FAIL_MIN_LINES - 1))
 
 # Module Discovery
 MODULE_DISCOVERY_ENABLED=true      # Enable auto-discovery of modules
@@ -113,30 +130,6 @@ check_dependencies() {
         print_error "Missing dependencies. Run: poetry install --with dev"
         exit 1
     fi
-}
-
-check_baseline_monotonicity() {
-    print_header "Checking Baseline Monotonicity (SA121)"
-
-    local mon_exit=0
-    poetry run python scripts/check_quality_baseline_monotonicity.py || mon_exit=$?
-
-    if [ $mon_exit -ne 0 ]; then
-        echo ""
-        print_error "Baseline monotonicity gate FAILED (exit $mon_exit)"
-
-        # CR-005: Helper already emits canonical JSON to stdout.
-        # Shell inline summary does NOT duplicate output — only manages
-        # stale artifacts and lifecycle messages.
-
-        # Clear stale success artifacts (preserve policy artifact)
-        rm -f "$JSON_OUTPUT" "$MD_OUTPUT" "$STATUS_OUTPUT"
-        echo ""
-        print_error "Quality gate aborted — monotonicity policy violation (SA121)"
-        exit 1
-    fi
-
-    print_success "Baseline monotonicity gate passed"
 }
 
 discover_python_modules() {
@@ -203,32 +196,82 @@ analyze_dead_code() {
         vulture_args="$vulture_args --sort-by-size"
     fi
 
-    # Run vulture and capture output
+    # Run vulture and capture output.  Exit 3 means findings, 0 means none;
+    # any other status is an analyzer failure that must not read as clean.
+    local vulture_status=0
     local vulture_output
     vulture_output=$(poetry run vulture \
         $module_paths \
-        $vulture_args 2>&1 || true)
+        $vulture_args 2>&1) || vulture_status=$?
 
-    # Count issues
-    local dead_code_count
-    if [ -z "$vulture_output" ]; then
-        dead_code_count=0
-    else
-        dead_code_count=$(echo "$vulture_output" | grep -c "unused" 2>/dev/null || echo "0")
-        # Ensure count is a single integer (trim whitespace)
-        dead_code_count=$(echo "$dead_code_count" | tr -d '[:space:]')
-        dead_code_count=${dead_code_count:-0}
+    if [ "$vulture_status" -ne 0 ] && [ "$vulture_status" -ne 3 ]; then
+        print_error "vulture scan failed (exit $vulture_status)"
+        exit 1
     fi
 
-    if [ "$dead_code_count" -eq 0 ]; then
-        print_success "No dead code found"
-    else
-        print_warning "Found $dead_code_count dead code issues"
-    fi
-
-    # Store results in temporary file for JSON aggregation
+    # Store raw output for the report step
     echo "$vulture_output" > "$OUTPUT_DIR/vulture_raw.txt"
-    echo "$dead_code_count" > "$OUTPUT_DIR/dead_code_count.txt"
+
+    # Split findings by confidence: >= 100% fails, 80-99% warns.  A non-empty
+    # line that is not a finding is an analyzer diagnostic; the run must fail
+    # closed instead of counting it as zero findings.
+    if ! python3 - "$OUTPUT_DIR" "$VULTURE_ERROR_CONFIDENCE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+output_dir = Path(sys.argv[1])
+error_confidence = int(sys.argv[2])
+raw = (output_dir / "vulture_raw.txt").read_text()
+pattern = re.compile(
+    r"^(?P<location>.+?): (?P<message>.+) \((?P<confidence>\d+)% confidence.*\)$"
+)
+
+fail_lines: list[str] = []
+warn_lines: list[str] = []
+for line in raw.splitlines():
+    stripped = line.strip()
+    if not stripped:
+        continue
+    match = pattern.match(stripped)
+    if match is None:
+        raise SystemExit(f"unrecognized vulture output line: {stripped}")
+    if int(match.group("confidence")) >= error_confidence:
+        fail_lines.append(stripped)
+    else:
+        warn_lines.append(stripped)
+
+(output_dir / "dead_code_fail.txt").write_text(
+    "\n".join(fail_lines) + ("\n" if fail_lines else "")
+)
+(output_dir / "dead_code_warning.txt").write_text(
+    "\n".join(warn_lines) + ("\n" if warn_lines else "")
+)
+(output_dir / "dead_code_fail_count.txt").write_text(f"{len(fail_lines)}\n")
+(output_dir / "dead_code_warning_count.txt").write_text(f"{len(warn_lines)}\n")
+PY
+    then
+        print_error "vulture output is not a valid finding list — refusing to treat it as zero findings"
+        exit 1
+    fi
+
+    local fail_count=$(cat "$OUTPUT_DIR/dead_code_fail_count.txt")
+    local warn_count=$(cat "$OUTPUT_DIR/dead_code_warning_count.txt")
+
+    if [ "$fail_count" -gt 0 ]; then
+        print_error "Found $fail_count dead code findings at 100% confidence"
+        while IFS= read -r dead_line; do
+            if [ -n "$dead_line" ]; then
+                print_error "  $dead_line"
+            fi
+        done < "$OUTPUT_DIR/dead_code_fail.txt"
+    fi
+    if [ "$warn_count" -gt 0 ]; then
+        print_warning "Found $warn_count dead code findings at 80-99% confidence"
+    fi
+    if [ "$fail_count" -eq 0 ] && [ "$warn_count" -eq 0 ]; then
+        print_success "No dead code found"
+    fi
 }
 
 analyze_complexity() {
@@ -239,6 +282,7 @@ analyze_complexity() {
 
     # Cyclomatic Complexity (CC)
     echo "Running cyclomatic complexity analysis..."
+    local cc_status=0
     local cc_output
     cc_output=$(poetry run radon cc \
         $module_paths \
@@ -246,21 +290,31 @@ analyze_complexity() {
         --show-complexity \
         --show-closures \
         --total-average \
-        --json 2>&1 || echo "{}")
+        --json 2>/dev/null) || cc_status=$?
+
+    # A non-zero status or a document whose values are not finding lists is
+    # an analyzer failure that must not read as zero findings.  Radon reports
+    # a per-file error object (``{"error": ...}``) for an unparsable file with
+    # status 0, so value shapes are validated too.
+    if [ "$cc_status" -ne 0 ] || ! echo "$cc_output" | python3 -c "
+import json
+import sys
+
+data = json.load(sys.stdin)
+valid = isinstance(data, dict) and all(
+    isinstance(entries, list)
+    and all(isinstance(entry, dict) for entry in entries)
+    for entries in data.values()
+)
+if not valid:
+    raise SystemExit(1)
+" 2>/dev/null; then
+        print_error "radon complexity output is not a valid JSON object — refusing to treat it as zero findings"
+        exit 1
+    fi
 
     # Save JSON output
     echo "$cc_output" > "$OUTPUT_DIR/complexity_cc.json"
-
-    # SA233: full function inventory (every grade) so the baseline comparison
-    # can tell a moved function from one reduced below the reporting threshold.
-    local inventory_output
-    inventory_output=$(poetry run radon cc \
-        $module_paths \
-        --show-complexity \
-        --show-closures \
-        --json 2>&1 || echo "{}")
-
-    echo "$inventory_output" > "$OUTPUT_DIR/complexity_inventory.json"
 
     # Count high complexity functions (C and above)
     local high_complexity_count
@@ -268,16 +322,17 @@ analyze_complexity() {
 import sys, json
 try:
     data = json.load(sys.stdin)
-    count = sum(len([f for f in funcs if f.get('complexity', 0) >= $RADON_HIGH_COMPLEXITY_CC])
+    count = sum(len([f for f in funcs
+                     if f.get('complexity', 0) >= $RADON_HIGH_COMPLEXITY_CC
+                     and f.get('type') != 'class'])
                 for funcs in data.values() if isinstance(funcs, list))
     print(count)
 except:
     print(0)
 " 2>/dev/null || echo "0")
-
     echo "$high_complexity_count" > "$OUTPUT_DIR/high_complexity_count.txt"
 
-    # Count error-level complexity functions (NEW)
+    # Count failure-level complexity functions
     local error_complexity_count
     error_complexity_count=$(echo "$cc_output" | python3 -c "
 import sys, json
@@ -291,34 +346,43 @@ try:
 except:
     print(0)
 " 2>/dev/null || echo "0")
-
     echo "$error_complexity_count" > "$OUTPUT_DIR/error_complexity_count.txt"
 
-    # SA242: name every critical function so the hard gate reports it, not
-    # just a count. The file backs the summary printout and the exit verdict.
+    # SA242: name every failure-column function so the gate reports it, not
+    # just a count. The warning-column file backs the warn-naming in reports.
+    # Radon class aggregates are not functions and are excluded from the fail
+    # column; nested functions are included through --show-closures.
     echo "$cc_output" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
 except Exception:
     data = {}
-rows = []
+
+def function_name(entry):
+    name = entry.get('name', '?')
+    classname = entry.get('classname')
+    return f'{classname}.{name}' if classname else name
+
+error_rows = []
+warn_rows = []
 for file_path, funcs in data.items():
     if not isinstance(funcs, list):
         continue
     for entry in funcs:
-        if (
-            entry.get('complexity', 0) >= $RADON_ERROR_COMPLEXITY_CC
-            and entry.get('type') != 'class'
-        ):
-            name = entry.get('name', '?')
-            classname = entry.get('classname')
-            if classname:
-                name = f'{classname}.{name}'
-            rows.append((entry['complexity'], file_path, name))
-for complexity, file_path, name in sorted(rows, reverse=True):
-    print(f'{complexity}\t{file_path}\t{name}')
-" > "$OUTPUT_DIR/error_complexity_functions.txt" 2>/dev/null || true
+        if entry.get('type') == 'class':
+            continue
+        complexity = entry.get('complexity', 0)
+        if complexity >= $RADON_ERROR_COMPLEXITY_CC:
+            error_rows.append((complexity, file_path, function_name(entry)))
+        elif complexity >= $RADON_HIGH_COMPLEXITY_CC:
+            warn_rows.append((complexity, file_path, function_name(entry)))
+for rows, filename in ((error_rows, 'error_complexity_functions.txt'), (warn_rows, 'high_complexity_functions.txt')):
+    rows.sort(reverse=True)
+    with open('$OUTPUT_DIR/' + filename, 'w') as handle:
+        for complexity, file_path, name in rows:
+            handle.write(f'{complexity}\t{file_path}\t{name}\n')
+" 2>/dev/null || true
 
     if [ "$high_complexity_count" -eq 0 ] && [ "$error_complexity_count" -eq 0 ]; then
         print_success "No high complexity functions found"
@@ -384,13 +448,13 @@ analyze_large_files() {
     echo "$large_files_output" > "$OUTPUT_DIR/large_files.txt"
 
     local warning_count
-    warning_count=$(echo "$large_files_output" | grep -v "^$" | \
+    warning_count=$(printf '%s\n' "$large_files_output" | \
         awk -v warn="$LARGE_FILE_WARNING_LINES" -v err="$LARGE_FILE_ERROR_LINES" \
-        '$1 >= warn && $1 < err' | wc -l)
+        '$1 >= warn && $1 < err {count++} END {print count+0}')
 
     local error_count
-    error_count=$(echo "$large_files_output" | grep -v "^$" | \
-        awk -v err="$LARGE_FILE_ERROR_LINES" '$1 >= err' | wc -l)
+    error_count=$(printf '%s\n' "$large_files_output" | \
+        awk -v err="$LARGE_FILE_ERROR_LINES" '$1 >= err {count++} END {print count+0}')
 
     echo "$warning_count" > "$OUTPUT_DIR/large_files_warning_count.txt"
     echo "$error_count" > "$OUTPUT_DIR/large_files_error_count.txt"
@@ -417,41 +481,127 @@ analyze_duplication() {
     # Get module paths
     local module_paths=$(get_module_paths)
 
-    # Run pylint with only duplicate-code check enabled.
     # pylint exits 8 when it reports refactor findings (which includes every
-    # R0801 block), so its output must be captured independently of the exit
-    # status; stdout is the JSON document.
-    local pylint_output
-    pylint_output=$(poetry run pylint \
+    # R0801 block) and 0 when there are none; any other status is an analyzer
+    # failure.  stdout is the JSON document; stderr stays out of it.
+    local pylint_common="--disable=all --enable=duplicate-code --ignore-comments=yes --ignore-docstrings=yes --ignore-imports=yes --output-format=json"
+
+    # Warn pass: every block of >= 6 similar lines (the option value is one
+    # below the inclusive floor because pylint compares strictly greater).
+    local warn_status=0
+    local warn_output
+    warn_output=$(poetry run pylint \
         $module_paths \
-        --disable=all \
-        --enable=duplicate-code \
-        --min-similarity-lines=$PYLINT_MIN_SIMILARITY_LINES \
-        --ignore-comments=yes \
-        --ignore-docstrings=yes \
-        --ignore-imports=yes \
-        --output-format=json 2>/dev/null || true)
+        $pylint_common \
+        --min-similarity-lines=$PYLINT_WARN_OPTION_LINES 2>/dev/null) || warn_status=$?
+    echo "$warn_output" > "$OUTPUT_DIR/duplication.json"
 
-    echo "$pylint_output" > "$OUTPUT_DIR/duplication.json"
+    # Fail pass: only blocks of >= 20 similar lines, by pylint's own count.
+    local error_status=0
+    local error_output
+    error_output=$(poetry run pylint \
+        $module_paths \
+        $pylint_common \
+        --min-similarity-lines=$PYLINT_FAIL_OPTION_LINES 2>/dev/null) || error_status=$?
+    echo "$error_output" > "$OUTPUT_DIR/duplication_error.json"
 
-    # Count duplication blocks; unparseable output is a gate error, never zero
-    local dup_count
-    if ! dup_count=$(echo "$pylint_output" | python3 -c "
-import sys, json
-data = json.load(sys.stdin)
-count = len([d for d in data if d.get('message-id') == 'R0801'])
-print(count)
-" 2>/dev/null); then
-        print_error "pylint duplication output is not valid JSON — refusing to treat it as zero findings"
+    if { [ "$warn_status" -ne 0 ] && [ "$warn_status" -ne 8 ]; } || \
+       { [ "$error_status" -ne 0 ] && [ "$error_status" -ne 8 ]; }; then
+        print_error "pylint duplication scan failed (exit $warn_status/$error_status)"
         exit 1
     fi
 
-    echo "$dup_count" > "$OUTPUT_DIR/duplication_count.txt"
+    # Classify the two runs.  Unparseable output, a non-object entry, or a
+    # non-R0801 analyzer diagnostic is a gate error, never zero findings.  A
+    # block reported by the fail pass fails; every other block observed by
+    # the warn pass warns.
+    if ! python3 - "$OUTPUT_DIR" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
 
-    if [ "$dup_count" -eq 0 ]; then
+output_dir = Path(sys.argv[1])
+header_pattern = re.compile(r"==([^\s:]+):\[(\d+):(\d+)\]")
+
+
+def load_blocks(filename: str) -> list[dict]:
+    raw = (output_dir / filename).read_text()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{filename} is not valid JSON: {exc}") from None
+    if not isinstance(data, list):
+        raise SystemExit(f"{filename} must be a JSON list")
+    blocks = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            raise SystemExit(f"{filename} contains a non-object entry")
+        message_id = entry.get("message-id")
+        if message_id != "R0801":
+            raise SystemExit(
+                f"{filename} carries analyzer diagnostic {message_id}: "
+                f"{entry.get('message', '')}"
+            )
+        blocks.append(entry)
+    return blocks
+
+
+def identity(entry: dict) -> tuple[str, ...]:
+    headers = tuple(header_pattern.findall(str(entry.get("message", ""))))
+    if headers:
+        return headers
+    return (json.dumps(entry, sort_keys=True),)
+
+
+fail_blocks = load_blocks("duplication_error.json")
+fail_identities = {identity(entry) for entry in fail_blocks}
+warn_blocks = [
+    entry for entry in load_blocks("duplication.json") if identity(entry) not in fail_identities
+]
+
+(output_dir / "duplication_fail.json").write_text(json.dumps(fail_blocks, indent=2) + "\n")
+(output_dir / "duplication_warning.json").write_text(json.dumps(warn_blocks, indent=2) + "\n")
+(output_dir / "duplication_count.txt").write_text(f"{len(fail_blocks) + len(warn_blocks)}\n")
+(output_dir / "duplication_fail_count.txt").write_text(f"{len(fail_blocks)}\n")
+(output_dir / "duplication_warning_count.txt").write_text(f"{len(warn_blocks)}\n")
+PY
+    then
+        print_error "pylint duplication output is not a valid finding list — refusing to treat it as zero findings"
+        exit 1
+    fi
+
+    local fail_count=$(cat "$OUTPUT_DIR/duplication_fail_count.txt")
+    local warn_count=$(cat "$OUTPUT_DIR/duplication_warning_count.txt")
+
+    if [ "$fail_count" -gt 0 ]; then
+        print_error "Found $fail_count duplication blocks of >= $PYLINT_FAIL_MIN_LINES similar lines"
+        python3 - "$OUTPUT_DIR/duplication_fail.json" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+header_pattern = re.compile(r"==([^\s:]+):\[(\d+):(\d+)\]")
+for entry in json.loads(Path(sys.argv[1]).read_text()):
+    ranges = header_pattern.findall(str(entry.get("message", "")))
+    if ranges:
+        for name, start, end in ranges:
+            # Pylint headers are zero-based and end-exclusive; display
+            # one-based inclusive source lines.
+            start_line = int(start) + 1
+            end_line = int(end)
+            span = end_line - start_line + 1
+            print(f"  {name} source lines {start_line}-{end_line} (span {span} lines)")
+    else:
+        print(f"  {entry.get('path', 'unknown-path')}")
+PY
+    fi
+    if [ "$warn_count" -gt 0 ]; then
+        print_warning "Found $warn_count duplication blocks of $PYLINT_WARN_MIN_LINES-$((PYLINT_FAIL_MIN_LINES - 1)) similar lines"
+    fi
+    if [ "$fail_count" -eq 0 ] && [ "$warn_count" -eq 0 ]; then
         print_success "No code duplication found"
-    else
-        print_warning "Found $dup_count duplication blocks"
     fi
 }
 
@@ -467,379 +617,115 @@ generate_json_report() {
     export QS_OUTPUT_DIR="$OUTPUT_DIR"
     export QS_JSON_OUTPUT="$JSON_OUTPUT"
     export QS_STATUS_OUTPUT="$STATUS_OUTPUT"
-    export QS_BASELINE_FILE="$BASELINE_FILE"
     export QS_RADON_HIGH_COMPLEXITY_CC="$RADON_HIGH_COMPLEXITY_CC"
     export QS_RADON_ERROR_COMPLEXITY_CC="$RADON_ERROR_COMPLEXITY_CC"
     export QS_LARGE_FILE_WARNING_LINES="$LARGE_FILE_WARNING_LINES"
     export QS_LARGE_FILE_ERROR_LINES="$LARGE_FILE_ERROR_LINES"
+    export QS_VULTURE_MIN_CONFIDENCE="$VULTURE_MIN_CONFIDENCE"
+    export QS_VULTURE_ERROR_CONFIDENCE="$VULTURE_ERROR_CONFIDENCE"
+    export QS_PYLINT_WARN_MIN_LINES="$PYLINT_WARN_MIN_LINES"
+    export QS_PYLINT_FAIL_MIN_LINES="$PYLINT_FAIL_MIN_LINES"
 
     python3 <<'PY'
-from collections import Counter
+from pathlib import Path
 import json
 import os
 import re
-from pathlib import Path
 
 root = Path(os.environ["QS_ROOT"]).resolve()
 output_dir = Path(os.environ["QS_OUTPUT_DIR"])
 json_output = Path(os.environ["QS_JSON_OUTPUT"])
 status_output = Path(os.environ["QS_STATUS_OUTPUT"])
 timestamp = os.environ["QS_TIMESTAMP"]
-baseline_file_value = os.environ["QS_BASELINE_FILE"]
-baseline_path = Path(baseline_file_value)
-if not baseline_path.is_absolute():
-    baseline_path = (Path.cwd() / baseline_path).resolve()
 
 high_complexity_threshold = int(os.environ["QS_RADON_HIGH_COMPLEXITY_CC"])
 error_complexity_threshold = int(os.environ["QS_RADON_ERROR_COMPLEXITY_CC"])
 large_file_warning_threshold = int(os.environ["QS_LARGE_FILE_WARNING_LINES"])
 large_file_error_threshold = int(os.environ["QS_LARGE_FILE_ERROR_LINES"])
+vulture_min_confidence = int(os.environ["QS_VULTURE_MIN_CONFIDENCE"])
+vulture_error_confidence = int(os.environ["QS_VULTURE_ERROR_CONFIDENCE"])
+pylint_min_lines = int(os.environ["QS_PYLINT_WARN_MIN_LINES"])
+pylint_error_lines = int(os.environ["QS_PYLINT_FAIL_MIN_LINES"])
 
-confidence_suffix = re.compile(r"\s+\(\d+% confidence, .*\)$")
-dead_code_identity = re.compile(r"^(?P<file>.+?):\d+: (?P<message>.+)$")
 
-
-def read_text_safe(filename):
+def read_text_safe(filename: str) -> str:
     try:
         return (output_dir / filename).read_text()
     except OSError:
         return ""
 
 
-def read_json_safe(filename, default):
+def read_json_safe(filename: str, default):
     try:
         return json.loads((output_dir / filename).read_text())
     except (OSError, json.JSONDecodeError):
         return default
 
 
-def relative_path(path_value):
+def relative_path(path_value: str) -> str:
     if not path_value:
         return ""
-
     path = Path(path_value)
     if not path.is_absolute():
         return path.as_posix()
-
     try:
         return path.resolve().relative_to(root).as_posix()
     except ValueError:
         return path.as_posix()
 
 
-def require_mapping(value, label):
-    if not isinstance(value, dict):
-        raise ValueError(f"{label} must be an object")
-    return value
+# --- Dead code -----------------------------------------------------------
+dead_code_fail = [line for line in read_text_safe("dead_code_fail.txt").splitlines() if line.strip()]
+dead_code_warning = [
+    line for line in read_text_safe("dead_code_warning.txt").splitlines() if line.strip()
+]
 
-
-def require_string(value, label):
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{label} must be a non-empty string")
-    return value
-
-
-def require_non_negative_int(value, label):
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(f"{label} must be a non-negative integer")
-    return value
-
-
-_IDENTIFIER_SEGMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
-def require_dotted_identifier(value, label):
-    value = require_string(value, label)
-    if any(
-        not _IDENTIFIER_SEGMENT.fullmatch(segment) for segment in value.split(".")
-    ):
-        raise ValueError(f"{label} must be a dotted Python identifier path")
-    return value
-
-
-def module_from_repo_path(rel_path):
-    """Derive the defining module path from a repo-relative ``.py`` path."""
-    parts = rel_path.split("/")
-    if "src" not in parts:
-        raise ValueError(f"complexity file path must sit under a src/ root: {rel_path}")
-    module_parts = parts[parts.index("src") + 1 :]
-    if not module_parts or not module_parts[-1].endswith(".py"):
-        raise ValueError(f"complexity file path must name a Python source file: {rel_path}")
-    module_parts[-1] = module_parts[-1][: -len(".py")]
-    if module_parts[-1] == "__init__":
-        module_parts = module_parts[:-1]
-    if not module_parts:
-        raise ValueError(f"complexity file path does not name a module: {rel_path}")
-    return ".".join(module_parts)
-
-
-def shared_module_prefix_length(module_a, module_b):
-    """Count the leading dotted segments two module paths share."""
-    shared = 0
-    for left, right in zip(module_a.split("."), module_b.split(".")):
-        if left != right:
-            break
-        shared += 1
-    return shared
-
-
-def complexity_identity_keys(radon_data):
-    """Return every module.qualname key a radon run reports."""
-    keys = set()
-    for file_path, entries in radon_data.items():
-        if not isinstance(entries, list):
-            continue
-        rel_file = relative_path(file_path)
-        try:
-            module = module_from_repo_path(rel_file)
-        except ValueError:
-            continue
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            name = entry.get("name")
-            if not isinstance(name, str) or not name:
-                continue
-            class_name = entry.get("classname")
-            symbol = f"{class_name}.{name}" if class_name else name
-            keys.add(f"{module}.{symbol}")
-    return keys
-
-
-def normalize_dead_code(line):
-    stripped = confidence_suffix.sub("", line.strip())
-    match = dead_code_identity.match(stripped)
-    if not match:
-        return stripped
-    return f"{match.group('file')}: {match.group('message')}"
-
-
-def normalize_duplication_message(message):
-    if not isinstance(message, str):
-        return ""
-    return " ".join(message.split())
-
-
-def normalize_duplication_location(location):
-    if not isinstance(location, dict):
-        return ""
-
-    path = relative_path(str(location.get("path", "")).strip())
-    line = location.get("line")
-    end_line = location.get("endLine")
-    location_parts = [path]
-    if isinstance(line, int):
-        location_parts.append(str(line))
-    if isinstance(end_line, int):
-        location_parts.append(str(end_line))
-    return ":".join(part for part in location_parts if part)
-
-
-def normalize_duplication_identity(entry):
-    normalized_message = normalize_duplication_message(entry.get("message"))
-    normalized_locations = []
-    raw_locations = entry.get("locations")
-    if isinstance(raw_locations, list):
-        normalized_locations = sorted(
-            location
-            for location in (
-                normalize_duplication_location(location)
-                for location in raw_locations
-            )
-            if location
-        )
-
-    if not normalized_locations:
-        primary_location = normalize_duplication_location(
-            {
-                "path": entry.get("path", ""),
-                "line": entry.get("line"),
-                "endLine": entry.get("endLine"),
-            }
-        )
-        if primary_location:
-            normalized_locations = [primary_location]
-
-    identity_parts = [normalized_message, *normalized_locations]
-    normalized_identity = " | ".join(part for part in identity_parts if part)
-    if normalized_identity:
-        return normalized_identity
-    return json.dumps(entry, sort_keys=True)
-
-
-def validate_baseline(data):
-    baseline = require_mapping(data, "baseline")
-    schema_version = require_non_negative_int(baseline.get("schema_version"), "schema_version")
-    if schema_version != 1:
-        raise ValueError("schema_version must equal 1")
-
-    dead_code = require_mapping(baseline.get("dead_code"), "dead_code")
-    allowed_messages = dead_code.get("allowed_messages")
-    if not isinstance(allowed_messages, list) or any(
-        not isinstance(item, str) or not item for item in allowed_messages
-    ):
-        raise ValueError("dead_code.allowed_messages must be a list of non-empty strings")
-
-    complexity = require_mapping(baseline.get("complexity"), "complexity")
-    allowed_functions_raw = require_mapping(
-        complexity.get("allowed_functions"),
-        "complexity.allowed_functions",
-    )
-    allowed_functions = {}
-    for key, entry in allowed_functions_raw.items():
-        require_string(key, "complexity.allowed_functions key")
-        item = require_mapping(entry, f"complexity.allowed_functions[{key}]")
-        module = require_dotted_identifier(
-            item.get("module"), f"complexity.allowed_functions[{key}].module"
-        )
-        qualname = require_dotted_identifier(
-            item.get("qualname"), f"complexity.allowed_functions[{key}].qualname"
-        )
-        entry_type = require_string(item.get("type"), f"complexity.allowed_functions[{key}].type")
-        max_complexity = require_non_negative_int(
-            item.get("max_complexity"),
-            f"complexity.allowed_functions[{key}].max_complexity",
-        )
-        expected_key = f"{module}.{qualname}"
-        if key != expected_key:
-            raise ValueError(
-                f"complexity.allowed_functions[{key}] must match module.qualname ({expected_key})"
-            )
-        # SA231: a function at or above the critical CC threshold may be
-        # accepted only when the baseline states why it is listed.
-        if max_complexity >= error_complexity_threshold:
-            require_string(
-                item.get("reason"),
-                f"complexity.allowed_functions[{key}].reason",
-            )
-        allowed_functions[key] = {
-            "module": module,
-            "qualname": qualname,
-            "type": entry_type,
-            "max_complexity": max_complexity,
-        }
-
-    # SA231: file length is ratcheted for files at or above the 800-line
-    # error threshold; each accepted file carries the reason it is listed.
-    file_length = baseline.get("file_length")
-    allowed_files = {}
-    if file_length is not None:
-        file_length = require_mapping(file_length, "file_length")
-        allowed_files_raw = require_mapping(
-            file_length.get("allowed_files"),
-            "file_length.allowed_files",
-        )
-        for key, entry in allowed_files_raw.items():
-            file_path = require_string(key, "file_length.allowed_files key")
-            item = require_mapping(entry, f"file_length.allowed_files[{key}]")
-            max_lines = require_non_negative_int(
-                item.get("max_lines"),
-                f"file_length.allowed_files[{key}].max_lines",
-            )
-            reason = require_string(
-                item.get("reason"),
-                f"file_length.allowed_files[{key}].reason",
-            )
-            allowed_files[file_path] = {
-                "max_lines": max_lines,
-                "reason": reason,
-            }
-
-    duplication = require_mapping(baseline.get("duplication"), "duplication")
-    allowed_blocks = require_non_negative_int(
-        duplication.get("allowed_blocks"),
-        "duplication.allowed_blocks",
-    )
-    allowed_block_identities = duplication.get("allowed_block_identities", [])
-    if not isinstance(allowed_block_identities, list) or any(
-        not isinstance(item, str) or not item for item in allowed_block_identities
-    ):
-        raise ValueError(
-            "duplication.allowed_block_identities must be a list of non-empty strings"
-        )
-    if "allowed_block_identities" in duplication and (
-        len(allowed_block_identities) != allowed_blocks
-    ):
-        raise ValueError(
-            "duplication.allowed_block_identities must list each allowed duplication block when present"
-        )
-
-    return {
-        "schema_version": schema_version,
-        "dead_code": {"allowed_messages": allowed_messages},
-        "complexity": {"allowed_functions": allowed_functions},
-        "file_length": {"allowed_files": allowed_files},
-        "duplication": {
-            "allowed_blocks": allowed_blocks,
-            "allowed_block_identities": allowed_block_identities,
-        },
-    }
-
-
-def regression_sort_key(item):
-    severity_order = {"critical": 0, "warning": 1}
-    return (
-        severity_order.get(item.get("severity"), 2),
-        item.get("module", ""),
-        item.get("qualname", ""),
-        item.get("message", ""),
-    )
-
-
-dead_code_raw = read_text_safe("vulture_raw.txt")
-normalized_dead_code = sorted(
-    normalize_dead_code(line)
-    for line in dead_code_raw.splitlines()
-    if line.strip()
-)
-
+# --- Complexity ----------------------------------------------------------
 cyclomatic = read_json_safe("complexity_cc.json", {})
 maintainability = read_json_safe("maintainability_mi.json", {})
 raw_metrics = read_json_safe("raw_metrics.json", {})
 
-actual_complexity = {}
-for file_path, entries in cyclomatic.items():
-    if not isinstance(entries, list):
-        continue
-    rel_file = relative_path(file_path)
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        name = entry.get("name")
-        if not isinstance(name, str) or not name:
-            continue
-        complexity_value = entry.get("complexity")
-        if isinstance(complexity_value, bool) or not isinstance(complexity_value, int):
-            continue
-        class_name = entry.get("classname")
-        symbol = f"{class_name}.{name}" if class_name else name
-        module = module_from_repo_path(rel_file)
-        key = f"{module}.{symbol}"
-        actual_complexity[key] = {
-            "key": key,
-            "module": module,
-            "qualname": symbol,
-            "type": entry.get("type", "function"),
-            "complexity": complexity_value,
-            "rank": entry.get("rank"),
-            "lineno": entry.get("lineno"),
-            "endline": entry.get("endline"),
-        }
 
-# SA233: the full-grade inventory proves a baseline entry still exists in the
-# tree even when it dropped below the reporting threshold; without it, a
-# reduced stationary function would look like a move source. An inventory that
-# cannot see a finding the filtered run reported is a broken run, never a
-# silently more permissive comparison.
-inventory_complexity_keys = complexity_identity_keys(
-    read_json_safe("complexity_inventory.json", {})
+def parse_complexity_rows(filename: str) -> list[dict]:
+    rows = []
+    for line in read_text_safe(filename).splitlines():
+        parts = line.split("\t")
+        if len(parts) != 3:
+            continue
+        complexity, file_path, name = parts
+        try:
+            value = int(complexity)
+        except ValueError:
+            continue
+        rows.append(
+            {
+                "module": name,
+                "complexity": value,
+                "file": relative_path(file_path),
+            }
+        )
+    return rows
+
+
+critical_functions = parse_complexity_rows("error_complexity_functions.txt")
+high_functions = parse_complexity_rows("high_complexity_functions.txt")
+high_complexity_count = sum(
+    1
+    for entries in cyclomatic.values()
+    if isinstance(entries, list)
+    for entry in entries
+    if isinstance(entry, dict)
+    and isinstance(entry.get("complexity"), (int, float))
+    and not isinstance(entry.get("complexity"), bool)
+    and entry.get("complexity", 0) >= high_complexity_threshold
+    and entry.get("type") != "class"
 )
-if actual_complexity and not inventory_complexity_keys:
-    raise ValueError("complexity inventory is empty while findings exist")
-present_complexity_keys = set(actual_complexity) | inventory_complexity_keys
+error_complexity_count = len(critical_functions)
 
+# --- Large files ---------------------------------------------------------
 large_files_raw = read_text_safe("large_files.txt")
-actual_large_files = {}
+large_files_fail = []
+large_files_warning = []
 for raw_line in large_files_raw.splitlines():
     line = raw_line.strip()
     if not line:
@@ -851,425 +737,147 @@ for raw_line in large_files_raw.splitlines():
         line_count = int(parts[0].strip())
     except ValueError:
         continue
-    rel_file = relative_path(parts[1].strip())
-    actual_large_files[rel_file] = {
-        "file": rel_file,
-        "lines": line_count,
-    }
+    entry = {"file": relative_path(parts[1].strip()), "lines": line_count}
+    if line_count >= large_file_error_threshold:
+        large_files_fail.append(entry)
+    elif line_count >= large_file_warning_threshold:
+        large_files_warning.append(entry)
+large_files_fail.sort(key=lambda item: (-item["lines"], item["file"]))
+large_files_warning.sort(key=lambda item: (-item["lines"], item["file"]))
 
-duplication_raw = read_json_safe("duplication.json", [])
-matching_duplication_blocks = []
-for entry in duplication_raw:
-    if not isinstance(entry, dict) or entry.get("message-id") != "R0801":
-        continue
-    normalized_entry = dict(entry)
-    if isinstance(normalized_entry.get("path"), str):
-        normalized_entry["path"] = relative_path(normalized_entry["path"])
-    raw_locations = normalized_entry.get("locations")
-    if isinstance(raw_locations, list):
-        normalized_locations = []
-        for location in raw_locations:
-            if not isinstance(location, dict):
-                continue
-            normalized_location = dict(location)
-            if isinstance(normalized_location.get("path"), str):
-                normalized_location["path"] = relative_path(
-                    normalized_location["path"]
-                )
-            normalized_locations.append(normalized_location)
-        normalized_entry["locations"] = normalized_locations
-    normalized_entry["identity"] = normalize_duplication_identity(normalized_entry)
-    matching_duplication_blocks.append(normalized_entry)
+# --- Duplication ---------------------------------------------------------
+duplication_header_pattern = re.compile(r"==([^\s:]+):\[(\d+):(\d+)\]")
 
-# Monotonicity gate results (written by check_quality_baseline_monotonicity.py)
-monotonicity_data = None
-monotonicity_file = output_dir / "quality_baseline_policy.json"
-try:
-    monotonicity_data = json.loads(monotonicity_file.read_text())
-except (OSError, json.JSONDecodeError):
-    pass
 
-def raw_complexity_count(threshold):
-    """Count analyzer entries at or above *threshold*, excluding class aggregates.
+def describe_duplication(entry: dict) -> None:
+    """Name the block's locations and its source span from the message headers.
 
-    The count is taken from the raw analyzer document, not the keyed
-    ``actual_complexity`` map, so a duplicate function identity (Radon emits
-    same-named closures without class context) can never hide a critical
-    measurement from the report, status, or Markdown verdict.
+    Pylint headers are zero-based and end-exclusive (``[0:20]`` is the first
+    20 lines), so the displayed coordinates are converted to one-based
+    inclusive source lines.
     """
-    total = 0
-    for entries in cyclomatic.values():
-        if not isinstance(entries, list):
-            continue
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            complexity_value = entry.get("complexity")
-            if isinstance(complexity_value, bool) or not isinstance(
-                complexity_value, int
-            ):
-                continue
-            if complexity_value >= threshold and entry.get("type") != "class":
-                total += 1
-    return total
-
-
-high_complexity_count = raw_complexity_count(high_complexity_threshold)
-error_complexity_count = raw_complexity_count(error_complexity_threshold)
-large_files_warning_count = sum(
-    1
-    for entry in actual_large_files.values()
-    if large_file_warning_threshold <= entry["lines"] < large_file_error_threshold
-)
-large_files_error_count = sum(
-    1 for entry in actual_large_files.values() if entry["lines"] >= large_file_error_threshold
-)
-duplication_count = len(matching_duplication_blocks)
-
-summary = {
-    "dead_code_issues": len(normalized_dead_code),
-    "high_complexity_functions": high_complexity_count,
-    "error_complexity_functions": error_complexity_count,
-    "large_files_warning": large_files_warning_count,
-    "large_files_error": large_files_error_count,
-    "duplication_blocks": duplication_count,
-    "total_issues": len(normalized_dead_code)
-    + high_complexity_count
-    + large_files_warning_count
-    + large_files_error_count
-    + duplication_count,
-}
-
-baseline_payload = {
-    "file": str(baseline_path),
-    "status": "error",
-    "error": "Baseline comparison not evaluated",
-}
-regressions = {
-    "status": "not_evaluated",
-    "warning_count": 0,
-    "critical_count": 0,
-    "total_count": 0,
-    "has_regressions": False,
-    "dead_code": {
-        "count": 0,
-        "new_messages": [],
-        "resolved_messages": [],
-    },
-    "complexity": {
-        "warning_count": 0,
-        "critical_count": 0,
-        "new_or_worse": [],
-        "resolved": [],
-    },
-    "large_files": {
-        "warning_count": 0,
-        "critical_count": 0,
-        "new_or_grown": [],
-        "resolved": [],
-    },
-    "duplication": {
-        "allowed_blocks": 0,
-        "observed_blocks": duplication_count,
-        "count": 0,
-        "new_blocks": [],
-    },
-}
-
-baseline_data = None
-try:
-    baseline_data = validate_baseline(json.loads(baseline_path.read_text()))
-except FileNotFoundError:
-    baseline_payload["error"] = f"Baseline file not found: {baseline_path}"
-except json.JSONDecodeError as exc:
-    baseline_payload["error"] = (
-        f"Baseline file is not valid JSON: {baseline_path}: {exc.msg} "
-        f"at line {exc.lineno}, column {exc.colno}"
-    )
-except ValueError as exc:
-    baseline_payload["error"] = f"Baseline file is invalid: {exc}"
-
-if baseline_data is not None:
-    allowed_messages = Counter(baseline_data["dead_code"]["allowed_messages"])
-    actual_messages = Counter(normalized_dead_code)
-    new_dead_code = []
-    for message in sorted(actual_messages):
-        delta = actual_messages[message] - allowed_messages.get(message, 0)
-        for _ in range(max(0, delta)):
-            new_dead_code.append({"message": message, "severity": "warning"})
-
-    resolved_dead_code = []
-    for message in sorted(allowed_messages):
-        delta = allowed_messages[message] - actual_messages.get(message, 0)
-        for _ in range(max(0, delta)):
-            resolved_dead_code.append(message)
-
-    # SA233: a function that moved between files is matched to its pre-move
-    # baseline entry by qualname, so a pure move is not a regression and a
-    # worsened qualname is reported against the ceiling it carried before.
-    baseline_functions = baseline_data["complexity"]["allowed_functions"]
-    baseline_by_qualname = {}
-    for baseline_key, baseline_entry in baseline_functions.items():
-        baseline_by_qualname.setdefault(baseline_entry["qualname"], []).append(baseline_key)
-
-    def move_source_for(actual_entry, consumed):
-        """Pick the deterministic pre-move baseline entry for a moved function."""
-        candidates = [
-            baseline_key
-            for baseline_key in baseline_by_qualname.get(actual_entry["qualname"], [])
-            if baseline_key not in present_complexity_keys and baseline_key not in consumed
-        ]
-        if not candidates:
-            return None
-        return sorted(
-            candidates,
-            key=lambda baseline_key: (
-                -shared_module_prefix_length(
-                    baseline_functions[baseline_key]["module"], actual_entry["module"]
-                ),
-                -baseline_functions[baseline_key]["max_complexity"],
-                baseline_key,
-            ),
-        )[0]
-
-    complexity_regressions = []
-    consumed_move_sources = set()
-    # SA233: destinations are consumed in sorted key order, matching the
-    # monotonicity helper, so analyzer output order cannot change the verdict.
-    for key, actual_entry in sorted(actual_complexity.items()):
-        baseline_entry = baseline_functions.get(key)
-        allowed_max = None
-        regression_type = None
-        if baseline_entry is not None:
-            if actual_entry["complexity"] > baseline_entry["max_complexity"]:
-                allowed_max = baseline_entry["max_complexity"]
-                regression_type = "increased"
-            else:
-                continue
-        else:
-            move_source = move_source_for(actual_entry, consumed_move_sources)
-            if move_source is None:
-                regression_type = "new"
-            else:
-                consumed_move_sources.add(move_source)
-                allowed_max = baseline_functions[move_source]["max_complexity"]
-                if actual_entry["complexity"] <= allowed_max:
-                    continue  # pure move: the qualname did not worsen
-                regression_type = "increased"
-
-        regression = dict(actual_entry)
-        regression["severity"] = (
-            "critical"
-            if actual_entry["complexity"] >= error_complexity_threshold
-            else "warning"
-        )
-        regression["regression_type"] = regression_type
-        regression["allowed_max_complexity"] = allowed_max
-        if allowed_max is not None:
-            regression["delta"] = actual_entry["complexity"] - allowed_max
-        complexity_regressions.append(regression)
-
-    complexity_resolved = []
-    for key, baseline_entry in baseline_functions.items():
-        if key in actual_complexity:
-            continue
-        if key in consumed_move_sources:
-            continue  # the function moved; it is not resolved
-        resolved_entry = dict(baseline_entry)
-        resolved_entry["key"] = key
-        complexity_resolved.append(resolved_entry)
-
-    # SA231: files at or above the 800-line error threshold are ratcheted.
-    # A file may sit at or above the threshold only while the baseline lists
-    # it with a reason and the measured size stays within its listed ceiling.
-    large_file_regressions = []
-    for file_path, actual_entry in actual_large_files.items():
-        if actual_entry["lines"] < large_file_error_threshold:
-            continue
-        baseline_entry = baseline_data["file_length"]["allowed_files"].get(file_path)
-        if baseline_entry is None:
-            allowed_max_lines = None
-            regression_type = "new"
-        elif actual_entry["lines"] > baseline_entry["max_lines"]:
-            allowed_max_lines = baseline_entry["max_lines"]
-            regression_type = "grown"
-        else:
-            continue
-
-        regression = dict(actual_entry)
-        regression["severity"] = (
-            "critical"
-            if actual_entry["lines"] >= large_file_error_threshold
-            else "warning"
-        )
-        regression["regression_type"] = regression_type
-        regression["allowed_max_lines"] = allowed_max_lines
-        if allowed_max_lines is not None:
-            regression["delta"] = actual_entry["lines"] - allowed_max_lines
-        large_file_regressions.append(regression)
-
-    large_files_resolved = []
-    for file_path, baseline_entry in baseline_data["file_length"]["allowed_files"].items():
-        actual_entry = actual_large_files.get(file_path)
-        if actual_entry is not None and actual_entry["lines"] >= large_file_error_threshold:
-            continue
-        large_files_resolved.append(
-            {
-                "file": file_path,
-                "max_lines": baseline_entry["max_lines"],
-            }
-        )
-
-    allowed_duplication_blocks = baseline_data["duplication"]["allowed_blocks"]
-    allowed_duplication_identities = baseline_data["duplication"][
-        "allowed_block_identities"
+    ranges = duplication_header_pattern.findall(str(entry.get("message", "")))
+    entry["block_locations"] = [
+        f"{name} source lines {int(start) + 1}-{end}" for name, start, end in ranges
     ]
-    duplication_regressions = []
-    if allowed_duplication_identities:
-        # Identity-matched acceptance: each listed block is accepted once.
-        remaining_allowed_duplication_blocks = Counter(
-            allowed_duplication_identities
-        )
-        for block in matching_duplication_blocks:
-            identity = str(block.get("identity", "")).strip()
-            if remaining_allowed_duplication_blocks.get(identity, 0) > 0:
-                remaining_allowed_duplication_blocks[identity] -= 1
-                continue
+    spans = [int(end) - int(start) for _, start, end in ranges]
+    entry["span_lines"] = max(spans) if spans else None
 
-            regression = dict(block)
-            regression["severity"] = "warning"
-            duplication_regressions.append(regression)
-    else:
-        # Count-ceiling acceptance: pylint's R0801 pairing is not stable across
-        # runs, so a block list without identities accepts up to the ceiling
-        # and regresses only when the observed count exceeds it.
-        for block in matching_duplication_blocks[allowed_duplication_blocks:]:
-            regression = dict(block)
-            regression["severity"] = "warning"
-            duplication_regressions.append(regression)
 
-    complexity_regressions.sort(key=regression_sort_key)
-    large_file_regressions.sort(key=regression_sort_key)
+observed_blocks = [
+    entry
+    for entry in read_json_safe("duplication.json", [])
+    if isinstance(entry, dict) and entry.get("message-id") == "R0801"
+]
+fail_blocks = [
+    entry
+    for entry in read_json_safe("duplication_fail.json", [])
+    if isinstance(entry, dict)
+]
+warn_blocks = [
+    entry
+    for entry in read_json_safe("duplication_warning.json", [])
+    if isinstance(entry, dict)
+]
+for entry in (*fail_blocks, *warn_blocks, *observed_blocks):
+    if isinstance(entry.get("path"), str):
+        entry["path"] = relative_path(entry["path"])
+    raw_locations = entry.get("locations")
+    if isinstance(raw_locations, list):
+        for location in raw_locations:
+            if isinstance(location, dict) and isinstance(location.get("path"), str):
+                location["path"] = relative_path(location["path"])
+    describe_duplication(entry)
 
-    warning_regressions = (
-        len(new_dead_code)
-        + sum(1 for entry in complexity_regressions if entry["severity"] == "warning")
-        + sum(1 for entry in large_file_regressions if entry["severity"] == "warning")
-        + len(duplication_regressions)
-    )
-    critical_regressions = sum(
-        1 for entry in complexity_regressions if entry["severity"] == "critical"
-    ) + sum(1 for entry in large_file_regressions if entry["severity"] == "critical")
-
-    baseline_payload = {
-        "file": str(baseline_path),
-        "status": "loaded",
-        "schema_version": baseline_data["schema_version"],
-        "accepted": {
-            "dead_code_messages": len(baseline_data["dead_code"]["allowed_messages"]),
-            "high_complexity_functions": len(baseline_data["complexity"]["allowed_functions"]),
-            "critical_complexity_functions": sum(
-                1
-                for entry in baseline_data["complexity"]["allowed_functions"].values()
-                if entry["max_complexity"] >= error_complexity_threshold
-            ),
-            # SA231: accepted file-length ceilings by threshold band.
-            "large_files_warning": sum(
-                1
-                for entry in baseline_data["file_length"]["allowed_files"].values()
-                if large_file_warning_threshold
-                <= entry["max_lines"]
-                < large_file_error_threshold
-            ),
-            "large_files_error": sum(
-                1
-                for entry in baseline_data["file_length"]["allowed_files"].values()
-                if entry["max_lines"] >= large_file_error_threshold
-            ),
-            "duplication_blocks": allowed_duplication_blocks,
-        },
-    }
-    regressions = {
-        "status": "evaluated",
-        "warning_count": warning_regressions,
-        "critical_count": critical_regressions,
-        "total_count": warning_regressions + critical_regressions,
-        "has_regressions": (warning_regressions + critical_regressions) > 0,
-        "dead_code": {
-            "count": len(new_dead_code),
-            "new_messages": new_dead_code,
-            "resolved_messages": resolved_dead_code,
-        },
-        "complexity": {
-            "warning_count": sum(
-                1 for entry in complexity_regressions if entry["severity"] == "warning"
-            ),
-            "critical_count": sum(
-                1 for entry in complexity_regressions if entry["severity"] == "critical"
-            ),
-            "new_or_worse": complexity_regressions,
-            "resolved": sorted(complexity_resolved, key=lambda entry: entry["key"]),
-        },
-        "large_files": {
-            "warning_count": sum(
-                1 for entry in large_file_regressions if entry["severity"] == "warning"
-            ),
-            "critical_count": sum(
-                1 for entry in large_file_regressions if entry["severity"] == "critical"
-            ),
-            "new_or_grown": large_file_regressions,
-            "resolved": sorted(large_files_resolved, key=lambda entry: entry["file"]),
-        },
-        "duplication": {
-            "allowed_blocks": allowed_duplication_blocks,
-            "observed_blocks": duplication_count,
-            "count": len(duplication_regressions),
-            "new_blocks": duplication_regressions,
-        },
-    }
+# --- Aggregation ---------------------------------------------------------
+fail_count = (
+    len(dead_code_fail)
+    + len(critical_functions)
+    + len(large_files_fail)
+    + len(fail_blocks)
+)
+warning_count = (
+    len(dead_code_warning)
+    + len(high_functions)
+    + len(large_files_warning)
+    + len(warn_blocks)
+)
+exit_code = 1 if fail_count > 0 else 0
 
 report = {
     "timestamp": timestamp,
-    "summary": summary,
-    "baseline": baseline_payload,
-    "regressions": regressions,
+    "thresholds": {
+        "vulture": {
+            "warn_min_confidence": vulture_min_confidence,
+            "fail_min_confidence": vulture_error_confidence,
+        },
+        "complexity": {
+            "warn_min_cc": high_complexity_threshold,
+            "fail_min_cc": error_complexity_threshold,
+        },
+        "large_files": {
+            "warn_min_lines": large_file_warning_threshold,
+            "fail_min_lines": large_file_error_threshold,
+        },
+        "duplication": {
+            "warn_min_similar_lines": pylint_min_lines,
+            "fail_min_similar_lines": pylint_error_lines,
+        },
+    },
+    "summary": {
+        "dead_code_fail": len(dead_code_fail),
+        "dead_code_warning": len(dead_code_warning),
+        "complexity_fail": len(critical_functions),
+        "complexity_warning": len(high_functions),
+        "large_files_fail": len(large_files_fail),
+        "large_files_warning": len(large_files_warning),
+        "duplication_fail": len(fail_blocks),
+        "duplication_warning": len(warn_blocks),
+        "fail_total": fail_count,
+        "warning_total": warning_count,
+    },
+    "fail_findings": {
+        "dead_code": dead_code_fail,
+        "complexity": critical_functions,
+        "large_files": large_files_fail,
+        "duplication": fail_blocks,
+    },
+    "warnings": {
+        "dead_code": dead_code_warning,
+        "complexity": high_functions,
+        "large_files": large_files_warning,
+        "duplication": warn_blocks,
+    },
     "dead_code": {
-        "raw_output": dead_code_raw,
-        "normalized_messages": normalized_dead_code,
+        "raw_output": read_text_safe("vulture_raw.txt"),
     },
     "complexity": {
         "cyclomatic": cyclomatic,
-        "normalized_entries": sorted(actual_complexity.values(), key=lambda entry: entry["key"]),
         "maintainability": maintainability,
         "raw_metrics": raw_metrics,
     },
     "large_files": {
         "files": large_files_raw,
-        "normalized_entries": sorted(
-            actual_large_files.values(),
-            key=lambda entry: (-entry["lines"], entry["file"]),
-        ),
     },
-    "duplication": duplication_raw,
-    "monotonicity": monotonicity_data,
+    "duplication": {
+        "observed": observed_blocks,
+        "fail_blocks": fail_blocks,
+        "warning_blocks": warn_blocks,
+    },
 }
 
 status_payload = {
-    "baseline_status": baseline_payload["status"],
-    "baseline_error": baseline_payload.get("error", ""),
-    # SA242: the raw critical counts and the hard-gate verdict are independent
-    # of the accepted baseline.
-    "error_complexity_functions": error_complexity_count,
-    "large_files_error": large_files_error_count,
-    "hard_gate_failed": error_complexity_count > 0 or large_files_error_count > 0,
-    "warning_regressions": regressions["warning_count"],
-    "critical_regressions": regressions["critical_count"],
-    "total_regressions": regressions["total_count"],
-    "monotonicity_verdict": monotonicity_data.get("verdict") if monotonicity_data else None,
-    "monotonicity_merge_base": monotonicity_data.get("merge_base") if monotonicity_data else None,
-    "monotonicity_base_ref": monotonicity_data.get("base_ref") if monotonicity_data else None,
-    "monotonicity_waiver_count": monotonicity_data.get("summary", {}).get("total_waivers") if monotonicity_data else None,
-    "monotonicity_diagnostics": monotonicity_data.get("diagnostics", []) if monotonicity_data else [],
+    "fail_count": fail_count,
+    "warning_count": warning_count,
+    "exit_code": exit_code,
+    "dead_code_fail": len(dead_code_fail),
+    "dead_code_warning": len(dead_code_warning),
+    "complexity_fail": len(critical_functions),
+    "complexity_warning": len(high_functions),
+    "large_files_fail": len(large_files_fail),
+    "large_files_warning": len(large_files_warning),
+    "duplication_fail": len(fail_blocks),
+    "duplication_warning": len(warn_blocks),
 }
 
 json_output.write_text(json.dumps(report, indent=2) + "\n")
@@ -1289,12 +897,15 @@ generate_markdown_report() {
     export QS_RADON_ERROR_COMPLEXITY_CC="$RADON_ERROR_COMPLEXITY_CC"
     export QS_LARGE_FILE_WARNING_LINES="$LARGE_FILE_WARNING_LINES"
     export QS_LARGE_FILE_ERROR_LINES="$LARGE_FILE_ERROR_LINES"
-    export QS_PYLINT_MIN_SIMILARITY_LINES="$PYLINT_MIN_SIMILARITY_LINES"
+    export QS_VULTURE_MIN_CONFIDENCE="$VULTURE_MIN_CONFIDENCE"
+    export QS_VULTURE_ERROR_CONFIDENCE="$VULTURE_ERROR_CONFIDENCE"
+    export QS_PYLINT_WARN_MIN_LINES="$PYLINT_WARN_MIN_LINES"
+    export QS_PYLINT_FAIL_MIN_LINES="$PYLINT_FAIL_MIN_LINES"
 
     python3 <<'PY'
+from pathlib import Path
 import json
 import os
-from pathlib import Path
 
 report = json.loads(Path(os.environ["QS_JSON_OUTPUT"]).read_text())
 md_output = Path(os.environ["QS_MD_OUTPUT"])
@@ -1303,162 +914,137 @@ high_complexity_threshold = int(os.environ["QS_RADON_HIGH_COMPLEXITY_CC"])
 error_complexity_threshold = int(os.environ["QS_RADON_ERROR_COMPLEXITY_CC"])
 large_file_warning_threshold = int(os.environ["QS_LARGE_FILE_WARNING_LINES"])
 large_file_error_threshold = int(os.environ["QS_LARGE_FILE_ERROR_LINES"])
-pylint_similarity_lines = int(os.environ["QS_PYLINT_MIN_SIMILARITY_LINES"])
+vulture_min_confidence = int(os.environ["QS_VULTURE_MIN_CONFIDENCE"])
+vulture_error_confidence = int(os.environ["QS_VULTURE_ERROR_CONFIDENCE"])
+pylint_similarity_lines = int(os.environ["QS_PYLINT_WARN_MIN_LINES"])
+pylint_error_lines = int(os.environ["QS_PYLINT_FAIL_MIN_LINES"])
 
 summary = report["summary"]
-baseline = report["baseline"]
-regressions = report["regressions"]
-
-# SA242: the hard gate fails a run regardless of the baseline comparison.
-hard_gate_failed = bool(
-    summary["error_complexity_functions"] > 0 or summary["large_files_error"] > 0
-)
+failures = report["fail_findings"]
+warnings = report["warnings"]
+fail_total = summary["fail_total"]
+warning_total = summary["warning_total"]
 
 
-def pluralize(count, singular, plural=None):
-    if count == 1:
-        return f"1 {singular}"
-    return f"{count} {plural or singular + 's'}"
-
-
-def code_block(language, content):
+def code_block(language: str, content: str) -> str:
     body = content.rstrip() if content else ""
     if not body:
         body = "[]" if language == "json" else "No findings."
     return f"```{language}\n{body}\n```"
 
 
-def json_block(value):
+def json_block(value) -> str:
     return code_block("json", json.dumps(value, indent=2))
 
 
-def regression_cell(count, label):
-    return f"{count} {label}" if baseline["status"] == "loaded" else "baseline error"
+def overall_verdict() -> str:
+    if fail_total > 0:
+        return "✗ Failing findings"
+    if warning_total > 0:
+        return "✓ Pass (warnings only)"
+    return "✓ Pass"
 
 
-def hard_gate_cell(count, fallback):
-    """Show the baseline-independent hard-gate error when the tier fails."""
-    if count > 0:
-        return f"{count} hard-gate errors"
-    return fallback
-
-
-def overall_verdict():
-    """Return the overall verdict covering both the ratchet and hard gate."""
-    if hard_gate_failed:
-        return "✗ Critical findings"
-    if baseline["status"] != "loaded":
-        return "✗ Baseline error"
-    if regressions["total_count"] == 0:
-        return "✓ Pass"
-    return "✗ Action required"
+def duplication_locations(entry: dict) -> str:
+    locations = list(entry.get("block_locations") or [])
+    if not locations:
+        raw_locations = entry.get("locations")
+        if isinstance(raw_locations, list):
+            for location in raw_locations:
+                if not isinstance(location, dict):
+                    continue
+                path = location.get("path", "unknown-path")
+                line = location.get("line")
+                locations.append(f"{path}:{line}" if line else str(path))
+    if not locations:
+        path = entry.get("path", "unknown-path")
+        line = entry.get("line")
+        locations.append(f"{path}:{line}" if line else str(path))
+    return ", ".join(locations)
 
 
 lines = [
     "# QuickScale Code Quality Report",
     "",
     f"**Generated:** {report['timestamp']}",
-    f"**Baseline file:** {baseline['file']}",
+    "",
+    "**Thresholds:** "
+    f"CC >= {error_complexity_threshold} fails / {high_complexity_threshold}-{error_complexity_threshold - 1} warns; "
+    f"files >= {large_file_error_threshold} lines fail / {large_file_warning_threshold}-{large_file_error_threshold - 1} warn; "
+    f"duplication >= {pylint_error_lines} similar lines fails / {pylint_similarity_lines}-{pylint_error_lines - 1} warn; "
+    f"vulture {vulture_error_confidence}% fails / {vulture_min_confidence}-{vulture_error_confidence - 1}% warns.",
     "",
     "## Summary",
     "",
-    "| Metric | Raw Count | Gate Impact |",
-    "|--------|-----------|-------------|",
-    f"| Dead Code Issues | {summary['dead_code_issues']} | {regression_cell(regressions['dead_code']['count'], 'new vs baseline')} |",
-    f"| High Complexity Functions (CC >= {high_complexity_threshold}) | {summary['high_complexity_functions']} | {regression_cell(regressions['complexity']['warning_count'], 'warning regressions')} |",
-    f"| Critical Complexity Functions (CC >= {error_complexity_threshold}) | {summary['error_complexity_functions']} | {hard_gate_cell(summary['error_complexity_functions'], regression_cell(regressions['complexity']['critical_count'], 'critical regressions'))} |",
-    f"| Large Files ({large_file_warning_threshold}-{large_file_error_threshold - 1} lines) | {summary['large_files_warning']} | {regression_cell(regressions['large_files']['warning_count'], 'warning regressions')} |",
-    f"| Very Large Files (>= {large_file_error_threshold} lines) | {summary['large_files_error']} | {hard_gate_cell(summary['large_files_error'], regression_cell(regressions['large_files']['critical_count'], 'critical regressions'))} |",
-    f"| Code Duplication Blocks | {summary['duplication_blocks']} | {regression_cell(regressions['duplication']['count'], 'new vs baseline')} |",
-    f"| **Total Raw Issues** | **{summary['total_issues']}** | **{overall_verdict()}** |",
+    "| Metric | Findings | Threshold | Gate impact |",
+    "|--------|----------|-----------|-------------|",
+    f"| Dead code (>= {vulture_error_confidence}% confidence) | {summary['dead_code_fail']} | fails | {summary['dead_code_fail']} failing |",
+    f"| Dead code ({vulture_min_confidence}-{vulture_error_confidence - 1}% confidence) | {summary['dead_code_warning']} | warns | advisory |",
+    f"| Critical complexity (CC >= {error_complexity_threshold}) | {summary['complexity_fail']} | fails | {summary['complexity_fail']} failing |",
+    f"| High complexity (CC {high_complexity_threshold}-{error_complexity_threshold - 1}) | {summary['complexity_warning']} | warns | advisory |",
+    f"| Very large files (>= {large_file_error_threshold} lines) | {summary['large_files_fail']} | fails | {summary['large_files_fail']} failing |",
+    f"| Large files ({large_file_warning_threshold}-{large_file_error_threshold - 1} lines) | {summary['large_files_warning']} | warns | advisory |",
+    f"| Duplication (>= {pylint_error_lines} similar lines) | {summary['duplication_fail']} | fails | {summary['duplication_fail']} failing |",
+    f"| Duplication ({pylint_similarity_lines}-{pylint_error_lines - 1} similar lines) | {summary['duplication_warning']} | warns | advisory |",
+    f"| **Total** | **{fail_total + warning_total}** | | **{overall_verdict()}** |",
     "",
     "---",
     "",
-    "## Baseline Gate",
+    f"## Failing Findings ({fail_total})",
     "",
 ]
 
-if baseline["status"] != "loaded":
-    lines.extend(
-        [
-            f"✗ Baseline configuration error: {baseline['error']}",
-            "",
-            "Baseline comparison was not evaluated. Raw findings below are still preserved for inspection.",
-        ]
-    )
+if fail_total == 0:
+    lines.append("✓ None.")
 else:
-    accepted = baseline["accepted"]
-    lines.extend(
-        [
-            "✓ Baseline loaded successfully.",
-            "",
-            "Accepted debt snapshot:",
-            f"- {accepted['dead_code_messages']} dead-code messages",
-            f"- {accepted['high_complexity_functions']} high-complexity functions ({accepted['critical_complexity_functions']} critical)",
-            f"- {accepted['large_files_warning']} warning large files and {accepted['large_files_error']} critical large files",
-            f"- {accepted['duplication_blocks']} allowed duplication blocks",
-            "",
-        ]
-    )
-
-    if regressions["total_count"] == 0:
-        lines.extend(
-            [
-                "Regression result: ✓ No new or worsened findings relative to the accepted baseline.",
-                "",
-                "### New or Worse Findings",
-                "",
-                "✓ None.",
-            ]
+    for entry in failures["dead_code"]:
+        lines.append(f"- [dead code] {entry}")
+    for entry in failures["complexity"]:
+        lines.append(
+            f"- [complexity] {entry['module']} is {entry['complexity']} ({entry['file']})"
         )
-    else:
-        lines.extend(
-            [
-                f"Regression result: ✗ {regressions['critical_count']} critical and {regressions['warning_count']} warning regressions detected.",
-                "",
-                "### New or Worse Findings",
-                "",
-            ]
+    for entry in failures["large_files"]:
+        lines.append(
+            f"- [large file] {entry['file']} has {entry['lines']} lines"
         )
-        for entry in regressions["dead_code"]["new_messages"]:
-            lines.append(f"- [warning] Dead code: {entry['message']}")
-        for entry in regressions["complexity"]["new_or_worse"]:
-            location = f"{entry['module']}.{entry['qualname']}"
-            if entry["allowed_max_complexity"] is None:
-                lines.append(
-                    f"- [{entry['severity']}] Complexity: {location} is {entry['complexity']} (new above threshold)"
-                )
-            else:
-                lines.append(
-                    f"- [{entry['severity']}] Complexity: {location} is {entry['complexity']} (baseline {entry['allowed_max_complexity']})"
-                )
-        for entry in regressions["large_files"]["new_or_grown"]:
-            if entry["allowed_max_lines"] is None:
-                lines.append(
-                    f"- [{entry['severity']}] Large file: {entry['file']} is {entry['lines']} lines (new at or above {large_file_error_threshold})"
-                )
-            else:
-                lines.append(
-                    f"- [{entry['severity']}] Large file: {entry['file']} is {entry['lines']} lines (baseline {entry['allowed_max_lines']})"
-                )
-        for entry in regressions["duplication"]["new_blocks"]:
-            path = entry.get("path") or "unknown-path"
-            line = entry.get("line")
-            location = f"{path}:{line}" if line else path
-            lines.append(
-                f"- [warning] Duplication: {location} {entry.get('message', 'duplicate-code')}"
-            )
+    for entry in failures["duplication"]:
+        span = entry.get("span_lines")
+        span_note = f" (span {span} lines)" if span else ""
+        lines.append(
+            f"- [duplication] {duplication_locations(entry)}{span_note} "
+            f"{entry.get('message', 'duplicate-code').splitlines()[0]}"
+        )
 
-    lines.extend(
-        [
-            "",
-            "### Resolved Since Baseline",
-            "",
-            f"- Dead code resolved: {len(regressions['dead_code']['resolved_messages'])}",
-            f"- Complexity entries resolved: {len(regressions['complexity']['resolved'])}",
-            f"- Large files resolved: {len(regressions['large_files']['resolved'])}",
-        ]
-    )
+lines.extend(
+    [
+        "",
+        "---",
+        "",
+        f"## Warnings ({warning_total})",
+        "",
+    ]
+)
+
+if warning_total == 0:
+    lines.append("✓ None.")
+else:
+    for entry in warnings["dead_code"]:
+        lines.append(f"- [dead code] {entry}")
+    for entry in warnings["complexity"]:
+        lines.append(
+            f"- [complexity] {entry['module']} is {entry['complexity']} ({entry['file']})"
+        )
+    for entry in warnings["large_files"]:
+        lines.append(
+            f"- [large file] {entry['file']} has {entry['lines']} lines"
+        )
+    for entry in warnings["duplication"]:
+        span = entry.get("span_lines")
+        span_note = f" (span {span} lines)" if span else ""
+        lines.append(
+            f"- [duplication] {duplication_locations(entry)}{span_note} "
+            f"{entry.get('message', 'duplicate-code').splitlines()[0]}"
+        )
 
 lines.extend(
     [
@@ -1485,45 +1071,16 @@ lines.extend(
         "",
         "### Code Duplication (pylint)",
         "",
-        json_block(report["duplication"]),
+        json_block(report["duplication"]["observed"]),
         "",
-        "---",
-        "",
-        "## Baseline Monotonicity Gate (SA121)",
-        "",
-    ])
-
-monotonicity_data = report.get("monotonicity")
-if monotonicity_data and monotonicity_data.get("verdict"):
-    lines.extend([
-        f"- **Verdict:** {monotonicity_data['verdict']}",
-        f"- **Merge base:** {monotonicity_data.get('merge_base', 'unknown')}",
-        f"- **Base ref:** {monotonicity_data.get('base_ref', 'unknown')}",
-        f"- **Total waivers:** {monotonicity_data.get('summary', {}).get('total_waivers', 0)}",
-        f"- **Violations:** {monotonicity_data.get('summary', {}).get('total_violations', 0)} total, {monotonicity_data.get('summary', {}).get('unresolved_violations', 0)} unresolved",
-        "",
-        "### Diagnostics",
-        "",
-        json_block(monotonicity_data.get("diagnostics", [])),
-        "",
-    ])
-    # CR-005: No raw waiver_evaluations/lifecycle prose section.
-    # Canonical diagnostics fenced JSON above is authoritative.
-else:
-    lines.extend([
-        "- Baseline monotonicity gate not evaluated.",
-        "",
-    ])
-
-lines.extend([
         "---",
         "",
         "## Tool Details",
         "",
         "- vulture: Dead code detection",
-        f"- radon: Complexity metrics (CC >= {high_complexity_threshold} warning, CC >= {error_complexity_threshold} critical)",
-        f"- pylint: Code duplication (minimum {pylint_similarity_lines} similar lines)",
-        f"- Custom: Large file detection ({large_file_warning_threshold}+ warning, {large_file_error_threshold}+ critical)",
+        f"- radon: Complexity metrics (CC >= {high_complexity_threshold} warning, CC >= {error_complexity_threshold} failure)",
+        f"- pylint: Code duplication (minimum {pylint_similarity_lines} similar lines; >= {pylint_error_lines} fails)",
+        f"- Custom: Large file detection ({large_file_warning_threshold}+ warning, {large_file_error_threshold}+ failure)",
         "",
         f"Full JSON report: {os.environ['QS_JSON_OUTPUT']}",
     ]
@@ -1546,9 +1103,6 @@ main() {
     # Check all dependencies are installed
     check_dependencies
 
-    # Check baseline monotonicity before running analyzers
-    check_baseline_monotonicity
-
     # Run all analyses
     analyze_dead_code
     analyze_complexity
@@ -1562,12 +1116,14 @@ main() {
     print_header "Analysis Complete"
 
     # Read summary counts for exit code determination
-    local dead_code_count=$(cat "$OUTPUT_DIR/dead_code_count.txt" 2>/dev/null || echo "0")
-    local high_complexity_count=$(cat "$OUTPUT_DIR/high_complexity_count.txt" 2>/dev/null || echo "0")
+    local dead_code_fail=$(cat "$OUTPUT_DIR/dead_code_fail_count.txt" 2>/dev/null || echo "0")
+    local dead_code_warning=$(cat "$OUTPUT_DIR/dead_code_warning_count.txt" 2>/dev/null || echo "0")
     local error_complexity_count=$(cat "$OUTPUT_DIR/error_complexity_count.txt" 2>/dev/null || echo "0")
+    local high_complexity_count=$(cat "$OUTPUT_DIR/high_complexity_count.txt" 2>/dev/null || echo "0")
     local large_files_warning=$(cat "$OUTPUT_DIR/large_files_warning_count.txt" 2>/dev/null || echo "0")
     local large_files_error=$(cat "$OUTPUT_DIR/large_files_error_count.txt" 2>/dev/null || echo "0")
-    local dup_count=$(cat "$OUTPUT_DIR/duplication_count.txt" 2>/dev/null || echo "0")
+    local duplication_fail=$(cat "$OUTPUT_DIR/duplication_fail_count.txt" 2>/dev/null || echo "0")
+    local duplication_warning=$(cat "$OUTPUT_DIR/duplication_warning_count.txt" 2>/dev/null || echo "0")
 
     eval "$(
         python3 - "$STATUS_OUTPUT" <<'PY'
@@ -1577,28 +1133,21 @@ import sys
 from pathlib import Path
 
 data = json.loads(Path(sys.argv[1]).read_text())
-for key in (
-    "baseline_status",
-    "baseline_error",
-    "warning_regressions",
-    "critical_regressions",
-    "total_regressions",
-):
+for key in ("fail_count", "warning_count", "exit_code"):
     print(f"{key.upper()}={shlex.quote(str(data.get(key, '')))}")
 PY
     )"
 
     echo ""
     echo "Summary:"
-    echo "  - Baseline file: $BASELINE_FILE"
-    echo "  - Dead code: $dead_code_count"
+    echo "  - Dead code (100% confidence): $dead_code_fail"
+    echo "  - Dead code (80-99% confidence): $dead_code_warning"
     echo "  - High complexity (CC >= $RADON_HIGH_COMPLEXITY_CC): $high_complexity_count"
     echo "  - Critical complexity (CC >= $RADON_ERROR_COMPLEXITY_CC): $error_complexity_count"
     echo "  - Large files ($LARGE_FILE_WARNING_LINES-$((LARGE_FILE_ERROR_LINES - 1)) lines): $large_files_warning"
     echo "  - Very large files (>= $LARGE_FILE_ERROR_LINES lines): $large_files_error"
-    echo "  - Duplication blocks: $dup_count"
-    echo "  - Baseline regressions (warning): $WARNING_REGRESSIONS"
-    echo "  - Baseline regressions (critical): $CRITICAL_REGRESSIONS"
+    echo "  - Duplication blocks (fail): $duplication_fail"
+    echo "  - Duplication blocks (warn): $duplication_warning"
     echo ""
     echo "Reports generated:"
     echo "  - JSON: $JSON_OUTPUT"
@@ -1606,29 +1155,17 @@ PY
     echo "  - Gate status: $STATUS_OUTPUT"
     echo ""
 
-    # Exit codes
-    # SA242 hard gate: live critical complexity and very large files fail
-    # regardless of what the accepted baseline lists.
-    if [ "$error_complexity_count" -gt 0 ] || [ "$large_files_error" -gt 0 ]; then
-        print_error "Critical code-quality findings must be fixed; the accepted baseline cannot waive them."
-        exit 2
-    fi
-
-    if [ "$BASELINE_STATUS" != "loaded" ]; then
-        print_error "Baseline configuration error: $BASELINE_ERROR"
+    if [ "$FAIL_COUNT" -gt 0 ]; then
+        print_error "Quality gate FAILED: $FAIL_COUNT fail-column findings must be fixed."
         exit 1
     fi
 
-    if [ "$CRITICAL_REGRESSIONS" -gt 0 ]; then
-        print_error "CRITICAL regressions detected against baseline"
-        exit 2
-    elif [ "$WARNING_REGRESSIONS" -gt 0 ]; then
-        print_warning "Regressions detected against baseline - review reports"
-        exit 1
+    if [ "$WARNING_COUNT" -gt 0 ]; then
+        print_warning "Quality gate passed with $WARNING_COUNT warn-column findings (advisory)."
     else
-        print_success "Quality baseline gate passed with no regressions"
-        exit 0
+        print_success "Quality gate passed with no findings."
     fi
+    exit 0
 }
 
 # Run main function

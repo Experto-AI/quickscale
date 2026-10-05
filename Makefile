@@ -1142,8 +1142,8 @@ refresh-action-pins:
 #   serial                  299 s -> 5 failed, 1313 passed
 #   -n auto --dist loadfile  94 s -> 5 failed, 1313 passed  (identical outcomes)
 #   -n auto (default loadscan) 34 s -> 20 failed (15 spurious)  <- do NOT use
-# loadfile keeps every test in a file on one worker, so the intra-file shared state in
-# test_quality_baseline_monotonicity.py cannot race.  Collection and outcomes are
+# loadfile keeps every test in a file on one worker; the default loadscan
+# distribution produced spurious failures.  Collection and outcomes are
 # unchanged; only wall time moves.  Retain --dist loadfile if worker count is tuned.
 check-gate-suites:
 	@set -e; \

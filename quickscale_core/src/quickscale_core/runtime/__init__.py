@@ -2,7 +2,7 @@
 QuickScale runtime API facade — combined re-export surface.
 
 This is the public import path for generated-project code and module-owned
-adapters.  It re-exports all symbols from three sub-modules:
+adapters.  It re-exports all symbols from four sub-modules:
 
 * ``runtime.dr`` — DR adapter functions, primitives, and all backup-dependent
   symbols (orchestration, recovery, persistence, verification).  The sub-module
@@ -13,6 +13,9 @@ adapters.  It re-exports all symbols from three sub-modules:
 * ``runtime.conventions`` — the shared module-convention helpers (capability
   collection, startup checks, the one DRF error shape).  Loaded only when one
   of its symbols is requested, so a process without Django never imports it.
+* ``runtime.admin`` — the shared Django-admin mixin module admins reuse
+  (read-only operational surfaces).  Loaded only when its symbol is requested,
+  so a process without Django never imports it.
 
 Module-owned adapters (e.g. ``quickscale_modules_social.adapter``) should
 import from ``quickscale_core.runtime.manifest`` directly to avoid pulling
@@ -25,9 +28,11 @@ part of it: a module whose manifest owns its options resolves through
 auth, orgs, notifications, and social resolvers the facade once re-exported
 were removed when their manifests took over.
 
-``__all__`` is a hardcoded literal (union of the sub-module exports) so
-the SA9.2 module-core compatibility checker's static analysis can resolve
-all symbols without Python import-time side effects.
+``__all__`` is a hardcoded literal (the curated union of the sub-module
+exports) so the SA9.2 module-core compatibility checker's static analysis can
+resolve all symbols without Python import-time side effects.  The sub-modules
+deliberately do not define their own ``__all__``: this facade is the single
+declared surface, and duplicating the lists would be dead weight.
 """
 
 from __future__ import annotations
@@ -53,15 +58,19 @@ _LAZY_CONVENTIONS_SYMBOLS: frozenset[str] = frozenset(
     }
 )
 
+#: Symbols served lazily by ``runtime.admin``.  Admin mixins drag in the
+#: Django admin stack, so processes that never touch it never import it.
+_LAZY_ADMIN_SYMBOLS: frozenset[str] = frozenset({"ReadOnlyAdminMixin"})
+
 # ---------------------------------------------------------------------------
-# Public API — complete hardcoded literal union of dr.__all__,
-# manifest.__all__, and conventions.__all__.  Kept as a literal so the
-# SA9.2 static-analysis checker (check_module_core_compatibility.py) can
-# resolve every symbol without importing the sub-modules.
+# Public API — the curated hardcoded literal union of the dr, manifest,
+# conventions, and admin surfaces.  Kept as a literal so the SA9.2
+# static-analysis checker (check_module_core_compatibility.py) can resolve
+# every symbol without importing the sub-modules.
 #
-# When adding a new public symbol to dr.py, manifest.py, or
-# conventions.py, add it here too.  The compatibility checker will catch
-# any mismatch.
+# When adding a new public symbol to dr.py, manifest.py, conventions.py, or
+# admin.py, add it here too.  The compatibility checker will catch any
+# mismatch.
 # ---------------------------------------------------------------------------
 __all__ = [
     # DR adapter surface (from dr)
@@ -163,6 +172,8 @@ __all__ = [
     "exception_handler",
     "register_module_checks",
     "register_module_settings_check",
+    # Shared admin behavior (from admin)
+    "ReadOnlyAdminMixin",
 ]
 
 
@@ -176,8 +187,13 @@ def _load_conventions() -> typing.Any:
     return importlib.import_module("quickscale_core.runtime.conventions")
 
 
+def _load_admin() -> typing.Any:
+    """Load and return the shared admin helpers on first admin access."""
+    return importlib.import_module("quickscale_core.runtime.admin")
+
+
 def __getattr__(name: str) -> typing.Any:
-    """Resolve an attribute from the manifest, conventions, or lazy DR surface."""
+    """Resolve an attribute from the manifest, conventions, admin, or DR surface."""
     if name == "manifest":
         return _manifest
     if hasattr(_manifest, name):
@@ -186,6 +202,8 @@ def __getattr__(name: str) -> typing.Any:
         return _load_conventions()
     if name in _LAZY_CONVENTIONS_SYMBOLS:
         return getattr(_load_conventions(), name)
+    if name in _LAZY_ADMIN_SYMBOLS:
+        return getattr(_load_admin(), name)
     dr_module = _load_dr()
     if name == "dr":
         return dr_module

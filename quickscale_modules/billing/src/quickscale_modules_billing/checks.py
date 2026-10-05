@@ -36,7 +36,7 @@ _PROJECTED_SECRETS = (
 
 
 def check_billing_settings(
-    app_configs: object = None,
+    _app_configs: object = None,
     **kwargs: object,
 ) -> list[CheckMessage]:
     """Fail startup on an invalid resolved billing runtime.

@@ -578,7 +578,8 @@ settings read but never declared, and every default written twice. Renames are a
   `capture_event`, `is_enabled`);
 - a foundation (layer 1, rule 5) additionally publishes the extension bases other modules build
   on. For orgs these are the ones modules use today: `models` (`Organization`, `TenantModel`),
-  `managers` (`TenantManager`), `admin` (`TenantModelAdmin`), `current_org`, `tenancy`, `removal`,
+  `managers` (`TenantManager`), `admin` (`TenantModelAdmin`, `OrgAwareAdminMixin`,
+  `make_same_org_validated_form`), `current_org`, `tenancy`, `removal`,
   `sanitization`, `public_context`, `permissions`, and `signals`. The list is part of this decision
   and changes only by editing it.
 
@@ -1466,7 +1467,7 @@ implicit env-var/stdout-JSON coupling.
 - **plan-apply-system.md**: Plan/apply schemas, state management, and execution order
 - **module-extension.md**: Module extension contract and the module-authoring checklist
 - **generated_file_ownership.md**: Beta-migration `INTENTIONALLY_UNMANAGED` category inventory
-- **quality_tools.md**: Quality analyzers plus the baseline-monotonicity gate specification
+- **quality_tools.md**: Quality analyzers plus the fixed fail/warn threshold gate specification
 - **dr_engine_migration.md**: DR engine architecture and generated-project migration guidance
 - **user_manual.md**: CLI workflows and worked examples
 - **CHANGELOG.md**: Canonical all-version release history index
@@ -1825,12 +1826,13 @@ anyone adding or changing migrations.
 
 4. **Preserved schema surfaces — keep matching the baseline:** forms' four presets / 16 fields (auto-created via initial data migration), the five parent UNIQUE constraints and six composite FKs, and listings' pinned index names.
 
-5. **Quality maxima are shrink-only.** Remediation may only reduce a measured
-   maximum or leave it unchanged. A migration that exceeds a threshold must be
-   compacted with a parity proof preserving its exact historical operation,
-   schema, data, and reverse contracts — never allowlisted, threshold-exempted,
-   or gate-exempted. See §[Quality Baseline Monotonicity](#quality-baseline-monotonicity)
-   for how the ceiling comparison is enforced.
+5. **Quality maxima stay under the fixed threshold lines.** Remediation may only
+   reduce a measured maximum or leave it unchanged. A migration that would push
+   a metric into a fail column must be compacted with a parity proof preserving
+   its exact historical operation, schema, data, and reverse contracts — never
+   allowlisted, threshold-exempted, or gate-exempted. See
+   §[Quality Thresholds Gate](#quality-thresholds-gate) for the fixed fail/warn
+   lines.
 
 **Related docs:** [roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)
 
@@ -2426,7 +2428,7 @@ re-obtained unconditionally before anything ships.
 PostgreSQL lifecycle; `make ci-e2e` adds the E2E and privileged lanes. Parity between the local,
 hosted, and publish sets is machine-checked against `scripts/gate_registry.json`, so each context
 runs its declared set rather than a hand-picked subset — the registry records per-gate context
-membership, including the local-only quality ratchet and the hosted-only commit-testimony gate. A
+membership, including the local-only quality thresholds gate and the hosted-only commit-testimony gate. A
 partial run announces itself as `PARTIAL CI — NOT a full pass` and does not count.
 
 **Where coverage is mandatory rather than discretionary.** The publish quality check requires
@@ -2447,60 +2449,38 @@ compensating step is one maintainer's discipline and does not generalize.
 
 ---
 
-### Quality Baseline Monotonicity Gate (SA121) {#quality-baseline-monotonicity}
+### Quality Thresholds Gate (SA243) {#quality-thresholds-gate}
 
-**Rule:** The shrink-only quality baseline (`scripts/quality_baseline.json`) is
-enforced against its **merge-base ancestor**, never against its own current
-values. Any ceiling increase relative to the merge-base blob is a violation
-unless a structured, time-bounded waiver in `scripts/quality_waivers.json`
-covers it.
+**Rule:** `make quality` has no accepted-debt baseline. Each metric carries one
+fixed fail line and one advisory warn band:
 
-**Why a separate helper exists:** `check_quality.sh` reads the current baseline
-and trusts it as authority, so an edit that raises a ceiling simultaneously
-erases the evidence of the prohibited growth.
-`scripts/check_quality_baseline_monotonicity.py` uses a different comparison
-authority — the merge-base blob from Git — so the growth stays visible.
+| Metric | Fails (non-zero exit) | Warns only |
+|---|---|---|
+| Cyclomatic complexity (radon) | CC >= 21 | CC 11-20 |
+| File length | >= 800 lines | 500-799 lines |
+| Duplication (pylint R0801) | a block of >= 20 similar lines | blocks of 6-19 lines |
+| Dead code (vulture) | 100% confidence | 80-99% confidence |
 
-**Standing constraints:**
+Fail-column findings are reported by function, file, or block with their
+values, and the run exits 1. Warn-column findings print and the run still
+exits 0. There is no baseline file, no waiver ledger, no monotonicity helper,
+and no inline allowlist: the only way to clear a fail-column finding is to fix
+it. The duplication fail line uses pylint's own similar-line count — the gate
+runs the checker once with `--min-similarity-lines=5` for the 6-line warn
+floor and once with `--min-similarity-lines=19` for the 20-line fail line
+(pylint's option is exclusive, so each option is one below its inclusive
+floor), so a fail-column block is exactly one pylint reports at 19.
 
-- ✅ An active waiver is the only thing that clears an increase; every other
-  ledger state (malformed, duplicate, expired, orphan, stale base, over
-  ceiling) blocks the gate, as does missing coverage
-- ✅ Every waiver carries an owner, a reason, an expiry date, and a
-  `decision_ref` that MUST resolve to an anchor declared in **this file** — a
-  waived increase with no recorded decision is not a decision
-- ✅ The gate reads the merge-base blob from the local Git object store only
-- ❌ No automatic fetch, no `HEAD`/`HEAD^` fallback, and no silent skipping when
-  the base ref or base blob cannot be resolved — that is a hard failure, per
-  §[Fail-Hard Principle](#fail-hard-principle)
-- ❌ No migration or other historical artifact may be allowlisted, threshold-
-  exempted, or gate-exempted to avoid this check (see
-  §[Migration-Squash Decision](#migration-squash-decision) rule 5)
-- ✅ Per-file line ceilings remain part of the baseline schema under the
-  `file_length` section: every entry carries its `max_lines` ceiling and the
-  reason it is listed, and remains a monotonicity and waiver key. SA242
-  supersedes the acceptance behavior: a file at or above 800 lines fails
-  `make quality` independent of the baseline, so a listed file no longer
-  passes. The retired `large_files` name stays ignored. See
-  [File-Size Metric Policy](#file-size-metric-policy). The baseline sections
-  are `dead_code`, `complexity`, `file_length`, and `duplication`.
+**Why fixed thresholds replaced the baseline:** the shrink-only ratchet
+required a waiver ledger, a merge-base helper, and roughly 800 lines of
+baseline-comparison code to keep accepted debt from growing. Fixed lines are
+simpler and stricter: the fail columns admit no debt at all.
 
-**Specification** — the baseline and waiver-ledger schemas, the waiver state
-machine, the canonical diagnostic record, the deterministic error envelope,
-ceiling-index construction, and merge-base resolution precedence are owned by
-[quality_tools.md §Baseline Monotonicity Gate](./quality_tools.md#baseline-monotonicity-gate-sa121).
+**Specification** — per-tool behavior, report artifacts, and exit codes are
+owned by
+[quality_tools.md §Quality Thresholds Gate](./quality_tools.md#quality-thresholds-gate).
 
-<!-- Compatibility anchors for inbound links and waiver `decision_ref` values.
-     The specification they name is owned by quality_tools.md. -->
-<a id="exact-baseline-schema"></a>
-<a id="exact-waiver-ledger-schema"></a>
-<a id="canonical-diagnostic-record"></a>
-<a id="deterministic-error-envelope"></a>
-<a id="waiver-state-machine"></a>
-<a id="validated-ceiling-indexes"></a>
-<a id="merge-base-resolution-precedence"></a>
-
-**Related docs:** [quality_tools.md](./quality_tools.md#baseline-monotonicity-gate-sa121) |
+**Related docs:** [quality_tools.md](./quality_tools.md#quality-thresholds-gate) |
 [arch-audit.md current posture](../others/arch-audit.md) | [roadmap.md](./roadmap.md) |
 [CHANGELOG.md closure history](../../CHANGELOG.md)
 
@@ -2509,19 +2489,12 @@ ceiling-index construction, and merge-base resolution precedence are owned by
 ### File-Size Metric Policy {#file-size-metric-policy}
 
 **Rule:** Files at or above 800 lines always fail `make quality`: each is
-reported as an error naming the file and its line count, independent of the
-accepted baseline. The baseline's `file_length` section and its merge-base
-monotonicity keys remain the accepted schema and compatibility surface, but a
-listed file no longer passes the gate. Files 500-799 lines remain advisory
-diagnostics. The retired `large_files.max_lines` name is never indexed.
+reported as an error naming the file and its line count. Files of 500-799 lines
+are advisory diagnostics. The fail line is fixed (SA243): there is no per-file
+ceiling, no baseline entry, and no waiver. Line counts include a final physical
+line that has no trailing newline (SA242).
 
-**One-time re-baseline (SA231).** The closing batch re-tightened the baseline
-to the measured tree and recorded each increase against the merge base as a
-time-bounded waiver expiring 2027-03-31. From that baseline on the ratchet is
-shrink-only: a new or worsened finding fails `make quality` until it is fixed
-or a new decision waives it.
-
-**Related docs:** [Quality Baseline Monotonicity Gate](#quality-baseline-monotonicity) |
+**Related docs:** [Quality Thresholds Gate](#quality-thresholds-gate) |
 [roadmap.md](./roadmap.md) | [CHANGELOG.md](../../CHANGELOG.md)
 
 ---

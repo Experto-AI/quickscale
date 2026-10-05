@@ -363,7 +363,7 @@ def _module_settings_check(
 ) -> CheckCallable:
     """Return the generic settings check bound to *module_name*."""
 
-    def check(app_configs: object = None, **kwargs: object) -> list[CheckMessage]:
+    def check(_app_configs: object = None, **kwargs: object) -> list[CheckMessage]:
         return _module_settings_issues(module_name, retired_settings)
 
     return check

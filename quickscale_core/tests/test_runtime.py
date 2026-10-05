@@ -155,6 +155,7 @@ class TestRuntimeAllExport:
             "RemoteMaterializer",
             "ResolverResult",
             "ManifestError",
+            "ReadOnlyAdminMixin",
             "ResolvedRestoreSource",
             "RestoreResult",
             "RestoreSourceResolutionMode",
@@ -444,10 +445,14 @@ class TestManifestFacade:
     )
 
     def test_manifest_exports_only_public_contract_names(self) -> None:
-        assert all(not name.startswith("_") for name in runtime_manifest.__all__)
-        assert set(runtime_manifest.__all__) <= {
-            name for name in dir(runtime_manifest) if not name.startswith("_")
-        }
+        """The sub-module exposes its contract without a duplicate ``__all__``.
+
+        The combined ``runtime`` facade owns the single declared surface; the
+        manifest sub-module deliberately declares none.
+        """
+        exported = {name for name in dir(runtime_manifest) if not name.startswith("_")}
+        assert set(self._CONTRACT_NAMES).issubset(exported)
+        assert not hasattr(runtime_manifest, "__all__")
 
     def test_canonical_identity_through_both_facades(self) -> None:
         from quickscale_core.contracts import module_options
@@ -648,7 +653,8 @@ class TestRuntimeDrEagerSurface:
 
     def test_dir_includes_all_exported_symbols(self) -> None:
         result = runtime_dr.__dir__()
-        assert result == sorted(runtime_dr.__all__)
+        expected = sorted(name for name in vars(runtime_dr) if not name.startswith("_"))
+        assert result == expected
 
 
 # ===================================================================
@@ -820,7 +826,7 @@ class TestCallerParityPassEagerSurface:
     # ------------------------------------------------------------------
 
     def test_getattr_public_symbols_via_runtime(self) -> None:
-        for name in runtime_dr.__all__:
+        for name in runtime.__all__:
             assert hasattr(runtime, name), f"runtime has no attribute {name}"
             obj = getattr(runtime, name)
             assert obj is not None
@@ -839,7 +845,8 @@ class TestCallerParityPassEagerSurface:
 
     def test_dr_dir_includes_all_exported_symbols(self) -> None:
         result = runtime_dr.__dir__()
-        assert sorted(result) == sorted(runtime_dr.__all__)
+        expected = sorted(name for name in vars(runtime_dr) if not name.startswith("_"))
+        assert sorted(result) == expected
 
     # ------------------------------------------------------------------
     # Section 6: ``register_backup_persistence`` accepts the

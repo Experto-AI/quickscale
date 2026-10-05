@@ -35,7 +35,7 @@ _DECLARED_SETTINGS = (
 
 
 def check_vendor_secrets(
-    app_configs: object = None,
+    _app_configs: object = None,
     **kwargs: object,
 ) -> list[CheckMessage]:
     """Fail startup when an s3-compatible backend lacks its credentials.

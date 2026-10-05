@@ -117,7 +117,7 @@ dropped, and lockfiles, `*.md`, JSON, `module.yml`, version files, and test path
 | Module file names | `RULE_28_ALLOWED_FILES` (22) / `_ALLOWED_DIRS` (5) | Gated, closed-world | **new row** |
 | Module options validated | Manifest option schema read in core and enforced at plan/apply (SA217); retired names refused at startup | Structural | **strengthened** |
 | Split facades keep their surface | 5 hand-enumerated surface sets, 2 behavioral seam tests, nothing for billing or the CLI split facades | Gated (open-world, hand-listed), partial | **new row**; finding 2 |
-| Complexity ratchet | `quality_baseline.json` keyed by file path; 55 waivers; warn-only until the SA231 closing batch | Advisory | **new row**; finding 2 |
+| Quality thresholds | `scripts/check_quality.sh` fixed fail lines: CC >= 21, files >= 800 lines, duplication blocks >= 20 similar lines, vulture 100% confidence (SA243); no baseline, waiver, or monotonicity helper | Gated | **updated (SA243)**: the shrink-only baseline ratchet is replaced by fixed thresholds; lower bands stay advisory |
 | Schema and data survive a QuickScale upgrade | Clean-break rule; restore refuses a differing vintage (SA205) | Convention + one refusal gate | unchanged |
 | Template ↔ upgradable-code contract | Step-identity declaration, emission-derived watch set (SA207/SA211) | Gated | unchanged |
 | Org-removal obligations discharged | `AppConfig` declarations + one fail-closed coordinator (SA213); purge hooks declared per module (SA228) | Domain-declared, conformance at runtime | strengthened |
@@ -151,7 +151,7 @@ items:
      anchors: [quickscale_cli/src/quickscale_cli/commands/_split_refs.py,
                quickscale_modules/billing/src/quickscale_modules_billing/services.py,
                quickscale_core/tests/test_manifest_resolver_facade_surface.py,
-               scripts/quality_waivers.json],
+               scripts/check_quality.sh],
      first_seen: 2026-10-03, last_verified: 2026-10-03}
   - {id: W2, status: watchlist, title: "Two filesystem-lock implementations", lenses: [IX]}
   - {id: W3, status: watchlist, title: "Hand-pinned residue in CI provisioning", lenses: [XV]}

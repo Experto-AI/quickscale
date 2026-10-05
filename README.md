@@ -345,18 +345,18 @@ make quality
 # View reports
 cat .quickscale/quality_report.md     # Human-readable
 cat .quickscale/quality_report.json   # Machine-readable
-cat .quickscale/quality_gate_status.json  # Baseline gate summary
+cat .quickscale/quality_gate_status.json  # Gate verdict summary
 ```
 
-`make quality` always preserves the raw findings in the report artifacts above. The gate compares current findings against the tracked accepted-debt baseline in `scripts/quality_baseline.json`, passes when there are no warning or critical regressions beyond that baseline, and always fails when any function is at cyclomatic complexity 21 or higher or any Python file reaches 800 lines, regardless of the baseline.
+`make quality` always preserves the raw findings in the report artifacts above. The gate applies fixed thresholds with no baseline: a function at cyclomatic complexity 21 or higher, a Python file at 800 lines or more, a duplication block of 20 or more similar lines, or a 100%-confidence dead-code finding fails the run; the CC 11-20, file 500-799, duplication 6-19, and 80-99% confidence bands print as advisories and still exit 0.
 
 **Detects:**
 - Dead code (unused imports, functions, variables)
 - High complexity (cyclomatic complexity >10)
-- Large files (500-799 lines warning, >=800 critical)
-- Code duplication (>6 similar lines)
+- Large files (500-799 lines warning, >=800 fail)
+- Code duplication (6+ similar lines warning, >=20 fail)
 
-**Exit codes:** 0 (no warning or critical regressions beyond baseline, no function at CC >= 21, no file at >= 800 lines), 1 (warning regressions, including baseline-load failures), 2 (critical regressions, or any function at CC >= 21 or file at >= 800 lines)
+**Exit codes:** 0 (no fail-column finding; warn-column findings print as advisories), 1 (a fail-column finding, a missing analyzer dependency, or unreadable analyzer output). GNU Make reports a failed recipe as its own exit 2.
 
 ## Learn More
 

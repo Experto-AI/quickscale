@@ -198,83 +198,12 @@ from quickscale_core.dr_engine.verification import (  # noqa: F401
     _validate_verification_inputs as _validate_verification_inputs,
 )
 
-# ---------------------------------------------------------------------------
-# Public API — DR surface (both eagerly-available and lazy symbols)
-# ---------------------------------------------------------------------------
-
-__all__ = [
-    # DR adapter surface
-    "ADAPTER_FUNCTIONS",
-    "BackupError",
-    "build_database_plan",
-    "capture_snapshot",
-    "execute_database_restore",
-    "fetch_snapshot_report",
-    "record_verification",
-    "set_rollback_pin",
-    "sync_media",
-    # DR orchestration surface
-    "BackupLockError",
-    "StagedAdminRestoreUpload",
-    "build_backup_filename",
-    "build_backup_snapshot_report",
-    "clear_backup_snapshot_rollback_pin",
-    "create_backup",
-    "delete_artifact_files",
-    "download_backup_path",
-    "get_backup_snapshot",
-    "get_local_backup_directory",
-    "prune_expired_backups",
-    "record_backup_snapshot_verification",
-    "report_backup_snapshot",
-    "restore_admin_uploaded_backup",
-    "restore_backup_artifact",
-    "restore_backup_source",
-    # Admin uploaded-file staging/resolution/cleanup seam
-    "_cleanup_admin_restore_upload_directory",
-    "_resolve_admin_uploaded_restore_artifact",
-    "_stage_admin_restore_upload",
-    "set_backup_snapshot_rollback_pin",
-    "sync_backup_snapshot_media",
-    "validate_backup_artifact",
-    # DR primitives surface
-    "BackupConfigurationError",
-    "BackupPolicySnapshot",
-    "ShellCommandRunner",
-    # DR recovery surface
-    "ArtifactLike",
-    "BackupRestoreBlocked",
-    "RemoteMaterializer",
-    "ResolvedRestoreSource",
-    "RestoreResult",
-    "RestoreSourceResolutionMode",
-    "RestoreWarning",
-    # DR persistence surface
-    "BackupArtifactPersistence",
-    "BackupPolicyPersistence",
-    "PersistedBackupArtifact",
-    "PersistedBackupPolicy",
-    "PersistedBackupSnapshot",
-    "create_artifact",
-    "create_snapshot",
-    "ensure_default_policy",
-    "get_backup_artifact",
-    "get_authoritative_snapshot_for_artifact",
-    "has_any_policy",
-    "iter_expired_snapshots",
-    "iter_expired_unlinked_artifacts",
-    "load_default_policy",
-    "refresh_snapshot",
-    "register_backup_persistence",
-    "resolve_admin_uploaded_restore_artifact",
-    "save_artifact",
-    "save_default_policy",
-    "save_snapshot",
-    "settings_policy_snapshot",
-    "update_artifact_after_restore",
-]
+# NOTE: this sub-module deliberately declares no ``__all__``.  The combined
+# ``quickscale_core.runtime`` facade owns the single hardcoded public-surface
+# literal that the SA9.2 compatibility checker resolves; duplicating it here
+# would only create a second list to keep in sync.
 
 
 def __dir__() -> list[str]:
-    """Return sorted module __all__ for dir()."""
-    return sorted(__all__)
+    """Return the public DR surface for dir()."""
+    return sorted(name for name in globals() if not name.startswith("_"))

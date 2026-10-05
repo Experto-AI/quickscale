@@ -516,9 +516,9 @@ describe_local_conformance_gate() {
             LOCAL_GATE_FAILURE_LABEL="Split-Facade Import Gate"
             ;;
         quality)
-            LOCAL_GATE_DESCRIPTION="Running quality ratchet gate..."
-            LOCAL_GATE_SUCCESS="✓ Quality ratchet gate passed"
-            LOCAL_GATE_FAILURE_LABEL="Quality Ratchet Gate"
+            LOCAL_GATE_DESCRIPTION="Running quality thresholds gate..."
+            LOCAL_GATE_SUCCESS="✓ Quality thresholds gate passed"
+            LOCAL_GATE_FAILURE_LABEL="Quality Thresholds Gate"
             ;;
         *)
             LOCAL_GATE_DESCRIPTION="Running $target..."
@@ -735,7 +735,7 @@ report_static_failure_banner() {
             ;;
         quality)
             echo "╔════════════════════════════════════════╗"
-            echo "║   ✗ Quality Ratchet Gate Failed        ║"
+            echo "║   ✗ Quality Thresholds Gate Failed     ║"
             echo "╚════════════════════════════════════════╝"
             ;;
         typecheck)

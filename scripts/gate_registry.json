@@ -386,7 +386,7 @@
         },
         {
             "id": "quality",
-            "description": "Quality ratchet: no new or worsened dead code, complexity, or duplication against the scripts/quality_baseline.json baseline, and no function at CC >= 21 or file at or above 800 lines regardless of the baseline",
+            "description": "Quality thresholds: fixed fail/warn lines (no baseline or waiver) — a function at CC >= 21, a Python file at or above 800 lines, a duplication block of >= 20 similar lines, or a 100%-confidence dead-code finding fails make quality; the 11-20 CC, 500-799 line, 6-19 similar-line, and 80-99% confidence bands warn only",
             "required_contexts": [
                 "local-serial",
                 "local-parallel"
