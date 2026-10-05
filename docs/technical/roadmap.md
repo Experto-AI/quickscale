@@ -26,7 +26,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 |---|---|---|---|---|
 | SA245 | Share one redaction matcher and one set of replacement values across anonymization handlers | 3 | — | Required |
 | SA246 | Declare personal data per module and check it where the project's models are installed | 2 | — | Optional |
-| SA247 | Split the module-conventions checker and its tests into packages without changing behavior | 1 | — | Optional |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA246 | Optional |
@@ -36,7 +35,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA247 ──► SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
+Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: SA246
 Track 3: SA245
      critical path: SA191 → SA153; release gate: SA245 before 0.89.0
@@ -49,10 +48,10 @@ with a fresh context, scoped to that slice's text and named surfaces, and ends w
 handoff note (what landed, what is next, what to watch) committed with the work. A ticket closes
 when its last slice lands; slices are not scheduled.
 
-**Order.** SA247 runs first on Track 1 so later convention-rule edits (SA245, SA246) touch one rule module
-instead of a 6,650-line file; it is a pure move. SA204 freezes migration history before any post-SA153 module schema change; SA154 is
-an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA245 edits the anonymization handler files
-SA244 scoped and still gates 0.89.0. SA246 touches `apps.py` capabilities and orgs'
+**Order.** SA204 freezes migration history before any post-SA153 module schema change; SA154 is
+an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA245 edits the
+anonymization handler files SA244 scoped and still gates 0.89.0. SA246 touches `apps.py`
+capabilities and orgs'
 checks, not handler bodies, and lands before SA153 so the portal's personal fields are classified
 from the first migration.
 
@@ -62,7 +61,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA247 | yes | yes | yes | **yes** | yes |
+| 1 | SA214 | yes | yes | yes | **yes** | yes |
 | 2 | SA246 | yes | yes | yes | **yes** | no |
 | 3 | SA245 | yes | yes | yes | **yes** | no |
 
@@ -97,9 +96,6 @@ A track is **truly green** only when all three states are yes.
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row, and the five `_anonymization.py`
   handlers with core's redaction helpers (SA245).
-- SA247 moves the conformance harness's files (`scripts/check_module_conventions.py`, its test, and
-  the new packages) without changing rules; Tracks 2 and 3 rebase their rule edits onto the new
-  layout after it merges.
 - SA246 moves the personal-data inventory and its walk from Track 3 to Track 2: the per-module
   personal-data declarations, the orgs personal-data system check, and module-extension.md
   § removal.
@@ -177,40 +173,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** each module's `apps.py` capability, `orgs/checks.py`, orgs' personal-data inventory
   and its test, module-extension.md, decisions, and the arch and coherence audits.
 
-- [ ] **SA247 — Split the module-conventions checker and its tests into packages without changing behavior.**
-
-  **Context:** `scripts/check_module_conventions.py` (~6,650 lines) and
-  `scripts/test_check_module_conventions.py` (~7,300 lines) are too large to read whole; an agent
-  session ran out of output after reading both. No source file should exceed ~1,500 lines, so a
-  rule edit needs only that rule's module plus core. Pure move: no renames, no rule logic edits, no
-  "while I'm here" fixes.
-
-  **Scope:**
-  - `scripts/module_conventions/`: `core.py` (`Corpus`, `AuthorityError`, `_read_tree` and corpus
-    loading, AST helpers shared by more than one rule — bindings, scoping,
-    terminate/reachability); `rules_*.py` grouped by theme (identity/naming,
-    dependencies/imports, routes/views, models/settings, docs/README, analytics); `rule_44.py` for
-    the rule-44 lexical scanner and its `_rule_44_*` helpers; one ordered registry preserving the
-    current execution and output order. Single-rule helpers move with their rule, not into core.
-  - `scripts/check_module_conventions.py` stays a thin entry point (`main(argv)` plus re-exports of
-    every name tests or other scripts import today, found by grepping the repo), so the Makefile
-    target (Makefile:1115), CI, and `gate_registry.json` stay unchanged.
-  - The test file splits the same way into `scripts/tests_module_conventions/` or
-    `test_module_conventions_*.py`, whichever the pytest configuration discovers, with shared
-    fixtures in a conftest or helper module.
-
-  **Acceptance:**
-  - `pytest --collect-only -q` reports the same test count before and after; the suite and the
-    `make` target that runs the checker pass; no test logic changes.
-  - The checker's output on the real repo is byte-identical before and after (saved and diffed).
-  - `wc -l`: no new file exceeds ~1,500 lines.
-  - `scripts/README.md` and the Makefile:1112 comment point at the new layout, and
-    `scripts/adaptive.rules.md` mentions the per-rule layout if it documents where rules live.
-  - The delivery summary lists helpers seen duplicated across other `check_*.py` scripts as
-    candidates for a later pass; a shared library for them is out of scope.
-
-  **Surfaces:** `scripts/check_module_conventions.py`, its test, the new `scripts/module_conventions/`
-  and test packages, `scripts/README.md`, the Makefile comment, and `scripts/adaptive.rules.md`.
+- [x] **SA247 — Split the module-conventions checker and its tests into packages without changing behavior.**
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
