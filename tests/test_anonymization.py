@@ -33,6 +33,61 @@ def test_anonymize_clears_the_profile_fields(user) -> None:
 
 
 @pytest.mark.django_db
+def test_declared_treatments_hold_on_a_populated_user(
+    user, org, blog_org_scope, django_capture_on_commit_callbacks
+) -> None:
+    """Every declared treatment matches what the executor does to populated rows."""
+    from django.apps import apps
+
+    from quickscale_core.runtime import PersonalDataField, PersonalDataTreatment
+    from quickscale_modules_blog.models import BlogMediaAsset, Post
+
+    config = apps.get_app_config("quickscale_blog")
+    declared = {
+        (entry.model_name, entry.field_name): entry.treatment
+        for entry in config.personal_data_declarations()
+        if isinstance(entry, PersonalDataField)
+    }
+    assert declared == {
+        ("AuthorProfile", "user"): PersonalDataTreatment.KEEP_LINK,
+        ("AuthorProfile", "bio"): PersonalDataTreatment.SCRUB,
+        ("AuthorProfile", "avatar"): PersonalDataTreatment.DELETE_FILE,
+        ("Post", "author"): PersonalDataTreatment.KEEP_LINK,
+        ("BlogMediaAsset", "uploaded_by"): PersonalDataTreatment.KEEP_LINK,
+    }
+
+    profile = AuthorProfile.objects.create(
+        user=user, bio="Personal bio", avatar=_avatar_upload()
+    )
+    storage = profile.avatar.storage
+    avatar_name = profile.avatar.name
+    with blog_org_scope(org):
+        post = Post.objects.create(
+            title="Declared treatment",
+            author=user,
+            content="Post body",
+            organization=org,
+        )
+        asset = BlogMediaAsset.objects.create(
+            file=_avatar_upload("asset.png"),
+            original_filename="asset.png",
+            uploaded_by=user,
+            organization=org,
+        )
+
+    with django_capture_on_commit_callbacks(execute=True):
+        anonymize_account(user, "test@example.com", "Test User", user.get_username())
+
+    profile.refresh_from_db()
+    assert profile.user_id == user.pk
+    assert profile.bio == ""
+    assert not profile.avatar
+    assert not storage.exists(avatar_name)
+    assert post.author_id == user.pk
+    assert asset.uploaded_by_id == user.pk
+
+
+@pytest.mark.django_db
 def test_anonymize_without_a_profile_is_a_no_op(user) -> None:
     """A person who never authored keeps no profile row to clear."""
     anonymize_account(user, "test@example.com", "Test User", user.get_username())
