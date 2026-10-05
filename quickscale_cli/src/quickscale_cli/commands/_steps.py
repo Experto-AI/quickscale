@@ -7,7 +7,8 @@ them (decisions.md, Split-Facade Seams).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import click
 
@@ -151,6 +152,419 @@ def _execute_apply_steps(
         lock.release()
 
 
+def _resume_first_unsatisfied_step(
+    executor: _apply.ApplyExecutor,
+) -> ApplyStep | None:
+    """Return the recovery checkpoint's first unsatisfied step, if readable."""
+    try:
+        checkpoint = executor.get_checkpoint()
+        return executor.find_first_unsatisfied_step(checkpoint)
+    except _apply.LedgerError:
+        # Malformed checkpoint — fall back to running from step 1.
+        click.secho(
+            "⚠️  Could not read apply recovery checkpoint. Re-running from step 1.",
+            fg="yellow",
+        )
+        return None
+
+
+def _embed_modules_for_apply(
+    ctx: ApplyContext,
+    *,
+    no_modules: bool,
+    split_ref_overrides: Mapping[str, str] | None,
+) -> Any:
+    """Run step 1 and fail closed with the partial-embed summary on error."""
+    modules_to_embed = (
+        ctx.delta.modules_to_add
+        if ctx.existing_state
+        else list(ctx.qs_config.modules.keys())
+    )
+
+    # For existing projects, commit any pending QuickScale config changes
+    # (e.g. quickscale.yml updated by `quickscale plan`) before embedding
+    # modules, so git subtree has a clean working directory to operate on.
+    if ctx.existing_state is not None and modules_to_embed:
+        _git_ops._commit_pending_config_changes(ctx.output_path)
+
+    if split_ref_overrides:
+        embed_result = _embedding._embed_modules_step(
+            ctx.output_path,
+            modules_to_embed,
+            no_modules,
+            ctx.existing_state,
+            split_ref_overrides,
+        )
+    else:
+        embed_result = _embedding._embed_modules_step(
+            ctx.output_path,
+            modules_to_embed,
+            no_modules,
+            ctx.existing_state,
+        )
+
+    if embed_result.success:
+        return embed_result
+
+    # Persist successful partial embeds (explicit no-rollback contract).
+    if not _state._save_project_state(
+        ctx.output_path,
+        ctx.qs_config,
+        ctx.existing_state,
+        embed_result.embedded_modules,
+        ctx.delta,
+        provenance_payloads=embed_result.provenance_payloads,
+    ):
+        _finalize._print_apply_failure_summary(
+            failed_step=_FAILED_STEP["authoritative state persistence"],
+            reason=(
+                f"required module '{embed_result.failed_module}' failed to embed, "
+                "and QuickScale could not save partial authoritative state to "
+                ".quickscale/state.yml."
+            ),
+        )
+        raise click.Abort()
+    _state._clear_apply_recovery_state(ctx.output_path)
+    _finalize._print_apply_failure_summary(
+        failed_step=_FAILED_STEP["module embedding"],
+        reason=f"required module '{embed_result.failed_module}' failed to embed",
+    )
+    raise click.Abort()
+
+
+def _resume_post_embed_state(
+    ctx: ApplyContext,
+    executor: _apply.ApplyExecutor,
+    embed_result: Any,
+    *,
+    should_run: bool,
+) -> tuple[Any, Any]:
+    """Return the post-embed state snapshot and its checkpoint tree id.
+
+    When recovering past step 1, use the recovery ledger's applied_state as
+    the post-embed state and its git_index_checkpoint as the tree id.
+    """
+    if should_run:
+        return _finalize._exec_step_post_embed_snapshot(
+            ctx,
+            embed_result.embedded_modules,
+            embed_result.provenance_payloads,
+        )
+    recovery_ledger = executor.load_ledger()
+    if recovery_ledger is not None:
+        return recovery_ledger.applied_state, recovery_ledger.git_index_checkpoint
+    # Fallback — should not happen in recovery mode.
+    return _finalize._exec_step_post_embed_snapshot(
+        ctx,
+        embed_result.embedded_modules,
+        embed_result.provenance_payloads,
+    )
+
+
+def _checkpoint_post_embed_steps(
+    embed_result: Any,
+    *,
+    post_embed_state: Any,
+    checkpoint_tree_id: Any,
+    should_run: bool,
+    checkpoint_step: Callable[..., None],
+) -> None:
+    """Write the step 1 and step 2 recovery checkpoints after the snapshot.
+
+    Seed both checkpoints with the real post-embed snapshot and
+    checkpoint_tree_id so the recovery ledger is self-describing and does not
+    carry placeholder state (AF5-CR-002).
+    """
+    if should_run and _embedding._embed_modules_ran_successfully(embed_result):
+        checkpoint_step(
+            _apply.APPLY_STEPS[0],
+            checkpoint_tree_id=checkpoint_tree_id,
+            state_snapshot=post_embed_state,
+        )  # step 1 — embed modules
+    if should_run and embed_result.embedded_modules:
+        checkpoint_step(
+            _apply.APPLY_STEPS[1],
+            checkpoint_tree_id=checkpoint_tree_id,
+            state_snapshot=post_embed_state,
+        )  # step 2 — post-embed snapshot
+
+
+def _run_managed_artifact_steps(
+    ctx: ApplyContext,
+    *,
+    embedded_modules: Any,
+    post_embed_state: Any,
+    checkpoint_tree_id: Any,
+    should_run: Callable[[int], bool],
+    checkpoint_step: Callable[..., None],
+) -> None:
+    """Run steps 3 and 4: managed wiring and managed-file hash capture."""
+    if should_run(3):
+        if not _context._regenerate_managed_wiring_for_apply(ctx, embedded_modules):
+            _finalize._abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP["managed module wiring generation"],
+                reason="unable to render managed settings, URL, and integration files",
+            )
+        checkpoint_step(_apply.APPLY_STEPS[2])  # step 3
+
+    if should_run(4):
+        step4_outcome = _state._capture_managed_file_hashes_after_apply(
+            ctx.output_path, ctx.qs_config, post_embed_state
+        )
+        if not step4_outcome.success:
+            _finalize._abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP["capture managed file hashes"],
+                reason=str(step4_outcome.message),
+            )
+        checkpoint_step(_apply.APPLY_STEPS[3])  # step 4
+
+
+def _run_env_example_sync_steps(
+    ctx: ApplyContext,
+    *,
+    post_embed_state: Any,
+    checkpoint_tree_id: Any,
+    should_run: Callable[[int], bool],
+    checkpoint_step: Callable[..., None],
+) -> None:
+    """Run steps 5-7: gitignore hardening and env-example synchronization."""
+    if should_run(5):
+        if not _runtime._ensure_backups_gitignore_rules(ctx.output_path, ctx.qs_config):
+            _finalize._abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP["backups gitignore hardening"],
+                reason="Unable to update .gitignore with the configured private backups directory.",
+            )
+        checkpoint_step(_apply.APPLY_STEPS[4])  # step 5
+
+    if should_run(6):
+        if not _runtime._sync_notifications_env_example(ctx.output_path, ctx.qs_config):
+            _finalize._abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP["notifications env example sync"],
+                reason="Unable to update .env.example with the configured notifications env-var names.",
+            )
+        checkpoint_step(_apply.APPLY_STEPS[5])  # step 6
+
+    if should_run(7):
+        if not _runtime._sync_analytics_env_example(ctx.output_path, ctx.qs_config):
+            _finalize._abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP["analytics env example sync"],
+                reason="Unable to update .env.example with the configured analytics env-var names.",
+            )
+        checkpoint_step(_apply.APPLY_STEPS[6])  # step 7
+
+
+def _run_module_dependency_steps(
+    ctx: ApplyContext,
+    *,
+    post_embed_state: Any,
+    checkpoint_tree_id: Any,
+    should_run: Callable[[int], bool],
+    checkpoint_step: Callable[..., None],
+) -> None:
+    """Run steps 8 and 9: billing env example and module dependency sync."""
+    if should_run(8):
+        if not _runtime._sync_billing_env_example(ctx.output_path, ctx.qs_config):
+            _finalize._abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP["billing env example sync"],
+                reason="Unable to update .env.example with the configured billing env-var names.",
+            )
+        checkpoint_step(_apply.APPLY_STEPS[7])  # step 8
+
+    if should_run(9):
+        if not _runtime._sync_project_module_dependencies_for_apply(
+            ctx.output_path,
+            ctx.qs_config,
+        ):
+            _finalize._abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP["module dependency sync"],
+                reason="Unable to reconcile embedded-module Poetry dependency entries in pyproject.toml.",
+            )
+        checkpoint_step(_apply.APPLY_STEPS[8])  # step 9
+
+
+def _dependency_setup_flags(ctx: ApplyContext, *, no_docker: bool) -> tuple[bool, bool]:
+    """Return the destructive-phase docker/migration flags for steps 10-13."""
+    should_auto_start_docker = not no_docker and ctx.qs_config.docker.start
+    should_run_local_migrations = (ctx.existing_state is not None) and (
+        not ctx.qs_config.docker.start or no_docker
+    )
+    return should_auto_start_docker, should_run_local_migrations
+
+
+def _run_dependency_setup_step(
+    ctx: ApplyContext,
+    *,
+    post_embed_state: Any,
+    checkpoint_tree_id: Any,
+    should_run: Callable[[int], bool],
+    checkpoint_step: Callable[..., None],
+) -> None:
+    """Run step 10: poetry lock and dependency installation (no migrations)."""
+    if should_run(10):
+        if not _runtime._run_post_generation_steps(
+            ctx.output_path,
+        ):
+            _finalize._abort_after_post_embed_failure(
+                ctx,
+                post_embed_state,
+                checkpoint_tree_id=checkpoint_tree_id,
+                failed_step=_FAILED_STEP[
+                    "post-generation dependency and migration setup"
+                ],
+                reason="Poetry lock refresh or dependency installation failed after module dependency sync.",
+            )
+        checkpoint_step(_apply.APPLY_STEPS[9])  # step 10
+
+
+def _run_mutable_config_step(
+    ctx: ApplyContext,
+    *,
+    should_run: Callable[[int], bool],
+    checkpoint_step: Callable[..., None],
+) -> None:
+    """Run step 11: apply the mutable project configuration."""
+    if should_run(11):
+        _finalize._exec_step_apply_mutable_config(ctx)
+        checkpoint_step(_apply.APPLY_STEPS[10])  # step 11
+
+
+def _run_docker_startup_step(
+    ctx: ApplyContext,
+    *,
+    post_embed_state: Any,
+    checkpoint_tree_id: Any,
+    should_auto_start_docker: bool,
+    verbose_docker: bool,
+    should_run: Callable[[int], bool],
+    checkpoint_step: Callable[..., None],
+) -> bool | None:
+    """Run step 12: optional Docker startup; return whether Docker started."""
+    docker_started: bool | None = None
+    if should_run(12):
+        if should_auto_start_docker:
+            if _runtime._should_check_stale_volumes(
+                ctx
+            ) and not _runtime._preflight_stale_docker_volumes(ctx.output_path):
+                _finalize._abort_after_post_embed_failure(
+                    ctx,
+                    post_embed_state,
+                    checkpoint_tree_id=checkpoint_tree_id,
+                    failed_step=_FAILED_STEP["docker startup"],
+                    reason=(
+                        "Leftover Docker volumes from an earlier project of the "
+                        "same name would corrupt this project's migration history."
+                    ),
+                )
+            docker_started = _runtime._start_docker(
+                ctx.output_path, ctx.qs_config.docker.build, verbose_docker
+            )
+            if not docker_started:
+                _finalize._abort_after_post_embed_failure(
+                    ctx,
+                    post_embed_state,
+                    checkpoint_tree_id=checkpoint_tree_id,
+                    failed_step=_FAILED_STEP["docker startup"],
+                    reason="Docker auto-start failed. Run 'quickscale logs' to inspect the failing service.",
+                )
+        checkpoint_step(_apply.APPLY_STEPS[11])  # step 12
+    return docker_started
+
+
+def _run_migration_step(
+    ctx: ApplyContext,
+    *,
+    post_embed_state: Any,
+    checkpoint_tree_id: Any,
+    should_auto_start_docker: bool,
+    docker_started: bool | None,
+    should_run_local_migrations: bool,
+    should_run: Callable[[int], bool],
+    checkpoint_step: Callable[..., None],
+) -> None:
+    """Run step 13: database migrations in Docker or locally."""
+    if should_run(13):
+        if should_auto_start_docker and docker_started:
+            if not _runtime._run_migrations_in_docker(ctx.output_path):
+                _finalize._abort_after_post_embed_failure(
+                    ctx,
+                    post_embed_state,
+                    checkpoint_tree_id=checkpoint_tree_id,
+                    failed_step=_FAILED_STEP["database migrations"],
+                    reason="Migrations failed inside Docker backend container. Run 'quickscale logs backend' for details.",
+                )
+        elif should_run_local_migrations:
+            if not _runtime._run_local_migrations(ctx.output_path):
+                _finalize._abort_after_post_embed_failure(
+                    ctx,
+                    post_embed_state,
+                    checkpoint_tree_id=checkpoint_tree_id,
+                    failed_step=_FAILED_STEP["database migrations"],
+                    reason="Local database migrations failed. Run 'poetry run python manage.py migrate' manually for details.",
+                )
+        checkpoint_step(_apply.APPLY_STEPS[12])  # step 13
+
+
+def _run_final_apply_steps(
+    ctx: ApplyContext,
+    *,
+    post_embed_state: Any,
+    checkpoint_tree_id: Any,
+    no_docker: bool,
+    docker_started: bool | None,
+    should_run: Callable[[int], bool],
+    checkpoint_step: Callable[..., None],
+) -> None:
+    """Run steps 14-16: Railway deploy, finalize, and next-steps display.
+
+    No checkpoint follows finalize or display: those steps clear the recovery
+    ledger, and writing another would recreate a stale one (AF5-CR-001).
+    """
+    if should_run(14):
+        _finalize._exec_step_railway_deploy(
+            ctx,
+            post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
+        )
+        checkpoint_step(_apply.APPLY_STEPS[13])  # step 14
+
+    if should_run(15):
+        _finalize._finalize_apply_state(
+            ctx,
+            post_embed_state,
+            checkpoint_tree_id=checkpoint_tree_id,
+        )
+
+    if should_run(16):
+        _finalize._display_next_steps(
+            ctx.output_path,
+            ctx.qs_config,
+            no_docker,
+            docker_started,
+            existing_project=ctx.existing_state is not None,
+        )
+
+
 def _execute_apply_steps_locked(
     ctx: ApplyContext,
     force: bool,
@@ -170,30 +584,17 @@ def _execute_apply_steps_locked(
     already-completed non-destructive steps.  After each step executes, a
     checkpoint is written to the recovery ledger.
     """
-    # ------------------------------------------------------------------
-    # AF5 Phase 2 — determine resume state
-    # ------------------------------------------------------------------
     executor = _apply.ApplyExecutor(ctx.output_path)
-    _af5_first_step: ApplyStep | None = None
-
+    first_step: ApplyStep | None = None
     if has_pending_post_embed_recovery:
-        try:
-            checkpoint = executor.get_checkpoint()
-            _af5_first_step = executor.find_first_unsatisfied_step(checkpoint)
-        except _apply.LedgerError:
-            # Malformed checkpoint — fall back to running from step 1.
-            _af5_first_step = None
-            click.secho(
-                "⚠️  Could not read apply recovery checkpoint. Re-running from step 1.",
-                fg="yellow",
-            )
+        first_step = _resume_first_unsatisfied_step(executor)
 
     def _should_run(step_order: int) -> bool:
         """Return ``True`` when the step at *step_order* should execute
         (not be skipped by the recovery checkpoint)."""
-        if _af5_first_step is None:
+        if first_step is None:
             return True
-        return step_order >= _af5_first_step.order
+        return step_order >= first_step.order
 
     def _checkpoint_step(
         step: ApplyStep,
@@ -225,243 +626,56 @@ def _execute_apply_steps_locked(
                 fg="yellow",
             )
 
-    # ------------------------------------------------------------------
-    # Step 1: Embed modules
-    # ------------------------------------------------------------------
-    modules_to_embed = (
-        ctx.delta.modules_to_add
-        if ctx.existing_state
-        else list(ctx.qs_config.modules.keys())
+    embed_result = _embed_modules_for_apply(
+        ctx, no_modules=no_modules, split_ref_overrides=split_ref_overrides
     )
-
-    # For existing projects, commit any pending QuickScale config changes
-    # (e.g. quickscale.yml updated by `quickscale plan`) before embedding
-    # modules, so git subtree has a clean working directory to operate on.
-    if ctx.existing_state is not None and modules_to_embed:
-        _git_ops._commit_pending_config_changes(ctx.output_path)
-
-    if split_ref_overrides:
-        embed_result = _embedding._embed_modules_step(
-            ctx.output_path,
-            modules_to_embed,
-            no_modules,
-            ctx.existing_state,
-            split_ref_overrides,
-        )
-    else:
-        embed_result = _embedding._embed_modules_step(
-            ctx.output_path,
-            modules_to_embed,
-            no_modules,
-            ctx.existing_state,
-        )
     embedded_modules = embed_result.embedded_modules
-    provenance_payloads = embed_result.provenance_payloads
 
-    if not embed_result.success:
-        # Persist successful partial embeds (explicit no-rollback contract).
-        if not _state._save_project_state(
-            ctx.output_path,
-            ctx.qs_config,
-            ctx.existing_state,
-            embedded_modules,
-            ctx.delta,
-            provenance_payloads=provenance_payloads,
-        ):
-            _finalize._print_apply_failure_summary(
-                failed_step=_FAILED_STEP["authoritative state persistence"],
-                reason=(
-                    f"required module '{embed_result.failed_module}' failed to embed, "
-                    "and QuickScale could not save partial authoritative state to "
-                    ".quickscale/state.yml."
-                ),
-            )
-            raise click.Abort()
-        _state._clear_apply_recovery_state(ctx.output_path)
-        _finalize._print_apply_failure_summary(
-            failed_step=_FAILED_STEP["module embedding"],
-            reason=f"required module '{embed_result.failed_module}' failed to embed",
-        )
-        raise click.Abort()
-
-    # ------------------------------------------------------------------
-    # Step 2: Post-embed state snapshot
-    # ------------------------------------------------------------------
-    # When recovering past step 1, use the recovery ledger's applied_state
-    # as the post-embed state and its git_index_checkpoint as the tree id.
-    if _should_run(2):
-        post_embed_state, checkpoint_tree_id = _finalize._exec_step_post_embed_snapshot(
-            ctx,
-            embedded_modules,
-            provenance_payloads,
-        )
-    else:
-        _recovery_ledger = executor.load_ledger()
-        if _recovery_ledger is not None:
-            post_embed_state = _recovery_ledger.applied_state
-            checkpoint_tree_id = _recovery_ledger.git_index_checkpoint
-        else:
-            # Fallback — should not happen in recovery mode.
-            post_embed_state, checkpoint_tree_id = (
-                _finalize._exec_step_post_embed_snapshot(
-                    ctx,
-                    embedded_modules,
-                    provenance_payloads,
-                )
-            )
+    post_embed_state, checkpoint_tree_id = _resume_post_embed_state(
+        ctx, executor, embed_result, should_run=_should_run(2)
+    )
 
     # Narrow the optional types: the adapter raises click.Abort on failure,
     # so these are always populated past this point.
     assert post_embed_state is not None  # noqa: S101 - internal invariant guaranteed by the caller
     assert checkpoint_tree_id is not None  # noqa: S101 - internal invariant guaranteed by the caller
 
-    # AF5 Phase 2 checkpoint: after step 2, the recovery ledger exists.
-    # Write progress for step 1 (if modules were embedded) and step 2.
-    # Seed both checkpoints with the real post-embed snapshot and
-    # checkpoint_tree_id so the recovery ledger is self-describing
-    # and does not carry placeholder state (AF5-CR-002).
-    if _should_run(2) and _embedding._embed_modules_ran_successfully(embed_result):
-        _checkpoint_step(
-            _apply.APPLY_STEPS[0],
-            checkpoint_tree_id=checkpoint_tree_id,
-            state_snapshot=post_embed_state,
-        )  # step 1 — embed modules
-    if _should_run(2) and embedded_modules:
-        _checkpoint_step(
-            _apply.APPLY_STEPS[1],
-            checkpoint_tree_id=checkpoint_tree_id,
-            state_snapshot=post_embed_state,
-        )  # step 2 — post-embed snapshot
-
-    # ------------------------------------------------------------------
-    # Step 3: Managed module wiring generation
-    # ------------------------------------------------------------------
-    if _should_run(3):
-        if not _context._regenerate_managed_wiring_for_apply(ctx, embedded_modules):
-            _finalize._abort_after_post_embed_failure(
-                ctx,
-                post_embed_state,
-                checkpoint_tree_id=checkpoint_tree_id,
-                failed_step=_FAILED_STEP["managed module wiring generation"],
-                reason="unable to render managed settings, URL, and integration files",
-            )
-        _checkpoint_step(_apply.APPLY_STEPS[2])  # step 3
-
-    # ------------------------------------------------------------------
-    # Step 4: Capture managed file hashes
-    # ------------------------------------------------------------------
-    if _should_run(4):
-        step4_outcome = _state._capture_managed_file_hashes_after_apply(
-            ctx.output_path, ctx.qs_config, post_embed_state
-        )
-        if not step4_outcome.success:
-            _finalize._abort_after_post_embed_failure(
-                ctx,
-                post_embed_state,
-                checkpoint_tree_id=checkpoint_tree_id,
-                failed_step=_FAILED_STEP["capture managed file hashes"],
-                reason=str(step4_outcome.message),
-            )
-        _checkpoint_step(_apply.APPLY_STEPS[3])  # step 4
-
-    # ------------------------------------------------------------------
-    # Step 5: Backups gitignore hardening
-    # ------------------------------------------------------------------
-    if _should_run(5):
-        if not _runtime._ensure_backups_gitignore_rules(ctx.output_path, ctx.qs_config):
-            _finalize._abort_after_post_embed_failure(
-                ctx,
-                post_embed_state,
-                checkpoint_tree_id=checkpoint_tree_id,
-                failed_step=_FAILED_STEP["backups gitignore hardening"],
-                reason="Unable to update .gitignore with the configured private backups directory.",
-            )
-        _checkpoint_step(_apply.APPLY_STEPS[4])  # step 5
-
-    # ------------------------------------------------------------------
-    # Step 6: Notifications env example sync
-    # ------------------------------------------------------------------
-    if _should_run(6):
-        if not _runtime._sync_notifications_env_example(ctx.output_path, ctx.qs_config):
-            _finalize._abort_after_post_embed_failure(
-                ctx,
-                post_embed_state,
-                checkpoint_tree_id=checkpoint_tree_id,
-                failed_step=_FAILED_STEP["notifications env example sync"],
-                reason="Unable to update .env.example with the configured notifications env-var names.",
-            )
-        _checkpoint_step(_apply.APPLY_STEPS[5])  # step 6
-
-    # ------------------------------------------------------------------
-    # Step 7: Analytics env example sync
-    # ------------------------------------------------------------------
-    if _should_run(7):
-        if not _runtime._sync_analytics_env_example(ctx.output_path, ctx.qs_config):
-            _finalize._abort_after_post_embed_failure(
-                ctx,
-                post_embed_state,
-                checkpoint_tree_id=checkpoint_tree_id,
-                failed_step=_FAILED_STEP["analytics env example sync"],
-                reason="Unable to update .env.example with the configured analytics env-var names.",
-            )
-        _checkpoint_step(_apply.APPLY_STEPS[6])  # step 7
-
-    # ------------------------------------------------------------------
-    # Step 8: Billing env example sync
-    # ------------------------------------------------------------------
-    if _should_run(8):
-        if not _runtime._sync_billing_env_example(ctx.output_path, ctx.qs_config):
-            _finalize._abort_after_post_embed_failure(
-                ctx,
-                post_embed_state,
-                checkpoint_tree_id=checkpoint_tree_id,
-                failed_step=_FAILED_STEP["billing env example sync"],
-                reason="Unable to update .env.example with the configured billing env-var names.",
-            )
-        _checkpoint_step(_apply.APPLY_STEPS[7])  # step 8
-
-    # ------------------------------------------------------------------
-    # Step 9: Module dependency sync
-    # ------------------------------------------------------------------
-    if _should_run(9):
-        if not _runtime._sync_project_module_dependencies_for_apply(
-            ctx.output_path,
-            ctx.qs_config,
-        ):
-            _finalize._abort_after_post_embed_failure(
-                ctx,
-                post_embed_state,
-                checkpoint_tree_id=checkpoint_tree_id,
-                failed_step=_FAILED_STEP["module dependency sync"],
-                reason="Unable to reconcile embedded-module Poetry dependency entries in pyproject.toml.",
-            )
-        _checkpoint_step(_apply.APPLY_STEPS[8])  # step 9
-
-    # ------------------------------------------------------------------
-    # Step 10: Post-generation dependency setup (no migrations)
-    # ------------------------------------------------------------------
-    # AF5 Phase 4: Step 10 only handles poetry lock + install.  All
-    # migration execution — local, Docker, --no-docker — is deferred
-    # to step 13 in the late confirmable phase below.
-    should_auto_start_docker = not no_docker and ctx.qs_config.docker.start
-    should_run_local_migrations = (ctx.existing_state is not None) and (
-        not ctx.qs_config.docker.start or no_docker
+    _checkpoint_post_embed_steps(
+        embed_result,
+        post_embed_state=post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
+        should_run=_should_run(2),
+        checkpoint_step=_checkpoint_step,
     )
-
-    if _should_run(10):
-        if not _runtime._run_post_generation_steps(
-            ctx.output_path,
-        ):
-            _finalize._abort_after_post_embed_failure(
-                ctx,
-                post_embed_state,
-                checkpoint_tree_id=checkpoint_tree_id,
-                failed_step=_FAILED_STEP[
-                    "post-generation dependency and migration setup"
-                ],
-                reason="Poetry lock refresh or dependency installation failed after module dependency sync.",
-            )
-        _checkpoint_step(_apply.APPLY_STEPS[9])  # step 10
+    _run_managed_artifact_steps(
+        ctx,
+        embedded_modules=embedded_modules,
+        post_embed_state=post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
+        should_run=_should_run,
+        checkpoint_step=_checkpoint_step,
+    )
+    _run_env_example_sync_steps(
+        ctx,
+        post_embed_state=post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
+        should_run=_should_run,
+        checkpoint_step=_checkpoint_step,
+    )
+    _run_module_dependency_steps(
+        ctx,
+        post_embed_state=post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
+        should_run=_should_run,
+        checkpoint_step=_checkpoint_step,
+    )
+    _run_dependency_setup_step(
+        ctx,
+        post_embed_state=post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
+        should_run=_should_run,
+        checkpoint_step=_checkpoint_step,
+    )
 
     # ------------------------------------------------------------------
     # Late confirmation gate — destructive/remote phase (steps 11-16)
@@ -474,118 +688,42 @@ def _execute_apply_steps_locked(
     #
     # When ``_AF5_DESTRUCTIVE_CONFIRM_BYPASS`` is ``True`` (test mode),
     # the gate is silently skipped without printing or prompting.
+    should_auto_start_docker, should_run_local_migrations = _dependency_setup_flags(
+        ctx, no_docker=no_docker
+    )
     _finalize._confirm_destructive_remote_phase(
         should_auto_start_docker=should_auto_start_docker,
         should_run_local_migrations=should_run_local_migrations,
     )
 
-    # ------------------------------------------------------------------
-    # Steps 11-16: Destructive/remote operations with per-step
-    # checkpointing (AF5 Phase 4).
-    # ------------------------------------------------------------------
-
-    # ------------------------------------------------------------------
-    # Step 11: Apply mutable config
-    # ------------------------------------------------------------------
-    if _should_run(11):
-        _finalize._exec_step_apply_mutable_config(ctx)
-        _checkpoint_step(_apply.APPLY_STEPS[10])  # step 11
-
-    # ------------------------------------------------------------------
-    # Step 12: Docker startup
-    # ------------------------------------------------------------------
-    docker_started: bool | None = None
-    if _should_run(12):
-        if should_auto_start_docker:
-            if _runtime._should_check_stale_volumes(
-                ctx
-            ) and not _runtime._preflight_stale_docker_volumes(ctx.output_path):
-                _finalize._abort_after_post_embed_failure(
-                    ctx,
-                    post_embed_state,
-                    checkpoint_tree_id=checkpoint_tree_id,
-                    failed_step=_FAILED_STEP["docker startup"],
-                    reason=(
-                        "Leftover Docker volumes from an earlier project of the "
-                        "same name would corrupt this project's migration history."
-                    ),
-                )
-            docker_started = _runtime._start_docker(
-                ctx.output_path, ctx.qs_config.docker.build, verbose_docker
-            )
-            if not docker_started:
-                _finalize._abort_after_post_embed_failure(
-                    ctx,
-                    post_embed_state,
-                    checkpoint_tree_id=checkpoint_tree_id,
-                    failed_step=_FAILED_STEP["docker startup"],
-                    reason="Docker auto-start failed. Run 'quickscale logs' to inspect the failing service.",
-                )
-        _checkpoint_step(_apply.APPLY_STEPS[11])  # step 12
-
-    # ------------------------------------------------------------------
-    # Step 13: Database migrations (local or Docker)
-    # ------------------------------------------------------------------
-    # AF5 Phase 4: This single step handles all migration paths.
-    # Docker-first projects run migrations inside the container;
-    # existing-project and --no-docker paths run local migrations.
-    if _should_run(13):
-        if should_auto_start_docker and docker_started:
-            if not _runtime._run_migrations_in_docker(ctx.output_path):
-                _finalize._abort_after_post_embed_failure(
-                    ctx,
-                    post_embed_state,
-                    checkpoint_tree_id=checkpoint_tree_id,
-                    failed_step=_FAILED_STEP["database migrations"],
-                    reason="Migrations failed inside Docker backend container. Run 'quickscale logs backend' for details.",
-                )
-        elif should_run_local_migrations:
-            if not _runtime._run_local_migrations(ctx.output_path):
-                _finalize._abort_after_post_embed_failure(
-                    ctx,
-                    post_embed_state,
-                    checkpoint_tree_id=checkpoint_tree_id,
-                    failed_step=_FAILED_STEP["database migrations"],
-                    reason="Local database migrations failed. Run 'poetry run python manage.py migrate' manually for details.",
-                )
-        _checkpoint_step(_apply.APPLY_STEPS[12])  # step 13
-
-    # ------------------------------------------------------------------
-    # Step 14: Railway deploy
-    # ------------------------------------------------------------------
-    if _should_run(14):
-        _finalize._exec_step_railway_deploy(
-            ctx,
-            post_embed_state,
-            checkpoint_tree_id=checkpoint_tree_id,
-        )
-        _checkpoint_step(_apply.APPLY_STEPS[13])  # step 14
-
-    # ------------------------------------------------------------------
-    # Step 15: Finalize apply state
-    # ------------------------------------------------------------------
-    # No checkpoint after finalize: the step body already clears the
-    # recovery ledger on success.  Writing another checkpoint here
-    # would recreate a bogus recovery ledger with placeholder state
-    # (AF5-CR-001).
-    if _should_run(15):
-        _finalize._finalize_apply_state(
-            ctx,
-            post_embed_state,
-            checkpoint_tree_id=checkpoint_tree_id,
-        )
-
-    # ------------------------------------------------------------------
-    # Step 16: Display next steps
-    # ------------------------------------------------------------------
-    # No checkpoint after display: there are no further steps to resume
-    # from and writing one would recreate the stale recovery ledger
-    # that step 15 just cleared (AF5-CR-001).
-    if _should_run(16):
-        _finalize._display_next_steps(
-            ctx.output_path,
-            ctx.qs_config,
-            no_docker,
-            docker_started,
-            existing_project=ctx.existing_state is not None,
-        )
+    _run_mutable_config_step(
+        ctx, should_run=_should_run, checkpoint_step=_checkpoint_step
+    )
+    docker_started = _run_docker_startup_step(
+        ctx,
+        post_embed_state=post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
+        should_auto_start_docker=should_auto_start_docker,
+        verbose_docker=verbose_docker,
+        should_run=_should_run,
+        checkpoint_step=_checkpoint_step,
+    )
+    _run_migration_step(
+        ctx,
+        post_embed_state=post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
+        should_auto_start_docker=should_auto_start_docker,
+        docker_started=docker_started,
+        should_run_local_migrations=should_run_local_migrations,
+        should_run=_should_run,
+        checkpoint_step=_checkpoint_step,
+    )
+    _run_final_apply_steps(
+        ctx,
+        post_embed_state=post_embed_state,
+        checkpoint_tree_id=checkpoint_tree_id,
+        no_docker=no_docker,
+        docker_started=docker_started,
+        should_run=_should_run,
+        checkpoint_step=_checkpoint_step,
+    )

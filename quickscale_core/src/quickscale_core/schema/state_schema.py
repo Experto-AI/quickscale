@@ -159,6 +159,129 @@ class QuickScaleState:
         # the on-disk presence check.
 
 
+def _adopted_contract_steps(
+    project_data: dict[str, Any], message: str
+) -> list[str] | None:
+    """Return validated adopted-contract steps, or None when unset."""
+    adopted_steps_raw = project_data.get("adopted_contract_steps")
+    if adopted_steps_raw is None:
+        return None
+    if not isinstance(adopted_steps_raw, list) or any(
+        not isinstance(step_id, str) or not step_id for step_id in adopted_steps_raw
+    ):
+        raise StateError(message)
+    return list(adopted_steps_raw)
+
+
+def _require_project_string(
+    project_data: dict[str, Any], key: str, message: str
+) -> str:
+    """Return a required non-empty project string, or raise StateError."""
+    value = project_data.get(key)
+    if not isinstance(value, str) or not value:
+        raise StateError(message)
+    return value
+
+
+def _parse_state_project(project_data: Any) -> ProjectState:
+    """Validate and build the project section of a state file."""
+    if not isinstance(project_data, dict):
+        raise StateError("'project' in state file must be a mapping")
+
+    if "name" in project_data and (
+        "slug" not in project_data or "package" not in project_data
+    ):
+        raise StateError(
+            "Legacy state schema detected (project.name). "
+            "This version requires project.slug and project.package. "
+            "Regenerate state by re-running 'quickscale apply' with a "
+            "quickscale.yml that defines project.slug/project.package."
+        )
+
+    project_slug = _require_project_string(
+        project_data, "slug", "State file project.slug must be a non-empty string"
+    )
+    project_package = _require_project_string(
+        project_data, "package", "State file project.package must be a non-empty string"
+    )
+    project_theme = _require_project_string(
+        project_data, "theme", "State file project.theme must be a non-empty string"
+    )
+
+    adopted_steps = _adopted_contract_steps(
+        project_data,
+        "State file project.adopted_contract_steps must be a list of non-empty strings",
+    )
+
+    return ProjectState(
+        slug=project_slug,
+        package=project_package,
+        theme=project_theme,
+        project_contract=project_data.get("project_contract"),
+        adopted_contract_steps=adopted_steps,
+        created_at=project_data.get("created_at", datetime.now().isoformat()),
+        last_applied=project_data.get("last_applied", datetime.now().isoformat()),
+    )
+
+
+def _parse_state_modules(data: dict[str, Any]) -> dict[str, ModuleState]:
+    """Validate and build the modules section of a state file."""
+    modules_data = data.get("modules", {})
+    if not isinstance(modules_data, dict):
+        raise StateError("'modules' in state file must be a mapping")
+
+    modules: dict[str, ModuleState] = {}
+    for module_name, module_info in modules_data.items():
+        if not isinstance(module_info, dict):
+            raise StateError(f"Module '{module_name}' state must be a mapping")
+
+        modules[module_name] = ModuleState(
+            name=module_name,
+            version=normalize_installed_version(module_info.get("version")),
+            commit_sha=module_info.get("commit_sha"),
+            embedded_at=module_info.get("embedded_at", datetime.now().isoformat()),
+            options=sanitize_module_options(
+                module_name,
+                module_info.get("options") or {},
+            ),
+            # Phase 2 consolidated tracking fields (optional).
+            prefix=module_info.get("prefix"),
+            branch=module_info.get("branch"),
+            installed_at=module_info.get("installed_at"),
+        )
+    return modules
+
+
+def _state_managed_file_record(
+    entry: Any, *, file_path: str | None = None
+) -> ManagedFileRecord | None:
+    """Return one validated managed-file record, or None when unusable."""
+    if not isinstance(entry, dict):
+        return None
+    payload = entry if file_path is None else {**entry, "path": file_path}
+    try:
+        return ManagedFileRecord.from_dict(payload)
+    except KeyError, TypeError, ValueError:
+        return None
+
+
+def _parse_state_managed_files(data: dict[str, Any]) -> dict[str, ManagedFileRecord]:
+    """Validate and build the managed-files section of a state file."""
+    managed_files: dict[str, ManagedFileRecord] = {}
+    managed_files_data = data.get("managed_files")
+    if isinstance(managed_files_data, list):
+        for entry in managed_files_data:
+            record = _state_managed_file_record(entry)
+            if record is not None:
+                managed_files[record.path] = record
+    elif isinstance(managed_files_data, dict):
+        for file_path, file_info in managed_files_data.items():
+            record = _state_managed_file_record(file_info, file_path=file_path)
+            if record is not None:
+                managed_files[record.path] = record
+    return managed_files
+
+
 class StateManager:
     """Manages state file operations for QuickScale projects"""
 
@@ -193,114 +316,9 @@ class StateManager:
             if not isinstance(data, dict):
                 raise StateError("State file must be a YAML mapping")
 
-            # Parse project state
-            project_data = data.get("project", {})
-            if not isinstance(project_data, dict):
-                raise StateError("'project' in state file must be a mapping")
-
-            if "name" in project_data and (
-                "slug" not in project_data or "package" not in project_data
-            ):
-                raise StateError(
-                    "Legacy state schema detected (project.name). "
-                    "This version requires project.slug and project.package. "
-                    "Regenerate state by re-running 'quickscale apply' with a "
-                    "quickscale.yml that defines project.slug/project.package."
-                )
-
-            project_slug = project_data.get("slug")
-            project_package = project_data.get("package")
-            project_theme = project_data.get("theme")
-
-            if not isinstance(project_slug, str) or not project_slug:
-                raise StateError("State file project.slug must be a non-empty string")
-
-            if not isinstance(project_package, str) or not project_package:
-                raise StateError(
-                    "State file project.package must be a non-empty string"
-                )
-
-            if not isinstance(project_theme, str) or not project_theme:
-                raise StateError("State file project.theme must be a non-empty string")
-
-            adopted_steps_raw = project_data.get("adopted_contract_steps")
-            if adopted_steps_raw is not None and (
-                not isinstance(adopted_steps_raw, list)
-                or any(
-                    not isinstance(step_id, str) or not step_id
-                    for step_id in adopted_steps_raw
-                )
-            ):
-                raise StateError(
-                    "State file project.adopted_contract_steps must be a list "
-                    "of non-empty strings"
-                )
-
-            project = ProjectState(
-                slug=project_slug,
-                package=project_package,
-                theme=project_theme,
-                project_contract=project_data.get("project_contract"),
-                adopted_contract_steps=(
-                    list(adopted_steps_raw) if adopted_steps_raw is not None else None
-                ),
-                created_at=project_data.get("created_at", datetime.now().isoformat()),
-                last_applied=project_data.get(
-                    "last_applied", datetime.now().isoformat()
-                ),
-            )
-
-            # Parse module states
-            modules_data = data.get("modules", {})
-            if not isinstance(modules_data, dict):
-                raise StateError("'modules' in state file must be a mapping")
-
-            modules: dict[str, ModuleState] = {}
-            for module_name, module_info in modules_data.items():
-                if not isinstance(module_info, dict):
-                    raise StateError(f"Module '{module_name}' state must be a mapping")
-
-                modules[module_name] = ModuleState(
-                    name=module_name,
-                    version=normalize_installed_version(module_info.get("version")),
-                    commit_sha=module_info.get("commit_sha"),
-                    embedded_at=module_info.get(
-                        "embedded_at", datetime.now().isoformat()
-                    ),
-                    options=sanitize_module_options(
-                        module_name,
-                        module_info.get("options") or {},
-                    ),
-                    # Phase 2 consolidated tracking fields (optional).
-                    prefix=module_info.get("prefix"),
-                    branch=module_info.get("branch"),
-                    installed_at=module_info.get("installed_at"),
-                )
-
-            # Parse managed-file records (Phase 2 consolidated section).
-            managed_files: dict[str, ManagedFileRecord] = {}
-            managed_files_data = data.get("managed_files")
-            if managed_files_data is not None:
-                if isinstance(managed_files_data, list):
-                    for entry in managed_files_data:
-                        if not isinstance(entry, dict):
-                            continue
-                        try:
-                            record = ManagedFileRecord.from_dict(entry)
-                        except KeyError, TypeError, ValueError:
-                            continue
-                        managed_files[record.path] = record
-                elif isinstance(managed_files_data, dict):
-                    for file_path, file_info in managed_files_data.items():
-                        if not isinstance(file_info, dict):
-                            continue
-                        try:
-                            record = ManagedFileRecord.from_dict(
-                                {**file_info, "path": file_path}
-                            )
-                        except KeyError, TypeError, ValueError:
-                            continue
-                        managed_files[record.path] = record
+            project = _parse_state_project(data.get("project", {}))
+            modules = _parse_state_modules(data)
+            managed_files = _parse_state_managed_files(data)
 
             return QuickScaleState(
                 version=data.get("version", "1"),

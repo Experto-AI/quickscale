@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
@@ -50,27 +51,28 @@ def _resolve_snapshot_provenance_value(
     return populated_candidates[0][1]
 
 
-def _build_snapshot_full_backup_contract(
-    snapshot: Any,
-    *,
-    now: datetime | None = None,
-) -> dict[str, Any]:
-    """Build the canonical full-backup completeness/provenance contract."""
-    evaluated_at = now or _django_timezone.now()
-    _, database_descriptor, sidecars = _paths._get_snapshot_report_children(snapshot)
+@dataclass(frozen=True)
+class _SnapshotDatabaseContract:
+    """The authoritative-dump portion of the full-backup contract."""
 
+    status: str
+    relative_path: str
+    local_available: bool
+    remote_available: bool
+    payload: dict[str, Any] | None
+
+
+def _snapshot_database_contract(
+    snapshot: Any, database_descriptor: Any
+) -> tuple[_SnapshotDatabaseContract, list[str]]:
+    """Return the database contract fields and their completeness issues."""
     completeness_issues: list[str] = []
-    provenance_issues: list[str] = []
-
-    if snapshot.status != "ready":
-        completeness_issues.append(f"snapshot status is '{snapshot.status}'")
-
-    authoritative_dump = snapshot.authoritative_dump
     database_status = str(database_descriptor.get("status", "")).strip() or "missing"
     database_relative_path = str(database_descriptor.get("relative_path", "")).strip()
     database_local_available = False
     database_remote_available = False
     database_remote_key = str(database_descriptor.get("remote_key", "")).strip()
+    authoritative_dump = snapshot.authoritative_dump
 
     authoritative_dump_payload: dict[str, Any] | None = None
     if authoritative_dump is None:
@@ -107,78 +109,100 @@ def _build_snapshot_full_backup_contract(
             or {},
         }
 
-    required_sidecars: dict[str, dict[str, Any]] = {}
-    loaded_sidecar_payloads: dict[str, dict[str, Any]] = {}
-    expected_manifest_statuses = {
-        _primitives._MEDIA_SYNC_MANIFEST_FILENAME: "ready",
-        _primitives._ENV_VAR_MANIFEST_FILENAME: "ready",
-        _primitives._RELEASE_METADATA_FILENAME: "ready",
+    return (
+        _SnapshotDatabaseContract(
+            status=database_status,
+            relative_path=database_relative_path,
+            local_available=database_local_available,
+            remote_available=database_remote_available,
+            payload=authoritative_dump_payload,
+        ),
+        completeness_issues,
+    )
+
+
+def _sidecar_descriptor_fields(
+    snapshot: Any, filename: str, raw_descriptor: Any
+) -> tuple[dict[str, Any], str, str, bool, bool]:
+    """Return one sidecar's entry and (status, manifest, local, remote) fields."""
+    descriptor = raw_descriptor if isinstance(raw_descriptor, dict) else {}
+    sidecar_status = str(descriptor.get("status", "")).strip() or "missing"
+    metadata = descriptor.get("metadata", {})
+    manifest_status = ""
+    if isinstance(metadata, dict):
+        manifest_status = str(metadata.get("manifest_status", "")).strip()
+
+    local_path_text = str(descriptor.get("local_path", "")).strip()
+    local_path = (
+        Path(local_path_text)
+        if local_path_text
+        else _paths._snapshot_sidecar_path(snapshot, filename)
+    )
+    local_available = local_path.exists()
+    remote_available = bool(str(descriptor.get("remote_key", "")).strip())
+    entry = {
+        "status": sidecar_status,
+        "manifest_status": manifest_status,
+        "local_available": local_available,
+        "remote_available": remote_available,
     }
+    return entry, sidecar_status, manifest_status, local_available, remote_available
 
-    for filename in _primitives._REQUIRED_SNAPSHOT_SIDECAR_FILENAMES:
-        raw_descriptor = sidecars.get(filename)
-        descriptor = raw_descriptor if isinstance(raw_descriptor, dict) else {}
-        sidecar_status = str(descriptor.get("status", "")).strip() or "missing"
-        metadata = descriptor.get("metadata", {})
-        manifest_status = ""
-        if isinstance(metadata, dict):
-            manifest_status = str(metadata.get("manifest_status", "")).strip()
 
-        local_path_text = str(descriptor.get("local_path", "")).strip()
-        local_path = (
-            Path(local_path_text)
-            if local_path_text
-            else _paths._snapshot_sidecar_path(snapshot, filename)
-        )
-        local_available = local_path.exists()
-        remote_available = bool(str(descriptor.get("remote_key", "")).strip())
+def _sidecar_completeness_issues(
+    raw_descriptor: Any,
+    filename: str,
+    *,
+    sidecar_status: str,
+    manifest_status: str,
+    local_available: bool,
+    remote_available: bool,
+    expected_manifest_status: str | None,
+) -> list[str]:
+    """Return one sidecar's completeness issues."""
+    issues: list[str] = []
+    if not isinstance(raw_descriptor, dict):
+        issues.append(f"{filename} descriptor is missing")
+    elif sidecar_status != "ready":
+        issues.append(f"{filename} status is '{sidecar_status}'")
+    if not local_available and not remote_available:
+        issues.append(f"{filename} is unavailable in both local and remote storage")
+    if (
+        expected_manifest_status is not None
+        and manifest_status != expected_manifest_status
+    ):
+        issues.append(f"{filename} manifest status is '{manifest_status or 'missing'}'")
+    return issues
 
-        required_sidecars[filename] = {
-            "status": sidecar_status,
-            "manifest_status": manifest_status,
-            "local_available": local_available,
-            "remote_available": remote_available,
-        }
 
-        if not isinstance(raw_descriptor, dict):
-            completeness_issues.append(f"{filename} descriptor is missing")
-        elif sidecar_status != "ready":
-            completeness_issues.append(f"{filename} status is '{sidecar_status}'")
-        if not local_available and not remote_available:
-            completeness_issues.append(
-                f"{filename} is unavailable in both local and remote storage"
-            )
+def _sidecar_payload(
+    snapshot: Any, filename: str, *, local_available: bool, remote_available: bool
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Return one locally available sidecar's payload and provenance issues."""
+    if local_available:
+        try:
+            return _sidecar._load_snapshot_sidecar_payload(snapshot, filename), []
+        except _primitives.BackupError as exc:
+            return None, [
+                f"{filename} could not be loaded for provenance validation: {exc}"
+            ]
+    if not remote_available:
+        return None, [f"{filename} provenance payload is unavailable for inspection"]
+    return None, []
 
-        expected_manifest_status = expected_manifest_statuses.get(filename)
-        if (
-            expected_manifest_status is not None
-            and manifest_status != expected_manifest_status
-        ):
-            completeness_issues.append(
-                f"{filename} manifest status is '{manifest_status or 'missing'}'"
-            )
 
-        if local_available:
-            try:
-                loaded_sidecar_payloads[filename] = (
-                    _sidecar._load_snapshot_sidecar_payload(
-                        snapshot,
-                        filename,
-                    )
-                )
-            except _primitives.BackupError as exc:
-                provenance_issues.append(
-                    f"{filename} could not be loaded for provenance validation: {exc}"
-                )
-        elif not remote_available:
-            provenance_issues.append(
-                f"{filename} provenance payload is unavailable for inspection"
-            )
-
+def _collect_sidecar_provenance(
+    loaded_sidecar_payloads: dict[str, dict[str, Any]],
+) -> tuple[
+    list[tuple[str, str]],
+    list[tuple[str, str]],
+    list[str],
+    dict[str, str | None],
+]:
+    """Collect per-sidecar provenance candidates, issues, and captured times."""
     project_slug_candidates: list[tuple[str, str]] = []
-    source_environment_candidates: list[tuple[str, str]] = [
-        ("snapshot", snapshot.source_environment.strip())
-    ]
+    source_environment_candidates: list[tuple[str, str]] = []
+    provenance_issues: list[str] = []
     sidecar_captured_at: dict[str, str | None] = {}
     for filename, payload in loaded_sidecar_payloads.items():
         payload_project_slug = str(payload.get("project_slug", "")).strip()
@@ -197,6 +221,90 @@ def _build_snapshot_full_backup_contract(
         sidecar_captured_at[filename] = (
             str(captured_at).strip() if captured_at is not None else None
         )
+    return (
+        project_slug_candidates,
+        source_environment_candidates,
+        provenance_issues,
+        sidecar_captured_at,
+    )
+
+
+def _snapshot_release_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the release metadata summary carried in the contract."""
+    module_versions = payload.get("module_versions", {})
+    return {
+        "app_version": payload.get("app_version"),
+        "django_version": payload.get("django_version"),
+        "module_versions": module_versions if isinstance(module_versions, dict) else {},
+        "git_sha": payload.get("git_sha"),
+    }
+
+
+def _build_snapshot_full_backup_contract(
+    snapshot: Any,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Build the canonical full-backup completeness/provenance contract."""
+    evaluated_at = now or _django_timezone.now()
+    _, database_descriptor, sidecars = _paths._get_snapshot_report_children(snapshot)
+
+    completeness_issues: list[str] = []
+    provenance_issues: list[str] = []
+
+    if snapshot.status != "ready":
+        completeness_issues.append(f"snapshot status is '{snapshot.status}'")
+
+    database_contract, database_issues = _snapshot_database_contract(
+        snapshot, database_descriptor
+    )
+    completeness_issues.extend(database_issues)
+
+    required_sidecars: dict[str, dict[str, Any]] = {}
+    loaded_sidecar_payloads: dict[str, dict[str, Any]] = {}
+    expected_manifest_statuses = {
+        _primitives._MEDIA_SYNC_MANIFEST_FILENAME: "ready",
+        _primitives._ENV_VAR_MANIFEST_FILENAME: "ready",
+        _primitives._RELEASE_METADATA_FILENAME: "ready",
+    }
+
+    for filename in _primitives._REQUIRED_SNAPSHOT_SIDECAR_FILENAMES:
+        raw_descriptor = sidecars.get(filename)
+        entry, sidecar_status, manifest_status, local_available, remote_available = (
+            _sidecar_descriptor_fields(snapshot, filename, raw_descriptor)
+        )
+        required_sidecars[filename] = entry
+        completeness_issues.extend(
+            _sidecar_completeness_issues(
+                raw_descriptor,
+                filename,
+                sidecar_status=sidecar_status,
+                manifest_status=manifest_status,
+                local_available=local_available,
+                remote_available=remote_available,
+                expected_manifest_status=expected_manifest_statuses.get(filename),
+            )
+        )
+        payload, sidecar_provenance = _sidecar_payload(
+            snapshot,
+            filename,
+            local_available=local_available,
+            remote_available=remote_available,
+        )
+        provenance_issues.extend(sidecar_provenance)
+        if payload is not None:
+            loaded_sidecar_payloads[filename] = payload
+
+    (
+        project_slug_candidates,
+        source_environment_candidates,
+        sidecar_provenance_issues,
+        sidecar_captured_at,
+    ) = _collect_sidecar_provenance(loaded_sidecar_payloads)
+    provenance_issues.extend(sidecar_provenance_issues)
+    source_environment_candidates.insert(
+        0, ("snapshot", snapshot.source_environment.strip())
+    )
 
     project_slug = _resolve_snapshot_provenance_value(
         field_name="project_slug",
@@ -212,13 +320,7 @@ def _build_snapshot_full_backup_contract(
     release_payload = loaded_sidecar_payloads.get(
         _primitives._RELEASE_METADATA_FILENAME, {}
     )
-    module_versions = release_payload.get("module_versions", {})
-    release_summary = {
-        "app_version": release_payload.get("app_version"),
-        "django_version": release_payload.get("django_version"),
-        "module_versions": module_versions if isinstance(module_versions, dict) else {},
-        "git_sha": release_payload.get("git_sha"),
-    }
+    release_summary = _snapshot_release_summary(release_payload)
 
     completeness_status = "complete" if not completeness_issues else "incomplete"
     provenance_status = "consistent" if not provenance_issues else "inconsistent"
@@ -234,10 +336,10 @@ def _build_snapshot_full_backup_contract(
             "status": completeness_status,
             "issues": completeness_issues,
             "database": {
-                "status": database_status,
-                "relative_path": database_relative_path,
-                "local_available": database_local_available,
-                "remote_available": database_remote_available,
+                "status": database_contract.status,
+                "relative_path": database_contract.relative_path,
+                "local_available": database_contract.local_available,
+                "remote_available": database_contract.remote_available,
             },
             "required_sidecars": required_sidecars,
         },
@@ -249,7 +351,7 @@ def _build_snapshot_full_backup_contract(
             "source_environment": source_environment,
             "captured_at": snapshot.created_at.astimezone(timezone.utc).isoformat(),
             "sidecar_captured_at": sidecar_captured_at,
-            "authoritative_dump": authoritative_dump_payload,
+            "authoritative_dump": database_contract.payload,
             "release": release_summary,
         },
     }

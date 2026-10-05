@@ -150,6 +150,142 @@ def plan(
     _dr_output._echo_plan_summary(plan_payload)
 
 
+def _require_execute_surface_selection(
+    *, database: bool, media: bool, env_vars: bool, resume: bool
+) -> None:
+    """Reject an execute invocation that selects no operational surface."""
+    if not any((database, media, env_vars)) and not resume:
+        raise click.ClickException(
+            "Choose at least one operational surface: --database, --media, or --env-vars."
+        )
+
+
+def _require_production_rollback_pin(
+    context: Any, *, hours: int | None, reason: str | None, resume: bool
+) -> None:
+    """Require a rollback pin before executing against a production route."""
+    if resume or not context.route.involves_production():
+        return
+    if hours is not None and str(reason or "").strip():
+        return
+    raise click.ClickException(
+        "Routes involving Railway production require --rollback-pin-hours and --rollback-pin-reason before execution."
+    )
+
+
+def _require_resume_rollback_pin(
+    context: Any,
+    existing_rollback_pin: dict[str, Any] | None,
+    *,
+    hours: int | None,
+    reason: str | None,
+    resume: bool,
+) -> None:
+    """Require a rollback pin (or an active stored one) when resuming production."""
+    if not (context.route.involves_production() and resume):
+        return
+    if hours is not None and str(reason or "").strip():
+        return
+    if existing_rollback_pin is not None and existing_rollback_pin.get("active"):
+        return
+    raise click.ClickException(
+        "Routes involving Railway production require --rollback-pin-hours and --rollback-pin-reason before execution."
+    )
+
+
+def _execute_one_surface(
+    context: Any,
+    surface_name: str,
+    *,
+    snapshot_id: str,
+    snapshot_report: dict[str, Any],
+    env_sync_plan: dict[str, Any],
+) -> dict[str, Any]:
+    """Run one selected DR surface and return its result payload."""
+    if surface_name == "env_vars":
+        return _dr_env_sync._execute_portable_env_sync(context, env_sync_plan)
+    if surface_name == "database":
+        return _dr_adapter._execute_database_restore(context, snapshot_report)
+    return _dr_adapter._run_media_sync(
+        context,
+        snapshot_id=snapshot_id,
+        dry_run=False,
+    )
+
+
+def _execute_selected_surfaces(
+    context: Any,
+    *,
+    snapshot_id: str,
+    snapshot_report: dict[str, Any],
+    selected_surfaces: Any,
+    latest_execute_record: dict[str, Any] | None,
+    env_sync_plan: dict[str, Any],
+    resume: bool,
+    execute_payload: dict[str, Any],
+) -> bool:
+    """Run each selected surface in order; True when a selected surface failed."""
+    latest_surface_statuses = _dr_report._latest_execute_surface_statuses(
+        latest_execute_record
+    )
+    surface_failure = False
+    for surface_name in _dr_report._DR_EXECUTE_SURFACES:
+        if surface_name not in selected_surfaces:
+            continue
+
+        if surface_failure:
+            execute_payload[surface_name] = {
+                "status": "incomplete",
+                "reason": "not attempted because an earlier selected surface failed",
+            }
+            continue
+
+        if resume and latest_surface_statuses.get(surface_name) == "completed":
+            execute_payload[surface_name] = {
+                "status": "skipped",
+                "reason": "already completed in the latest execute record",
+            }
+            continue
+
+        try:
+            execute_payload[surface_name] = _execute_one_surface(
+                context,
+                surface_name,
+                snapshot_id=snapshot_id,
+                snapshot_report=snapshot_report,
+                env_sync_plan=env_sync_plan,
+            )
+        except click.ClickException as exc:
+            execute_payload[surface_name] = {
+                "status": "failed",
+                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+            }
+            surface_failure = True
+        except Exception as exc:
+            execute_payload[surface_name] = {
+                "status": "failed",
+                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+            }
+            surface_failure = True
+    return surface_failure
+
+
+def _mark_partial_execute_payload(execute_payload: dict[str, Any]) -> None:
+    """Mark the execute payload partial when a surface needs follow-up."""
+    if any(
+        _dr_report._surface_result_requires_follow_up(surface)
+        for surface in (
+            execute_payload["env_vars"],
+            execute_payload["database"],
+            execute_payload["media"],
+        )
+        if isinstance(surface, dict)
+    ):
+        execute_payload["status"] = "partial"
+
+
 @dr.command()
 @click.option("--route", type=_dr_context._ROUTE_CHOICE, required=True)
 @click.option("--snapshot-id", required=True)
@@ -180,10 +316,9 @@ def execute(
     as_json: bool,
 ) -> None:
     """Execute selected DR surfaces for one stored snapshot."""
-    if not any((database, media, env_vars)) and not resume:
-        raise click.ClickException(
-            "Choose at least one operational surface: --database, --media, or --env-vars."
-        )
+    _require_execute_surface_selection(
+        database=database, media=media, env_vars=env_vars, resume=resume
+    )
 
     context = _dr_context._build_context(
         route,
@@ -193,11 +328,12 @@ def execute(
         target_railway_environment=target_railway_environment,
         include_target=True,
     )
-    if context.route.involves_production() and not resume:
-        if rollback_pin_hours is None or not str(rollback_pin_reason or "").strip():
-            raise click.ClickException(
-                "Routes involving Railway production require --rollback-pin-hours and --rollback-pin-reason before execution."
-            )
+    _require_production_rollback_pin(
+        context,
+        hours=rollback_pin_hours,
+        reason=rollback_pin_reason,
+        resume=resume,
+    )
 
     snapshot_report = _dr_adapter._fetch_snapshot_report(
         context,
@@ -233,17 +369,13 @@ def execute(
     existing_rollback_pin = (
         rollback_pin_payload if isinstance(rollback_pin_payload, dict) else None
     )
-    if context.route.involves_production():
-        rollback_pin_active = bool(
-            existing_rollback_pin is not None and existing_rollback_pin.get("active")
-        )
-        if resume and (
-            rollback_pin_hours is None or not str(rollback_pin_reason or "").strip()
-        ):
-            if not rollback_pin_active:
-                raise click.ClickException(
-                    "Routes involving Railway production require --rollback-pin-hours and --rollback-pin-reason before execution."
-                )
+    _require_resume_rollback_pin(
+        context,
+        existing_rollback_pin,
+        hours=rollback_pin_hours,
+        reason=rollback_pin_reason,
+        resume=resume,
+    )
 
     env_sync_plan = _dr_env_sync._build_env_sync_plan(context, snapshot_report)
 
@@ -280,70 +412,17 @@ def execute(
         _dr_report._latest_execute_surface_payloads(latest_execute_record)
     )
 
-    latest_surface_statuses = _dr_report._latest_execute_surface_statuses(
-        latest_execute_record
+    _execute_selected_surfaces(
+        context,
+        snapshot_id=snapshot_id,
+        snapshot_report=snapshot_report,
+        selected_surfaces=selected_surfaces,
+        latest_execute_record=latest_execute_record,
+        env_sync_plan=env_sync_plan,
+        resume=resume,
+        execute_payload=execute_payload,
     )
-    surface_failure = False
-    for surface_name in _dr_report._DR_EXECUTE_SURFACES:
-        if surface_name not in selected_surfaces:
-            continue
-
-        if surface_failure:
-            execute_payload[surface_name] = {
-                "status": "incomplete",
-                "reason": "not attempted because an earlier selected surface failed",
-            }
-            continue
-
-        if resume and latest_surface_statuses.get(surface_name) == "completed":
-            execute_payload[surface_name] = {
-                "status": "skipped",
-                "reason": "already completed in the latest execute record",
-            }
-            continue
-
-        try:
-            if surface_name == "env_vars":
-                execute_payload[surface_name] = _dr_env_sync._execute_portable_env_sync(
-                    context,
-                    env_sync_plan,
-                )
-            elif surface_name == "database":
-                execute_payload[surface_name] = _dr_adapter._execute_database_restore(
-                    context,
-                    snapshot_report,
-                )
-            else:
-                execute_payload[surface_name] = _dr_adapter._run_media_sync(
-                    context,
-                    snapshot_id=snapshot_id,
-                    dry_run=False,
-                )
-        except click.ClickException as exc:
-            execute_payload[surface_name] = {
-                "status": "failed",
-                "error": str(exc),
-                "error_type": exc.__class__.__name__,
-            }
-            surface_failure = True
-        except Exception as exc:
-            execute_payload[surface_name] = {
-                "status": "failed",
-                "error": str(exc),
-                "error_type": exc.__class__.__name__,
-            }
-            surface_failure = True
-
-    if any(
-        _dr_report._surface_result_requires_follow_up(surface)
-        for surface in (
-            execute_payload["env_vars"],
-            execute_payload["database"],
-            execute_payload["media"],
-        )
-        if isinstance(surface, dict)
-    ):
-        execute_payload["status"] = "partial"
+    _mark_partial_execute_payload(execute_payload)
 
     _dr_adapter._record_verification(
         context,

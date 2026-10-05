@@ -377,6 +377,246 @@ def _update_single_module(
         return False
 
 
+def _load_update_state(project_path: Path) -> Any:
+    """Load authoritative state, aborting on failure or no installed modules.
+
+    Returns None when the command should stop because nothing is installed.
+    """
+    manager = _project_state_manager.ProjectStateManager(project_path)
+    try:
+        state = manager.load_state()
+    except Exception as error:
+        click.secho(
+            f"❌ Failed to load .quickscale/state.yml: {error}",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "💡 Fix or restore .quickscale/state.yml before running "
+            "'quickscale update'.",
+            err=True,
+        )
+        raise click.Abort() from error
+
+    if state is None or not state.modules:
+        click.secho("✅ No modules installed. Nothing to update.", fg="green")
+        click.echo("\n💡 Tip: Add modules with 'quickscale plan --add'")
+        return None
+    return state
+
+
+def _validate_update_preconditions(
+    state: Any, project_path: Path, *, acknowledged: bool
+) -> None:
+    """Enforce contract vintage, warn on drift, and validate module readiness."""
+    _contract_vintage.enforce_shipped_contract_vintage(
+        state,
+        state.modules,
+        operation="'quickscale update'",
+        acknowledged=acknowledged,
+    )
+
+    # Surface module version drift between state and legacy config.
+    # Non-fatal: update reconciles both files at the end.
+    try:
+        legacy_config = _config.load_config()
+    except _config.ConfigError:
+        legacy_config = None
+    _module_shared._warn_version_drift_for_update(project_path, legacy_config)
+
+    for name in state.modules:
+        if not _module_shared._validate_module_readiness(name):
+            raise click.Abort()
+
+
+def _acquire_update_lock(project_path: Path) -> Any:
+    """Acquire the update advisory lock, aborting on contention."""
+    lock = _advisory_lock.AdvisoryLock(project_path, operation="update")
+    try:
+        lock.acquire()
+    except _advisory_lock.AdvisoryLockContentionError as error:
+        click.secho(f"❌ {error}", fg="red", err=True)
+        raise click.Abort() from error
+    return lock
+
+
+def _resolve_pre_update_head(project_path: Path) -> str:
+    """Return the pre-update HEAD, or an empty string when unresolvable."""
+    try:
+        return subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+            ["git", "rev-parse", "HEAD"],  # noqa: S607 - PATH-resolved executable by design
+            cwd=project_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except subprocess.CalledProcessError:
+        # ``_validate_update_environment`` already required a git repository;
+        # without a resolvable HEAD there is no committed state to roll back
+        # to, so partial-failure rollback is skipped.
+        return ""
+
+
+def _update_all_modules(state: Any, *, no_preview: bool) -> tuple[list[str], list[str]]:
+    """Update each installed module in order; stop at the first failure."""
+    failed_modules: list[str] = []
+    updated_modules: list[str] = []
+    for name, module_state in state.modules.items():
+        if not _update_single_module(
+            name,
+            module_state,
+            "https://github.com/Experto-AI/quickscale.git",
+            no_preview,
+        ):
+            failed_modules.append(name)
+            break
+        updated_modules.append(name)
+    return failed_modules, updated_modules
+
+
+def _regenerate_update_wiring(project_path: Path) -> bool:
+    """Regenerate the managed wiring after every pull; True on success."""
+    try:
+        # Any failure in this post-pull phase — loading state, regenerating,
+        # recording hashes, or committing the wiring — must be treated as a
+        # failed update so the modules committed by the pulls above are rolled
+        # back with it.
+        refreshed_state = _project_state_manager.ProjectStateManager(
+            project_path
+        ).load_state()
+        if refreshed_state is None:
+            raise _state_schema.StateError(
+                "authoritative project state could not be loaded"
+            )
+        wiring_success, wiring_message = (
+            _module_update_io._regenerate_and_record_managed_wiring(
+                project_path,
+                refreshed_state.project.package,
+            )
+        )
+        if not wiring_success:
+            raise RuntimeError(wiring_message)
+        _module_update_io._commit_regenerated_managed_wiring(
+            refreshed_state.project.package
+        )
+        click.echo("  ✅ Regenerated managed module wiring")
+    except Exception as error:  # noqa: BLE001 - rollback is handled by the caller
+        click.secho(
+            f"❌ Failed to regenerate managed module wiring: {error}",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "💡 Fix the module manifests, then run "
+            "'quickscale apply' to regenerate the managed wiring.",
+            err=True,
+        )
+        return False
+    return True
+
+
+def _record_confirmed_update_adoption(project_path: Path, *, enabled: bool) -> None:
+    """Record and commit the confirmed contract adoption when enabled.
+
+    It runs only after every module mutation (the subtree pulls need a clean
+    tree) and while the advisory lock is still held, then commits it so the
+    next command's clean-tree check still passes (SA207).
+    """
+    if not enabled:
+        return
+    refreshed_state = _project_state_manager.ProjectStateManager(
+        project_path
+    ).load_state()
+    if refreshed_state is None:
+        return
+    _contract_vintage.record_contract_adoption(refreshed_state, project_path)
+    _module_update_io._commit_contract_adoption()
+
+
+def _run_update_under_lock(
+    state: Any, project_path: Path, *, no_preview: bool, confirm_contract_adoption: bool
+) -> tuple[list[str], list[str], bool]:
+    """Run the locked update sequence and return (failed, updated, wiring_failed)."""
+    lock = _acquire_update_lock(project_path)
+    try:
+        pre_update_head = _resolve_pre_update_head(project_path)
+        failed_modules, updated_modules = _update_all_modules(
+            state, no_preview=no_preview
+        )
+
+        # Regenerate the managed wiring once every module pull succeeded.
+        # Regeneration validates every embedded manifest against the running
+        # core version, so it cannot run between the pulls of a mixed-version
+        # set.  A failed regeneration restores the pre-update wiring and its
+        # hash records, then aborts the command.
+        wiring_failed = False
+        if not failed_modules:
+            wiring_failed = not _regenerate_update_wiring(project_path)
+
+        _record_confirmed_update_adoption(
+            project_path,
+            enabled=(
+                confirm_contract_adoption and not failed_modules and not wiring_failed
+            ),
+        )
+
+        if failed_modules or wiring_failed:
+            # A post-pull failure must not leave the modules committed before
+            # it paired with the pre-update managed wiring.  The rollback runs
+            # under the same advisory lock that protects the update, so a
+            # concurrent update cannot interleave with it.
+            _module_update_io._roll_back_partial_module_update(
+                project_path,
+                pre_update_head,
+                updated_modules,
+                state.project.package,
+            )
+    finally:
+        lock.release()
+    return failed_modules, updated_modules, wiring_failed
+
+
+def _report_update_outcome(
+    failed_modules: list[str], updated_modules: list[str], *, wiring_failed: bool
+) -> None:
+    """Print the failure report or the success banner for a finished update."""
+    if failed_modules:
+        click.secho(
+            "\n❌ Module update stopped due to failure",
+            fg="red",
+            bold=True,
+            err=True,
+        )
+        click.echo(
+            f"Failed module(s): {', '.join(failed_modules)}",
+            err=True,
+        )
+        if updated_modules:
+            click.echo(
+                "The modules updated before the failure were rolled back; "
+                "fix the failure and re-run 'quickscale update'.",
+                err=True,
+            )
+        raise click.Abort()
+
+    if wiring_failed:
+        click.secho(
+            "\n❌ Module update finished without regenerated managed wiring",
+            fg="red",
+            bold=True,
+            err=True,
+        )
+        if updated_modules:
+            click.echo(
+                "The modules updated before the failure were rolled back; "
+                "fix the failure and re-run 'quickscale update'.",
+                err=True,
+            )
+        raise click.Abort()
+
+    click.secho("\n🎉 Module update complete!", fg="green", bold=True)
+
+
 @click.command()
 @click.option(
     "--no-preview",
@@ -420,49 +660,16 @@ def update(
     try:
         _module_shared._validate_update_environment()
 
-        # Load consolidated state. ProjectStateManager.load_state() performs
-        # read-through import of legacy config.yml tracking fields when
-        # state.yml lacks consolidated tracking metadata.
         project_path = Path.cwd()
-        manager = _project_state_manager.ProjectStateManager(project_path)
-        try:
-            state = manager.load_state()
-        except Exception as error:
-            click.secho(
-                f"❌ Failed to load .quickscale/state.yml: {error}",
-                fg="red",
-                err=True,
-            )
-            click.echo(
-                "💡 Fix or restore .quickscale/state.yml before running "
-                "'quickscale update'.",
-                err=True,
-            )
-            raise click.Abort() from error
-
-        if state is None or not state.modules:
-            click.secho("✅ No modules installed. Nothing to update.", fg="green")
-            click.echo("\n💡 Tip: Add modules with 'quickscale plan --add'")
+        state = _load_update_state(project_path)
+        if state is None:
             return
 
-        _contract_vintage.enforce_shipped_contract_vintage(
+        _validate_update_preconditions(
             state,
-            state.modules,
-            operation="'quickscale update'",
+            project_path,
             acknowledged=acknowledge_contract_vintage or confirm_contract_adoption,
         )
-
-        # Surface module version drift between state and legacy config.
-        # Non-fatal: update reconciles both files at the end.
-        try:
-            legacy_config = _config.load_config()
-        except _config.ConfigError:
-            legacy_config = None
-        _module_shared._warn_version_drift_for_update(project_path, legacy_config)
-
-        for name in state.modules:
-            if not _module_shared._validate_module_readiness(name):
-                raise click.Abort()
 
         # Show installed modules
         click.echo(f"📦 Found {len(state.modules)} installed module(s):")
@@ -477,150 +684,20 @@ def update(
             click.echo("❌ Update cancelled")
             return
 
-        # Acquire advisory lock after confirmation but before mutation.
-        lock = _advisory_lock.AdvisoryLock(project_path, operation="update")
-        try:
-            lock.acquire()
-        except _advisory_lock.AdvisoryLockContentionError as error:
-            click.secho(f"❌ {error}", fg="red", err=True)
-            raise click.Abort() from error
+        (
+            failed_modules,
+            updated_modules,
+            wiring_failed,
+        ) = _run_update_under_lock(
+            state,
+            project_path,
+            no_preview=no_preview,
+            confirm_contract_adoption=confirm_contract_adoption,
+        )
 
-        failed_modules: list[str] = []
-        updated_modules: list[str] = []
-        wiring_failed = False
-        try:
-            pre_update_head = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
-                ["git", "rev-parse", "HEAD"],  # noqa: S607 - PATH-resolved executable by design
-                cwd=project_path,
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.strip()
-        except subprocess.CalledProcessError:
-            # ``_validate_update_environment`` already required a git
-            # repository; without a resolvable HEAD there is no committed
-            # state to roll back to, so partial-failure rollback is skipped.
-            pre_update_head = ""
-
-        try:
-            # Update each module
-            for name, module_state in state.modules.items():
-                if not _update_single_module(
-                    name,
-                    module_state,
-                    "https://github.com/Experto-AI/quickscale.git",
-                    no_preview,
-                ):
-                    failed_modules.append(name)
-                    break
-                updated_modules.append(name)
-
-            # Regenerate the managed wiring once every module pull succeeded.
-            # Regeneration validates every embedded manifest against the
-            # running core version, so it cannot run between the pulls of a
-            # mixed-version set.  A failed regeneration restores the
-            # pre-update wiring and its hash records, then aborts the command.
-            if not failed_modules:
-                # Any failure in this post-pull phase — loading state,
-                # regenerating, recording hashes, or committing the wiring —
-                # must be treated as a failed update so the modules committed
-                # by the pulls above are rolled back with it.
-                try:
-                    refreshed_state = _project_state_manager.ProjectStateManager(
-                        project_path
-                    ).load_state()
-                    if refreshed_state is None:
-                        raise _state_schema.StateError(
-                            "authoritative project state could not be loaded"
-                        )
-                    wiring_success, wiring_message = (
-                        _module_update_io._regenerate_and_record_managed_wiring(
-                            project_path,
-                            refreshed_state.project.package,
-                        )
-                    )
-                    if not wiring_success:
-                        raise RuntimeError(wiring_message)
-                    _module_update_io._commit_regenerated_managed_wiring(
-                        refreshed_state.project.package
-                    )
-                    click.echo("  ✅ Regenerated managed module wiring")
-                except Exception as error:  # noqa: BLE001 - rollback below
-                    wiring_failed = True
-                    click.secho(
-                        f"❌ Failed to regenerate managed module wiring: {error}",
-                        fg="red",
-                        err=True,
-                    )
-                    click.echo(
-                        "💡 Fix the module manifests, then run "
-                        "'quickscale apply' to regenerate the managed wiring.",
-                        err=True,
-                    )
-
-            # Record the confirmed adoption only after every module mutation
-            # (the subtree pulls need a clean tree) and while the advisory lock
-            # is still held, then commit it so the next command's clean-tree
-            # check still passes (SA207).
-            if confirm_contract_adoption and not failed_modules and not wiring_failed:
-                refreshed_state = _project_state_manager.ProjectStateManager(
-                    project_path
-                ).load_state()
-                if refreshed_state is not None:
-                    _contract_vintage.record_contract_adoption(
-                        refreshed_state, project_path
-                    )
-                    _module_update_io._commit_contract_adoption()
-
-            if failed_modules or wiring_failed:
-                # A post-pull failure must not leave the modules committed
-                # before it paired with the pre-update managed wiring.  The
-                # rollback runs under the same advisory lock that protects the
-                # update, so a concurrent update cannot interleave with it.
-                _module_update_io._roll_back_partial_module_update(
-                    project_path,
-                    pre_update_head,
-                    updated_modules,
-                    state.project.package,
-                )
-        finally:
-            lock.release()
-
-        if failed_modules:
-            click.secho(
-                "\n❌ Module update stopped due to failure",
-                fg="red",
-                bold=True,
-                err=True,
-            )
-            click.echo(
-                f"Failed module(s): {', '.join(failed_modules)}",
-                err=True,
-            )
-            if updated_modules:
-                click.echo(
-                    "The modules updated before the failure were rolled back; "
-                    "fix the failure and re-run 'quickscale update'.",
-                    err=True,
-                )
-            raise click.Abort()
-
-        if wiring_failed:
-            click.secho(
-                "\n❌ Module update finished without regenerated managed wiring",
-                fg="red",
-                bold=True,
-                err=True,
-            )
-            if updated_modules:
-                click.echo(
-                    "The modules updated before the failure were rolled back; "
-                    "fix the failure and re-run 'quickscale update'.",
-                    err=True,
-                )
-            raise click.Abort()
-
-        click.secho("\n🎉 Module update complete!", fg="green", bold=True)
+        _report_update_outcome(
+            failed_modules, updated_modules, wiring_failed=wiring_failed
+        )
 
     except _git_errors.GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)

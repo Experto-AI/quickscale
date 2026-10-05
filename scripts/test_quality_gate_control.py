@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -37,6 +38,16 @@ _FIND_STUB = (
     "#!/bin/bash\n"
     "# stub find -- report the listed file at a controlled size\n"
     f'echo "{_STUB_LINE_COUNT}\t{_ORCHESTRATION_FILE}"\n'
+    "exit 0\n"
+)
+
+# SA242: the same fixture below the 800-line hard gate, for control cases
+# that need a successful large-file surface while isolating another check.
+_SAFE_LINE_COUNT = 700
+_FIND_STUB_SAFE = (
+    "#!/bin/bash\n"
+    "# stub find -- report the listed file below the hard gate\n"
+    f'echo "{_SAFE_LINE_COUNT}\t{_ORCHESTRATION_FILE}"\n'
     "exit 0\n"
 )
 
@@ -187,10 +198,10 @@ class TestQualityGateControl:
     # Control cases
     # ------------------------------------------------------------------
 
-    def test_listed_ceiling_accepts_the_file(
+    def test_listed_large_file_fails_the_hard_gate(
         self, tmp_path: Path, quality_output_dir: Path
     ) -> None:
-        """A listed file within its ceiling produces no regression."""
+        """SA242: a baseline-listed >= 800-line file still fails the gate."""
         poetry_bin = self._poetry_stub(tmp_path)
         find_bin = self._find_stub(tmp_path)
         temp_baseline, temp_waivers = self._temp_inputs(
@@ -206,8 +217,8 @@ class TestQualityGateControl:
                 "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
             },
         )
-        assert result.returncode == 0, (
-            f"Expected exit 0 for a listed file within its ceiling, "
+        assert result.returncode == 2, (
+            f"Expected exit 2 for a listed file at or above 800 lines, "
             f"got {result.returncode}\nstdout:\n{result.stdout}\n"
             f"stderr:\n{result.stderr}"
         )
@@ -215,14 +226,26 @@ class TestQualityGateControl:
         status = json.loads(
             (quality_output_dir / "quality_gate_status.json").read_text(encoding="utf-8")
         )
-        assert status["total_regressions"] == 0
+        assert status["large_files_error"] == 1
+        assert status["hard_gate_failed"] is True
+        # The accepted baseline still absorbs the change; the hard gate is
+        # what fails the run, independently of the baseline comparison.
         assert status["critical_regressions"] == 0
+        assert status["total_regressions"] == 0
 
         report = json.loads(
             (quality_output_dir / "quality_report.json").read_text(encoding="utf-8")
         )
         assert report["summary"]["large_files_error"] == 1
-        assert report["regressions"]["large_files"]["critical_count"] == 0
+
+        assert _ORCHESTRATION_FILE in result.stdout
+        assert "has 2000 lines" in result.stdout
+
+        # The Markdown verdict must agree with the process exit code.
+        markdown = (quality_output_dir / "quality_report.md").read_text(encoding="utf-8")
+        assert "✓ Pass" not in markdown
+        assert "✗ Critical findings" in markdown
+        assert "hard-gate errors" in markdown
 
     def test_grown_file_fails_the_gate(self, tmp_path: Path, quality_output_dir: Path) -> None:
         """A file grown past its listed ceiling fails the gate."""
@@ -349,6 +372,11 @@ class TestQualityGateControl:
             return 0""",
             f"""        # Radon analysis --- controlled per-run output
         if tool == "radon":
+            import os
+            log_path = os.environ.get("QS_RADON_ARGS_LOG")
+            if log_path:
+                with open(log_path, "a", encoding="utf-8") as handle:
+                    handle.write(" ".join(tool_args) + "\\n")
             if "--min" in tool_args:
                 print({actual_json!r})
             else:
@@ -423,7 +451,7 @@ class TestQualityGateControl:
         """Return poetry/find stub dirs and a baseline/ledger pair for a move."""
         files = {self._MOVED_PATH: [self._radon_entry(complexity)]}
         poetry_bin = self._radon_stub(tmp_path, files, files)
-        find_bin = self._find_stub(tmp_path)
+        find_bin = self._find_stub(tmp_path, _FIND_STUB_SAFE)
         temp_baseline, temp_waivers = self._complexity_inputs(
             tmp_path, [("quickscale_core.sample.old_home", "helper", 12)]
         )
@@ -506,7 +534,7 @@ class TestQualityGateControl:
             "quickscale_core/src/quickscale_core/sample/new_home.py": [self._radon_entry(12)],
         }
         poetry_bin = self._radon_stub(tmp_path, actual, inventory)
-        find_bin = self._find_stub(tmp_path)
+        find_bin = self._find_stub(tmp_path, _FIND_STUB_SAFE)
         temp_baseline, temp_waivers = self._complexity_inputs(
             tmp_path, [("quickscale_core.sample.old_home", "helper", 12)]
         )
@@ -557,7 +585,7 @@ class TestQualityGateControl:
         ):
             order_dir = tmp_path / order
             poetry_bin = self._radon_stub(order_dir, files, files)
-            find_bin = self._find_stub(order_dir)
+            find_bin = self._find_stub(order_dir, _FIND_STUB_SAFE)
             temp_baseline, temp_waivers = self._complexity_inputs(order_dir, entries)
             result = self._run_shell(
                 quality_output_dir,
@@ -583,7 +611,7 @@ class TestQualityGateControl:
     ) -> None:
         """A duplication count above the accepted ceiling fails the gate."""
         poetry_bin = self._poetry_stub(tmp_path, _DUPLICATION_POETRY_STUB)
-        find_bin = self._find_stub(tmp_path)
+        find_bin = self._find_stub(tmp_path, _FIND_STUB_SAFE)
         temp_baseline, temp_waivers = self._temp_inputs(
             tmp_path,
             file_length_entries={_ORCHESTRATION_FILE: 2897},
@@ -620,3 +648,327 @@ class TestQualityGateControl:
 
         markdown = (quality_output_dir / "quality_report.md").read_text(encoding="utf-8")
         assert "Duplication:" in markdown
+
+    # ------------------------------------------------------------------
+    # SA242: the critical-complexity hard gate is independent of the baseline
+    # ------------------------------------------------------------------
+
+    _CRITICAL_MODULE = "quickscale_core.sample.critical"
+    _CRITICAL_PATH = "quickscale_core/src/quickscale_core/sample/critical.py"
+
+    def _critical_baseline_inputs(
+        self, tmp_path: Path, entries: dict[str, dict[str, Any]]
+    ) -> tuple[Path, Path]:
+        """Return a baseline/ledger pair listing the given complexity entries."""
+        baseline = json.loads(
+            (_REPO_ROOT / "scripts" / "quality_baseline.json").read_text(encoding="utf-8")
+        )
+        baseline["complexity"]["allowed_functions"] = entries
+        baseline["dead_code"]["allowed_messages"] = []
+        baseline["duplication"] = {"allowed_blocks": 0}
+        baseline["file_length"] = {"allowed_files": {}}
+        temp_baseline = tmp_path / "baseline_critical_control.json"
+        temp_baseline.write_text(json.dumps(baseline), encoding="utf-8")
+
+        ledger = {
+            "schema_version": 1,
+            "description": "Control-case ledger for the critical-complexity hard gate.",
+            "waivers": [
+                {
+                    "waiver_id": f"W-CTRL-CRIT-{index}",
+                    "entry_key": f"complexity:{key}",
+                    "base_ceiling": 0,
+                    "ceiling": entry["max_complexity"],
+                    "owner": "test@example.com",
+                    "reason": "Control-case fixture for the critical complexity hard gate",
+                    "expires_on": _WAIVER_EXPIRES,
+                    "decision_ref": "quality-baseline-monotonicity",
+                }
+                for index, (key, entry) in enumerate(entries.items())
+            ],
+        }
+        temp_waivers = tmp_path / "waivers_critical_control.json"
+        temp_waivers.write_text(json.dumps(ledger), encoding="utf-8")
+        return temp_baseline, temp_waivers
+
+    def _critical_complexity_inputs(self, tmp_path: Path) -> tuple[Path, Path]:
+        """Return a baseline/ledger pair that lists one CC-21 function."""
+        return self._critical_baseline_inputs(
+            tmp_path,
+            {
+                f"{self._CRITICAL_MODULE}.helper": {
+                    "module": self._CRITICAL_MODULE,
+                    "qualname": "helper",
+                    "type": "function",
+                    "max_complexity": 21,
+                    "reason": "control-case fixture",
+                }
+            },
+        )
+
+    def test_critical_complexity_fails_independent_of_baseline(
+        self, tmp_path: Path, quality_output_dir: Path
+    ) -> None:
+        """A baseline-listed CC-21 function still fails the hard gate."""
+        files = {self._CRITICAL_PATH: [self._radon_entry(21)]}
+        poetry_bin = self._radon_stub(tmp_path, files, files)
+        find_bin = self._find_stub(tmp_path, _FIND_STUB_SAFE)
+        temp_baseline, temp_waivers = self._critical_complexity_inputs(tmp_path)
+        result = self._run_shell(
+            quality_output_dir,
+            stub_dir=poetry_bin,
+            find_stub_dir=find_bin,
+            extra_env={
+                "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
+                "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
+            },
+        )
+        assert result.returncode == 2, (
+            f"Expected exit 2 for a listed CC-21 function, "
+            f"got {result.returncode}\nstdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+        status = json.loads(
+            (quality_output_dir / "quality_gate_status.json").read_text(encoding="utf-8")
+        )
+        assert status["error_complexity_functions"] == 1
+        assert status["hard_gate_failed"] is True
+        # The accepted baseline still absorbs the finding; the hard gate is
+        # what fails the run, independently of the baseline comparison.
+        assert status["critical_regressions"] == 0
+        assert status["total_regressions"] == 0
+
+        report = json.loads(
+            (quality_output_dir / "quality_report.json").read_text(encoding="utf-8")
+        )
+        assert report["summary"]["error_complexity_functions"] == 1
+        assert "helper is 21" in result.stdout
+
+        # The Markdown verdict must agree with the process exit code.
+        markdown = (quality_output_dir / "quality_report.md").read_text(encoding="utf-8")
+        assert "✓ Pass" not in markdown
+        assert "✗ Critical findings" in markdown
+        assert "hard-gate errors" in markdown
+
+    def test_class_aggregate_does_not_trip_the_hard_gate(
+        self, tmp_path: Path, quality_output_dir: Path
+    ) -> None:
+        """Radon class aggregates are not functions; a CC-20 method stays clean."""
+        class_entry = {
+            "name": "Example",
+            "type": "class",
+            "complexity": 21,
+            "rank": "D",
+            "lineno": 1,
+            "endline": 30,
+        }
+        method_entry = {
+            "name": "method",
+            "classname": "Example",
+            "type": "method",
+            "complexity": 20,
+            "rank": "C",
+            "lineno": 2,
+            "endline": 29,
+        }
+        files = {self._CRITICAL_PATH: [class_entry, method_entry]}
+        poetry_bin = self._radon_stub(tmp_path, files, files)
+        find_bin = self._find_stub(tmp_path, _FIND_STUB_SAFE)
+        temp_baseline, temp_waivers = self._critical_baseline_inputs(
+            tmp_path,
+            {
+                f"{self._CRITICAL_MODULE}.Example": {
+                    "module": self._CRITICAL_MODULE,
+                    "qualname": "Example",
+                    "type": "class",
+                    "max_complexity": 21,
+                    "reason": "control-case fixture",
+                },
+                f"{self._CRITICAL_MODULE}.Example.method": {
+                    "module": self._CRITICAL_MODULE,
+                    "qualname": "Example.method",
+                    "type": "method",
+                    "max_complexity": 20,
+                },
+            },
+        )
+        result = self._run_shell(
+            quality_output_dir,
+            stub_dir=poetry_bin,
+            find_stub_dir=find_bin,
+            extra_env={
+                "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
+                "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
+            },
+        )
+        assert result.returncode == 0, (
+            f"Expected exit 0 for a listed class aggregate with a CC-20 method, "
+            f"got {result.returncode}\nstdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+        status = json.loads(
+            (quality_output_dir / "quality_gate_status.json").read_text(encoding="utf-8")
+        )
+        assert status["error_complexity_functions"] == 0
+        assert status["hard_gate_failed"] is False
+
+    def test_nested_function_fails_the_hard_gate(
+        self, tmp_path: Path, quality_output_dir: Path
+    ) -> None:
+        """A nested function at CC-21, reported via closures, still fails."""
+        nested_entry = {
+            "name": "outer.inner",
+            "type": "function",
+            "complexity": 21,
+            "rank": "D",
+            "lineno": 2,
+            "endline": 30,
+        }
+        files = {self._CRITICAL_PATH: [nested_entry]}
+        poetry_bin = self._radon_stub(tmp_path, files, files)
+        find_bin = self._find_stub(tmp_path, _FIND_STUB_SAFE)
+        temp_baseline, temp_waivers = self._critical_baseline_inputs(
+            tmp_path,
+            {
+                f"{self._CRITICAL_MODULE}.outer.inner": {
+                    "module": self._CRITICAL_MODULE,
+                    "qualname": "outer.inner",
+                    "type": "function",
+                    "max_complexity": 21,
+                    "reason": "control-case fixture",
+                }
+            },
+        )
+        result = self._run_shell(
+            quality_output_dir,
+            stub_dir=poetry_bin,
+            find_stub_dir=find_bin,
+            extra_env={
+                "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
+                "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
+                "QS_RADON_ARGS_LOG": str(tmp_path / "radon_args.txt"),
+            },
+        )
+        assert result.returncode == 2, (
+            f"Expected exit 2 for a listed nested CC-21 function, "
+            f"got {result.returncode}\nstdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+        status = json.loads(
+            (quality_output_dir / "quality_gate_status.json").read_text(encoding="utf-8")
+        )
+        assert status["error_complexity_functions"] == 1
+        assert status["hard_gate_failed"] is True
+        assert "outer.inner is 21" in result.stdout
+        # The analyzer must be asked for closures, or nested functions never
+        # reach the gate.
+        radon_args = (tmp_path / "radon_args.txt").read_text(encoding="utf-8")
+        assert "--show-closures" in radon_args
+
+    def test_colliding_closure_names_keep_critical_measurement(
+        self, tmp_path: Path, quality_output_dir: Path
+    ) -> None:
+        """Same-named closures must not hide a critical measurement."""
+        # Radon emits class-method closures as ``method.inner`` without class
+        # context, so two classes can collide on one identity; the keyed map
+        # keeps only the last, but the raw count must retain the critical one.
+        colliding_entries = [
+            {
+                "name": "method.inner",
+                "type": "function",
+                "complexity": 21,
+                "rank": "D",
+                "lineno": 2,
+                "endline": 30,
+            },
+            {
+                "name": "method.inner",
+                "type": "function",
+                "complexity": 12,
+                "rank": "C",
+                "lineno": 40,
+                "endline": 60,
+            },
+        ]
+        files = {self._CRITICAL_PATH: colliding_entries}
+        poetry_bin = self._radon_stub(tmp_path, files, files)
+        find_bin = self._find_stub(tmp_path, _FIND_STUB_SAFE)
+        temp_baseline, temp_waivers = self._critical_baseline_inputs(
+            tmp_path,
+            {
+                f"{self._CRITICAL_MODULE}.method.inner": {
+                    "module": self._CRITICAL_MODULE,
+                    "qualname": "method.inner",
+                    "type": "function",
+                    "max_complexity": 12,
+                }
+            },
+        )
+        result = self._run_shell(
+            quality_output_dir,
+            stub_dir=poetry_bin,
+            find_stub_dir=find_bin,
+            extra_env={
+                "QUALITY_BASELINE_FILE": str(temp_baseline),
+                "QUALITY_WAIVERS_FILE": str(temp_waivers),
+                "QUALITY_BASELINE_BASE_REF": _DEFAULT_BASE_REF,
+            },
+        )
+        assert result.returncode == 2, (
+            f"Expected exit 2 for a colliding critical closure, "
+            f"got {result.returncode}\nstdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+        status = json.loads(
+            (quality_output_dir / "quality_gate_status.json").read_text(encoding="utf-8")
+        )
+        assert status["error_complexity_functions"] == 1
+        assert status["hard_gate_failed"] is True
+        # The baseline listing wins the keyed comparison; the raw critical
+        # measurement must still fail the report and the Markdown verdict.
+        assert status["total_regressions"] == 0
+        report = json.loads(
+            (quality_output_dir / "quality_report.json").read_text(encoding="utf-8")
+        )
+        assert report["summary"]["error_complexity_functions"] == 1
+        markdown = (quality_output_dir / "quality_report.md").read_text(encoding="utf-8")
+        assert "✓ Pass" not in markdown
+        assert "✗ Critical findings" in markdown
+
+    # ------------------------------------------------------------------
+    # SA242: physical-line counting and the exact 799/800 boundary
+    # ------------------------------------------------------------------
+
+    def test_large_file_counter_counts_unterminated_final_line(self, tmp_path: Path) -> None:
+        """The counter includes a final physical line without a newline."""
+        shell_text = _SHELL_PATH.read_text(encoding="utf-8")
+        assert 'grep -c "" "$python_file"' in shell_text, (
+            "check_quality.sh must count physical lines, not newline bytes"
+        )
+        no_newline_800 = tmp_path / "no_newline_800.py"
+        no_newline_800.write_text("\n".join(f"# line {index}" for index in range(800)))
+        newline_799 = tmp_path / "newline_799.py"
+        newline_799.write_text("\n".join(f"# line {index}" for index in range(799)) + "\n")
+        script = (
+            "for python_file do "
+            'line_count=$(grep -c "" "$python_file" 2>/dev/null || true); '
+            "line_count=${line_count:-0}; "
+            'printf "%s\\t%s\\n" "$line_count" "$python_file"; '
+            "done"
+        )
+        result = subprocess.run(
+            ["sh", "-c", script, "sh", str(no_newline_800), str(newline_799)],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        counts = {
+            line.split("\t", 1)[1]: int(line.split("\t", 1)[0])
+            for line in result.stdout.splitlines()
+        }
+        assert counts[str(no_newline_800)] == 800
+        assert counts[str(newline_799)] == 799

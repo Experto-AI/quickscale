@@ -63,6 +63,57 @@ def _validate_unmarked_manage_command(
             )
 
 
+def _quote_state_after_piece(
+    piece: str, quote_character: str | None, escaped: bool
+) -> tuple[str | None, bool]:
+    """Return the quote and escape state after scanning one shell piece."""
+    for character in piece:
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\" and quote_character != "'":
+            escaped = True
+            continue
+        if character not in {'"', "'"}:
+            continue
+        if quote_character == character:
+            quote_character = None
+        elif quote_character is None:
+            quote_character = character
+    return quote_character, escaped
+
+
+def _heredoc_delimiter_of(logical_line: str) -> str | None:
+    """Return the heredoc delimiter a complete statement opens, if any."""
+    heredoc_match = re.search(
+        r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?\s*$",
+        logical_line,
+    )
+    if heredoc_match is not None:
+        return heredoc_match.group(1)
+    return None
+
+
+def _raise_unterminated_start_sh(
+    launcher_path: Path,
+    *,
+    start_line: int,
+    pending: list[str],
+    quote_character: str | None,
+    heredoc_delimiter: str | None,
+) -> None:
+    """Raise when the launcher ends inside a heredoc or open shell statement."""
+    if heredoc_delimiter is not None:
+        raise ValueError(
+            f"{launcher_path}: unterminated heredoc is outside the static start.sh grammar."
+        )
+    if pending or quote_character is not None:
+        raise ValueError(
+            f"{launcher_path}:{start_line}: unterminated shell statement is outside "
+            "the static start.sh grammar."
+        )
+
+
 def _start_sh_logical_lines(
     launcher_path: Path, launcher_text: str
 ) -> list[tuple[int, str]]:
@@ -81,7 +132,7 @@ def _start_sh_logical_lines(
             continue
 
         active_line = _active_launcher_line(launcher_path, raw_line).rstrip()
-        if not pending and not active_line.strip():
+        if not active_line.strip() and not pending:
             continue
         if not pending:
             start_line = line_number
@@ -89,20 +140,9 @@ def _start_sh_logical_lines(
         continued = active_line.endswith("\\") and quote_character != "'"
         piece = active_line[:-1].rstrip() if continued else active_line
         pending.append(piece)
-
-        for character in piece:
-            if escaped:
-                escaped = False
-                continue
-            if character == "\\" and quote_character != "'":
-                escaped = True
-                continue
-            if character not in {'"', "'"}:
-                continue
-            if quote_character == character:
-                quote_character = None
-            elif quote_character is None:
-                quote_character = character
+        quote_character, escaped = _quote_state_after_piece(
+            piece, quote_character, escaped
+        )
 
         if quote_character is not None or continued:
             continue
@@ -112,22 +152,15 @@ def _start_sh_logical_lines(
         if not logical_line:
             continue
         logical_lines.append((start_line, logical_line))
-        heredoc_match = re.search(
-            r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?\s*$",
-            logical_line,
-        )
-        if heredoc_match is not None:
-            heredoc_delimiter = heredoc_match.group(1)
+        heredoc_delimiter = _heredoc_delimiter_of(logical_line)
 
-    if heredoc_delimiter is not None:
-        raise ValueError(
-            f"{launcher_path}: unterminated heredoc is outside the static start.sh grammar."
-        )
-    if pending or quote_character is not None:
-        raise ValueError(
-            f"{launcher_path}:{start_line}: unterminated shell statement is outside "
-            "the static start.sh grammar."
-        )
+    _raise_unterminated_start_sh(
+        launcher_path,
+        start_line=start_line,
+        pending=pending,
+        quote_character=quote_character,
+        heredoc_delimiter=heredoc_delimiter,
+    )
     return logical_lines
 
 
@@ -407,30 +440,42 @@ def _validate_start_sh_python_command(
     )
 
 
-def _validate_start_sh_segment(
+def _validate_start_sh_if_clause(
     launcher_path: Path, line_number: int, tokens: list[str]
 ) -> None:
-    """Validate one executable segment against the positive command grammar."""
-    if not tokens:
-        return
+    """Reject an if/elif clause that is not one static ``[[ ]]`` condition."""
+    if len(tokens) < 3 or tokens[1] != "[[" or tokens[-1] != "]]":
+        raise ValueError(
+            f"{launcher_path}:{line_number}: {tokens[0]} must use one static [[ ]] "
+            "condition in the start.sh grammar."
+        )
+
+
+def _validate_start_sh_for_clause(
+    launcher_path: Path, line_number: int, tokens: list[str]
+) -> None:
+    """Reject for-loop syntax outside the static start.sh grammar."""
+    if (
+        len(tokens) < 4
+        or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", tokens[1]) is None
+        or tokens[2] != "in"
+    ):
+        raise ValueError(
+            f"{launcher_path}:{line_number}: for-loop syntax is outside the "
+            "static literal start.sh grammar."
+        )
+
+
+def _validate_start_sh_prefix_segment(
+    launcher_path: Path, line_number: int, tokens: list[str]
+) -> bool:
+    """Validate an opening/control segment; True when it is fully handled."""
     if tokens[0] in {"if", "elif"}:
-        if len(tokens) < 3 or tokens[1] != "[[" or tokens[-1] != "]]":
-            raise ValueError(
-                f"{launcher_path}:{line_number}: {tokens[0]} must use one static [[ ]] "
-                "condition in the start.sh grammar."
-            )
-        return
+        _validate_start_sh_if_clause(launcher_path, line_number, tokens)
+        return True
     if tokens[0] == "for":
-        if (
-            len(tokens) < 4
-            or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", tokens[1]) is None
-            or tokens[2] != "in"
-        ):
-            raise ValueError(
-                f"{launcher_path}:{line_number}: for-loop syntax is outside the "
-                "static literal start.sh grammar."
-            )
-        return
+        _validate_start_sh_for_clause(launcher_path, line_number, tokens)
+        return True
     if tokens[0] in _START_SH_CONTROL_MARKERS:
         marker = tokens.pop(0)
         if marker in {"done", "fi"} and tokens:
@@ -440,22 +485,28 @@ def _validate_start_sh_segment(
             )
         if tokens:
             _validate_start_sh_segment(launcher_path, line_number, tokens)
-        return
+        return True
     if tokens[0] == "[[":
         if tokens[-1] != "]]":
             raise ValueError(
                 f"{launcher_path}:{line_number}: unterminated static [[ ]] condition."
             )
-        return
+        return True
+    return False
 
+
+def _start_sh_leading_command_index(tokens: list[str]) -> int:
+    """Skip leading environment assignments; return len(tokens) when none remain."""
     command_index = 0
     while command_index < len(tokens):
-        assignment_match = _SHELL_ENV_ASSIGNMENT.fullmatch(tokens[command_index])
-        if assignment_match is None:
+        if _SHELL_ENV_ASSIGNMENT.fullmatch(tokens[command_index]) is None:
             break
         command_index += 1
-    if command_index >= len(tokens):
-        return
+    return command_index
+
+
+def _start_sh_executable_index(tokens: list[str], command_index: int) -> int | None:
+    """Skip an exec/env prefix; None when only the prefix remains."""
     if tokens[command_index] == "exec":
         command_index += 1
     if command_index < len(tokens) and Path(tokens[command_index]).name == "env":
@@ -467,12 +518,30 @@ def _validate_start_sh_segment(
                 continue
             break
     if command_index >= len(tokens):
+        return None
+    return command_index
+
+
+def _validate_start_sh_segment(
+    launcher_path: Path, line_number: int, tokens: list[str]
+) -> None:
+    """Validate one executable segment against the positive command grammar."""
+    if not tokens:
+        return
+    if _validate_start_sh_prefix_segment(launcher_path, line_number, tokens):
+        return
+
+    command_index = _start_sh_leading_command_index(tokens)
+    if command_index >= len(tokens):
+        return
+    executable_index = _start_sh_executable_index(tokens, command_index)
+    if executable_index is None:
         raise ValueError(
             f"{launcher_path}:{line_number}: incomplete command prefix is outside the "
             "static literal start.sh grammar."
         )
 
-    command = tokens[command_index]
+    command = tokens[executable_index]
     command_name = Path(command).name
     if "$" in command or "`" in command or command_name not in _START_SH_COMMANDS:
         raise ValueError(
@@ -483,7 +552,7 @@ def _validate_start_sh_segment(
         )
     if command_name in {"python", "python3"}:
         _validate_start_sh_python_command(
-            launcher_path, line_number, tokens, command_index
+            launcher_path, line_number, tokens, executable_index
         )
 
 
@@ -546,6 +615,55 @@ def _start_sh_line_is_unconditional_terminator(
     return tokens[command_index] == "exec" or Path(tokens[command_index]).name == "exit"
 
 
+def _start_sh_set_enables_errexit(arguments: list[str]) -> bool:
+    """Return whether a ``set`` argument list enables errexit."""
+    return arguments == ["-o", "errexit"] or any(
+        option.startswith("-") and "e" in option[1:] for option in arguments
+    )
+
+
+def _start_sh_set_disables_errexit(arguments: list[str]) -> bool:
+    """Return whether a ``set`` argument list disables errexit."""
+    return arguments == ["+o", "errexit"] or any(
+        option.startswith("+") and "e" in option[1:] for option in arguments
+    )
+
+
+def _start_sh_unconditional_effect(
+    launcher_path: Path, line_number: int, segment: list[str], *, errexit: bool
+) -> bool | None:
+    """Return the new errexit state, or None when the segment does not change it."""
+    if segment[0] == "set":
+        if _start_sh_set_enables_errexit(segment[1:]):
+            return True
+        if _start_sh_set_disables_errexit(segment[1:]):
+            return False
+        return None
+    if errexit and Path(segment[0]).name == "false":
+        raise ValueError(
+            f"{launcher_path}:{line_number}: top-level false under active "
+            "set -e terminates before required startup commands."
+        )
+    return None
+
+
+def _start_sh_segment_errexit(
+    launcher_path: Path,
+    line_number: int,
+    segments: list[list[str]],
+    *,
+    unconditional: bool,
+    errexit: bool,
+) -> bool:
+    """Return the errexit state after one reachable, top-level annotation."""
+    if not unconditional or len(segments) != 1 or not segments[0]:
+        return errexit
+    updated = _start_sh_unconditional_effect(
+        launcher_path, line_number, segments[0], errexit=errexit
+    )
+    return errexit if updated is None else updated
+
+
 def _start_sh_reachable_logical_lines(
     launcher_path: Path, launcher_text: str
 ) -> list[tuple[int, str, bool, bool]]:
@@ -571,24 +689,13 @@ def _start_sh_reachable_logical_lines(
         reachable = not terminated
         unconditional = reachable and effective_depth == 0
         annotated.append((line_number, logical_line, reachable, unconditional))
-        if unconditional and len(segments) == 1 and segments[0]:
-            segment = segments[0]
-            if segment[0] == "set":
-                if segment[1:] == ["-o", "errexit"] or any(
-                    option.startswith("-") and "e" in option[1:]
-                    for option in segment[1:]
-                ):
-                    errexit = True
-                elif segment[1:] == ["+o", "errexit"] or any(
-                    option.startswith("+") and "e" in option[1:]
-                    for option in segment[1:]
-                ):
-                    errexit = False
-            elif errexit and Path(segment[0]).name == "false":
-                raise ValueError(
-                    f"{launcher_path}:{line_number}: top-level false under active "
-                    "set -e terminates before required startup commands."
-                )
+        errexit = _start_sh_segment_errexit(
+            launcher_path,
+            line_number,
+            segments,
+            unconditional=unconditional,
+            errexit=errexit,
+        )
         if (
             reachable
             and effective_depth == 0

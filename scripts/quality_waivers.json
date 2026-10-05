@@ -93,16 +93,6 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W078",
-      "entry_key": "complexity:quickscale_core.apply.ledger._parse_applied_state",
-      "base_ceiling": 23,
-      "ceiling": 29,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
       "waiver_id": "W079",
       "entry_key": "complexity:quickscale_core.apply.steps.env_sync.sync_env_example_blocks",
       "base_ceiling": 0,
@@ -137,26 +127,6 @@
       "entry_key": "complexity:quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
       "base_ceiling": 17,
       "ceiling": 18,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W083",
-      "entry_key": "complexity:quickscale_core.manifest.option_validation._cross_option_issues",
-      "base_ceiling": 0,
-      "ceiling": 42,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W084",
-      "entry_key": "complexity:quickscale_core.manifest.option_validation._single_value_issues",
-      "base_ceiling": 0,
-      "ceiling": 28,
       "owner": "QuickScale maintainers",
       "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
       "expires_on": "2027-03-31",
@@ -203,30 +173,10 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W089",
-      "entry_key": "complexity:quickscale_core.schema.state_schema.StateManager.load",
-      "base_ceiling": 28,
-      "ceiling": 34,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
       "waiver_id": "W090",
       "entry_key": "complexity:quickscale_devtools.beta_migration.compatibility._dockerfile_final_stage_settings_assignment",
       "base_ceiling": 0,
       "ceiling": 12,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W091",
-      "entry_key": "complexity:quickscale_devtools.beta_migration.compatibility._launcher_package_mismatch",
-      "base_ceiling": 0,
-      "ceiling": 37,
       "owner": "QuickScale maintainers",
       "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
       "expires_on": "2027-03-31",
@@ -303,26 +253,6 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W099",
-      "entry_key": "complexity:quickscale_devtools.beta_migration.runtime_commands._parse_runtime_command_line",
-      "base_ceiling": 0,
-      "ceiling": 46,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W100",
-      "entry_key": "complexity:quickscale_devtools.beta_migration.settings_facade._canonical_read_env_var",
-      "base_ceiling": 0,
-      "ceiling": 21,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
       "waiver_id": "W101",
       "entry_key": "complexity:quickscale_devtools.beta_migration.settings_facade._facade_imports",
       "base_ceiling": 0,
@@ -367,16 +297,6 @@
       "entry_key": "complexity:quickscale_devtools.beta_migration.shell._has_dynamic_env_assignment_name",
       "base_ceiling": 0,
       "ceiling": 20,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W106",
-      "entry_key": "complexity:quickscale_devtools.beta_migration.shell._validate_persistent_environment_mutation",
-      "base_ceiling": 0,
-      "ceiling": 46,
       "owner": "QuickScale maintainers",
       "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
       "expires_on": "2027-03-31",
@@ -453,30 +373,10 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W114",
-      "entry_key": "complexity:quickscale_devtools.beta_migration.start_sh._validate_start_sh_segment",
-      "base_ceiling": 0,
-      "ceiling": 30,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
       "waiver_id": "W115",
       "entry_key": "complexity:quickscale_devtools.beta_migration.toml_editing._insert_missing_path_dependencies",
       "base_ceiling": 0,
       "ceiling": 11,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W116",
-      "entry_key": "complexity:quickscale_devtools.handoff_prompt.render_handoff_prompt",
-      "base_ceiling": 0,
-      "ceiling": 15,
       "owner": "QuickScale maintainers",
       "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
       "expires_on": "2027-03-31",
@@ -543,40 +443,10 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W123",
-      "entry_key": "complexity:quickscale_modules_billing._subscription_checkout._create_subscription_checkout_session",
-      "base_ceiling": 0,
-      "ceiling": 22,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W124",
-      "entry_key": "complexity:quickscale_modules_billing._subscription_checkout._reconcile_subscription_checkout",
-      "base_ceiling": 0,
-      "ceiling": 28,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
       "waiver_id": "W125",
       "entry_key": "complexity:quickscale_modules_billing._subscription_checkout._reuse_live_subscription_checkout_url",
       "base_ceiling": 0,
       "ceiling": 16,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W126",
-      "entry_key": "complexity:quickscale_modules_billing._subscription_events._apply_subscription_payload",
-      "base_ceiling": 0,
-      "ceiling": 31,
       "owner": "QuickScale maintainers",
       "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
       "expires_on": "2027-03-31",
@@ -627,26 +497,6 @@
       "entry_key": "complexity:quickscale_modules_billing._webhooks._resolve_subscription_checkout_for_session",
       "base_ceiling": 0,
       "ceiling": 15,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W132",
-      "entry_key": "complexity:quickscale_modules_billing._webhooks_invoice._apply_invoice_payment_failed_event",
-      "base_ceiling": 0,
-      "ceiling": 23,
-      "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W133",
-      "entry_key": "complexity:quickscale_modules_billing._webhooks_invoice._finalize_invoice_paid_event",
-      "base_ceiling": 0,
-      "ceiling": 29,
       "owner": "QuickScale maintainers",
       "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted complexity for tracked reduction.",
       "expires_on": "2027-03-31",
@@ -756,39 +606,9 @@
       "waiver_id": "W144",
       "entry_key": "duplication:allowed_blocks",
       "base_ceiling": 0,
-      "ceiling": 57,
+      "ceiling": 63,
       "owner": "QuickScale maintainers",
-      "reason": "SA231 closeout re-tightens the baseline to the measured tree; this ceiling records the accepted duplication blocks for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W145",
-      "entry_key": "complexity:quickscale_modules_billing._webhooks._handle_checkout_session_completed_event",
-      "base_ceiling": 15,
-      "ceiling": 22,
-      "owner": "QuickScale maintainers",
-      "reason": "SA232 split billing's services.py into private _<name>.py modules; this function moved to _webhooks.py and its measured complexity rose from 15 at the merge base to 22. The ceiling records the accepted increase for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W146",
-      "entry_key": "complexity:quickscale_cli.commands._finalize._display_next_steps_impl",
-      "base_ceiling": 26,
-      "ceiling": 30,
-      "owner": "QuickScale maintainers",
-      "reason": "SA232 split apply_command.py into private _<name>.py modules; this function moved to _finalize.py and its measured complexity rose from 26 at the merge base to 30. The ceiling records the accepted increase for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
-      "waiver_id": "W147",
-      "entry_key": "complexity:quickscale_cli.commands._module_update.update",
-      "base_ceiling": 17,
-      "ceiling": 33,
-      "owner": "QuickScale maintainers",
-      "reason": "SA232 split module_commands.py into private _<name>.py modules; this function moved to _module_update.py and its measured complexity rose from 17 at the merge base to 33. The ceiling records the accepted increase for tracked reduction.",
+      "reason": "SA242 ratchet: pylint reported 63 duplication blocks at landing; the count ceiling records the accepted set for tracked reduction.",
       "expires_on": "2027-03-31",
       "decision_ref": "quality-baseline-monotonicity"
     },
@@ -813,22 +633,382 @@
       "decision_ref": "quality-baseline-monotonicity"
     },
     {
-      "waiver_id": "W150",
-      "entry_key": "complexity:quickscale_core.dr_engine._report._build_snapshot_full_backup_contract",
-      "base_ceiling": 34,
-      "ceiling": 35,
-      "owner": "QuickScale maintainers",
-      "reason": "SA232 split dr_engine orchestration.py into private _<name>.py modules; this function moved to _report.py and its measured complexity rose from 34 at the merge base to 35. The ceiling records the accepted increase for tracked reduction.",
-      "expires_on": "2027-03-31",
-      "decision_ref": "quality-baseline-monotonicity"
-    },
-    {
       "waiver_id": "W151",
       "entry_key": "complexity:quickscale_core.dr_engine._report.build_backup_snapshot_report",
       "base_ceiling": 12,
       "ceiling": 13,
       "owner": "QuickScale maintainers",
       "reason": "SA232 split dr_engine orchestration.py into private _<name>.py modules; this function moved to _report.py and its measured complexity rose from 12 at the merge base to 13. The ceiling records the accepted increase for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W152",
+      "entry_key": "complexity:quickscale_core.manifest.loader_derivation_expressions._validate_wiring_contribution",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242 ratchet: this warning-tier finding predates the landing ratchet; its measured ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W153",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.classification._classify_donor_files",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W154",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.classification._is_build_artifact",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W155",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.design_layer._design_reference_failures",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W156",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.design_layer._donor_design_failures",
+      "base_ceiling": 0,
+      "ceiling": 15,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W157",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.design_layer._recipient_preserves_path",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W158",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.package_json_editing._find_top_level_dependency_brace",
+      "base_ceiling": 0,
+      "ceiling": 19,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W159",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.package_json_editing._plan_frontend_dependency_merge",
+      "base_ceiling": 0,
+      "ceiling": 14,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W160",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.package_json_editing._validate_fresh_first_frontend_dependency_targets",
+      "base_ceiling": 0,
+      "ceiling": 15,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W161",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.planning._fresh_first_actions",
+      "base_ceiling": 0,
+      "ceiling": 20,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W162",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_label._app_config_bindings",
+      "base_ceiling": 0,
+      "ceiling": 15,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W163",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_label._class_constant_attribute",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W164",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_label._default_app_config",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W165",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_label._merge_mro_sequences",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W166",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_label._resolve_class_constant",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W167",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_analysis._class_attribute_declaration",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W168",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_analysis._evaluated_definition_names",
+      "base_ceiling": 0,
+      "ceiling": 14,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W169",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_analysis._migration_owned_operations",
+      "base_ceiling": 0,
+      "ceiling": 17,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W170",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_analysis._module_executed_expression_nodes",
+      "base_ceiling": 0,
+      "ceiling": 17,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W171",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_analysis._module_executed_statements",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W172",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_analysis._module_level_bindings",
+      "base_ceiling": 0,
+      "ceiling": 16,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W173",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_analysis._validate_migration_dependencies",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W174",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_analysis._validate_operations_declaration",
+      "base_ceiling": 0,
+      "ceiling": 16,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W175",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_carry._plan_carried_migrations",
+      "base_ceiling": 0,
+      "ceiling": 17,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W176",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_carry._regenerated_migration_terminal",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W177",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_migration_carry._render_carried_migration",
+      "base_ceiling": 0,
+      "ceiling": 18,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W178",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_ops._installed_apps_entries",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W179",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_ops._mount_project_app_urls",
+      "base_ceiling": 0,
+      "ceiling": 11,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W180",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_ops._urls_helper_names",
+      "base_ceiling": 0,
+      "ceiling": 18,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W181",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.project_apps_preflight._validate_project_app_targets",
+      "base_ceiling": 0,
+      "ceiling": 15,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W182",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.regeneration._plan_beta_migration_iterate",
+      "base_ceiling": 0,
+      "ceiling": 16,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W183",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.regeneration._validate_iterate_recipient_root",
+      "base_ceiling": 0,
+      "ceiling": 16,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W184",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.settings_facade._inline_contract_span",
+      "base_ceiling": 0,
+      "ceiling": 17,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W185",
+      "entry_key": "complexity:quickscale_devtools.beta_migration.settings_facade._sole_default_selection_entry",
+      "base_ceiling": 0,
+      "ceiling": 15,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242: the project_apps split moved this SA214(f) helper into a submodule; its measured warning-tier ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W186",
+      "entry_key": "complexity:quickscale_modules_orgs.middleware.TenantMiddleware._is_org_management_path",
+      "base_ceiling": 0,
+      "ceiling": 14,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242 ratchet: this warning-tier finding predates the landing ratchet; its measured ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W187",
+      "entry_key": "complexity:quickscale_cli.commands._runtime._ensure_backups_gitignore_rules._impl",
+      "base_ceiling": 0,
+      "ceiling": 13,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242 ratchet: this warning-tier finding predates the landing ratchet; its measured ceiling is accepted for tracked reduction.",
+      "expires_on": "2027-03-31",
+      "decision_ref": "quality-baseline-monotonicity"
+    },
+    {
+      "waiver_id": "W188",
+      "entry_key": "complexity:quickscale_modules_orgs._current_org_priming._make_priming_execute_wrapper.wrapper",
+      "base_ceiling": 0,
+      "ceiling": 12,
+      "owner": "QuickScale maintainers",
+      "reason": "SA242 ratchet: this warning-tier finding predates the landing ratchet; its measured ceiling is accepted for tracked reduction.",
       "expires_on": "2027-03-31",
       "decision_ref": "quality-baseline-monotonicity"
     }

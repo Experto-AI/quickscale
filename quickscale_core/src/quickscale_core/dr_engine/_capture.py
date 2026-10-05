@@ -199,19 +199,10 @@ def _complete_capture_after_dump(
     return artifact
 
 
-def _resume_backup_capture(
-    snapshot_id: str,
-    *,
-    initiated_by: AbstractBaseUser | None = None,
-    trigger: str,
-    policy: BackupPolicySnapshot,
-    shell_runner: ShellCommandRunner | None,
-    remote_uploader: _RemoteUploader | None,
-    remote_deleter: _RemoteDeleter | None,
-    now: datetime,
-) -> Any:
-    """Resume an incomplete snapshot capture using the existing snapshot id."""
-    snapshot = _state.get_backup_snapshot(snapshot_id)
+def _validate_resume_preconditions(
+    snapshot: Any, policy: BackupPolicySnapshot
+) -> BackupPolicySnapshot:
+    """Validate resume preconditions and return the resolved capture policy."""
     resolved_policy = _paths._build_snapshot_capture_resume_policy(snapshot, policy)
     issues = _policy._validate_policy_snapshot_internal(resolved_policy)
     if issues:
@@ -242,6 +233,186 @@ def _resume_backup_capture(
         raise _primitives.BackupError(
             f"Backup snapshot '{snapshot.snapshot_id}' is already complete; resume is not needed."
         )
+    return resolved_policy
+
+
+def _resume_new_artifact(
+    snapshot: Any,
+    database_directory: Path,
+    *,
+    engine: str,
+    database_name: str,
+    resolved_policy: BackupPolicySnapshot,
+    shell_runner: ShellCommandRunner | None,
+    initiated_by: AbstractBaseUser | None,
+    trigger: str,
+    now: datetime,
+) -> tuple[Any, Path]:
+    """Build the dump artifact for one found on disk or captured during resume."""
+    candidate_dump_files = sorted(
+        path for path in database_directory.iterdir() if path.is_file()
+    )
+    if len(candidate_dump_files) > 1:
+        raise _primitives.BackupError(
+            f"Cannot resume snapshot '{snapshot.snapshot_id}' because multiple database dump candidates were found."
+        )
+
+    database_server_version: str | None = None
+    database_server_major: int | None = None
+    dump_client_version: str | None = None
+    dump_client_major: int | None = None
+
+    if candidate_dump_files:
+        local_path = candidate_dump_files[0]
+        backup_format = _recovery._detect_restore_file_format(local_path)
+        if backup_format == "pg_dump_custom":
+            (
+                database_server_version,
+                database_server_major,
+                dump_client_version,
+                dump_client_major,
+            ) = _metadata._require_postgresql_18_contract(
+                database_engine=engine,
+                executable="pg_dump",
+                operation="backup capture resume",
+            )
+    else:
+        (
+            local_path,
+            backup_format,
+            filename,
+            database_server_version,
+            database_server_major,
+            dump_client_version,
+            dump_client_major,
+        ) = _metadata._create_database_dump(
+            engine,
+            resolved_policy,
+            shell_runner=shell_runner,
+            now=now,
+            database_directory=database_directory,
+            operation="backup capture resume",
+        )
+
+    checksum = _primitives._compute_sha256(local_path)
+    size_bytes = local_path.stat().st_size
+    metadata = _metadata._build_backup_metadata(
+        created_at=now,
+        backup_format=backup_format,
+        database_engine=engine,
+        database_name=database_name,
+        target_mode=resolved_policy.target_mode,
+        database_server_version=database_server_version,
+        database_server_major=database_server_major,
+        dump_client_version=dump_client_version,
+        dump_client_major=dump_client_major,
+    )
+    metadata["snapshot_id"] = snapshot.snapshot_id
+    if snapshot.remote_root_key:
+        metadata["snapshot_remote_root_key"] = snapshot.remote_root_key
+
+    artifact = _persistence.create_artifact(
+        filename=local_path.name,
+        storage_target=(
+            "private_remote"
+            if resolved_policy.target_mode == "private_remote"
+            else "local"
+        ),
+        local_path=str(local_path),
+        remote_bucket_name=resolved_policy.remote_bucket_name,
+        remote_endpoint_url=resolved_policy.remote_endpoint_url,
+        remote_region_name=resolved_policy.remote_region_name,
+        checksum_sha256=checksum,
+        size_bytes=size_bytes,
+        backup_format=backup_format,
+        database_engine=engine,
+        database_name=database_name,
+        database_server_major=database_server_major,
+        dump_client_major=dump_client_major,
+        metadata_json=metadata,
+        initiated_by=initiated_by,
+        trigger=trigger,
+    )
+    return artifact, local_path
+
+
+def _resume_existing_artifact(
+    artifact: Any, snapshot: Any, resolved_policy: BackupPolicySnapshot
+) -> Path:
+    """Validate and refresh an existing authoritative dump artifact on resume."""
+    if artifact.status == "deleted":
+        raise _primitives.BackupError(
+            f"Cannot resume snapshot '{snapshot.snapshot_id}' because its authoritative dump artifact has been deleted."
+        )
+
+    local_path = _state._resolve_snapshot_database_local_path(snapshot, artifact)
+    if not local_path.exists():
+        raise _primitives.BackupError(
+            f"Cannot resume snapshot '{snapshot.snapshot_id}' because the original authoritative dump file is missing."
+        )
+
+    validation_issues = _recovery._collect_local_backup_validation_issues(
+        local_path,
+        backup_format=artifact.backup_format,
+        expected_checksum=artifact.checksum_sha256,
+        expected_size=artifact.size_bytes,
+    )
+    if validation_issues:
+        raise _primitives.BackupError(
+            f"Cannot resume snapshot '{snapshot.snapshot_id}' because the original authoritative dump file is not valid: "
+            + "; ".join(validation_issues)
+        )
+
+    update_fields: list[str] = []
+    if artifact.local_path != str(local_path):
+        artifact.local_path = str(local_path)
+        update_fields.append("local_path")
+    if (
+        not (
+            resolved_policy.target_mode == "private_remote" and not artifact.remote_key
+        )
+        and artifact.status != "ready"
+    ):
+        artifact.status = "ready"
+        update_fields.append("status")
+    if update_fields:
+        _persistence.save_artifact(
+            artifact, update_fields=[*update_fields, "updated_at"]
+        )
+    return local_path
+
+
+def _resume_child_descriptors(snapshot: Any, artifact: Any) -> dict[str, Any]:
+    """Return the refreshed child-descriptor document for a resumed snapshot."""
+    child_descriptors_json = deepcopy(
+        snapshot.child_descriptors_json
+        if isinstance(snapshot.child_descriptors_json, dict)
+        else {}
+    )
+    child_descriptors_json["database"] = _paths._build_snapshot_database_descriptor(
+        snapshot,
+        artifact,
+    )
+    sidecars = child_descriptors_json.get("sidecars")
+    if not isinstance(sidecars, dict):
+        child_descriptors_json["sidecars"] = {}
+    return child_descriptors_json
+
+
+def _resume_backup_capture(
+    snapshot_id: str,
+    *,
+    initiated_by: AbstractBaseUser | None = None,
+    trigger: str,
+    policy: BackupPolicySnapshot,
+    shell_runner: ShellCommandRunner | None,
+    remote_uploader: _RemoteUploader | None,
+    remote_deleter: _RemoteDeleter | None,
+    now: datetime,
+) -> Any:
+    """Resume an incomplete snapshot capture using the existing snapshot id."""
+    snapshot = _state.get_backup_snapshot(snapshot_id)
+    resolved_policy = _validate_resume_preconditions(snapshot, policy)
 
     snapshot_lock_directory = _paths._build_snapshot_lock_directory(snapshot)
     snapshot_lock_directory.mkdir(parents=True, exist_ok=True)
@@ -262,147 +433,22 @@ def _resume_backup_capture(
         artifact = snapshot.authoritative_dump
 
         if artifact is None:
-            candidate_dump_files = sorted(
-                path for path in database_directory.iterdir() if path.is_file()
-            )
-            if len(candidate_dump_files) > 1:
-                raise _primitives.BackupError(
-                    f"Cannot resume snapshot '{snapshot.snapshot_id}' because multiple database dump candidates were found."
-                )
-
-            database_server_version: str | None = None
-            database_server_major: int | None = None
-            dump_client_version: str | None = None
-            dump_client_major: int | None = None
-
-            if candidate_dump_files:
-                local_path = candidate_dump_files[0]
-                backup_format = _recovery._detect_restore_file_format(local_path)
-                if backup_format == "pg_dump_custom":
-                    (
-                        database_server_version,
-                        database_server_major,
-                        dump_client_version,
-                        dump_client_major,
-                    ) = _metadata._require_postgresql_18_contract(
-                        database_engine=engine,
-                        executable="pg_dump",
-                        operation="backup capture resume",
-                    )
-            else:
-                (
-                    local_path,
-                    backup_format,
-                    filename,
-                    database_server_version,
-                    database_server_major,
-                    dump_client_version,
-                    dump_client_major,
-                ) = _metadata._create_database_dump(
-                    engine,
-                    resolved_policy,
-                    shell_runner=shell_runner,
-                    now=now,
-                    database_directory=database_directory,
-                    operation="backup capture resume",
-                )
-
-            checksum = _primitives._compute_sha256(local_path)
-            size_bytes = local_path.stat().st_size
-            metadata = _metadata._build_backup_metadata(
-                created_at=now,
-                backup_format=backup_format,
-                database_engine=engine,
+            artifact, local_path = _resume_new_artifact(
+                snapshot,
+                database_directory,
+                engine=engine,
                 database_name=database_name,
-                target_mode=resolved_policy.target_mode,
-                database_server_version=database_server_version,
-                database_server_major=database_server_major,
-                dump_client_version=dump_client_version,
-                dump_client_major=dump_client_major,
-            )
-            metadata["snapshot_id"] = snapshot.snapshot_id
-            if snapshot.remote_root_key:
-                metadata["snapshot_remote_root_key"] = snapshot.remote_root_key
-
-            artifact = _persistence.create_artifact(
-                filename=local_path.name,
-                storage_target=(
-                    "private_remote"
-                    if resolved_policy.target_mode == "private_remote"
-                    else "local"
-                ),
-                local_path=str(local_path),
-                remote_bucket_name=resolved_policy.remote_bucket_name,
-                remote_endpoint_url=resolved_policy.remote_endpoint_url,
-                remote_region_name=resolved_policy.remote_region_name,
-                checksum_sha256=checksum,
-                size_bytes=size_bytes,
-                backup_format=backup_format,
-                database_engine=engine,
-                database_name=database_name,
-                database_server_major=database_server_major,
-                dump_client_major=dump_client_major,
-                metadata_json=metadata,
+                resolved_policy=resolved_policy,
+                shell_runner=shell_runner,
                 initiated_by=initiated_by,
                 trigger=trigger,
+                now=now,
             )
             snapshot.authoritative_dump = artifact
         else:
-            if artifact.status == "deleted":
-                raise _primitives.BackupError(
-                    f"Cannot resume snapshot '{snapshot.snapshot_id}' because its authoritative dump artifact has been deleted."
-                )
+            local_path = _resume_existing_artifact(artifact, snapshot, resolved_policy)
 
-            local_path = _state._resolve_snapshot_database_local_path(
-                snapshot, artifact
-            )
-            if not local_path.exists():
-                raise _primitives.BackupError(
-                    f"Cannot resume snapshot '{snapshot.snapshot_id}' because the original authoritative dump file is missing."
-                )
-
-            validation_issues = _recovery._collect_local_backup_validation_issues(
-                local_path,
-                backup_format=artifact.backup_format,
-                expected_checksum=artifact.checksum_sha256,
-                expected_size=artifact.size_bytes,
-            )
-            if validation_issues:
-                raise _primitives.BackupError(
-                    f"Cannot resume snapshot '{snapshot.snapshot_id}' because the original authoritative dump file is not valid: "
-                    + "; ".join(validation_issues)
-                )
-
-            update_fields: list[str] = []
-            if artifact.local_path != str(local_path):
-                artifact.local_path = str(local_path)
-                update_fields.append("local_path")
-            if (
-                not (
-                    resolved_policy.target_mode == "private_remote"
-                    and not artifact.remote_key
-                )
-                and artifact.status != "ready"
-            ):
-                artifact.status = "ready"
-                update_fields.append("status")
-            if update_fields:
-                _persistence.save_artifact(
-                    artifact, update_fields=[*update_fields, "updated_at"]
-                )
-
-        child_descriptors_json = deepcopy(
-            snapshot.child_descriptors_json
-            if isinstance(snapshot.child_descriptors_json, dict)
-            else {}
-        )
-        child_descriptors_json["database"] = _paths._build_snapshot_database_descriptor(
-            snapshot,
-            artifact,
-        )
-        sidecars = child_descriptors_json.get("sidecars")
-        if not isinstance(sidecars, dict):
-            child_descriptors_json["sidecars"] = {}
+        child_descriptors_json = _resume_child_descriptors(snapshot, artifact)
         snapshot.child_descriptors_json = child_descriptors_json
         _persistence.save_snapshot(
             snapshot,

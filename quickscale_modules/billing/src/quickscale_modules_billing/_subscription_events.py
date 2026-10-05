@@ -106,6 +106,127 @@ def _upsert_subscription_from_payload(
         )
 
 
+def _resolve_mutation_user(
+    subscription_payload: Mapping[str, Any],
+    fallback_user: Any | None,
+    organization: Any,
+) -> Any:
+    """Return the local user for a subscription mutation, or fail closed."""
+    user = _resolve_user_for_subscription(subscription_payload=subscription_payload)
+    if user is None:
+        user = fallback_user
+    if user is None and organization is None:
+        raise BillingWebhookError(
+            "Could not resolve a local user for the Stripe subscription."
+        )
+    return user
+
+
+def _validate_subscription_identity(
+    subscription: Subscription,
+    *,
+    stripe_subscription_id: str,
+    customer_id: str,
+) -> None:
+    """Refuse a provider identity that conflicts with the local subscription."""
+    existing_subscription_id = str(subscription.stripe_subscription_id or "").strip()
+    existing_customer_id = str(subscription.stripe_customer_id or "").strip()
+    if existing_subscription_id and existing_subscription_id != stripe_subscription_id:
+        raise BillingWebhookError(
+            "Stripe subscription identity conflicts with the current local "
+            "subscription; automatic replacement was refused."
+        )
+    if customer_id and existing_customer_id and existing_customer_id != customer_id:
+        raise BillingWebhookError(
+            "Stripe customer identity conflicts with the current local "
+            "subscription; automatic replacement was refused."
+        )
+
+
+def _subscription_identity_updates(
+    subscription: Subscription,
+    *,
+    stripe_subscription_id: str,
+    customer_id: str,
+) -> list[str]:
+    """Apply provider identity fields; return the fields that changed."""
+    update_fields: list[str] = []
+    if customer_id and subscription.stripe_customer_id != customer_id:
+        subscription.stripe_customer_id = customer_id
+        update_fields.append("stripe_customer_id")
+    if (
+        stripe_subscription_id
+        and subscription.stripe_subscription_id != stripe_subscription_id
+    ):
+        subscription.stripe_subscription_id = stripe_subscription_id
+        update_fields.append("stripe_subscription_id")
+    return update_fields
+
+
+def _subscription_ownership_updates(
+    subscription: Subscription, *, organization: Any, user: Any
+) -> list[str]:
+    """Apply ownership fields; return the fields that changed."""
+    update_fields: list[str] = []
+    if organization is not None and subscription.organization_id != organization.pk:
+        subscription.organization = organization
+        update_fields.append("organization")
+    if user is not None and subscription.user_id is None:
+        subscription.user = user
+        update_fields.append("user")
+    return update_fields
+
+
+def _apply_subscription_fields(
+    subscription: Subscription,
+    *,
+    plan: Plan,
+    local_status: str,
+    stripe_subscription_id: str,
+    customer_id: str,
+    organization: Any,
+    user: Any,
+) -> None:
+    """Apply the identity and ownership fields and persist the subscription."""
+    subscription.plan = plan
+    subscription.status = local_status
+    update_fields: list[str] = ["plan", "status"]
+    update_fields += _subscription_identity_updates(
+        subscription,
+        stripe_subscription_id=stripe_subscription_id,
+        customer_id=customer_id,
+    )
+    update_fields += _subscription_ownership_updates(
+        subscription, organization=organization, user=user
+    )
+    unique_fields = list(dict.fromkeys(update_fields))
+    if subscription.pk is None:
+        subscription.save()
+    elif unique_fields:
+        subscription.save(update_fields=unique_fields)
+    if organization is not None and customer_id:
+        _sync_organization_customer_id(organization, customer_id)
+
+
+def _apply_subscription_period_bounds(
+    subscription: Subscription, subscription_payload: Mapping[str, Any]
+) -> None:
+    """Apply the provider period bounds, never overwriting with a missing value.
+
+    Under the pinned API version period bounds exist only on subscription items.
+    """
+    period_start, period_end = _extract_subscription_period_bounds(subscription_payload)
+    period_update_fields: list[str] = []
+    if period_start is not None and subscription.current_period_start != period_start:
+        subscription.current_period_start = period_start
+        period_update_fields.append("current_period_start")
+    if period_end is not None and subscription.current_period_end != period_end:
+        subscription.current_period_end = period_end
+        period_update_fields.append("current_period_end")
+    if period_update_fields:
+        subscription.save(update_fields=period_update_fields)
+
+
 def _apply_subscription_payload(
     *,
     subscription_payload: Mapping[str, Any],
@@ -120,13 +241,7 @@ def _apply_subscription_payload(
     # Phase 3: each handler owns its org scope for SET LOCAL support.
     with org_scope(organization):
         organization = _locks._lock_organization_for_billing_mutation(organization)
-        user = _resolve_user_for_subscription(subscription_payload=subscription_payload)
-        if user is None:
-            user = fallback_user
-        if user is None and organization is None:
-            raise BillingWebhookError(
-                "Could not resolve a local user for the Stripe subscription."
-            )
+        user = _resolve_mutation_user(subscription_payload, fallback_user, organization)
 
         subscription = _resolution._resolve_subscription_for_runtime_event(
             stripe_subscription_id=stripe_subscription_id,
@@ -139,66 +254,21 @@ def _apply_subscription_payload(
             subscription = Subscription(user=user, organization=organization, plan=plan)
 
         customer_id = str(subscription_payload.get("customer") or "").strip()
-        existing_subscription_id = str(
-            subscription.stripe_subscription_id or ""
-        ).strip()
-        existing_customer_id = str(subscription.stripe_customer_id or "").strip()
-        if (
-            existing_subscription_id
-            and existing_subscription_id != stripe_subscription_id
-        ):
-            raise BillingWebhookError(
-                "Stripe subscription identity conflicts with the current local "
-                "subscription; automatic replacement was refused."
-            )
-        if customer_id and existing_customer_id and existing_customer_id != customer_id:
-            raise BillingWebhookError(
-                "Stripe customer identity conflicts with the current local "
-                "subscription; automatic replacement was refused."
-            )
-
-        subscription.plan = plan
-        subscription.status = local_status
-        update_fields: list[str] = ["plan", "status"]
-        if customer_id and subscription.stripe_customer_id != customer_id:
-            subscription.stripe_customer_id = customer_id
-            update_fields.append("stripe_customer_id")
-        if (
-            stripe_subscription_id
-            and subscription.stripe_subscription_id != stripe_subscription_id
-        ):
-            subscription.stripe_subscription_id = stripe_subscription_id
-            update_fields.append("stripe_subscription_id")
-        if organization is not None and subscription.organization_id != organization.pk:
-            subscription.organization = organization
-            update_fields.append("organization")
-        if user is not None and subscription.user_id is None:
-            subscription.user = user
-            update_fields.append("user")
-        unique_fields = list(dict.fromkeys(update_fields))
-        if subscription.pk is None:
-            subscription.save()
-        elif unique_fields:
-            subscription.save(update_fields=unique_fields)
-        if organization is not None and customer_id:
-            _sync_organization_customer_id(organization, customer_id)
-        # Under the pinned API version period bounds exist only on subscription
-        # items. Known bounds are never overwritten with a missing value.
-        period_start, period_end = _extract_subscription_period_bounds(
-            subscription_payload
+        _validate_subscription_identity(
+            subscription,
+            stripe_subscription_id=stripe_subscription_id,
+            customer_id=customer_id,
         )
-        period_update_fields: list[str] = []
-        if (
-            period_start is not None
-            and subscription.current_period_start != period_start
-        ):
-            subscription.current_period_start = period_start
-            period_update_fields.append("current_period_start")
-        if period_end is not None and subscription.current_period_end != period_end:
-            subscription.current_period_end = period_end
-            period_update_fields.append("current_period_end")
-        if period_update_fields:
-            subscription.save(update_fields=period_update_fields)
+        _apply_subscription_fields(
+            subscription,
+            plan=plan,
+            local_status=local_status,
+            stripe_subscription_id=stripe_subscription_id,
+            customer_id=customer_id,
+            organization=organization,
+            user=user,
+        )
+        _apply_subscription_period_bounds(subscription, subscription_payload)
         return subscription
 
 

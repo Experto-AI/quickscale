@@ -7,6 +7,37 @@ from ..handoff_prompt import _write_text_atomically
 import ast
 
 
+def _static_joined_string(node: ast.JoinedStr) -> str | None:
+    """Resolve an f-string of static literal parts and static substitutions."""
+    parts: list[str] = []
+    for value in node.values:
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            parts.append(value.value)
+            continue
+        if (
+            isinstance(value, ast.FormattedValue)
+            and value.conversion == -1
+            and value.format_spec is None
+        ):
+            rendered = _static_string_expression(value.value)
+            if rendered is not None:
+                parts.append(rendered)
+                continue
+        return None
+    return "".join(parts)
+
+
+def _static_join_expression(
+    separator_node: ast.expr, elements: list[ast.expr]
+) -> str | None:
+    """Resolve a ``separator.join(static elements)`` expression, if static."""
+    separator = _static_string_expression(separator_node)
+    items = [_static_string_expression(item) for item in elements]
+    if separator is not None and all(item is not None for item in items):
+        return separator.join(item for item in items if item is not None)
+    return None
+
+
 def _static_string_expression(node: ast.expr) -> str | None:
     """Resolve a statically constructed string without executing settings code."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -18,22 +49,7 @@ def _static_string_expression(node: ast.expr) -> str | None:
             return left + right
         return None
     if isinstance(node, ast.JoinedStr):
-        parts: list[str] = []
-        for value in node.values:
-            if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                parts.append(value.value)
-                continue
-            if (
-                isinstance(value, ast.FormattedValue)
-                and value.conversion == -1
-                and value.format_spec is None
-            ):
-                rendered = _static_string_expression(value.value)
-                if rendered is not None:
-                    parts.append(rendered)
-                    continue
-            return None
-        return "".join(parts)
+        return _static_joined_string(node)
     if (
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
@@ -42,10 +58,7 @@ def _static_string_expression(node: ast.expr) -> str | None:
         and not node.keywords
         and isinstance(node.args[0], (ast.List, ast.Tuple, ast.Set))
     ):
-        separator = _static_string_expression(node.func.value)
-        items = [_static_string_expression(item) for item in node.args[0].elts]
-        if separator is not None and all(item is not None for item in items):
-            return separator.join(item for item in items if item is not None)
+        return _static_join_expression(node.func.value, list(node.args[0].elts))
     return None
 
 
@@ -62,36 +75,50 @@ def _dotted_expression_name(node: ast.expr) -> str | None:
     return ".".join(reversed(parts))
 
 
+def _config_env_read_name(node: ast.Call) -> str | None:
+    """Return the URL variable name for ``config(NAME, default=None)``, if any."""
+    if not (isinstance(node.func, ast.Name) and node.func.id == "config"):
+        return None
+    if len(node.args) != 1 or not isinstance(node.args[0], ast.Constant):
+        return None
+    if node.args[0].value not in {"RUNTIME_DATABASE_URL", "DATABASE_URL"}:
+        return None
+    if len(node.keywords) != 1 or node.keywords[0].arg != "default":
+        return None
+    default = node.keywords[0].value
+    if not (isinstance(default, ast.Constant) and default.value is None):
+        return None
+    return str(node.args[0].value)
+
+
+def _os_environ_selector_read_name(node: ast.Call) -> str | None:
+    """Return the selector name for ``os.environ.get(SELECTOR, "")``, if any."""
+    if not (isinstance(node.func, ast.Attribute) and node.func.attr == "get"):
+        return None
+    if _dotted_expression_name(node.func.value) != "os.environ":
+        return None
+    if len(node.args) != 2 or not isinstance(node.args[0], ast.Constant):
+        return None
+    if node.args[0].value not in {
+        "QUICKSCALE_PRIVILEGED_COMMAND",
+        "QUICKSCALE_NON_DB_COMMAND",
+    }:
+        return None
+    if not isinstance(node.args[1], ast.Constant) or node.args[1].value != "":
+        return None
+    if node.keywords:
+        return None
+    return str(node.args[0].value)
+
+
 def _canonical_read_env_var(node: ast.expr) -> str | None:
     """Return the environment variable a canonical read reads, if it is one."""
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "config"
-        and len(node.args) == 1
-        and isinstance(node.args[0], ast.Constant)
-        and node.args[0].value in {"RUNTIME_DATABASE_URL", "DATABASE_URL"}
-        and len(node.keywords) == 1
-        and node.keywords[0].arg == "default"
-        and isinstance(node.keywords[0].value, ast.Constant)
-        and node.keywords[0].value.value is None
-    ):
-        return str(node.args[0].value)
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "get"
-        and _dotted_expression_name(node.func.value) == "os.environ"
-        and len(node.args) == 2
-        and isinstance(node.args[0], ast.Constant)
-        and node.args[0].value
-        in {"QUICKSCALE_PRIVILEGED_COMMAND", "QUICKSCALE_NON_DB_COMMAND"}
-        and isinstance(node.args[1], ast.Constant)
-        and node.args[1].value == ""
-        and not node.keywords
-    ):
-        return str(node.args[0].value)
-    return None
+    if not isinstance(node, ast.Call):
+        return None
+    config_name = _config_env_read_name(node)
+    if config_name is not None:
+        return config_name
+    return _os_environ_selector_read_name(node)
 
 
 def _facade_imports(

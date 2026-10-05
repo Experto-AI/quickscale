@@ -26,23 +26,25 @@ import re
 from pathlib import Path
 
 
-def _parse_runtime_command_line(
-    launcher_path: Path,
-    *,
-    line_number: int,
-    active_line: str,
-) -> tuple[str, str] | None:
-    """Parse one selector-bearing line under the shipped one-shot grammar."""
+def _reject_selector_line_continuation(
+    launcher_path: Path, *, line_number: int, active_line: str
+) -> None:
+    """Reject shell line continuations on non-Dockerfile selector lines."""
     if launcher_path.name != "Dockerfile" and active_line.rstrip().endswith("\\"):
         raise ValueError(
             f"{launcher_path}:{line_number}: QUICKSCALE_PRIVILEGED_COMMAND/"
             "QUICKSCALE_NON_DB_COMMAND selectors must use one static literal "
             "assignment without shell line continuation."
         )
+
+
+def _selector_line_tokens(
+    launcher_path: Path, *, line_number: int, active_line: str
+) -> list[str]:
+    """Tokenize a selector line, stripping its Dockerfile RUN/&& decorations."""
     tokens = _shell_tokens(launcher_path, line_number, active_line)
     if not tokens:
-        return None
-
+        return []
     if launcher_path.name == "Dockerfile" and tokens[-1:] == ["&&"]:
         tokens.pop()
     if any(_is_shell_operator(token) for token in tokens):
@@ -52,15 +54,19 @@ def _parse_runtime_command_line(
         )
     if launcher_path.name == "Dockerfile" and tokens[:1] == ["RUN"]:
         tokens.pop(0)
+    return tokens
 
+
+def _scan_selector_assignments(
+    tokens: list[str], launcher_path: Path, *, line_number: int
+) -> list[tuple[int, str, str]]:
+    """Collect selector assignments and reject dynamically constructed names."""
     selector_assignments: list[tuple[int, str, str]] = []
-    assignment_tokens: dict[int, tuple[str, str]] = {}
     for index, token in enumerate(tokens):
         assignment_match = _SHELL_ENV_ASSIGNMENT.fullmatch(token)
         if assignment_match is not None:
             assignment_name = assignment_match.group("name")
             assignment_value = assignment_match.group("value")
-            assignment_tokens[index] = (assignment_name, assignment_value)
             if assignment_name in _RUNTIME_COMMAND_NAMES:
                 selector_assignments.append((index, assignment_name, assignment_value))
                 continue
@@ -76,29 +82,13 @@ def _parse_runtime_command_line(
                 "QUICKSCALE_NON_DB_COMMAND selectors must use a static literal "
                 "NAME=value environment assignment."
             )
+    return selector_assignments
 
-    has_selector_marker = _has_runtime_selector_marker(active_line)
-    has_bypass_marker = "QUICKSCALE_ALLOW_BYPASSRLS" in active_line
-    if not selector_assignments:
-        if has_selector_marker:
-            raise ValueError(
-                f"{launcher_path}:{line_number}: QUICKSCALE_PRIVILEGED_COMMAND/"
-                "QUICKSCALE_NON_DB_COMMAND selectors must use a supported static literal "
-                "assignment with no dynamically constructed variable name."
-            )
-        if has_bypass_marker:
-            raise ValueError(
-                f"{launcher_path}:{line_number}: QUICKSCALE_ALLOW_BYPASSRLS is only "
-                "supported as a one-shot prefix for QUICKSCALE_NON_DB_COMMAND."
-            )
-        return None
-    if len(selector_assignments) != 1:
-        raise ValueError(
-            f"{launcher_path}:{line_number}: QUICKSCALE_PRIVILEGED_COMMAND and "
-            "QUICKSCALE_NON_DB_COMMAND static literal selectors are mutually exclusive "
-            "and may appear only once."
-        )
 
+def _resolve_python_command_index(
+    tokens: list[str], launcher_path: Path, *, line_number: int
+) -> int:
+    """Return the single python token index the selector must prefix."""
     python_indices = [
         index for index, token in enumerate(tokens) if token in {"python", "python3"}
     ]
@@ -107,7 +97,13 @@ def _parse_runtime_command_line(
             f"{launcher_path}:{line_number}: runtime selector must prefix exactly one "
             "static python manage.py command."
         )
-    python_index = python_indices[0]
+    return python_indices[0]
+
+
+def _command_prefix_assignments(
+    tokens: list[str], python_index: int, launcher_path: Path, *, line_number: int
+) -> dict[str, list[str]]:
+    """Return the one-shot environment prefix assignments before python."""
     prefix_tokens = tokens[:python_index]
     if prefix_tokens[:1] == ["env"]:
         prefix_tokens = prefix_tokens[1:]
@@ -130,8 +126,22 @@ def _parse_runtime_command_line(
         prefix_assignments.setdefault(assignment_match.group("name"), []).append(
             assignment_match.group("value")
         )
+    return prefix_assignments
 
-    selector_index, environment_name, command = selector_assignments[0]
+
+def _validate_selector_attachment(
+    *,
+    launcher_path: Path,
+    line_number: int,
+    active_line: str,
+    tokens: list[str],
+    python_index: int,
+    selector_index: int,
+    environment_name: str,
+    command: str,
+    prefix_assignments: dict[str, list[str]],
+) -> None:
+    """Reject a selector that is not one static literal manage.py prefix."""
     if selector_index >= python_index or environment_name not in prefix_assignments:
         raise ValueError(
             f"{launcher_path}:{line_number}: {environment_name} must be an environment "
@@ -155,6 +165,26 @@ def _parse_runtime_command_line(
             f"{launcher_path}:{line_number}: {environment_name} must use a static literal "
             f"command name; unable to verify {command or '(empty)'!r}."
         )
+    _validate_manage_command(
+        tokens=tokens,
+        python_index=python_index,
+        environment_name=environment_name,
+        command=command,
+        launcher_path=launcher_path,
+        line_number=line_number,
+    )
+
+
+def _validate_manage_command(
+    *,
+    tokens: list[str],
+    python_index: int,
+    environment_name: str,
+    command: str,
+    launcher_path: Path,
+    line_number: int,
+) -> None:
+    """Reject a selector whose manage.py command is not the literal selector."""
     if len(tokens) <= python_index + 2 or tokens[python_index + 1] != "manage.py":
         raise ValueError(
             f"{launcher_path}:{line_number}: {environment_name} must prefix exactly one "
@@ -170,6 +200,16 @@ def _parse_runtime_command_line(
             f"the same static literal manage.py command; unable to verify {manage_command!r}."
         )
 
+
+def _validate_selector_flag_rules(
+    *,
+    launcher_path: Path,
+    line_number: int,
+    environment_name: str,
+    command: str,
+    prefix_assignments: dict[str, list[str]],
+) -> None:
+    """Reject privileged and bypass flag combinations the grammar forbids."""
     if environment_name == "QUICKSCALE_PRIVILEGED_COMMAND":
         if prefix_assignments.get("RUNTIME_DATABASE_URL") != [""]:
             raise ValueError(
@@ -190,6 +230,76 @@ def _parse_runtime_command_line(
             f"{launcher_path}:{line_number}: QUICKSCALE_ALLOW_BYPASSRLS=1 is only "
             "supported with QUICKSCALE_NON_DB_COMMAND."
         )
+
+
+def _parse_runtime_command_line(
+    launcher_path: Path,
+    *,
+    line_number: int,
+    active_line: str,
+) -> tuple[str, str] | None:
+    """Parse one selector-bearing line under the shipped one-shot grammar."""
+    _reject_selector_line_continuation(
+        launcher_path, line_number=line_number, active_line=active_line
+    )
+    tokens = _selector_line_tokens(
+        launcher_path, line_number=line_number, active_line=active_line
+    )
+    if not tokens:
+        return None
+
+    selector_assignments = _scan_selector_assignments(
+        tokens, launcher_path, line_number=line_number
+    )
+
+    has_selector_marker = _has_runtime_selector_marker(active_line)
+    has_bypass_marker = "QUICKSCALE_ALLOW_BYPASSRLS" in active_line
+    if not selector_assignments:
+        if has_selector_marker:
+            raise ValueError(
+                f"{launcher_path}:{line_number}: QUICKSCALE_PRIVILEGED_COMMAND/"
+                "QUICKSCALE_NON_DB_COMMAND selectors must use a supported static literal "
+                "assignment with no dynamically constructed variable name."
+            )
+        if has_bypass_marker:
+            raise ValueError(
+                f"{launcher_path}:{line_number}: QUICKSCALE_ALLOW_BYPASSRLS is only "
+                "supported as a one-shot prefix for QUICKSCALE_NON_DB_COMMAND."
+            )
+        return None
+    if len(selector_assignments) != 1:
+        raise ValueError(
+            f"{launcher_path}:{line_number}: QUICKSCALE_PRIVILEGED_COMMAND and "
+            "QUICKSCALE_NON_DB_COMMAND static literal selectors are mutually exclusive "
+            "and may appear only once."
+        )
+
+    python_index = _resolve_python_command_index(
+        tokens, launcher_path, line_number=line_number
+    )
+    prefix_assignments = _command_prefix_assignments(
+        tokens, python_index, launcher_path, line_number=line_number
+    )
+
+    selector_index, environment_name, command = selector_assignments[0]
+    _validate_selector_attachment(
+        launcher_path=launcher_path,
+        line_number=line_number,
+        active_line=active_line,
+        tokens=tokens,
+        python_index=python_index,
+        selector_index=selector_index,
+        environment_name=environment_name,
+        command=command,
+        prefix_assignments=prefix_assignments,
+    )
+    _validate_selector_flag_rules(
+        launcher_path=launcher_path,
+        line_number=line_number,
+        environment_name=environment_name,
+        command=command,
+        prefix_assignments=prefix_assignments,
+    )
     return environment_name, command
 
 

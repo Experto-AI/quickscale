@@ -40,6 +40,14 @@ quickscale_core/src/models.py:15: unused import 'datetime' (100% confidence)
   - **D (21-30):** Very high - refactor recommended
   - **E (31+):** Extremely high - refactor required
 
+Functions at CC >= 21 are reported as an error naming the function and its
+value, and `make quality` exits non-zero for them regardless of the accepted
+baseline. The CC 11-20 tier stays a warning. Nested functions are included
+through Radon's closure reporting; Radon class aggregates are not functions
+and are not part of the critical count. Radon does not report methods of
+classes declared inside functions, so those methods remain outside this
+measurement by analyzer limitation.
+
 **Maintainability Index (MI):**
 - Composite metric combining complexity, LOC, and Halstead volume
 - Grades:
@@ -67,11 +75,10 @@ Identifies files that may benefit from splitting:
 - **Warning:** 500-799 lines — advisory
 - **Critical:** >=800 lines — gated
 
-Files below 800 lines are advisory diagnostics only. A file at or above 800
-lines must be listed in the baseline's `file_length` section with a `reason`
-and a `max_lines` ceiling; an unlisted file or one grown past its ceiling is a
-critical regression that fails the gate. The ratchet is shrink-only: removing
-the file or bringing it below 800 lines resolves the entry.
+A file at or above 800 lines is reported as an error naming the file and its
+line count, and `make quality` exits non-zero for it regardless of the accepted
+baseline. The 500-799-line tier stays an advisory warning. Line counts include
+a final physical line that has no trailing newline.
 
 **Why it matters:**
 - Large files are harder to understand and navigate
@@ -159,9 +166,9 @@ Compact machine-readable summary of the baseline gate result:
 
 ## Exit Codes
 
-- **0:** No warning or critical regressions beyond the tracked baseline; monotonicity gate passed
+- **0:** No warning or critical regressions beyond the tracked baseline, no function at CC >= 21 or file at >= 800 lines, and the monotonicity gate passed
 - **1:** Warning regressions found, the baseline file could not be loaded, or the baseline monotonicity gate failed (policy violation or prerequisite error)
-- **2:** Critical regressions found
+- **2:** Critical regressions found, or any function at CC >= 21 or file at >= 800 lines
 
 > **Note:** The baseline monotonicity helper uses exit 1 for a policy violation
 > and exit 2 for a prerequisite or schema error. `scripts/check_quality.sh`
@@ -203,9 +210,11 @@ The quality analysis script complements existing tools:
 - Dead code with <80% confidence
 - Functions with CC 6-10
 
-**Gated:** files at or above 800 lines and functions at or above CC 11 must be
-listed in the baseline with a ceiling (and a reason, for a critical CC entry or
-any `file_length` entry); a new or grown finding fails `make quality`.
+**Gated:** functions at or above CC 21 and files at or above 800 lines fail
+`make quality` outright, independent of the accepted baseline. Functions at
+CC 11-20 stay warnings, and a new or grown finding in that tier must be listed
+in the baseline with a ceiling. Files at 500-799 lines are advisory diagnostics
+only and need no baseline entry; `file_length` entries still carry a reason.
 
 ## Baseline Monotonicity Gate (SA121)
 

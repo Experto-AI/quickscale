@@ -386,7 +386,7 @@
         },
         {
             "id": "quality",
-            "description": "Quality ratchet: no new or worsened dead code, complexity, duplication, or file at or above 800 lines against the scripts/quality_baseline.json baseline",
+            "description": "Quality ratchet: no new or worsened dead code, complexity, or duplication against the scripts/quality_baseline.json baseline, and no function at CC >= 21 or file at or above 800 lines regardless of the baseline",
             "required_contexts": [
                 "local-serial",
                 "local-parallel"

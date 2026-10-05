@@ -39,6 +39,8 @@ import yaml
 
 from quickscale_core.apply.step import APPLY_STEPS
 from quickscale_core.schema.state_schema import (
+    ManagedFileRecord,
+    ModuleState,
     ProjectState,
     QuickScaleState,
     StateError,
@@ -497,35 +499,26 @@ def _parse_ledger(raw: Any) -> RecoveryLedger:
     )
 
 
-def _parse_applied_state(raw: dict[str, Any]) -> QuickScaleState:
-    """Extract and validate the applied-state fields from the raw ledger dict.
-
-    Reuses the same validation logic that ``StateManager.load()`` applies to
-    ``state.yml`` — missing or wrong-type required fields raise
-    :class:`LedgerError`.
-
-    Raises:
-        LedgerError: If required applied-state fields are absent or invalid.
-    """
-    from datetime import datetime
-
-    from quickscale_core.config import normalize_installed_version
-    from quickscale_core.contracts.module_options import sanitize_module_options
-    from quickscale_core.schema.state_schema import (
-        ManagedFileRecord,
-        ModuleState,
-    )
-
-    # version is optional (default "1") matching StateManager behaviour
-    version = raw.get("version", "1")
-
-    # project section is required
-    project_data = raw.get("project")
-    if not isinstance(project_data, dict):
+def _ledger_adopted_contract_steps(
+    project_data: dict[str, Any],
+) -> list[str] | None:
+    """Return validated adopted-contract steps from a ledger project section."""
+    adopted_steps_raw = project_data.get("adopted_contract_steps")
+    if adopted_steps_raw is None:
+        return None
+    if not isinstance(adopted_steps_raw, list) or any(
+        not isinstance(step_id, str) or not step_id for step_id in adopted_steps_raw
+    ):
         raise LedgerError(
-            "Recovery ledger 'project' section must be a mapping; "
-            f"got {type(project_data).__name__ if project_data is not None else 'absent'}"
+            "Recovery ledger project.adopted_contract_steps must be a list "
+            "of non-empty strings"
         )
+    return list(adopted_steps_raw)
+
+
+def _ledger_project_state(project_data: dict[str, Any]) -> ProjectState:
+    """Validate and build the project section of a recovery ledger."""
+    from datetime import datetime
 
     slug = project_data.get("slug")
     package = project_data.get("package")
@@ -544,37 +537,25 @@ def _parse_applied_state(raw: dict[str, Any]) -> QuickScaleState:
             f"Recovery ledger project.theme must be a non-empty string, got {theme!r}"
         )
 
-    adopted_steps_raw = project_data.get("adopted_contract_steps")
-    if adopted_steps_raw is not None and (
-        not isinstance(adopted_steps_raw, list)
-        or any(
-            not isinstance(step_id, str) or not step_id for step_id in adopted_steps_raw
-        )
-    ):
-        raise LedgerError(
-            "Recovery ledger project.adopted_contract_steps must be a list "
-            "of non-empty strings"
-        )
+    adopted_steps = _ledger_adopted_contract_steps(project_data)
 
-    project = ProjectState(
+    return ProjectState(
         slug=slug,
         package=package,
         theme=theme,
         project_contract=project_data.get("project_contract"),
-        adopted_contract_steps=(
-            list(adopted_steps_raw) if adopted_steps_raw is not None else None
-        ),
+        adopted_contract_steps=adopted_steps,
         created_at=project_data.get("created_at", datetime.now().isoformat()),
         last_applied=project_data.get("last_applied", datetime.now().isoformat()),
     )
 
-    # modules section is optional
-    modules_data = raw.get("modules", {})
-    if not isinstance(modules_data, dict):
-        raise LedgerError(
-            f"Recovery ledger 'modules' section must be a mapping, "
-            f"got {type(modules_data).__name__}"
-        )
+
+def _ledger_modules(modules_data: dict[str, Any]) -> dict[str, ModuleState]:
+    """Validate and build the modules section of a recovery ledger."""
+    from datetime import datetime
+
+    from quickscale_core.config import normalize_installed_version
+    from quickscale_core.contracts.module_options import sanitize_module_options
 
     modules: dict[str, ModuleState] = {}
     for module_name, module_info in modules_data.items():
@@ -595,54 +576,99 @@ def _parse_applied_state(raw: dict[str, Any]) -> QuickScaleState:
             branch=module_info.get("branch"),
             installed_at=module_info.get("installed_at"),
         )
+    return modules
 
-    # managed_files section is optional
-    # Distinguish "key absent" (valid — use empty dict) from
-    # "key present with explicit null" (invalid — fail hard).
+
+def _ledger_managed_file_record(
+    entry: Any, *, file_path: str | None = None
+) -> ManagedFileRecord:
+    """Return one validated managed-file record from a ledger entry."""
+    if not isinstance(entry, dict):
+        if file_path is None:
+            raise LedgerError(
+                f"Each managed_files entry must be a mapping, "
+                f"got {type(entry).__name__}"
+            )
+        raise LedgerError(
+            f"Managed file '{file_path}' value must be a mapping, "
+            f"got {type(entry).__name__}"
+        )
+    try:
+        if file_path is None:
+            return ManagedFileRecord.from_dict(entry)
+        return ManagedFileRecord.from_dict({**entry, "path": file_path})
+    except (KeyError, TypeError, ValueError) as exc:
+        if file_path is None:
+            raise LedgerError(
+                f"Managed file record is missing required fields: {exc}"
+            ) from exc
+        raise LedgerError(
+            f"Managed file record for '{file_path}' is missing required fields: {exc}"
+        ) from exc
+
+
+def _parse_ledger_managed_files(raw: dict[str, Any]) -> dict[str, ManagedFileRecord]:
+    """Validate and build the managed-files section of a recovery ledger.
+
+    Distinguish "key absent" (valid — use empty dict) from "key present with
+    explicit null" (invalid — fail hard).
+    """
     managed_files: dict[str, ManagedFileRecord] = {}
     managed_files_data = raw.get("managed_files")
-    if managed_files_data is not None:
-        if isinstance(managed_files_data, list):
-            for entry in managed_files_data:
-                if not isinstance(entry, dict):
-                    raise LedgerError(
-                        f"Each managed_files entry must be a mapping, "
-                        f"got {type(entry).__name__}"
-                    )
-                try:
-                    record = ManagedFileRecord.from_dict(entry)
-                except (KeyError, TypeError, ValueError) as exc:
-                    raise LedgerError(
-                        f"Managed file record is missing required fields: {exc}"
-                    ) from exc
-                managed_files[record.path] = record
-        elif isinstance(managed_files_data, dict):
-            for file_path, file_info in managed_files_data.items():
-                if not isinstance(file_info, dict):
-                    raise LedgerError(
-                        f"Managed file '{file_path}' value must be a mapping, "
-                        f"got {type(file_info).__name__}"
-                    )
-                try:
-                    record = ManagedFileRecord.from_dict(
-                        {**file_info, "path": file_path}
-                    )
-                except (KeyError, TypeError, ValueError) as exc:
-                    raise LedgerError(
-                        f"Managed file record for '{file_path}' is missing "
-                        f"required fields: {exc}"
-                    ) from exc
-                managed_files[record.path] = record
-        else:
+    if managed_files_data is None:
+        if "managed_files" in raw:
             raise LedgerError(
-                f"'managed_files' must be a list or mapping, "
-                f"got {type(managed_files_data).__name__}"
+                "'managed_files' must be a list or mapping when present, got None"
             )
-    elif "managed_files" in raw:
-        # Key present with explicit null — fail hard.
+        return managed_files
+    if isinstance(managed_files_data, list):
+        for entry in managed_files_data:
+            record = _ledger_managed_file_record(entry)
+            managed_files[record.path] = record
+        return managed_files
+    if isinstance(managed_files_data, dict):
+        for file_path, file_info in managed_files_data.items():
+            record = _ledger_managed_file_record(file_info, file_path=file_path)
+            managed_files[record.path] = record
+        return managed_files
+    raise LedgerError(
+        f"'managed_files' must be a list or mapping, "
+        f"got {type(managed_files_data).__name__}"
+    )
+
+
+def _parse_applied_state(raw: dict[str, Any]) -> QuickScaleState:
+    """Extract and validate the applied-state fields from the raw ledger dict.
+
+    Reuses the same validation logic that ``StateManager.load()`` applies to
+    ``state.yml`` — missing or wrong-type required fields raise
+    :class:`LedgerError`.
+
+    Raises:
+        LedgerError: If required applied-state fields are absent or invalid.
+    """
+    # version is optional (default "1") matching StateManager behaviour
+    version = raw.get("version", "1")
+
+    # project section is required
+    project_data = raw.get("project")
+    if not isinstance(project_data, dict):
         raise LedgerError(
-            "'managed_files' must be a list or mapping when present, got None"
+            "Recovery ledger 'project' section must be a mapping; "
+            f"got {type(project_data).__name__ if project_data is not None else 'absent'}"
         )
+    project = _ledger_project_state(project_data)
+
+    # modules section is optional
+    modules_data = raw.get("modules", {})
+    if not isinstance(modules_data, dict):
+        raise LedgerError(
+            f"Recovery ledger 'modules' section must be a mapping, "
+            f"got {type(modules_data).__name__}"
+        )
+    modules = _ledger_modules(modules_data)
+
+    managed_files = _parse_ledger_managed_files(raw)
 
     return QuickScaleState(
         version=str(version),

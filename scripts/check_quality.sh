@@ -244,6 +244,7 @@ analyze_complexity() {
         $module_paths \
         --min $RADON_MIN_COMPLEXITY_GRADE \
         --show-complexity \
+        --show-closures \
         --total-average \
         --json 2>&1 || echo "{}")
 
@@ -256,6 +257,7 @@ analyze_complexity() {
     inventory_output=$(poetry run radon cc \
         $module_paths \
         --show-complexity \
+        --show-closures \
         --json 2>&1 || echo "{}")
 
     echo "$inventory_output" > "$OUTPUT_DIR/complexity_inventory.json"
@@ -281,7 +283,9 @@ except:
 import sys, json
 try:
     data = json.load(sys.stdin)
-    count = sum(len([f for f in funcs if f.get('complexity', 0) >= $RADON_ERROR_COMPLEXITY_CC])
+    count = sum(len([f for f in funcs
+                     if f.get('complexity', 0) >= $RADON_ERROR_COMPLEXITY_CC
+                     and f.get('type') != 'class'])
                 for funcs in data.values() if isinstance(funcs, list))
     print(count)
 except:
@@ -290,11 +294,42 @@ except:
 
     echo "$error_complexity_count" > "$OUTPUT_DIR/error_complexity_count.txt"
 
+    # SA242: name every critical function so the hard gate reports it, not
+    # just a count. The file backs the summary printout and the exit verdict.
+    echo "$cc_output" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    data = {}
+rows = []
+for file_path, funcs in data.items():
+    if not isinstance(funcs, list):
+        continue
+    for entry in funcs:
+        if (
+            entry.get('complexity', 0) >= $RADON_ERROR_COMPLEXITY_CC
+            and entry.get('type') != 'class'
+        ):
+            name = entry.get('name', '?')
+            classname = entry.get('classname')
+            if classname:
+                name = f'{classname}.{name}'
+            rows.append((entry['complexity'], file_path, name))
+for complexity, file_path, name in sorted(rows, reverse=True):
+    print(f'{complexity}\t{file_path}\t{name}')
+" > "$OUTPUT_DIR/error_complexity_functions.txt" 2>/dev/null || true
+
     if [ "$high_complexity_count" -eq 0 ] && [ "$error_complexity_count" -eq 0 ]; then
         print_success "No high complexity functions found"
     else
         if [ "$error_complexity_count" -gt 0 ]; then
             print_error "Found $error_complexity_count critical complexity functions (CC >= $RADON_ERROR_COMPLEXITY_CC)"
+            while IFS=$'\t' read -r function_complexity function_path function_name; do
+                if [ -n "$function_complexity" ]; then
+                    print_error "  $function_path: $function_name is $function_complexity"
+                fi
+            done < "$OUTPUT_DIR/error_complexity_functions.txt"
         fi
         if [ "$high_complexity_count" -gt 0 ]; then
             print_warning "Found $high_complexity_count high complexity functions (CC >= $RADON_HIGH_COMPLEXITY_CC)"
@@ -329,13 +364,20 @@ analyze_large_files() {
     # Get module paths
     local module_paths=$(get_module_paths)
 
-    # Find files >= warning threshold
-    # Filter out the "total" line from wc -l output
+    # Find files >= warning threshold.  ``grep -c ""`` counts a final
+    # physical line that has no trailing newline; ``wc -l`` would undercount
+    # it, so a valid 800-line file without a terminal newline could slip past
+    # the gate.
     local large_files_output
     large_files_output=$(find \
         $module_paths \
-        -type f -name "*.py" -exec wc -l {} + 2>/dev/null | \
-        grep -v " total$" | \
+        -type f -name "*.py" -exec sh -c '
+            for python_file do
+                line_count=$(grep -c "" "$python_file" 2>/dev/null || true)
+                line_count=${line_count:-0}
+                printf "%s\t%s\n" "$line_count" "$python_file"
+            done
+        ' sh {} + 2>/dev/null | \
         awk -v warn="$LARGE_FILE_WARNING_LINES" '$1 >= warn {print $1 "\t" $2}' | \
         sort -rn || echo "")
 
@@ -353,10 +395,19 @@ analyze_large_files() {
     echo "$warning_count" > "$OUTPUT_DIR/large_files_warning_count.txt"
     echo "$error_count" > "$OUTPUT_DIR/large_files_error_count.txt"
 
+    if [ "$error_count" -gt 0 ]; then
+        print_error "Found $error_count very large files (>= $LARGE_FILE_ERROR_LINES lines)"
+        while IFS=$'\t' read -r file_line_count file_path; do
+            if [ -n "$file_line_count" ] && [ "$file_line_count" -ge "$LARGE_FILE_ERROR_LINES" ]; then
+                print_error "  $file_path has $file_line_count lines"
+            fi
+        done <<< "$large_files_output"
+    fi
+    if [ "$warning_count" -gt 0 ]; then
+        print_warning "Found $warning_count large files (>$LARGE_FILE_WARNING_LINES lines)"
+    fi
     if [ "$error_count" -eq 0 ] && [ "$warning_count" -eq 0 ]; then
         print_success "No large files found"
-    else
-        print_warning "Found $warning_count files >$LARGE_FILE_WARNING_LINES lines, $error_count files >$LARGE_FILE_ERROR_LINES lines"
     fi
 }
 
@@ -838,12 +889,33 @@ try:
 except (OSError, json.JSONDecodeError):
     pass
 
-high_complexity_count = sum(
-    1 for entry in actual_complexity.values() if entry["complexity"] >= high_complexity_threshold
-)
-error_complexity_count = sum(
-    1 for entry in actual_complexity.values() if entry["complexity"] >= error_complexity_threshold
-)
+def raw_complexity_count(threshold):
+    """Count analyzer entries at or above *threshold*, excluding class aggregates.
+
+    The count is taken from the raw analyzer document, not the keyed
+    ``actual_complexity`` map, so a duplicate function identity (Radon emits
+    same-named closures without class context) can never hide a critical
+    measurement from the report, status, or Markdown verdict.
+    """
+    total = 0
+    for entries in cyclomatic.values():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            complexity_value = entry.get("complexity")
+            if isinstance(complexity_value, bool) or not isinstance(
+                complexity_value, int
+            ):
+                continue
+            if complexity_value >= threshold and entry.get("type") != "class":
+                total += 1
+    return total
+
+
+high_complexity_count = raw_complexity_count(high_complexity_threshold)
+error_complexity_count = raw_complexity_count(error_complexity_threshold)
 large_files_warning_count = sum(
     1
     for entry in actual_large_files.values()
@@ -1185,6 +1257,11 @@ report = {
 status_payload = {
     "baseline_status": baseline_payload["status"],
     "baseline_error": baseline_payload.get("error", ""),
+    # SA242: the raw critical counts and the hard-gate verdict are independent
+    # of the accepted baseline.
+    "error_complexity_functions": error_complexity_count,
+    "large_files_error": large_files_error_count,
+    "hard_gate_failed": error_complexity_count > 0 or large_files_error_count > 0,
     "warning_regressions": regressions["warning_count"],
     "critical_regressions": regressions["critical_count"],
     "total_regressions": regressions["total_count"],
@@ -1232,6 +1309,11 @@ summary = report["summary"]
 baseline = report["baseline"]
 regressions = report["regressions"]
 
+# SA242: the hard gate fails a run regardless of the baseline comparison.
+hard_gate_failed = bool(
+    summary["error_complexity_functions"] > 0 or summary["large_files_error"] > 0
+)
+
 
 def pluralize(count, singular, plural=None):
     if count == 1:
@@ -1254,6 +1336,24 @@ def regression_cell(count, label):
     return f"{count} {label}" if baseline["status"] == "loaded" else "baseline error"
 
 
+def hard_gate_cell(count, fallback):
+    """Show the baseline-independent hard-gate error when the tier fails."""
+    if count > 0:
+        return f"{count} hard-gate errors"
+    return fallback
+
+
+def overall_verdict():
+    """Return the overall verdict covering both the ratchet and hard gate."""
+    if hard_gate_failed:
+        return "✗ Critical findings"
+    if baseline["status"] != "loaded":
+        return "✗ Baseline error"
+    if regressions["total_count"] == 0:
+        return "✓ Pass"
+    return "✗ Action required"
+
+
 lines = [
     "# QuickScale Code Quality Report",
     "",
@@ -1266,11 +1366,11 @@ lines = [
     "|--------|-----------|-------------|",
     f"| Dead Code Issues | {summary['dead_code_issues']} | {regression_cell(regressions['dead_code']['count'], 'new vs baseline')} |",
     f"| High Complexity Functions (CC >= {high_complexity_threshold}) | {summary['high_complexity_functions']} | {regression_cell(regressions['complexity']['warning_count'], 'warning regressions')} |",
-    f"| Critical Complexity Functions (CC >= {error_complexity_threshold}) | {summary['error_complexity_functions']} | {regression_cell(regressions['complexity']['critical_count'], 'critical regressions')} |",
+    f"| Critical Complexity Functions (CC >= {error_complexity_threshold}) | {summary['error_complexity_functions']} | {hard_gate_cell(summary['error_complexity_functions'], regression_cell(regressions['complexity']['critical_count'], 'critical regressions'))} |",
     f"| Large Files ({large_file_warning_threshold}-{large_file_error_threshold - 1} lines) | {summary['large_files_warning']} | {regression_cell(regressions['large_files']['warning_count'], 'warning regressions')} |",
-    f"| Very Large Files (>= {large_file_error_threshold} lines) | {summary['large_files_error']} | {regression_cell(regressions['large_files']['critical_count'], 'critical regressions')} |",
+    f"| Very Large Files (>= {large_file_error_threshold} lines) | {summary['large_files_error']} | {hard_gate_cell(summary['large_files_error'], regression_cell(regressions['large_files']['critical_count'], 'critical regressions'))} |",
     f"| Code Duplication Blocks | {summary['duplication_blocks']} | {regression_cell(regressions['duplication']['count'], 'new vs baseline')} |",
-    f"| **Total Raw Issues** | **{summary['total_issues']}** | **{'✓ Pass' if baseline['status'] == 'loaded' and regressions['total_count'] == 0 else '✗ Action required' if baseline['status'] == 'loaded' else '✗ Baseline error'}** |",
+    f"| **Total Raw Issues** | **{summary['total_issues']}** | **{overall_verdict()}** |",
     "",
     "---",
     "",
@@ -1507,6 +1607,13 @@ PY
     echo ""
 
     # Exit codes
+    # SA242 hard gate: live critical complexity and very large files fail
+    # regardless of what the accepted baseline lists.
+    if [ "$error_complexity_count" -gt 0 ] || [ "$large_files_error" -gt 0 ]; then
+        print_error "Critical code-quality findings must be fixed; the accepted baseline cannot waive them."
+        exit 2
+    fi
+
     if [ "$BASELINE_STATUS" != "loaded" ]; then
         print_error "Baseline configuration error: $BASELINE_ERROR"
         exit 1

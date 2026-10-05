@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -142,6 +143,117 @@ def _theme_non_jinja_emitted_paths(
     return result
 
 
+def _claim_emitted_destination(
+    mapping: dict[str, str], emitted: str, stem: str, *, allow_idempotent: bool = False
+) -> bool:
+    """Record one emitted destination; False when an idempotent entry exists."""
+    existing = mapping.get(emitted)
+    if existing is None:
+        mapping[emitted] = stem
+        return True
+    if allow_idempotent and existing == stem:
+        return False
+    raise ValueError(
+        f"Duplicate emitted destination {emitted!r}: '{existing}' and '{stem}'"
+    )
+
+
+def _theme_jinja_mapping_entries(
+    template_root: Path, theme: str
+) -> Iterator[tuple[str, str]]:
+    """Yield (emitted path, template stem) for the requested theme's templates."""
+    for template_path in sorted(template_root.rglob("*.j2")):
+        rel = template_path.relative_to(template_root)
+        stem = str(rel)
+        name_without_suffix = stem[:-3] if stem.endswith(".j2") else stem
+        rel_no_j2 = Path(name_without_suffix)
+        parts = rel_no_j2.parts
+
+        if parts[0] != "themes":
+            continue
+        # Skip templates from non-matching themes
+        if len(parts) < 3 or parts[1] != theme:
+            continue
+        emitted = _resolve_theme_emitted_path(rel_no_j2)
+        if emitted is not None:
+            yield emitted, stem
+
+
+def _common_jinja_mapping_entries(template_root: Path) -> Iterator[tuple[str, str]]:
+    """Yield (emitted path, template stem) for ``common/`` templates."""
+    for template_path in sorted(template_root.rglob("*.j2")):
+        rel = template_path.relative_to(template_root)
+        stem = str(rel)
+        name_without_suffix = stem[:-3] if stem.endswith(".j2") else stem
+        parts = Path(name_without_suffix).parts
+        if parts[0] != "common":
+            continue
+        yield str(Path(*parts[1:])), stem
+
+
+def _root_jinja_emitted_path(
+    parts: tuple[str, ...], name_without_suffix: str, package_name: str
+) -> str:
+    """Return the emitted path of a project_name/, github/, or root template."""
+    if parts[0] == "project_name":
+        return str(Path(package_name) / Path(*parts[1:]))
+    if parts[0] == "github":
+        return str(Path(".github") / Path(*parts[1:]))
+    return name_without_suffix
+
+
+def _remaining_jinja_mapping_entries(
+    template_root: Path, package_name: str
+) -> Iterator[tuple[str, str, tuple[str, ...]]]:
+    """Yield (emitted path, template stem, parts) for the remaining templates."""
+    for template_path in sorted(template_root.rglob("*.j2")):
+        rel = template_path.relative_to(template_root)
+        stem = str(rel)
+        name_without_suffix = stem[:-3] if stem.endswith(".j2") else stem
+        parts = Path(name_without_suffix).parts
+        # Skip theme and common — handled in passes 1 and 2
+        if parts[0] in ("themes", "common"):
+            continue
+        yield (
+            _root_jinja_emitted_path(parts, name_without_suffix, package_name),
+            stem,
+            parts,
+        )
+
+
+def _claim_common_entry(
+    mapping: dict[str, str],
+    theme_claimed: set[str],
+    common_claimed: set[str],
+    emitted: str,
+    stem: str,
+) -> None:
+    """Claim one common template destination unless a theme already owns it."""
+    if emitted in theme_claimed:
+        return
+    if _claim_emitted_destination(mapping, emitted, stem, allow_idempotent=True):
+        common_claimed.add(emitted)
+
+
+def _claim_remaining_entry(
+    mapping: dict[str, str],
+    theme_claimed: set[str],
+    common_claimed: set[str],
+    emitted: str,
+    stem: str,
+    parts: tuple[str, ...],
+) -> None:
+    """Claim one remaining template destination under the priority rules."""
+    if emitted in theme_claimed:
+        return
+    # Root-level templates defer to common/ when they map to the same
+    # emitted project path (e.g. templates/admin/index.html.j2 exists
+    # both at root and under common/ — common wins).
+    if parts[0] not in ("project_name", "github") and emitted in common_claimed:
+        return
+    _claim_emitted_destination(mapping, emitted, stem, allow_idempotent=True)
+
+
 def get_generator_emission_mapping(
     template_root: Path,
     *,
@@ -194,102 +306,25 @@ def get_generator_emission_mapping(
     # ------------------------------------------------------------------
     # Pass 1: Theme-specific .j2 templates (highest priority)
     # ------------------------------------------------------------------
-    for template_path in sorted(template_root.rglob("*.j2")):
-        rel = template_path.relative_to(template_root)
-        stem = str(rel)
-        name_without_suffix = stem[:-3] if stem.endswith(".j2") else stem
-        rel_no_j2 = Path(name_without_suffix)
-        parts = rel_no_j2.parts
-
-        if parts[0] != "themes":
-            continue
-        # Skip templates from non-matching themes
-        if len(parts) < 3 or parts[1] != theme:
-            continue
-
-        emitted = _resolve_theme_emitted_path(rel_no_j2)
-        if emitted is not None:
-            if emitted in mapping:
-                raise ValueError(
-                    f"Duplicate emitted destination {emitted!r}: "
-                    f"'{mapping[emitted]}' and '{stem}'"
-                )
-            mapping[emitted] = stem
+    for emitted, stem in _theme_jinja_mapping_entries(template_root, theme):
+        if _claim_emitted_destination(mapping, emitted, stem):
             theme_claimed.add(emitted)
 
     # ------------------------------------------------------------------
     # Pass 2: Common templates (lower priority than theme, higher than root)
     # ------------------------------------------------------------------
-    for template_path in sorted(template_root.rglob("*.j2")):
-        rel = template_path.relative_to(template_root)
-        stem = str(rel)
-        name_without_suffix = stem[:-3] if stem.endswith(".j2") else stem
-        rel_no_j2 = Path(name_without_suffix)
-        parts = rel_no_j2.parts
-
-        if parts[0] != "common":
-            continue
-
-        suffix = Path(*parts[1:])
-        emitted = str(suffix)
-
-        if emitted in theme_claimed:
-            continue  # theme-specific template overrides common
-
-        if emitted in mapping:
-            if mapping[emitted] == stem:
-                continue  # idempotent entry
-            raise ValueError(
-                f"Duplicate emitted destination {emitted!r}: "
-                f"'{mapping[emitted]}' and '{stem}'"
-            )
-        mapping[emitted] = stem
-        common_claimed.add(emitted)
+    for emitted, stem in _common_jinja_mapping_entries(template_root):
+        _claim_common_entry(mapping, theme_claimed, common_claimed, emitted, stem)
 
     # ------------------------------------------------------------------
     # Pass 3: All remaining .j2 templates (project_name, github, root-level)
     # ------------------------------------------------------------------
-    for template_path in sorted(template_root.rglob("*.j2")):
-        rel = template_path.relative_to(template_root)
-        stem = str(rel)
-        name_without_suffix = stem[:-3] if stem.endswith(".j2") else stem
-        rel_no_j2 = Path(name_without_suffix)
-        parts = rel_no_j2.parts
-
-        # Skip theme and common — handled in passes 1 and 2
-        if parts[0] in ("themes", "common"):
-            continue
-
-        # --- project_name/ templates (emitted as {package}/...) ---
-        if parts[0] == "project_name":
-            suffix = Path(*parts[1:])
-            emitted = str(Path(package_name) / suffix)
-        # --- github/ -> .github/ ---
-        elif parts[0] == "github":
-            suffix = Path(*parts[1:])
-            emitted = str(Path(".github") / suffix)
-        # --- Root-level templates ---
-        else:
-            emitted = name_without_suffix
-
-        # Skip if already claimed by a higher-priority template
-        if emitted in theme_claimed:
-            continue
-
-        # Root-level templates defer to common/ when they map to the same
-        # emitted project path (e.g. templates/admin/index.html.j2 exists
-        # both at root and under common/ — common wins).
-        if parts[0] not in ("project_name", "github") and emitted in common_claimed:
-            continue
-
-        if emitted in mapping:
-            if mapping[emitted] == stem:
-                continue  # idempotent entry
-            raise ValueError(
-                f"Duplicate emitted destination {emitted!r}: "
-                f"'{mapping[emitted]}' and '{stem}'"
-            )
-        mapping[emitted] = stem
+    for emitted, stem, parts in _remaining_jinja_mapping_entries(
+        template_root, package_name
+    ):
+        _claim_remaining_entry(
+            mapping, theme_claimed, common_claimed, emitted, stem, parts
+        )
 
     # ------------------------------------------------------------------
     # Pass 4: Non-Jinja theme files copied as-is
@@ -297,12 +332,7 @@ def get_generator_emission_mapping(
     for emitted_path, template_rel in _theme_non_jinja_emitted_paths(
         template_root, theme=theme
     ).items():
-        if emitted_path in mapping:
-            raise ValueError(
-                f"Duplicate emitted destination {emitted_path!r}: "
-                f"'{mapping[emitted_path]}' and '{template_rel}'"
-            )
-        mapping[emitted_path] = template_rel
+        _claim_emitted_destination(mapping, emitted_path, template_rel)
 
     # ------------------------------------------------------------------
     # Pass 5: Dynamically generated outputs

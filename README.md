@@ -348,7 +348,7 @@ cat .quickscale/quality_report.json   # Machine-readable
 cat .quickscale/quality_gate_status.json  # Baseline gate summary
 ```
 
-`make quality` always preserves the raw findings in the report artifacts above. The gate compares current findings against the tracked accepted-debt baseline in `scripts/quality_baseline.json` and passes when there are no warning or critical regressions beyond that baseline.
+`make quality` always preserves the raw findings in the report artifacts above. The gate compares current findings against the tracked accepted-debt baseline in `scripts/quality_baseline.json`, passes when there are no warning or critical regressions beyond that baseline, and always fails when any function is at cyclomatic complexity 21 or higher or any Python file reaches 800 lines, regardless of the baseline.
 
 **Detects:**
 - Dead code (unused imports, functions, variables)
@@ -356,7 +356,7 @@ cat .quickscale/quality_gate_status.json  # Baseline gate summary
 - Large files (500-799 lines warning, >=800 critical)
 - Code duplication (>6 similar lines)
 
-**Exit codes:** 0 (no warning or critical regressions beyond baseline), 1 (warning regressions, including baseline-load failures), 2 (critical regressions)
+**Exit codes:** 0 (no warning or critical regressions beyond baseline, no function at CC >= 21, no file at >= 800 lines), 1 (warning regressions, including baseline-load failures), 2 (critical regressions, or any function at CC >= 21 or file at >= 800 lines)
 
 ## Learn More
 

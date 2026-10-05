@@ -96,14 +96,8 @@ def _render_remaining_action(action: PendingManualAction) -> list[str]:
     return lines
 
 
-def render_handoff_prompt(report: BetaMigrationReport) -> str:
-    """Render the handoff prompt document for a completed fresh-first run."""
-    if report.recipient is None:
-        raise ValueError(
-            "A recipient snapshot is required to render the beta migration handoff prompt."
-        )
-    recipient_root = report.recipient.path
-
+def _render_handoff_header(report: BetaMigrationReport) -> list[str]:
+    """Render the run-identity header with its verification tallies."""
     lines: list[str] = [
         "# Beta migration handoff prompt",
         "",
@@ -132,19 +126,13 @@ def render_handoff_prompt(report: BetaMigrationReport) -> str:
     passed = sum(result.status == "passed" for result in report.verification_results)
     failed = sum(result.status == "failed" for result in report.verification_results)
     lines.append(f"- Verification: {passed} passed, {failed} failed")
+    return lines
 
-    lines += ["", "## What was migrated", "", "Steps completed:"]
-    lines += _render_bullet_lines([step.step for step in report.completed_steps])
 
-    carried_steps = [
-        step
-        for step in report.completed_steps
-        if step.step == "carry-project-app-migration-operations"
-    ]
-    if carried_steps:
-        lines += ["", "Carried migration operations:"]
-        lines += _render_bullet_lines([step.detail for step in carried_steps])
-
+def _render_changed_paths(
+    report: BetaMigrationReport, recipient_root: Path
+) -> list[str]:
+    """Render the recipient-relative changed-path section."""
     changed_paths = sorted(
         {
             relative
@@ -155,10 +143,14 @@ def render_handoff_prompt(report: BetaMigrationReport) -> str:
             if relative is not None
         }
     )
-    lines += ["", f"Recipient paths changed ({len(changed_paths)}):"]
+    lines = ["", f"Recipient paths changed ({len(changed_paths)}):"]
     lines += _render_bullet_lines([f"`{path}`" for path in changed_paths])
+    return lines
 
-    lines += ["", "Diff summary:"]
+
+def _render_diff_section(report: BetaMigrationReport) -> list[str]:
+    """Render the module, path-dependency, and frontend diff summary."""
+    lines = ["", "Diff summary:"]
     lines.append(f"- Module diff: {_render_diff_summary(report.module_diff)}")
     lines.append(
         f"- Path dependency diff: {_render_diff_summary(report.path_dependency_diff)}"
@@ -172,6 +164,27 @@ def render_handoff_prompt(report: BetaMigrationReport) -> str:
             f"donor-only={merge.donor_only or ['(none)']}, "
             f"version conflicts={merge.conflicts or ['(none)']}"
         )
+    return lines
+
+
+def _render_migrated_section(
+    report: BetaMigrationReport, recipient_root: Path
+) -> list[str]:
+    """Render the completed steps, changed paths, diffs, and verification."""
+    lines = ["", "## What was migrated", "", "Steps completed:"]
+    lines += _render_bullet_lines([step.step for step in report.completed_steps])
+
+    carried_steps = [
+        step
+        for step in report.completed_steps
+        if step.step == "carry-project-app-migration-operations"
+    ]
+    if carried_steps:
+        lines += ["", "Carried migration operations:"]
+        lines += _render_bullet_lines([step.detail for step in carried_steps])
+
+    lines += _render_changed_paths(report, recipient_root)
+    lines += _render_diff_section(report)
 
     if report.verification_results:
         lines += ["", "Verification commands:"]
@@ -181,8 +194,12 @@ def render_handoff_prompt(report: BetaMigrationReport) -> str:
                 for result in report.verification_results
             ]
         )
+    return lines
 
-    lines += ["", "## Remaining work", ""]
+
+def _render_trailing_sections(report: BetaMigrationReport) -> list[str]:
+    """Render the remaining-work, hard-constraint, and done-criteria sections."""
+    lines = ["", "## Remaining work", ""]
     if report.pending_manual_actions:
         for action in report.pending_manual_actions:
             lines += _render_remaining_action(action)
@@ -193,6 +210,20 @@ def render_handoff_prompt(report: BetaMigrationReport) -> str:
     lines += _render_bullet_lines(list(HARD_CONSTRAINTS))
     lines += ["", "## Done criteria", ""]
     lines += _render_bullet_lines(list(DONE_CRITERIA))
+    return lines
+
+
+def render_handoff_prompt(report: BetaMigrationReport) -> str:
+    """Render the handoff prompt document for a completed fresh-first run."""
+    if report.recipient is None:
+        raise ValueError(
+            "A recipient snapshot is required to render the beta migration handoff prompt."
+        )
+    recipient_root = report.recipient.path
+
+    lines = _render_handoff_header(report)
+    lines += _render_migrated_section(report, recipient_root)
+    lines += _render_trailing_sections(report)
 
     return "\n".join(lines) + "\n"
 

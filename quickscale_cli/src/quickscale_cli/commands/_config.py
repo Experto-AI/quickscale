@@ -345,6 +345,50 @@ def _abort_for_disabled_required_modules(qs_config: QuickScaleConfig) -> None:
     raise click.Abort()
 
 
+def _abort_for_module_option_issues(
+    module_name: str,
+    display_name: str,
+    options: Mapping[str, Any] | None,
+    hint: str,
+) -> None:
+    """Abort apply when a configured module's option values are incomplete."""
+    issues = _option_validation.validate_module_options(
+        _resolvers.load_module_manifest_with_fallback(module_name),
+        options or {},
+    )
+    if not issues:
+        return
+    click.secho(
+        f"\n❌ {display_name} module configuration is incomplete for apply:",
+        fg="red",
+        err=True,
+    )
+    for issue in issues:
+        click.echo(f"  • {issue}", err=True)
+    click.echo(hint, err=True)
+    raise click.Abort()
+
+
+def _echo_notifications_abort_hint(notifications_options: Mapping[str, Any]) -> None:
+    """Print the notifications abort hint for the configuration's target."""
+    notifications_adapter = _apply_support.notifications_adapter_module()
+    if notifications_adapter is not None and (
+        notifications_adapter.notifications_production_targeted(notifications_options)
+    ):
+        click.echo(
+            "\n💡 This configuration targets live Resend delivery, so apply refuses "
+            "to leave production on the console email backend. Complete the missing "
+            "notifications settings first.",
+            err=True,
+        )
+        return
+    click.echo(
+        "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+        "quickscale.yml to correct the notifications values.",
+        err=True,
+    )
+
+
 def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     """Validate actionable module-specific prerequisites before apply proceeds.
 
@@ -356,24 +400,13 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     _abort_for_disabled_required_modules(qs_config)
 
     if "orgs" in qs_config.modules:
-        orgs_issues = _option_validation.validate_module_options(
-            _resolvers.load_module_manifest_with_fallback("orgs"),
-            qs_config.modules["orgs"].options or {},
+        _abort_for_module_option_issues(
+            "orgs",
+            "Orgs",
+            qs_config.modules["orgs"].options,
+            "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+            "quickscale.yml to correct the orgs option values.",
         )
-        if orgs_issues:
-            click.secho(
-                "\n❌ Orgs module configuration is incomplete for apply:",
-                fg="red",
-                err=True,
-            )
-            for issue in orgs_issues:
-                click.echo(f"  • {issue}", err=True)
-            click.echo(
-                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-                "quickscale.yml to correct the orgs option values.",
-                err=True,
-            )
-            raise click.Abort()
 
     _abort_for_not_ready_modules(
         list(qs_config.modules.keys()), source="quickscale.yml"
@@ -381,70 +414,37 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
 
     storage_config = qs_config.modules.get("storage")
     if storage_config is not None:
-        storage_issues = _option_validation.validate_module_options(
-            _resolvers.load_module_manifest_with_fallback("storage"),
-            storage_config.options or {},
+        _abort_for_module_option_issues(
+            "storage",
+            "Storage",
+            storage_config.options,
+            "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+            "quickscale.yml to correct the storage option values. "
+            "Storage apply requires a valid backend and optional booleans.",
         )
-        if storage_issues:
-            click.secho(
-                "\n❌ Storage module configuration is incomplete for apply:",
-                fg="red",
-                err=True,
-            )
-            for issue in storage_issues:
-                click.echo(f"  • {issue}", err=True)
-            click.echo(
-                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-                "quickscale.yml to correct the storage option values. "
-                "Storage apply requires a valid backend and optional booleans.",
-                err=True,
-            )
-            raise click.Abort()
 
     backups_config = qs_config.modules.get("backups")
     if backups_config is not None:
-        backups_issues = _option_validation.validate_module_options(
-            _resolvers.load_module_manifest_with_fallback("backups"),
-            backups_config.options or {},
+        _abort_for_module_option_issues(
+            "backups",
+            "Backups",
+            backups_config.options,
+            "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+            "quickscale.yml to correct the backups option values.",
         )
-        if backups_issues:
-            click.secho(
-                "\n❌ Backups module configuration is incomplete for apply:",
-                fg="red",
-                err=True,
-            )
-            for issue in backups_issues:
-                click.echo(f"  • {issue}", err=True)
-            click.echo(
-                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-                "quickscale.yml to correct the backups option values.",
-                err=True,
-            )
-            raise click.Abort()
 
     social_config = qs_config.modules.get("social")
     if social_config is not None:
-        social_issues = _option_validation.validate_module_options(
-            _resolvers.load_module_manifest_with_fallback("social"),
-            social_config.options or {},
+        _abort_for_module_option_issues(
+            "social",
+            "Social",
+            social_config.options,
+            "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+            "quickscale.yml to correct the social settings. This phase wires the "
+            "managed backend transport, and the canonical public paths remain "
+            f"{_module_options.SOCIAL_LINK_TREE_PATH} and {_module_options.SOCIAL_EMBEDS_PATH} for fresh "
+            "showcase_react generations or manual theme adoption.",
         )
-        if social_issues:
-            click.secho(
-                "\n❌ Social module configuration is incomplete for apply:",
-                fg="red",
-                err=True,
-            )
-            for issue in social_issues:
-                click.echo(f"  • {issue}", err=True)
-            click.echo(
-                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-                "quickscale.yml to correct the social settings. This phase wires the "
-                "managed backend transport, and the canonical public paths remain "
-                f"{_module_options.SOCIAL_LINK_TREE_PATH} and {_module_options.SOCIAL_EMBEDS_PATH} for fresh "
-                "showcase_react generations or manual theme adoption.",
-                err=True,
-            )
-            raise click.Abort()
 
     notifications_config = qs_config.modules.get("notifications")
     if notifications_config is None:
@@ -465,22 +465,7 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     )
     for issue in notification_issues:
         click.echo(f"  • {issue}", err=True)
-    notifications_adapter = _apply_support.notifications_adapter_module()
-    if notifications_adapter is not None and (
-        notifications_adapter.notifications_production_targeted(notifications_options)
-    ):
-        click.echo(
-            "\n💡 This configuration targets live Resend delivery, so apply refuses "
-            "to leave production on the console email backend. Complete the missing "
-            "notifications settings first.",
-            err=True,
-        )
-    else:
-        click.echo(
-            "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-            "quickscale.yml to correct the notifications values.",
-            err=True,
-        )
+    _echo_notifications_abort_hint(notifications_options)
     raise click.Abort()
 
 

@@ -19,6 +19,24 @@
   },
   "complexity": {
     "allowed_functions": {
+      "quickscale_cli.commands._config._load_and_validate_config": {
+        "module": "quickscale_cli.commands._config",
+        "qualname": "_load_and_validate_config",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_cli.commands._context._attempt_provenance_repair_if_needed": {
+        "module": "quickscale_cli.commands._context",
+        "qualname": "_attempt_provenance_repair_if_needed",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_cli.commands._deploy_service_config._configure_env_vars_step": {
+        "module": "quickscale_cli.commands._deploy_service_config",
+        "qualname": "_configure_env_vars_step",
+        "type": "function",
+        "max_complexity": 12
+      },
       "quickscale_cli.commands._deploy_service_config._verify_deployment_step": {
         "module": "quickscale_cli.commands._deploy_service_config",
         "qualname": "_verify_deployment_step",
@@ -37,12 +55,11 @@
         "type": "function",
         "max_complexity": 11
       },
-      "quickscale_cli.commands.dr_commands.execute": {
-        "module": "quickscale_cli.commands.dr_commands",
-        "qualname": "execute",
+      "quickscale_cli.commands._generation._generate_with_existing_config": {
+        "module": "quickscale_cli.commands._generation",
+        "qualname": "_generate_with_existing_config",
         "type": "function",
-        "max_complexity": 35,
-        "reason": "SA231 closeout: CLI facade and legacy branching held at the measured complexity; reduction is tracked by the ratchet waivers."
+        "max_complexity": 16
       },
       "quickscale_cli.commands._module_embed._perform_module_embed": {
         "module": "quickscale_cli.commands._module_embed",
@@ -68,12 +85,11 @@
         "type": "function",
         "max_complexity": 13
       },
-      "quickscale_cli.commands._module_update.update": {
-        "module": "quickscale_cli.commands._module_update",
-        "qualname": "update",
+      "quickscale_cli.commands._module_update_io._roll_back_partial_module_update": {
+        "module": "quickscale_cli.commands._module_update_io",
+        "qualname": "_roll_back_partial_module_update",
         "type": "function",
-        "max_complexity": 33,
-        "reason": "SA231 closeout: CLI facade and legacy branching held at the measured complexity; reduction is tracked by the ratchet waivers."
+        "max_complexity": 12
       },
       "quickscale_cli.commands._plan_add._parse_add_module_selection": {
         "module": "quickscale_cli.commands._plan_add",
@@ -81,11 +97,59 @@
         "type": "function",
         "max_complexity": 11
       },
+      "quickscale_cli.commands._runtime._ensure_backups_gitignore_rules._impl": {
+        "module": "quickscale_cli.commands._runtime",
+        "qualname": "_ensure_backups_gitignore_rules._impl",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_cli.commands._state._build_project_state_snapshot": {
+        "module": "quickscale_cli.commands._state",
+        "qualname": "_build_project_state_snapshot",
+        "type": "function",
+        "max_complexity": 12
+      },
       "quickscale_cli.commands._status_diagnostics._state_file_has_consolidated_sections": {
         "module": "quickscale_cli.commands._status_diagnostics",
         "qualname": "_state_file_has_consolidated_sections",
         "type": "function",
         "max_complexity": 15
+      },
+      "quickscale_cli.commands._status_display._display_contract_vintage": {
+        "module": "quickscale_cli.commands._status_display",
+        "qualname": "_display_contract_vintage",
+        "type": "function",
+        "max_complexity": 12
+      },
+      "quickscale_cli.commands.apply_command.apply": {
+        "module": "quickscale_cli.commands.apply_command",
+        "qualname": "apply",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_cli.commands.contract_vintage.check_contract_vintage": {
+        "module": "quickscale_cli.commands.contract_vintage",
+        "qualname": "check_contract_vintage",
+        "type": "function",
+        "max_complexity": 12
+      },
+      "quickscale_cli.commands.contract_vintage.enforce_contract_vintage": {
+        "module": "quickscale_cli.commands.contract_vintage",
+        "qualname": "enforce_contract_vintage",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_cli.commands.module_config._prompt_for_manifest_option": {
+        "module": "quickscale_cli.commands.module_config",
+        "qualname": "_prompt_for_manifest_option",
+        "type": "function",
+        "max_complexity": 15
+      },
+      "quickscale_cli.utils._dependency_sync_ops.sync_project_module_dependencies": {
+        "module": "quickscale_cli.utils._dependency_sync_ops",
+        "qualname": "sync_project_module_dependencies",
+        "type": "function",
+        "max_complexity": 17
       },
       "quickscale_cli.utils._dependency_write._append_dependency_entries": {
         "module": "quickscale_cli.utils._dependency_write",
@@ -98,12 +162,6 @@
         "qualname": "_update_dependency_entries",
         "type": "function",
         "max_complexity": 13
-      },
-      "quickscale_cli.utils._dependency_sync_ops.sync_project_module_dependencies": {
-        "module": "quickscale_cli.utils._dependency_sync_ops",
-        "qualname": "sync_project_module_dependencies",
-        "type": "function",
-        "max_complexity": 17
       },
       "quickscale_cli.utils._railway_project._get_railway_variables_json": {
         "module": "quickscale_cli.utils._railway_project",
@@ -153,34 +211,9 @@
         "type": "method",
         "max_complexity": 11
       },
-      "quickscale_core.apply.ledger._parse_applied_state": {
-        "module": "quickscale_core.apply.ledger",
-        "qualname": "_parse_applied_state",
-        "type": "function",
-        "max_complexity": 29,
-        "reason": "SA231 closeout: ceiling recorded at the measured value; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_core.dr_engine._paths._snapshot_capture_is_complete": {
-        "module": "quickscale_core.dr_engine._paths",
-        "qualname": "_snapshot_capture_is_complete",
-        "type": "function",
-        "max_complexity": 17
-      },
-      "quickscale_core.dr_engine._sidecar._build_media_sync_manifest": {
-        "module": "quickscale_core.dr_engine._sidecar",
-        "qualname": "_build_media_sync_manifest",
-        "type": "function",
-        "max_complexity": 13
-      },
-      "quickscale_core.dr_engine._sidecar._capture_snapshot_sidecars": {
-        "module": "quickscale_core.dr_engine._sidecar",
-        "qualname": "_capture_snapshot_sidecars",
-        "type": "function",
-        "max_complexity": 12
-      },
-      "quickscale_core.dr_engine._sidecar._persist_snapshot_sidecar_payload": {
-        "module": "quickscale_core.dr_engine._sidecar",
-        "qualname": "_persist_snapshot_sidecar_payload",
+      "quickscale_core.apply.steps.env_sync.sync_env_example_blocks": {
+        "module": "quickscale_core.apply.steps.env_sync",
+        "qualname": "sync_env_example_blocks",
         "type": "function",
         "max_complexity": 11
       },
@@ -189,13 +222,6 @@
         "qualname": "_complete_capture_after_dump",
         "type": "function",
         "max_complexity": 12
-      },
-      "quickscale_core.dr_engine._capture._resume_backup_capture": {
-        "module": "quickscale_core.dr_engine._capture",
-        "qualname": "_resume_backup_capture",
-        "type": "function",
-        "max_complexity": 25,
-        "reason": "SA231 closeout: DR-engine orchestration held at the measured complexity; the split landed and reduction is tracked by the ratchet waivers."
       },
       "quickscale_core.dr_engine._capture.create_backup": {
         "module": "quickscale_core.dr_engine._capture",
@@ -215,9 +241,21 @@
         "type": "function",
         "max_complexity": 13
       },
+      "quickscale_core.dr_engine._paths._snapshot_capture_is_complete": {
+        "module": "quickscale_core.dr_engine._paths",
+        "qualname": "_snapshot_capture_is_complete",
+        "type": "function",
+        "max_complexity": 17
+      },
       "quickscale_core.dr_engine._policy._validate_policy_snapshot_internal": {
         "module": "quickscale_core.dr_engine._policy",
         "qualname": "_validate_policy_snapshot_internal",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_core.dr_engine._prune.prune_expired_backups": {
+        "module": "quickscale_core.dr_engine._prune",
+        "qualname": "prune_expired_backups",
         "type": "function",
         "max_complexity": 13
       },
@@ -227,16 +265,33 @@
         "type": "function",
         "max_complexity": 18
       },
-      "quickscale_core.dr_engine._report._build_snapshot_full_backup_contract": {
-        "module": "quickscale_core.dr_engine._report",
-        "qualname": "_build_snapshot_full_backup_contract",
-        "type": "function",
-        "max_complexity": 35,
-        "reason": "SA231 closeout: DR-engine orchestration held at the measured complexity; the split landed and reduction is tracked by the ratchet waivers."
-      },
       "quickscale_core.dr_engine._report.build_backup_snapshot_report": {
         "module": "quickscale_core.dr_engine._report",
         "qualname": "build_backup_snapshot_report",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_core.dr_engine._sidecar._build_media_sync_manifest": {
+        "module": "quickscale_core.dr_engine._sidecar",
+        "qualname": "_build_media_sync_manifest",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_core.dr_engine._sidecar._capture_snapshot_sidecars": {
+        "module": "quickscale_core.dr_engine._sidecar",
+        "qualname": "_capture_snapshot_sidecars",
+        "type": "function",
+        "max_complexity": 12
+      },
+      "quickscale_core.dr_engine._sidecar._persist_snapshot_sidecar_payload": {
+        "module": "quickscale_core.dr_engine._sidecar",
+        "qualname": "_persist_snapshot_sidecar_payload",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_core.dr_engine.primitives._resolve_postgres_connection_parameters": {
+        "module": "quickscale_core.dr_engine.primitives",
+        "qualname": "_resolve_postgres_connection_parameters",
         "type": "function",
         "max_complexity": 13
       },
@@ -258,302 +313,29 @@
         "type": "function",
         "max_complexity": 12
       },
-      "quickscale_core.generator.generator.get_generator_emission_mapping": {
-        "module": "quickscale_core.generator.generator",
-        "qualname": "get_generator_emission_mapping",
-        "type": "function",
-        "max_complexity": 26,
-        "reason": "SA231 closeout: ceiling recorded at the measured value; reduction is tracked by the ratchet waivers."
-      },
       "quickscale_core.manifest.derivation.build_schema_from_manifest": {
         "module": "quickscale_core.manifest.derivation",
         "qualname": "build_schema_from_manifest",
         "type": "function",
         "max_complexity": 13
       },
-      "quickscale_core.manifest.social_manifest.resolve_social_target": {
-        "module": "quickscale_core.manifest.social_manifest",
-        "qualname": "resolve_social_target",
+      "quickscale_core.manifest.loader_derivation_expressions._validate_wiring_contribution": {
+        "module": "quickscale_core.manifest.loader_derivation_expressions",
+        "qualname": "_validate_wiring_contribution",
         "type": "function",
         "max_complexity": 11
-      },
-      "quickscale_core.schema.config_schema._validate_modules_section": {
-        "module": "quickscale_core.schema.config_schema",
-        "qualname": "_validate_modules_section",
-        "type": "function",
-        "max_complexity": 12
-      },
-      "quickscale_core.schema.state_schema.StateManager": {
-        "module": "quickscale_core.schema.state_schema",
-        "qualname": "StateManager",
-        "type": "class",
-        "max_complexity": 11
-      },
-      "quickscale_core.schema.state_schema.StateManager.load": {
-        "module": "quickscale_core.schema.state_schema",
-        "qualname": "StateManager.load",
-        "type": "method",
-        "max_complexity": 34,
-        "reason": "SA231 closeout: ceiling recorded at the measured value; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_core.schema.state_schema.StateManager.save": {
-        "module": "quickscale_core.schema.state_schema",
-        "qualname": "StateManager.save",
-        "type": "method",
-        "max_complexity": 11
-      },
-      "quickscale_devtools.beta_migration.planning._prepare_beta_migration_report": {
-        "module": "quickscale_devtools.beta_migration.planning",
-        "qualname": "_prepare_beta_migration_report",
-        "type": "function",
-        "max_complexity": 11
-      },
-      "quickscale_devtools.beta_migration.toml_editing._locate_toml_section_bounds": {
-        "module": "quickscale_devtools.beta_migration.toml_editing",
-        "qualname": "_locate_toml_section_bounds",
-        "type": "function",
-        "max_complexity": 13
-      },
-      "quickscale_modules_analytics.services.configure_analytics_client": {
-        "module": "quickscale_modules_analytics.services",
-        "qualname": "configure_analytics_client",
-        "type": "function",
-        "max_complexity": 13
-      },
-      "quickscale_modules_analytics.services.get_distinct_id": {
-        "module": "quickscale_modules_analytics.services",
-        "qualname": "get_distinct_id",
-        "type": "function",
-        "max_complexity": 13
-      },
-      "quickscale_modules_crm.admin._CrmOrgAwareAdminMixin.save_model": {
-        "module": "quickscale_modules_crm.admin",
-        "qualname": "_CrmOrgAwareAdminMixin.save_model",
-        "type": "method",
-        "max_complexity": 12
-      },
-      "quickscale_modules_crm.serializers.DealDetailSerializer.validate": {
-        "module": "quickscale_modules_crm.serializers",
-        "qualname": "DealDetailSerializer.validate",
-        "type": "method",
-        "max_complexity": 13
-      },
-      "quickscale_modules_forms.serializers.FormSubmissionCreateSerializer.validate": {
-        "module": "quickscale_modules_forms.serializers",
-        "qualname": "FormSubmissionCreateSerializer.validate",
-        "type": "method",
-        "max_complexity": 19
-      },
-      "quickscale_modules_listings.services.create_published_listing_from_payload": {
-        "module": "quickscale_modules_listings.services",
-        "qualname": "create_published_listing_from_payload",
-        "type": "function",
-        "max_complexity": 16
-      },
-      "quickscale_modules_social._contracts.resolve_social_target": {
-        "module": "quickscale_modules_social._contracts",
-        "qualname": "resolve_social_target",
-        "type": "function",
-        "max_complexity": 11
-      },
-      "quickscale_modules_social.services.list_published_social_embeds": {
-        "module": "quickscale_modules_social.services",
-        "qualname": "list_published_social_embeds",
-        "type": "function",
-        "max_complexity": 11
-      },
-      "quickscale_modules_storage._helpers.list_s3_compatible_media_inventory": {
-        "module": "quickscale_modules_storage._helpers",
-        "qualname": "list_s3_compatible_media_inventory",
-        "type": "function",
-        "max_complexity": 18
-      },
-      "quickscale_modules_storage._helpers.validate_file_upload": {
-        "module": "quickscale_modules_storage._helpers",
-        "qualname": "validate_file_upload",
-        "type": "function",
-        "max_complexity": 12
-      },
-      "quickscale_modules_billing._payload._extract_price_id": {
-        "module": "quickscale_modules_billing._payload",
-        "qualname": "_extract_price_id",
-        "type": "function",
-        "max_complexity": 11
-      },
-      "quickscale_modules_billing._payload._extract_subscription_price_id": {
-        "module": "quickscale_modules_billing._payload",
-        "qualname": "_extract_subscription_price_id",
-        "type": "function",
-        "max_complexity": 15
-      },
-      "quickscale_modules_billing._webhooks._handle_checkout_session_completed_event": {
-        "module": "quickscale_modules_billing._webhooks",
-        "qualname": "_handle_checkout_session_completed_event",
-        "type": "function",
-        "max_complexity": 22,
-        "reason": "SA231 closeout: billing webhook and checkout branching held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_modules_billing._credits._has_matching_business_reference": {
-        "module": "quickscale_modules_billing._credits",
-        "qualname": "_has_matching_business_reference",
-        "type": "function",
-        "max_complexity": 11
-      },
-      "quickscale_modules_billing._subscription_events._upsert_subscription_from_payload": {
-        "module": "quickscale_modules_billing._subscription_events",
-        "qualname": "_upsert_subscription_from_payload",
-        "type": "function",
-        "max_complexity": 13
-      },
-      "quickscale_modules_billing._validation._validate_stripe_price_parity": {
-        "module": "quickscale_modules_billing._validation",
-        "qualname": "_validate_stripe_price_parity",
-        "type": "function",
-        "max_complexity": 14
-      },
-      "quickscale_modules_billing._customers.get_or_create_stripe_customer": {
-        "module": "quickscale_modules_billing._customers",
-        "qualname": "get_or_create_stripe_customer",
-        "type": "function",
-        "max_complexity": 11
-      },
-      "quickscale_modules_billing.services.handle_stripe_event": {
-        "module": "quickscale_modules_billing.services",
-        "qualname": "handle_stripe_event",
-        "type": "function",
-        "max_complexity": 12
-      },
-      "quickscale_cli.commands._context._attempt_provenance_repair_if_needed": {
-        "module": "quickscale_cli.commands._context",
-        "qualname": "_attempt_provenance_repair_if_needed",
-        "type": "function",
-        "max_complexity": 13
-      },
-      "quickscale_cli.commands._state._build_project_state_snapshot": {
-        "module": "quickscale_cli.commands._state",
-        "qualname": "_build_project_state_snapshot",
-        "type": "function",
-        "max_complexity": 12
-      },
-      "quickscale_cli.commands._finalize._display_next_steps_impl": {
-        "module": "quickscale_cli.commands._finalize",
-        "qualname": "_display_next_steps_impl",
-        "type": "function",
-        "max_complexity": 30,
-        "reason": "SA231 closeout: CLI facade and legacy branching held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_cli.commands._steps._execute_apply_steps_locked": {
-        "module": "quickscale_cli.commands._steps",
-        "qualname": "_execute_apply_steps_locked",
-        "type": "function",
-        "max_complexity": 51,
-        "reason": "SA231 closeout: CLI facade and legacy branching held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_cli.commands._generation._generate_with_existing_config": {
-        "module": "quickscale_cli.commands._generation",
-        "qualname": "_generate_with_existing_config",
-        "type": "function",
-        "max_complexity": 16
-      },
-      "quickscale_cli.commands._config._load_and_validate_config": {
-        "module": "quickscale_cli.commands._config",
-        "qualname": "_load_and_validate_config",
-        "type": "function",
-        "max_complexity": 11
-      },
-      "quickscale_cli.commands._runtime._normalize_backups_gitignore_entry": {
-        "module": "quickscale_cli.commands._runtime",
-        "qualname": "_normalize_backups_gitignore_entry",
-        "type": "function",
-        "max_complexity": 21,
-        "reason": "SA231 closeout: CLI facade and legacy branching held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_cli.commands._config._validate_module_prerequisites": {
-        "module": "quickscale_cli.commands._config",
-        "qualname": "_validate_module_prerequisites",
-        "type": "function",
-        "max_complexity": 23,
-        "reason": "SA231 closeout: CLI facade and legacy branching held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_cli.commands._deploy_service_config._configure_env_vars_step": {
-        "module": "quickscale_cli.commands._deploy_service_config",
-        "qualname": "_configure_env_vars_step",
-        "type": "function",
-        "max_complexity": 12
-      },
-      "quickscale_cli.commands._module_update_io._roll_back_partial_module_update": {
-        "module": "quickscale_cli.commands._module_update_io",
-        "qualname": "_roll_back_partial_module_update",
-        "type": "function",
-        "max_complexity": 12
-      },
-      "quickscale_cli.commands._status_display._display_contract_vintage": {
-        "module": "quickscale_cli.commands._status_display",
-        "qualname": "_display_contract_vintage",
-        "type": "function",
-        "max_complexity": 12
-      },
-      "quickscale_cli.commands.apply_command.apply": {
-        "module": "quickscale_cli.commands.apply_command",
-        "qualname": "apply",
-        "type": "function",
-        "max_complexity": 13
-      },
-      "quickscale_cli.commands.contract_vintage.check_contract_vintage": {
-        "module": "quickscale_cli.commands.contract_vintage",
-        "qualname": "check_contract_vintage",
-        "type": "function",
-        "max_complexity": 12
-      },
-      "quickscale_cli.commands.contract_vintage.enforce_contract_vintage": {
-        "module": "quickscale_cli.commands.contract_vintage",
-        "qualname": "enforce_contract_vintage",
-        "type": "function",
-        "max_complexity": 11
-      },
-      "quickscale_cli.commands.module_config._prompt_for_manifest_option": {
-        "module": "quickscale_cli.commands.module_config",
-        "qualname": "_prompt_for_manifest_option",
-        "type": "function",
-        "max_complexity": 15
-      },
-      "quickscale_core.apply.steps.env_sync.sync_env_example_blocks": {
-        "module": "quickscale_core.apply.steps.env_sync",
-        "qualname": "sync_env_example_blocks",
-        "type": "function",
-        "max_complexity": 11
-      },
-      "quickscale_core.dr_engine._prune.prune_expired_backups": {
-        "module": "quickscale_core.dr_engine._prune",
-        "qualname": "prune_expired_backups",
-        "type": "function",
-        "max_complexity": 13
-      },
-      "quickscale_core.dr_engine.primitives._resolve_postgres_connection_parameters": {
-        "module": "quickscale_core.dr_engine.primitives",
-        "qualname": "_resolve_postgres_connection_parameters",
-        "type": "function",
-        "max_complexity": 13
-      },
-      "quickscale_core.manifest.option_validation._cross_option_issues": {
-        "module": "quickscale_core.manifest.option_validation",
-        "qualname": "_cross_option_issues",
-        "type": "function",
-        "max_complexity": 42,
-        "reason": "SA231 closeout: ceiling recorded at the measured value; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_core.manifest.option_validation._single_value_issues": {
-        "module": "quickscale_core.manifest.option_validation",
-        "qualname": "_single_value_issues",
-        "type": "function",
-        "max_complexity": 28,
-        "reason": "SA231 closeout: ceiling recorded at the measured value; reduction is tracked by the ratchet waivers."
       },
       "quickscale_core.manifest.option_validation.collect_option_validation_issues": {
         "module": "quickscale_core.manifest.option_validation",
         "qualname": "collect_option_validation_issues",
         "type": "function",
         "max_complexity": 14
+      },
+      "quickscale_core.manifest.social_manifest.resolve_social_target": {
+        "module": "quickscale_core.manifest.social_manifest",
+        "qualname": "resolve_social_target",
+        "type": "function",
+        "max_complexity": 11
       },
       "quickscale_core.runtime.conventions._collect_field_messages": {
         "module": "quickscale_core.runtime.conventions",
@@ -573,24 +355,59 @@
         "type": "function",
         "max_complexity": 15
       },
+      "quickscale_core.schema.config_schema._validate_modules_section": {
+        "module": "quickscale_core.schema.config_schema",
+        "qualname": "_validate_modules_section",
+        "type": "function",
+        "max_complexity": 12
+      },
+      "quickscale_core.schema.state_schema.StateManager.save": {
+        "module": "quickscale_core.schema.state_schema",
+        "qualname": "StateManager.save",
+        "type": "method",
+        "max_complexity": 11
+      },
+      "quickscale_devtools.beta_migration.classification._classify_donor_files": {
+        "module": "quickscale_devtools.beta_migration.classification",
+        "qualname": "_classify_donor_files",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_devtools.beta_migration.classification._is_build_artifact": {
+        "module": "quickscale_devtools.beta_migration.classification",
+        "qualname": "_is_build_artifact",
+        "type": "function",
+        "max_complexity": 12
+      },
       "quickscale_devtools.beta_migration.compatibility._dockerfile_final_stage_settings_assignment": {
         "module": "quickscale_devtools.beta_migration.compatibility",
         "qualname": "_dockerfile_final_stage_settings_assignment",
         "type": "function",
         "max_complexity": 12
       },
-      "quickscale_devtools.beta_migration.compatibility._launcher_package_mismatch": {
-        "module": "quickscale_devtools.beta_migration.compatibility",
-        "qualname": "_launcher_package_mismatch",
-        "type": "function",
-        "max_complexity": 37,
-        "reason": "SA231 closeout: beta-migration parsing and validation held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
       "quickscale_devtools.beta_migration.compatibility._validate_runtime_compatibility": {
         "module": "quickscale_devtools.beta_migration.compatibility",
         "qualname": "_validate_runtime_compatibility",
         "type": "function",
-        "max_complexity": 20
+        "max_complexity": 16
+      },
+      "quickscale_devtools.beta_migration.design_layer._design_reference_failures": {
+        "module": "quickscale_devtools.beta_migration.design_layer",
+        "qualname": "_design_reference_failures",
+        "type": "function",
+        "max_complexity": 12
+      },
+      "quickscale_devtools.beta_migration.design_layer._donor_design_failures": {
+        "module": "quickscale_devtools.beta_migration.design_layer",
+        "qualname": "_donor_design_failures",
+        "type": "function",
+        "max_complexity": 15
+      },
+      "quickscale_devtools.beta_migration.design_layer._recipient_preserves_path": {
+        "module": "quickscale_devtools.beta_migration.design_layer",
+        "qualname": "_recipient_preserves_path",
+        "type": "function",
+        "max_complexity": 13
       },
       "quickscale_devtools.beta_migration.dockerfile._docker_segment_command_indexes": {
         "module": "quickscale_devtools.beta_migration.dockerfile",
@@ -614,7 +431,7 @@
         "module": "quickscale_devtools.beta_migration.identity",
         "qualname": "_build_identity_reconciliation_plan",
         "type": "function",
-        "max_complexity": 14
+        "max_complexity": 13
       },
       "quickscale_devtools.beta_migration.identity._replace_identity_text_for_path": {
         "module": "quickscale_devtools.beta_migration.identity",
@@ -622,25 +439,173 @@
         "type": "function",
         "max_complexity": 14
       },
+      "quickscale_devtools.beta_migration.package_json_editing._find_top_level_dependency_brace": {
+        "module": "quickscale_devtools.beta_migration.package_json_editing",
+        "qualname": "_find_top_level_dependency_brace",
+        "type": "function",
+        "max_complexity": 19
+      },
+      "quickscale_devtools.beta_migration.package_json_editing._plan_frontend_dependency_merge": {
+        "module": "quickscale_devtools.beta_migration.package_json_editing",
+        "qualname": "_plan_frontend_dependency_merge",
+        "type": "function",
+        "max_complexity": 14
+      },
+      "quickscale_devtools.beta_migration.package_json_editing._validate_fresh_first_frontend_dependency_targets": {
+        "module": "quickscale_devtools.beta_migration.package_json_editing",
+        "qualname": "_validate_fresh_first_frontend_dependency_targets",
+        "type": "function",
+        "max_complexity": 15
+      },
+      "quickscale_devtools.beta_migration.planning._fresh_first_actions": {
+        "module": "quickscale_devtools.beta_migration.planning",
+        "qualname": "_fresh_first_actions",
+        "type": "function",
+        "max_complexity": 20
+      },
+      "quickscale_devtools.beta_migration.planning._prepare_beta_migration_report": {
+        "module": "quickscale_devtools.beta_migration.planning",
+        "qualname": "_prepare_beta_migration_report",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_devtools.beta_migration.project_apps_label._app_config_bindings": {
+        "module": "quickscale_devtools.beta_migration.project_apps_label",
+        "qualname": "_app_config_bindings",
+        "type": "function",
+        "max_complexity": 15
+      },
+      "quickscale_devtools.beta_migration.project_apps_label._class_constant_attribute": {
+        "module": "quickscale_devtools.beta_migration.project_apps_label",
+        "qualname": "_class_constant_attribute",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_devtools.beta_migration.project_apps_label._default_app_config": {
+        "module": "quickscale_devtools.beta_migration.project_apps_label",
+        "qualname": "_default_app_config",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_devtools.beta_migration.project_apps_label._merge_mro_sequences": {
+        "module": "quickscale_devtools.beta_migration.project_apps_label",
+        "qualname": "_merge_mro_sequences",
+        "type": "function",
+        "max_complexity": 12
+      },
+      "quickscale_devtools.beta_migration.project_apps_label._resolve_class_constant": {
+        "module": "quickscale_devtools.beta_migration.project_apps_label",
+        "qualname": "_resolve_class_constant",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_analysis._class_attribute_declaration": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_analysis",
+        "qualname": "_class_attribute_declaration",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_analysis._evaluated_definition_names": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_analysis",
+        "qualname": "_evaluated_definition_names",
+        "type": "function",
+        "max_complexity": 14
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_analysis._migration_owned_operations": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_analysis",
+        "qualname": "_migration_owned_operations",
+        "type": "function",
+        "max_complexity": 17
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_analysis._module_executed_expression_nodes": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_analysis",
+        "qualname": "_module_executed_expression_nodes",
+        "type": "function",
+        "max_complexity": 17
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_analysis._module_executed_statements": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_analysis",
+        "qualname": "_module_executed_statements",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_analysis._module_level_bindings": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_analysis",
+        "qualname": "_module_level_bindings",
+        "type": "function",
+        "max_complexity": 16
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_analysis._validate_migration_dependencies": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_analysis",
+        "qualname": "_validate_migration_dependencies",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_analysis._validate_operations_declaration": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_analysis",
+        "qualname": "_validate_operations_declaration",
+        "type": "function",
+        "max_complexity": 16
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_carry._plan_carried_migrations": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_carry",
+        "qualname": "_plan_carried_migrations",
+        "type": "function",
+        "max_complexity": 17
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_carry._regenerated_migration_terminal": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_carry",
+        "qualname": "_regenerated_migration_terminal",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_devtools.beta_migration.project_apps_migration_carry._render_carried_migration": {
+        "module": "quickscale_devtools.beta_migration.project_apps_migration_carry",
+        "qualname": "_render_carried_migration",
+        "type": "function",
+        "max_complexity": 18
+      },
+      "quickscale_devtools.beta_migration.project_apps_ops._installed_apps_entries": {
+        "module": "quickscale_devtools.beta_migration.project_apps_ops",
+        "qualname": "_installed_apps_entries",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_devtools.beta_migration.project_apps_ops._mount_project_app_urls": {
+        "module": "quickscale_devtools.beta_migration.project_apps_ops",
+        "qualname": "_mount_project_app_urls",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_devtools.beta_migration.project_apps_ops._urls_helper_names": {
+        "module": "quickscale_devtools.beta_migration.project_apps_ops",
+        "qualname": "_urls_helper_names",
+        "type": "function",
+        "max_complexity": 18
+      },
+      "quickscale_devtools.beta_migration.project_apps_preflight._validate_project_app_targets": {
+        "module": "quickscale_devtools.beta_migration.project_apps_preflight",
+        "qualname": "_validate_project_app_targets",
+        "type": "function",
+        "max_complexity": 15
+      },
+      "quickscale_devtools.beta_migration.regeneration._plan_beta_migration_iterate": {
+        "module": "quickscale_devtools.beta_migration.regeneration",
+        "qualname": "_plan_beta_migration_iterate",
+        "type": "function",
+        "max_complexity": 16
+      },
+      "quickscale_devtools.beta_migration.regeneration._validate_iterate_recipient_root": {
+        "module": "quickscale_devtools.beta_migration.regeneration",
+        "qualname": "_validate_iterate_recipient_root",
+        "type": "function",
+        "max_complexity": 16
+      },
       "quickscale_devtools.beta_migration.runtime_commands._extract_launcher_runtime_commands": {
         "module": "quickscale_devtools.beta_migration.runtime_commands",
         "qualname": "_extract_launcher_runtime_commands",
         "type": "function",
         "max_complexity": 20
-      },
-      "quickscale_devtools.beta_migration.runtime_commands._parse_runtime_command_line": {
-        "module": "quickscale_devtools.beta_migration.runtime_commands",
-        "qualname": "_parse_runtime_command_line",
-        "type": "function",
-        "max_complexity": 46,
-        "reason": "SA231 closeout: beta-migration parsing and validation held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_devtools.beta_migration.settings_facade._canonical_read_env_var": {
-        "module": "quickscale_devtools.beta_migration.settings_facade",
-        "qualname": "_canonical_read_env_var",
-        "type": "function",
-        "max_complexity": 21,
-        "reason": "SA231 closeout: beta-migration parsing and validation held at the measured complexity; reduction is tracked by the ratchet waivers."
       },
       "quickscale_devtools.beta_migration.settings_facade._facade_imports": {
         "module": "quickscale_devtools.beta_migration.settings_facade",
@@ -654,12 +619,23 @@
         "type": "function",
         "max_complexity": 20
       },
+      "quickscale_devtools.beta_migration.settings_facade._inline_contract_span": {
+        "module": "quickscale_devtools.beta_migration.settings_facade",
+        "qualname": "_inline_contract_span",
+        "type": "function",
+        "max_complexity": 17
+      },
+      "quickscale_devtools.beta_migration.settings_facade._sole_default_selection_entry": {
+        "module": "quickscale_devtools.beta_migration.settings_facade",
+        "qualname": "_sole_default_selection_entry",
+        "type": "function",
+        "max_complexity": 15
+      },
       "quickscale_devtools.beta_migration.settings_facade._static_string_expression": {
         "module": "quickscale_devtools.beta_migration.settings_facade",
         "qualname": "_static_string_expression",
         "type": "function",
-        "max_complexity": 27,
-        "reason": "SA231 closeout: beta-migration parsing and validation held at the measured complexity; reduction is tracked by the ratchet waivers."
+        "max_complexity": 14
       },
       "quickscale_devtools.beta_migration.shell._active_launcher_line": {
         "module": "quickscale_devtools.beta_migration.shell",
@@ -673,13 +649,6 @@
         "type": "function",
         "max_complexity": 20
       },
-      "quickscale_devtools.beta_migration.shell._validate_persistent_environment_mutation": {
-        "module": "quickscale_devtools.beta_migration.shell",
-        "qualname": "_validate_persistent_environment_mutation",
-        "type": "function",
-        "max_complexity": 46,
-        "reason": "SA231 closeout: beta-migration parsing and validation held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
       "quickscale_devtools.beta_migration.start_sh._start_sh_line_is_unconditional_terminator": {
         "module": "quickscale_devtools.beta_migration.start_sh",
         "qualname": "_start_sh_line_is_unconditional_terminator",
@@ -690,15 +659,13 @@
         "module": "quickscale_devtools.beta_migration.start_sh",
         "qualname": "_start_sh_logical_lines",
         "type": "function",
-        "max_complexity": 25,
-        "reason": "SA231 closeout: beta-migration parsing and validation held at the measured complexity; reduction is tracked by the ratchet waivers."
+        "max_complexity": 14
       },
       "quickscale_devtools.beta_migration.start_sh._start_sh_reachable_logical_lines": {
         "module": "quickscale_devtools.beta_migration.start_sh",
         "qualname": "_start_sh_reachable_logical_lines",
         "type": "function",
-        "max_complexity": 26,
-        "reason": "SA231 closeout: beta-migration parsing and validation held at the measured complexity; reduction is tracked by the ratchet waivers."
+        "max_complexity": 12
       },
       "quickscale_devtools.beta_migration.start_sh._start_sh_segments": {
         "module": "quickscale_devtools.beta_migration.start_sh",
@@ -724,24 +691,17 @@
         "type": "function",
         "max_complexity": 13
       },
-      "quickscale_devtools.beta_migration.start_sh._validate_start_sh_segment": {
-        "module": "quickscale_devtools.beta_migration.start_sh",
-        "qualname": "_validate_start_sh_segment",
-        "type": "function",
-        "max_complexity": 30,
-        "reason": "SA231 closeout: beta-migration parsing and validation held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
       "quickscale_devtools.beta_migration.toml_editing._insert_missing_path_dependencies": {
         "module": "quickscale_devtools.beta_migration.toml_editing",
         "qualname": "_insert_missing_path_dependencies",
         "type": "function",
         "max_complexity": 11
       },
-      "quickscale_devtools.handoff_prompt.render_handoff_prompt": {
-        "module": "quickscale_devtools.handoff_prompt",
-        "qualname": "render_handoff_prompt",
+      "quickscale_devtools.beta_migration.toml_editing._locate_toml_section_bounds": {
+        "module": "quickscale_devtools.beta_migration.toml_editing",
+        "qualname": "_locate_toml_section_bounds",
         "type": "function",
-        "max_complexity": 15
+        "max_complexity": 13
       },
       "quickscale_modules_analytics.checks.check_analytics_settings": {
         "module": "quickscale_modules_analytics.checks",
@@ -749,9 +709,27 @@
         "type": "function",
         "max_complexity": 17
       },
+      "quickscale_modules_analytics.services.configure_analytics_client": {
+        "module": "quickscale_modules_analytics.services",
+        "qualname": "configure_analytics_client",
+        "type": "function",
+        "max_complexity": 13
+      },
+      "quickscale_modules_analytics.services.get_distinct_id": {
+        "module": "quickscale_modules_analytics.services",
+        "qualname": "get_distinct_id",
+        "type": "function",
+        "max_complexity": 13
+      },
       "quickscale_modules_billing._checkout._create_checkout_session": {
         "module": "quickscale_modules_billing._checkout",
         "qualname": "_create_checkout_session",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_modules_billing._credits._has_matching_business_reference": {
+        "module": "quickscale_modules_billing._credits",
+        "qualname": "_has_matching_business_reference",
         "type": "function",
         "max_complexity": 11
       },
@@ -761,11 +739,29 @@
         "type": "function",
         "max_complexity": 11
       },
+      "quickscale_modules_billing._customers.get_or_create_stripe_customer": {
+        "module": "quickscale_modules_billing._customers",
+        "qualname": "get_or_create_stripe_customer",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_modules_billing._payload._extract_price_id": {
+        "module": "quickscale_modules_billing._payload",
+        "qualname": "_extract_price_id",
+        "type": "function",
+        "max_complexity": 11
+      },
       "quickscale_modules_billing._payload._extract_subscription_period_bounds": {
         "module": "quickscale_modules_billing._payload",
         "qualname": "_extract_subscription_period_bounds",
         "type": "function",
         "max_complexity": 14
+      },
+      "quickscale_modules_billing._payload._extract_subscription_price_id": {
+        "module": "quickscale_modules_billing._payload",
+        "qualname": "_extract_subscription_price_id",
+        "type": "function",
+        "max_complexity": 15
       },
       "quickscale_modules_billing._removal.reconcile_purchase_checkouts_for_removal": {
         "module": "quickscale_modules_billing._removal",
@@ -779,32 +775,17 @@
         "type": "function",
         "max_complexity": 19
       },
-      "quickscale_modules_billing._subscription_checkout._create_subscription_checkout_session": {
-        "module": "quickscale_modules_billing._subscription_checkout",
-        "qualname": "_create_subscription_checkout_session",
-        "type": "function",
-        "max_complexity": 22,
-        "reason": "SA231 closeout: billing webhook and checkout branching held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_modules_billing._subscription_checkout._reconcile_subscription_checkout": {
-        "module": "quickscale_modules_billing._subscription_checkout",
-        "qualname": "_reconcile_subscription_checkout",
-        "type": "function",
-        "max_complexity": 28,
-        "reason": "SA231 closeout: billing webhook and checkout branching held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
       "quickscale_modules_billing._subscription_checkout._reuse_live_subscription_checkout_url": {
         "module": "quickscale_modules_billing._subscription_checkout",
         "qualname": "_reuse_live_subscription_checkout_url",
         "type": "function",
         "max_complexity": 16
       },
-      "quickscale_modules_billing._subscription_events._apply_subscription_payload": {
+      "quickscale_modules_billing._subscription_events._upsert_subscription_from_payload": {
         "module": "quickscale_modules_billing._subscription_events",
-        "qualname": "_apply_subscription_payload",
+        "qualname": "_upsert_subscription_from_payload",
         "type": "function",
-        "max_complexity": 31,
-        "reason": "SA231 closeout: billing webhook and checkout branching held at the measured complexity; reduction is tracked by the ratchet waivers."
+        "max_complexity": 13
       },
       "quickscale_modules_billing._subscription_mutations._persist_subscription_provider_snapshot": {
         "module": "quickscale_modules_billing._subscription_mutations",
@@ -817,6 +798,12 @@
         "qualname": "_validate_completed_checkout_provider_identity",
         "type": "function",
         "max_complexity": 13
+      },
+      "quickscale_modules_billing._validation._validate_stripe_price_parity": {
+        "module": "quickscale_modules_billing._validation",
+        "qualname": "_validate_stripe_price_parity",
+        "type": "function",
+        "max_complexity": 14
       },
       "quickscale_modules_billing._webhooks._handle_checkout_session_expired_event": {
         "module": "quickscale_modules_billing._webhooks",
@@ -836,25 +823,77 @@
         "type": "function",
         "max_complexity": 15
       },
-      "quickscale_modules_billing._webhooks_invoice._apply_invoice_payment_failed_event": {
-        "module": "quickscale_modules_billing._webhooks_invoice",
-        "qualname": "_apply_invoice_payment_failed_event",
-        "type": "function",
-        "max_complexity": 23,
-        "reason": "SA231 closeout: billing webhook and checkout branching held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
-      "quickscale_modules_billing._webhooks_invoice._finalize_invoice_paid_event": {
-        "module": "quickscale_modules_billing._webhooks_invoice",
-        "qualname": "_finalize_invoice_paid_event",
-        "type": "function",
-        "max_complexity": 29,
-        "reason": "SA231 closeout: billing webhook and checkout branching held at the measured complexity; reduction is tracked by the ratchet waivers."
-      },
       "quickscale_modules_billing._webhooks_invoice._process_invoice_paid_event": {
         "module": "quickscale_modules_billing._webhooks_invoice",
         "qualname": "_process_invoice_paid_event",
         "type": "function",
         "max_complexity": 11
+      },
+      "quickscale_modules_billing.services.handle_stripe_event": {
+        "module": "quickscale_modules_billing.services",
+        "qualname": "handle_stripe_event",
+        "type": "function",
+        "max_complexity": 12
+      },
+      "quickscale_modules_crm.admin._CrmOrgAwareAdminMixin.save_model": {
+        "module": "quickscale_modules_crm.admin",
+        "qualname": "_CrmOrgAwareAdminMixin.save_model",
+        "type": "method",
+        "max_complexity": 12
+      },
+      "quickscale_modules_crm.serializers.DealDetailSerializer.validate": {
+        "module": "quickscale_modules_crm.serializers",
+        "qualname": "DealDetailSerializer.validate",
+        "type": "method",
+        "max_complexity": 13
+      },
+      "quickscale_modules_forms.serializers.FormSubmissionCreateSerializer.validate": {
+        "module": "quickscale_modules_forms.serializers",
+        "qualname": "FormSubmissionCreateSerializer.validate",
+        "type": "method",
+        "max_complexity": 19
+      },
+      "quickscale_modules_listings.services.create_published_listing_from_payload": {
+        "module": "quickscale_modules_listings.services",
+        "qualname": "create_published_listing_from_payload",
+        "type": "function",
+        "max_complexity": 16
+      },
+      "quickscale_modules_orgs._current_org_priming._make_priming_execute_wrapper.wrapper": {
+        "module": "quickscale_modules_orgs._current_org_priming",
+        "qualname": "_make_priming_execute_wrapper.wrapper",
+        "type": "function",
+        "max_complexity": 12
+      },
+      "quickscale_modules_orgs.middleware.TenantMiddleware._is_org_management_path": {
+        "module": "quickscale_modules_orgs.middleware",
+        "qualname": "TenantMiddleware._is_org_management_path",
+        "type": "method",
+        "max_complexity": 14
+      },
+      "quickscale_modules_social._contracts.resolve_social_target": {
+        "module": "quickscale_modules_social._contracts",
+        "qualname": "resolve_social_target",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_modules_social.services.list_published_social_embeds": {
+        "module": "quickscale_modules_social.services",
+        "qualname": "list_published_social_embeds",
+        "type": "function",
+        "max_complexity": 11
+      },
+      "quickscale_modules_storage._helpers.list_s3_compatible_media_inventory": {
+        "module": "quickscale_modules_storage._helpers",
+        "qualname": "list_s3_compatible_media_inventory",
+        "type": "function",
+        "max_complexity": 18
+      },
+      "quickscale_modules_storage._helpers.validate_file_upload": {
+        "module": "quickscale_modules_storage._helpers",
+        "qualname": "validate_file_upload",
+        "type": "function",
+        "max_complexity": 12
       },
       "quickscale_modules_storage.checks.check_vendor_secrets": {
         "module": "quickscale_modules_storage.checks",
@@ -868,6 +907,6 @@
     "allowed_files": {}
   },
   "duplication": {
-    "allowed_blocks": 57
+    "allowed_blocks": 63
   }
 }

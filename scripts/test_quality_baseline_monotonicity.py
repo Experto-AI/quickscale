@@ -5178,8 +5178,8 @@ class TestShellSubprocess:
         stub.write_text(
             "#!/bin/bash\n"
             "# stub find -- emit one line for a baseline-tracked file\n"
-            "# with ample headroom, then exit 0.\n"
-            'echo "2000\tquickscale_core/src/quickscale_core/dr_engine/orchestration.py"\n'
+            "# below the 800-line hard gate, then exit 0.\n"
+            'echo "700\tquickscale_core/src/quickscale_core/dr_engine/orchestration.py"\n'
             "exit 0\n",
             encoding="utf-8",
         )
@@ -5237,14 +5237,14 @@ class TestShellSubprocess:
         Return a temp baseline/ledger pair listing the find-stub file.
 
         The checked-in baseline lists no file (none reaches 800 lines), so a
-        success run whose find stub reports a 2,000-line file needs a fixture
+        success run whose find stub reports a 700-line file needs a fixture
         entry plus its matching waiver.
         """
         baseline = json.loads((_REPO_ROOT / "scripts" / "quality_baseline.json").read_text())
         baseline["file_length"] = {
             "allowed_files": {
                 "quickscale_core/src/quickscale_core/dr_engine/orchestration.py": {
-                    "max_lines": 2897,
+                    "max_lines": 700,
                     "reason": "Shell-subprocess fixture",
                 }
             }
@@ -5262,7 +5262,7 @@ class TestShellSubprocess:
                     "file_length:quickscale_core/src/quickscale_core/dr_engine/orchestration.py"
                 ),
                 "base_ceiling": 0,
-                "ceiling": 2897,
+                "ceiling": 700,
                 "owner": "test@example.com",
                 "reason": "Shell-subprocess fixture",
                 "expires_on": future,
@@ -5571,10 +5571,11 @@ class TestShellSubprocess:
             report_keys = set(report_data.keys())
             missing_report = expected_report_keys - report_keys
             assert not missing_report, f"Report JSON missing expected keys: {missing_report}"
-            # The find fixture emits a 2,000-line Python file. It remains visible
-            # in raw diagnostics but contributes no baseline regression or gate
-            # failure.
-            assert report_data["summary"]["large_files_error"] == 1
+            # The find fixture emits a 700-line Python file: a warning-tier
+            # large file that contributes no baseline regression and no gate
+            # failure (SA242 keeps 500-799 lines a warning).
+            assert report_data["summary"]["large_files_warning"] == 1
+            assert report_data["summary"]["large_files_error"] == 0
             assert report_data["regressions"]["large_files"]["critical_count"] == 0
             assert report_data["regressions"]["total_count"] == 0
 
@@ -5804,13 +5805,13 @@ class TestShellSubprocess:
             # Isolate the fixture difference to the pinned increases: empty the
             # dead-code and duplication sections whose freeze entries this ledger
             # does not cover. The file-length entry below lists the find stub's
-            # 2,000-line file, with the matching waiver in the ledger.
+            # 700-line file, with the matching waiver in the ledger.
             higher_baseline["dead_code"]["allowed_messages"] = []
             higher_baseline["duplication"] = {"allowed_blocks": 0}
             higher_baseline["file_length"] = {
                 "allowed_files": {
                     "quickscale_core/src/quickscale_core/dr_engine/orchestration.py": {
-                        "max_lines": 2897,
+                        "max_lines": 700,
                         "reason": "Nonempty diagnostic shell test",
                     }
                 }
@@ -5819,14 +5820,14 @@ class TestShellSubprocess:
             # difference against the merge base is exactly these three
             # increases, independent of any waivers the repository carries.
             pinned_keys = (
-                "quickscale_core.schema.config_schema._validate_modules_section",
-                "quickscale_core.schema.state_schema.StateManager.load",
-                "quickscale_core.generator.generator.get_generator_emission_mapping",
+                "quickscale_cli.commands._deploy_service_config._configure_env_vars_step",
+                "quickscale_core.apply.ledger.RecoveryLedger",
+                "quickscale_core.dr_engine._report.build_backup_snapshot_report",
             )
             bumped = dict(higher_baseline["complexity"]["allowed_functions"])
             bumped[pinned_keys[0]] = dict(bumped[pinned_keys[0]], max_complexity=13)
-            bumped[pinned_keys[1]] = dict(bumped[pinned_keys[1]], max_complexity=30)
-            bumped[pinned_keys[2]] = dict(bumped[pinned_keys[2]], max_complexity=37)
+            bumped[pinned_keys[1]] = dict(bumped[pinned_keys[1]], max_complexity=14)
+            bumped[pinned_keys[2]] = dict(bumped[pinned_keys[2]], max_complexity=14)
             higher_baseline["complexity"]["allowed_functions"] = {
                 key: bumped[key] for key in pinned_keys
             }
@@ -5840,10 +5841,10 @@ class TestShellSubprocess:
                     {
                         "waiver_id": "W-NE-CPX",
                         "entry_key": (
-                            "complexity:quickscale_core.schema.config_schema"
-                            "._validate_modules_section"
+                            "complexity:quickscale_cli.commands._deploy_service_config"
+                            "._configure_env_vars_step"
                         ),
-                        "base_ceiling": 12,
+                        "base_ceiling": 0,
                         "ceiling": 13,
                         "owner": "test@example.com",
                         "reason": "Nonempty diagnostic shell test",
@@ -5852,11 +5853,9 @@ class TestShellSubprocess:
                     },
                     {
                         "waiver_id": "W-NE-CPX2",
-                        "entry_key": (
-                            "complexity:quickscale_core.schema.state_schema.StateManager.load"
-                        ),
-                        "base_ceiling": 28,
-                        "ceiling": 30,
+                        "entry_key": ("complexity:quickscale_core.apply.ledger.RecoveryLedger"),
+                        "base_ceiling": 12,
+                        "ceiling": 14,
                         "owner": "test@example.com",
                         "reason": "Nonempty diagnostic shell test",
                         "expires_on": future,
@@ -5865,11 +5864,11 @@ class TestShellSubprocess:
                     {
                         "waiver_id": "W-NE-CPX3",
                         "entry_key": (
-                            "complexity:quickscale_core.generator.generator"
-                            ".get_generator_emission_mapping"
+                            "complexity:quickscale_core.dr_engine._report"
+                            ".build_backup_snapshot_report"
                         ),
-                        "base_ceiling": 35,
-                        "ceiling": 37,
+                        "base_ceiling": 12,
+                        "ceiling": 14,
                         "owner": "test@example.com",
                         "reason": "Nonempty diagnostic shell test",
                         "expires_on": future,
@@ -5882,7 +5881,7 @@ class TestShellSubprocess:
                             "dr_engine/orchestration.py"
                         ),
                         "base_ceiling": 0,
-                        "ceiling": 2897,
+                        "ceiling": 700,
                         "owner": "test@example.com",
                         "reason": "Nonempty diagnostic shell test",
                         "expires_on": future,

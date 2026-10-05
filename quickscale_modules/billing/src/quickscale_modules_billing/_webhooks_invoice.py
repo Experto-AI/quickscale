@@ -221,6 +221,138 @@ def _process_invoice_paid_event(
     )
 
 
+def _reload_invoice_subscription(subscription: Subscription) -> Subscription:
+    """Reload the subscription for update, or fail closed when it vanished."""
+    try:
+        return (
+            Subscription.all_objects.select_for_update()
+            .select_related("organization", "plan")
+            .get(pk=subscription.pk)
+        )
+    except Subscription.DoesNotExist as exc:
+        raise BillingWebhookError(
+            "The resolved invoice subscription disappeared before local "
+            "finalization; automatic reconciliation was refused."
+        ) from exc
+
+
+def _invoice_identity_changed(
+    subscription: Subscription,
+    expected_identity: SubscriptionProviderIdentity,
+    expected_customer_id: str,
+) -> bool:
+    """Return whether the reloaded subscription no longer matches its identity."""
+    current_customer_id = str(subscription.stripe_customer_id or "").strip()
+    return (
+        subscription.pk != expected_identity.subscription_pk
+        or subscription.organization_id != expected_identity.organization_id
+        or str(subscription.stripe_subscription_id or "").strip()
+        != expected_identity.stripe_subscription_id
+        or current_customer_id != expected_customer_id
+    )
+
+
+def _invoice_conflicts_with_identity(
+    *,
+    subscription_id: str,
+    customer_id: str,
+    expected_identity: SubscriptionProviderIdentity,
+    expected_customer_id: str,
+) -> bool:
+    """Return whether the invoice's provider identity conflicts with the stored one."""
+    incoming_subscription_id = subscription_id.strip()
+    incoming_customer_id = customer_id.strip()
+    return bool(
+        incoming_subscription_id
+        and expected_identity.stripe_subscription_id
+        and incoming_subscription_id != expected_identity.stripe_subscription_id
+    ) or bool(
+        incoming_customer_id
+        and expected_customer_id
+        and incoming_customer_id != expected_customer_id
+    )
+
+
+def _require_unchanged_invoice_identity(
+    subscription: Subscription,
+    *,
+    expected_identity: SubscriptionProviderIdentity,
+    expected_customer_id: str,
+    subscription_id: str,
+    customer_id: str,
+) -> None:
+    """Refuse a paid invoice whose subscription identity changed underneath it."""
+    if _invoice_identity_changed(
+        subscription, expected_identity, expected_customer_id
+    ) or _invoice_conflicts_with_identity(
+        subscription_id=subscription_id,
+        customer_id=customer_id,
+        expected_identity=expected_identity,
+        expected_customer_id=expected_customer_id,
+    ):
+        raise BillingWebhookError(
+            "The resolved invoice subscription changed provider identity before "
+            "local finalization; automatic reconciliation was refused."
+        )
+
+
+def _update_existing_invoice_identity(
+    subscription: Subscription,
+    *,
+    organization: Any,
+    customer_id: str,
+    subscription_id: str,
+) -> None:
+    """Refresh the existing subscription's provider identity fields."""
+    update_fields: list[str] = []
+    if customer_id.strip() and subscription.stripe_customer_id != customer_id.strip():
+        subscription.stripe_customer_id = customer_id.strip()
+        update_fields.append("stripe_customer_id")
+    if (
+        subscription_id.strip()
+        and subscription.stripe_subscription_id != subscription_id.strip()
+    ):
+        subscription.stripe_subscription_id = subscription_id.strip()
+        update_fields.append("stripe_subscription_id")
+    if update_fields:
+        subscription.save(update_fields=update_fields)
+    if customer_id.strip():
+        _sync_organization_customer_id(organization, customer_id.strip())
+
+
+def _update_invoice_subscription_identity(
+    subscription: Subscription,
+    *,
+    plan: Plan,
+    organization: Any,
+    user: Any,
+    customer_id: str,
+    subscription_id: str,
+) -> Subscription:
+    """Activate an incomplete subscription or refresh its identity fields."""
+    if subscription.status in {
+        Subscription.Status.INCOMPLETE,
+        Subscription.Status.PAST_DUE,
+    } or (
+        subscription_id and not str(subscription.stripe_subscription_id or "").strip()
+    ):
+        return _activate_subscription_for_paid_invoice(
+            subscription=subscription,
+            plan=plan,
+            organization=organization,
+            user=user,
+            customer_id=customer_id,
+            stripe_subscription_id=subscription_id,
+        )
+    _update_existing_invoice_identity(
+        subscription,
+        organization=organization,
+        customer_id=customer_id,
+        subscription_id=subscription_id,
+    )
+    return subscription
+
+
 def _finalize_invoice_paid_event(
     *,
     event_payload: Mapping[str, Any],
@@ -241,87 +373,28 @@ def _finalize_invoice_paid_event(
         mutation_organization = _locks._lock_organization_for_billing_mutation(
             mutation_organization
         )
-        try:
-            subscription = (
-                Subscription.all_objects.select_for_update()
-                .select_related("organization", "plan")
-                .get(pk=subscription.pk)
-            )
-        except Subscription.DoesNotExist as exc:
-            raise BillingWebhookError(
-                "The resolved invoice subscription disappeared before local "
-                "finalization; automatic reconciliation was refused."
-            ) from exc
-        current_customer_id = str(subscription.stripe_customer_id or "").strip()
-        identity_changed = (
-            subscription.pk != expected_identity.subscription_pk
-            or subscription.organization_id != expected_identity.organization_id
-            or str(subscription.stripe_subscription_id or "").strip()
-            != expected_identity.stripe_subscription_id
-            or current_customer_id != expected_customer_id
+        subscription = _reload_invoice_subscription(subscription)
+        _require_unchanged_invoice_identity(
+            subscription,
+            expected_identity=expected_identity,
+            expected_customer_id=expected_customer_id,
+            subscription_id=subscription_id,
+            customer_id=customer_id,
         )
-        incoming_subscription_id = subscription_id.strip()
-        incoming_customer_id = customer_id.strip()
-        invoice_conflicts_with_identity = bool(
-            incoming_subscription_id
-            and expected_identity.stripe_subscription_id
-            and incoming_subscription_id != expected_identity.stripe_subscription_id
-        ) or bool(
-            incoming_customer_id
-            and expected_customer_id
-            and incoming_customer_id != expected_customer_id
-        )
-        if identity_changed or invoice_conflicts_with_identity:
-            raise BillingWebhookError(
-                "The resolved invoice subscription changed provider identity before "
-                "local finalization; automatic reconciliation was refused."
-            )
         # Re-resolve user if backfill resolved the subscription.
         if resolved_user is None:
             resolved_user = _resolve_user_for_invoice(invoice_payload=invoice_payload)
 
-        if subscription.status in {
-            Subscription.Status.INCOMPLETE,
-            Subscription.Status.PAST_DUE,
-        } or (
-            subscription_id
-            and not str(subscription.stripe_subscription_id or "").strip()
-        ):
-            subscription = _activate_subscription_for_paid_invoice(
-                subscription=subscription,
-                plan=plan,
-                organization=mutation_organization,
-                user=resolved_user,
-                customer_id=customer_id,
-                stripe_subscription_id=subscription_id,
-            )
-        else:
-            update_fields: list[str] = []
-            if (
-                customer_id.strip()
-                and subscription.stripe_customer_id != customer_id.strip()
-            ):
-                subscription.stripe_customer_id = customer_id.strip()
-                update_fields.append("stripe_customer_id")
-            if (
-                subscription_id.strip()
-                and subscription.stripe_subscription_id != subscription_id.strip()
-            ):
-                subscription.stripe_subscription_id = subscription_id.strip()
-                update_fields.append("stripe_subscription_id")
-            if update_fields:
-                subscription.save(update_fields=update_fields)
-            if customer_id.strip():
-                _sync_organization_customer_id(
-                    mutation_organization,
-                    customer_id.strip(),
-                )
-
+        subscription = _update_invoice_subscription_identity(
+            subscription,
+            plan=plan,
+            organization=mutation_organization,
+            user=resolved_user,
+            customer_id=customer_id,
+            subscription_id=subscription_id,
+        )
         organization = subscription.organization
-
-        user = resolved_user
-        if user is None and subscription is not None:
-            user = subscription.user
+        user = resolved_user if resolved_user is not None else subscription.user
 
         reference_data: dict[str, Any] = {
             "invoice_id": invoice_id,
@@ -365,6 +438,77 @@ def _handle_invoice_payment_failed_event(
         )
 
 
+def _subscription_for_missing_failed_invoice(
+    *,
+    invoice_payload: Mapping[str, Any],
+    resolved_user: Any | None,
+    resolved_organization: Any,
+) -> Subscription:
+    """Build the subscription row a failed invoice implies when none exists."""
+    if resolved_user is None and resolved_organization is None:
+        raise BillingWebhookError(
+            "Could not resolve a local user for the Stripe invoice."
+        )
+    price_id = _extract_price_id(invoice_payload)
+    plan = Plan.objects.filter(stripe_price_id=price_id).order_by("pk").first()
+    if plan is None:
+        raise BillingWebhookError(f"No billing plan matches Stripe price {price_id}.")
+    return Subscription(
+        user=resolved_user,
+        organization=resolved_organization,
+        plan=plan,
+    )
+
+
+def _require_failed_invoice_identity(
+    subscription: Subscription, *, customer_id: str, subscription_id: str
+) -> None:
+    """Refuse a failed invoice that conflicts with the stored provider identity."""
+    existing_customer_id = str(subscription.stripe_customer_id or "").strip()
+    existing_subscription_id = str(subscription.stripe_subscription_id or "").strip()
+    if (
+        customer_id and existing_customer_id and customer_id != existing_customer_id
+    ) or (
+        subscription_id
+        and existing_subscription_id
+        and subscription_id != existing_subscription_id
+    ):
+        raise BillingWebhookError(
+            "The failed invoice conflicts with the current subscription provider "
+            "identity; automatic replacement was refused."
+        )
+
+
+def _apply_failed_subscription_fields(
+    subscription: Subscription,
+    resolved_user: Any | None,
+    resolved_organization: Any,
+    *,
+    customer_id: str,
+    subscription_id: str,
+) -> Subscription:
+    """Mark the subscription past due and refresh its identity fields."""
+    subscription.status = Subscription.Status.PAST_DUE
+    update_fields: list[str] = ["status"]
+    if customer_id and subscription.stripe_customer_id != customer_id:
+        subscription.stripe_customer_id = customer_id
+        update_fields.append("stripe_customer_id")
+    if subscription_id and subscription.stripe_subscription_id != subscription_id:
+        subscription.stripe_subscription_id = subscription_id
+        update_fields.append("stripe_subscription_id")
+    if (
+        resolved_organization is not None
+        and subscription.organization_id != resolved_organization.pk
+    ):
+        subscription.organization = resolved_organization
+        update_fields.append("organization")
+    if resolved_user is not None and subscription.user_id != resolved_user.pk:
+        subscription.user = resolved_user
+        update_fields.append("user")
+    subscription.save(update_fields=update_fields)
+    return subscription
+
+
 def _apply_invoice_payment_failed_event(
     *,
     invoice_payload: Mapping[str, Any],
@@ -386,58 +530,26 @@ def _apply_invoice_payment_failed_event(
         )
 
         if subscription is None:
-            if resolved_user is None and resolved_organization is None:
-                raise BillingWebhookError(
-                    "Could not resolve a local user for the Stripe invoice."
-                )
-            price_id = _extract_price_id(invoice_payload)
-            plan = Plan.objects.filter(stripe_price_id=price_id).order_by("pk").first()
-            if plan is None:
-                raise BillingWebhookError(
-                    f"No billing plan matches Stripe price {price_id}."
-                )
-            subscription = Subscription(
-                user=resolved_user,
-                organization=resolved_organization,
-                plan=plan,
+            subscription = _subscription_for_missing_failed_invoice(
+                invoice_payload=invoice_payload,
+                resolved_user=resolved_user,
+                resolved_organization=resolved_organization,
             )
 
-        subscription.status = Subscription.Status.PAST_DUE
-        update_fields: list[str] = ["status"]
         customer_id = str(invoice_payload.get("customer") or "").strip()
         subscription_id = _invoice_subscription_id(invoice_payload)
-        existing_customer_id = str(subscription.stripe_customer_id or "").strip()
-        existing_subscription_id = str(
-            subscription.stripe_subscription_id or ""
-        ).strip()
-        if (
-            customer_id and existing_customer_id and customer_id != existing_customer_id
-        ) or (
-            subscription_id
-            and existing_subscription_id
-            and subscription_id != existing_subscription_id
-        ):
-            raise BillingWebhookError(
-                "The failed invoice conflicts with the current subscription provider "
-                "identity; automatic replacement was refused."
-            )
-        if customer_id and subscription.stripe_customer_id != customer_id:
-            subscription.stripe_customer_id = customer_id
-            update_fields.append("stripe_customer_id")
-        if subscription_id and subscription.stripe_subscription_id != subscription_id:
-            subscription.stripe_subscription_id = subscription_id
-            update_fields.append("stripe_subscription_id")
-        if (
-            resolved_organization is not None
-            and subscription.organization_id != resolved_organization.pk
-        ):
-            subscription.organization = resolved_organization
-            update_fields.append("organization")
-        if resolved_user is not None and subscription.user_id != resolved_user.pk:
-            subscription.user = resolved_user
-            update_fields.append("user")
-        subscription.save(update_fields=update_fields)
-        return subscription
+        _require_failed_invoice_identity(
+            subscription,
+            customer_id=customer_id,
+            subscription_id=subscription_id,
+        )
+        return _apply_failed_subscription_fields(
+            subscription,
+            resolved_user,
+            resolved_organization,
+            customer_id=customer_id,
+            subscription_id=subscription_id,
+        )
 
 
 def _activate_subscription_for_paid_invoice(

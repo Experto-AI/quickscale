@@ -323,8 +323,8 @@ def _sync_billing_env_example(
     return outcome.success
 
 
-def _normalize_backups_gitignore_entry(local_directory: str) -> str | None:
-    """Return a safe repo-relative ignore entry for backup artifacts."""
+def _safe_backups_relative_path(local_directory: str) -> str | None:
+    """Return the slash-normalized relative path before ``./`` stripping."""
     if any(
         ord(character) < 32 or ord(character) == 127 for character in local_directory
     ):
@@ -340,11 +340,27 @@ def _normalize_backups_gitignore_entry(local_directory: str) -> str | None:
         return None
     if candidate.startswith("/") or candidate.startswith("~"):
         return None
+    return candidate
+
+
+def _normalized_backups_path(local_directory: str) -> str | None:
+    """Return a normalized repo-relative path, or None when it is unsafe."""
+    candidate = _safe_backups_relative_path(local_directory)
+    if candidate is None:
+        return None
 
     normalized = candidate
     while normalized.startswith("./"):
         normalized = normalized[2:]
     if not normalized or normalized.startswith("/"):
+        return None
+    return normalized
+
+
+def _normalize_backups_gitignore_entry(local_directory: str) -> str | None:
+    """Return a safe repo-relative ignore entry for backup artifacts."""
+    normalized = _normalized_backups_path(local_directory)
+    if normalized is None:
         return None
 
     path = PurePosixPath(normalized)

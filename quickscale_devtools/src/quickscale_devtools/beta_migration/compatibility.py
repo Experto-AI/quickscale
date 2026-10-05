@@ -88,6 +88,150 @@ def _dockerfile_final_stage_settings_assignment(
     return assignment
 
 
+def _launcher_layout_lines(
+    launcher_path: Path, launcher_text: str
+) -> list[tuple[int, str]]:
+    """Return the launcher lines the compatibility checks evaluate."""
+    if launcher_path.name == "start.sh":
+        return [
+            (line_number, line)
+            for line_number, line, reachable, _unconditional in (
+                _start_sh_reachable_logical_lines(launcher_path, launcher_text)
+            )
+            if reachable
+        ]
+    return list(enumerate(launcher_text.splitlines(), start=1))
+
+
+def _start_sh_package_line_failures(
+    active_line: str,
+    *,
+    line_number: int,
+    launcher_path: Path,
+    expected_package: str,
+    referenced_packages: list[str],
+) -> list[str]:
+    """Return the start.sh package-reference failures for one line."""
+    failures: list[str] = []
+    matches = list(_START_SH_PACKAGE_REFERENCE.finditer(active_line))
+    referenced_packages.extend(match.group(1) for match in matches)
+    if active_line.count(".wsgi") != len(matches):
+        failures.append(
+            f"{launcher_path}:{line_number} contains an unresolved or dynamic "
+            ".wsgi target"
+        )
+    for match in matches:
+        if match.group(1) != expected_package:
+            failures.append(
+                f"{launcher_path}:{line_number} references {match.group(1)}; "
+                f"expected {expected_package}"
+            )
+    return failures
+
+
+def _docker_runtime_directive_failure(
+    active_line: str, *, line_number: int, launcher_path: Path
+) -> tuple[bool, str | None]:
+    """Return (directive present, failure) for one non-continued Dockerfile line."""
+    directive_match = re.match(
+        r"^\s*(CMD|ENTRYPOINT)\s+(.+?)\s*$",
+        active_line,
+        re.IGNORECASE,
+    )
+    if directive_match is None:
+        return False, None
+    directive = directive_match.group(1).upper()
+    payload = directive_match.group(2)
+    try:
+        command = json.loads(payload)
+    except json.JSONDecodeError:
+        command = None
+    if directive != "CMD" or command != ["./start.sh"]:
+        return True, (
+            f"{launcher_path}:{line_number} must use the canonical "
+            'CMD ["./start.sh"] runtime entrypoint'
+        )
+    return True, None
+
+
+def _gunicorn_line_failures(
+    active_line: str,
+    *,
+    line_number: int,
+    launcher_path: Path,
+    expected_package: str,
+) -> tuple[int, list[str]]:
+    """Return (invocations, failures) for one start.sh gunicorn line."""
+    if launcher_path.name != "start.sh" or not re.search(r"\bgunicorn\b", active_line):
+        return 0, []
+    tokens = _shell_tokens(launcher_path, line_number, active_line)
+    if tokens[-1:] == ["\\"]:
+        tokens.pop()
+    gunicorn_indices = [
+        index for index, token in enumerate(tokens) if token == _GUNICORN_SHELL_WORD
+    ]
+    failures: list[str] = []
+    for index in gunicorn_indices:
+        if (
+            index + 1 >= len(tokens)
+            or re.fullmatch(
+                rf"{re.escape(expected_package)}\.wsgi(?::application)?",
+                tokens[index + 1],
+            )
+            is None
+        ):
+            rendered_target = (
+                tokens[index + 1] if index + 1 < len(tokens) else "(missing)"
+            )
+            failures.append(
+                f"{launcher_path}:{line_number} has unresolved or incorrect gunicorn "
+                f"target {rendered_target!r}; expected {expected_package}.wsgi:application"
+            )
+    return len(gunicorn_indices), failures
+
+
+def _launcher_summary_failures(
+    launcher_path: Path,
+    launcher_text: str,
+    expected_package: str,
+    *,
+    referenced_packages: list[str],
+    gunicorn_invocations: int,
+    docker_runtime_directives: int,
+) -> list[str]:
+    """Return the launcher-level failures the per-line checks cannot see."""
+    failures: list[str] = []
+    if launcher_path.name == "start.sh" and not referenced_packages:
+        failures.append(f"{launcher_path} contains no static .wsgi package reference")
+    if launcher_path.name == "start.sh" and gunicorn_invocations != 1:
+        failures.append(
+            f"{launcher_path} must contain exactly one static gunicorn invocation; "
+            f"found {gunicorn_invocations}"
+        )
+    if launcher_path.name == "Dockerfile" and docker_runtime_directives != 1:
+        failures.append(
+            f"{launcher_path} must contain exactly one canonical Docker runtime "
+            f"CMD directive; found {docker_runtime_directives}"
+        )
+    if launcher_path.name == "Dockerfile":
+        settings_assignment = _dockerfile_final_stage_settings_assignment(
+            launcher_path, launcher_text
+        )
+        expected_settings = f"{expected_package}.settings.production"
+        if settings_assignment is None:
+            failures.append(
+                f"{launcher_path} final stage must define ENV "
+                f"DJANGO_SETTINGS_MODULE={expected_settings}"
+            )
+        elif settings_assignment[1] != expected_settings:
+            line_number, actual_settings = settings_assignment
+            failures.append(
+                f"{launcher_path}:{line_number} final-stage DJANGO_SETTINGS_MODULE "
+                f"is {actual_settings!r}; expected {expected_settings!r}"
+            )
+    return failures
+
+
 def _launcher_package_mismatch(
     launcher_path: Path,
     launcher_text: str,
@@ -101,18 +245,7 @@ def _launcher_package_mismatch(
     docker_runtime_directives = 0
     docker_continuation = False
 
-    if launcher_path.name == "start.sh":
-        launcher_lines = [
-            (line_number, line)
-            for line_number, line, reachable, _unconditional in _start_sh_reachable_logical_lines(
-                launcher_path, launcher_text
-            )
-            if reachable
-        ]
-    else:
-        launcher_lines = list(enumerate(launcher_text.splitlines(), start=1))
-
-    for line_number, line in launcher_lines:
+    for line_number, line in _launcher_layout_lines(launcher_path, launcher_text):
         active_line = _active_launcher_line(launcher_path, line)
         if not active_line.strip():
             continue
@@ -120,96 +253,42 @@ def _launcher_package_mismatch(
         if launcher_path.name == "Dockerfile":
             docker_continuation = active_line.rstrip().endswith("\\")
         if launcher_path.name == "start.sh":
-            matches = list(_START_SH_PACKAGE_REFERENCE.finditer(active_line))
-            referenced_packages.extend(match.group(1) for match in matches)
-            if active_line.count(".wsgi") != len(matches):
-                mismatches.append(
-                    f"{launcher_path}:{line_number} contains an unresolved or dynamic "
-                    ".wsgi target"
+            mismatches.extend(
+                _start_sh_package_line_failures(
+                    active_line,
+                    line_number=line_number,
+                    launcher_path=launcher_path,
+                    expected_package=expected_package,
+                    referenced_packages=referenced_packages,
                 )
-            for match in matches:
-                if match.group(1) != expected_package:
-                    mismatches.append(
-                        f"{launcher_path}:{line_number} references {match.group(1)}; "
-                        f"expected {expected_package}"
-                    )
-
+            )
         if launcher_path.name == "Dockerfile" and not continued_docker_instruction:
-            directive_match = re.match(
-                r"^\s*(CMD|ENTRYPOINT)\s+(.+?)\s*$",
-                active_line,
-                re.IGNORECASE,
+            directive_present, failure = _docker_runtime_directive_failure(
+                active_line, line_number=line_number, launcher_path=launcher_path
             )
-            if directive_match is not None:
+            if directive_present:
                 docker_runtime_directives += 1
-                directive = directive_match.group(1).upper()
-                payload = directive_match.group(2)
-                try:
-                    command = json.loads(payload)
-                except json.JSONDecodeError:
-                    command = None
-                if directive != "CMD" or command != ["./start.sh"]:
-                    mismatches.append(
-                        f"{launcher_path}:{line_number} must use the canonical "
-                        'CMD ["./start.sh"] runtime entrypoint'
-                    )
+            if failure is not None:
+                mismatches.append(failure)
+        invocation_count, failures = _gunicorn_line_failures(
+            active_line,
+            line_number=line_number,
+            launcher_path=launcher_path,
+            expected_package=expected_package,
+        )
+        gunicorn_invocations += invocation_count
+        mismatches.extend(failures)
 
-        if launcher_path.name != "start.sh" or not re.search(
-            r"\bgunicorn\b", active_line
-        ):
-            continue
-        tokens = _shell_tokens(launcher_path, line_number, active_line)
-        if tokens[-1:] == ["\\"]:
-            tokens.pop()
-        gunicorn_indices = [
-            index for index, token in enumerate(tokens) if token == _GUNICORN_SHELL_WORD
-        ]
-        gunicorn_invocations += len(gunicorn_indices)
-        for index in gunicorn_indices:
-            if (
-                index + 1 >= len(tokens)
-                or re.fullmatch(
-                    rf"{re.escape(expected_package)}\.wsgi(?::application)?",
-                    tokens[index + 1],
-                )
-                is None
-            ):
-                rendered_target = (
-                    tokens[index + 1] if index + 1 < len(tokens) else "(missing)"
-                )
-                mismatches.append(
-                    f"{launcher_path}:{line_number} has unresolved or incorrect gunicorn "
-                    f"target {rendered_target!r}; expected {expected_package}.wsgi:application"
-                )
-
-    if launcher_path.name == "start.sh" and not referenced_packages:
-        mismatches.append(f"{launcher_path} contains no static .wsgi package reference")
-    if launcher_path.name == "start.sh" and gunicorn_invocations != 1:
-        mismatches.append(
-            f"{launcher_path} must contain exactly one static gunicorn invocation; "
-            f"found {gunicorn_invocations}"
+    mismatches.extend(
+        _launcher_summary_failures(
+            launcher_path,
+            launcher_text,
+            expected_package,
+            referenced_packages=referenced_packages,
+            gunicorn_invocations=gunicorn_invocations,
+            docker_runtime_directives=docker_runtime_directives,
         )
-    if launcher_path.name == "Dockerfile" and docker_runtime_directives != 1:
-        mismatches.append(
-            f"{launcher_path} must contain exactly one canonical Docker runtime "
-            f"CMD directive; found {docker_runtime_directives}"
-        )
-    if launcher_path.name == "Dockerfile":
-        settings_assignment = _dockerfile_final_stage_settings_assignment(
-            launcher_path, launcher_text
-        )
-        expected_settings = f"{expected_package}.settings.production"
-        if settings_assignment is None:
-            mismatches.append(
-                f"{launcher_path} final stage must define ENV "
-                f"DJANGO_SETTINGS_MODULE={expected_settings}"
-            )
-        elif settings_assignment[1] != expected_settings:
-            line_number, actual_settings = settings_assignment
-            mismatches.append(
-                f"{launcher_path}:{line_number} final-stage DJANGO_SETTINGS_MODULE "
-                f"is {actual_settings!r}; expected {expected_settings!r}"
-            )
+    )
     if not mismatches:
         return None
     return "; ".join(mismatches)

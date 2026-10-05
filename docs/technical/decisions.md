@@ -2475,11 +2475,12 @@ authority — the merge-base blob from Git — so the growth stays visible.
 - ❌ No migration or other historical artifact may be allowlisted, threshold-
   exempted, or gate-exempted to avoid this check (see
   §[Migration-Squash Decision](#migration-squash-decision) rule 5)
-- ✅ Per-file line ceilings are part of the ratchet again, under the
-  `file_length` section (SA231): every entry carries its `max_lines` ceiling
-  and the reason it is listed. Line counts are baseline entries, monotonicity
-  keys, waiver keys, regressions, and gate exit-status inputs for files at or
-  above 800 lines; the retired `large_files` name stays ignored. See
+- ✅ Per-file line ceilings remain part of the baseline schema under the
+  `file_length` section: every entry carries its `max_lines` ceiling and the
+  reason it is listed, and remains a monotonicity and waiver key. SA242
+  supersedes the acceptance behavior: a file at or above 800 lines fails
+  `make quality` independent of the baseline, so a listed file no longer
+  passes. The retired `large_files` name stays ignored. See
   [File-Size Metric Policy](#file-size-metric-policy). The baseline sections
   are `dead_code`, `complexity`, `file_length`, and `duplication`.
 
@@ -2506,13 +2507,12 @@ ceiling-index construction, and merge-base resolution precedence are owned by
 
 ### File-Size Metric Policy {#file-size-metric-policy}
 
-**Rule:** Files at or above 800 lines are gated by the quality ratchet. The
-baseline's `file_length` section lists each accepted file with its `max_lines`
-ceiling and the reason it is listed; `make quality` fails when a file at or
-above 800 lines is unlisted or grows past its ceiling, and the merge-base
-monotonicity gate treats each ceiling as a ratchet key. Files below 800 lines
-remain advisory diagnostics. The retired `large_files.max_lines` name is never
-indexed.
+**Rule:** Files at or above 800 lines always fail `make quality`: each is
+reported as an error naming the file and its line count, independent of the
+accepted baseline. The baseline's `file_length` section and its merge-base
+monotonicity keys remain the accepted schema and compatibility surface, but a
+listed file no longer passes the gate. Files 500-799 lines remain advisory
+diagnostics. The retired `large_files.max_lines` name is never indexed.
 
 **One-time re-baseline (SA231).** The closing batch re-tightened the baseline
 to the measured tree and recorded each increase against the merge base as a
