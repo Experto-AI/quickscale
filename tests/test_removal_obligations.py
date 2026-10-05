@@ -33,8 +33,8 @@ from quickscale_modules_orgs.removal import (
 DECLARED_PROJECT_OBLIGATION = OrganizationRemovalObligation(
     name="sa213-project-provider-state",
     purge_action=RemovalAction.REFUSE,
-    account_delete_action=RemovalAction.SKIP,
-    account_delete_skip_reason="Account deletion retains the organization's records.",
+    anonymize_action=RemovalAction.SKIP,
+    anonymize_skip_reason="Account deletion retains the organization's records.",
     external_provider_fields=(
         ExternalProviderField(
             "provider_id_app.projectproviderrecord",
@@ -47,8 +47,8 @@ DECLARED_PROJECT_OBLIGATION = OrganizationRemovalObligation(
 DECLARED_ORGANIZATION_OBLIGATION = OrganizationRemovalObligation(
     name="sa213-organization-provider-state",
     purge_action=RemovalAction.REFUSE,
-    account_delete_action=RemovalAction.SKIP,
-    account_delete_skip_reason="Account deletion retains the organization row.",
+    anonymize_action=RemovalAction.SKIP,
+    anonymize_skip_reason="Account deletion retains the organization row.",
     external_provider_fields=(
         ExternalProviderField(
             "quickscale_orgs.organization",
@@ -277,8 +277,8 @@ def test_purge_deletes_with_an_empty_declared_organization_field(
 UNSCOPED_DECLARATION = OrganizationRemovalObligation(
     name="sa213-unscoped-provider-state",
     purge_action=RemovalAction.REFUSE,
-    account_delete_action=RemovalAction.SKIP,
-    account_delete_skip_reason="Account deletion retains the rows.",
+    anonymize_action=RemovalAction.SKIP,
+    anonymize_skip_reason="Account deletion retains the rows.",
     external_provider_fields=(
         ExternalProviderField("quickscale_billing.plan", "stripe_price_id"),
     ),
@@ -323,8 +323,8 @@ def test_purge_fails_closed_on_an_uninspectable_declared_field(
 DECLARED_CACHE_OBLIGATION = OrganizationRemovalObligation(
     name="sa213-project-cache-state",
     purge_action=RemovalAction.INVALIDATE,
-    account_delete_action=RemovalAction.SKIP,
-    account_delete_skip_reason="Account deletion retains the organization's rows.",
+    anonymize_action=RemovalAction.SKIP,
+    anonymize_skip_reason="Account deletion retains the organization's rows.",
 )
 
 
@@ -371,8 +371,8 @@ def test_purge_runs_a_declared_cache_hook(declared_cache_hook: list) -> None:
 DECLARED_UNKNOWN_LABEL_OBLIGATION = OrganizationRemovalObligation(
     name="sa213-unknown-label-state",
     purge_action=RemovalAction.REFUSE,
-    account_delete_action=RemovalAction.SKIP,
-    account_delete_skip_reason="Account deletion retains the organization's rows.",
+    anonymize_action=RemovalAction.SKIP,
+    anonymize_skip_reason="Account deletion retains the organization's rows.",
     external_provider_fields=(
         ExternalProviderField(
             "quickscale_orgs.organizaton",
@@ -492,7 +492,7 @@ def test_structured_values_that_are_not_mappings_fail_closed() -> None:
 GUARDED_UNKNOWN_LABEL_DECLARATION = OrganizationRemovalObligation(
     name=BILLING_PROVIDER_STATE,
     purge_action=RemovalAction.REFUSE,
-    account_delete_action=RemovalAction.RECONCILE,
+    anonymize_action=RemovalAction.RECONCILE,
     external_provider_fields=(
         ExternalProviderField(
             "quickscale_billing.misspeled",
@@ -546,8 +546,8 @@ def test_purge_resolves_boundary_guarded_labels_too(
 UNDISCHARGEABLE_DECLARATION = OrganizationRemovalObligation(
     name="sa213-undischargeable-state",
     purge_action=RemovalAction.RECONCILE,
-    account_delete_action=RemovalAction.SKIP,
-    account_delete_skip_reason="Account deletion retains the organization's rows.",
+    anonymize_action=RemovalAction.SKIP,
+    anonymize_skip_reason="Account deletion retains the organization's rows.",
 )
 
 

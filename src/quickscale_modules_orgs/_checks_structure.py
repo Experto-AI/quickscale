@@ -350,8 +350,8 @@ def _route_mismatch_messages(obligation: OrganizationRemovalObligation) -> list[
 def _reconcile_mismatch_message(
     obligation: OrganizationRemovalObligation,
 ) -> Error | None:
-    """Report account-delete reconciliation whose declared fields have no guard."""
-    if obligation.account_delete_action is not RemovalAction.RECONCILE:
+    """Report anonymize reconciliation whose declared fields have no guard."""
+    if obligation.anonymize_action is not RemovalAction.RECONCILE:
         return None
     if all(
         provider_field.boundary_guarded
@@ -360,10 +360,10 @@ def _reconcile_mismatch_message(
         return None
     return Error(
         f"Organization-removal obligation {obligation.name!r} "
-        "declares 'reconcile' for the 'account-delete' boundary but "
+        "declares 'reconcile' for the 'anonymize' boundary but "
         "declares provider fields no boundary guard reconciles.",
         hint=(
-            "Declare SKIP when account deletion retains the rows, or "
+            "Declare SKIP when the boundary retains the rows, or "
             "mark the fields boundary_guarded when a boundary guard "
             "decides their liveness."
         ),

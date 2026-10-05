@@ -84,8 +84,8 @@ class QuickscaleOrgsConfig(AppConfig):
             OrganizationRemovalObligation(
                 name=OWNED_TENANT_ROWS,
                 purge_action=RemovalAction.DELETE,
-                account_delete_action=RemovalAction.SKIP,
-                account_delete_skip_reason=(
+                anonymize_action=RemovalAction.SKIP,
+                anonymize_skip_reason=(
                     "Account deletion removes the person while retaining "
                     "organization data."
                 ),
@@ -93,13 +93,13 @@ class QuickscaleOrgsConfig(AppConfig):
             OrganizationRemovalObligation(
                 name=OWNED_PERSONAL_DATA,
                 purge_action=RemovalAction.DELETE,
-                account_delete_action=RemovalAction.ANONYMIZE,
+                anonymize_action=RemovalAction.ANONYMIZE,
             ),
             OrganizationRemovalObligation(
                 name=SOCIAL_CACHE_STATE,
                 purge_action=RemovalAction.INVALIDATE,
-                account_delete_action=RemovalAction.SKIP,
-                account_delete_skip_reason=(
+                anonymize_action=RemovalAction.SKIP,
+                anonymize_skip_reason=(
                     "Retained organization data keeps its organization-scoped "
                     "cache state."
                 ),
@@ -107,8 +107,8 @@ class QuickscaleOrgsConfig(AppConfig):
             OrganizationRemovalObligation(
                 name=PURGE_TOMBSTONE,
                 purge_action=RemovalAction.RECORD,
-                account_delete_action=RemovalAction.SKIP,
-                account_delete_skip_reason=(
+                anonymize_action=RemovalAction.SKIP,
+                anonymize_skip_reason=(
                     "No organization is removed, so account deletion writes no "
                     "purge tombstone."
                 ),
@@ -181,7 +181,7 @@ class QuickscaleOrgsConfig(AppConfig):
     ) -> None:
         """Scrub orgs' personal data as the ``owned-personal-data`` executor.
 
-        The account-deletion boundary runs this hook inside its anonymization
+        The anonymize boundary runs this hook inside its anonymization
         transaction: the person leaves every organization and their invitation
         addresses are scrubbed, pending ones withdrawn.  The pre-scrub identity
         arguments let handler order not matter.
@@ -195,9 +195,9 @@ class QuickscaleOrgsConfig(AppConfig):
     def anonymize_handlers(self) -> tuple[Any, ...]:
         """Declare orgs' account-anonymization handler (rule 4).
 
-        The account-deletion boundary collects every installed app's declared
-        handler through the shared core helper and runs them in one
-        transaction; orgs declares its own app config as its handler.
+        The anonymize boundary collects every installed app's declared handler
+        through the shared core helper and runs them in one transaction; orgs
+        declares its own app config as its handler.
         """
         return (self,)
 

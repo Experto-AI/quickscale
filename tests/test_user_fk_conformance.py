@@ -12,13 +12,10 @@ from __future__ import annotations
 import pytest
 from django.apps import apps
 from django.conf import settings
-from django.db import connection
 from django.db.models import CASCADE, SET_NULL
 from django.test import Client
-from django.test.utils import CaptureQueriesContext
 
 from quickscale_modules_orgs.current_org import (
-    org_scope,
     reset_current_org_id,
     set_current_org_id,
 )
@@ -199,59 +196,6 @@ class TestUserFkDeleteRuleConformance:
             assert Post.all_objects.filter(pk=post_id).exists()
         finally:
             reset_current_org_id()
-
-
-@pytest.mark.django_db
-def test_account_deletion_reference_discovery_query_count_ignores_tenant_count() -> (
-    None
-):
-    """Cross-tenant provenance discovery is bounded by models, not tenants."""
-    from django.contrib.auth import get_user_model
-
-    from quickscale_modules_auth.views import AccountDeleteView
-    from quickscale_modules_blog.models import Post
-    from quickscale_modules_orgs.models import Organization
-
-    User = get_user_model()
-    user = User.objects.create_user(
-        username="sa190_bounded_discovery",
-        email="sa190-bounded@example.com",
-        password="Sa190Bounded1!",
-    )
-    referenced_org = Organization.objects.create(
-        name="SA190 Referenced Org",
-        slug="sa190-referenced-org",
-    )
-    with org_scope(referenced_org):
-        Post.all_objects.create(
-            title="SA190 provenance",
-            author=user,
-            organization=referenced_org,
-        )
-
-    view = AccountDeleteView()
-    handled_app_labels = frozenset()
-    with CaptureQueriesContext(connection) as baseline_queries:
-        baseline_ids = view._tenant_user_reference_organization_ids(
-            user, handled_app_labels
-        )
-
-    Organization.objects.bulk_create(
-        [
-            Organization(
-                name=f"SA190 Unrelated Org {index}",
-                slug=f"sa190-unrelated-org-{index}",
-            )
-            for index in range(50)
-        ]
-    )
-    with CaptureQueriesContext(connection) as expanded_queries:
-        expanded_ids = view._tenant_user_reference_organization_ids(
-            user, handled_app_labels
-        )
-
-    assert baseline_ids == expanded_ids == {referenced_org.pk}
-    assert len(expanded_queries) == len(baseline_queries)
 
 
 # ---------------------------------------------------------------------------
@@ -486,39 +430,41 @@ class TestAccountDeleteViewSurvivorRegression:
         assert retained_user.is_active is False, "User should be disabled"
         assert retained_user.email == f"deleted-{user_id}@invalid"
 
-        # ---- Assert: blog Post survives with author=NULL ----
+        # ---- Assert: blog Post survives, attributed to the retained row ----
         from quickscale_modules_blog.models import Post
 
         set_current_org_id(org.pk)
         try:
             post.refresh_from_db()
-            assert post.author is None, (
-                "Blog Post.author should be NULL after account removal"
+            assert post.author_id == user_id, (
+                "Blog Post.author should stay attributed to the retained account"
             )
             assert Post.all_objects.filter(pk=post_id).exists(), (
                 "Blog Post record should still exist"
             )
 
-            # ---- Assert: CRM ContactNote survives with created_by=NULL ----
+            # ---- Assert: CRM ContactNote keeps the retained attribution ----
             contact_note.refresh_from_db()
-            assert contact_note.created_by is None, (
-                "CRM ContactNote.created_by should be NULL after account removal"
+            assert contact_note.created_by_id == user_id, (
+                "CRM ContactNote.created_by should stay attributed to the "
+                "retained account"
             )
 
-            # ---- Assert: CRM DealNote survives with created_by=NULL ----
+            # ---- Assert: CRM DealNote keeps the retained attribution ----
             deal_note.refresh_from_db()
-            assert deal_note.created_by is None, (
-                "CRM DealNote.created_by should be NULL after account removal"
+            assert deal_note.created_by_id == user_id, (
+                "CRM DealNote.created_by should stay attributed to the retained account"
             )
         finally:
             reset_current_org_id()
 
-        # ---- Assert: former-member project provenance is detached ----
+        # ---- Assert: former-member project provenance stays attributed ----
         set_current_org_id(project_org.pk)
         try:
             project_listing.refresh_from_db()
-            assert project_listing.created_by is None, (
-                "ProjectListing.created_by should be NULL after account removal"
+            assert project_listing.created_by_id == user_id, (
+                "ProjectListing.created_by should stay attributed to the "
+                "retained account"
             )
         finally:
             reset_current_org_id()

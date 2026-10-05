@@ -12,10 +12,10 @@ from enum import Enum
 
 
 class RemovalBoundary(Enum):
-    """The two shipped boundaries that remove org-related state."""
+    """The two shipped boundaries that discharge org-related obligations."""
 
     PURGE = "purge"
-    ACCOUNT_DELETE = "account-delete"
+    ANONYMIZE = "anonymize"
 
 
 class RemovalAction(Enum):
@@ -73,8 +73,8 @@ class OrganizationRemovalObligation:
 
     name: str
     purge_action: RemovalAction
-    account_delete_action: RemovalAction
-    account_delete_skip_reason: str = ""
+    anonymize_action: RemovalAction
+    anonymize_skip_reason: str = ""
     external_provider_fields: tuple[ExternalProviderField, ...] = ()
     boundary_guarded_hooks: BoundaryGuardedHooks | None = None
 
@@ -82,7 +82,7 @@ class OrganizationRemovalObligation:
         """Return the action declared for *boundary*."""
         if boundary is RemovalBoundary.PURGE:
             return self.purge_action
-        return self.account_delete_action
+        return self.anonymize_action
 
 
 AUTH_PERSONAL_DATA = "auth-personal-data"
@@ -129,7 +129,7 @@ COORDINATOR_DISCHARGE_ACTIONS: dict[RemovalBoundary, frozenset[RemovalAction]] =
             RemovalAction.RECORD,
         }
     ),
-    RemovalBoundary.ACCOUNT_DELETE: frozenset(
+    RemovalBoundary.ANONYMIZE: frozenset(
         {RemovalAction.RECONCILE, RemovalAction.ANONYMIZE}
     ),
 }
