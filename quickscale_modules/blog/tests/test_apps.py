@@ -39,7 +39,7 @@ def test_app_config_declares_the_author_profile_personal_data_obligation() -> No
     (obligation,) = config.removal_obligations()
 
     assert obligation.name == BLOG_PERSONAL_DATA
-    assert obligation.account_delete_action is RemovalAction.ANONYMIZE
+    assert obligation.anonymize_action is RemovalAction.ANONYMIZE
     assert obligation.purge_action is RemovalAction.SKIP
     assert callable(config.anonymize_account)
     assert config.anonymize_handlers() == (config,)

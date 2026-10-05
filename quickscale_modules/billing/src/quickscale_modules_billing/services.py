@@ -36,7 +36,6 @@ from quickscale_modules_billing._locks import (
 )
 from quickscale_modules_billing._removal import (
     account_deletion_user_reference_organization_ids as account_deletion_user_reference_organization_ids,
-    detach_account_deletion_user_references as detach_account_deletion_user_references,
     guard_organization_removal_provider_state as guard_organization_removal_provider_state,
     reconcile_purchase_checkouts_for_removal as reconcile_purchase_checkouts_for_removal,
 )
@@ -163,7 +162,6 @@ __all__ = [
     "BillingWebhookError",
     "BillingWebhookSignatureError",
     "debit_user",
-    "detach_account_deletion_user_references",
     "StripeClient",
     "StripeWebhookResult",
     "SubscriptionCancellationTransition",

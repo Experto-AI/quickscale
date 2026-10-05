@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 from django.apps import apps
-from django.db import transaction
 from django.db.models import Q
 from quickscale_modules_orgs.current_org import org_scope
 
@@ -31,8 +30,6 @@ from quickscale_modules_billing.exceptions import (
     BillingValidationError,
 )
 from quickscale_modules_billing.models import (
-    CreditBalance,
-    CreditTransaction,
     PurchaseCheckout,
     Subscription,
 )
@@ -185,50 +182,14 @@ def guard_organization_removal_provider_state(
     return ""
 
 
-def detach_account_deletion_user_references(
-    user_id: Any,
-    *,
-    organization_ids: list[Any],
-) -> int:
-    """Null billing provenance under each organization's FORCE-RLS context."""
-    organization_model = apps.get_model(
-        "quickscale_orgs",
-        "Organization",
-    )
-    detached_count = 0
-    with transaction.atomic():
-        organizations = list(
-            organization_model._default_manager.select_for_update()
-            .filter(pk__in=organization_ids)
-            .order_by("pk")
-        )
-        if len(organizations) != len(set(organization_ids)):
-            raise BillingError(
-                "A billing organization disappeared during account deletion."
-            )
-        for organization in organizations:
-            with org_scope(organization):
-                detached_count += CreditBalance.all_objects.filter(
-                    organization=organization,
-                    user_id=user_id,
-                ).update(user=None)
-                detached_count += CreditTransaction.all_objects.filter(
-                    organization=organization,
-                    user_id=user_id,
-                ).update(user=None)
-                detached_count += PurchaseCheckout.all_objects.filter(
-                    organization=organization,
-                    user_id=user_id,
-                ).update(user=None)
-                detached_count += Subscription.all_objects.filter(
-                    organization=organization,
-                    user_id=user_id,
-                ).update(user=None)
-    return detached_count
-
-
 def account_deletion_user_reference_organization_ids(user_id: Any) -> list[Any]:
-    """Discover every organization retaining billing provenance for one user."""
+    """Discover every organization retaining billing provenance for one user.
+
+    Account removal reconciles the one-time purchase state that stays
+    attributed to the person in organizations they have left, so it discovers
+    the organizations through orgs' narrow read-only seam and then locks and
+    reconciles each one.  Nothing is detached: the account row is retained.
+    """
     from quickscale_modules_orgs.current_org import (
         account_deletion_user_reference_organization_ids as discover_organization_ids,
     )

@@ -155,9 +155,9 @@ class PropertiesConfig(AppConfig):
             OrganizationRemovalObligation(
                 name="property-listing-state",
                 purge_action=RemovalAction.DELETE,
-                account_delete_action=RemovalAction.SKIP,
-                account_delete_skip_reason=(
-                    "Account deletion retains the organization's listings."
+                anonymize_action=RemovalAction.SKIP,
+                anonymize_skip_reason=(
+                    "Account removal retains the organization's listings."
                 ),
             ),
         )
@@ -167,7 +167,7 @@ Both removal boundaries discharge the discovered set through one shared
 coordinator. `purge_organization` discharges one stage at a time — its refusal
 guards (`REFUSE`), the marker-derived row deletion (`DELETE`), the purge
 tombstone (`RECORD`), and organization-scoped cache invalidation
-(`INVALIDATE`) — while account deletion discharges provider reconciliation
+(`INVALIDATE`) — while the anonymize boundary discharges provider reconciliation
 (`RECONCILE`) and runs each installed app's account anonymization
 (`ANONYMIZE`); `SKIP` records an obligation a boundary deliberately does not
 execute. A declared provider field refuses the purge while it carries a value;
@@ -197,8 +197,8 @@ removal that finishes while a declared obligation was not discharged
 fails closed, and the orgs system check (`quickscale_modules_orgs.E002`) fails
 a declaration whose action no boundary performs, a declaration without its
 executor hook, a boundary that stops routing its stages through the
-coordinator, and account-deletion reconciliation of provider fields no boundary
-guard covers — so `manage.py check` and `migrate` refuse them.
+coordinator, and reconciliation at the anonymize boundary of provider fields no
+boundary guard covers — so `manage.py check` and `migrate` refuse them.
 
 ## Module Categories
 

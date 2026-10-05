@@ -22,19 +22,25 @@ from quickscale_modules_auth.exceptions import _AccountDeletionProviderBlocked
 
 @dataclass
 class _PreparedDeletionState:
-    """State the account-deletion boundary reconciles before deleting."""
+    """State the anonymize boundary reconciles before scrubbing.
+
+    The member and cancellation organizations bound the removal's writes and
+    its pre-removal recheck; the discovered provider organizations join them
+    in the lock set and the reconciliation scope, so the one-time purchase
+    state attributed to the person in organizations they have left is locked
+    and checked before the account row is disabled and scrubbed.
+    """
 
     handlers: tuple[Any, ...]
     handled_app_labels: frozenset[str]
     prepared_member_org_ids: set[Any]
     cancellation_org_ids: set[Any]
     prepared_provider_org_ids: set[Any]
-    prepared_tenant_user_ref_org_ids: set[Any]
     cancellation_transitions: dict[tuple[int, Any], Any] = field(default_factory=dict)
 
     @property
     def lock_org_ids(self) -> set[Any]:
-        """Organization ids whose provider locks the deletion acquires."""
+        """Organization ids whose provider locks the removal acquires."""
         return (
             self.prepared_member_org_ids
             | self.cancellation_org_ids
@@ -43,12 +49,8 @@ class _PreparedDeletionState:
 
     @property
     def recheck_lock_org_ids(self) -> set[Any]:
-        """Organization ids locked for the pre-deletion state recheck."""
-        return (
-            self.prepared_member_org_ids
-            | self.prepared_provider_org_ids
-            | self.prepared_tenant_user_ref_org_ids
-        )
+        """Organization ids locked for the pre-removal state recheck."""
+        return self.prepared_member_org_ids | self.prepared_provider_org_ids
 
     @property
     def reconcile_org_ids(self) -> set[Any]:
@@ -56,19 +58,17 @@ class _PreparedDeletionState:
         return (
             self.prepared_member_org_ids
             | self.prepared_provider_org_ids
-            | self.prepared_tenant_user_ref_org_ids
             | self.cancellation_org_ids
         )
 
 
 @dataclass
 class _RecheckResult:
-    """Outcome of the locked-state recheck taken right before deletion."""
+    """Outcome of the locked-state recheck taken right before scrubbing."""
 
     rejection_response: HttpResponse | None
     locked_organizations: list[Organization]
     current_provider_org_ids: set[Any]
-    current_tenant_user_ref_org_ids: set[Any]
 
 
 class _AccountDeletionFlowMixin:
@@ -111,10 +111,6 @@ class _AccountDeletionFlowMixin:
             self, user: Any, handlers: tuple[Any, ...]
         ) -> set[Any]: ...
 
-        def _tenant_user_reference_organization_ids(
-            self, user: Any, handled_app_labels: frozenset[str]
-        ) -> set[Any]: ...
-
     def _provider_blocked_response(self, form: Any, exc: Exception) -> HttpResponse:
         """Re-render the confirmation template with a provider-block message."""
         messages.error(
@@ -126,11 +122,14 @@ class _AccountDeletionFlowMixin:
     def _prepare_account_deletion_state(
         self, form: Any, user: Any
     ) -> _PreparedDeletionState | HttpResponse:
-        """Collect handlers and lock the deletion's baseline organization state.
+        """Collect handlers and lock the removal's baseline organization state.
 
         The last-owner guard runs inside the first lock transaction, and
-        provider and tenant references are discovered after it so their
-        provider calls stay outside a database transaction.
+        provider references are discovered after it so their provider calls
+        stay outside a database transaction.  The discovered organizations
+        join the member and cancellation organizations in the lock set, so
+        their one-time purchase state is locked and checked through the
+        removal instead of being released after a single visit.
         """
         try:
             handlers = self._account_deletion_handlers()
@@ -163,16 +162,12 @@ class _AccountDeletionFlowMixin:
             )
         except _AccountDeletionProviderBlocked as exc:
             return self._provider_blocked_response(form, exc)
-        prepared_tenant_user_ref_org_ids = self._tenant_user_reference_organization_ids(
-            user, handled_app_labels
-        )
         return _PreparedDeletionState(
             handlers=handlers,
             handled_app_labels=handled_app_labels,
             prepared_member_org_ids=prepared_member_org_ids,
             cancellation_org_ids=cancellation_org_ids,
             prepared_provider_org_ids=prepared_provider_org_ids,
-            prepared_tenant_user_ref_org_ids=prepared_tenant_user_ref_org_ids,
         )
 
     def _recheck_locked_deletion_state(
@@ -181,16 +176,14 @@ class _AccountDeletionFlowMixin:
         """Re-read the locked state and return the rejection response, if any.
 
         The caller holds the organization locks and runs this inside the
-        deletion transaction, so a membership, provider-reference, or
-        cancellation change discovered here still rolls the deletion back.
+        removal transaction, so a membership, provider-reference, or
+        cancellation change discovered here still rolls the account removal
+        back.
         """
         locked_organizations = self._lock_organizations(state.recheck_lock_org_ids)
         member_org_ids = set(self._member_organization_ids(user))
         current_provider_org_ids = self._provider_user_reference_organization_ids(
             user, state.handlers
-        )
-        current_tenant_user_ref_org_ids = self._tenant_user_reference_organization_ids(
-            user, state.handled_app_labels
         )
 
         rejection_response: HttpResponse | None
@@ -206,13 +199,6 @@ class _AccountDeletionFlowMixin:
                 self.request,
                 "Provider references changed while account deletion was "
                 "being prepared. Retry the deletion.",
-            )
-            rejection_response = self.form_invalid(form)
-        elif current_tenant_user_ref_org_ids != state.prepared_tenant_user_ref_org_ids:
-            messages.error(
-                self.request,
-                "Tenant content references changed while account deletion "
-                "was being prepared. Retry the deletion.",
             )
             rejection_response = self.form_invalid(form)
         else:
@@ -245,5 +231,4 @@ class _AccountDeletionFlowMixin:
             rejection_response=rejection_response,
             locked_organizations=locked_organizations,
             current_provider_org_ids=current_provider_org_ids,
-            current_tenant_user_ref_org_ids=current_tenant_user_ref_org_ids,
         )

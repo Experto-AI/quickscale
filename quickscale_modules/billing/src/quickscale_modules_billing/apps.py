@@ -46,7 +46,7 @@ class QuickscaleBillingConfig(AppConfig):
             OrganizationRemovalObligation(
                 name=BILLING_PROVIDER_STATE,
                 purge_action=RemovalAction.REFUSE,
-                account_delete_action=RemovalAction.RECONCILE,
+                anonymize_action=RemovalAction.RECONCILE,
                 # Billing's purge refusal is decided by its own guards in the
                 # purge command (live subscription, pending checkout), not by a
                 # populated identifier, so every field is declared
@@ -117,7 +117,7 @@ class QuickscaleBillingConfig(AppConfig):
             OrganizationRemovalObligation(
                 name=BILLING_PERSONAL_DATA,
                 purge_action=RemovalAction.SKIP,
-                account_delete_action=RemovalAction.ANONYMIZE,
+                anonymize_action=RemovalAction.ANONYMIZE,
             ),
         )
 
@@ -138,7 +138,7 @@ class QuickscaleBillingConfig(AppConfig):
     def anonymize_handlers(self) -> tuple[Any, ...]:
         """Declare billing's account-anonymization handler (rule 4).
 
-        The account-deletion boundary collects every installed app's declared
+        The anonymize boundary collects every installed app's declared
         handler through the shared core helper and runs them in one
         transaction; billing declares its own app config as its handler.
         """
@@ -221,26 +221,16 @@ class QuickscaleBillingConfig(AppConfig):
             provider_expired_checkout_id=provider_expired_checkout_id,
         )
 
-    def detach_account_deletion_user_references(
-        self,
-        user_id: Any,
-        organization_ids: list[Any],
-    ) -> int:
-        """Clear billing provenance before Django deletes the referenced user."""
-        from quickscale_modules_billing._removal import (
-            detach_account_deletion_user_references,
-        )
-
-        return detach_account_deletion_user_references(
-            user_id,
-            organization_ids=organization_ids,
-        )
-
     def account_deletion_user_reference_organization_ids(
         self,
         user_id: Any,
     ) -> list[Any]:
-        """Return orgs that retain billing provenance for account deletion."""
+        """Return orgs that retain billing provenance for account removal.
+
+        Account removal discovers the organizations whose one-time purchase
+        state stays attributed to the person and locks each one before its
+        purchase check; nothing is detached from the retained account.
+        """
         from quickscale_modules_billing._removal import (
             account_deletion_user_reference_organization_ids,
         )
@@ -269,11 +259,11 @@ class QuickscaleBillingConfig(AppConfig):
     def account_deletion_handlers(self) -> tuple[Any, ...]:
         """Declare billing's account-deletion handler (Module Conventions rule 4).
 
-        Account deletion collects every installed app's declared handler and
-        drives billing's provider reconciliation, subscription cancellation
-        with compensation, and provenance detachment through it, so no consumer
-        needs billing's label or service imports.  Billing declares its own app
-        config as the handler: the methods below are the handler surface.
+        Account removal collects every installed app's declared handler and
+        drives billing's provider reconciliation and subscription cancellation
+        with compensation through it, so no consumer needs billing's label or
+        service imports.  Billing declares its own app config as the handler:
+        the methods below are the handler surface.
         """
         return (self,)
 

@@ -2,7 +2,7 @@
 
 Module Conventions rule 28: the account-deletion view is a facade over
 private ``_<name>.py`` sibling modules.  This module keeps the declared
-rule 34 account-deletion boundary's entry point — its ``form_valid`` route
+rule 34 anonymize boundary's entry point — its ``form_valid`` route
 through the shared removal coordinator — the rule 4 capability collection
 with its ``collect_capabilities`` and ``_installed_app_config`` patch seams,
 and the ``quickscale_modules_auth.views`` log channel; private helpers stay
@@ -28,7 +28,6 @@ import quickscale_modules_auth._account_deletion_flow as _account_deletion_flow
 import quickscale_modules_auth._account_deletion_guard as _account_deletion_guard
 import quickscale_modules_auth._account_deletion_handlers as _account_deletion_handlers
 import quickscale_modules_auth._account_deletion_providers as _account_deletion_providers
-import quickscale_modules_auth._account_deletion_references as _account_deletion_references
 import quickscale_modules_auth._anonymization as _anonymization
 import quickscale_modules_auth.exceptions as _exceptions
 
@@ -61,7 +60,6 @@ _ACCOUNT_DELETION_HANDLER_METHODS: tuple[str, ...] = (
     "reconcile_account_deletion_provider_state",
     "cancel_account_deletion_subscription",
     "resume_account_deletion_subscription",
-    "detach_account_deletion_user_references",
 )
 
 #: The organization scope a declared handler reconciles over.  A ``touched``
@@ -87,7 +85,6 @@ class AccountDeleteView(
     _account_deletion_guard._AccountDeletionGuardMixin,
     _account_deletion_handlers._AccountDeletionHandlerPlumbingMixin,
     _account_deletion_providers._AccountDeletionProviderMixin,
-    _account_deletion_references._AccountDeletionReferenceMixin,
     LoginRequiredMixin,
     FormView,
 ):
@@ -122,7 +119,7 @@ class AccountDeleteView(
         row is disabled and scrubbed. The row itself is never deleted.
         """
         user = self.request.user
-        coordinator = RemovalCoordinator(RemovalBoundary.ACCOUNT_DELETE)
+        coordinator = RemovalCoordinator(RemovalBoundary.ANONYMIZE)
         state = self._prepare_account_deletion_state(form, user)
         if isinstance(state, HttpResponse):
             return state
@@ -155,16 +152,6 @@ class AccountDeleteView(
                         recheck = self._recheck_locked_deletion_state(form, user, state)
                         if recheck.rejection_response is not None:
                             return recheck.rejection_response
-                        self._detach_tenant_user_references(
-                            user,
-                            recheck.current_tenant_user_ref_org_ids,
-                            state.handled_app_labels,
-                        )
-                        self._detach_provider_user_references(
-                            user,
-                            recheck.current_provider_org_ids,
-                            state.handlers,
-                        )
                         self._record_account_delete_skips(
                             recheck.locked_organizations,
                             coordinator=coordinator,
@@ -241,7 +228,7 @@ class AccountDeleteView(
                 state.handlers,
             )
             self._reconcile_removal_provider_state(
-                state.reconcile_org_ids,
+                state.prepared_member_org_ids,
                 state.handlers,
                 state.handled_app_labels,
             )
@@ -271,7 +258,7 @@ class AccountDeleteView(
                     obligation.name,
                     organization.name,
                     organization.pk,
-                    obligation.account_delete_skip_reason,
+                    obligation.anonymize_skip_reason,
                 )
 
     def _anonymize_account(

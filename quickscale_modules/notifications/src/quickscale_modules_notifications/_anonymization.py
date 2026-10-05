@@ -4,7 +4,7 @@
 module declares the ``anonymize_handlers`` capability without declaring an
 organization-removal obligation: a generated project may embed notifications
 without ``orgs``, and the declaration vocabulary lives in the orgs package, so
-the account-deletion boundary collects this handler through the shared core
+the anonymize boundary collects this handler through the shared core
 helper exactly like the other declared handlers.
 
 Every stored message that carries the person's identity is scrubbed, not only
