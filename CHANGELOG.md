@@ -528,6 +528,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     each with its value; the CC 11–20, 500–799-line, 6–19-similar-line, and 80–99%-confidence
     tiers warn and still exit 0. The accepted-debt baseline, waiver ledger, and merge-base
     monotonicity helper are removed.
+  - **Account anonymization is scoped to the person's records.** Removing an account rewrites a
+    notification message only when a delivery to the person, an `actor_user_id` context entry, or
+    the person's full address in that context links the message to them, deletes only unexpired
+    sessions, and loads only billing webhook payloads that mention the address, so another user's
+    message content is never rewritten.
   - **Personal data is declared per module and checked where it is installed.** Every module, and a
     project app that needs one, declares the treatment of its own user-linked fields through the
     `personal_data_declarations` capability beside its anonymization handler; a warning-level

@@ -24,8 +24,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA244 | Scope account anonymization to the person's records and bound its scans | 3 | — | Required |
-| SA245 | Share one redaction matcher and one set of replacement values across anonymization handlers | 3 | SA244 | Required |
+| SA245 | Share one redaction matcher and one set of replacement values across anonymization handlers | 3 | — | Required |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
@@ -37,8 +36,8 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: —
-Track 3: SA244 ──► SA245
-     critical path: SA191 → SA153; release gate: SA244 → SA245 before 0.89.0
+Track 3: SA245
+     critical path: SA191 → SA153; release gate: SA245 before 0.89.0
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -49,10 +48,10 @@ handoff note (what landed, what is next, what to watch) committed with the work.
 when its last slice lands; slices are not scheduled.
 
 **Order.** SA204 freezes migration history before any post-SA153 module schema change; SA154 is
-an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA244 and SA245 share
-the anonymization handler files and gate 0.89.0. SA246 landed before SA153, so the portal's personal
-fields are classified from the first migration; it touched `apps.py` capabilities and orgs'
-checks, not handler bodies.
+an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA245 edits the
+anonymization handler files SA244 scoped and still gates 0.89.0. SA246 landed before SA153, so the
+portal's personal fields are classified from the first migration; it touched `apps.py` capabilities
+and orgs' checks, not handler bodies.
 
 ### Track states
 
@@ -62,7 +61,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA214 | yes | yes | yes | **yes** | yes |
 | 2 | — | yes | yes | yes | **yes** | no |
-| 3 | SA244 | yes | yes | yes | **yes** | no |
+| 3 | SA245 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -95,7 +94,7 @@ A track is **truly green** only when all three states are yes.
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row, and the five `_anonymization.py`
-  handlers with core's redaction helpers (SA244, SA245).
+  handlers with core's redaction helpers (SA245).
 - SA246 moved the personal-data inventory and its walk from Track 3 to Track 2: the per-module
   personal-data declarations, the orgs personal-data system check, and module-extension.md
   § removal.
@@ -117,31 +116,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [ ] **SA244 — Scope account anonymization to the person's records and bound its scans.**
-
-  **Context:** SA216(a) made notifications' `_scrub_messages` walk every `NotificationMessage` and
-  redact the person's name and username wherever they appear as whole words, so one user's account
-  removal rewrites unrelated text in every tenant's messages, including pending ones later sent
-  (tech audit `notifications-anonymize-rewrites-all-messages`, S2). The same removal transaction,
-  holding org row locks and provider advisory locks, also decodes every `django_session` row and
-  walks every billing `WebhookEvent` payload; past gunicorn's 60 s timeout the worker dies after
-  the Stripe cancellation and the compensation never runs (`anonymize-full-table-scans-under-locks`,
-  S3). Neither has shipped; both block 0.89.0.
-
-  **Acceptance:**
-  - notifications redacts names and usernames only in messages linked to the person: those with a
-    delivery to them, and those whose `context_json` records them as the actor through an
-    `actor_user_id` key that `send_notification` callers (the orgs invitation send) now stamp.
-    Pre-key invitation messages are covered by a one-time fallback that matches the person's
-    unique email in `context_json`, never their name.
-  - A test with a second user's message containing a common word and a person whose first name is
-    that word leaves the unrelated message byte-identical; the shared-invitation test still passes.
-  - auth deletes only sessions with `expire_date > now()`; billing pre-filters `WebhookEvent` rows
-    in SQL on the person's email before the Python walk. No handler scans a whole table.
-  - The dead `_account_username` helper is deleted (`notifications-account-username-dead`).
-
-  **Surfaces:** `notifications/_anonymization.py` and its tests, the orgs invitation send call
-  site, `auth/_anonymization.py`, `billing/_anonymization.py`, and the tech audit.
+- [x] **SA244 — Scope account anonymization to the person's records and bound its scans.**
 
 - [ ] **SA245 — Share one redaction matcher and one set of replacement values across anonymization handlers.**
 
