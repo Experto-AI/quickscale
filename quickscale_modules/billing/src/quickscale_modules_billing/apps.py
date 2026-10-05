@@ -11,6 +11,9 @@ from typing import Any
 from django.apps import AppConfig
 
 from quickscale_core.runtime import (
+    PersonalDataExclusion,
+    PersonalDataField,
+    PersonalDataTreatment,
     register_module_checks,
     register_module_settings_check,
 )
@@ -143,6 +146,60 @@ class QuickscaleBillingConfig(AppConfig):
         transaction; billing declares its own app config as its handler.
         """
         return (self,)
+
+    def personal_data_declarations(
+        self,
+    ) -> tuple[PersonalDataField | PersonalDataExclusion, ...]:
+        """Declare the personal-data rows billing owns (rule 49).
+
+        The subscription, balance, ledger, and checkout rows stay attributed
+        to the disabled account; the stored Stripe webhook payloads are
+        scrubbed of the customer's address and name.  A ledger description
+        derived from plan names and provider IDs is excluded.
+        """
+        return (
+            PersonalDataField(
+                app_label=self.label,
+                model_name="Subscription",
+                field_name="user",
+                treatment=PersonalDataTreatment.KEEP_LINK,
+                note="Subscription stays attributed to the deleted user.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="CreditBalance",
+                field_name="user",
+                treatment=PersonalDataTreatment.KEEP_LINK,
+                note="Balance stays attributed to the deleted user.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="CreditTransaction",
+                field_name="user",
+                treatment=PersonalDataTreatment.KEEP_LINK,
+                note="Ledger row stays attributed to the deleted user.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="PurchaseCheckout",
+                field_name="user",
+                treatment=PersonalDataTreatment.KEEP_LINK,
+                note="Checkout record stays attributed to the deleted user.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="WebhookEvent",
+                field_name="payload",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Customer email and name redacted from the stored Stripe event payload.",
+            ),
+            PersonalDataExclusion(
+                app_label=self.label,
+                model_name="CreditTransaction",
+                field_name="description",
+                reason="Derived from the plan name and provider IDs, not personal data.",
+            ),
+        )
 
     def reconcile_organization_removal_provider_state(
         self,

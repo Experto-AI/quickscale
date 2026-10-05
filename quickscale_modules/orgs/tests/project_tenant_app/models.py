@@ -17,6 +17,7 @@ class ProjectListing(AbstractListing):
         on_delete=models.SET_NULL,
         related_name="project_listings",
     )
+    contact_email = models.EmailField(blank=True, default="")
 
     class Meta(AbstractListing.Meta):
         abstract = False

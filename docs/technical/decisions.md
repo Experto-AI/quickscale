@@ -1161,6 +1161,24 @@ mapping that mirrors this section.
   function that takes `request`.
 - ❌ A moved log channel without a release-notes line.
 
+**47–48.** Owned by SA245 (redaction and replacement values).
+
+**49. Personal-data declarations.**
+- ✅ A module declares the treatment of each of its own user-linked fields on its own
+  `AppConfig`, through the `personal_data_declarations` capability beside the module's
+  anonymization handler where it has one. The entries are `PersonalDataField` /
+  `PersonalDataExclusion` records from `quickscale_core.runtime`, so every layer declares them by
+  importing only core. `orgs`' own module keeps only the rows no installed module declares for
+  itself: orgs', Django contrib's, and the third-party rows.
+- ✅ The closed-world inventory test collects the declarations, and orgs' system check
+  (`quickscale_orgs.W006`) reports both kinds of gap where the project's models are installed:
+  a candidate field on a project-owned model with no declared treatment or reasoned exclusion,
+  and a declared treatment whose app contributes no executor.
+- ✅ A declared treatment other than `KEEP_LINK` is executed by the declaring app's own
+  `anonymize_handlers` capability.
+- ❌ One module's source or test listing another module's fields; a field declared with a
+  treatment whose declaring app provides no handler.
+
 ---
 
 ### Split-Facade Seams (SA234) {#split-facade-seams}

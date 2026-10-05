@@ -5,6 +5,9 @@ from typing import Any
 from django.apps import AppConfig
 
 from quickscale_core.runtime import (
+    PersonalDataExclusion,
+    PersonalDataField,
+    PersonalDataTreatment,
     register_module_checks,
     register_module_settings_check,
 )
@@ -45,6 +48,88 @@ class QuickscaleNotificationsConfig(AppConfig):
         stays independent of ``orgs``.
         """
         return (self,)
+
+    def personal_data_declarations(
+        self,
+    ) -> tuple[PersonalDataField | PersonalDataExclusion, ...]:
+        """Declare the personal-data rows notifications owns (rule 49).
+
+        Rendered messages, delivery records, and stored provider payloads can
+        echo the recipient or an actor identity, so they are scrubbed; the
+        organization's sender and reply-to configuration is excluded.  The
+        records live in core, so notifications declares them without importing
+        ``orgs``.
+        """
+        return (
+            PersonalDataField(
+                app_label=self.label,
+                model_name="NotificationMessage",
+                field_name="subject",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Rendered subject replaced with a redacted placeholder.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="NotificationMessage",
+                field_name="rendered_text",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Rendered body replaced with a redacted placeholder.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="NotificationMessage",
+                field_name="rendered_html",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Rendered body replaced with a redacted placeholder.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="NotificationMessage",
+                field_name="context_json",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Rendered context replaced with a redacted placeholder.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="NotificationMessage",
+                field_name="last_error",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Provider error text can echo the address; redacted.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="NotificationDelivery",
+                field_name="failure_reason",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Provider error text can echo the address; redacted.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="NotificationDelivery",
+                field_name="recipient_email",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Address scrubbed; status is kept for delivery statistics.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="NotificationDeliveryEvent",
+                field_name="payload_json",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Stored provider payload carries the recipient; the address is redacted.",
+            ),
+            PersonalDataExclusion(
+                app_label=self.label,
+                model_name="NotificationSettings",
+                field_name="sender_email",
+                reason="Organization sender configuration, not the user's address.",
+            ),
+            PersonalDataExclusion(
+                app_label=self.label,
+                model_name="NotificationSettings",
+                field_name="reply_to_email",
+                reason="Organization reply-to configuration, not the user's address.",
+            ),
+        )
 
     def ready(self) -> None:
         # Late import: checks.py reads the notifications settings snapshot,

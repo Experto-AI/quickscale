@@ -152,6 +152,9 @@ class TestRuntimeAllExport:
             "PersistedBackupArtifact",
             "PersistedBackupPolicy",
             "PersistedBackupSnapshot",
+            "PersonalDataExclusion",
+            "PersonalDataField",
+            "PersonalDataTreatment",
             "RemoteMaterializer",
             "ResolverResult",
             "ManifestError",
@@ -345,6 +348,16 @@ class TestRuntimeSymbolTypes:
             assert symbol is not None, f"runtime.{name} is None"
             assert callable(symbol), f"runtime.{name} is not callable"
 
+    def test_personal_data_records_are_classes(self) -> None:
+        for name in (
+            "PersonalDataExclusion",
+            "PersonalDataField",
+            "PersonalDataTreatment",
+        ):
+            symbol = getattr(runtime, name, None)
+            assert symbol is not None, f"runtime.{name} is None"
+            assert isclass(symbol), f"runtime.{name} is not a class"
+
     # ------------------------------------------------------------------
     # Persistence surface types
     # ------------------------------------------------------------------
@@ -389,6 +402,9 @@ class TestRuntimeImportable:
             "BackupPolicyPersistence",
             "ModuleWiringSpec",
             "PersistedBackupArtifact",
+            "PersonalDataExclusion",
+            "PersonalDataField",
+            "PersonalDataTreatment",
             "ResolverResult",
             "SOCIAL_EMBEDS_PATH",
             "SOCIAL_INTEGRATION_BASE_PATH",

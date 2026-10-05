@@ -41,6 +41,46 @@ def test_scrub_account_disables_and_clears_the_account_row(user) -> None:
 
 
 @pytest.mark.django_db
+def test_declared_treatments_hold_on_a_populated_user(user) -> None:
+    """Every declared treatment is what the scrub does to a populated user."""
+    from django.apps import apps
+
+    from quickscale_core.runtime import PersonalDataField, PersonalDataTreatment
+
+    config = apps.get_app_config("quickscale_auth")
+    declared = {
+        entry.field_name: entry.treatment
+        for entry in config.personal_data_declarations()
+        if isinstance(entry, PersonalDataField)
+    }
+    assert declared == {
+        "username": PersonalDataTreatment.SCRUB,
+        "email": PersonalDataTreatment.SCRUB,
+        "first_name": PersonalDataTreatment.SCRUB,
+        "last_name": PersonalDataTreatment.SCRUB,
+        "password": PersonalDataTreatment.SCRUB,
+        "last_login": PersonalDataTreatment.SCRUB,
+    }
+
+    user.last_login = user.date_joined
+    user.save(update_fields=["last_login"])
+
+    scrub_account(user, "TestUser@Example.com", "Test User", user.get_username())
+
+    user.refresh_from_db()
+    scrubbed = {
+        "username": user.username == f"deleted-{user.pk}",
+        "email": user.email == f"deleted-{user.pk}@invalid",
+        "first_name": user.first_name == "",
+        "last_name": user.last_name == "",
+        "password": not user.has_usable_password(),
+        "last_login": user.last_login is None,
+    }
+    assert set(scrubbed) == set(declared)
+    assert all(scrubbed.values()), scrubbed
+
+
+@pytest.mark.django_db
 def test_scrub_account_deletes_the_login_addresses(user) -> None:
     """The addresses allauth holds exist only to sign in."""
     from allauth.account.models import EmailAddress

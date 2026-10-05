@@ -1,10 +1,14 @@
-"""Personal-data inventory conformance gate.
+"""Personal-data declaration conformance gate (Module Conventions rule 49).
 
 The gate walks every installed model in the cross-module orgs harness --
 ``tests/settings.py`` installs every first-party module plus Django contrib,
 allauth, and the orgs fixture apps -- and fails when a field that could hold
-personal data about a user is neither listed in ``_personal_data_inventory``
-with its treatment nor excluded there with a reason.
+personal data about a user is neither declared with its treatment nor excluded
+with a reason.  Each module declares the rows it owns through its ``AppConfig``
+``personal_data_declarations`` capability, collected by
+``quickscale_modules_orgs._personal_data.declared_personal_data``; that helper
+adds the rows no installed module declares for itself (orgs' own, Django admin,
+sessions, and allauth's account).
 
 It lives in the orgs test suite for the same reason
 ``test_user_fk_conformance.py`` does: ``orgs/tests/settings.py`` is the
@@ -13,148 +17,43 @@ smallest truthful cross-module harness.
 
 from __future__ import annotations
 
-import enum
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
-
 from django.apps import apps
-from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist
-from django.db import models
 
-from tests._personal_data_inventory import (
-    PERSONAL_DATA_EXCLUSIONS,
-    PERSONAL_DATA_FIELDS,
+from quickscale_core.runtime import (
     PersonalDataExclusion,
     PersonalDataField,
+    collect_capabilities,
+)
+from quickscale_modules_orgs._personal_data import (
+    CENTRAL_PERSONAL_DATA_EXCLUSIONS,
+    CENTRAL_PERSONAL_DATA_FIELDS,
+    PERSONAL_DATA_DECLARATIONS_CAPABILITY,
+    CandidateField,
+    CandidateKind,
+    candidate_kinds,
+    declared_personal_data,
+    declared_treatment_handler_gaps,
+    shipped_candidate_fields,
+    uncovered_candidates,
 )
 
-USER_MODEL_LABEL = settings.AUTH_USER_MODEL.lower()
+
+def _declared_inventory() -> tuple[
+    tuple[PersonalDataField, ...], tuple[PersonalDataExclusion, ...]
+]:
+    """Return the central rows plus every app's collected declarations."""
+    return declared_personal_data()
 
 
-class CandidateKind(enum.Enum):
-    """A candidate rule that flags a field for classification."""
-
-    USER_REFERENCE = "user reference"
-    EMAIL = "email"
-    IP_ADDRESS = "ip address"
-    FILE = "file"
-    FREE_TEXT = "free text"
-
-
-@dataclass(frozen=True)
-class CandidateField:
-    """A field flagged by at least one candidate rule."""
-
-    app_label: str
-    model_name: str
-    field_name: str
-    kinds: tuple[CandidateKind, ...]
-
-    @property
-    def key(self) -> tuple[str, str, str]:
-        """Return the ``(app_label, model_name, field_name)`` lookup key."""
-        return (self.app_label, self.model_name, self.field_name)
-
-    def describe(self) -> str:
-        """Return a description for a gate failure message."""
-        kinds = ", ".join(kind.value for kind in self.kinds)
-        return f"{self.app_label}.{self.model_name}.{self.field_name} [{kinds}]"
-
-
-def _targets_user(field: models.Field) -> bool:
-    """Return True when *field* is a relation to ``AUTH_USER_MODEL``."""
-    remote = getattr(field, "remote_field", None)
-    related = getattr(remote, "model", None)
-    meta = getattr(related, "_meta", None)
-    return meta is not None and meta.label_lower == USER_MODEL_LABEL
-
-
-def _references_user(model: type[models.Model]) -> bool:
-    """Return True when *model* has a forward relation to ``AUTH_USER_MODEL``."""
-    return any(
-        _targets_user(field)
-        for field in model._meta.get_fields()
-        if not field.auto_created
-    )
-
-
-def candidate_kinds(
-    model: type[models.Model], field: models.Field
-) -> tuple[CandidateKind, ...]:
-    """Classify *field* under every candidate rule it matches, in rule order."""
-    kinds: list[CandidateKind] = []
-    if _targets_user(field):
-        kinds.append(CandidateKind.USER_REFERENCE)
-    if isinstance(field, models.EmailField):
-        kinds.append(CandidateKind.EMAIL)
-    if isinstance(field, models.GenericIPAddressField):
-        kinds.append(CandidateKind.IP_ADDRESS)
-    if isinstance(field, (models.FileField, models.ImageField)):
-        kinds.append(CandidateKind.FILE)
-    if isinstance(field, models.TextField) and _references_user(model):
-        kinds.append(CandidateKind.FREE_TEXT)
-    return tuple(kinds)
-
-
-def _shipped_models() -> Iterator[type[models.Model]]:
-    """Yield every installed model that represents shipped data.
-
-    Models from test-fixture apps and test modules are skipped: they register
-    only when their test module is imported, so including them would make this
-    gate depend on collection order, and they hold no shipped data.
-    """
-    for model in apps.get_models(include_auto_created=True):
-        module = model.__module__
-        if module == "tests" or module.startswith("tests."):
-            continue
-        yield model
-
-
-def walk_candidate_fields() -> list[CandidateField]:
-    """Return every candidate field across the installed shipped models."""
-    candidates: list[CandidateField] = []
-    for model in _shipped_models():
-        for field in model._meta.get_fields():
-            # Skip reverse relations and other auto-created field objects.
-            if field.auto_created:
-                continue
-            kinds = candidate_kinds(model, field)
-            if kinds:
-                candidates.append(
-                    CandidateField(
-                        app_label=model._meta.app_label,
-                        model_name=model.__name__,
-                        field_name=field.name,
-                        kinds=kinds,
-                    )
-                )
-    return candidates
-
-
-def uncovered_candidates(
-    candidates: Iterable[CandidateField],
-    fields: Iterable[PersonalDataField],
-    exclusions: Iterable[PersonalDataExclusion],
-) -> list[str]:
-    """Return descriptions of candidates neither inventoried nor excluded."""
-    covered = {entry.key for entry in fields}
-    excluded = {entry.key for entry in exclusions if entry.reason.strip()}
-    return [
-        candidate.describe()
-        for candidate in candidates
-        if candidate.key not in covered and candidate.key not in excluded
-    ]
-
-
-def _model_or_none(app_label: str, model_name: str) -> type[models.Model] | None:
+def _model_or_none(app_label: str, model_name: str) -> type | None:
     try:
         return apps.get_model(app_label, model_name)
     except LookupError:
         return None
 
 
-def _has_field(model: type[models.Model], field_name: str) -> bool:
+def _has_field(model: type, field_name: str) -> bool:
     try:
         model._meta.get_field(field_name)
     except FieldDoesNotExist:
@@ -167,25 +66,27 @@ def _has_field(model: type[models.Model], field_name: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def test_all_candidate_fields_are_inventoried_or_excluded() -> None:
-    """Every candidate is listed with its treatment or excluded with a reason."""
+def test_all_candidate_fields_are_declared_or_excluded() -> None:
+    """Every candidate is declared with its treatment or excluded with a reason."""
+    fields, exclusions = _declared_inventory()
     uncovered = uncovered_candidates(
-        walk_candidate_fields(),
-        PERSONAL_DATA_FIELDS,
-        PERSONAL_DATA_EXCLUSIONS,
+        shipped_candidate_fields(),
+        fields,
+        exclusions,
     )
     assert not uncovered, (
-        "Personal-data candidates missing from "
-        "quickscale_modules/orgs/tests/_personal_data_inventory.py. Add each "
-        "field with its SA216 treatment, or an exclusion with a reason:\n"
-        + "\n".join(uncovered)
+        "Personal-data candidates with no declared treatment. Declare each "
+        "field's treatment, or an exclusion with a reason, in the owning "
+        "app's 'personal_data_declarations' capability beside its "
+        "anonymization handler (Module Conventions rule 49; see "
+        "module-extension.md, Project-Owned Tenant Models):\n" + "\n".join(uncovered)
     )
 
 
 def test_candidate_rules_flag_each_representative_field() -> None:
     """The walk detects all five candidate rules, so the gate is not vacuous."""
     kinds_by_key = {
-        candidate.key: candidate.kinds for candidate in walk_candidate_fields()
+        candidate.key: candidate.kinds for candidate in shipped_candidate_fields()
     }
     assert kinds_by_key[("account", "EmailAddress", "user")] == (
         CandidateKind.USER_REFERENCE,
@@ -207,7 +108,8 @@ def test_candidate_rules_flag_each_representative_field() -> None:
 
 def test_inventory_and_exclusions_resolve_to_installed_fields() -> None:
     """Every entry names an installed model field, so none is stale."""
-    for entry in (*PERSONAL_DATA_FIELDS, *PERSONAL_DATA_EXCLUSIONS):
+    fields, exclusions = _declared_inventory()
+    for entry in (*fields, *exclusions):
         model = _model_or_none(entry.app_label, entry.model_name)
         assert model is not None, (
             f"Inventory entry {entry.app_label}.{entry.model_name}."
@@ -220,17 +122,38 @@ def test_inventory_and_exclusions_resolve_to_installed_fields() -> None:
 
 
 def test_inventory_keys_are_unique_and_disjoint_from_exclusions() -> None:
-    """No field is listed twice, and no field is both inventoried and excluded."""
-    field_keys = [entry.key for entry in PERSONAL_DATA_FIELDS]
-    exclusion_keys = [entry.key for entry in PERSONAL_DATA_EXCLUSIONS]
+    """No field is listed twice, and no field is both declared and excluded."""
+    fields, exclusions = _declared_inventory()
+    field_keys = [entry.key for entry in fields]
+    exclusion_keys = [entry.key for entry in exclusions]
     assert len(field_keys) == len(set(field_keys)), "duplicate personal-data entry"
     assert len(exclusion_keys) == len(set(exclusion_keys)), "duplicate exclusion entry"
-    assert not set(field_keys) & set(exclusion_keys), (
-        "field both inventoried and excluded"
-    )
-    assert all(entry.reason.strip() for entry in PERSONAL_DATA_EXCLUSIONS), (
+    assert not set(field_keys) & set(exclusion_keys), "field both declared and excluded"
+    assert all(entry.reason.strip() for entry in exclusions), (
         "every exclusion must carry a non-blank reason"
     )
+
+
+def test_central_rows_keep_only_orgs_contrib_and_third_party() -> None:
+    """No module's rows stay in orgs' central file; each module declares them."""
+    central_app_labels = {"quickscale_orgs", "account", "sessions", "admin"}
+    for entry in (*CENTRAL_PERSONAL_DATA_FIELDS, *CENTRAL_PERSONAL_DATA_EXCLUSIONS):
+        assert entry.app_label in central_app_labels, (
+            f"{entry.app_label}.{entry.model_name}.{entry.field_name} is a "
+            "module's own row and must be declared by that module, not kept "
+            "in orgs' central file."
+        )
+
+
+def test_declared_treatments_other_than_keep_link_have_a_handler() -> None:
+    """A declaration that promises work names the app that executes it."""
+    declared = [
+        entry
+        for entry in collect_capabilities(PERSONAL_DATA_DECLARATIONS_CAPABILITY)
+        if isinstance(entry, PersonalDataField)
+    ]
+    assert declared, "no app declares personal-data fields"
+    assert declared_treatment_handler_gaps() == []
 
 
 #: Fields confirmed to hold personal data that the candidate rules cannot see:
@@ -258,7 +181,8 @@ _SEMANTIC_PERSONAL_DATA_KEYS: frozenset[tuple[str, str, str]] = frozenset(
 
 def test_semantic_personal_data_fields_stay_inventoried() -> None:
     """Fields the candidate rules cannot see must stay in the inventory."""
-    inventoried = {entry.key for entry in PERSONAL_DATA_FIELDS}
+    fields, _ = _declared_inventory()
+    inventoried = {entry.key for entry in fields}
     missing = _SEMANTIC_PERSONAL_DATA_KEYS - inventoried
     assert not missing, (
         f"Confirmed personal-data fields missing from the inventory: {sorted(missing)}"
@@ -272,19 +196,16 @@ def test_semantic_personal_data_fields_stay_inventoried() -> None:
 
 def test_control_gate_fails_when_an_entry_is_missing() -> None:
     """Dropping one real entry makes the gate report its field."""
-    candidates = walk_candidate_fields()
+    fields, exclusions = _declared_inventory()
+    candidates = shipped_candidate_fields()
     target = next(
         candidate
         for candidate in candidates
         if candidate.key == ("account", "EmailAddress", "email")
     )
     assert CandidateKind.EMAIL in target.kinds
-    reduced_fields = tuple(
-        entry for entry in PERSONAL_DATA_FIELDS if entry.key != target.key
-    )
-    uncovered = uncovered_candidates(
-        candidates, reduced_fields, PERSONAL_DATA_EXCLUSIONS
-    )
+    reduced_fields = tuple(entry for entry in fields if entry.key != target.key)
+    uncovered = uncovered_candidates(candidates, reduced_fields, exclusions)
     assert target.describe() in uncovered
 
 

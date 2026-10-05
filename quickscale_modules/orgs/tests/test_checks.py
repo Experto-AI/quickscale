@@ -15,6 +15,13 @@ Covers every code path in ``check_model_classification()``:
 * W005 — unclassified concrete model found
 * Happy path — all models classified, no warnings
 
+Covers every code path in ``check_personal_data_declarations()``:
+
+* W006 — exception during declaration discovery
+* W006 — one message per undeclared candidate
+* Control — a project-app ``EmailField`` on a user-referencing model fails the
+  real walk, and a collected declaration silences it
+
 Covers the ``check_tenant_manager_inheritance()`` paths:
 
 * E003 — a model carrying a ``TenantManager`` without ``TenantModel``
@@ -275,6 +282,120 @@ class TestCheckModelClassificationHappy:
         messages = check_model_classification(app_configs=None)
 
         assert len(messages) == 0
+
+
+# ---------------------------------------------------------------------------
+# Personal-data declaration coverage check (W006) tests
+# ---------------------------------------------------------------------------
+
+
+class TestCheckPersonalDataDeclarationsW006:
+    """An undeclared candidate field on a project model is reported."""
+
+    @patch("quickscale_modules_orgs._personal_data.personal_data_coverage_gaps")
+    def test_returns_w006_on_discovery_exception(self, mock_gaps: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_personal_data_declarations
+
+        mock_gaps.side_effect = ValueError("Simulated declaration failure")
+
+        messages = check_personal_data_declarations(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_orgs.W006"
+        assert "Failed to read the declared personal-data treatments" in messages[0].msg
+
+    @patch("quickscale_modules_orgs._personal_data.personal_data_coverage_gaps")
+    def test_returns_w006_for_each_gap(self, mock_gaps: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_personal_data_declarations
+
+        mock_gaps.return_value = [
+            "acme_app.propertylisting.contact_email [email]",
+        ]
+
+        messages = check_personal_data_declarations(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_orgs.W006"
+        assert "acme_app.propertylisting.contact_email" in messages[0].msg
+        assert "personal_data_declarations" in messages[0].hint
+
+    @patch("quickscale_modules_orgs._personal_data.personal_data_coverage_gaps")
+    def test_declared_candidates_return_no_messages(self, mock_gaps: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_personal_data_declarations
+
+        mock_gaps.return_value = []
+
+        assert check_personal_data_declarations(app_configs=None) == []
+
+    @patch("quickscale_modules_orgs._personal_data.collect_capabilities")
+    def test_declared_treatment_without_a_handler_is_reported(
+        self, mock_collect: MagicMock
+    ) -> None:
+        """A declared non-keep-link treatment needs its app's own handler."""
+        from quickscale_core.runtime import PersonalDataField, PersonalDataTreatment
+
+        from quickscale_modules_orgs.checks import check_personal_data_declarations
+
+        declaration = PersonalDataField(
+            app_label="quickscale_billing",
+            model_name="WebhookEvent",
+            field_name="payload",
+            treatment=PersonalDataTreatment.SCRUB,
+            note="Control: declared treatment with no handler.",
+        )
+
+        def collect(capability: str) -> tuple:
+            if capability == "personal_data_declarations":
+                return (declaration,)
+            return ()
+
+        mock_collect.side_effect = collect
+
+        messages = check_personal_data_declarations(app_configs=None)
+
+        named = " ".join(message.msg for message in messages)
+        assert "quickscale_billing.WebhookEvent.payload" in named
+        assert "anonymize_handlers" in named
+        assert all(message.id == "quickscale_orgs.W006" for message in messages)
+
+    def test_project_email_field_fails_the_real_walk(self) -> None:
+        """A project-app ``EmailField`` on a user-referencing model is reported."""
+        from quickscale_modules_orgs.checks import check_personal_data_declarations
+
+        messages = check_personal_data_declarations(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_orgs.W006"
+        assert "project_tenant_app.ProjectListing.contact_email" in messages[0].msg
+
+    def test_declaring_the_field_silences_the_real_walk(
+        self, monkeypatch: MonkeyPatch
+    ) -> None:
+        """A declaration collected by the capability suppresses the warning."""
+        from quickscale_core.runtime import PersonalDataField, PersonalDataTreatment
+
+        from quickscale_modules_orgs.checks import check_personal_data_declarations
+        from tests.project_tenant_app.apps import ProjectTenantAppConfig
+
+        declaration = PersonalDataField(
+            app_label="project_tenant_app",
+            model_name="ProjectListing",
+            field_name="contact_email",
+            treatment=PersonalDataTreatment.KEEP_LINK,
+            note="Control: declared treatment.",
+        )
+        monkeypatch.setattr(
+            ProjectTenantAppConfig,
+            "personal_data_declarations",
+            lambda self: (declaration,),
+            raising=False,
+        )
+
+        messages = check_personal_data_declarations(app_configs=None)
+
+        assert messages, "the other fixture fields stay undeclared"
+        named = " ".join(message.msg for message in messages)
+        assert "project_tenant_app.ProjectListing.contact_email" not in named
 
 
 # ---------------------------------------------------------------------------

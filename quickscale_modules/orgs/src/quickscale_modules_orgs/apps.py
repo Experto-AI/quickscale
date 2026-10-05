@@ -217,10 +217,11 @@ class QuickscaleOrgsConfig(AppConfig):
         #
         # Late import: checks.py reads models through tenancy, so it must load
         # after the app registry is ready.  Importing the module also
-        # registers the two warning-only catalog checks (tenant isolation and
-        # model classification) as ``quickscale_orgs`` system checks; they are
-        # not passed to the eager runner because one of them reads live
-        # database catalog state and neither may block startup.
+        # registers the three warning-only catalog checks (tenant isolation,
+        # model classification, and personal-data declarations) as
+        # ``quickscale_orgs`` system checks; they are not passed to the eager
+        # runner because one of them reads live database catalog state and
+        # none of them may block startup.
         from quickscale_modules_orgs.checks import (
             RETIRED_SETTINGS,
             check_provider_id_conformance,

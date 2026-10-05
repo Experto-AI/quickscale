@@ -5,6 +5,9 @@ from typing import Any
 from django.apps import AppConfig
 
 from quickscale_core.runtime import (
+    PersonalDataExclusion,
+    PersonalDataField,
+    PersonalDataTreatment,
     register_module_checks,
     register_module_settings_check,
 )
@@ -63,6 +66,78 @@ class QuickscaleBlogConfig(AppConfig):
         declares its own app config as its handler.
         """
         return (self,)
+
+    def personal_data_declarations(
+        self,
+    ) -> tuple[PersonalDataField | PersonalDataExclusion, ...]:
+        """Declare the personal-data rows blog owns (rule 49).
+
+        The profile's user link is retained while its bio and stored avatar are
+        cleared; posts and uploaded media belong to the organization and stay
+        attributed to the disabled account.  Organization editorial content and
+        organization-owned media files are excluded with their reasons.
+        """
+        return (
+            PersonalDataField(
+                app_label=self.label,
+                model_name="AuthorProfile",
+                field_name="user",
+                treatment=PersonalDataTreatment.KEEP_LINK,
+                note="Profile row stays; its bio and avatar are cleared.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="AuthorProfile",
+                field_name="bio",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Blanked.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="AuthorProfile",
+                field_name="avatar",
+                treatment=PersonalDataTreatment.DELETE_FILE,
+                note="Stored file deleted on commit and the field cleared.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="Post",
+                field_name="author",
+                treatment=PersonalDataTreatment.KEEP_LINK,
+                note="Post stays attributed to the deleted user.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="BlogMediaAsset",
+                field_name="uploaded_by",
+                treatment=PersonalDataTreatment.KEEP_LINK,
+                note="Media stays attributed to the deleted user.",
+            ),
+            PersonalDataExclusion(
+                app_label=self.label,
+                model_name="Post",
+                field_name="content",
+                reason="Organization editorial content authored by the user; retained as-is.",
+            ),
+            PersonalDataExclusion(
+                app_label=self.label,
+                model_name="Post",
+                field_name="excerpt",
+                reason="Organization editorial content authored by the user; retained as-is.",
+            ),
+            PersonalDataExclusion(
+                app_label=self.label,
+                model_name="Post",
+                field_name="featured_image",
+                reason="Organization-owned post image; retained as-is.",
+            ),
+            PersonalDataExclusion(
+                app_label=self.label,
+                model_name="BlogMediaAsset",
+                field_name="file",
+                reason="Organization-owned media file; retained as-is.",
+            ),
+        )
 
     def ready(self) -> None:
         """Run the blog startup checks through the shared helpers."""

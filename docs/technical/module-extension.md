@@ -186,7 +186,7 @@ declaration needs its `anonymize_account` hook, so the boundary runs the
 declaring app's own work instead of marking a declaration discharged for
 nothing. An `ANONYMIZE` declaration must also declare the `anonymize_handlers`
 capability (a method returning `(self,)`, the app's own config) so auth's
-account-deletion collector runs that executor; the boundary fails the deletion
+anonymize boundary runs that executor; the boundary fails the deletion
 closed when a declared obligation's owner contributes no handler. A module may
 also declare `removal_label_prefix` to name how its
 models appear in the purge summary, and each removal boundary's owner declares
@@ -199,6 +199,48 @@ a declaration whose action no boundary performs, a declaration without its
 executor hook, a boundary that stops routing its stages through the
 coordinator, and reconciliation at the anonymize boundary of provider fields no
 boundary guard covers — so `manage.py check` and `migrate` refuse them.
+
+A project app (or a module) also declares the personal-data treatment of each of
+its own user-linked fields, beside its anonymization handler where it has one,
+through the `personal_data_declarations` capability
+([decisions.md § Module Conventions](decisions.md#module-conventions) rule 49).
+Each entry is a `PersonalDataField` or `PersonalDataExclusion` record from
+`quickscale_core.runtime`. `orgs` collects the declarations and its
+`quickscale_orgs.W006` system check warns about a project-owned model whose
+candidate field — a relation to the user model, an email, an IP address, a file
+field, or free text on a user-referencing model — has no declared treatment or
+reasoned exclusion, and about a declared treatment whose app contributes no
+handler, so the project's own fields are reported where the project's models are
+installed:
+
+```python
+from django.apps import AppConfig
+
+from quickscale_core.runtime import PersonalDataField, PersonalDataTreatment
+
+
+class PropertiesConfig(AppConfig):
+    name = "properties"
+
+    def personal_data_declarations(self):
+        return (
+            # A treatment other than KEEP_LINK needs this app's own
+            # anonymize_account executor and anonymize_handlers capability.
+            PersonalDataField(
+                app_label="properties",
+                model_name="PropertyInquiry",
+                field_name="contact_email",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Inquiry address cleared by the project's own handler.",
+            ),
+        )
+```
+
+A declared treatment other than `KEEP_LINK` needs the declaring app's own
+`anonymize_account` executor and `anonymize_handlers` capability, as above; a
+`PersonalDataExclusion` records a candidate field confirmed not to hold personal
+data, with its reason. `orgs` keeps only the rows no installed module declares
+for itself (its own, Django contrib's, and the installed third-party rows).
 
 ## Module Categories
 
@@ -519,6 +561,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 
 **6. Testing:**
 - [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
+- [ ] The module declares the treatment of its own user-linked personal-data fields on its `AppConfig` through `personal_data_declarations` (records from `quickscale_core.runtime`), and its anonymization test asserts the declared treatments on a populated user (rule 49)
 - [ ] 90% overall mean + 80% per file minimum coverage (CI enforced)
 - [ ] Tests use concrete models (not abstract stubs)
 - [ ] Required test files: `test_apps.py`, `test_services.py`, `test_migrations.py` (with models), and `test_isolation.py` plus `test_rls_boundary.py` (with tenant models)

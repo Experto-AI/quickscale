@@ -12,7 +12,7 @@ Audited: 8e4122f2 (v89) · 2026-10-05 · working tree dirty (uncommitted `docs/o
 > audit**, kept next to `tech-audit.md` and `arch-audit.md` and in their format. The inventory
 > stays as the evidence and decision record that this audit cites: its sections are the per-aspect
 > tables of passes 1–8, and [decisions.md § Module Conventions](../technical/decisions.md#module-conventions)
-> rules 1–46 are the rules. Every prior ID is carried here with the same name. The inventory's
+> rules 1–46 are the rules, with rule 49 recorded by SA246 (rules 47–48 are owned by SA245). Every prior ID is carried here with the same name. The inventory's
 > index and reconciliation log are frozen at `c10b529e`, and its header points here.
 
 ---
@@ -33,9 +33,9 @@ Audited: 8e4122f2 (v89) · 2026-10-05 · working tree dirty (uncommitted `docs/o
 - **3 manifests declaring `spa_routes`** (blog, crm, listings), from SA235.
 - **16 management commands**, now that SA240 added `quickscale_orgs_create_site_org`.
 - **Outside the members:** the rule 40 harness (`scripts/check_module_conventions.py`, 6,646
-  lines), core's `collect_capabilities`, auth's anonymize collector, and the personal-data
-  inventory `orgs/tests/_personal_data_inventory.py`. That inventory carries entries for 11 apps,
-  9 of them outside orgs.
+  lines), core's `collect_capabilities`,   auth's anonymize collector, and the personal-data
+  inventory (then `orgs/tests/_personal_data_inventory.py`). That inventory carried entries for
+  11 apps, 9 of them outside orgs.
 
 **Shared namespaces.** These are the same as in the 2026-10-03 pass (inventory §§1–47). This
 delta adds two:
@@ -48,8 +48,9 @@ delta adds two:
 
 **Declared conventions.**
 
-- decisions.md § Module Conventions rules 1–46. Rule 40's harness covers 40 of them, and running
-  it at `8e4122f2` gives `All 40 covered module conventions pass`.
+- decisions.md § Module Conventions rules 1–46. Rule 49 (personal-data declarations) is held by
+  the closed-world inventory test and the `W006` check. Rule 40's harness covers 40 of them, and
+  running it at `8e4122f2` gives `All 40 covered module conventions pass`.
   - `OPEN_RULES` = 21 (a review rule plus per-module rollback tests), 27 (the user-FK gate), and
     30 (`collect_wiring`).
   - Rules 41 and 46 have no detector of their own. Their clauses run inside rules 7, 31, 37
@@ -127,9 +128,11 @@ items:
      members_diverging: [billing, notifications], population: anonymize-handlers(5),
      check: conformance, closed_world: true, handoff: [],
      first_seen: 2026-10-05, last_verified: 2026-10-05}
-  - {id: personal-data-inventory-ownership, status: open, aspect: C, cost: [tax, ambiguity],
+  - {id: personal-data-inventory-ownership, status: resolved, rule: "rule 49", aspect: C,
+     cost: [tax, ambiguity],
      members_diverging: [auth, backups, billing, blog, crm, forms, listings, notifications],
-     population: modules-with-user-data(9), check: review, closed_world: false, handoff: [arch],
+     population: modules-with-user-data(9), check: "closed-world inventory test + runtime warning (W006)",
+     closed_world: true, handoff: [arch],
      first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: anonymize-executor-naming, status: open, aspect: D, cost: [tax],
      members_diverging: [auth], population: anonymize-handlers(5), check: conformance,
@@ -152,14 +155,14 @@ items:
 
 ## 3. Summary table
 
-**Counts (open):** defect 1 · collision 0 · ambiguity 1 · tax 2 · total 4. Prior: 50 resolved, 0
+**Counts (open):** defect 1 · collision 0 · ambiguity 1 · tax 1 · total 3. Prior: 51 resolved, 0
 regressed.
 
 | ID | Aspect | Cost | Diverging / population | Status |
 |---|---|---|---|---|
 | `anonymize-redaction-helper-copies` | C | defect, tax | 2 / 5 handlers | open |
 | `anonymize-replacement-values` | G | ambiguity, tax | 2 / 5 handlers | open |
-| `personal-data-inventory-ownership` | C | tax, ambiguity | 8 / 9 modules with user data | open |
+| `personal-data-inventory-ownership` | C | tax, ambiguity | 8 / 9 modules with user data | resolved (rule 49, see §12) |
 | `anonymize-executor-naming` | D | tax | 1 / 5 handlers | open |
 | `write-effects-on-commit` | F | — | 0 / 6 | resolved (correction, see §12) |
 | 49 other prior items | A–P | — | 0 | resolved |
@@ -234,6 +237,12 @@ The handler that applies each treatment lives in the module. The list that says 
 lives in orgs' tests, and module-extension.md does not mention it.
 
 *Drift:* Item 3.
+
+*Resolved by SA246 (rule 49):* each module declares its own rows through the
+`personal_data_declarations` capability beside its handler, the closed-world test collects the
+declarations, and orgs' `W006` check reports undeclared candidates on project-owned models. orgs
+keeps only its own, contrib, and third-party rows. module-extension.md § Project-Owned Tenant
+Models documents the declaration and the check.
 
 ### 4.5 Write effects (F)
 
@@ -329,38 +338,6 @@ removed. No drift remains (see the correction in §12).
 - **Confidence:** High. Every handler was read in full.
 - **Hand-off:** none.
 
-### Item 3: Personal-data ownership — every module's rows live in orgs' tests
-
-- **ID:** `personal-data-inventory-ownership`
-- **Aspect / population:** C (vocabulary ownership); the modules with user-linked fields (9).
-- **Table:** §4.4. Rows for 8 other modules, plus orgs' own, sit in
-  `orgs/tests/_personal_data_inventory.py`.
-- **Drift:** A module author who adds a user field to, say, forms must edit orgs' test file. The
-  authoring guide (module-extension.md §removal) does not say so. The failing test, in a module
-  the author did not touch, is the only signal.
-- **Cost class:**
-  - **Tax.** The rule cannot be found by the person who must follow it (§3.5).
-  - **Ambiguity.** The treatment that forms' code applies is declared by orgs, so a reader of
-    forms cannot see it.
-- **Declared rule:** none. SA242 created the inventory, and no Module Conventions rule names it.
-- **Options:**
-  - **A.** Each module declares its rows as a capability or a manifest block (`personal_data:`),
-    and the test collects them through `collect_capabilities`, as with `anonymize_handlers`. The
-    test stays closed-world.
-  - **B.** Keep one file but move it to a neutral home (`tests_shared/`), and link it from
-    module-extension.md's checklist. This is cheaper, but ownership is still central.
-- **Recommended rule (A):**
-  - ✅ A module declares the personal-data treatment of each of its own user-linked fields, next
-    to the handler that applies it.
-  - ❌ One module's test file listing another module's fields.
-- **Enforcement:** the existing closed-world inventory test, re-pointed at the collected
-  declarations. Its three control cases carry over.
-- **Migration:** 8 modules gain a declaration, and the orgs file shrinks to orgs, contrib, and
-  third-party rows. This is test-time only, so it is not a one-way door.
-- **Confidence:** High. Rows were counted by script, and the guide was searched.
-- **Hand-off:** arch. This item is the convention side of `personal-data-coverage-shipped-only`
-  (arch Finding 2), and the inventory's home and reach are that finding's root.
-
 ### Item 4 (compact): `anonymize-executor-naming`
 
 D · handlers 5 · the private entry point is `anonymize_account` in 4 and `scrub_account` in auth
@@ -394,10 +371,11 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
 
 1. **Anonymization has no Module Conventions rule.** module-extension.md states the declaration
    shape, but no rule covers matching, values, or file roles (Items 1, 2, 4).
-2. **Undiscoverable rule.** The personal-data inventory is not mentioned in module-extension.md
-   or the authoring checklist (Item 3).
-3. **Stale term.** module-extension.md line 189 still says "auth's account-deletion collector"
-   after SA216(c) renamed the boundary to *anonymize* (`dfd6214e`).
+2. **Undiscoverable rule.** *(resolved by SA246: module-extension.md § Project-Owned Tenant
+   Models documents the `personal_data_declarations` capability and the `W006` check, and the
+   authoring checklist names the declaration and the populated-user assertion.)*
+3. **Stale term.** *(resolved by SA246: module-extension.md now says "auth's anonymize boundary"
+   instead of "auth's account-deletion collector".)*
 4. **Delegated rules are hard to see.** Rules 41 and 46 have no detector of their own. Their
    clauses ride rules 7/31/37 and 19/28, and only a comment in the partition test says so
    (`test_check_module_conventions.py:7282`). The harness's success line ("40 covered") does not
@@ -465,7 +443,10 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
 - 2026-10-05 — `anonymize-redaction-helper-copies`: **new**, open (lead from the arch audit's
   Coherence hand-offs).
 - 2026-10-05 — `anonymize-replacement-values`: **new**, open.
-- 2026-10-05 — `personal-data-inventory-ownership`: **new**, open.
+- 2026-10-05 — `personal-data-inventory-ownership`: **resolved** (SA246 — rule 49; each module
+  declares its rows through `personal_data_declarations`, the closed-world inventory test
+  collects them and keeps its three controls, and orgs' W006 check reports undeclared candidates
+  on project-owned models).
 - 2026-10-05 — `anonymize-executor-naming`: **new**, open.
 - 2026-10-05 — `write-effects-on-commit`: **resolved** (2eb63262 — verified: notifications' rollback test `tests/test_services.py:325–341` exists and `dispatch_after_commit` is gone; blog joins the population with an on-commit test). (Correction: the 2026-10-03 pass listed it as *decided* with notifications still to change; the test landed 2026-10-02, before that pass's SHA.)
 - 2026-10-05 — `settings-snapshot-readers`: **resolved** (537204bc — rule 42 (D44); harness passes at 8e4122f2).

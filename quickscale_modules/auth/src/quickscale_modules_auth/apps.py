@@ -9,7 +9,12 @@ from typing import Any
 
 from django.apps import AppConfig
 
-from quickscale_core.runtime import register_module_settings_check
+from quickscale_core.runtime import (
+    PersonalDataExclusion,
+    PersonalDataField,
+    PersonalDataTreatment,
+    register_module_settings_check,
+)
 from quickscale_modules_orgs.removal import (
     AUTH_PERSONAL_DATA,
     OrganizationRemovalObligation,
@@ -65,6 +70,74 @@ class QuickscaleAuthConfig(AppConfig):
         declares its own app config as its handler.
         """
         return (self,)
+
+    def personal_data_declarations(
+        self,
+    ) -> tuple[PersonalDataField | PersonalDataExclusion, ...]:
+        """Declare the personal-data rows auth owns (rule 49).
+
+        The account is disabled and scrubbed, never deleted, so all six
+        identity fields are scrubbed; the auto-created permission through
+        tables hold only the FK pair and are excluded.  allauth's
+        ``account`` addresses and the person's ``sessions`` rows are declared
+        centrally with ``orgs`` because only ``auth``'s scrub deletes them.
+        """
+        return (
+            PersonalDataField(
+                app_label=self.label,
+                model_name="User",
+                field_name="username",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Replaced with 'deleted-<id>'.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="User",
+                field_name="email",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Replaced with 'deleted-<id>@invalid' so the address can register again.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="User",
+                field_name="first_name",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Blanked.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="User",
+                field_name="last_name",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Blanked.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="User",
+                field_name="password",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Set unusable; the same handler turns is_active off.",
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="User",
+                field_name="last_login",
+                treatment=PersonalDataTreatment.SCRUB,
+                note="Cleared.",
+            ),
+            PersonalDataExclusion(
+                app_label=self.label,
+                model_name="User_groups",
+                field_name="user",
+                reason="Auto-created M2M through table for User.groups; holds the FK pair only.",
+            ),
+            PersonalDataExclusion(
+                app_label=self.label,
+                model_name="User_user_permissions",
+                field_name="user",
+                reason="Auto-created M2M through table for User.user_permissions; FK pair only.",
+            ),
+        )
 
     def removal_boundary_implementations(
         self,
