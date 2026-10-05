@@ -80,10 +80,6 @@ and React were not read this pass. Silence there means *not looked at*.
 schema: tech-audit/v6
 audited: 8e4122f216824edb62134441a00f2413b3854653
 items:
-  - {id: billing-anonymize-name-substring, status: open, severity: S4, category: I,
-     title: "Billing payload scrub replaces the name as a bare substring, including in dict keys", effort: Trivial,
-     confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_anonymization.py], first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: dr-restore-vintage-exact-match, status: watchlist, category: I, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/recovery.py], first_seen: 2026-09-24, last_verified: 2026-10-05}
   - {id: orgs-provider-id-check-blocks-migrate, status: watchlist, category: VI, reality: generated-app,
@@ -98,23 +94,16 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 1 · total 1 open.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 0 · total 0 open.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
-| `billing-anonymize-name-substring` | S4 | I | Name replaced as a bare substring, keys included | Trivial | High | new |
 
 ---
 
 ## 4. Findings
 
-### S4
-
-- `billing-anonymize-name-substring` · `billing/_anonymization.py:149` · within the person's own
-  webhook payloads, the name is replaced as a bare case-insensitive substring, in dict **keys**
-  too (`_redact_identity` rewrites keys). A short name such as "Al" or "Id" mangles field names
-  like `total` or `customer_id` and destroys the payload's structure. Fix: use the notifications
-  word-boundary match, and leave keys alone.
+No open findings; the SA245 closure is recorded in §13.
 ---
 
 ## 5. Safeguard matrix
@@ -154,8 +143,8 @@ Every empty cell carries a finding ID or a stated reason.
    of `anonymize-full-table-scans-under-locks`, and `notifications-account-username-dead`. All
    three were in the same file, and landed with the auth session filter and the billing SQL
    pre-filter.
-2. **Batch B (still open):** `billing-anonymize-name-substring`, carried by SA245 with the shared
-   redaction helpers.
+2. **Batch B:** `billing-anonymize-name-substring` landed with the shared redaction helpers
+   (SA245); no batch remains open.
 
 Batch A landed before the next release, because SA216 has not shipped yet.
 
@@ -167,8 +156,8 @@ Batch A landed before the next release, because SA216 has not shipped yet.
   filters expired rows. The lock/recheck logic is clean.
 - **notifications**: clean. Anonymization and the send path were read; the executor now selects
   linked messages only.
-- **billing**: `billing-anonymize-name-substring`. Anonymization was read in full; payloads are
-  pre-filtered in SQL.
+- **billing**: clean. Anonymization was read in full; payloads are pre-filtered in SQL, and the
+  scrub now uses core's word-bounded matcher and leaves payload keys alone.
 - **orgs**: clean. Anonymization, the create-site-org command, and the watchlist re-checks were
   read.
 - **blog**: clean. Anonymization was read in full, and avatar deletion runs on commit with no raise.
@@ -207,8 +196,9 @@ The five items from the prior pass are carried. One is added:
 
 - Billing webhook payloads still select by **matching identity strings**, because they carry no
   user or org link; notification messages select by delivery, an actor link, or the address.
-  Every executor re-implements the email-token matcher: billing and notifications contain
-  duplicate `_identity_form`/`_replace_addresses` functions. The structural decision is whether
+  Every executor re-implemented the email-token matcher: billing and notifications carried
+  duplicate `_identity_form`/`_replace_addresses` functions until SA245 moved the matcher to core.
+  The structural decision is whether
   personal-data rows must carry an owner key (the SA242 inventory could require one).
 
 ---
@@ -219,7 +209,8 @@ The five items from the prior pass are carried. One is added:
 - Add an anonymization conformance test that runs every declared `anonymize_account` against a
   fixture with a **bystander** user whose rows contain the person's name as ordinary text, and
   asserts the bystander rows are unchanged. It would have caught
-  `billing-anonymize-name-substring`; notifications now has the direct common-word test.
+  `billing-anonymize-name-substring`; notifications now has the direct common-word test, and
+  rules 47–48 cover the matcher shapes without that end-to-end run.
 
 ---
 
@@ -352,3 +343,7 @@ one-liners were not re-evaluated beyond a spot check (the Stripe client still se
   `expire_date__gt=now()`, billing loads only address-matching payloads, and message selection no
   longer walks the table.
 - 2026-10-05 — `notifications-account-username-dead`: resolved (SA244). The helper is deleted.
+- 2026-10-05 — `billing-anonymize-name-substring`: resolved (SA245, abbc09d0). Billing and
+  notifications scrub through core's `replace_address`/`redact_names`; name matching is
+  word-bounded, payload keys are never rewritten, pinned by billing's
+  `test_anonymize_never_rewrites_payload_keys` and the core redaction table.
