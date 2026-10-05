@@ -61,19 +61,19 @@ def _validate_obligation_actions(
     app_config: AppConfig,
 ) -> None:
     """Validate the obligation's action vocabulary, skip reason, and executors."""
-    for attribute in ("purge_action", "account_delete_action"):
+    for attribute in ("purge_action", "anonymize_action"):
         if not isinstance(getattr(obligation, attribute), RemovalAction):
             raise ValueError(
                 f"{owner} declares {obligation.name!r} with a {attribute} "
                 "outside the RemovalAction vocabulary."
             )
     if (
-        obligation.account_delete_action is RemovalAction.SKIP
-        and not obligation.account_delete_skip_reason
+        obligation.anonymize_action is RemovalAction.SKIP
+        and not obligation.anonymize_skip_reason
     ):
         raise ValueError(
-            f"{owner} declares {obligation.name!r} as skipped for account "
-            "deletion without a reason."
+            f"{owner} declares {obligation.name!r} as skipped for the "
+            "anonymize boundary without a reason."
         )
     if obligation.external_provider_fields and obligation.purge_action not in {
         RemovalAction.REFUSE,
@@ -86,7 +86,7 @@ def _validate_obligation_actions(
         )
     for boundary, action in (
         (RemovalBoundary.PURGE, obligation.purge_action),
-        (RemovalBoundary.ACCOUNT_DELETE, obligation.account_delete_action),
+        (RemovalBoundary.ANONYMIZE, obligation.anonymize_action),
     ):
         hook = STAGE_EXECUTOR_HOOKS.get(action)
         if hook is None:

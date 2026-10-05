@@ -49,8 +49,8 @@ def test_removal_obligation_names_are_unique_and_skips_are_explained() -> None:
     names = [obligation.name for obligation in obligations]
     assert len(names) == len(set(names))
     for obligation in obligations:
-        if obligation.account_delete_action is RemovalAction.SKIP:
-            assert obligation.account_delete_skip_reason
+        if obligation.anonymize_action is RemovalAction.SKIP:
+            assert obligation.anonymize_skip_reason
 
 
 def test_purged_provider_ids_have_refuse_or_reconcile_obligations() -> None:
@@ -285,8 +285,8 @@ def test_aggregate_rejects_a_name_declared_by_two_apps(
     obligation = OrganizationRemovalObligation(
         name="acme-provider-state",
         purge_action=RemovalAction.REFUSE,
-        account_delete_action=RemovalAction.SKIP,
-        account_delete_skip_reason="Account deletion leaves provider state alone.",
+        anonymize_action=RemovalAction.SKIP,
+        anonymize_skip_reason="Account deletion leaves provider state alone.",
     )
     first = SimpleNamespace(label="acme_app", removal_obligations=(obligation,))
     second = SimpleNamespace(label="acme_other_app", removal_obligations=(obligation,))
@@ -319,8 +319,8 @@ def test_declared_obligations_reject_duplicate_names() -> None:
     obligation = OrganizationRemovalObligation(
         name="acme-provider-state",
         purge_action=RemovalAction.REFUSE,
-        account_delete_action=RemovalAction.SKIP,
-        account_delete_skip_reason="Retained.",
+        anonymize_action=RemovalAction.SKIP,
+        anonymize_skip_reason="Retained.",
     )
     config = SimpleNamespace(
         label="acme_app", removal_obligations=(obligation, obligation)
@@ -335,7 +335,7 @@ def test_declared_obligations_reject_an_unexplained_skip() -> None:
     obligation = OrganizationRemovalObligation(
         name="acme-provider-state",
         purge_action=RemovalAction.REFUSE,
-        account_delete_action=RemovalAction.SKIP,
+        anonymize_action=RemovalAction.SKIP,
     )
     config = SimpleNamespace(label="acme_app", removal_obligations=(obligation,))
 
@@ -348,8 +348,8 @@ def test_declared_obligations_reject_an_unknown_action() -> None:
     obligation = OrganizationRemovalObligation(
         name="acme-provider-state",
         purge_action="refuse",  # type: ignore[arg-type]
-        account_delete_action=RemovalAction.SKIP,
-        account_delete_skip_reason="Retained.",
+        anonymize_action=RemovalAction.SKIP,
+        anonymize_skip_reason="Retained.",
     )
     config = SimpleNamespace(label="acme_app", removal_obligations=(obligation,))
 
@@ -362,8 +362,8 @@ def test_declared_obligations_require_an_executor_hook() -> None:
     obligation = OrganizationRemovalObligation(
         name="acme-cache-state",
         purge_action=RemovalAction.INVALIDATE,
-        account_delete_action=RemovalAction.SKIP,
-        account_delete_skip_reason="Retained.",
+        anonymize_action=RemovalAction.SKIP,
+        anonymize_skip_reason="Retained.",
     )
     config = SimpleNamespace(label="acme_app", removal_obligations=(obligation,))
 
@@ -376,8 +376,8 @@ def test_declared_obligations_accept_an_app_owned_stage_with_its_hook() -> None:
     obligation = OrganizationRemovalObligation(
         name="acme-cache-state",
         purge_action=RemovalAction.INVALIDATE,
-        account_delete_action=RemovalAction.SKIP,
-        account_delete_skip_reason="Retained.",
+        anonymize_action=RemovalAction.SKIP,
+        anonymize_skip_reason="Retained.",
     )
     config = SimpleNamespace(
         label="acme_app",
@@ -393,8 +393,8 @@ def test_declared_obligations_reject_provider_fields_without_refusal() -> None:
     obligation = OrganizationRemovalObligation(
         name="acme-provider-state",
         purge_action=RemovalAction.DELETE,
-        account_delete_action=RemovalAction.SKIP,
-        account_delete_skip_reason="Retained.",
+        anonymize_action=RemovalAction.SKIP,
+        anonymize_skip_reason="Retained.",
         external_provider_fields=(
             ExternalProviderField("acme_app.asset", "vendor_customer_id"),
         ),
@@ -413,8 +413,8 @@ def _boundary_guarded_obligation(
     return OrganizationRemovalObligation(
         name="acme-provider-state",
         purge_action=RemovalAction.REFUSE,
-        account_delete_action=RemovalAction.SKIP,
-        account_delete_skip_reason="Retained.",
+        anonymize_action=RemovalAction.SKIP,
+        anonymize_skip_reason="Retained.",
         external_provider_fields=(
             ExternalProviderField(
                 "acme_app.asset",
@@ -497,7 +497,7 @@ def test_installed_boundaries_declare_their_implementations() -> None:
     assert implementations[RemovalBoundary.PURGE][1].endswith(
         "quickscale_orgs_purge_organization"
     )
-    assert implementations[RemovalBoundary.ACCOUNT_DELETE] == (
+    assert implementations[RemovalBoundary.ANONYMIZE] == (
         "quickscale_modules_auth",
         "quickscale_modules_auth.views",
         "AccountDeleteView.form_valid",
@@ -548,7 +548,7 @@ def test_every_boundary_declares_coordinator_routes() -> None:
 def test_declared_refusal_fields_skip_boundary_guarded_fields() -> None:
     """Billing decides its provider liveness, so its fields are not value-refused."""
     assert declared_refusal_fields(RemovalBoundary.PURGE) == ()
-    assert declared_refusal_fields(RemovalBoundary.ACCOUNT_DELETE) == ()
+    assert declared_refusal_fields(RemovalBoundary.ANONYMIZE) == ()
 
 
 def test_declared_refusal_fields_list_unguarded_fields(
@@ -558,8 +558,8 @@ def test_declared_refusal_fields_list_unguarded_fields(
     obligation = OrganizationRemovalObligation(
         name="acme-provider-state",
         purge_action=RemovalAction.REFUSE,
-        account_delete_action=RemovalAction.SKIP,
-        account_delete_skip_reason="Account deletion retains the rows.",
+        anonymize_action=RemovalAction.SKIP,
+        anonymize_skip_reason="Account deletion retains the rows.",
         external_provider_fields=(
             ExternalProviderField("acme_app.asset", "vendor_customer_id"),
             ExternalProviderField(
@@ -590,7 +590,7 @@ def test_coordinator_fails_closed_when_a_stage_never_ran() -> None:
 
 def test_account_delete_coordinator_requires_both_stages() -> None:
     """Account deletion discharges provider reconciliation and anonymization."""
-    coordinator = RemovalCoordinator(RemovalBoundary.ACCOUNT_DELETE)
+    coordinator = RemovalCoordinator(RemovalBoundary.ANONYMIZE)
     with pytest.raises(RuntimeError, match="did not discharge"):
         coordinator.finish()
 
@@ -613,7 +613,7 @@ def test_anonymize_is_an_app_owned_stage_with_a_declared_executor() -> None:
     """The anonymize action names the declaring app's hook and has a route."""
     assert STAGE_EXECUTOR_HOOKS[RemovalAction.ANONYMIZE] == "anonymize_account"
     assert RemovalAction.ANONYMIZE in coordinator_discharge_actions(
-        RemovalBoundary.ACCOUNT_DELETE
+        RemovalBoundary.ANONYMIZE
     )
     assert RemovalAction.ANONYMIZE not in coordinator_discharge_actions(
         RemovalBoundary.PURGE
@@ -652,7 +652,7 @@ def test_coordinator_discharge_and_finish_are_idempotent() -> None:
 
 def test_coordinator_records_skips_without_discharging_them() -> None:
     """Account deletion records the retained obligations it never executes."""
-    coordinator = RemovalCoordinator(RemovalBoundary.ACCOUNT_DELETE)
+    coordinator = RemovalCoordinator(RemovalBoundary.ANONYMIZE)
 
     skipped = coordinator.skipped()
 
@@ -667,7 +667,7 @@ def test_coordinator_records_skips_without_discharging_them() -> None:
 def test_coordinator_rejects_a_stage_without_a_boundary_route() -> None:
     """An action the boundary does not perform cannot be discharged."""
     purge = RemovalCoordinator(RemovalBoundary.PURGE)
-    account_delete = RemovalCoordinator(RemovalBoundary.ACCOUNT_DELETE)
+    account_delete = RemovalCoordinator(RemovalBoundary.ANONYMIZE)
 
     with pytest.raises(RuntimeError, match="no coordinator route"):
         purge.discharge_stage(RemovalAction.RECONCILE)

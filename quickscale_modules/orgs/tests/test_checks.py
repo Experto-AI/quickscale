@@ -744,8 +744,8 @@ class TestCheckRemovalObligationDischargeE002:
             OrganizationRemovalObligation(
                 name="acme-registry-state",
                 purge_action=RemovalAction.RECONCILE,
-                account_delete_action=RemovalAction.SKIP,
-                account_delete_skip_reason="Account deletion retains the rows.",
+                anonymize_action=RemovalAction.SKIP,
+                anonymize_skip_reason="Account deletion retains the rows.",
             ),
         )
 
@@ -769,7 +769,7 @@ class TestCheckRemovalObligationDischargeE002:
             OrganizationRemovalObligation(
                 name="acme-provider-state",
                 purge_action=RemovalAction.REFUSE,
-                account_delete_action=RemovalAction.RECONCILE,
+                anonymize_action=RemovalAction.RECONCILE,
             ),
         )
 
@@ -941,7 +941,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
     def test_account_delete_boundary_wiring_is_checked(
         self, monkeypatch: MonkeyPatch
     ) -> None:
-        """The account-deletion boundary is followed like the purge one."""
+        """The anonymize boundary is followed like the purge one."""
         from quickscale_modules_orgs import checks
         from quickscale_modules_orgs.removal import RemovalBoundary
 
@@ -949,7 +949,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
             checks,
             "_boundary_implementations",
             lambda: {
-                RemovalBoundary.ACCOUNT_DELETE: (
+                RemovalBoundary.ANONYMIZE: (
                     "quickscale_modules_auth",
                     "tests.bypassed_boundary",
                     "BypassingAccountDeleteBoundary.handle",
@@ -980,8 +980,8 @@ class TestCheckRemovalObligationDischargeWiringE002:
             OrganizationRemovalObligation(
                 name="acme-provider-state",
                 purge_action=RemovalAction.REFUSE,
-                account_delete_action=RemovalAction.SKIP,
-                account_delete_skip_reason="Account deletion retains the rows.",
+                anonymize_action=RemovalAction.SKIP,
+                anonymize_skip_reason="Account deletion retains the rows.",
                 external_provider_fields=(
                     ExternalProviderField(
                         "quickscale_billing.plan",
@@ -1012,7 +1012,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
             OrganizationRemovalObligation(
                 name="acme-provider-state",
                 purge_action=RemovalAction.REFUSE,
-                account_delete_action=RemovalAction.RECONCILE,
+                anonymize_action=RemovalAction.RECONCILE,
                 external_provider_fields=(
                     ExternalProviderField("acme_app.asset", "vendor_customer_id"),
                 ),
@@ -1023,7 +1023,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
 
         assert len(messages) == 1
         assert messages[0].id == "quickscale_orgs.E002"
-        assert "'account-delete'" in messages[0].msg
+        assert "'anonymize'" in messages[0].msg
         assert "no boundary guard reconciles" in messages[0].msg
 
     @patch("quickscale_modules_orgs.checks.organization_removal_obligations")
@@ -1041,7 +1041,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
             OrganizationRemovalObligation(
                 name="acme-provider-state",
                 purge_action=RemovalAction.REFUSE,
-                account_delete_action=RemovalAction.RECONCILE,
+                anonymize_action=RemovalAction.RECONCILE,
                 external_provider_fields=(
                     ExternalProviderField(
                         "acme_app.asset",

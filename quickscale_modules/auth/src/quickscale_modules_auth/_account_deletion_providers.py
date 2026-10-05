@@ -161,7 +161,15 @@ class _AccountDeletionProviderMixin:
         organization_ids: set[Any],
         handlers: tuple[Any, ...],
     ) -> None:
-        """Require every declared handler's one-time state to be terminal."""
+        """Require every declared handler's one-time state to be terminal.
+
+        The caller passes the discovered provider organizations, whose
+        mutation locks the removal holds across this check and its removal
+        transaction, so an already-authorized purchase creation cannot slip a
+        reservation in behind the check.  Each organization is visited under
+        its own scope, so no organization's rows are read outside its own RLS
+        context.
+        """
         if not organization_ids:
             return
         for handler in handlers:
@@ -172,6 +180,21 @@ class _AccountDeletionProviderMixin:
                     organization_id,
                     user.pk,
                 )
+
+    def _provider_user_reference_organization_ids(
+        self, user: Any, handlers: tuple[Any, ...]
+    ) -> set[Any]:
+        """Discover provider-owned organizations independently of memberships."""
+        organization_ids: set[Any] = set()
+        for handler in handlers:
+            organization_ids.update(
+                self._call_account_deletion_handler(
+                    handler,
+                    "account_deletion_user_reference_organization_ids",
+                    user.pk,
+                )
+            )
+        return organization_ids
 
     def _enter_account_deletion_locks(
         self,
@@ -210,38 +233,6 @@ class _AccountDeletionProviderMixin:
                     "acquisition failure; re-raising the acquisition failure."
                 )
             raise
-
-    def _detach_provider_user_references(
-        self,
-        user: Any,
-        organization_ids: set[Any],
-        handlers: tuple[Any, ...],
-    ) -> None:
-        """Null each declared handler's user provenance under FORCE-RLS scope."""
-        if not organization_ids:
-            return
-        for handler in handlers:
-            self._call_account_deletion_handler(
-                handler,
-                "detach_account_deletion_user_references",
-                user.pk,
-                list(organization_ids),
-            )
-
-    def _provider_user_reference_organization_ids(
-        self, user: Any, handlers: tuple[Any, ...]
-    ) -> set[Any]:
-        """Discover provider-owned organizations independently of memberships."""
-        organization_ids: set[Any] = set()
-        for handler in handlers:
-            organization_ids.update(
-                self._call_account_deletion_handler(
-                    handler,
-                    "account_deletion_user_reference_organization_ids",
-                    user.pk,
-                )
-            )
-        return organization_ids
 
     def _resume_provider_subscriptions(
         self,

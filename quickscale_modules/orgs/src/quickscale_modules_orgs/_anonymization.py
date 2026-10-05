@@ -2,10 +2,10 @@
 
 ``QuickscaleOrgsConfig.anonymize_account`` delegates here.  The app config
 declares the ``ANONYMIZE`` action on the ``owned-personal-data``
-organization-removal obligation, so the account-deletion boundary runs this
+organization-removal obligation, so the anonymize boundary runs this
 module's own work instead of marking the declaration discharged for nothing.
 
-The account-deletion boundary's last-owner guard runs before this executor,
+The anonymize boundary's last-owner guard runs before this executor,
 so the memberships removed here are ones the person may leave.
 """
 

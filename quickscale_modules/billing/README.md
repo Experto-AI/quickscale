@@ -93,10 +93,11 @@ source tree.
 
 `QuickscaleBillingConfig` declares billing's account-deletion handler through the Module
 Conventions rule 4 `account_deletion_handlers` capability: account deletion collects every
-installed handler and drives Stripe purchase-checkout reconciliation, subscription-checkout
-reconciliation for the organizations whose subscriptions the deletion cancels, cancellation
-with compensation, provider mutation locking, and provenance detachment through it, so no
-consumer imports billing's services or names its label.
+installed handler and drives billing-provenance discovery, Stripe purchase-checkout
+reconciliation, subscription-checkout reconciliation for the organizations whose subscriptions
+the deletion cancels, cancellation with compensation, and provider mutation locking through it,
+so no consumer imports billing's services or names its label. The retained account keeps
+billing records attributed to it, so the handler no longer nulls billing's user provenance.
 
 ### Plan-feature gate
 

@@ -22,7 +22,7 @@ class BypassingPurgeBoundary:
 
 
 class BypassingAccountDeleteBoundary:
-    """An account-deletion boundary whose entry point never discharges."""
+    """An anonymize boundary whose entry point never discharges."""
 
     def handle(self) -> None:
         """Bypass the shared coordinator entirely."""

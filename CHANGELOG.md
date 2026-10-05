@@ -38,8 +38,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Server-rendered module pages share the project shell.** The blog, listings, and CRM base templates extend the project's `base.html` instead of emitting their own `<html>` document, so those pages inherit the site topbar, messages, and footer. Their child templates now fill `blog_content`, `listings_content`, and `crm_content`; a project that overrode one of these templates must rename its content block to match.
   - **Account removal disables and anonymizes instead of deleting.** Deleting your account
     deactivates the user row in place and scrubs its personal data — email, names, username,
-    password, sessions, and module-held profile data — so the same address can register again
-    while the old account cannot sign in.
+    password, sessions, and module-held profile data. Posts, deals, notes, and billing records
+    stay attributed to the scrubbed account, and the same address can register again while the
+    old account cannot sign in.
   - **CRM styling moved into a stylesheet.** CRM page styles live in `quickscale_crm/css/crm.css` rather than an inline `<style>` block, and cover CRM content only — the page shell comes from `base.html`.
   - **Module page content keeps its spacing under the shared shell.** Each module base wraps its page content in a `<div class="<module>-content">` and its stylesheet sets the vertical rhythm there, because the project `base.html` reset zeroes default margins.
   - **Frontend architecture is documented.** [docs/technical/frontend.md](docs/technical/frontend.md) defines the `window.__QUICKSCALE__` seam, URL ownership between the React shell and module routes, the Vite/`collectstatic` pipeline, and the template-inheritance rule for server-rendered module surfaces.

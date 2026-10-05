@@ -588,18 +588,18 @@ def account_deletion_user_reference_organization_ids(
 ) -> set[Any]:
     """Return tenant orgs that retain nullable provenance for one user.
 
+    Account removal must reconcile provider state that stays attributed to the
+    person in organizations they have left, so it needs a cross-tenant read.
     The generic ``operator_access`` context is reserved for explicitly
-    authorized operator callers because it yields an unrestricted read scope.
-    Account deletion also needs a cross-tenant read, including organizations
-    the user has already left, but must not expose that scope to the request.
-    This narrow seam validates the installed tenant/user relation shape and
-    returns only matching ``organization_id`` values.
+    authorized operator callers because it yields an unrestricted read scope;
+    this narrow seam validates the installed tenant/user relation shape and
+    returns only matching ``organization_id`` values.  The removal then locks
+    and reconciles those organizations under each one's ordinary write scope;
+    the seam itself nulls nothing.
 
     Discovery executes one indexed query per matching tenant model, rather
     than one query per model for every organization in the deployment. Its
-    query count is therefore independent of the total tenant count. Writes
-    remain outside operator access and must still run under ``org_scope`` so
-    the FORCE-RLS ``FOR ALL`` policy continues to fail closed.
+    query count is therefore independent of the total tenant count.
     """
     if included_app_labels is not None and included_app_labels & excluded_app_labels:
         raise ValueError("Included and excluded app labels must not overlap.")
@@ -613,7 +613,7 @@ def account_deletion_user_reference_organization_ids(
     user_model = get_user_model()
     organization_ids: set[Any] = set()
     with transaction.atomic():
-        with _audited_cross_tenant_read(reason="account deletion provenance discovery"):
+        with _audited_cross_tenant_read(reason="account removal provenance discovery"):
             for model in get_tenant_models():
                 app_label = model._meta.app_label
                 if (

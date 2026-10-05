@@ -29,7 +29,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
 | SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
-| SA216 | Disable and anonymize accounts instead of deleting the user row | post-v88 | 3 | — | Deferred |
 | SA242 | Fail `make quality` on critical complexity and very large files | post-v88 | 2 | — | Deferred |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -37,7 +36,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: SA242
-Track 3: SA216
+Track 3: —
      critical path: SA191 → SA153
 ```
 
@@ -56,7 +55,7 @@ any post-SA153 module schema change. SA154 is an inventory, not work.
 donor. SA235, SA237, and SA238 have landed, recording rules 41 and 44–46 (proposed in the
 [inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closing
 their own items, harness clauses, and inventory sections. SA241 landed on Track 3 ahead of SA153;
-SA216 follows on that track.
+SA216 landed on that track.
 
 ### Track states
 
@@ -66,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA214 | yes | yes | yes | **yes** | no |
 | 2 | SA242 | yes | yes | yes | **yes** | no |
-| 3 | SA216 | yes | yes | yes | **yes** | no |
+| 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -376,68 +375,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   playbook and gap ledger; the `showcase_react` theme, generator, and
   `generated_file_ownership.md` (design layer); decisions.
 
-- [ ] **SA216 — Disable and anonymize accounts instead of deleting the user row.**
-
-  **Context:** "Delete my account" (auth's `AccountDeleteView`) deletes the `User` row today. Every
-  record the person made for an organization loses its author ([Module Conventions](decisions.md#module-conventions) rule 27 makes
-  those links `SET_NULL`), and the deletion needs cross-organization machinery: orgs'
-  `account_deletion_user_reference_organization_ids()` lookup, the `RemovalCoordinator`'s
-  `ACCOUNT_DELETE` boundary, and billing reconciliation before the row can go. Deleting the row is
-  also what erasure requests are assumed to need. They need the personal data gone, not the row.
-  This ticket keeps the row, disables it, and scrubs the personal data at once, so records stay
-  attributed to "Deleted user #<id>" (as Django admin shows it).
-
-  **Personal data:** the checked inventory in orgs'
-  `tests/_personal_data_inventory.py` lists every field and its treatment; its conformance test
-  fails on any uninventoried candidate. The handlers implement that inventory.
-
-  Out of scope: data about people who are *not* users (crm `Contact`, forms submissions with their
-  IP and user agent), which belong to the organization; a restore grace period; a data export.
-
-  **Scope:**
-  - *Anonymize capability.* Each module that holds personal data about a user declares an
-    anonymize handler on its `AppConfig` (Module Conventions rule 4's capability mechanism, extending
-    the removal obligations in orgs' `removal.py` with an `ANONYMIZE` `RemovalAction`); auth
-    collects and runs them in one transaction. File deletion runs on commit (Module Conventions
-    rule 21).
-  - *auth.* `AccountDeleteView` disables and scrubs instead of calling `delete()`; the last-owner
-    guard and billing's checks before deletion stay. The person can sign up again with the same email.
-  - *Simplify.* The cross-organization null-out lookup
-    (`account_deletion_user_reference_organization_ids`, in orgs' `current_org` and billing) is
-    called only by auth's delete view; it goes if nothing else deletes users through self-service,
-    and the `ACCOUNT_DELETE` removal boundary becomes the anonymize boundary. Operator hard delete
-    (Django admin) keeps working under Module Conventions rule 27.
-  - *Docs.* decisions.md records the account-removal model; organizations.md's account deletion
-    section and auth's README change with it.
-
-  **Acceptance:**
-  - After account removal, no table (module or third-party) holds the person's email, name, or
-    free text written about them as a user, as a test that walks the inventory proves; files are gone
-    from storage.
-  - Their posts, deals, notes, and billing records remain, attributed to "Deleted user", and each
-    organization's data is otherwise untouched.
-  - The same email can register again; the old account cannot sign in.
-  - A rolled-back removal leaves no effect (Module Conventions rule 21); operator hard delete still passes the user-FK conformance gate.
-
-  **Surfaces:** auth (`views.py`, `AppConfig`, README); orgs (`removal.py`, the
-  account-deletion lookup, memberships, invitations); blog, notifications, billing, crm, forms,
-  backups (anonymize handlers where the inventory lists them); decisions.md and [organizations.md](organizations.md). Billing is a Track 2
-  surface, so SA216 lands through the serialized merge queue.
-
-  **Slices:**
-  - [x] (a) The `ANONYMIZE` removal action and auth's collector, with each module's handler and
-    its tests. Handoff: the action and coordinator route, the `anonymize_handlers` capability,
-    the five handlers, and the view's in-transaction collector are reviewed and green; next are
-    (b) and (c); watch the escaped and overlapping identity matching in notifications'
-    shared-message scrub.
-  - [x] (b) `AccountDeleteView` disables and scrubs; re-registration and sign-in tests; the
-    rollback test. Handoff: the view stops being a `DeleteView` and keeps the row, disabled
-    and scrubbed; re-registration and sign-in tests prove the same email can register again
-    while the old credentials cannot sign in, the existing rollback test stays green, and
-    the coupled orgs survivor regression asserts the retained row; next is (c); watch the
-    detach pass, which still nulls nullable provenance until (c) removes it.
-  - [ ] (c) Remove the account-deletion lookup and turn `ACCOUNT_DELETE` into the anonymize
-    boundary; decisions, organizations.md, and auth's README.
+- [x] **SA216 — Disable and anonymize accounts instead of deleting the user row.**
 
 - [ ] **SA242 — Fail `make quality` on critical complexity and very large files.**
 

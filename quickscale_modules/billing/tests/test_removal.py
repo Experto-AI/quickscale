@@ -55,7 +55,7 @@ def test_removal_obligation_declares_its_boundary_guard_hooks() -> None:
         mutation_lock="organization_removal_provider_mutation_lock",
     )
     assert personal_data.name == BILLING_PERSONAL_DATA
-    assert personal_data.account_delete_action is RemovalAction.ANONYMIZE
+    assert personal_data.anonymize_action is RemovalAction.ANONYMIZE
     assert personal_data.purge_action is RemovalAction.SKIP
     assert callable(_billing_config().anonymize_account)
 

@@ -30,14 +30,14 @@ class QuickscaleBlogConfig(AppConfig):
         """Declare the author profile's personal data as blog's own obligation.
 
         The person's posts and uploaded media belong to the organization and
-        stay attributed to the deleted account, so only the profile fields are
+        stay attributed to the disabled account, so only the profile fields are
         scrubbed.  An organization purge does not touch a user profile.
         """
         return (
             OrganizationRemovalObligation(
                 name=BLOG_PERSONAL_DATA,
                 purge_action=RemovalAction.SKIP,
-                account_delete_action=RemovalAction.ANONYMIZE,
+                anonymize_action=RemovalAction.ANONYMIZE,
             ),
         )
 
@@ -58,9 +58,9 @@ class QuickscaleBlogConfig(AppConfig):
     def anonymize_handlers(self) -> tuple[Any, ...]:
         """Declare blog's account-anonymization handler (rule 4).
 
-        The account-deletion boundary collects every installed app's declared
-        handler through the shared core helper and runs them in one
-        transaction; blog declares its own app config as its handler.
+        The anonymize boundary collects every installed app's declared handler
+        through the shared core helper and runs them in one transaction; blog
+        declares its own app config as its handler.
         """
         return (self,)
 
