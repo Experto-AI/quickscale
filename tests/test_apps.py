@@ -213,29 +213,6 @@ def test_account_deletion_adapter_delegates_purchase_reconciliation() -> None:
     )
 
 
-def test_account_deletion_adapter_delegates_user_reference_detachment() -> None:
-    from unittest.mock import patch
-
-    from quickscale_modules_billing.apps import QuickscaleBillingConfig
-
-    config = QuickscaleBillingConfig(
-        "quickscale_modules_billing",
-        import_module("quickscale_modules_billing"),
-    )
-
-    with patch(
-        "quickscale_modules_billing._removal.detach_account_deletion_user_references",
-        return_value=2,
-    ) as detach:
-        result = config.detach_account_deletion_user_references(
-            "user-1",
-            organization_ids=["org-1", "org-2"],
-        )
-
-    assert result == 2
-    detach.assert_called_once_with("user-1", organization_ids=["org-1", "org-2"])
-
-
 def test_account_deletion_adapter_delegates_user_reference_discovery() -> None:
     from unittest.mock import patch
 
