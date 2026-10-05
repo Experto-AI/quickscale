@@ -1,5 +1,7 @@
 # Module Conventions Inventory
 
+> **Moved (2026-10-05).** The coherence audit now lives in [`docs/others/coherence-audit.md`](../others/coherence-audit.md), next to the technical and architectural audits. This file's audit index and reconciliation log are frozen at `c10b529e`; its sections 1–47 and decisions D1–D48 remain the evidence and decision record that audit cites.
+
 Audited: c10b529e (v89) · 2026-10-03 · working tree dirty (uncommitted edits to `docs/others/arch-audit.md` and `tech-audit.md` only; no source) · prompt: deep-coherence-audit v1 · passes: 2 (this re-run; 8 in all)
 **SA215 closing pass:** 2026-10-02 · see [Closing pass](#closing-pass-sa215-2026-10-02)
 

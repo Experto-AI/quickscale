@@ -79,7 +79,6 @@ RETAINED_CLOSED_TICKETS = {
 COLUMNS = [
     "Ticket",
     "Delivery",
-    "Horizon",
     "Track",
     "Depends on",
     "Release requirement",
@@ -137,20 +136,13 @@ def _roadmap_tickets(text: str) -> set[str]:
         "invalid scheduled ID"
     )
     assert scheduled == tickets, "schedule coverage mismatch"
-    horizons: dict[str, str] = {}
     requirements: dict[str, str] = {}
     dependencies: dict[str, set[str]] = {}
-    for ticket, delivery, horizon, track, dependency_text, requirement in rows:
+    for ticket, delivery, track, dependency_text, requirement in rows:
         assert delivery and requirement, (
             f"missing delivery or release requirement: {ticket}"
         )
-        assert horizon in {"v88", "post-v88"}, f"invalid horizon: {ticket}"
-        allowed_requirements = (
-            {"Required", "Optional"}
-            if horizon == "v88"
-            else {"Deferred", "Inventory only"}
-        )
-        assert requirement in allowed_requirements, (
+        assert requirement in {"Required", "Optional", "Inventory only"}, (
             f"invalid release requirement: {ticket}"
         )
         assert track in {"1", "2", "3"}, f"invalid track: {ticket}"
@@ -160,7 +152,6 @@ def _roadmap_tickets(text: str) -> set[str]:
         deps = set(re.findall(TICKET, dependency_text))
         assert deps <= tickets, f"unknown dependency: {ticket}"
         assert ticket not in deps, f"self dependency: {ticket}"
-        horizons[ticket] = horizon
         requirements[ticket] = requirement
         dependencies[ticket] = deps
     visited: set[str] = set()
@@ -178,9 +169,6 @@ def _roadmap_tickets(text: str) -> set[str]:
 
     for ticket in tickets:
         visit(ticket)
-        assert horizons[ticket] != "v88" or all(
-            horizons[dependency] == "v88" for dependency in dependencies[ticket]
-        ), f"v88 depends on post-v88: {ticket}"
         assert requirements[ticket] != "Required" or all(
             requirements[dependency] == "Required"
             for dependency in dependencies[ticket]
@@ -201,11 +189,11 @@ def test_docs_index_links_to_roadmap() -> None:
 def roadmap() -> str:
     """Synthetic tickets keep controls independent of the live backlog."""
     return """# Roadmap
-| Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
-| --- | --- | --- | --- | --- | --- |
-| SA900 | First delivery | v88 | 1 | — | Required |
-| SA901 | Second delivery | v88 | 2 | SA900 | Required |
-| SA902 | Later delivery | post-v88 | 3 | SA901 | Deferred |
+| Ticket | Delivery | Track | Depends on | Release requirement |
+| --- | --- | --- | --- | --- |
+| SA900 | First delivery | 1 | — | Required |
+| SA901 | Second delivery | 2 | SA900 | Required |
+| SA902 | Later delivery | 3 | SA901 | Optional |
 
 - [ ] **SA900 — First delivery**
 - [ ] **SA901 — Second delivery**
@@ -226,20 +214,13 @@ def test_synthetic_valid_roadmap(roadmap: str) -> None:
         ("| SA901 |", "| SA900 |", "duplicate scheduled"),
         ("| SA902 |", "| SA903 |", "schedule coverage"),
         ("| 1 |", "| 4 |", "invalid track"),
-        ("| v88 | 1", "| next | 1", "invalid horizon"),
         ("| SA900 | Required", "| unknown | Required", "invalid dependencies"),
         ("| SA900 | Required", "| SA999 | Required", "unknown dependency"),
         ("| SA900 | Required", "| SA901 | Required", "self dependency"),
         ("| — | Required", "| SA901 | Required", "dependency cycle"),
-        ("| post-v88 | 3", "| v88 | 3 | extra", "row width"),
-        (
-            "| v88 | 1 | — | Required",
-            "| post-v88 | 1 | — | Deferred",
-            "v88 depends on post-v88",
-        ),
+        ("| 3 | SA901", "| 3 | extra | SA901", "row width"),
         ("| Required |", "| Maybe |", "invalid release requirement"),
         ("| Required |", "| Deferred |", "invalid release requirement"),
-        ("| Deferred |", "| Required |", "invalid release requirement"),
         ("| — | Required", "| — | Optional", "non-required prerequisite"),
         (
             "**SA900 — First delivery**",
@@ -267,7 +248,7 @@ def test_accepts_checked_ticket_outside_open_schedule(
     closed_roadmap = (
         roadmap.replace("SA902", closed_ticket)
         .replace(
-            f"| {closed_ticket} | Later delivery | post-v88 | 3 | SA901 | Deferred |\n",
+            f"| {closed_ticket} | Later delivery | 3 | SA901 | Optional |\n",
             "",
         )
         .replace(f"- [ ] **{closed_ticket}", f"- [x] **{closed_ticket}")

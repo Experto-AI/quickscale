@@ -15,28 +15,31 @@ their value.
 real Stripe keys, every webhook and every checkout fails); the fix ships in 0.89.0, which is not
 published yet ([publish_procedure.md](publish_procedure.md)).
 
-The scheduling table owns horizon, track, dependencies, and release requirement. Ticket bodies own
+The scheduling table owns track, dependencies, and release requirement. Ticket bodies own
 context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves history.
 
 ## Schedule and parallel execution
 
 <a id="scheduling-table"></a>
 
-| Ticket | Delivery | Horizon | Track | Depends on | Release requirement |
-|---|---|---|---|---|---|
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | post-v88 | 1 | — | Deferred |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | post-v88 | 1 | — | Deferred |
-| SA153 | Deliver the first property portal using project-owned extensions | post-v88 | 1 | SA191 | Deferred |
-| SA154 | Property-portal capabilities to promote when a project needs them | post-v88 | 1 | SA153 | Inventory only |
-| SA214 | Harden the fresh-first migration tool into the standard upgrade path | post-v88 | 1 | — | Deferred |
+| Ticket | Delivery | Track | Depends on | Release requirement |
+|---|---|---|---|---|
+| SA244 | Scope account anonymization to the person's records and bound its scans | 3 | — | Required |
+| SA245 | Share one redaction matcher and one set of replacement values across anonymization handlers | 3 | SA244 | Required |
+| SA246 | Declare personal data per module and check it where the project's models are installed | 2 | — | Optional |
+| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
+| SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA246 | Optional |
+| SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
+| SA214 | Harden the fresh-first migration tool into the standard upgrade path | 1 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: —
-Track 3: —
-     critical path: SA191 → SA153
+Track 2: SA246
+Track 3: SA244 ──► SA245
+     critical path: SA191 → SA153; release gate: SA244 → SA245 before 0.89.0
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges.
@@ -46,15 +49,11 @@ with a fresh context, scoped to that slice's text and named surfaces, and ends w
 handoff note (what landed, what is next, what to watch) committed with the work. A ticket closes
 when its last slice lands; slices are not scheduled.
 
-**Critical path.** The conventions land while renames are still cheap: `bap-web` is not yet
-ported, and SA204 has not frozen the migration history. SA204 freezes migration history before
-any post-SA153 module schema change. SA154 is an inventory, not work.
-
-**Parallel start.** SA214 runs ahead of SA191 on Track 1 against a pinned pre-SA191 `bap-web`
-donor. SA235, SA237, and SA238 have landed, recording rules 41 and 44–46 (proposed in the
-[inventory](../planning/module-conventions-inventory.md#rules-proposed-seventh-pass)) and closing
-their own items, harness clauses, and inventory sections. SA241 landed on Track 3 ahead of SA153;
-SA216 landed on that track.
+**Order.** SA204 freezes migration history before any post-SA153 module schema change; SA154 is
+an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA244 and SA245 share
+the anonymization handler files and gate 0.89.0. SA246 touches `apps.py` capabilities and orgs'
+checks, not handler bodies, and lands before SA153 so the portal's personal fields are classified
+from the first migration.
 
 ### Track states
 
@@ -62,9 +61,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA214 | yes | yes | yes | **yes** | no |
-| 2 | — | yes | yes | yes | **yes** | no |
-| 3 | — | yes | yes | yes | **yes** | no |
+| 1 | SA214 | yes | yes | yes | **yes** | yes |
+| 2 | SA246 | yes | yes | yes | **yes** | no |
+| 3 | SA244 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -91,11 +90,15 @@ A track is **truly green** only when all three states are yes.
   `production.py.j2`, `local.py.j2`), the generator's Jinja environment, `auth/views.py`, the
   blog rate limiter, the generated `pyproject.toml.j2` `[build-system]` block, orgs'
   `quickscale_orgs_create_site_org` command, the personal-data inventory, and the frontend
-  decisions in `frontend.md` (SA241), and, for the
+  decisions in `frontend.md`, and, for the
   conventions, the `quickscale_core.runtime` helpers, module `checks.py` and `exceptions.py`,
   write effects and email, orgs' `permissions`, and module URLs, APIs, and webhooks, with the
   theme's React API client, module settings snapshots and the module split facades' loggers and
-  re-exports, and the conformance harness with its registry row.
+  re-exports, and the conformance harness with its registry row, and the five `_anonymization.py`
+  handlers with core's redaction helpers (SA244, SA245).
+- SA246 moves the personal-data inventory and its walk from Track 3 to Track 2: the per-module
+  personal-data declarations, the orgs personal-data system check, and module-extension.md
+  § removal.
 - **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
   a ticket that does lands through the serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
@@ -114,9 +117,85 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
 
-- [x] **SA237 — One org-role check and root-only type-stub exemptions.**
+- [ ] **SA244 — Scope account anonymization to the person's records and bound its scans.**
 
-- [x] **SA238 — Split-facade conventions: log channels, re-exports, and view discovery by content.**
+  **Context:** SA216(a) made notifications' `_scrub_messages` walk every `NotificationMessage` and
+  redact the person's name and username wherever they appear as whole words, so one user's account
+  removal rewrites unrelated text in every tenant's messages, including pending ones later sent
+  (tech audit `notifications-anonymize-rewrites-all-messages`, S2). The same removal transaction,
+  holding org row locks and provider advisory locks, also decodes every `django_session` row and
+  walks every billing `WebhookEvent` payload; past gunicorn's 60 s timeout the worker dies after
+  the Stripe cancellation and the compensation never runs (`anonymize-full-table-scans-under-locks`,
+  S3). Neither has shipped; both block 0.89.0.
+
+  **Acceptance:**
+  - notifications redacts names and usernames only in messages linked to the person: those with a
+    delivery to them, and those whose `context_json` records them as the actor through an
+    `actor_user_id` key that `send_notification` callers (the orgs invitation send) now stamp.
+    Pre-key invitation messages are covered by a one-time fallback that matches the person's
+    unique email in `context_json`, never their name.
+  - A test with a second user's message containing a common word and a person whose first name is
+    that word leaves the unrelated message byte-identical; the shared-invitation test still passes.
+  - auth deletes only sessions with `expire_date > now()`; billing pre-filters `WebhookEvent` rows
+    in SQL on the person's email before the Python walk. No handler scans a whole table.
+  - The dead `_account_username` helper is deleted (`notifications-account-username-dead`).
+
+  **Surfaces:** `notifications/_anonymization.py` and its tests, the orgs invitation send call
+  site, `auth/_anonymization.py`, `billing/_anonymization.py`, and the tech audit.
+
+- [ ] **SA245 — Share one redaction matcher and one set of replacement values across anonymization handlers.**
+
+  **Context:** billing and notifications carry byte-identical copies of the address helpers that
+  have already diverged: billing still matches the name as a bare substring and rewrites payload
+  keys, so an account named `Bill` turns `billing_details` into `[redacted]ing_details` (tech
+  audit `billing-anonymize-name-substring`; coherence audit
+  `anonymize-redaction-helper-copies`). The same field kind, an address inside a stored provider
+  payload, becomes `deleted-<pk>@invalid` in notifications and `[redacted]` in billing, with the
+  tokens spelled in five places (`anonymize-replacement-values`). auth's private entry point is
+  `scrub_account` while the other four are `anonymize_account`, and its file also holds the
+  cross-module collector (`anonymize-executor-naming`).
+
+  **Acceptance:**
+  - `quickscale_core.runtime` exposes the redaction helpers (`replace_address`, `redact_names`)
+    and the `DELETED_ADDRESS(pk)` and `REDACTED` values; one core test table pins namesake,
+    overlapping address, quoted address, and untouched-key cases. HTML-entity spellings stay an
+    opt-in of notifications.
+  - billing and notifications use them, with word-bounded name and username matching and no key
+    rewrite; every email address becomes `DELETED_ADDRESS(pk)`, every name or username `REDACTED`
+    (option A of the coherence audit), and wholesale-replaced provider prose keeps `REDACTED`.
+  - auth's handler entry point is `_anonymization.anonymize_account`, and the collector moves to
+    auth's `_anonymize_boundary.py`.
+  - decisions.md § Module Conventions records rules 47 (redaction) and 48 (replacement values and
+    entry-point name); the harness enforces both with control cases (billing's current
+    `_redact_string` and `REDACTED = "[redacted]"`), and the coherence audit's three items close.
+
+  **Surfaces:** `quickscale_core.runtime`, the five `_anonymization.py` handlers, auth's new
+  boundary file, decisions, the conformance harness, and the coherence audit.
+
+- [ ] **SA246 — Declare personal data per module and check it where the project's models are installed.**
+
+  **Context:** whether every personal field has an anonymization treatment is checked only by a
+  test in orgs over shipped models (`orgs/tests/_personal_data_inventory.py`), which skips project
+  apps by design and ties the recorded treatment to no handler. A project-owned field such as an
+  SA153 contact email on a user-referencing model is detected by nothing (arch audit
+  `personal-data-coverage-shipped-only`). Eight modules' rows also live in orgs' tests, which the
+  authoring guide never mentions (coherence audit `personal-data-inventory-ownership`).
+
+  **Acceptance:**
+  - Each module declares the treatment of its own user-linked fields beside its handler, collected
+    through `collect_capabilities` like `anonymize_handlers`; orgs' file keeps only orgs, contrib,
+    and third-party rows. The closed-world inventory test reads the collected declarations and
+    keeps its three control cases.
+  - `walk_candidate_fields` and `candidate_kinds` move into `quickscale_modules_orgs` as a
+    warning-level system check over installed apps, on the `check_model_classification` (W005)
+    pattern; a control proves a project-app `EmailField` on a user-referencing model fails it.
+  - Each module's anonymization test asserts its declared treatments on a populated user.
+  - decisions.md records rule 49 (personal-data declarations); module-extension.md § removal
+    documents the declaration and the check and replaces "account-deletion collector" with the
+    anonymize boundary's name.
+
+  **Surfaces:** each module's `apps.py` capability, `orgs/checks.py`, orgs' personal-data inventory
+  and its test, module-extension.md, decisions, and the arch and coherence audits.
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
@@ -134,6 +213,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   new incremental migration under the existing migration-quality gates. A registered gate fails
   when an existing migration file of a model-bearing module changes or disappears, with controls
   proving that it rejects an in-place `0001` edit and accepts a new `0002`.
+
+  The same gate fails when a frozen migration imports a `_`-prefixed module symbol; before the
+  freeze, `blog`'s `_BlogMediaAssetImageField` (pinned into `0001_initial` by `6e0ac9da`) is
+  promoted to a public, documented field or replaced, so frozen history names only symbols with a
+  stability promise (arch audit `clean-break-schema-no-data-path`, guard).
 
   The gate compares against a checked-in manifest of the frozen files' content hashes (it works in
   shallow CI clones and needs no tag). Before merging, confirm no module schema change shipped
@@ -235,8 +319,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   inform later reusable module changes.
 
   A client-rendered page gives crawlers and link-preview bots an empty document, so catalog and
-  detail pages must be prerendered or server-rendered for Open Graph and indexing. SA241 chooses
-  that mechanism and records it, with the React-frontend decision, before this ticket starts.
+  detail pages must be prerendered or server-rendered for Open Graph and indexing, by the mechanism
+  [frontend.md](frontend.md) records.
 
   The launch needs property fields and galleries, explicit currency labels, attribute filtering
   and keyword search applied by the API, Spanish public pages, listing-linked inquiries into `crm`,
@@ -247,7 +331,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   New child tables, including gallery images, follow the child-table decision in
   [decisions.md](decisions.md) and the `test_rls_boundary.py` coverage pattern.
 
-  **Acceptance:** under SA241's decisions, the `bap-web` project migrated by SA191 serves an organization-scoped React property catalog and
+  **Acceptance:** under frontend.md's decisions, the `bap-web` project migrated by SA191 serves an organization-scoped React property catalog and
   detail page with ordered image galleries; bedrooms, bathrooms, area, property type, sale/rent,
   and explicitly labeled currency fields; keyword and attribute filters that the API applies
   server-side. Property pages use the React app's visual design and render in Spanish. A listing
@@ -258,9 +342,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and passes the generated project's `check_tenant_isolation` through marker-derived enrollment, with no
   edit under vendored module source. Prove the search → detail → inquiry journey and isolation
   between organizations through both the API and the rendered pages. Correct reusable-module feature
-  claims that the module does not provide. Prerendering uses the mechanism SA241 approved. The
+  claims that the module does not provide. The
   marker-derived purge plan covers property rows without a vendored module edit. Every `*_id` field on a property model is classified through
-  SA208's project-side declaration, and the SA208 system check passes in the project.
+  SA208's project-side declaration, and the SA208 system check passes in the project. Every
+  personal field on a project-owned model carries a personal-data declaration and passes SA246's
+  check.
 
   **Slices:**
   - [ ] (a) Models: property fields, currency labels, and ordered gallery child tables, with
@@ -276,8 +362,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** the project-owned property extension, its API and React pages, and the project's
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; extension
   documentation.
-
-- [x] **SA241 — Record the React-frontend and public-page prerender decisions for SA153.**
 
 - [ ] **SA154 — Property-portal capabilities to promote when a project needs them.**
 
@@ -365,19 +449,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `production.py` onto the facade (G-001), carries non-regenerable project-owned-app migration
     operations into appended migrations with fail-closed safe-carry boundaries (G-002), and
     classifies donor root documentation and tooling paths (G-003); the pinned-donor dry run is clean
-    with zero unclassified files and both carries planned; next is the release-time full execution
-    iteration with published module splits (`make publish-modules`) and PostgreSQL 18; watch the
-    rewrite's recognized-shape boundary and the carry planner's same-app dependency chain.
+    with zero unclassified files and both carries planned; next is the full execution iteration on
+    PostgreSQL 18 with modules from `--split-refs-from-branches` (repinning to published splits is
+    SA191's cutover step); watch the rewrite's recognized-shape boundary and the carry planner's
+    same-app dependency chain.
 
   **Surfaces:** `quickscale_devtools/.../beta_migration/`, its tests and smoke gate; the migration
   playbook and gap ledger; the `showcase_react` theme, generator, and
   `generated_file_ownership.md` (design layer); decisions.
-
-- [x] **SA216 — Disable and anonymize accounts instead of deleting the user row.**
-
-- [x] **SA242 — Fail `make quality` on critical complexity and very large files.**
-
-- [x] **SA243 — Replace the `make quality` baseline ratchet with fixed fail/warn thresholds.**
 
 ## Deferred constraints and references
 
