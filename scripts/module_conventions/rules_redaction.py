@@ -124,8 +124,9 @@ def rule_48_replacement_values(corpus: Corpus) -> list[str]:
     """
     Rule 48: one set of replacement values and one handler entry-point name.
 
-    Every handler writes core's ``DELETED_ADDRESS(pk)`` for an address and
-    core's ``REDACTED`` for a name or username, and its private entry point is
+    A handler that removes identity from stored text or payloads writes core's
+    ``DELETED_ADDRESS(pk)`` for an address and core's ``REDACTED`` for a name or
+    username, and every handler's private entry point is
     ``_anonymization.anonymize_account``, which the app config delegates to.
     """
     violations: list[str] = []

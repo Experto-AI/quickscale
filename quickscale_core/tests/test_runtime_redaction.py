@@ -19,7 +19,7 @@ from quickscale_core.runtime import (
 
 
 def test_replacement_values_are_the_one_set() -> None:
-    """Every handler writes the same name sentinel and address factory."""
+    """Every identity scrub shares the one name sentinel and address factory."""
     assert REDACTED == "[redacted]"
     assert DELETED_ADDRESS(42) == "deleted-42@invalid"
     assert DELETED_ADDRESS("pk-1") == "deleted-pk-1@invalid"

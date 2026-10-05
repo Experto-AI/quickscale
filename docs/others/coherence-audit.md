@@ -312,9 +312,11 @@ removed. No drift remains (see the correction in §12).
   - **B.** Address fields with a unique meaning get `deleted-<pk>@invalid`, and addresses inside
     text or payloads get `[redacted]`. notifications changes 2 call sites. The trade-off is that
     payloads lose the account link.
-- **Recommended rule (A):**
-  - ✅ An anonymization handler writes `DELETED_ADDRESS(pk)` for any email address and `REDACTED`
-    for any name or username, importing both from core.
+- **Recommended rule (A):** recorded as rule 48 with its scoping: an account's own unique username
+  field keeps `deleted-<pk>`, and `REDACTED` applies to names and usernames removed from stored
+  text or payloads.
+  - ✅ An anonymization handler writes `DELETED_ADDRESS(pk)` for any email address it removes from
+    stored text or payloads and `REDACTED` for any such name or username, importing both from core.
   - ❌ A literal `"[redacted]"` or `f"deleted-{…}@invalid"` in module code.
   - Exception: `failure_reason`, which is replaced wholesale because provider prose can embed the
     address in unknown forms. It keeps `REDACTED`.
@@ -377,8 +379,9 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
       usernames match at word boundaries, and payload keys are never rewritten.
     - ❌ A module-local address pattern or identity matcher. ❌ Substring name matching.
 48. **Replacement values (Items 2 and 4).** — recorded as decisions rule 48 (SA245, `abbc09d0`).
-    - ✅ Every email address becomes core's `DELETED_ADDRESS(pk)`, and every name or username
-      becomes `REDACTED`.
+    - ✅ Identity removed from stored text or payloads becomes core's `DELETED_ADDRESS(pk)` for an
+      address and core's `REDACTED` for a name or username; an account's own unique username field
+      keeps its `deleted-<pk>` candidate.
     - ✅ A handler's private entry point is `_anonymization.anonymize_account`.
     - ❌ A literal sentinel in module code.
     - Exception: wholesale-replaced provider prose keeps `REDACTED`.
