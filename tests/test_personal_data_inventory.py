@@ -61,6 +61,15 @@ def _has_field(model: type, field_name: str) -> bool:
     return True
 
 
+def _is_other_module_label(app_label: str) -> bool:
+    """Return True when *app_label* names another first-party module.
+
+    First-party module labels take the ``quickscale_<module>`` stem (rule 2);
+    orgs' own label is the one module label the central set allows.
+    """
+    return app_label.startswith("quickscale_") and app_label != "quickscale_orgs"
+
+
 # ---------------------------------------------------------------------------
 # The gate
 # ---------------------------------------------------------------------------
@@ -136,9 +145,8 @@ def test_inventory_keys_are_unique_and_disjoint_from_exclusions() -> None:
 
 def test_central_rows_keep_only_orgs_contrib_and_third_party() -> None:
     """No module's rows stay in orgs' central file; each module declares them."""
-    central_app_labels = {"quickscale_orgs", "account", "sessions", "admin"}
     for entry in (*CENTRAL_PERSONAL_DATA_FIELDS, *CENTRAL_PERSONAL_DATA_EXCLUSIONS):
-        assert entry.app_label in central_app_labels, (
+        assert not _is_other_module_label(entry.app_label), (
             f"{entry.app_label}.{entry.model_name}.{entry.field_name} is a "
             "module's own row and must be declared by that module, not kept "
             "in orgs' central file."
@@ -156,27 +164,23 @@ def test_declared_treatments_other_than_keep_link_have_a_handler() -> None:
     assert declared_treatment_handler_gaps() == []
 
 
-#: Fields confirmed to hold personal data that the candidate rules cannot see:
-#: JSON payloads, sender-side text, and the user model's own names and secrets.
-#: Deleting one of these entries would otherwise pass the metadata-driven gate.
+#: Central fields confirmed to hold personal data that the candidate rules
+#: cannot see: a session payload no installed module declares for itself.
+#: Deleting this entry would otherwise pass the metadata-driven gate.  Each
+#: module's own non-candidate rows are pinned in that module's tests, so this
+#: set holds only orgs', contrib, and third-party keys (rule 49).
 _SEMANTIC_PERSONAL_DATA_KEYS: frozenset[tuple[str, str, str]] = frozenset(
     {
-        ("quickscale_auth", "User", "username"),
-        ("quickscale_auth", "User", "first_name"),
-        ("quickscale_auth", "User", "last_name"),
-        ("quickscale_auth", "User", "password"),
-        ("quickscale_auth", "User", "last_login"),
         ("sessions", "Session", "session_data"),
-        ("quickscale_notifications", "NotificationMessage", "subject"),
-        ("quickscale_notifications", "NotificationMessage", "rendered_text"),
-        ("quickscale_notifications", "NotificationMessage", "rendered_html"),
-        ("quickscale_notifications", "NotificationMessage", "context_json"),
-        ("quickscale_notifications", "NotificationMessage", "last_error"),
-        ("quickscale_notifications", "NotificationDelivery", "failure_reason"),
-        ("quickscale_notifications", "NotificationDeliveryEvent", "payload_json"),
-        ("quickscale_billing", "WebhookEvent", "payload"),
     }
 )
+
+
+def _non_central_semantic_keys(
+    keys: frozenset[tuple[str, str, str]],
+) -> list[tuple[str, str, str]]:
+    """Return pinned keys naming another first-party module's app."""
+    return sorted(key for key in keys if _is_other_module_label(key[0]))
 
 
 def test_semantic_personal_data_fields_stay_inventoried() -> None:
@@ -186,6 +190,16 @@ def test_semantic_personal_data_fields_stay_inventoried() -> None:
     missing = _SEMANTIC_PERSONAL_DATA_KEYS - inventoried
     assert not missing, (
         f"Confirmed personal-data fields missing from the inventory: {sorted(missing)}"
+    )
+
+
+def test_semantic_pins_keep_only_central_rows() -> None:
+    """A pinned key names orgs', contrib, or third-party data, never a module's."""
+    offenders = _non_central_semantic_keys(_SEMANTIC_PERSONAL_DATA_KEYS)
+    assert not offenders, (
+        "Pinned personal-data keys name another installed module; pin that "
+        "module's fields in its own tests (rule 49):\n"
+        + "\n".join(str(key) for key in offenders)
     )
 
 
@@ -247,3 +261,9 @@ def test_control_blank_exclusion_reason_is_rejected() -> None:
         reason="   ",
     )
     assert uncovered_candidates([candidate], (), (blank,)) == [candidate.describe()]
+
+
+def test_control_re_added_module_key_is_rejected() -> None:
+    """Adding an auth key to the central pins fails the central-only guard."""
+    keys = _SEMANTIC_PERSONAL_DATA_KEYS | {("quickscale_auth", "User", "username")}
+    assert _non_central_semantic_keys(keys) == [("quickscale_auth", "User", "username")]
