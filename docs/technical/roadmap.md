@@ -28,13 +28,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA214 | Harden the fresh-first migration tool into the standard upgrade path | 1 | — | Optional |
+| SA214 | Harden the fresh-first migration tool into the standard upgrade path | 2 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: —
+Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
+Track 2: SA214
 Track 3: —
      critical path: SA191 → SA153
 ```
@@ -47,11 +47,8 @@ handoff note (what landed, what is next, what to watch) committed with the work.
 when its last slice lands; slices are not scheduled.
 
 **Order.** SA204 freezes migration history before any post-SA153 module schema change; SA154 is
-an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA246 landed before SA153,
-so the portal's personal fields are classified from the first migration; it touched `apps.py`
-capabilities and orgs' checks, not handler bodies. SA248 landed before SA153 adds its inquiry
-notification, so the first new sender states whom the message is about. SA250 landed after SA248
-on Track 3; both edited the conventions harness.
+an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor, so it does not wait on
+SA191. SA191 runs slice (b) first; slice (a) waits on the maintainer's production dump.
 
 ### Track states
 
@@ -59,16 +56,15 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA214 | yes | yes | yes | **yes** | yes |
-| 2 | — | yes | yes | yes | **yes** | no |
+| 1 | SA191 | yes | no | yes | no | yes |
+| 2 | SA214 | yes | yes | yes | **yes** | no |
 | 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
 - Track 1 owns gate documentation, `scripts/gate_registry.json`, the quality
-  thresholds (`scripts/check_quality.sh`), the generated `urls.py.j2` and the theme's social seam pages, the parity oracles, the hosted
-  workflow triggers, the maintainer migration tools with their smoke gate and playbook, the
-  migration-history freeze gate and `decisions.md` § Clean-Break Migration History, the `bap-web`
+  thresholds (`scripts/check_quality.sh`), the generated `urls.py.j2` and the theme's social seam
+  pages, the parity oracles, the hosted workflow triggers, the migration-history freeze gate and `decisions.md` § Clean-Break Migration History, the `bap-web`
   migration and its reseed step, the property extension, public templates, and the portal's
   extension documentation, and, for the conventions, module identities, models and their
   `0001_initial`, module READMEs, and module templates, static files, and template tags, with the
@@ -82,7 +78,8 @@ A track is **truly green** only when all three states are yes.
   docs), the split facades of the CLI commands, `dr_engine`, and billing with the tests that patch
   them, the blog and storage upload-path builders, and, for the conventions, the manifest option schema and the CLI's `module_config`,
   module settings names, `is_enabled()`, and the per-module personal-data declarations with the
-  orgs personal-data check.
+  orgs personal-data check, and the maintainer migration tools (`beta_migration/`) with their
+  smoke gate, playbook, gap ledger, and the `showcase_react` design layer.
 - Track 3 owns the orgs tenancy, purge, removal-obligation, and boot path (`orgs/apps.py`,
   `orgs/removal.py`), the privileged-command and runtime-role stations, the
   `quickscale_core.runtime` settings facade, the generated settings templates (`base.py.j2`,
@@ -95,11 +92,9 @@ A track is **truly green** only when all three states are yes.
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row, and the five `_anonymization.py`
   handlers with core's redaction helpers.
-- SA246 moved the personal-data inventory and its walk from Track 3 to Track 2: the per-module
-  personal-data declarations, the orgs personal-data system check, and module-extension.md
-  § removal.
-- **Cross-track edits.** Outside the conventions, no queued ticket edits another track's surfaces;
-  a ticket that does lands through the serialized merge queue.
+- **Cross-track edits.** SA191 builds its recipient by the migration playbook that SA214 (Track 2)
+  rewrites; SA191 only reads it, and gate documentation (Track 1) is the shared file for SA214's
+  smoke-gate row. Both land through the serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md). Each track resolves the shared set at its
@@ -115,14 +110,6 @@ reset/checkout destructively. Merge `v89` into the worktree, resolve there, run 
 suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
-
-- [x] **SA244 — Scope account anonymization to the person's records and bound its scans.**
-
-- [x] **SA245 — Share one redaction matcher and one set of replacement values across anonymization handlers.**
-
-- [x] **SA246 — Declare personal data per module and check it where the project's models are installed.**
-
-- [x] **SA247 — Split the module-conventions checker and its tests into packages without changing behavior.**
 
 - [ ] **SA204 — Freeze module migration history at the vintage `bap-web` lands on.**
 
@@ -301,12 +288,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [x] **SA248 — Declare whom a notification is about at the send boundary.**
-
-- [x] **SA249 — Pin each module's non-candidate personal-data fields in its own tests.**
-
-- [x] **SA250 — Derive the conventions rule partition from decisions.md.**
-
 - [ ] **SA214 — Harden the fresh-first migration tool into the standard upgrade path.**
 
   Make `make beta-migrate-fresh` the standard way to move a QuickScale project onto the current
@@ -351,41 +332,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Slices:**
   - [x] (a) `make beta-migrate-iterate`: one non-interactive iteration driven by the donor's
-    `quickscale.yml`. Handoff: the target reads slug, package, theme, and modules from the donor
-    config, regenerates through a staging directory and `quickscale apply --split-refs-from-branches`,
-    then runs fresh-first; next are G-001 and slices (b)–(f); watch the apply confirmation input and
-    the fail-closed recipient and stage guards.
-  - [x] (b) Classification of every donor file, with unclassified files as blockers. Handoff: the
-    audit classifies donor files against the fresh recipient (identity-normalized) and the generator
-    emission inventory, records the inventory in the report and stdout, and blocks before mutation on
-    an unclassified or unreadable file; next are slices (c)–(f), starting with G-001; watch the
-    recognized-root allowlist — a new donor root blocks until the maintainer classifies it.
+    `quickscale.yml`.
+  - [x] (b) Classification of every donor file, with unclassified files as blockers.
   - [x] (c) Project-owned apps (copy, register, mount, regenerate migrations) and frontend
     dependency merge.
   - [x] (d) The `showcase_react` design layer, its ownership entry and upgrade test, and the
-    donor design port. Handoff: the theme emits `frontend/design/` (tokens.css,
-    tailwind.preset.js, fonts/, brand/), the React entry imports it and Django-rendered pages
-    resolve the same tokens, the layer is declared never-overwritten in
-    generated_file_ownership.md with an apply-upgrade test, and the tool's `port-donor-design`
-    step validates and copies the donor layer or its legacy index.css/tailwind.config.js sources;
-    next are (e)–(f); watch the design-layer recipient preflight and the regenerated
-    exact-emission fixture.
-  - [x] (e) The generated `MIGRATION_PROMPT.md` and its snapshot test. Handoff: delivered by
-    `1e628dd5` and kept green through slices (b)–(d) — the fresh-first and iterate flows write
-    `MIGRATION_PROMPT.md` from the report (what was migrated, remaining manual actions with their
-    paths and governing rules, hard constraints, done criteria) only after the verification stack
-    completes, via a symlink-safe atomic replace; the `handoff_prompt.md` fixture pins the
-    document and the smoke gate asserts it; next is (f), starting with G-001; watch prompt
-    stability as the report schema grows.
+    donor design port.
+  - [x] (e) The generated `MIGRATION_PROMPT.md` and its snapshot test.
   - [ ] (f) Ledger iterations to a clean final run, the playbook rewrite, and the pre-facade
-    `production.py` decision. Handoff: the tool now rewrites a recognized pre-facade
-    `production.py` onto the facade (G-001), carries non-regenerable project-owned-app migration
-    operations into appended migrations with fail-closed safe-carry boundaries (G-002), and
-    classifies donor root documentation and tooling paths (G-003); the pinned-donor dry run is clean
-    with zero unclassified files and both carries planned; next is the full execution iteration on
-    PostgreSQL 18 with modules from `--split-refs-from-branches` (repinning to published splits is
-    SA191's cutover step); watch the rewrite's recognized-shape boundary and the carry planner's
-    same-app dependency chain.
+    `production.py` decision. G-001–G-003 are fixed and the pinned-donor dry run is clean; next is
+    the full execution iteration on PostgreSQL 18 with modules from `--split-refs-from-branches`.
 
   **Surfaces:** `quickscale_devtools/.../beta_migration/`, its tests and smoke gate; the migration
   playbook and gap ledger; the `showcase_react` theme, generator, and
@@ -395,8 +351,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 The [architecture audit](../others/arch-audit.md) and [technical audit](../others/tech-audit.md) own
 deferred findings, watch notes, and their growth triggers; items stay there until a trigger fires.
-Open questions: whether "regenerate and port" is the permanent upgrade model, and whether
-`experto-ai-web` migrates too. Standing scope rules, presence contracts, and resource safeguards
+Open question: whether `experto-ai-web` migrates too. Standing scope rules, presence contracts, and resource safeguards
 live in [decisions](decisions.md) and
 [validation policy](validation_policy.md#candidate-review-and-integration).
 

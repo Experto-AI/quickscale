@@ -21,8 +21,8 @@ removal no longer deletes the user row; it disables and scrubs it through per-mo
 `anonymize_account` handlers (SA216), backed by a test-time personal-data inventory (SA242). One
 maintainer; very high cadence; `0.89.0` unpublished.
 
-**Growth direction (planning surface):** Track 1 is SA214 (beta-migration tooling, landing) →
-SA191 (`bap-web` rebuild, reseeded) → SA153 (first property portal: Spanish public pages,
+**Growth direction (planning surface):** Track 2 is SA214 (beta-migration tooling, landing);
+Track 1 is SA191 (`bap-web` rebuild, reseeded) → SA153 (first property portal: Spanish public pages,
 listing-linked inquiries into `crm`) → SA204 (migration-history freeze). **Data sensitivity:**
 credentials, user PII, Stripe identifiers; no regulatory regime declared, but the product now
 makes a user-facing promise ("its personal data removed", `auth/views.py:196`), which activates
@@ -157,8 +157,8 @@ items:
 its schema changes, and no tool carries a deployed project's data from vintage N to N+k.
 
 **Evidence** (re-verified this pass):
-- SA204 is still `Deferred`, sequenced after SA153 (`roadmap.md:27`, `:36`); its acceptance text
-  (`roadmap.md:121-146`) is unchanged and correct.
+- SA204 is still queued after SA153 on Track 1; its roadmap acceptance text is unchanged and
+  correct.
 - Delta: `6e0ac9da` rewrote `blog/migrations/0001_initial.py:95` in place, swapping
   `models.ImageField` for `quickscale_modules_blog.models._BlogMediaAssetImageField`.
 - SA214(f) (`6abdb7a0`) carries **project-owned** app migrations for the one-off SA191 port; it is
@@ -297,11 +297,6 @@ entries, so the freeze's first migrations are born classified.
   permanent model) is **retired**: SA214 tooled the port as an explicitly one-off path.
 
 *No red flags this pass.*
-
-## Coherence hand-offs
-
-- Anonymization scrubbers' independently written escaping logic — **now scheduled as SA245**;
-  carried here until it lands.
 
 ## Reconciliation log
 
