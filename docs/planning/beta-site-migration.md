@@ -23,7 +23,9 @@ Rules for the current maintainer tool:
 - implemented in `quickscale_devtools.beta_migration`; `scripts/beta_migrate.py` is only the thin maintainer wrapper, not a QuickScale module or public `quickscale` CLI command
 - reports which project's `settings/production.py`, `start.sh`, and `Dockerfile` form the effective runtime, rejects unresolved command settings or launcher/package skew before mutation, and keeps fresh-first `.quickscale/state.yml` identity metadata aligned with the reconciled scaffold
 - a run that completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient — what was migrated, every remaining manual action with its paths and governing rule, the hard constraints, and the done criteria — for a coding assistant to complete the remainder; dry runs and runs blocked before or during execution write no prompt
-- the tool starts the recipient's Docker Compose stack from a clean state before the first service-backed verification command (`quickscale manage migrate` execs into the backend container) and stops it, with its throwaway volumes, after the verification stack even when a command fails; host-run `poetry run pytest` reads the recipient `.env` and needs the PostgreSQL 18 service
+- the tool starts the recipient's database service from a clean state with a reserved loopback publication before the database-backed verification command and stops it, with its throwaway volumes, after the verification stack even when a command fails; the migration runs in the recipient's own Poetry environment as the sanctioned privileged command because the generated production image compiles the pre-port frontend sources in its build, and the database service is the project's own Compose definition; host-run `poetry run pytest` reads the recipient `.env` and needs the operator's PostgreSQL 18 service
+- the verification environment inherits the project's own declarations — the CI test job's non-live credential placeholders and the `.env.example` restricted runtime-role URL — with the operator's environment winning; a copied donor Django file keeps its own symbols and receives every generated top-level symbol it lacks plus the imports those symbols need; donor package-root modules the recipient lacks are copied in and never overwrite a module the recipient owns
+- the verification contract records pre-port manual-port surfaces instead of blocking: a non-zero exit from `pnpm build`, `poetry run pytest`, or `pnpm test` is recorded as a failed result plus a remaining manual action carrying the command and its captured output, and the stack continues; `poetry lock`, `poetry install`, `pnpm install`, `makemigrations`, and `poetry run python manage.py migrate` stay blocking, and a timeout or launch failure blocks regardless; a completed run writes the handoff prompt naming each recorded surface
 - `DONOR` and `RECIPIENT` are the only required operator inputs and must be provided explicitly on every run
 - prefer deterministic Python transforms over bash-heavy pipelines
 - if a step cannot be resolved safely, stop and emit a partial report with `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions` for a maintainer or AI coding assistant to continue
@@ -74,8 +76,10 @@ Host-run `poetry run pytest` reads the recipient `.env` and needs a PostgreSQL 1
 `localhost:5432`.
 
 Check the iteration by the run report, the remaining items in `$RECIPIENT/MIGRATION_PROMPT.md`,
-and the donor's pytest and Vitest suites run in the recipient. Live-site Playwright and screenshot
-parity run in the final iteration only.
+and the donor's pytest and Vitest suites run in the recipient. A recorded pre-port surface — a
+failed `pnpm build`, `poetry run pytest`, or `pnpm test` that belongs to the donor's manual-port
+work — appears as a failed verification result and a remaining action, not a blocker. Live-site
+Playwright and screenshot parity run in the final iteration only.
 
 ### After a fix
 
@@ -102,18 +106,21 @@ The final iteration runs with every row closed.
 | G-003 | pinned-donor dry run (SA214 f) | The pinned donor's root documentation and tooling paths (`roadmap.md`, `formularios.md`, `properties-plan.md`, `adaptive.yml`, `docs/`, `.pnpm-store/`, `.tmp/`, `.claude/`, `coverage.xml`) matched no class, so the classification audit blocked. | tool fix | The taxonomy recognizes top-level Markdown documents and `adaptive.yml` as project-owned, `docs/` as a recognized project root, and the tooling stores plus the coverage report as build artifacts. | `test_donor_documentation_and_tooling_paths_classify`; the pinned-donor dry run reports zero unclassified files | closed |
 | G-004 | execution iteration (SA214 f) | The regeneration step ran the repository Poetry environment's `quickscale`, which has no staged wheelhouse, so the generated project's lockstep `quickscale-core` pin could not resolve for an unreleased target version. | playbook step | The iteration procedure names the staged wheelhouse via `QUICKSCALE_LOCAL_WHEELHOUSE`, so the unreleased pin resolves locally instead of chasing a PyPI version. | the pinned-donor execution iteration regenerated the recipient once the export was set | closed |
 | G-005 | execution iteration (SA214 f) | The verification stack ran bare `pytest`, which resolves to the maintainer's environment instead of the recipient's Poetry environment. | tool fix | The stack runs `poetry run pytest`, the generated project's own `make test` entrypoint. | `EXPECTED_VERIFICATION_SEQUENCE` and the environment assertions in `test_beta_migration.py`; `make check-beta-migration-smoke`; a real generated recipient resolved and ran the command through its own `.venv`, leaving only the project's coverage gate, which is G-007's pre-port test surface | closed |
-| G-006 | execution iteration (SA214 f) | The verification stack's `quickscale manage migrate` execs into the recipient's backend container, but nothing started the recipient's Docker Compose stack, so the command failed against a fresh recipient. | tool fix | The tool starts the stack from a clean state before the first service-backed command and stops it, with the throwaway volumes, after the verification stack even on failure. | `test_recipient_services_start_failure_blocks_and_cleans_up`, `test_recipient_services_stop_runs_when_a_verification_command_fails`, `test_recipient_services_cleanup_failure_is_recorded_not_raised`, `make check-beta-migration-smoke`; a real generated recipient started, migrated, and stopped with no containers left | closed |
-| G-007 | execution iteration (SA214 f) | `pnpm build` fails on the pinned donor: transplanted donor pages and components import donor-added `frontend/src/hooks` and `lib` exports, while the donor's divergent shared files (`useApi.ts`, `useModules.ts`) and its `ui/` and test sources are merge work the migration prompt assigns to the manual port; the tool blocks and writes no handoff prompt. | project decision | Open: decide whether the verification stack records pre-port manual-port surfaces instead of blocking, whether the tool gains a frontend-source merge, or whether the handoff prompt is the terminal state for this donor. | the iteration report's `pnpm build` output (TS2305/TS2307 in `frontend/src/pages/*` and `frontend/src/components/*`) | open |
+| G-006 | execution iteration (SA214 f) | The verification stack's `quickscale manage migrate` execs into the recipient's backend container, but nothing started the recipient's Docker Compose stack, so the command failed against a fresh recipient. | tool fix | The tool starts the stack from a clean state before the first service-backed command and stops it, with the throwaway volumes, after the verification stack even on failure (superseded by G-012's database-service lifecycle). | `test_recipient_services_start_failure_blocks_and_cleans_up`, `test_recipient_services_stop_runs_when_a_verification_command_fails`, `test_recipient_services_cleanup_failure_is_recorded_not_raised`, `make check-beta-migration-smoke`; a real generated recipient started, migrated, and stopped with no containers left | closed |
+| G-007 | execution iteration (SA214 f) | `pnpm build` fails on the pinned donor: transplanted donor pages and components import donor-added `frontend/src/hooks` and `lib` exports, while the donor's divergent shared files (`useApi.ts`, `useModules.ts`) and its `ui/` and test sources are merge work the migration prompt assigns to the manual port; the tool blocks and writes no handoff prompt. | project decision | The verification contract records pre-port manual-port surfaces instead of blocking: a non-zero exit from `pnpm build`, `poetry run pytest`, or `pnpm test` is recorded as a failed result plus a remaining manual action carrying its captured output, the stack continues, and the handoff prompt is the terminal state for the donor; setup, dependency-resolution, migration-regeneration, and migrate commands stay blocking, and timeouts or launch failures block regardless. No frontend-source merge is added. | `test_verification_specs_mark_only_build_and_test_commands_as_pre_port`, `test_pre_port_verification_failure_is_recorded_and_the_prompt_is_written`, `test_pre_port_verification_timeout_still_blocks`, the smoke gate's pre-port case, and the final iteration report (`ready`, 5 passed, 3 recorded) with its `MIGRATION_PROMPT.md` actions | closed |
+| G-008 | execution iteration (SA214 f) | The host verification environment lacked the project's declared CI test credentials, so the foundation `notifications` module failed its eager startup check (`quickscale_notifications.E003`) before the migration could run. | tool fix | Verification commands inherit the env entries the project's generated CI test job declares, with the operator's environment winning; an absent or malformed workflow declares nothing. | `test_project_ci_test_environment_reads_the_test_job_and_falls_back_safely`, `test_verification_environment_inherits_the_projects_declarations`, the smoke gate; the final iteration passed the notifications check | closed |
+| G-009 | execution iteration (SA214 f) | The host verification environment lacked the project's declared restricted runtime-role URL, so `orgs` failed its eager RLS boot guard (`quickscale_orgs.E004`) on a superuser connection. | tool fix | Verification commands inherit the `.env.example` `RUNTIME_DATABASE_URL` (last uncommented assignment), with the operator's environment winning; the migration itself runs as the sanctioned privileged command against the superuser URL. | `test_project_declared_runtime_database_url_reads_env_example`, `test_verification_environment_inherits_the_projects_declarations`, the smoke gate; the final iteration passed the RLS guard | closed |
+| G-010 | execution iteration (SA214 f) | The donor's `views.py` and `context_processors.py` replaced the scaffold files and dropped generated symbols (`react_shell_view`, `orgs_react_shell_view`, `installed_modules`) that the regenerated wiring imports, so Django setup failed with `ImportError`. | tool fix | A copied donor Django file keeps its own symbols and receives every generated top-level symbol it lacks, with the imports those symbols need; `settings/production.py` and `urls.py` keep their own contracts. | `test_append_missing_generated_symbols_keeps_scaffold_contract`, `test_donor_django_file_copy_preserves_current_scaffold_symbols`; the final iteration's `makemigrations` and `migrate` passed | closed |
+| G-011 | execution iteration (SA214 f) | The donor package-root module `bap_web/public_listings.py`, referenced by the carried project-owned app, was not carried, so importing the app failed with `ModuleNotFoundError`. | tool fix | The copy step adopts donor package-root modules the recipient lacks, except scaffold-managed names, and never overwrites a module the recipient owns. | `test_donor_django_file_copy_preserves_current_scaffold_symbols`; the final iteration imported the project app | closed |
+| G-012 | execution iteration (SA214 f) | The generated production image's `frontend-builder` stage runs `pnpm run build`, so the backend container could not build while the frontend sources are pre-port, and the service-backed migration blocked. | tool fix | The database-backed verification runs in the recipient's own Poetry environment as the sanctioned privileged `migrate` command against the project's Compose database service, which the tool starts with a reserved loopback publication and stops with its throwaway volumes; no backend image is built for verification. | lifecycle tests, the smoke gate, and the final iteration where `migrate` passed pre-port | closed |
 
-**Loop status (SA214 f).** G-001–G-006 are closed on landed tool fixes, their tests, and a
-validated execution path. The first real execution iteration on PostgreSQL 18 regenerated the
-recipient from the published splits, ran the fresh-first steps, and stopped at `pnpm build`: the
-pinned donor's divergent `frontend/src/hooks` and `lib` files are manual-port work per the
-migration prompt, so the tool cannot write its handoff prompt until G-007's verification contract
-is decided. Host-run `poetry run pytest` now resolves in the recipient's own Poetry environment; a
-pre-port recipient still fails the project's coverage gate, the same pre-port test surface as
-G-007. A stale Poetry repository cache entry for a freshly published transitive wheel also
-blocked the first attempt; `poetry cache clear --all PyPI` restored a complete lock.
+**Loop status (SA214 f).** All rows are closed. The final iteration against the pinned donor on
+PostgreSQL 18 regenerated the recipient from the published splits, ran the fresh-first copy,
+regenerated the `properties` migrations, migrated against the Compose database service, and
+completed with the frontend build and the recipient test suites recorded as pre-port manual-port
+work (5 passed, 3 recorded); it reported zero unclassified donor files and wrote
+`MIGRATION_PROMPT.md` naming each recorded surface. G-007's decision is applied, and G-008–G-012
+are the gaps that decision surfaced together with the tool fixes that closed them.
 
 - **ID** — `G-NNN`, never reused.
 - **Kind** — `tool fix`, `playbook step`, `project decision`, or `upstream to module`.
@@ -175,8 +182,10 @@ hand. One run performs, in order:
 1. field-aware identity reconciliation (including the locked authoritative `.quickscale/state.yml`
    and `start.sh`);
 2. App.tsx and donor-only page copies, then component-directory and utility-directory transplant;
-3. selected Django file copies; a recognized pre-facade donor `settings/production.py` has only its
-   inline database/command-selection block rewritten onto
+3. selected Django file copies; a copied donor file keeps the donor's symbols and gains every
+   generated top-level symbol it lacks (with the imports those symbols need), donor package-root
+   modules the recipient lacks are adopted, and a recognized pre-facade donor
+   `settings/production.py` has only its inline database/command-selection block rewritten onto
    `quickscale_core.runtime.settings.resolve_runtime_database_url`, with every other donor setting
    carried unchanged and named in the report;
 4. project-owned app copy, registration, URL mounting, and recipient-local `makemigrations`
@@ -187,13 +196,19 @@ hand. One run performs, in order:
    wins on a conflict, and every conflict is reported);
 6. the donor design port into the never-overwritten `frontend/design/` layer;
 7. the local verification stack (`poetry lock`, `poetry install`, `pnpm install`, `pnpm build`,
-   `makemigrations`, `quickscale manage migrate`, `poetry run pytest`, `pnpm test`), with the
-   recipient's Docker Compose stack started before the first service-backed command and stopped
-   after the stack.
+   `makemigrations`, `poetry run python manage.py migrate`, `poetry run pytest`, `pnpm test`),
+   with the recipient's database service started before the database-backed command and stopped
+   after the stack; a non-zero exit from `pnpm build`, `poetry run pytest`, or `pnpm test` is
+   recorded as a remaining manual action and the stack continues, while every other non-zero exit,
+   timeout, or launch failure blocks.
 
 A run that completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient with
 every remaining manual action, its paths, and the governing rule. Dry runs and blocked runs write
-no prompt.
+no prompt. A completed run whose only failures are recorded pre-port surfaces still writes the
+prompt, and the prompt is the terminal state for a donor whose divergent frontend sources and
+tests the manual port owns. The contract does not classify a pre-port command failure by cause: a
+failure inside those commands is triaged from its captured output, so an environment failure there
+is recorded rather than blocked and the operator must read the report.
 
 If a run stops partial, resume from the report's last completed deterministic step
 (`completed_steps`, `skipped_steps`, `changed_files`, `verification_results`) instead of rerunning
@@ -395,7 +410,7 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] Fresh-first throwaway recipient prepared
 [ ] Fresh-first report confirms complete field-aware identity reconciliation, including authoritative `.quickscale/state.yml`, derived database/frontend values, and `start.sh`
 [ ] Fresh-first report confirms App.tsx, custom pages/components, utilities, Django files, and missing path deps were copied
-[ ] Tool report contains seven passed verification results: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `poetry run pytest`, and `pnpm test` — plus a passed recipient-local `poetry run python manage.py makemigrations <app>` for every migrated model-bearing app
+[ ] Tool report shows every blocking verification command passed (`poetry lock`, `poetry install`, `pnpm install`, `poetry run python manage.py migrate`) — plus a passed recipient-local `poetry run python manage.py makemigrations <app>` for every migrated model-bearing app; any `pnpm build`, `poetry run pytest`, or `pnpm test` failure is recorded as a remaining manual action instead of blocking
 [ ] Local smoke-test completed — existing pages intact and new module pages work
 [ ] Effective production settings select their database through `quickscale_core.runtime.settings.resolve_runtime_database_url` — already facade-based in the donor, or rewritten by the tool from a recognized pre-facade block while the donor stays read-only
 [ ] Result committed or staged in the target repo

@@ -12,6 +12,7 @@ before mutation.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -58,6 +59,32 @@ def _install_subprocess_stub(
         command = tuple(argv)  # type: ignore[arg-type]
         calls.append(command)
         if command[:2] == ("docker", "inspect"):
+            if command[3] == "{{.State.Health.Status}}":
+                return subprocess.CompletedProcess(
+                    command, 0, stdout="healthy", stderr=""
+                )
+            if "Config.Env" in command[3]:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(
+                        [
+                            "POSTGRES_DB=app",
+                            "POSTGRES_USER=postgres",
+                            "POSTGRES_PASSWORD=postgres",
+                        ]
+                    ),
+                    stderr="",
+                )
+            if "NetworkSettings.Ports" in command[3]:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(
+                        {"5432/tcp": [{"HostIp": "127.0.0.1", "HostPort": "55000"}]}
+                    ),
+                    stderr="",
+                )
             return subprocess.CompletedProcess(command, 0, stdout="true", stderr="")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 

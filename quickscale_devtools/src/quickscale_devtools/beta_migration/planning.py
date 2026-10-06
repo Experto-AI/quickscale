@@ -19,6 +19,7 @@ from .model import (
     PendingManualAction,
     PlannedAction,
     ProjectSnapshot,
+    VerificationCommandResult,
     _append_completed_step,
     _append_parse_arguments_step,
     _append_skipped_step,
@@ -44,7 +45,9 @@ from .regeneration import _plan_beta_migration_iterate
 from .snapshots import _compute_diff, _load_project_snapshot, _record_snapshot_load
 from .toml_editing import _validate_fresh_first_path_dependency_targets
 from ..handoff_prompt import HANDOFF_PROMPT_FILENAME
+from pathlib import Path
 from typing import Literal
+import re
 
 
 def _fresh_first_actions(
@@ -100,7 +103,8 @@ def _fresh_first_actions(
             step="copy-selected-django-files",
             description=(
                 "Copy donor hand-written Django files into the recipient package while preserving "
-                "recipient-managed wiring files."
+                "recipient-managed wiring files, preserving current-scaffold symbols the donor "
+                "files lack, and adopting donor-only package-root modules."
             ),
             targets=[
                 *[
@@ -233,12 +237,14 @@ def _fresh_first_actions(
             PlannedAction(
                 step="start-recipient-services",
                 description=(
-                    "Start the recipient's throwaway Docker Compose stack (database, "
-                    "frontend, and backend containers) before the first service-backed "
-                    "verification command so docker-backed commands run against a live "
-                    "backend container."
+                    "Start the recipient's throwaway Docker Compose database service "
+                    "with a reserved loopback port before the database-backed "
+                    "verification command. The production backend image is not built "
+                    "because its frontend stage compiles the pre-port frontend sources "
+                    "the manual port owns, and the migration runs in the recipient's own "
+                    "Poetry environment against the Compose database."
                 ),
-                commands=["docker compose up -d --build"],
+                commands=["docker compose up -d db"],
                 targets=[str(recipient.path)],
             ),
             PlannedAction(
@@ -277,6 +283,29 @@ def _fresh_first_actions(
         ]
     )
     return actions
+
+
+def _pre_port_action_name(command: str) -> str:
+    """Return a stable action name for a recorded pre-port command failure."""
+    slug = re.sub(r"[^a-z0-9]+", "-", command.lower()).strip("-")
+    return f"resolve-pre-port-surface-{slug}"
+
+
+def _pre_port_action_paths(report: BetaMigrationReport, cwd: str) -> list[str]:
+    """Return the recipient-relative working directory for a failed command."""
+    if report.recipient is None:
+        return ["."]
+    try:
+        relative = Path(cwd).relative_to(report.recipient.path)
+    except ValueError:
+        return ["."]
+    return [relative.as_posix() or "."]
+
+
+def _pre_port_failure_excerpt(result: VerificationCommandResult) -> str:
+    """Return a bounded one-line diagnostic excerpt for a recorded failure."""
+    output = " ".join((result.stderr.strip() or result.stdout.strip()).split())
+    return output[-300:] if len(output) > 300 else output
 
 
 def _build_pending_manual_actions(
@@ -347,6 +376,30 @@ def _build_pending_manual_actions(
             ]
         )
         return actions
+
+    for result in report.verification_results:
+        if result.status != "failed" or not result.pre_port_surface:
+            continue
+        detail = (
+            f"Complete the manual port for `{result.command}` and re-run it; the "
+            f"command failed with exit code {result.return_code} on a pre-port "
+            "surface the migration prompt assigns to the manual port."
+        )
+        excerpt = _pre_port_failure_excerpt(result)
+        if excerpt:
+            detail += f" Captured output tail: {excerpt}"
+        actions.append(
+            PendingManualAction(
+                action=_pre_port_action_name(result.command),
+                detail=detail,
+                paths=_pre_port_action_paths(report, result.cwd),
+                rule=(
+                    "Pre-port build and test surfaces are recorded instead of blocking: "
+                    "reconcile the donor's divergent frontend sources and pre-port tests "
+                    "in the recipient, then re-run the command."
+                ),
+            )
+        )
 
     actions.extend(
         [

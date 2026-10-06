@@ -391,6 +391,32 @@ def test_iterate_inventory_blocks_before_replacing_the_recipient(
         command = tuple(argv)  # type: ignore[arg-type]
         calls.append(command)
         if command[:2] == ("docker", "inspect"):
+            if command[3] == "{{.State.Health.Status}}":
+                return subprocess.CompletedProcess(
+                    command, 0, stdout="healthy", stderr=""
+                )
+            if "Config.Env" in command[3]:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(
+                        [
+                            "POSTGRES_DB=app",
+                            "POSTGRES_USER=postgres",
+                            "POSTGRES_PASSWORD=postgres",
+                        ]
+                    ),
+                    stderr="",
+                )
+            if "NetworkSettings.Ports" in command[3]:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(
+                        {"5432/tcp": [{"HostIp": "127.0.0.1", "HostPort": "55000"}]}
+                    ),
+                    stderr="",
+                )
             return subprocess.CompletedProcess(command, 0, stdout="true", stderr="")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
@@ -482,6 +508,32 @@ def test_iterate_execution_classifies_the_regenerated_recipient(
         if command[:2] == ("quickscale", "apply"):
             shutil.copytree(template, Path(str(kwargs["cwd"])), dirs_exist_ok=True)
         if command[:2] == ("docker", "inspect"):
+            if command[3] == "{{.State.Health.Status}}":
+                return subprocess.CompletedProcess(
+                    command, 0, stdout="healthy", stderr=""
+                )
+            if "Config.Env" in command[3]:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(
+                        [
+                            "POSTGRES_DB=app",
+                            "POSTGRES_USER=postgres",
+                            "POSTGRES_PASSWORD=postgres",
+                        ]
+                    ),
+                    stderr="",
+                )
+            if "NetworkSettings.Ports" in command[3]:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(
+                        {"5432/tcp": [{"HostIp": "127.0.0.1", "HostPort": "55000"}]}
+                    ),
+                    stderr="",
+                )
             return subprocess.CompletedProcess(command, 0, stdout="true", stderr="")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 

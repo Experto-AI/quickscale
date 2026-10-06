@@ -59,9 +59,18 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     migrated, the remaining manual actions and their paths and governing rules, the hard
     constraints, and the done criteria.
   - **Beta migration verifies against a live recipient.** The fresh-first workflow starts the
-    recipient's Docker Compose stack before the first service-backed verification command and stops
-    it, with the throwaway volumes, after the stack even on failure, and runs the recipient's tests
-    in the recipient's own Poetry environment.
+    recipient's Compose database service with a reserved loopback port before the migration command
+    and stops it, with the throwaway volumes, after the stack even on failure, so `migrate` runs in
+    the recipient's own Poetry environment against the project's database; the recipient's tests
+    also run there, with the project's declared CI credentials and runtime-role URL.
+  - **Beta migration records pre-port surfaces instead of blocking.** A failing `pnpm build`,
+    `poetry run pytest`, or `pnpm test` is recorded as a failed verification result and a remaining
+    handoff action with its captured output, while setup and migration commands keep blocking, and
+    the completed run's `MIGRATION_PROMPT.md` names each recorded surface.
+  - **Beta migration carries donor Django symbols and modules.** A copied donor Django file keeps
+    its own symbols and gains the generated top-level symbols the regenerated wiring imports, and
+    donor package-root modules the recipient lacks are adopted without overwriting the recipient's
+    own modules.
   - **Beta migration classifies every donor file before mutation.** The maintainer tool sorts
     each donor file into generated-untouched, generated-customized, project-owned, module-edited,
     or build-artifact and blocks the run, naming the file, when one matches no class.

@@ -170,16 +170,34 @@ class BetaMigrationInput:
 
 @dataclass(frozen=True)
 class VerificationCommandSpec:
-    """A verification subprocess definition."""
+    """A verification subprocess definition.
+
+    ``pre_port_surface`` marks a command whose success depends on donor
+    application sources or tests that the migration prompt assigns to the
+    manual port. A non-zero exit from such a command is recorded as a failed
+    result plus a remaining manual action instead of blocking the run; setup,
+    dependency-resolution, migration-regeneration, and migrate commands stay
+    blocking. A timeout or launch failure blocks regardless of the flag.
+
+    ``requires_recipient_database`` marks a command that needs the recipient's
+    Compose database service running with a host publication before it starts.
+    """
 
     display_command: str
     argv: tuple[str, ...]
     cwd_suffix: str = "."
+    pre_port_surface: bool = False
+    requires_recipient_database: bool = False
 
 
 @dataclass(frozen=True)
 class VerificationCommandResult:
-    """Captured output from a verification subprocess."""
+    """Captured output from a verification subprocess.
+
+    ``pre_port_surface`` mirrors the command's spec so the report and the
+    rendered handoff prompt can name a recorded failure as pre-port work
+    without re-deriving the spec.
+    """
 
     command: str
     cwd: str
@@ -187,6 +205,7 @@ class VerificationCommandResult:
     return_code: int | None
     stdout: str
     stderr: str
+    pre_port_surface: bool = False
 
 
 @dataclass(frozen=True)

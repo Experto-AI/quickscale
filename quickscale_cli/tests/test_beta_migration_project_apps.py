@@ -124,6 +124,32 @@ def _install_subprocess_stub(
         working_dir = Path(str(cwd)) if cwd is not None else Path.cwd()
         calls.append((command_tuple, working_dir))
         if command_tuple[:2] == ("docker", "inspect"):
+            if command_tuple[3] == "{{.State.Health.Status}}":
+                return subprocess.CompletedProcess(
+                    command_tuple, 0, stdout="healthy", stderr=""
+                )
+            if "Config.Env" in command_tuple[3]:
+                return subprocess.CompletedProcess(
+                    command_tuple,
+                    0,
+                    stdout=json.dumps(
+                        [
+                            "POSTGRES_DB=app",
+                            "POSTGRES_USER=postgres",
+                            "POSTGRES_PASSWORD=postgres",
+                        ]
+                    ),
+                    stderr="",
+                )
+            if "NetworkSettings.Ports" in command_tuple[3]:
+                return subprocess.CompletedProcess(
+                    command_tuple,
+                    0,
+                    stdout=json.dumps(
+                        {"5432/tcp": [{"HostIp": "127.0.0.1", "HostPort": "55000"}]}
+                    ),
+                    stderr="",
+                )
             return subprocess.CompletedProcess(
                 command_tuple, 0, stdout="true", stderr=""
             )
@@ -272,7 +298,7 @@ def test_fresh_first_carries_app_and_merges_frontend_dependencies(
         "makemigrations",
         "properties",
     )
-    migrate = ("quickscale", "manage", "migrate")
+    migrate = ("poetry", "run", "python", "manage.py", "migrate")
     verification_argv = [argv for argv, _cwd in calls]
     verification_cwds = dict(calls)
     assert makemigrations in verification_argv

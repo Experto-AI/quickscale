@@ -27,17 +27,77 @@ from quickscale_devtools.beta_migration import (
     run_beta_migration,
     run_beta_migration_cli,
 )
-from quickscale_devtools.beta_migration.services import _recipient_services_prefix
+from quickscale_devtools.beta_migration.constants import VERIFICATION_COMMAND_SPECS
+from quickscale_devtools.beta_migration.services import (
+    _database_override_path,
+    _recipient_services_prefix,
+)
+from quickscale_devtools.beta_migration.symbol_merge import (
+    append_missing_generated_symbols,
+)
+from quickscale_devtools.beta_migration.verification_environment import (
+    project_ci_test_environment,
+    project_declared_runtime_database_url,
+)
 
 EXPECTED_VERIFICATION_SEQUENCE = [
     (("poetry", "lock"), "poetry lock", "."),
     (("poetry", "install"), "poetry install", "."),
     (("pnpm", "install"), "pnpm install", "frontend"),
     (("pnpm", "build"), "pnpm build", "frontend"),
-    (("quickscale", "manage", "migrate"), "quickscale manage migrate", "."),
+    (
+        ("poetry", "run", "python", "manage.py", "migrate"),
+        "poetry run python manage.py migrate",
+        ".",
+    ),
     (("poetry", "run", "pytest"), "poetry run pytest", "."),
     (("pnpm", "test"), "pnpm test", "frontend"),
 ]
+
+
+def _compose_argv(
+    recipient: Path, *tail: str, override: bool = False
+) -> tuple[str, ...]:
+    """Build the expected Compose argv for the recipient lifecycle."""
+    argv = ["docker", "compose", "-f", str(recipient / "docker-compose.yml")]
+    if override:
+        argv.extend(["-f", str(_database_override_path(recipient))])
+    argv.extend(tail)
+    return tuple(argv)
+
+
+def _docker_inspect_result(
+    command_tuple: tuple[str, ...],
+) -> subprocess.CompletedProcess[str]:
+    """Return the stub result for one docker inspect call."""
+    inspect_format = command_tuple[3]
+    if inspect_format == "{{.State.Health.Status}}":
+        return subprocess.CompletedProcess(
+            command_tuple, 0, stdout="healthy", stderr=""
+        )
+    if "Config.Env" in inspect_format:
+        return subprocess.CompletedProcess(
+            command_tuple,
+            0,
+            stdout=json.dumps(
+                [
+                    "POSTGRES_DB=beta_site",
+                    "POSTGRES_USER=postgres",
+                    "POSTGRES_PASSWORD=postgres",
+                ]
+            ),
+            stderr="",
+        )
+    if "NetworkSettings.Ports" in inspect_format:
+        return subprocess.CompletedProcess(
+            command_tuple,
+            0,
+            stdout=json.dumps(
+                {"5432/tcp": [{"HostIp": "127.0.0.1", "HostPort": "55000"}]}
+            ),
+            stderr="",
+        )
+    return subprocess.CompletedProcess(command_tuple, 0, stdout="true", stderr="")
 
 
 def _write_project(
@@ -321,9 +381,7 @@ def _install_verification_success_stub(
             env_calls.append((command_tuple, kwargs.get("env")))
         calls.append((command_tuple, call_cwd))
         if command_tuple[:2] == ("docker", "inspect"):
-            return subprocess.CompletedProcess(
-                command_tuple, 0, stdout="true", stderr=""
-            )
+            return _docker_inspect_result(command_tuple)
         joined = " ".join(command_tuple)
         return subprocess.CompletedProcess(
             command_tuple,
@@ -345,27 +403,46 @@ def _assert_verification_report(
     expected_calls: list[tuple[tuple[str, ...], Path]] = []
     for argv, _display, cwd_suffix in EXPECTED_VERIFICATION_SEQUENCE:
         cwd = recipient if cwd_suffix == "." else recipient / cwd_suffix
-        if argv[:2] == ("quickscale", "manage"):
+        if argv[-1] == "migrate":
             expected_calls.extend(
                 [
                     (
-                        (
-                            "docker",
-                            "compose",
-                            "down",
-                            "--remove-orphans",
-                            "--volumes",
+                        _compose_argv(
+                            recipient, "down", "--remove-orphans", "--volumes"
                         ),
                         recipient,
                     ),
-                    (("docker", "compose", "up", "-d", "--build"), recipient),
+                    (
+                        _compose_argv(recipient, "up", "-d", "db", override=True),
+                        recipient,
+                    ),
                     (
                         (
                             "docker",
                             "inspect",
                             "--format",
-                            "{{.State.Running}}",
-                            f"{recipient_prefix}_backend",
+                            "{{.State.Health.Status}}",
+                            f"{recipient_prefix}_db",
+                        ),
+                        recipient,
+                    ),
+                    (
+                        (
+                            "docker",
+                            "inspect",
+                            "--format",
+                            "{{json .Config.Env}}",
+                            f"{recipient_prefix}_db",
+                        ),
+                        recipient,
+                    ),
+                    (
+                        (
+                            "docker",
+                            "inspect",
+                            "--format",
+                            "{{json .NetworkSettings.Ports}}",
+                            f"{recipient_prefix}_db",
                         ),
                         recipient,
                     ),
@@ -373,7 +450,12 @@ def _assert_verification_report(
             )
         expected_calls.append((argv, cwd))
     expected_calls.append(
-        (("docker", "compose", "down", "--remove-orphans", "--volumes"), recipient)
+        (
+            _compose_argv(
+                recipient, "down", "--remove-orphans", "--volumes", override=True
+            ),
+            recipient,
+        )
     )
     assert calls == expected_calls
     assert [result.command for result in report.verification_results] == [
@@ -2731,17 +2813,18 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
         ("pnpm", "test"),
     }
 
+    migrate_command = ("poetry", "run", "python", "manage.py", "migrate")
     service_envs = {
-        command: env
-        for command, env in env_calls
-        if command == ("quickscale", "manage", "migrate")
+        command: env for command, env in env_calls if command == migrate_command
     }
-    assert set(service_envs) == {("quickscale", "manage", "migrate")}
-    manage_env = service_envs[("quickscale", "manage", "migrate")]
+    assert set(service_envs) == {migrate_command}
+    manage_env = service_envs[migrate_command]
     assert manage_env is not None
-    assert manage_env["QUICKSCALE_RESOURCE_PREFIX"] == _recipient_services_prefix(
-        recipient
+    assert manage_env["DATABASE_URL"] == (
+        "postgresql://postgres:postgres@127.0.0.1:55000/beta_site"
     )
+    assert manage_env["RUNTIME_DATABASE_URL"] == ""
+    assert manage_env["QUICKSCALE_PRIVILEGED_COMMAND"] == "migrate"
 
     new_package_dir = recipient / "experto_ai_web"
     assert new_package_dir.is_dir()
@@ -3512,6 +3595,536 @@ def test_verification_command_launch_oserror_blocks_and_stops_stack(
     ]
 
 
+def test_verification_specs_mark_only_build_and_test_commands_as_pre_port() -> None:
+    """Only the build and test surfaces depend on pre-port donor sources."""
+    pre_port = [
+        spec.display_command
+        for spec in VERIFICATION_COMMAND_SPECS
+        if spec.pre_port_surface
+    ]
+    blocking = [
+        spec.display_command
+        for spec in VERIFICATION_COMMAND_SPECS
+        if not spec.pre_port_surface
+    ]
+    assert pre_port == ["pnpm build", "poetry run pytest", "pnpm test"]
+    assert blocking == [
+        "poetry lock",
+        "poetry install",
+        "pnpm install",
+        "poetry run python manage.py migrate",
+    ]
+
+
+def test_pre_port_verification_failure_is_recorded_and_the_prompt_is_written(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing build/test surface is recorded, not blocked, and the prompt names it."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, cwd=None, **kwargs):
+        command_tuple = tuple(command)
+        calls.append(command_tuple)
+        if command_tuple == ("pnpm", "build"):
+            return subprocess.CompletedProcess(
+                command_tuple, 2, stdout="tsc stdout", stderr="TS2305 pre-port surface"
+            )
+        if command_tuple == ("poetry", "run", "pytest"):
+            return subprocess.CompletedProcess(
+                command_tuple, 1, stdout="coverage stdout", stderr="coverage gate"
+            )
+        if command_tuple[:2] == ("docker", "inspect"):
+            return _docker_inspect_result(command_tuple)
+        return subprocess.CompletedProcess(command_tuple, 0, stdout="stdout", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    assert report.phase == "fresh-first-executed"
+    assert report.blockers == []
+    assert calls[-1] == _compose_argv(
+        recipient, "down", "--remove-orphans", "--volumes", override=True
+    )
+
+    results = {result.command: result for result in report.verification_results}
+    assert list(results) == [
+        display for _argv, display, _cwd_suffix in EXPECTED_VERIFICATION_SEQUENCE
+    ]
+    recorded = results["pnpm build"]
+    assert recorded.status == "failed"
+    assert recorded.return_code == 2
+    assert recorded.stdout == "tsc stdout"
+    assert recorded.stderr == "TS2305 pre-port surface"
+    assert recorded.pre_port_surface is True
+    assert results["poetry run pytest"].status == "failed"
+    assert results["poetry run pytest"].pre_port_surface is True
+    # Every command after the recorded failures still ran.
+    assert results["poetry run python manage.py migrate"].status == "passed"
+    assert results["pnpm test"].status == "passed"
+
+    actions = {action.action: action for action in report.pending_manual_actions}
+    build_action = actions["resolve-pre-port-surface-pnpm-build"]
+    assert build_action.paths == ["frontend"]
+    assert "exit code 2" in build_action.detail
+    assert "TS2305 pre-port surface" in build_action.detail
+    assert build_action.rule
+    pytest_action = actions["resolve-pre-port-surface-poetry-run-pytest"]
+    assert pytest_action.paths == ["."]
+    assert "exit code 1" in pytest_action.detail
+    assert "coverage gate" in pytest_action.detail
+
+    prompt_path = recipient / "MIGRATION_PROMPT.md"
+    assert prompt_path.is_file()
+    prompt = prompt_path.read_text()
+    assert "`pnpm build` — failed" in prompt
+    assert "`poetry run pytest` — failed" in prompt
+    assert "resolve-pre-port-surface-pnpm-build" in prompt
+    assert "resolve-pre-port-surface-poetry-run-pytest" in prompt
+
+    verification_step = _find_step_detail(report, "run-verification-stack")
+    assert "Recorded pre-port surface failures" in verification_step
+    assert "pnpm build" in verification_step
+    assert "poetry run pytest" in verification_step
+
+
+def test_pre_port_verification_timeout_still_blocks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hung pre-port command is an environment failure and still blocks."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+
+    def fake_run(command, **kwargs):
+        command_tuple = tuple(command)
+        if command_tuple == ("pnpm", "build"):
+            raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+        return subprocess.CompletedProcess(command_tuple, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.phase == "fresh-first-partial"
+    assert any(
+        "pnpm build" in blocker and "timed out" in blocker.lower()
+        for blocker in report.blockers
+    )
+    assert not any(
+        result.command == "poetry run python manage.py migrate"
+        for result in report.verification_results
+    )
+    assert not (recipient / "MIGRATION_PROMPT.md").exists()
+
+
+def test_recipient_services_database_unhealthy_blocks_and_cleans_up(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A database that never turns healthy blocks before the migration runs."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, **kwargs):
+        command_tuple = tuple(command)
+        calls.append(command_tuple)
+        if (
+            command_tuple[:2] == ("docker", "inspect")
+            and command_tuple[3] == "{{.State.Health.Status}}"
+        ):
+            return subprocess.CompletedProcess(
+                command_tuple, 0, stdout="starting", stderr=""
+            )
+        return subprocess.CompletedProcess(command_tuple, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        "quickscale_devtools.beta_migration.services.RECIPIENT_SERVICES_READY_TIMEOUT_SECONDS",
+        0,
+    )
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.phase == "fresh-first-partial"
+    assert any("did not become healthy" in blocker for blocker in report.blockers), (
+        report.blockers
+    )
+    assert any(command[-3:] == ("up", "-d", "db") for command in calls), calls
+    assert calls[-1] == _compose_argv(
+        recipient, "down", "--remove-orphans", "--volumes", override=True
+    )
+    assert not any(
+        result.command == "poetry run python manage.py migrate"
+        for result in report.verification_results
+    )
+
+
+def test_project_ci_test_environment_reads_the_test_job_and_falls_back_safely(
+    tmp_path: Path,
+) -> None:
+    """The CI test-job env is the verification credential contract."""
+    recipient = tmp_path / "recipient"
+    recipient.mkdir()
+    assert project_ci_test_environment(recipient) == {}
+
+    workflow_dir = recipient / ".github" / "workflows"
+    workflow_dir.mkdir(parents=True)
+    workflow_path = workflow_dir / "ci.yml"
+    workflow_path.write_text("not: [valid")
+    assert project_ci_test_environment(recipient) == {}
+
+    workflow_path.write_text("jobs:\n  test:\n    env:\n      NOT_A_DICT: [1]\n")
+    assert project_ci_test_environment(recipient) == {}
+
+    workflow_path.write_text(
+        "jobs:\n"
+        "  test:\n"
+        "    env:\n"
+        "      POSTHOG_API_KEY: ph_test_ci\n"
+        "      SOME_NUMBER: 7\n"
+        "      NON_SCALAR: [a]\n"
+        "  other:\n"
+        "    env:\n"
+        "      IGNORED: value\n"
+    )
+    assert project_ci_test_environment(recipient) == {
+        "POSTHOG_API_KEY": "ph_test_ci",
+        "SOME_NUMBER": "7",
+    }
+
+
+def test_project_declared_runtime_database_url_reads_env_example(
+    tmp_path: Path,
+) -> None:
+    """The declared host runtime role URL is read from .env.example."""
+    recipient = tmp_path / "recipient"
+    recipient.mkdir()
+    assert project_declared_runtime_database_url(recipient) is None
+
+    env_example = recipient / ".env.example"
+    env_example.write_text("# RUNTIME_DATABASE_URL=postgresql://ignored@localhost/db\n")
+    assert project_declared_runtime_database_url(recipient) is None
+
+    env_example.write_text(
+        "RUNTIME_DATABASE_URL=postgresql://first@localhost/db\n"
+        "RUNTIME_DATABASE_URL='postgresql://quickscale_runtime:pw@localhost:5432/bap_web'\n"
+    )
+    assert (
+        project_declared_runtime_database_url(recipient)
+        == "postgresql://quickscale_runtime:pw@localhost:5432/bap_web"
+    )
+
+    env_example.write_text("RUNTIME_DATABASE_URL=\n")
+    assert project_declared_runtime_database_url(recipient) is None
+
+
+def test_verification_environment_inherits_the_projects_declarations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verification commands run with the project's declared CI and runtime role."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="beta-site",
+        package="beta_site",
+        marker="donor",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+    workflow_dir = recipient / ".github" / "workflows"
+    workflow_dir.mkdir(parents=True)
+    (workflow_dir / "ci.yml").write_text(
+        "jobs:\n"
+        "  test:\n"
+        "    env:\n"
+        "      QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET: whsec_test_ci\n"
+        "      POSTHOG_API_KEY: ph_test_ci\n"
+    )
+    runtime_url = "postgresql://quickscale_runtime:pw@localhost:5432/beta_site"
+    (recipient / ".env.example").write_text(
+        f"# local development\nRUNTIME_DATABASE_URL={runtime_url}\n"
+    )
+    env_calls: list[tuple[tuple[str, ...], dict[str, str] | None]] = []
+    _install_verification_success_stub(monkeypatch, env_calls)
+    monkeypatch.setenv("POSTHOG_API_KEY", "operator-real-key")
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    by_command = {command: env for command, env in env_calls}
+    pytest_env = by_command[("poetry", "run", "pytest")]
+    assert pytest_env is not None
+    assert pytest_env["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"] == "whsec_test_ci"
+    assert pytest_env["RUNTIME_DATABASE_URL"] == runtime_url
+    # An operator-provided value always wins over the CI placeholder.
+    assert pytest_env["POSTHOG_API_KEY"] == "operator-real-key"
+    compose_env = by_command[_compose_argv(recipient, "up", "-d", "db", override=True)]
+    assert compose_env is not None
+    assert compose_env["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"] == "whsec_test_ci"
+    assert compose_env["RUNTIME_DATABASE_URL"] == runtime_url
+    assert compose_env["POSTHOG_API_KEY"] == "operator-real-key"
+
+
+GENERATED_VIEWS_SOURCE = '''"""Views for beta-site.
+
+Generated by QuickScale - https://github.com/Experto-AI/quickscale
+"""
+
+from django.contrib.auth.decorators import login_required
+from django.http import HttpRequest, HttpResponse
+from django.middleware.csrf import get_token
+from django.shortcuts import render
+from django.views.generic import TemplateView
+
+
+#: The React SPA shell both the home routes and the managed module React shell
+#: routes render.
+react_shell_view = TemplateView.as_view(template_name="index.html")
+
+
+@login_required
+def orgs_react_shell_view(request: HttpRequest) -> HttpResponse:
+    """Serve the org shell only for signed-in users."""
+    return render(request, "index.html", {"csrf_token": get_token(request)})
+
+
+def custom_404_view(request: HttpRequest, exception: Exception | None = None) -> HttpResponse:
+    """Custom 404 error handler."""
+    return render(request, "404.html", {}, status=404)
+'''
+
+DONOR_VIEWS_SOURCE = '''"""Views for beta-site."""
+
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import render
+
+
+def custom_404_view(request: HttpRequest, exception: Exception | None = None) -> HttpResponse:
+    """Donor 404 handler."""
+    return render(request, "404.html", {}, status=404)
+'''
+
+
+def test_append_missing_generated_symbols_keeps_scaffold_contract(
+    tmp_path: Path,
+) -> None:
+    """A donor file keeps its symbols and gains the scaffold's missing ones."""
+    destination = tmp_path / "views.py"
+    destination.write_text(DONOR_VIEWS_SOURCE)
+
+    appended = append_missing_generated_symbols(destination, GENERATED_VIEWS_SOURCE)
+
+    assert appended == ["react_shell_view", "orgs_react_shell_view"]
+    merged = destination.read_text()
+    assert "Donor 404 handler." in merged
+    assert (
+        'react_shell_view = TemplateView.as_view(template_name="index.html")' in merged
+    )
+    assert "@login_required" in merged
+    assert "def orgs_react_shell_view" in merged
+    assert "from django.contrib.auth.decorators import login_required" in merged
+    assert "from django.middleware.csrf import get_token" in merged
+    assert "from django.views.generic import TemplateView" in merged
+    # An import the donor already binds is not repeated.
+    assert merged.count("from django.shortcuts import render") == 1
+    # Re-running the merge is a no-op.
+    assert append_missing_generated_symbols(destination, GENERATED_VIEWS_SOURCE) == []
+
+
+def test_donor_django_file_copy_preserves_current_scaffold_symbols(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A donor views.py that replaces the scaffold keeps the wiring's symbols."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="beta-site",
+        package="beta_site",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    donor_views = donor / "beta_site" / "views.py"
+    donor_views.write_text(DONOR_VIEWS_SOURCE)
+    recipient_views = recipient / "beta_site" / "views.py"
+    recipient_views.write_text(GENERATED_VIEWS_SOURCE)
+    # A donor-only package module referenced by the carried files is adopted;
+    # a name the recipient already owns is never overwritten.
+    (donor / "beta_site" / "public_listings.py").write_text(
+        '"""Donor public listings helper."""\n\n\ndef enabled() -> bool:\n    return False\n'
+    )
+    (donor / "beta_site" / "shared_helper.py").write_text('"""Donor helper."""\n')
+    (recipient / "beta_site" / "shared_helper.py").write_text(
+        '"""Recipient helper."""\n'
+    )
+    _install_verification_success_stub(monkeypatch)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "ready", report.blockers
+    merged = recipient_views.read_text()
+    assert "Donor 404 handler." in merged
+    assert "def orgs_react_shell_view" in merged
+    assert (recipient / "beta_site" / "public_listings.py").is_file()
+    assert (recipient / "beta_site" / "shared_helper.py").read_text() == (
+        '"""Recipient helper."""\n'
+    )
+    detail = _find_step_detail(report, "copy-selected-django-files")
+    assert "Copied donor-only package modules: public_listings.py" in detail
+    assert "Preserved current-scaffold symbols" in detail
+    assert "views.py (react_shell_view, orgs_react_shell_view)" in detail
+    # The facade rewrite contract owns settings/production.py; urls.py stays the donor's.
+    assert (
+        "preserved by the beta-migration carry"
+        not in (recipient / "beta_site" / "settings" / "production.py").read_text()
+    )
+    assert (
+        "preserved by the beta-migration carry"
+        not in (recipient / "beta_site" / "urls.py").read_text()
+    )
+
+
+def test_recipient_services_database_unhealthy_fails_fast(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unhealthy database blocks immediately instead of polling to the deadline."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, **kwargs):
+        command_tuple = tuple(command)
+        calls.append(command_tuple)
+        if (
+            command_tuple[:2] == ("docker", "inspect")
+            and command_tuple[3] == "{{.State.Health.Status}}"
+        ):
+            return subprocess.CompletedProcess(
+                command_tuple, 0, stdout="unhealthy", stderr=""
+            )
+        return subprocess.CompletedProcess(command_tuple, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.phase == "fresh-first-partial"
+    assert any(
+        "reported an unhealthy state" in blocker for blocker in report.blockers
+    ), report.blockers
+    assert calls[-1] == _compose_argv(
+        recipient, "down", "--remove-orphans", "--volumes", override=True
+    )
+
+
 def test_recipient_services_start_failure_blocks_and_cleans_up(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3534,9 +4147,9 @@ def test_recipient_services_start_failure_blocks_and_cleans_up(
     def fake_run(command, **kwargs):
         command_tuple = tuple(command)
         calls.append(command_tuple)
-        if command_tuple[:4] == ("docker", "compose", "up", "-d"):
+        if "up" in command_tuple and "db" in command_tuple:
             return subprocess.CompletedProcess(
-                command_tuple, 1, stdout="", stderr="compose build failed"
+                command_tuple, 1, stdout="", stderr="compose start failed"
             )
         return subprocess.CompletedProcess(command_tuple, 0, stdout="true", stderr="")
 
@@ -3554,19 +4167,15 @@ def test_recipient_services_start_failure_blocks_and_cleans_up(
     assert report.status == "blocked"
     assert report.phase == "fresh-first-partial"
     assert any(
-        "docker compose up -d --build" in blocker and "compose build failed" in blocker
+        "docker compose up -d db" in blocker and "compose start failed" in blocker
         for blocker in report.blockers
     ), report.blockers
     docker_commands = [command for command in calls if command[:1] == ("docker",)]
-    assert docker_commands[-1] == (
-        "docker",
-        "compose",
-        "down",
-        "--remove-orphans",
-        "--volumes",
+    assert docker_commands[-1] == _compose_argv(
+        recipient, "down", "--remove-orphans", "--volumes", override=True
     )
     assert not any(
-        result.command == "quickscale manage migrate"
+        result.command == "poetry run python manage.py migrate"
         for result in report.verification_results
     )
 
@@ -3593,10 +4202,12 @@ def test_recipient_services_stop_runs_when_a_verification_command_fails(
     def fake_run(command, **kwargs):
         command_tuple = tuple(command)
         calls.append(command_tuple)
-        if command_tuple == ("quickscale", "manage", "migrate"):
+        if command_tuple == ("poetry", "run", "python", "manage.py", "migrate"):
             return subprocess.CompletedProcess(
                 command_tuple, 1, stdout="", stderr="migration failed"
             )
+        if command_tuple[:2] == ("docker", "inspect"):
+            return _docker_inspect_result(command_tuple)
         return subprocess.CompletedProcess(command_tuple, 0, stdout="true", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -3611,13 +4222,11 @@ def test_recipient_services_stop_runs_when_a_verification_command_fails(
     )
 
     assert report.status == "blocked"
-    assert any("quickscale manage migrate" in blocker for blocker in report.blockers)
-    assert calls[-1] == (
-        "docker",
-        "compose",
-        "down",
-        "--remove-orphans",
-        "--volumes",
+    assert any(
+        "poetry run python manage.py migrate" in blocker for blocker in report.blockers
+    )
+    assert calls[-1] == _compose_argv(
+        recipient, "down", "--remove-orphans", "--volumes", override=True
     )
     completed_steps = {step.step for step in report.completed_steps}
     assert {
@@ -3651,14 +4260,20 @@ def test_recipient_services_cleanup_failure_is_recorded_not_raised(
     def fake_run(command, **kwargs):
         nonlocal stack_started
         command_tuple = tuple(command)
-        if command_tuple[:4] == ("docker", "compose", "up", "-d"):
-            stack_started = True
-            return subprocess.CompletedProcess(command_tuple, 0, stdout="", stderr="")
-        if stack_started and command_tuple[:3] == ("docker", "compose", "down"):
+        if command_tuple[:2] == ("docker", "inspect"):
+            return _docker_inspect_result(command_tuple)
+        if stack_started and command_tuple[-3:] == (
+            "down",
+            "--remove-orphans",
+            "--volumes",
+        ):
             return subprocess.CompletedProcess(
                 command_tuple, 1, stdout="", stderr="down failed"
             )
-        if command_tuple == ("quickscale", "manage", "migrate"):
+        if "up" in command_tuple and "db" in command_tuple:
+            stack_started = True
+            return subprocess.CompletedProcess(command_tuple, 0, stdout="", stderr="")
+        if command_tuple == ("poetry", "run", "python", "manage.py", "migrate"):
             return subprocess.CompletedProcess(
                 command_tuple, 1, stdout="", stderr="migration failed"
             )
@@ -3676,7 +4291,9 @@ def test_recipient_services_cleanup_failure_is_recorded_not_raised(
     )
 
     assert report.status == "blocked"
-    assert any("quickscale manage migrate" in blocker for blocker in report.blockers)
+    assert any(
+        "poetry run python manage.py migrate" in blocker for blocker in report.blockers
+    ), report.blockers
     stop_steps = {
         step.step: step.detail
         for step in (*report.completed_steps, *report.skipped_steps)

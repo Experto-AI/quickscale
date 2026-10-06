@@ -4,6 +4,8 @@ from .constants import (
     FRESH_FIRST_COMPONENT_DIR_SKIP,
     FRESH_FIRST_COPY_MISSING_DIRS,
     FRESH_FIRST_DONOR_DJANGO_FILES,
+    FRESH_FIRST_MANAGED_PACKAGE_ROOT_FILES,
+    FRESH_FIRST_NO_SYMBOL_MERGE,
     FRESH_FIRST_REPLACED_ROOT_FILES,
     FRESH_FIRST_UTILITY_DIRS,
     MANUAL_HANDOFF_REASON,
@@ -48,7 +50,7 @@ from .settings_facade import (
     _write_rewritten_settings,
 )
 from .services import (
-    _recipient_services_environment,
+    _recipient_database_url,
     _spec_needs_recipient_services,
     _start_recipient_services,
     _stop_recipient_services,
@@ -58,10 +60,12 @@ from .regeneration import (
     _plan_beta_migration_iterate,
 )
 from .snapshots import _load_project_snapshot
+from .symbol_merge import append_missing_generated_symbols
 from .toml_editing import (
     _collect_missing_path_dependency_values,
     _insert_missing_path_dependencies,
 )
+from .verification_environment import merge_project_verification_environment
 import shutil
 import subprocess
 from ..handoff_prompt import HANDOFF_PROMPT_FILENAME, write_handoff_prompt
@@ -229,24 +233,63 @@ def _execute_copy_custom_components_and_utilities(report: BetaMigrationReport) -
 
 
 def _execute_copy_selected_django_files(report: BetaMigrationReport) -> None:
-    """Copy selected donor Django files into the recipient package."""
+    """Copy selected donor Django files into the recipient package.
+
+    A copied donor file keeps the donor's own symbols; generated top-level
+    symbols the current scaffold's wiring imports but the donor file lacks
+    (for example the React shell view) are appended from the recipient's
+    pre-copy file, with the imports they need, so the regenerated wiring keeps
+    resolving after the donor copy. Donor package-root modules the recipient
+    lacks are copied in too, except scaffold-managed names, so donor helpers
+    referenced by carried apps and files come along.
+    """
     if report.donor is None or report.recipient is None:
         raise ValueError("Donor and recipient snapshots are required before execution.")
 
     copied_files: list[str] = []
+    merged_symbols: dict[str, list[str]] = {}
     for relative_path in FRESH_FIRST_DONOR_DJANGO_FILES:
         source_path = report.donor.package_dir / relative_path
         if not source_path.exists():
             continue
         destination_path = report.recipient.package_dir / relative_path
+        generated_source = (
+            destination_path.read_text() if destination_path.is_file() else None
+        )
         _copy_path(source_path, destination_path)
         _record_changed_file(report, destination_path)
         copied_files.append(relative_path)
+        if generated_source is None or relative_path in FRESH_FIRST_NO_SYMBOL_MERGE:
+            continue
+        preserved = append_missing_generated_symbols(destination_path, generated_source)
+        if preserved:
+            merged_symbols[relative_path] = preserved
 
+    copied_modules: list[str] = []
+    for source_path in sorted(
+        report.donor.package_dir.glob("*.py"), key=lambda item: item.name
+    ):
+        if source_path.name in FRESH_FIRST_MANAGED_PACKAGE_ROOT_FILES:
+            continue
+        destination_path = report.recipient.package_dir / source_path.name
+        if destination_path.exists():
+            continue
+        shutil.copy2(source_path, destination_path)
+        _record_changed_file(report, destination_path)
+        copied_modules.append(source_path.name)
+
+    detail = f"Copied donor Django files: {', '.join(copied_files) or '(none)'}"
+    if copied_modules:
+        detail += ". Copied donor-only package modules: " + ", ".join(copied_modules)
+    if merged_symbols:
+        detail += ". Preserved current-scaffold symbols: " + "; ".join(
+            f"{relative_path} ({', '.join(names)})"
+            for relative_path, names in merged_symbols.items()
+        )
     _append_completed_step(
         report,
         step="copy-selected-django-files",
-        detail=f"Copied donor Django files: {', '.join(copied_files) or '(none)'}",
+        detail=detail,
     )
 
 
@@ -421,17 +464,24 @@ def _build_verification_subprocess_context(
         "check": False,
         "timeout": VERIFICATION_COMMAND_TIMEOUT_SECONDS,
     }
-    if (
+    if spec.requires_recipient_database:
+        # The migration runs against the running Compose database service as
+        # the sanctioned privileged command, so DDL runs through the superuser
+        # DATABASE_URL while the runtime-role URL is blanked.
+        environment = merge_project_verification_environment(
+            build_isolated_poetry_env(), report.recipient.path
+        )
+        environment["DATABASE_URL"] = _recipient_database_url(report.recipient.path)
+        environment["RUNTIME_DATABASE_URL"] = ""
+        environment["QUICKSCALE_PRIVILEGED_COMMAND"] = "migrate"
+        subprocess_kwargs["env"] = environment
+    elif (
         len(spec.argv) >= 2
         and spec.argv[0] == "poetry"
         and spec.argv[1] in {"lock", "install", "run"}
     ):
-        subprocess_kwargs["env"] = build_isolated_poetry_env()
-    elif _spec_needs_recipient_services(spec):
-        # Service-backed commands exec into the recipient's Compose stack; the
-        # resource prefix must match the containers the lifecycle started.
-        subprocess_kwargs["env"] = _recipient_services_environment(
-            report.recipient.path
+        subprocess_kwargs["env"] = merge_project_verification_environment(
+            build_isolated_poetry_env(), report.recipient.path
         )
     return working_dir, subprocess_kwargs
 
@@ -455,6 +505,7 @@ def _append_verification_result(
             return_code=return_code,
             stdout=stdout,
             stderr=stderr,
+            pre_port_surface=spec.pre_port_surface,
         )
     )
 
@@ -513,6 +564,12 @@ def _run_verification_command(
         stderr=result.stderr or "",
     )
     if result.returncode != 0:
+        if spec.pre_port_surface:
+            # The failure belongs to a donor application surface the migration
+            # prompt assigns to the manual port; the report records it and the
+            # handoff prompt names it instead of blocking the run. Timeouts and
+            # launch failures above still block.
+            return
         raise ValueError(
             f"Verification command failed with exit code {result.returncode}: {spec.display_command}"
         )
@@ -532,10 +589,12 @@ def _verification_command_specs(
 def _execute_verification_stack(report: BetaMigrationReport) -> None:
     """Execute the shared verification stack and capture subprocess output.
 
-    The recipient's Docker Compose stack is started lazily before the first
-    service-backed command and stopped after the stack (with the throwaway
+    The recipient's Compose database service is started lazily before the first
+    database-backed command and stopped after the stack (with the throwaway
     volumes) even when a command fails, so a blocked run leaves no containers or
-    volumes behind.
+    volumes behind. A command marked ``pre_port_surface`` records its non-zero
+    exit as a remaining manual action and the stack continues with the next
+    command; a non-zero exit from any other command still blocks.
     """
     if report.recipient is None:
         raise ValueError("Recipient snapshot is unavailable.")
@@ -579,11 +638,21 @@ def _execute_verification_stack(report: BetaMigrationReport) -> None:
                     ),
                 )
 
-    _append_completed_step(
-        report,
-        step="run-verification-stack",
-        detail=f"Executed {len(report.verification_results)} verification commands successfully.",
-    )
+    failed_pre_port = [
+        result
+        for result in report.verification_results
+        if result.status == "failed" and result.pre_port_surface
+    ]
+    detail = f"Executed {len(report.verification_results)} verification commands."
+    if failed_pre_port:
+        detail += (
+            " Recorded pre-port surface failures as remaining manual actions: "
+            + ", ".join(result.command for result in failed_pre_port)
+            + "."
+        )
+    else:
+        detail += " Every command passed."
+    _append_completed_step(report, step="run-verification-stack", detail=detail)
 
 
 def _execute_write_handoff_prompt(report: BetaMigrationReport) -> None:

@@ -118,11 +118,22 @@ def _install_verification_shims(root: Path, spy_log: Path) -> Path:
     script = (
         "#!/bin/sh\n"
         'printf "%s\\n" "$0 $*" >> "$QS_SMOKE_SPY_LOG"\n'
+        'printf "notifications_secret=%s\\n" '
+        '"${QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET:-}" >> "$QS_SMOKE_SPY_LOG"\n'
+        'printf "runtime_url=%s\\n" "${RUNTIME_DATABASE_URL:-}" >> "$QS_SMOKE_SPY_LOG"\n'
         'if [ "${0##*/}" = "docker" ]; then\n'
-        "  # The recipient service lifecycle polls the container state; report the\n"
-        "  # backend as running so the hermetic gate never touches a real daemon.\n"
+        "  # The recipient service lifecycle polls the database state and reads the\n"
+        "  # container's credentials and published port; report them so the\n"
+        "  # hermetic gate never touches a real daemon.\n"
         '  if [ "${1:-}" = "inspect" ]; then\n'
-        '    printf "true\\n"\n'
+        '    case "$*" in\n'
+        '      *Health.Status*) printf "healthy\\n" ;;\n'
+        "      *Config.Env*) printf '%s\\n' "
+        '\'["POSTGRES_DB=bap_web","POSTGRES_USER=postgres","POSTGRES_PASSWORD=postgres"]\' ;;\n'
+        "      *NetworkSettings.Ports*) printf '%s\\n' "
+        '\'{"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"55000"}]}\' ;;\n'
+        '      *) printf "true\\n" ;;\n'
+        "    esac\n"
         "  fi\n"
         "  exit 0\n"
         "fi\n"
@@ -131,6 +142,11 @@ def _install_verification_shims(root: Path, spy_log: Path) -> Path:
         '    cp -R "$QS_SMOKE_APPLY_FIXTURE"/. "$PWD"/\n'
         "  fi\n"
         "  exit 0\n"
+        "fi\n"
+        'if [ "${0##*/}" = "pnpm" ] && [ "${1:-}" = "build" ] '
+        '&& [ "${QS_SMOKE_FAIL_PNPM_BUILD:-}" = "1" ]; then\n'
+        '  printf "TS2305: pre-port surface\\n" >&2\n'
+        "  exit 1\n"
         "fi\n"
         "exit 0\n"
     )
@@ -354,16 +370,30 @@ def _assert_recipient_services_lifecycle(
     """Assert the tool started and stopped the recipient Docker stack."""
     spy = spy_log.read_text()
     _require(
-        "docker compose up -d --build" in spy,
-        f"{label} did not start the recipient Docker Compose stack:\n{spy}",
+        "up -d db" in spy,
+        f"{label} did not start the recipient database service:\n{spy}",
     )
     _require(
-        "docker compose down --remove-orphans --volumes" in spy,
+        "down --remove-orphans --volumes" in spy,
         f"{label} did not stop the recipient Docker Compose stack:\n{spy}",
+    )
+    _require(
+        "poetry run python manage.py migrate" in spy,
+        f"{label} did not run the recipient's migration environment:\n{spy}",
     )
     _require(
         "poetry run pytest" in spy,
         f"{label} did not run the recipient's Poetry test environment:\n{spy}",
+    )
+    _require(
+        "notifications_secret=whsec_test_ci" in spy,
+        f"{label} verification environment did not inherit the project's "
+        f"declared CI test credentials:\n{spy}",
+    )
+    _require(
+        "runtime_url=postgresql://quickscale_runtime" in spy,
+        f"{label} verification environment did not inherit the project's "
+        f"declared runtime role URL:\n{spy}",
     )
     completed = {step["step"] for step in report["completed_steps"]}
     _require(
@@ -722,6 +752,64 @@ def _case_project_apps(root: Path, environment: dict[str, str], spy_log: Path) -
     )
 
 
+def _case_pre_port_surfaces(root: Path, environment: dict[str, str], spy_log: Path) -> None:
+    """Record a failing pre-port build surface and write the prompt."""
+    spy_log.write_text("")
+    donor = _generate_project(root, "pre-port-donor")
+    recipient = _generate_project(root, "pre-port-recipient")
+    case_environment = dict(environment)
+    case_environment["QS_SMOKE_FAIL_PNPM_BUILD"] = "1"
+
+    report, _stdout = _run_migration(
+        donor=donor,
+        recipient=recipient,
+        report_path=root / "pre-port.json",
+        environment=case_environment,
+    )
+
+    _require(
+        report["status"] == "ready",
+        f"pre-port execution was not ready: {report['blockers']}",
+    )
+    _require(
+        report["phase"] == "fresh-first-executed",
+        f"pre-port execution did not complete: {report['phase']}",
+    )
+    _require(not report["blockers"], f"pre-port execution blocked: {report['blockers']}")
+    results = {result["command"]: result for result in report["verification_results"]}
+    _require(
+        results["pnpm build"]["status"] == "failed"
+        and results["pnpm build"]["pre_port_surface"] is True,
+        f"pre-port build failure was not recorded: {results['pnpm build']}",
+    )
+    _require(
+        results["poetry run python manage.py migrate"]["status"] == "passed",
+        f"migration did not run after the recorded pre-port failure: {results}",
+    )
+    _require(
+        results["pnpm test"]["status"] == "passed",
+        f"later verification did not run after the recorded pre-port failure: {results}",
+    )
+    actions = {action["action"]: action for action in report["pending_manual_actions"]}
+    _require(
+        "resolve-pre-port-surface-pnpm-build" in actions,
+        f"pre-port failure produced no remaining manual action: {sorted(actions)}",
+    )
+    prompt_path = recipient / "MIGRATION_PROMPT.md"
+    _require(
+        prompt_path.is_file(),
+        "pre-port execution did not write the recipient handoff prompt",
+    )
+    prompt = prompt_path.read_text()
+    _require(
+        "`pnpm build` — failed" in prompt
+        and "resolve-pre-port-surface-pnpm-build" in prompt
+        and "TS2305: pre-port surface" in prompt,
+        f"handoff prompt did not record the pre-port surface output:\n{prompt}",
+    )
+    _assert_recipient_services_lifecycle(report, spy_log, label="pre-port")
+
+
 def main() -> int:
     print("🔍 Beta migration generated-project smoke gate")
     previous_skip_lock = os.environ.get("QS_SKIP_POETRY_LOCK")
@@ -744,6 +832,9 @@ def main() -> int:
             print("  🔍 project-owned app copy, registration, URL mount, and dependency merge")
             _case_project_apps(root / "project-apps", environment, spy_log)
             print("    ✅ project-apps covered app migration and frontend dependency merge")
+            print("  🔍 pre-port build surface recording and handoff prompt")
+            _case_pre_port_surfaces(root / "pre-port", environment, spy_log)
+            print("    ✅ pre-port covered recorded failure, continued stack, and prompt")
     finally:
         if previous_skip_lock is None:
             os.environ.pop("QS_SKIP_POETRY_LOCK", None)

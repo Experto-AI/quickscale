@@ -93,6 +93,32 @@ FRESH_FIRST_DONOR_DJANGO_FILES = (
 )
 
 
+# Copied donor files that keep the donor's authoritative shape with no
+# generated-symbol merge: settings/production.py has its own facade-rewrite
+# contract, and urls.py is the donor's router (the regenerated wiring imports
+# nothing from it, and its generated-only symbols are router internals).
+FRESH_FIRST_NO_SYMBOL_MERGE = ("settings/production.py", "urls.py")
+
+
+# Package-root modules that are scaffold-managed or already carried by name.
+# The donor-only package-module walk never adopts these; it copies every other
+# donor package-root module the recipient lacks, so donor helpers referenced by
+# carried apps and files come along.
+FRESH_FIRST_MANAGED_PACKAGE_ROOT_FILES = frozenset(
+    {
+        "__init__.py",
+        "asgi.py",
+        "wsgi.py",
+        "urls_modules.py",
+        *(
+            relative_path
+            for relative_path in FRESH_FIRST_DONOR_DJANGO_FILES
+            if "/" not in relative_path
+        ),
+    }
+)
+
+
 FRESH_FIRST_UTILITY_DIRS = (
     "assets",
     "data",
@@ -429,41 +455,56 @@ REGENERATION_APPLY_STDIN = "y\ny\n"
 REGENERATION_APPLY_TIMEOUT_SECONDS = 1800
 
 
+VERIFICATION_MIGRATE_ARGV = ("poetry", "run", "python", "manage.py", "migrate")
+
+
 VERIFICATION_COMMAND_SPECS = (
     VerificationCommandSpec("poetry lock", ("poetry", "lock")),
     VerificationCommandSpec("poetry install", ("poetry", "install")),
     VerificationCommandSpec("pnpm install", ("pnpm", "install"), cwd_suffix="frontend"),
-    VerificationCommandSpec("pnpm build", ("pnpm", "build"), cwd_suffix="frontend"),
+    # The recipient's build and test surfaces depend on donor application
+    # sources and tests the migration prompt assigns to the manual port. A
+    # non-zero exit there is recorded as a remaining manual action; setup,
+    # dependency-resolution, migration-regeneration, and migrate commands stay
+    # blocking.
     VerificationCommandSpec(
-        "quickscale manage migrate", ("quickscale", "manage", "migrate")
+        "pnpm build", ("pnpm", "build"), cwd_suffix="frontend", pre_port_surface=True
+    ),
+    # The migration runs in the recipient's own Poetry environment against the
+    # recipient's Compose database service; the generated production backend
+    # image compiles the frontend in its build, and the frontend sources are
+    # pre-port manual work.
+    VerificationCommandSpec(
+        "poetry run python manage.py migrate",
+        VERIFICATION_MIGRATE_ARGV,
+        requires_recipient_database=True,
     ),
     # The recipient's test suite runs in the recipient's own Poetry
     # environment, matching the generated project's `make test` entrypoint.
-    VerificationCommandSpec("poetry run pytest", ("poetry", "run", "pytest")),
-    VerificationCommandSpec("pnpm test", ("pnpm", "test"), cwd_suffix="frontend"),
+    VerificationCommandSpec(
+        "poetry run pytest", ("poetry", "run", "pytest"), pre_port_surface=True
+    ),
+    VerificationCommandSpec(
+        "pnpm test", ("pnpm", "test"), cwd_suffix="frontend", pre_port_surface=True
+    ),
 )
 
 
 VERIFICATION_COMMAND_TIMEOUT_SECONDS = 600
 
 
-# The service-backed verification commands run against the recipient's Docker
-# Compose stack (`quickscale manage` execs into the backend container). The tool
-# starts the stack before the first service-backed command and stops it, with
-# the throwaway volumes, after the stack even when a command fails. Host-run
-# commands (`poetry run pytest`) keep using the operator's PostgreSQL 18 service
-# documented in the migration playbook.
-RECIPIENT_SERVICES_COMMAND_PREFIXES: tuple[tuple[str, ...], ...] = (
-    ("quickscale", "manage"),
-)
-RECIPIENT_SERVICES_COMPOSE_START_ARGV = ("docker", "compose", "up", "-d", "--build")
-RECIPIENT_SERVICES_COMPOSE_STOP_ARGV = (
-    "docker",
-    "compose",
-    "down",
-    "--remove-orphans",
-    "--volumes",
-)
+# The database-backed verification command (`poetry run python manage.py
+# migrate`) runs in the recipient's own Poetry environment against the
+# recipient's Docker Compose database service: the generated production image
+# compiles the frontend sources in its build, and those sources are pre-port
+# manual work, so no backend container is started for verification. The tool
+# starts the database service with a reserved loopback publication, runs the
+# migration against it, and stops the service with its throwaway volumes even
+# when a command fails. Host-run commands (`poetry run pytest`) keep using the
+# operator's PostgreSQL 18 service documented in the migration playbook.
+RECIPIENT_SERVICES_CONTAINER_DATABASE_PORT = 5432
+RECIPIENT_SERVICES_COMPOSE_DB_UP_ARGV = ("up", "-d", "db")
+RECIPIENT_SERVICES_COMPOSE_DOWN_ARGV = ("down", "--remove-orphans", "--volumes")
 RECIPIENT_SERVICES_PREFIX_ENV = "QUICKSCALE_RESOURCE_PREFIX"
 RECIPIENT_SERVICES_TIMEOUT_SECONDS = 1800
 RECIPIENT_SERVICES_READY_TIMEOUT_SECONDS = 1800

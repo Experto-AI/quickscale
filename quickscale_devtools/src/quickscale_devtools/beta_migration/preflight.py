@@ -271,7 +271,7 @@ def _verification_command_specs_for(
 
     insert_at = len(specs)
     for index, candidate in enumerate(specs):
-        if candidate.argv[:3] == ("quickscale", "manage", "migrate"):
+        if candidate.requires_recipient_database:
             insert_at = index
             break
     specs.insert(

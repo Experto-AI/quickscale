@@ -61,7 +61,7 @@ Verification commands:
 - `poetry install` — passed
 - `pnpm install` — passed
 - `pnpm build` — passed
-- `quickscale manage migrate` — passed
+- `poetry run python manage.py migrate` — passed
 - `poetry run pytest` — passed
 - `pnpm test` — passed
 

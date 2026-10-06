@@ -28,13 +28,12 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA214 | Harden the fresh-first migration tool into the standard upgrade path | 2 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA214
+Track 2: —
 Track 3: —
      critical path: SA191 → SA153
 ```
@@ -47,8 +46,8 @@ handoff note (what landed, what is next, what to watch) committed with the work.
 when its last slice lands; slices are not scheduled.
 
 **Order.** SA204 freezes migration history before any post-SA153 module schema change; SA154 is
-an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor, so it does not wait on
-SA191. SA191 runs slice (b) first; slice (a) waits on the maintainer's production dump.
+an inventory, not work. SA191 runs slice (b) first; slice (a) waits on the maintainer's production
+dump.
 
 ### Track states
 
@@ -57,7 +56,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA214 | yes | yes | yes | **yes** | no |
+| 2 | — | yes | yes | yes | **yes** | no |
 | 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -92,9 +91,9 @@ A track is **truly green** only when all three states are yes.
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row, and the five `_anonymization.py`
   handlers with core's redaction helpers.
-- **Cross-track edits.** SA191 builds its recipient by the migration playbook that SA214 (Track 2)
-  rewrites; SA191 only reads it, and gate documentation (Track 1) is the shared file for SA214's
-  smoke-gate row. Both land through the serialized merge queue.
+- **Cross-track edits.** SA191 builds its recipient by the migration playbook of the completed
+  SA214 tool; SA191 only reads it, and gate documentation (Track 1) owns the smoke-gate row's
+  documentation. Both land through the serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md). Each track resolves the shared set at its
@@ -288,66 +287,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [ ] **SA214 — Harden the fresh-first migration tool into the standard upgrade path.**
-
-  Make `make beta-migrate-fresh` the standard way to move a QuickScale project onto the current
-  release, so the next beta-site upgrade needs no one-off prompt. Donors: `bap-web` as it stood
-  before SA191 (a pinned copy or commit, read-only) and fixture donors; not a live repository.
-
-  **Iterative loop.** The playbook's "Running a migration iteration" section is the procedure:
-  each iteration regenerates the recipient, runs `make beta-migrate-fresh` with a read-only donor,
-  and triages every gap into the gap ledger (tool fix, playbook step, project decision, or upstream
-  to a module); fixes land in QuickScale and the loop restarts. The recipient is never hand-edited
-  before the final iteration. The first slice is one non-interactive `make beta-migrate-iterate`
-  target that reads slug, theme, and modules from the donor's `quickscale.yml` and runs one
-  iteration; the rest follows ledger order, starting with G-001.
-
-  **Tool scope.** The tool migrates everything that can be done deterministically:
-  - *Classification.* Every donor file lands in exactly one class — generated-untouched,
-    generated-customized, project-owned, module-edited, or build artifact. An unclassified file is a
-    blocker, never a silent drop.
-  - *Functionality.* Project-owned Django apps are detected, copied, registered, and URL-mounted
-    without hand-patching QuickScale-owned settings; their migrations are regenerated against the
-    current `AbstractListing`. Donor-added frontend dependencies merge, with conflicts reported.
-  - *Design system.* The `showcase_react` theme gains a project-owned design layer: one folder
-    holding the tokens CSS, Tailwind preset, fonts, and brand assets. It is declared
-    never-overwritten in [generated_file_ownership.md](generated_file_ownership.md), and a test
-    proves an upgrade leaves it untouched. The tool ports the donor's design into it. The SA192
-    Django-rendered pages import the same tokens file.
-  - *Handoff prompt.* The final phase writes `MIGRATION_PROMPT.md` into the recipient, generated
-    from the report: what was migrated, the remaining manual actions with their paths and the
-    applicable rule, the hard constraints, and the exact done criteria; a snapshot test pins the
-    rendered prompt. A coding assistant completes the remainder from it.
-
-  **Acceptance:**
-  - A final iteration against the pinned `bap-web` donor runs clean: no unclassified files, every
-    ledger entry closed (G-001 included), and the handoff prompt's remaining items recorded.
-  - Tool tests cover each ledger fix with a fixture donor holding a project-owned app, customized
-    tokens, a module edit, and a pre-facade `production.py`; the handoff prompt has a snapshot
-    test; the beta-migration smoke gate passes; the playbook points at the tool instead of
-    duplicating it as shell snippets.
-  - A decision records who owns a pre-facade donor `production.py`: the migration rewrites a
-    recognized pre-facade database block onto the facade while the donor stays read-only
-    ([decisions.md § Generated-File Ownership](decisions.md#generated-file-ownership-taxonomy)).
-
-  **Slices:**
-  - [x] (a) `make beta-migrate-iterate`: one non-interactive iteration driven by the donor's
-    `quickscale.yml`.
-  - [x] (b) Classification of every donor file, with unclassified files as blockers.
-  - [x] (c) Project-owned apps (copy, register, mount, regenerate migrations) and frontend
-    dependency merge.
-  - [x] (d) The `showcase_react` design layer, its ownership entry and upgrade test, and the
-    donor design port.
-  - [x] (e) The generated `MIGRATION_PROMPT.md` and its snapshot test.
-  - [ ] (f) Ledger iterations to a clean final run, the playbook rewrite, and the pre-facade
-    `production.py` decision. G-001–G-006 are fixed; the first execution iteration on PostgreSQL 18
-    regenerated from the published splits and stopped at `pnpm build` on the pinned donor's
-    divergent frontend hooks and lib, which the migration prompt assigns to the manual port; decide
-    the verification contract for pre-port manual surfaces (G-007) before the final iteration.
-
-  **Surfaces:** `quickscale_devtools/.../beta_migration/`, its tests and smoke gate; the migration
-  playbook and gap ledger; the `showcase_react` theme, generator, and
-  `generated_file_ownership.md` (design layer); decisions.
+- [x] **SA214 — Harden the fresh-first migration tool into the standard upgrade path.**
 
 ## Deferred constraints and references
 
