@@ -166,6 +166,9 @@ class InvitationNotificationMixin:
                 invitation = form.save()
                 recipients = [invitation.email]
                 notification_context = self.get_notification_context(invitation)
+                # Rule 50: the inviter link travels as ``about_users``;
+                # notifications stores it where anonymization reads it.
+                about_users = [self.request.user]
                 # Rule 21: the invitation email is an effect of the write and
                 # runs only if that write commits.
                 transaction.on_commit(
@@ -173,6 +176,7 @@ class InvitationNotificationMixin:
                         template_key=_ORG_INVITATION_TEMPLATE_KEY,
                         recipients=recipients,
                         context=notification_context,
+                        about_users=about_users,
                         tags=["auth"],
                         metadata={"workflow": "org-invitation"},
                     )
@@ -191,13 +195,12 @@ class InvitationNotificationMixin:
         self,
         invitation: OrganizationInvitation,
     ) -> dict[str, str]:
-        # ``actor_user_id`` links this message to the inviter for account
-        # anonymization; a display name alone is not a safe selector.
+        # The inviter link travels as the sender's ``about_users`` argument
+        # (rule 50); the context carries render data only.
         return {
             "organization_name": invitation.organization.name,
             "invitee_email": invitation.email,
             "inviter_name": self.get_inviter_display_name(),
-            "actor_user_id": str(self.request.user.pk),
             "role_display": str(OrgRole(invitation.role).label),
             "accept_url": self.request.build_absolute_uri(
                 reverse(
