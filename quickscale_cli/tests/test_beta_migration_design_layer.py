@@ -57,6 +57,8 @@ def _install_subprocess_stub(
     def fake_run(argv: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         command = tuple(argv)  # type: ignore[arg-type]
         calls.append(command)
+        if command[:2] == ("docker", "inspect"):
+            return subprocess.CompletedProcess(command, 0, stdout="true", stderr="")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)

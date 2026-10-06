@@ -231,9 +231,30 @@ def _fresh_first_actions(
                 targets=[str(path) for path in _protected_recipient_paths(recipient)],
             ),
             PlannedAction(
+                step="start-recipient-services",
+                description=(
+                    "Start the recipient's throwaway Docker Compose stack (database, "
+                    "frontend, and backend containers) before the first service-backed "
+                    "verification command so docker-backed commands run against a live "
+                    "backend container."
+                ),
+                commands=["docker compose up -d --build"],
+                targets=[str(recipient.path)],
+            ),
+            PlannedAction(
                 step="run-verification-stack",
                 description="Run the shared verification subprocess stack in the recipient working tree.",
                 commands=_render_verification_commands(recipient.path, donor=donor),
+                targets=[str(recipient.path)],
+            ),
+            PlannedAction(
+                step="stop-recipient-services",
+                description=(
+                    "Stop the recipient's Docker Compose stack and remove its throwaway "
+                    "volumes after the verification stack, even when a verification "
+                    "command fails."
+                ),
+                commands=["docker compose down --remove-orphans --volumes"],
                 targets=[str(recipient.path)],
             ),
             PlannedAction(

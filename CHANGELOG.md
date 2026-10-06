@@ -58,6 +58,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient with what was
     migrated, the remaining manual actions and their paths and governing rules, the hard
     constraints, and the done criteria.
+  - **Beta migration verifies against a live recipient.** The fresh-first workflow starts the
+    recipient's Docker Compose stack before the first service-backed verification command and stops
+    it, with the throwaway volumes, after the stack even on failure, and runs the recipient's tests
+    in the recipient's own Poetry environment.
   - **Beta migration classifies every donor file before mutation.** The maintainer tool sorts
     each donor file into generated-untouched, generated-customized, project-owned, module-edited,
     or build-artifact and blocks the run, naming the file, when one matches no class.

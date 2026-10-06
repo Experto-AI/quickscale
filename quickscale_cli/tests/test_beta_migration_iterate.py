@@ -147,6 +147,8 @@ def _install_subprocess_stub(
                 stdout="",
                 stderr="apply failed" if apply_returncode else "",
             )
+        if command[:2] == ("docker", "inspect"):
+            return subprocess.CompletedProcess(command, 0, stdout="true", stderr="")
         return subprocess.CompletedProcess(
             command, 0, stdout=f"stdout:{' '.join(command)}", stderr=""
         )
@@ -382,7 +384,10 @@ def test_iterate_executes_regeneration_and_migration(
     assert not _iterate_stage_dir(recipient).exists()
 
     verification_calls = [
-        call for call in calls if call["argv"][:2] != ("quickscale", "apply")
+        call
+        for call in calls
+        if call["argv"][:2] != ("quickscale", "apply")
+        and call["argv"][:1] != ("docker",)
     ]
     assert len(verification_calls) == 7
 

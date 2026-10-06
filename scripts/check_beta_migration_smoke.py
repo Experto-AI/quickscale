@@ -23,7 +23,7 @@ from quickscale_core.utils.project_identity import resolve_project_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 BETA_MIGRATE = ROOT / "scripts" / "beta_migrate.py"
-SHIM_NAMES = ("poetry", "pnpm", "pytest", "quickscale")
+SHIM_NAMES = ("docker", "poetry", "pnpm", "pytest", "quickscale")
 
 
 class SmokeError(RuntimeError):
@@ -118,6 +118,14 @@ def _install_verification_shims(root: Path, spy_log: Path) -> Path:
     script = (
         "#!/bin/sh\n"
         'printf "%s\\n" "$0 $*" >> "$QS_SMOKE_SPY_LOG"\n'
+        'if [ "${0##*/}" = "docker" ]; then\n'
+        "  # The recipient service lifecycle polls the container state; report the\n"
+        "  # backend as running so the hermetic gate never touches a real daemon.\n"
+        '  if [ "${1:-}" = "inspect" ]; then\n'
+        '    printf "true\\n"\n'
+        "  fi\n"
+        "  exit 0\n"
+        "fi\n"
         'if [ "${0##*/}" = "quickscale" ] && [ "${1:-}" = "apply" ]; then\n'
         '  if [ -n "${QS_SMOKE_APPLY_FIXTURE:-}" ]; then\n'
         '    cp -R "$QS_SMOKE_APPLY_FIXTURE"/. "$PWD"/\n'
@@ -340,6 +348,30 @@ def _assert_successful_execution(
     )
 
 
+def _assert_recipient_services_lifecycle(
+    report: dict[str, Any], spy_log: Path, *, label: str
+) -> None:
+    """Assert the tool started and stopped the recipient Docker stack."""
+    spy = spy_log.read_text()
+    _require(
+        "docker compose up -d --build" in spy,
+        f"{label} did not start the recipient Docker Compose stack:\n{spy}",
+    )
+    _require(
+        "docker compose down --remove-orphans --volumes" in spy,
+        f"{label} did not stop the recipient Docker Compose stack:\n{spy}",
+    )
+    _require(
+        "poetry run pytest" in spy,
+        f"{label} did not run the recipient's Poetry test environment:\n{spy}",
+    )
+    completed = {step["step"] for step in report["completed_steps"]}
+    _require(
+        {"start-recipient-services", "stop-recipient-services"} <= completed,
+        f"{label} report did not record the recipient service lifecycle: {completed}",
+    )
+
+
 def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) -> None:
     spy_log.write_text("")
     donor = _generate_project(root, "beta-donor")
@@ -363,8 +395,8 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
         "fresh-first identity reconciliation was not planned",
     )
     _require(
-        len(report["planned_actions"]) == 10,
-        "fresh-first plan did not contain ten actions",
+        len(report["planned_actions"]) == 12,
+        "fresh-first plan did not contain twelve actions",
     )
     _require(
         report["runtime_provenance"]
@@ -477,6 +509,7 @@ def _case_fresh_first(root: Path, environment: dict[str, str], spy_log: Path) ->
         before_donor=donor_before,
         before_recipient=recipient_before,
     )
+    _assert_recipient_services_lifecycle(executed, spy_log, label="fresh-first")
     _probe_generated_runtime(execution_recipient)
     _require(
         "beta_target.wsgi" in (execution_recipient / "start.sh").read_text(),
@@ -571,6 +604,7 @@ def _case_iterate(root: Path, environment: dict[str, str], spy_log: Path) -> Non
         before_recipient={},
         label="iterate",
     )
+    _assert_recipient_services_lifecycle(executed, spy_log, label="iterate")
     _require(recipient.is_dir(), "iterate did not create the throwaway recipient")
     spy = spy_log.read_text()
     _require(
@@ -657,6 +691,7 @@ def _case_project_apps(root: Path, environment: dict[str, str], spy_log: Path) -
         label="project-apps",
         expected_verification_count=8,
     )
+    _assert_recipient_services_lifecycle(report, spy_log, label="project-apps")
     _require(
         (recipient / "properties" / "models.py").is_file(),
         "project-owned app was not copied into the recipient",

@@ -340,8 +340,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
     donor design port.
   - [x] (e) The generated `MIGRATION_PROMPT.md` and its snapshot test.
   - [ ] (f) Ledger iterations to a clean final run, the playbook rewrite, and the pre-facade
-    `production.py` decision. G-001–G-003 are fixed and the pinned-donor dry run is clean; next is
-    the full execution iteration on PostgreSQL 18 with modules from `--split-refs-from-branches`.
+    `production.py` decision. G-001–G-006 are fixed; the first execution iteration on PostgreSQL 18
+    regenerated from the published splits and stopped at `pnpm build` on the pinned donor's
+    divergent frontend hooks and lib, which the migration prompt assigns to the manual port; decide
+    the verification contract for pre-port manual surfaces (G-007) before the final iteration.
 
   **Surfaces:** `quickscale_devtools/.../beta_migration/`, its tests and smoke gate; the migration
   playbook and gap ledger; the `showcase_react` theme, generator, and

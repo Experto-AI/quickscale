@@ -123,6 +123,10 @@ def _install_subprocess_stub(
         command_tuple = tuple(command)
         working_dir = Path(str(cwd)) if cwd is not None else Path.cwd()
         calls.append((command_tuple, working_dir))
+        if command_tuple[:2] == ("docker", "inspect"):
+            return subprocess.CompletedProcess(
+                command_tuple, 0, stdout="true", stderr=""
+            )
         if on_command is not None:
             on_command(command_tuple, working_dir)
         return subprocess.CompletedProcess(

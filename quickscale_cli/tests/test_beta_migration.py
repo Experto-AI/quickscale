@@ -27,6 +27,7 @@ from quickscale_devtools.beta_migration import (
     run_beta_migration,
     run_beta_migration_cli,
 )
+from quickscale_devtools.beta_migration.services import _recipient_services_prefix
 
 EXPECTED_VERIFICATION_SEQUENCE = [
     (("poetry", "lock"), "poetry lock", "."),
@@ -34,7 +35,7 @@ EXPECTED_VERIFICATION_SEQUENCE = [
     (("pnpm", "install"), "pnpm install", "frontend"),
     (("pnpm", "build"), "pnpm build", "frontend"),
     (("quickscale", "manage", "migrate"), "quickscale manage migrate", "."),
-    (("pytest",), "pytest", "."),
+    (("poetry", "run", "pytest"), "poetry run pytest", "."),
     (("pnpm", "test"), "pnpm test", "frontend"),
 ]
 
@@ -319,6 +320,10 @@ def _install_verification_success_stub(
         if env_calls is not None:
             env_calls.append((command_tuple, kwargs.get("env")))
         calls.append((command_tuple, call_cwd))
+        if command_tuple[:2] == ("docker", "inspect"):
+            return subprocess.CompletedProcess(
+                command_tuple, 0, stdout="true", stderr=""
+            )
         joined = " ".join(command_tuple)
         return subprocess.CompletedProcess(
             command_tuple,
@@ -336,19 +341,47 @@ def _assert_verification_report(
     recipient: Path,
     calls: list[tuple[tuple[str, ...], Path]],
 ) -> None:
-    expected_calls = [
-        (
-            argv,
-            recipient if cwd_suffix == "." else recipient / cwd_suffix,
-        )
-        for argv, _display, cwd_suffix in EXPECTED_VERIFICATION_SEQUENCE
-    ]
+    recipient_prefix = _recipient_services_prefix(recipient)
+    expected_calls: list[tuple[tuple[str, ...], Path]] = []
+    for argv, _display, cwd_suffix in EXPECTED_VERIFICATION_SEQUENCE:
+        cwd = recipient if cwd_suffix == "." else recipient / cwd_suffix
+        if argv[:2] == ("quickscale", "manage"):
+            expected_calls.extend(
+                [
+                    (
+                        (
+                            "docker",
+                            "compose",
+                            "down",
+                            "--remove-orphans",
+                            "--volumes",
+                        ),
+                        recipient,
+                    ),
+                    (("docker", "compose", "up", "-d", "--build"), recipient),
+                    (
+                        (
+                            "docker",
+                            "inspect",
+                            "--format",
+                            "{{.State.Running}}",
+                            f"{recipient_prefix}_backend",
+                        ),
+                        recipient,
+                    ),
+                ]
+            )
+        expected_calls.append((argv, cwd))
+    expected_calls.append(
+        (("docker", "compose", "down", "--remove-orphans", "--volumes"), recipient)
+    )
     assert calls == expected_calls
     assert [result.command for result in report.verification_results] == [
         display for _argv, display, _cwd_suffix in EXPECTED_VERIFICATION_SEQUENCE
     ]
     assert [Path(result.cwd) for result in report.verification_results] == [
-        cwd for _argv, cwd in expected_calls
+        recipient if cwd_suffix == "." else recipient / cwd_suffix
+        for _argv, _display, cwd_suffix in EXPECTED_VERIFICATION_SEQUENCE
     ]
     assert [result.stdout for result in report.verification_results] == [
         f"stdout:{' '.join(argv)}"
@@ -2662,9 +2695,18 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
     poetry_envs = {
         command: env
         for command, env in env_calls
-        if command in {("poetry", "lock"), ("poetry", "install")}
+        if command
+        in {
+            ("poetry", "lock"),
+            ("poetry", "install"),
+            ("poetry", "run", "pytest"),
+        }
     }
-    assert set(poetry_envs) == {("poetry", "lock"), ("poetry", "install")}
+    assert set(poetry_envs) == {
+        ("poetry", "lock"),
+        ("poetry", "install"),
+        ("poetry", "run", "pytest"),
+    }
     for isolated_env in poetry_envs.values():
         assert isolated_env is not None
         assert "VIRTUAL_ENV" not in isolated_env
@@ -2675,15 +2717,31 @@ def test_run_fresh_first_different_slug_executes_verification_and_preserves_boun
     ambient_commands = {
         command
         for command, env in env_calls
-        if command not in {("poetry", "lock"), ("poetry", "install")} and env is None
+        if command
+        not in {
+            ("poetry", "lock"),
+            ("poetry", "install"),
+            ("poetry", "run", "pytest"),
+        }
+        and env is None
     }
     assert ambient_commands == {
         ("pnpm", "install"),
         ("pnpm", "build"),
-        ("quickscale", "manage", "migrate"),
-        ("pytest",),
         ("pnpm", "test"),
     }
+
+    service_envs = {
+        command: env
+        for command, env in env_calls
+        if command == ("quickscale", "manage", "migrate")
+    }
+    assert set(service_envs) == {("quickscale", "manage", "migrate")}
+    manage_env = service_envs[("quickscale", "manage", "migrate")]
+    assert manage_env is not None
+    assert manage_env["QUICKSCALE_RESOURCE_PREFIX"] == _recipient_services_prefix(
+        recipient
+    )
 
     new_package_dir = recipient / "experto_ai_web"
     assert new_package_dir.is_dir()
@@ -3452,6 +3510,189 @@ def test_verification_command_launch_oserror_blocks_and_stops_stack(
     assert report.blockers == [
         "run-verification-stack failed: Verification command failed to start: poetry lock: poetry executable missing"
     ]
+
+
+def test_recipient_services_start_failure_blocks_and_cleans_up(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed stack start should block before docker-backed verification."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, **kwargs):
+        command_tuple = tuple(command)
+        calls.append(command_tuple)
+        if command_tuple[:4] == ("docker", "compose", "up", "-d"):
+            return subprocess.CompletedProcess(
+                command_tuple, 1, stdout="", stderr="compose build failed"
+            )
+        return subprocess.CompletedProcess(command_tuple, 0, stdout="true", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert report.phase == "fresh-first-partial"
+    assert any(
+        "docker compose up -d --build" in blocker and "compose build failed" in blocker
+        for blocker in report.blockers
+    ), report.blockers
+    docker_commands = [command for command in calls if command[:1] == ("docker",)]
+    assert docker_commands[-1] == (
+        "docker",
+        "compose",
+        "down",
+        "--remove-orphans",
+        "--volumes",
+    )
+    assert not any(
+        result.command == "quickscale manage migrate"
+        for result in report.verification_results
+    )
+
+
+def test_recipient_services_stop_runs_when_a_verification_command_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed docker-backed command should still stop the started stack."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, **kwargs):
+        command_tuple = tuple(command)
+        calls.append(command_tuple)
+        if command_tuple == ("quickscale", "manage", "migrate"):
+            return subprocess.CompletedProcess(
+                command_tuple, 1, stdout="", stderr="migration failed"
+            )
+        return subprocess.CompletedProcess(command_tuple, 0, stdout="true", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert any("quickscale manage migrate" in blocker for blocker in report.blockers)
+    assert calls[-1] == (
+        "docker",
+        "compose",
+        "down",
+        "--remove-orphans",
+        "--volumes",
+    )
+    completed_steps = {step.step for step in report.completed_steps}
+    assert {
+        "start-recipient-services",
+        "stop-recipient-services",
+    } <= completed_steps
+    assert not any(
+        result.command == "poetry run pytest" for result in report.verification_results
+    )
+
+
+def test_recipient_services_cleanup_failure_is_recorded_not_raised(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing stop is reported without masking the verification blocker."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+    )
+    stack_started = False
+
+    def fake_run(command, **kwargs):
+        nonlocal stack_started
+        command_tuple = tuple(command)
+        if command_tuple[:4] == ("docker", "compose", "up", "-d"):
+            stack_started = True
+            return subprocess.CompletedProcess(command_tuple, 0, stdout="", stderr="")
+        if stack_started and command_tuple[:3] == ("docker", "compose", "down"):
+            return subprocess.CompletedProcess(
+                command_tuple, 1, stdout="", stderr="down failed"
+            )
+        if command_tuple == ("quickscale", "manage", "migrate"):
+            return subprocess.CompletedProcess(
+                command_tuple, 1, stdout="", stderr="migration failed"
+            )
+        return subprocess.CompletedProcess(command_tuple, 0, stdout="true", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="fresh-first",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "blocked"
+    assert any("quickscale manage migrate" in blocker for blocker in report.blockers)
+    stop_steps = {
+        step.step: step.detail
+        for step in (*report.completed_steps, *report.skipped_steps)
+        if step.step == "stop-recipient-services"
+    }
+    assert "stop-recipient-services" in stop_steps
+    assert "down failed" in stop_steps["stop-recipient-services"]
+
+
+def test_recipient_services_prefix_is_a_safe_compose_resource_name() -> None:
+    """The Compose resource prefix is a valid, trimmed resource name."""
+    assert (
+        _recipient_services_prefix(Path("/tmp/qs Beta.Recipient"))
+        == "qs_beta_recipient"
+    )
+    assert _recipient_services_prefix(Path("/")) == "quickscale_beta_recipient"
 
 
 # ---------------------------------------------------------------------------
