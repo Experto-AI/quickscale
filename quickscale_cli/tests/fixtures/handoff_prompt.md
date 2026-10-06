@@ -30,6 +30,8 @@ Steps completed:
 - merge-frontend-dependencies
 - port-donor-design
 - preserve-managed-recipient-files
+- start-recipient-services
+- stop-recipient-services
 - run-verification-stack
 
 Recipient paths changed (15):
@@ -60,7 +62,7 @@ Verification commands:
 - `pnpm install` — passed
 - `pnpm build` — passed
 - `quickscale manage migrate` — passed
-- `pytest` — passed
+- `poetry run pytest` — passed
 - `pnpm test` — passed
 
 ## Remaining work

@@ -388,8 +388,11 @@ def test_iterate_inventory_blocks_before_replacing_the_recipient(
     calls: list[object] = []
 
     def fake_run(argv: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        calls.append(argv)
-        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+        command = tuple(argv)  # type: ignore[arg-type]
+        calls.append(command)
+        if command[:2] == ("docker", "inspect"):
+            return subprocess.CompletedProcess(command, 0, stdout="true", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
@@ -478,6 +481,8 @@ def test_iterate_execution_classifies_the_regenerated_recipient(
         command = tuple(argv)  # type: ignore[arg-type]
         if command[:2] == ("quickscale", "apply"):
             shutil.copytree(template, Path(str(kwargs["cwd"])), dirs_exist_ok=True)
+        if command[:2] == ("docker", "inspect"):
+            return subprocess.CompletedProcess(command, 0, stdout="true", stderr="")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)

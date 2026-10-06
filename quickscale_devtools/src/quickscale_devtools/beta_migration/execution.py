@@ -47,6 +47,12 @@ from .settings_facade import (
     _plan_pre_facade_settings_rewrite,
     _write_rewritten_settings,
 )
+from .services import (
+    _recipient_services_environment,
+    _spec_needs_recipient_services,
+    _start_recipient_services,
+    _stop_recipient_services,
+)
 from .regeneration import (
     _execute_regenerate_recipient,
     _plan_beta_migration_iterate,
@@ -421,6 +427,12 @@ def _build_verification_subprocess_context(
         and spec.argv[1] in {"lock", "install", "run"}
     ):
         subprocess_kwargs["env"] = build_isolated_poetry_env()
+    elif _spec_needs_recipient_services(spec):
+        # Service-backed commands exec into the recipient's Compose stack; the
+        # resource prefix must match the containers the lifecycle started.
+        subprocess_kwargs["env"] = _recipient_services_environment(
+            report.recipient.path
+        )
     return working_dir, subprocess_kwargs
 
 
@@ -518,16 +530,54 @@ def _verification_command_specs(
 
 
 def _execute_verification_stack(report: BetaMigrationReport) -> None:
-    """Execute the shared verification stack and capture subprocess output."""
+    """Execute the shared verification stack and capture subprocess output.
+
+    The recipient's Docker Compose stack is started lazily before the first
+    service-backed command and stopped after the stack (with the throwaway
+    volumes) even when a command fails, so a blocked run leaves no containers or
+    volumes behind.
+    """
     if report.recipient is None:
         raise ValueError("Recipient snapshot is unavailable.")
 
-    for spec in _verification_command_specs(report):
-        _run_verification_command(report, spec)
-        if "makemigrations" in spec.argv:
-            # The regenerated initial migration exists now; append the carried
-            # donor operations before the stack's migrate command runs.
-            _execute_carry_project_app_migrations(report)
+    services_started = False
+    try:
+        for spec in _verification_command_specs(report):
+            if not services_started and _spec_needs_recipient_services(spec):
+                # Flag before starting so a partially started stack is still
+                # cleaned up by the finally block.
+                services_started = True
+                _append_completed_step(
+                    report,
+                    step="start-recipient-services",
+                    detail=_start_recipient_services(report),
+                )
+            _run_verification_command(report, spec)
+            if "makemigrations" in spec.argv:
+                # The regenerated initial migration exists now; append the carried
+                # donor operations before the stack's migrate command runs.
+                _execute_carry_project_app_migrations(report)
+    finally:
+        if services_started:
+            stop_failure = _stop_recipient_services(report)
+            if stop_failure is None:
+                _append_completed_step(
+                    report,
+                    step="stop-recipient-services",
+                    detail=(
+                        "Stopped the recipient Docker Compose stack and removed its "
+                        "throwaway volumes."
+                    ),
+                )
+            else:
+                _append_skipped_step(
+                    report,
+                    step="stop-recipient-services",
+                    detail=(
+                        "Recipient Docker Compose cleanup did not complete: "
+                        f"{stop_failure}"
+                    ),
+                )
 
     _append_completed_step(
         report,

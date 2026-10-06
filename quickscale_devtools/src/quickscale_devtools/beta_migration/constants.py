@@ -437,12 +437,37 @@ VERIFICATION_COMMAND_SPECS = (
     VerificationCommandSpec(
         "quickscale manage migrate", ("quickscale", "manage", "migrate")
     ),
-    VerificationCommandSpec("pytest", ("pytest",)),
+    # The recipient's test suite runs in the recipient's own Poetry
+    # environment, matching the generated project's `make test` entrypoint.
+    VerificationCommandSpec("poetry run pytest", ("poetry", "run", "pytest")),
     VerificationCommandSpec("pnpm test", ("pnpm", "test"), cwd_suffix="frontend"),
 )
 
 
 VERIFICATION_COMMAND_TIMEOUT_SECONDS = 600
+
+
+# The service-backed verification commands run against the recipient's Docker
+# Compose stack (`quickscale manage` execs into the backend container). The tool
+# starts the stack before the first service-backed command and stops it, with
+# the throwaway volumes, after the stack even when a command fails. Host-run
+# commands (`poetry run pytest`) keep using the operator's PostgreSQL 18 service
+# documented in the migration playbook.
+RECIPIENT_SERVICES_COMMAND_PREFIXES: tuple[tuple[str, ...], ...] = (
+    ("quickscale", "manage"),
+)
+RECIPIENT_SERVICES_COMPOSE_START_ARGV = ("docker", "compose", "up", "-d", "--build")
+RECIPIENT_SERVICES_COMPOSE_STOP_ARGV = (
+    "docker",
+    "compose",
+    "down",
+    "--remove-orphans",
+    "--volumes",
+)
+RECIPIENT_SERVICES_PREFIX_ENV = "QUICKSCALE_RESOURCE_PREFIX"
+RECIPIENT_SERVICES_TIMEOUT_SECONDS = 1800
+RECIPIENT_SERVICES_READY_TIMEOUT_SECONDS = 1800
+RECIPIENT_SERVICES_STOP_TIMEOUT_SECONDS = 300
 
 
 _RUNTIME_COMMAND_NAMES = frozenset(

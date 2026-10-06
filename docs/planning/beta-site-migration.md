@@ -23,6 +23,7 @@ Rules for the current maintainer tool:
 - implemented in `quickscale_devtools.beta_migration`; `scripts/beta_migrate.py` is only the thin maintainer wrapper, not a QuickScale module or public `quickscale` CLI command
 - reports which project's `settings/production.py`, `start.sh`, and `Dockerfile` form the effective runtime, rejects unresolved command settings or launcher/package skew before mutation, and keeps fresh-first `.quickscale/state.yml` identity metadata aligned with the reconciled scaffold
 - a run that completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient — what was migrated, every remaining manual action with its paths and governing rule, the hard constraints, and the done criteria — for a coding assistant to complete the remainder; dry runs and runs blocked before or during execution write no prompt
+- the tool starts the recipient's Docker Compose stack from a clean state before the first service-backed verification command (`quickscale manage migrate` execs into the backend container) and stops it, with its throwaway volumes, after the verification stack even when a command fails; host-run `poetry run pytest` reads the recipient `.env` and needs the PostgreSQL 18 service
 - `DONOR` and `RECIPIENT` are the only required operator inputs and must be provided explicitly on every run
 - prefer deterministic Python transforms over bash-heavy pipelines
 - if a step cannot be resolved safely, stop and emit a partial report with `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions` for a maintainer or AI coding assistant to continue
@@ -61,6 +62,17 @@ donor's `quickscale.yml`, regenerates the throwaway recipient through a staging 
 `quickscale apply --split-refs-from-branches`, then runs the fresh-first workflow against it.
 `DRY_RUN=1` plans the regeneration only. The recipient is never hand-edited between iterations.
 
+The iteration runs under the repository's Poetry environment, whose `quickscale` shadows the
+installed CLI, so an unreleased target version resolves its lockstep `quickscale-core` pin only
+through the wheelhouse `make install` staged:
+
+```bash
+export QUICKSCALE_LOCAL_WHEELHOUSE="$(readlink -f ~/.local/share/quickscale/current)/quickscale_wheels"
+```
+
+Host-run `poetry run pytest` reads the recipient `.env` and needs a PostgreSQL 18 service on
+`localhost:5432`.
+
 Check the iteration by the run report, the remaining items in `$RECIPIENT/MIGRATION_PROMPT.md`,
 and the donor's pytest and Vitest suites run in the recipient. Live-site Playwright and screenshot
 parity run in the final iteration only.
@@ -88,10 +100,20 @@ The final iteration runs with every row closed.
 | G-001 | 0 (2026-09-26) | The fresh-first preflight blocks: donor `bap_web/settings/production.py` (generated on v0.62.0) predates the SA206 runtime settings facade and selects its database inline. The donor is read-only, so the block cannot be cleared on the donor side. | tool fix | The tool stops treating an old donor's `production.py` as authoritative: it rewrites the donor's database block onto the facade, carries every other donor setting unchanged, and reports each carried customization. | `test_inline_command_contract_is_rewritten_onto_the_facade`, `test_inline_command_contract_execution_rewrites_the_recipient`, `test_ledger_fixture_donor_carries_app_tokens_module_edit_and_pre_facade_settings`, `make check-beta-migration-smoke`; the pinned-donor dry run plans the rewrite and names all 28 carried settings | closed |
 | G-002 | review (SA214 c) | A donor project-owned app's migrations can own operations the autodetector cannot reproduce — FORCE-RLS policies, composite tenant constraints, data migrations. Regenerating plain model operations would silently drop tenant isolation. | tool fix | The tool regenerates the model state and carries each non-regenerable operation into an appended migration, naming it; an operation that cannot be carried safely blocks before mutation. | `test_migration_owned_operations_are_carried_after_makemigrations`, `test_tuple_migration_operations_are_carried_after_makemigrations`, `test_unresolvable_operation_reference_blocks_before_mutation`, `test_external_migration_dependency_blocks_before_mutation`, `test_dynamic_operations_declaration_blocks_before_mutation`, `test_ledger_fixture_donor_carries_app_tokens_module_edit_and_pre_facade_settings`; the pinned-donor dry run plans `properties/0002` → `0002_carried_propertylisting_seeded_from_catalog.py` | closed |
 | G-003 | pinned-donor dry run (SA214 f) | The pinned donor's root documentation and tooling paths (`roadmap.md`, `formularios.md`, `properties-plan.md`, `adaptive.yml`, `docs/`, `.pnpm-store/`, `.tmp/`, `.claude/`, `coverage.xml`) matched no class, so the classification audit blocked. | tool fix | The taxonomy recognizes top-level Markdown documents and `adaptive.yml` as project-owned, `docs/` as a recognized project root, and the tooling stores plus the coverage report as build artifacts. | `test_donor_documentation_and_tooling_paths_classify`; the pinned-donor dry run reports zero unclassified files | closed |
+| G-004 | execution iteration (SA214 f) | The regeneration step ran the repository Poetry environment's `quickscale`, which has no staged wheelhouse, so the generated project's lockstep `quickscale-core` pin could not resolve for an unreleased target version. | playbook step | The iteration procedure names the staged wheelhouse via `QUICKSCALE_LOCAL_WHEELHOUSE`, so the unreleased pin resolves locally instead of chasing a PyPI version. | the pinned-donor execution iteration regenerated the recipient once the export was set | closed |
+| G-005 | execution iteration (SA214 f) | The verification stack ran bare `pytest`, which resolves to the maintainer's environment instead of the recipient's Poetry environment. | tool fix | The stack runs `poetry run pytest`, the generated project's own `make test` entrypoint. | `EXPECTED_VERIFICATION_SEQUENCE` and the environment assertions in `test_beta_migration.py`; `make check-beta-migration-smoke`; a real generated recipient resolved and ran the command through its own `.venv`, leaving only the project's coverage gate, which is G-007's pre-port test surface | closed |
+| G-006 | execution iteration (SA214 f) | The verification stack's `quickscale manage migrate` execs into the recipient's backend container, but nothing started the recipient's Docker Compose stack, so the command failed against a fresh recipient. | tool fix | The tool starts the stack from a clean state before the first service-backed command and stops it, with the throwaway volumes, after the verification stack even on failure. | `test_recipient_services_start_failure_blocks_and_cleans_up`, `test_recipient_services_stop_runs_when_a_verification_command_fails`, `test_recipient_services_cleanup_failure_is_recorded_not_raised`, `make check-beta-migration-smoke`; a real generated recipient started, migrated, and stopped with no containers left | closed |
+| G-007 | execution iteration (SA214 f) | `pnpm build` fails on the pinned donor: transplanted donor pages and components import donor-added `frontend/src/hooks` and `lib` exports, while the donor's divergent shared files (`useApi.ts`, `useModules.ts`) and its `ui/` and test sources are merge work the migration prompt assigns to the manual port; the tool blocks and writes no handoff prompt. | project decision | Open: decide whether the verification stack records pre-port manual-port surfaces instead of blocking, whether the tool gains a frontend-source merge, or whether the handoff prompt is the terminal state for this donor. | the iteration report's `pnpm build` output (TS2305/TS2307 in `frontend/src/pages/*` and `frontend/src/components/*`) | open |
 
-**Loop status (SA214 f).** Every row is closed on landed tool fixes and their tests, and the pinned
-dry run is clean. The release-time execution iteration still needs published module splits
-(`make publish-modules`) and a PostgreSQL 18 service; that rehearsal is the slice's remaining work.
+**Loop status (SA214 f).** G-001–G-006 are closed on landed tool fixes, their tests, and a
+validated execution path. The first real execution iteration on PostgreSQL 18 regenerated the
+recipient from the published splits, ran the fresh-first steps, and stopped at `pnpm build`: the
+pinned donor's divergent `frontend/src/hooks` and `lib` files are manual-port work per the
+migration prompt, so the tool cannot write its handoff prompt until G-007's verification contract
+is decided. Host-run `poetry run pytest` now resolves in the recipient's own Poetry environment; a
+pre-port recipient still fails the project's coverage gate, the same pre-port test surface as
+G-007. A stale Poetry repository cache entry for a freshly published transitive wheel also
+blocked the first attempt; `poetry cache clear --all PyPI` restored a complete lock.
 
 - **ID** — `G-NNN`, never reused.
 - **Kind** — `tool fix`, `playbook step`, `project decision`, or `upstream to module`.
@@ -165,7 +187,9 @@ hand. One run performs, in order:
    wins on a conflict, and every conflict is reported);
 6. the donor design port into the never-overwritten `frontend/design/` layer;
 7. the local verification stack (`poetry lock`, `poetry install`, `pnpm install`, `pnpm build`,
-   `makemigrations`, `quickscale manage migrate`, `pytest`, `pnpm test`).
+   `makemigrations`, `quickscale manage migrate`, `poetry run pytest`, `pnpm test`), with the
+   recipient's Docker Compose stack started before the first service-backed command and stopped
+   after the stack.
 
 A run that completes its verification stack writes `MIGRATION_PROMPT.md` into the recipient with
 every remaining manual action, its paths, and the governing rule. Dry runs and blocked runs write
@@ -371,7 +395,7 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] Fresh-first throwaway recipient prepared
 [ ] Fresh-first report confirms complete field-aware identity reconciliation, including authoritative `.quickscale/state.yml`, derived database/frontend values, and `start.sh`
 [ ] Fresh-first report confirms App.tsx, custom pages/components, utilities, Django files, and missing path deps were copied
-[ ] Tool report contains seven passed verification results: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test` — plus a passed recipient-local `poetry run python manage.py makemigrations <app>` for every migrated model-bearing app
+[ ] Tool report contains seven passed verification results: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `poetry run pytest`, and `pnpm test` — plus a passed recipient-local `poetry run python manage.py makemigrations <app>` for every migrated model-bearing app
 [ ] Local smoke-test completed — existing pages intact and new module pages work
 [ ] Effective production settings select their database through `quickscale_core.runtime.settings.resolve_runtime_database_url` — already facade-based in the donor, or rewritten by the tool from a recognized pre-facade block while the donor stays read-only
 [ ] Result committed or staged in the target repo
