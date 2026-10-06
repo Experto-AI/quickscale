@@ -139,10 +139,10 @@ member) and host projects outside this repository.
 schema: coherence-audit/v1
 audited: f00ed460
 items:
-  - {id: semantic-personal-data-central-pin, status: open, aspect: C, cost: [tax, ambiguity],
+  - {id: semantic-personal-data-central-pin, status: resolved, aspect: C, cost: [tax, ambiguity],
      members_diverging: [auth, billing, notifications], population: modules-with-user-data(9),
-     rule: "rule 49 ❌ clause", check: "per-module declaration flag + inventory test", closed_world: false,
-     handoff: [], first_seen: 2026-10-05, last_verified: 2026-10-05}
+     rule: "rule 49", check: "per-module declaration flag + inventory test", closed_world: true,
+     handoff: [], first_seen: 2026-10-05, last_verified: 2026-10-06}
   - {id: anonymize-redaction-helper-copies, status: resolved, rule: "rule 47", aspect: C, check: conformance, closed_world: false, resolved_by: abbc09d0, first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: anonymize-replacement-values, status: resolved, rule: "rule 48", aspect: G, check: conformance, closed_world: true, resolved_by: abbc09d0, first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: personal-data-inventory-ownership, status: resolved, rule: "rule 49", aspect: C,
@@ -170,12 +170,12 @@ items:
 
 ## 3. Summary table
 
-**Counts (open):** defect 0 · collision 0 · ambiguity 1 · tax 1 (same item) · total 1. Prior: 54
-resolved, 0 regressed.
+**Counts (open):** defect 0 · collision 0 · ambiguity 0 · tax 0 · total 0. Prior: 55 resolved, 0
+regressed.
 
 | ID | Aspect | Cost | Diverging / population | Status |
 |---|---|---|---|---|
-| `semantic-personal-data-central-pin` | C | ambiguity, tax | 3 / 9 modules with user data | open |
+| `semantic-personal-data-central-pin` | C | ambiguity, tax | 3 / 9 modules with user data | resolved (see §12, rule 49) |
 | `anonymize-redaction-helper-copies` | C | defect, tax | 2 / 5 handlers | resolved (see §12, rule 47) |
 | `anonymize-replacement-values` | G | ambiguity, tax | 2 / 5 handlers | resolved (see §12, rule 48) |
 | `personal-data-inventory-ownership` | C | tax, ambiguity | 8 / 9 modules with user data | resolved (rule 49, see §12) |
@@ -258,7 +258,9 @@ lives in orgs' tests, and module-extension.md does not mention it.
 `personal_data_declarations` capability beside its handler, the closed-world test collects the
 declarations, and orgs' `W006` check reports undeclared candidates on project-owned models. orgs
 keeps only its own, contrib, and third-party rows. module-extension.md § Project-Owned Tenant
-Models documents the declaration and the check.
+Models documents the declaration and the check. SA249 moves the last pins home: auth, billing,
+and notifications pin their own non-candidate rows in their own tests, and the inventory test
+accepts only orgs', contrib, and third-party pins.
 
 ### 4.5 Write effects (F)
 
@@ -272,6 +274,10 @@ removed. No drift remains (see the correction in §12).
 ## 5. Drift items (ranked: defect > collision > ambiguity > tax)
 
 ### Item 5: Personal-data ownership — non-candidate fields are still pinned in orgs' test
+
+**Resolved** (SA249) — rule 49 carries the amendment this item proposed; auth, billing, and
+notifications pin their non-candidate rows in their own tests, and the inventory test pins only
+orgs', contrib, and third-party rows and fails on a re-added module key.
 
 - **ID:** `semantic-personal-data-central-pin`
 - **Aspect / population:** C (vocabulary ownership); the 9 modules with user data.
@@ -593,3 +599,4 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
 - 2026-10-05 (b) — `personal-data-inventory-ownership`: resolved (2f1d0a4e — re-verified: 9 modules declare in `apps.py`; residual central pin split out as `semantic-personal-data-central-pin`).
 - 2026-10-05 (b) — `anonymize-redaction-helper-copies`, `anonymize-replacement-values`, `anonymize-executor-naming`: resolved (abbc09d0, 9203630f, 199eb250 — harness rules 47–48 pass at f00ed460).
 - 2026-10-05 (b) — all other prior IDs: still resolved (harness passes at f00ed460; SA247 split verified behavior-neutral by the same 42-rule success line; cells not re-read).
+- 2026-10-06 — `semantic-personal-data-central-pin`: **resolved** (SA249 — rule 49 amendment; auth, billing, and notifications pin their non-candidate rows in their own tests, and the inventory test accepts only orgs', contrib, and third-party pinned keys, with a control re-adding an auth key).

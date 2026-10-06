@@ -1187,14 +1187,18 @@ mapping that mirrors this section.
   `PersonalDataExclusion` records from `quickscale_core.runtime`, so every layer declares them by
   importing only core. `orgs`' own module keeps only the rows no installed module declares for
   itself: orgs', Django contrib's, and the third-party rows.
+- ✅ A module that declares a personal-data field the candidate walk cannot see pins it in its
+  own tests.
+- ✅ The inventory test pins only orgs', contrib, and third-party rows.
 - ✅ The closed-world inventory test collects the declarations, and orgs' system check
   (`quickscale_orgs.W006`) reports both kinds of gap where the project's models are installed:
   a candidate field on a project-owned model with no declared treatment or reasoned exclusion,
   and a declared treatment whose app contributes no executor.
 - ✅ A declared treatment other than `KEEP_LINK` is executed by the declaring app's own
   `anonymize_handlers` capability.
-- ❌ One module's source or test listing another module's fields; a field declared with a
-  treatment whose declaring app provides no handler.
+- ❌ One module's source or test listing another module's fields; a pinned key in orgs' tests
+  whose `app_label` is another installed module; a field declared with a treatment whose
+  declaring app provides no handler.
 
 ---
 

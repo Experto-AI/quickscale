@@ -81,6 +81,27 @@ def test_declared_treatments_hold_on_a_populated_user(user) -> None:
     assert all(scrubbed.values()), scrubbed
 
 
+def test_declared_non_candidate_fields_stay_pinned() -> None:
+    """Fields the candidate walk cannot see stay declared in auth's own tests."""
+    from django.apps import apps
+
+    from quickscale_core.runtime import PersonalDataField
+
+    config = apps.get_app_config("quickscale_auth")
+    declared = {
+        (entry.model_name, entry.field_name)
+        for entry in config.personal_data_declarations()
+        if isinstance(entry, PersonalDataField)
+    }
+    assert declared >= {
+        ("User", "username"),
+        ("User", "first_name"),
+        ("User", "last_name"),
+        ("User", "password"),
+        ("User", "last_login"),
+    }
+
+
 @pytest.mark.django_db
 def test_anonymize_account_deletes_the_login_addresses(user) -> None:
     """The addresses allauth holds exist only to sign in."""

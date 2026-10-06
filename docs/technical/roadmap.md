@@ -30,14 +30,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | 1 | — | Optional |
 | SA248 | Declare whom a notification is about at the send boundary | 3 | — | Optional |
-| SA249 | Pin each module's non-candidate personal-data fields in its own tests | 2 | — | Optional |
 | SA250 | Derive the conventions rule partition from decisions.md | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
-Track 2: SA249
+Track 2: —
 Track 3: SA248 ──► SA250
      cross-track: SA248 ──► SA153
      critical path: SA191 → SA153
@@ -55,8 +54,7 @@ an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA246 
 so the portal's personal fields are classified from the first migration; it touched `apps.py`
 capabilities and orgs' checks, not handler bodies. SA248 lands before SA153 adds its inquiry
 notification, so the first new sender states whom the message is about. SA250 queues after SA248
-on Track 3 because both edit the conventions harness; SA249 shares no surface with either and runs
-in parallel on Track 2.
+on Track 3 because both edit the conventions harness.
 
 ### Track states
 
@@ -65,7 +63,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA214 | yes | yes | yes | **yes** | yes |
-| 2 | SA249 | yes | yes | yes | **yes** | no |
+| 2 | — | yes | yes | yes | **yes** | no |
 | 3 | SA248 | yes | yes | yes | **yes** | yes (feeds SA153) |
 
 ### Ownership and merge coordination
@@ -330,21 +328,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `forms/_email.py`, their tests, decisions § Module Conventions, the conventions harness,
   module-extension.md, and the arch audit.
 
-- [ ] **SA249 — Pin each module's non-candidate personal-data fields in its own tests.**
-
-  **Context:** rule 49 moved every module's personal-data rows onto its own `AppConfig`, but orgs'
-  `_SEMANTIC_PERSONAL_DATA_KEYS` (`orgs/tests/test_personal_data_inventory.py`) still names 13
-  fields of auth, notifications, and billing that the candidate walk cannot see, contradicting
-  rule 49's ❌ clause; the next module with a name or payload field has no clean place to pin it
-  (coherence audit `semantic-personal-data-central-pin`, option B).
-
-  **Acceptance:** auth, billing, and notifications each pin their own non-candidate declarations in
-  a module test. orgs' list keeps only orgs', contrib, and third-party rows, and the inventory test
-  fails when a pinned key's `app_label` is another installed module, with a control that re-adds
-  an auth key. Rule 49 gains the amendment the coherence audit proposes.
-
-  **Surfaces:** orgs' inventory test, auth/billing/notifications tests, decisions rule 49, and the
-  coherence audit.
+- [x] **SA249 — Pin each module's non-candidate personal-data fields in its own tests.**
 
 - [ ] **SA250 — Derive the conventions rule partition from decisions.md.**
 
