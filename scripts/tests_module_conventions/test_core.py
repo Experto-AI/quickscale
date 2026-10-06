@@ -49,23 +49,53 @@ def test_layer_table_mirrors_the_shipped_modules() -> None:
     assert {module.name for module in corpus.modules} == set(checker.MODULE_LAYERS)
 
 
-# Rules the harness must cover or record as open.  SA215 covered 1-39;
-# SA236 adds 42-43; SA235's rule 41 clauses live in rules 7, 31, and 37, and
-# SA238's rule 46 clauses live in rules 19 and 28.  SA237 adds 44-45.
-# SA245 adds 47-48; SA248 adds 50.
-RECORDED_RULE_NUMBERS = frozenset({*range(1, 40), 42, 43, 44, 45, 47, 48, 50})
+def _decisions_document() -> str:
+    path = REPO_ROOT / checker.DECISIONS_DOC_RELATIVE_PATH
+    return path.read_text(encoding="utf-8")
 
 
-def test_covered_and_open_rules_partition_the_recorded_rules() -> None:
+def test_decisions_rule_headings_partition_into_covered_open_or_delegated() -> None:
+    recorded = checker.decisions_rule_numbers(REPO_ROOT)
     covered = {rule.number for rule in checker.RULES}
     open_rules = {number for number, _ in checker.OPEN_RULES}
-    assert covered | open_rules == RECORDED_RULE_NUMBERS
-    assert not covered & open_rules
+    delegated = {number for number, _ in checker.DELEGATED_RULES}
+    assert covered.isdisjoint(open_rules | delegated)
+    assert open_rules.isdisjoint(delegated)
+    assert checker.partition_violations(recorded) == []
+
+
+def test_partition_control_rejects_an_unlisted_rule_heading() -> None:
+    document = _decisions_document().replace(
+        "**1. Settings names.**",
+        "**999. Unlisted rule.**\n\n**1. Settings names.**",
+        1,
+    )
+    recorded = checker.rule_numbers_in_decisions(document)
+    assert 999 in recorded
+    assert checker.partition_violations(recorded) == [
+        "rule 999 is neither covered, open, nor delegated"
+    ]
+
+
+def test_main_success_line_names_the_delegated_rules(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert checker.main([str(REPO_ROOT)]) == 0
+    out = capsys.readouterr().out
+    assert "delegated:" in out
+    delegated = out.split("delegated:", 1)[1]
+    for number, _ in checker.DELEGATED_RULES:
+        assert f"{number} (" in delegated
 
 
 def test_every_open_rule_names_its_closer() -> None:
     for number, closer in checker.OPEN_RULES:
         assert re.search(r"SA\d+", closer), f"rule {number} needs a closing ticket: {closer!r}"
+
+
+def test_every_delegated_rule_names_its_carrier() -> None:
+    for number, carrier in checker.DELEGATED_RULES:
+        assert carrier.strip(), f"rule {number} needs a recorded carrier"
 
 
 def test_covered_rules_are_unique_and_numbered() -> None:

@@ -29,14 +29,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA214 | Harden the fresh-first migration tool into the standard upgrade path | 1 | — | Optional |
-| SA250 | Derive the conventions rule partition from decisions.md | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA214 ──► SA191 ──► SA153 ──► SA204 ──► SA154 (inventory)
 Track 2: —
-Track 3: SA250
+Track 3: —
      critical path: SA191 → SA153
 ```
 
@@ -51,8 +50,8 @@ when its last slice lands; slices are not scheduled.
 an inventory, not work. SA214 runs on a pinned pre-SA191 `bap-web` donor. SA246 landed before SA153,
 so the portal's personal fields are classified from the first migration; it touched `apps.py`
 capabilities and orgs' checks, not handler bodies. SA248 landed before SA153 adds its inquiry
-notification, so the first new sender states whom the message is about. SA250 queues after SA248
-on Track 3 because both edit the conventions harness.
+notification, so the first new sender states whom the message is about. SA250 landed after SA248
+on Track 3; both edited the conventions harness.
 
 ### Track states
 
@@ -62,7 +61,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA214 | yes | yes | yes | **yes** | yes |
 | 2 | — | yes | yes | yes | **yes** | no |
-| 3 | SA250 | yes | yes | yes | **yes** | no |
+| 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -306,20 +305,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA249 — Pin each module's non-candidate personal-data fields in its own tests.**
 
-- [ ] **SA250 — Derive the conventions rule partition from decisions.md.**
-
-  **Context:** `RECORDED_RULE_NUMBERS` (`scripts/tests_module_conventions/test_core.py`) is
-  hand-kept and omits rules 41, 46, and 49, so a new rule added to decisions.md passes the
-  partition unnoticed, and the harness success line cannot tell a delegated rule from a missing
-  one (coherence audit § Enforcement gaps 4 and 6).
-
-  **Acceptance:** the partition test parses the `**N.` headings of decisions.md § Module
-  Conventions and requires each to be covered, open, or listed as delegated with its carrier rules
-  or external gate (41 → 7/31/37, 46 → 19/28, 49 → the inventory test and W006). A control adds an
-  unlisted rule heading and the test fails. The harness success line names the delegated rules.
-
-  **Surfaces:** `scripts/module_conventions/`, `scripts/tests_module_conventions/test_core.py`,
-  and the coherence audit.
+- [x] **SA250 — Derive the conventions rule partition from decisions.md.**
 
 - [ ] **SA214 — Harden the fresh-first migration tool into the standard upgrade path.**
 

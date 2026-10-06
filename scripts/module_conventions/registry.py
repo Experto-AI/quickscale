@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -140,6 +141,69 @@ OPEN_RULES: tuple[tuple[int, str], ...] = (
     (27, "SA215 (user-FK conformance gate orgs/tests/test_user_fk_conformance.py)"),
     (30, "SA215 (enforced in apply itself, core collect_wiring)"),
 )
+
+
+# Rules with no detector of their own, listed with the carrier that enforces
+# them: rule 40 is the conformance-test rule this harness and its control cases
+# are; 41's and 46's clauses ride the covered rules named; 49's gate is the
+# closed-world inventory test and orgs' W006 check.  The partition test keeps
+# covered, open, and delegated a partition of the rule headings decisions.md
+# declares, so no rule can be silently omitted.
+DELEGATED_RULES: tuple[tuple[int, str], ...] = (
+    (40, "this harness"),
+    (41, "rules 7, 31 and 37"),
+    (46, "rules 19 and 28"),
+    (49, "the inventory test and orgs' W006 check"),
+)
+
+DECISIONS_DOC_RELATIVE_PATH = Path("docs/technical/decisions.md")
+MODULE_CONVENTIONS_HEADING = "### Module Conventions"
+_RULE_HEADING = re.compile(r"^\*\*(\d+)\.\s")
+
+
+def rule_numbers_in_decisions(text: str) -> tuple[int, ...]:
+    """Return the rule numbers decisions.md declares under Module Conventions."""
+    lines = text.splitlines()
+    start = next(
+        (index for index, line in enumerate(lines) if line.startswith(MODULE_CONVENTIONS_HEADING)),
+        None,
+    )
+    if start is None:
+        raise ValueError(f"decisions.md has no {MODULE_CONVENTIONS_HEADING!r} section")
+    numbers: list[int] = []
+    for line in lines[start + 1 :]:
+        if line.startswith("#"):
+            break
+        match = _RULE_HEADING.match(line)
+        if match:
+            numbers.append(int(match.group(1)))
+    if not numbers:
+        raise ValueError("decisions.md § Module Conventions declares no numbered rules")
+    return tuple(numbers)
+
+
+def decisions_rule_numbers(repo_root: Path) -> tuple[int, ...]:
+    """Return the rule numbers decisions.md declares, read under repo_root."""
+    text = (repo_root / DECISIONS_DOC_RELATIVE_PATH).read_text(encoding="utf-8")
+    return rule_numbers_in_decisions(text)
+
+
+def partition_violations(recorded: Iterable[int]) -> list[str]:
+    """Return messages for headings with no entry and for entries with no heading."""
+    known = {rule.number for rule in RULES}
+    known |= {number for number, _ in OPEN_RULES}
+    known |= {number for number, _ in DELEGATED_RULES}
+    recorded_numbers = list(recorded)
+    violations = [
+        f"rule {number} is neither covered, open, nor delegated"
+        for number in recorded_numbers
+        if number not in known
+    ]
+    violations.extend(
+        f"rule {number} is registered but decisions.md declares no such rule heading"
+        for number in sorted(known - set(recorded_numbers))
+    )
+    return violations
 
 
 def check_conventions(repo_root: Path) -> list[str]:
