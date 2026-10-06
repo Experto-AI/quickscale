@@ -32,6 +32,7 @@ from scripts.module_conventions.rules_misc import (
     rule_10_checks_errors,
     rule_20_email,
     rule_45_stub_exemptions,
+    rule_50_notification_links,
 )
 from scripts.module_conventions.rules_models import (
     rule_13_tenant_models,
@@ -126,6 +127,7 @@ RULES: tuple[Rule, ...] = (
     Rule(45, "stub exemptions", rule_45_stub_exemptions),
     Rule(47, "redaction", rule_47_redaction),
     Rule(48, "replacement values and entry-point name", rule_48_replacement_values),
+    Rule(50, "notification person links", rule_50_notification_links),
 )
 
 

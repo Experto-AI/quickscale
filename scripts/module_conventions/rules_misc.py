@@ -1,4 +1,4 @@
-"""Checks/errors, email, and stub-exemption rules."""
+"""Checks/errors, email, notification person-link, and stub-exemption rules."""
 
 from __future__ import annotations
 
@@ -461,6 +461,40 @@ def rule_20_email(corpus: Corpus) -> list[str]:
                 violations.append(
                     f"rule 20: {module.name}: calls send_notification "
                     "without requiring notifications"
+                )
+    return violations
+
+
+def _mapping_key_writes(tree: ast.Module, key: str) -> list[int]:
+    """Return the line numbers where *key* is written as a mapping key."""
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            for dict_key in node.keys:
+                if isinstance(dict_key, ast.Constant) and dict_key.value == key:
+                    lines.append(dict_key.lineno)
+        elif isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store):
+            if isinstance(node.slice, ast.Constant) and node.slice.value == key:
+                lines.append(node.lineno)
+        elif isinstance(node, ast.Call):
+            for keyword in node.keywords:
+                if keyword.arg == key:
+                    lines.append(keyword.value.lineno)
+    return lines
+
+
+def rule_50_notification_links(corpus: Corpus) -> list[str]:
+    """Rule 50: a sender declares whom a notification is about, never by key."""
+    violations: list[str] = []
+    for module in corpus.modules:
+        for rel, text in sorted(module.files.items()):
+            if not rel.endswith(".py"):
+                continue
+            for lineno in _mapping_key_writes(_parse(text), "actor_user_id"):
+                violations.append(
+                    f"rule 50: {module.name}: {rel}:{lineno} writes the reserved "
+                    "notification person-link key 'actor_user_id' in module source; "
+                    "pass send_notification(about_users=...) instead"
                 )
     return violations
 

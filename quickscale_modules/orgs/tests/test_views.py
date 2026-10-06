@@ -600,11 +600,12 @@ def test_invite_view_creates_invitation_and_dispatches_notification(
     assert captured_calls[0]["recipients"] == ["invitee@example.com"]
     assert captured_calls[0]["tags"] == ["auth"]
     assert captured_calls[0]["metadata"] == {"workflow": "org-invitation"}
+    # Rule 50: the inviter link travels as the sender's about_users argument.
+    assert captured_calls[0]["about_users"] == [admin_user]
     assert captured_calls[0]["context"] == {
         "organization_name": organization.name,
         "invitee_email": "invitee@example.com",
         "inviter_name": "Helios Admin",
-        "actor_user_id": str(admin_user.pk),
         "role_display": "Admin",
         "accept_url": (
             f"http://testserver/orgs/invitations/{invitation.token}/accept/"
@@ -2061,6 +2062,8 @@ def test_org_api_invite_creates_invitation_and_dispatches_notification(
     assert len(captured_calls) == 1
     assert captured_calls[0]["template_key"] == "notifications.org_invitation"
     assert captured_calls[0]["recipients"] == ["invitee@example.com"]
+    # Rule 50: the JSON invite path links the inviter the same way.
+    assert captured_calls[0]["about_users"] == [admin_user]
 
 
 @pytest.mark.django_db

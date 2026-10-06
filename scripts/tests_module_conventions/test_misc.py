@@ -834,6 +834,56 @@ def test_email_dependency_shape_control() -> None:
     )
 
 
+def test_notification_person_link_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_50_notification_links, module) == []
+
+    dict_key = _with_files(
+        module,
+        views=(
+            "def invite(send_notification, user):\n"
+            "    send_notification(context={'actor_user_id': str(user.pk)})\n"
+        ),
+    )
+    assert any(
+        "actor_user_id" in violation
+        for violation in _violations(checker.rule_50_notification_links, dict_key)
+    )
+
+    subscript_key = _with_files(
+        module,
+        views=(
+            "def invite(send_notification, context, user):\n"
+            "    context['actor_user_id'] = str(user.pk)\n"
+        ),
+    )
+    assert any(
+        "rule 50" in violation
+        for violation in _violations(checker.rule_50_notification_links, subscript_key)
+    )
+
+    keyword_key = _with_files(
+        module,
+        views=(
+            "def invite(send_notification, user):\n"
+            "    send_notification(context=dict(actor_user_id=str(user.pk)))\n"
+        ),
+    )
+    assert any(
+        "rule 50" in violation
+        for violation in _violations(checker.rule_50_notification_links, keyword_key)
+    )
+
+    declared = _with_files(
+        module,
+        views=(
+            "def invite(send_notification, user):\n"
+            "    send_notification(context={}, about_users=[user])\n"
+        ),
+    )
+    assert _violations(checker.rule_50_notification_links, declared) == []
+
+
 def test_stub_exemption_controls() -> None:
     module = _golden_module()
     assert _violations(checker.rule_45_stub_exemptions, module) == []

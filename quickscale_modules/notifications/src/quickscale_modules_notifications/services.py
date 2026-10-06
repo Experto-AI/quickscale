@@ -88,14 +88,22 @@ def send_notification(
     template_key: str,
     recipients: Sequence[str],
     context: Mapping[str, Any],
+    about_users: Sequence[Any],
     tags: Sequence[str] | None = None,
     metadata: Mapping[str, Any] | None = None,
     mailer: DeliveryMailer | None = None,
 ) -> NotificationMessage:
-    """Create a logical notification message and dispatch it after commit."""
+    """Create a logical notification message and dispatch it after commit.
+
+    ``about_users`` is required: every sender states the persons the message is
+    about (an explicit empty sequence when it is about no platform user), and
+    notifications stores the link on the message so account anonymization can
+    select it (rule 50).
+    """
     normalized_recipients = _delivery._normalize_recipients(recipients)
     if not normalized_recipients:
         raise NotificationValidationError("At least one recipient is required.")
+    normalized_about_user_ids = _normalize_about_users(about_users)
 
     settings_snapshot = load_settings_snapshot()
     _settings._ensure_notifications_enabled(settings_snapshot)
@@ -121,6 +129,7 @@ def send_notification(
             provider_name=settings_snapshot.provider_name,
             tags_json=provider_tags,
             metadata_json=provider_metadata,
+            about_user_ids_json=normalized_about_user_ids,
         )
         NotificationDelivery.objects.bulk_create(
             [
@@ -135,6 +144,38 @@ def send_notification(
             lambda: dispatch_notification_message(message.pk, mailer=mailer)
         )
     return message
+
+
+def _normalize_about_users(about_users: Sequence[Any]) -> list[str]:
+    """Return canonical, de-duplicated ids of the persons a message is about.
+
+    Rule 50: the persons travel as the required ``about_users`` sequence, an
+    explicit empty sequence included; notifications stores the link itself so
+    a sender cannot omit it silently and account anonymization can select the
+    message.
+    """
+    if isinstance(about_users, (str, bytes)):
+        raise NotificationValidationError(
+            "about_users must be a sequence of saved users, not a string."
+        )
+    try:
+        entries = list(about_users)
+    except TypeError as exc:
+        raise NotificationValidationError(
+            "about_users must be a sequence of saved users."
+        ) from exc
+
+    normalized: list[str] = []
+    for user in entries:
+        pk = getattr(user, "pk", None)
+        if pk is None:
+            raise NotificationValidationError(
+                "Every entry in about_users must be a saved user."
+            )
+        identifier = str(pk)
+        if identifier not in normalized:
+            normalized.append(identifier)
+    return normalized
 
 
 def dispatch_notification_message(

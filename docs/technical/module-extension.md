@@ -242,6 +242,31 @@ A declared treatment other than `KEEP_LINK` needs the declaring app's own
 data, with its reason. `orgs` keeps only the rows no installed module declares
 for itself (its own, Django contrib's, and the installed third-party rows).
 
+A project app (or a module) that sends email through notifications'
+`send_notification` also declares whom the message is about through the
+required `about_users` keyword — the saved users it is about, an explicit
+empty sequence when it is about no platform user. Notifications stores the
+link on the message, where account anonymization selects it, so a sender
+cannot omit it silently; Module Conventions rule 50 reserves the retired
+`actor_user_id` spelling — the harness fails any module source that writes it
+as a mapping key, a subscript key, or a call keyword — and a project app
+should pass the keyword the same way:
+
+```python
+from quickscale_modules_notifications.services import send_notification
+
+send_notification(
+    template_key="notifications.generic",
+    recipients=["person@example.com"],
+    context={"headline": "Hello", "body": "Your update is ready."},
+    about_users=[request.user],
+)
+```
+
+Messages already stored with the pre-keyword `actor_user_id` context key, or
+whose context carries the person's complete address, stay selectable through
+those fallbacks; new sends use the keyword.
+
 ## Module Categories
 
 | Module category | Preferred extension model | Example modules |
@@ -570,7 +595,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 - [ ] `__init__.py` holds only `__version__` and `__all__ = ["__version__"]`; `signals.py` holds only sent signals and receivers live in `receivers.py` (rules 15–16)
 - [ ] Commands raise `CommandError` on expected failure (no `print()` or `sys.exit()`); data-destroying commands take `--dry-run` (rule 17)
 - [ ] Views managing tenant data check the org role through orgs' `permissions` (`require_org_role`, `OrgRoleMixin`, `HasOrgRole`), never `is_staff` / `is_superuser` / `IsAdminUser` (rule 19)
-- [ ] Email goes through notifications' `send_notification` with `notifications` in `required_modules` (rule 20); emails, analytics events, vendor calls, and cache purges caused by a write run in `transaction.on_commit`, with a test that rolls the write back and sees no effect (rule 21)
+- [ ] Email goes through notifications' `send_notification` with `notifications` in `required_modules` (rule 20), and every person the message is about is declared through the required `about_users` keyword (rule 50); emails, analytics events, vendor calls, and cache purges caused by a write run in `transaction.on_commit`, with a test that rolls the write back and sees no effect (rule 21)
 - [ ] Analytics events are named `quickscale_<module>_<event>` in the module's own `services.py` and sent with analytics' `capture_event` (rule 22); cache keys are `quickscale_<module>:<name>` and the current time is `timezone.now()` (rule 24)
 - [ ] Constraints and indexes are named `quickscale_<module>_…` / `qs_<module>_…_idx`, no `unique_together` (rule 25); a webhook is a DRF `APIView` without authentication, permission, or throttle classes that hands the body to `services.py`, answers `200`/`400`/`404`, and deduplicates provider events (rule 26)
 - [ ] `on_delete` on `User` is `SET_NULL` (never `PROTECT`), `CASCADE` only on the listed fields (rule 27; the user-FK conformance gate); package files use the allowed names or a private `_<name>.py` (rule 28); test files are `test_<subject>.py`, with no ticket number in the name, docstrings, or comments (rule 29)

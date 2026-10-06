@@ -2167,7 +2167,7 @@ them yet (SA191 has not landed).
 - `services.py` defines `__all__`; the conformance test treats exactly that list as the module's
   public surface (rule 4) and rejects a cross-module import of a name not in it.
 - Public service functions take keyword-only arguments after at most one leading subject
-  (`send_notification(*, template_key, recipients, context)` already does), so adding a parameter never breaks a
+  (`send_notification(*, template_key, recipients, context, about_users)` already does), so adding a parameter never breaks a
   caller silently.
 - A service that cannot do what it was asked raises the module's `<Module>Error` (rule 10); the
   "is this optional thing on and configured?" question is `is_enabled()`, so callers no longer rely

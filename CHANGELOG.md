@@ -529,10 +529,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     tiers warn and still exit 0. The accepted-debt baseline, waiver ledger, and merge-base
     monotonicity helper are removed.
   - **Account anonymization is scoped to the person's records.** Removing an account rewrites a
-    notification message only when a delivery to the person, an `actor_user_id` context entry, or
-    the person's full address in that context links the message to them, deletes only unexpired
-    sessions, and loads only billing webhook payloads that mention the address, so another user's
-    message content is never rewritten.
+    notification message only when a delivery to the person, a stored person link, an
+    `actor_user_id` context entry from an already-stored message, or the person's full address in
+    that context links the message to them, deletes only unexpired sessions, and loads only
+    billing webhook payloads that mention the address, so another user's message content is never
+    rewritten.
   - **Personal data is declared per module and checked where it is installed.** Every module, and a
     project app that needs one, declares the treatment of its own user-linked fields through the
     `personal_data_declarations` capability beside its anonymization handler; a warning-level
@@ -548,6 +549,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     username to `[redacted]` through the `quickscale_core.runtime` helpers, matches names at word
     boundaries, and never rewrites payload keys, so an account named `Bill` no longer corrupts
     `billing_details`.
+  - **Notifications declare whom each message is about.** `send_notification` takes a required
+    `about_users` keyword, stores the linked users on the message, and account anonymization
+    selects on that link, falling back to the retired `actor_user_id` context key and the
+    recipient's address for already-stored messages. A Module Conventions rule reserves the
+    `actor_user_id` spelling for that fallback — the harness fails a module source that writes it
+    as a mapping key, subscript key, or call keyword — and a conformance test exercises every
+    registered template key.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

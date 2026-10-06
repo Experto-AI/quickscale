@@ -155,7 +155,7 @@ Prior rows are carried. Rows added this pass are marked ★.
 | DR backup/restore, CLI tree, release pipeline | carried unchanged — see prior pass | | | | | | | | |
 
 | ★ `AccountDeleteView` → anonymize boundary | `LoginRequiredMixin` | self only | form | autoescape | out of scope | bounded selections (unexpired sessions, address-matched payloads, linked messages) | compensating resume (lost on worker kill, same ID) | messages | INFO skip log |
-| ★ Anonymize executors (write scope) | n/a | orgs/blog/auth scoped by user FK; billing scoped by email; notifications scoped by delivery, actor link, or address | n/a | n/a | n/a | n/a | one transaction | n/a | none |
+| ★ Anonymize executors (write scope) | n/a | orgs/blog/auth scoped by user FK; billing scoped by email; notifications scoped by a delivery to the person, the stored person link, the pre-keyword actor link, or address | n/a | n/a | n/a | n/a | one transaction | n/a | none |
 | ★ `quickscale_orgs_create_site_org` | shell (runtime role) | reserved-slug guard | field validators | n/a | n/a | n/a | `get_or_create` | `CommandError` | stdout |
 | ★ SPA module routes (`SPA_MODULE_URLPATTERNS`) | static shell; data via the module APIs above | n/a | n/a | n/a | n/a | n/a | n/a | 404 handler | n/a |
 
@@ -167,7 +167,8 @@ Every empty cell carries a finding ID or a stated reason.
 ## 6. Fix order and batching
 
 1. **Batch B (open):** `billing-anonymize-name-substring`, carried by SA245 (shared redaction
-   helpers), with the bystander conformance test in §10. It is independent of everything else.
+   helpers); the anonymization **bystander** conformance test it called for is now delivered by
+   SA248 (§10). It is independent of everything else.
    Batch A (SA244) landed and was verified.
 
 ---
@@ -180,8 +181,8 @@ Every empty cell carries a finding ID or a stated reason.
   compiled.
 - **notifications**: clean. Linked-message selection was read in full, and the actor key and address
   fallback were verified.
-- **orgs**: clean. The SA246 W006 check and `_personal_data.py` were read, and the invitation context
-  stamps `actor_user_id` as a string on both invite views.
+- **orgs**: clean. The SA246 W006 check and `_personal_data.py` were read, and both invite views pass
+  the inviter through `send_notification(about_users=...)` (SA248).
 - **core runtime**: clean. The declaration records are frozen dataclasses with no behavior.
 - **scripts (SA247)**: clean by inventory (see the coverage statement).
 - **Other subsystems**: not re-read this pass. The prior verdicts stand.
@@ -220,8 +221,10 @@ The six items from the prior passes are carried (`git show 8e4122f2:docs/others/
 
 ## 10. Tooling gaps
 
-- The prior gaps are carried: image-layer and IaC scanning, and the anonymization **bystander**
-  conformance test (it would have caught `billing-anonymize-name-substring`).
+- The prior gaps are carried: image-layer and IaC scanning. The anonymization **bystander**
+  conformance test landed with SA248: `notifications/tests/test_anonymization_bystanders.py`
+  renders every registered template key with a sentinel user and asserts the anonymizer selects
+  its linked message while a bystander's message stays byte-identical.
 - The SA244 anonymization tests run on PostgreSQL, but nothing pins the `icontains` pre-filter
   against a non-ASCII address whose stored case differs. A single test would pin
   `anonymize-prefilter-ascii-only-casefold`.
@@ -369,3 +372,7 @@ The six items from the prior passes are carried (`git show 8e4122f2:docs/others/
 - 2026-10-05 — `crm-stage-seed-lost-on-commit-failure`: carried (trigger not fired).
 - 2026-10-05 — `orgs-disabled-in-saas-wedges-site`: carried (trigger not fired).
 - 2026-10-05 — `anonymize-prefilter-ascii-only-casefold`: new watchlist (introduced by SA244, `b179990b`).
+- 2026-10-06 — the anonymization **bystander** conformance test gap closed (SA248,
+  `notifications/tests/test_anonymization_bystanders.py`): every registered template key renders
+  with a sentinel user, the anonymizer selects the linked message, and a bystander's message stays
+  byte-identical.

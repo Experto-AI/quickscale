@@ -105,6 +105,10 @@ def _prepare_submission_notification(
                 template_key=_TRACKED_SUBMISSION_TEMPLATE_KEY,
                 recipients=recipients,
                 context=notification_context,
+                # Rule 50: a public submission is about no platform user; the
+                # submitter's address is still covered by the fallback when
+                # they hold an account.
+                about_users=[],
                 tags=["forms"],
                 metadata={"workflow": "form-submission"},
             )

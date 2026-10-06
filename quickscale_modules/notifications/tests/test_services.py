@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import time
+from typing import Any, cast
 
 import pytest
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -209,6 +212,7 @@ def test_send_notification_tracks_each_recipient_and_sanitizes_provider_metadata
                 "body": "Your account is ready.",
                 "secondary_text": "Thanks for trying QuickScale.",
             },
+            about_users=[],
             tags=["auth", "internal-id"],
             metadata={
                 "project": "Client Alpha",
@@ -252,6 +256,7 @@ def test_send_notification_supports_org_invitation_template(
             template_key="notifications.org_invitation",
             recipients=["Invitee@Example.com"],
             context=context,
+            about_users=[],
             tags=["auth"],
             metadata={"workflow": "org-invitation"},
             mailer=lambda mail: f"provider::{mail.to[0]}",
@@ -291,6 +296,7 @@ def test_send_notification_persists_partial_failures_per_recipient(
             template_key="notifications.generic",
             recipients=["ok@example.com", "broken@example.com"],
             context={"headline": "Partial send", "body": "Test body"},
+            about_users=[],
             mailer=fake_mailer,
         )
 
@@ -332,6 +338,7 @@ def test_rolled_back_send_notification_dispatches_nothing(
                 template_key="notifications.generic",
                 recipients=["rollback@example.com"],
                 context={"headline": "Rollback", "body": "Discard me."},
+                about_users=[],
                 mailer=fake_mailer,
             )
             raise _Rollback
@@ -348,6 +355,7 @@ def test_rolled_back_send_notification_dispatches_nothing(
             template_key="notifications.generic",
             recipients=["rollback@example.com"],
             context={"headline": "Commit", "body": "Send me."},
+            about_users=[],
             mailer=fake_mailer,
         )
 
@@ -367,6 +375,7 @@ def test_send_notification_rejects_tracking_when_runtime_disabled(
                 template_key="notifications.generic",
                 recipients=["disabled@example.com"],
                 context={"headline": "Disabled", "body": "Do not track this."},
+                about_users=[],
             )
 
     assert NotificationMessage.objects.count() == 0
@@ -386,6 +395,7 @@ def test_send_notification_bounds_an_overlong_rendered_subject(
             template_key="notifications.generic",
             recipients=["long@example.com"],
             context={"headline": "H" * 300, "body": "Body"},
+            about_users=[],
             mailer=lambda mail: f"provider::{mail.to[0]}",
         )
 
@@ -393,6 +403,95 @@ def test_send_notification_bounds_an_overlong_rendered_subject(
 
     assert message.subject == "H" * 255
     assert message.deliveries.get().status == NotificationDelivery.Status.SENT
+
+
+def test_send_notification_requires_the_about_users_keyword() -> None:
+    """Rule 50: the persons link is a required keyword with no default."""
+    parameter = inspect.signature(send_notification).parameters["about_users"]
+
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default is inspect.Parameter.empty
+
+
+@pytest.mark.django_db
+def test_send_notification_stores_the_person_link(
+    notification_settings_row,
+    django_capture_on_commit_callbacks,
+) -> None:
+    """Rule 50: notifications stores the ids where anonymization reads them."""
+    del notification_settings_row
+    user_model = get_user_model()
+    first = user_model.objects.create_user(
+        username="link-first",
+        email="link-first@example.com",
+        password="LinkFirst1!",
+    )
+    second = user_model.objects.create_user(
+        username="link-second",
+        email="link-second@example.com",
+        password="LinkSecond1!",
+    )
+
+    with django_capture_on_commit_callbacks(execute=True):
+        message = send_notification(
+            template_key="notifications.generic",
+            recipients=["archive@example.com"],
+            context={"headline": "Linked", "body": "Body"},
+            about_users=[first, second, first],
+            mailer=lambda mail: f"provider::{mail.to[0]}",
+        )
+
+    message.refresh_from_db()
+    assert message.about_user_ids_json == [str(first.pk), str(second.pk)]
+
+
+@pytest.mark.django_db
+def test_send_notification_accepts_an_explicit_empty_about_users(
+    notification_settings_row,
+    django_capture_on_commit_callbacks,
+) -> None:
+    """A message about no platform user stores an empty link list."""
+    del notification_settings_row
+
+    with django_capture_on_commit_callbacks(execute=True):
+        message = send_notification(
+            template_key="notifications.generic",
+            recipients=["archive@example.com"],
+            context={"headline": "Unlinked", "body": "Body"},
+            about_users=[],
+            mailer=lambda mail: f"provider::{mail.to[0]}",
+        )
+
+    message.refresh_from_db()
+    assert message.about_user_ids_json == []
+
+
+@pytest.mark.django_db
+def test_send_notification_rejects_an_unsaved_about_user(
+    notification_settings_row,
+) -> None:
+    """Rule 50: the link needs a saved person, not an unsaved model."""
+    del notification_settings_row
+    user_model = get_user_model()
+
+    with pytest.raises(NotificationValidationError, match="saved user"):
+        send_notification(
+            template_key="notifications.generic",
+            recipients=["archive@example.com"],
+            context={"headline": "Hi", "body": "Body"},
+            about_users=[user_model(username="unsaved-link")],
+        )
+
+
+def test_send_notification_rejects_a_non_sequence_about_users() -> None:
+    """Rule 50: about_users is a sequence, not a single user or None."""
+    with pytest.raises(NotificationValidationError, match="sequence"):
+        services.send_notification(
+            template_key="notifications.generic",
+            recipients=["archive@example.com"],
+            context={"headline": "Hi", "body": "Body"},
+            about_users=cast(Any, None),
+        )
 
 
 @pytest.mark.django_db
@@ -438,6 +537,8 @@ def test_forms_notify_submission_tracks_each_recipient_through_notifications(
         "template": "notifications-forms-submission",
         "workflow": "form-submission",
     }
+    # Rule 50: forms states explicitly that the message is about no user.
+    assert message.about_user_ids_json == []
     assert [delivery.recipient_email for delivery in deliveries] == [
         "alpha@example.com",
         "beta@example.com",
@@ -765,6 +866,7 @@ def test_send_notification_rejects_invalid_recipients_with_module_error() -> Non
             template_key="notifications.generic",
             recipients=["not-an-email"],
             context={"headline": "Hi", "body": "Body"},
+            about_users=[],
         )
 
 

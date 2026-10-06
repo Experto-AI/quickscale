@@ -85,10 +85,9 @@ never import their facade (SA234).
 - **Lens activation.** Active: I, II, III, IV, V,   VII, VIII, IX, XII, XV, XVI, **XVIII** (new:
   user-facing deletion promise), XIX. Inert: VI, X, XIV (single-process generated apps, no scale
   threshold planned); XVII (no metered driver); XX (one contributor). Archetypes: code generator,
-  CLI, multi-tenant. Findings came from I/XVI/XIX (finding 1) and III/VII/XVIII (finding 2).
+  CLI, multi-tenant. Findings came from I/XVI/XIX (finding 1) and III/VII/XVIII (finding 2,
+  closed by SA248).
 - **Needs runtime confirmation:** a restored `bap-web` dump against current code (finding 1).
-- **Needs runtime confirmation:** whether any deployed project already holds pre-key invitation
-  messages (finding 2's recorded limit).
 - **Open leads:** none.
 
 ## Enforcement census
@@ -105,7 +104,7 @@ never import their facade (SA234).
 | Split modules don't import their facade | `check_split_facade_imports.py` over 4 hand-listed roots, `_*.py` files only | Gated, open-world on package scope | unchanged; SA247 split landed outside it (W8) |
 | Quality thresholds | `scripts/check_quality.sh` fixed fail lines (SA242/SA243) | Gated, closed-world per metric | **replaced**: baseline and waivers deleted |
 | Declared anonymize obligations executed | `_require_obligation_owners` (`auth/_anonymization.py:72`) fails deletion closed; orgs `E002` | Structural | **new row** (SA216) |
-| Account anonymization reaches every notification about a person | `actor_user_id` context key stamped by each sender (1 of 2) + address fallback | Convention, ungated | **new row** (SA244); finding 2 |
+| Account anonymization reaches every notification about a person | required `about_users` keyword stored on the message; rule 50 over module source, with the pre-keyword actor-key and address fallbacks | Structural + gated | **closed by SA248**; the forward link is declared at the send boundary |
 | Every personal-data field has a declared anonymize treatment | each app's `personal_data_declarations` capability; `test_personal_data_inventory.py` (closed-world) and `check_personal_data_declarations` (W006) over project apps | Structural + gated (runtime warning + closed-world test) | verified this pass (SA246 fix-regression audit passed) |
 | Schema and data survive a QuickScale upgrade | clean-break rule; restore vintage refusal (SA205) | Convention + one refusal gate | unchanged |
 | Template ↔ upgradable-code contract | step-identity declarations (SA207/SA211) | Gated | unchanged |
@@ -118,7 +117,6 @@ never import their facade (SA234).
 | Rank | ID | Title | Horizon | Confidence | Size | Reversibility | Problem in one line |
 |---:|---|---|---|---|---|---|---|
 | 1 | `clean-break-schema-no-data-path` | Upgrades rewrite schema history with no data carry path | SA153 go-live | High | M | one-way door | Each release may rewrite every module's only migration, and nothing carries a deployed project's data across it. |
-| 2 | `notification-person-link-by-convention` | Notification ↔ person link is an unstamped-by-default context key | SA153 | Medium | S | two-way door | Anonymization finds a person's notifications through a context key each sender must remember to stamp, so every new sender can silently fall outside the deletion promise. |
 
 ## Machine-readable index
 
@@ -133,14 +131,6 @@ items:
      anchors: [docs/technical/decisions.md, docs/technical/roadmap.md,
                quickscale_modules/blog/src/quickscale_modules_blog/migrations/0001_initial.py],
      first_seen: 2026-09-23, last_verified: 2026-10-05}
-  - {id: notification-person-link-by-convention, status: open, rank: 2,
-     title: "Notification-to-person link is a convention-stamped context key",
-     lenses: [III, VII, XVIII], horizon: sa153, confidence: Medium, size: S,
-     reversibility: two-way door, depends_on: [], amplifies: [],
-     anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/services.py,
-               quickscale_modules/notifications/src/quickscale_modules_notifications/_anonymization.py,
-               quickscale_modules/orgs/src/quickscale_modules_orgs/views.py],
-     first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: W2, status: watchlist, title: "Two filesystem-lock implementations", lenses: [IX]}
   - {id: W3, status: watchlist, title: "Hand-pinned residue in CI provisioning", lenses: [XV]}
   - {id: W4, status: watchlist, title: "trigger_inputs legacy name for an exact allowlist", lenses: [XV]}
@@ -212,75 +202,6 @@ under RLS; the first incident is a failed production deploy.
 
 ---
 
-## Finding 2: Notification-to-person link is a convention-stamped context key
-
-- **ID:** `notification-person-link-by-convention`
-- **Rank rationale:** Medium × Medium, linear. Blast radius is the user-facing deletion promise
-  (one module's records); SA153 plausibly adds inquiry/agent notifications; each new sender adds a
-  fixed chance of a silent miss.
-- **Horizon & trigger:** SA153 — the first new `send_notification` caller that renders a user's
-  name without their address.
-- **Confidence:** Medium. Mechanism read in code and senders censused (2); whether a real sender
-  renders a name without an address is inferred, not observed beyond the invitation case.
-- **Context dependence:** `wrong-for-now` (privacy promise); generated-project reality.
-
-**Problem:** the only structural link from a stored notification to the person it is *about* is
-an `actor_user_id` key inside free-form `context_json`, which each caller must remember to stamp;
-`send_notification` has no parameter, column, or check for it.
-
-**Evidence** (newly established):
-- `notifications/services.py:86-94` — `send_notification(*, template_key, recipients, context,
-  tags, metadata, mailer)`: no subject/actor argument.
-- `notifications/_anonymization.py:144-147` selects `context_json__actor_user_id=str(user.pk)`;
-  module docstring `:12`: "an `actor_user_id` key that `send_notification` callers stamp".
-- Census: 2 callers outside notifications; **1** stamps it (`orgs/views.py:200`); forms
-  (`forms/_email.py:104`) does not, relying on the address fallback.
-- The docstring records the limit already: pre-key invitations "stay as stored".
-- `grep actor_user_id docs/` → 0 hits: the rule is in no Module Conventions rule or extension doc.
-
-**Counter-evidence:** searched the conventions harness (`scripts/module_conventions/`), W006
-(`orgs/checks.py`), `module-extension.md`, and SA245's roadmap entry for a rule or gate requiring
-senders to declare the person; found none. W006 checks *model fields*, so a name inside JSON is
-invisible to it. Partial mitigation: the address fallback catches any message whose context holds
-the person's complete address.
-
-**Why it compounds:** growth variable is **notification senders** (shipped modules and project
-apps; `send_notification` is public). Each one that renders a person by name or username alone and
-forgets the key leaves that text behind after "its personal data removed", with no failing signal.
-Built on top: orgs invitations, SA244's selector, SA245's planned shared matcher.
-
-**Detection signal:** none today. Instrument: count, per template key, messages lacking both
-`actor_user_id` and a recipient delivery; or a test that renders each registered template with a
-sentinel user and asserts the anonymizer selects it.
-
-**Steelman:** most senders put the person's address in context, which the fallback catches; the
-invitation is the one known name-only case and it is stamped. Accept while the sender set stays
-at two shipped modules and no project app sends notifications.
-
-**Correct shape:** the persons a message is about are declared at the send boundary (a required
-argument or a template-level declaration) and stored where the anonymizer reads them, so a sender
-cannot omit the link silently.
-
-**Do-nothing cost:** each new sender needs someone to know an undocumented key; a miss is a
-retained name discovered only by a user complaint.
-
-**Options:**
-1. **Promote the key to a keyword argument** (`about_users=`) of `send_notification`, stored on
-   the message (column or reserved context key written by notifications itself); required-or-empty
-   explicit. S, incremental, removes the convention.
-2. Declare per template key which context fields name a user (template registry metadata);
-   anonymizer derives the selector. M; also covers name-only fields.
-3. **Accept and document** in Module Conventions with a harness rule flagging `send_notification`
-   calls without the key; revoke at SA153.
-
-**Recommendation:** option 1, folded into SA245 since it edits the same handler.
-- **Size:** `S`. **Reversibility:** `two-way door`.
-- **Guard:** the keyword is required (no default), so every caller states it; a conventions rule
-  fails a direct `context_json` write of the key.
-- **First step:** add the keyword and have orgs pass it instead of stamping context.
-
----
-
 ## Change-cost probe
 
 **Probe A: SA191 rebuild `bap-web`** — stations unchanged (facade import in donor
@@ -298,7 +219,8 @@ agent contact email.**
    Omitting the declaration now warns at runtime (`W006`) and fails the closed-world test.
    **Exonerated by SA246.**
 3. An "inquiry received" email to the agent naming the inquirer: a new `send_notification`
-   caller; nothing requires stating whom it is about. **Verdict: finding 2 evidence.**
+   caller now states whom it is about through the required `about_users` keyword, and rule 50
+   fails a hand-stamped key. **Verdict: finding 2 evidence; closed by SA248.**
 
 **Probe C: add a module option** — unchanged since SA217. **Exonerated.**
 
@@ -319,7 +241,7 @@ agent contact email.**
 
 ## Fix order and interactions
 
-Finding 2 is independent of finding 1 and should ride SA245 (same file). Finding 1's freeze must precede any post-SA153 module schema change, and if SA153
+Finding 1's freeze must precede any post-SA153 module schema change, and if SA153
 adds personal fields to shipped modules, those land as `0002+` migrations *and* declaration
 entries, so the freeze's first migrations are born classified.
 
@@ -383,6 +305,12 @@ entries, so the freeze's first migrations are born classified.
 
 ## Reconciliation log
 
+- 2026-10-06 — `notification-person-link-by-convention`: **closed** by SA248. `send_notification`
+  takes a required `about_users` keyword and stores the canonical ids on the message; the
+  anonymizer selects on them and keeps the `actor_user_id` and address fallbacks for already-stored
+  messages; orgs passes the inviter and forms an explicit empty sequence. Module Conventions rule
+  50 and its harness clause fail a hand-stamped `actor_user_id` key, with control cases, and the
+  bystander conformance test renders every registered template key. Archived in CHANGELOG.
 - 2026-10-05 (pass 2, `e2623cb8`) — `clean-break-schema-no-data-path`: **still-open**, rank 1.
   No module migration changed; private-symbol reference re-verified.
 - 2026-10-05 (pass 2) — `notification-person-link-by-convention`: **new**, rank 2, minted by SA244.

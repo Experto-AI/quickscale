@@ -893,7 +893,7 @@ public surface is `services.py` (rule 4).
 - ✅ `services.py` defines `__all__`; exactly that list is the module's public service surface
   (rule 4).
 - ✅ A public service function takes keyword-only parameters after at most one leading subject
-  (`send_notification(*, template_key, recipients, context)` already does).
+  (`send_notification(*, template_key, recipients, context, about_users)` already does).
 - ✅ A service that cannot do what it was asked raises the module's `<Module>Error` (rule 10);
   whether an optional module is usable is `is_enabled()`. Listed exception: analytics' capture is
   best-effort (a vendor outage must not fail a request) and says so in its docstring.
@@ -1073,7 +1073,7 @@ headings.
   is a requirement under rule 20).
 
 **40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
-and the CLI's option handling fails on each of rules 1–39 and 42–48 (rule 21 stays a review rule
+and the CLI's option handling fails on each of rules 1–39, 42–48, and 50 (rule 21 stays a review rule
 with each module's write-effect rollback test; rule 27 through the user-FK conformance gate; rule 30
 in `apply` itself; rules 41 and 46 through the covered rules that carry their clauses; rule 49
 through the closed-world inventory test and orgs' `W006` check): names, suffixes and types, `_ENABLED`
@@ -1099,7 +1099,7 @@ outside the modules, option keys and command names in READMEs, and `required_mod
 and `implies`, settings snapshots outside `_settings.py` or in `__all__` and cross-module settings
 objects, `OrganizationMembership` queries outside orgs that filter by a string `role=`, and
 `except Exception` around another module's service call, identity redaction matchers and
-replacement-value sentinels — with a control case proving
+replacement-value sentinels, and a hand-stamped notification person-link key — with a control case proving
 each rule rejects a violation. The layer table, each
 foundation's published extension bases, and every listed exception live in one test-owned
 mapping that mirrors this section.
@@ -1195,6 +1195,16 @@ mapping that mirrors this section.
   `anonymize_handlers` capability.
 - ❌ One module's source or test listing another module's fields; a field declared with a
   treatment whose declaring app provides no handler.
+
+**50. Notification person links.**
+- ✅ A sender declares the persons a notification message is about through `send_notification`'s
+  required `about_users` keyword — a sequence of saved users, possibly empty — and notifications
+  stores the link on the message, where account anonymization reads it.
+- ❌ A module writing the string `actor_user_id` anywhere in its source — as a mapping key, a
+  subscript key, or a call keyword. The name is reserved for the anonymizer's fallback over
+  already-stored messages: a context built in a helper cannot be told apart statically from an
+  unrelated use, so the harness rejects the spelling itself. A key assembled from variables, or
+  written through `setdefault`/`setattr`, is outside the detector and stays a review rule.
 
 ---
 

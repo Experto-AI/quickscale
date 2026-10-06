@@ -72,6 +72,7 @@ from scripts.module_conventions.rules_misc import (
     rule_10_checks_errors,
     rule_20_email,
     rule_45_stub_exemptions,
+    rule_50_notification_links,
 )
 from scripts.module_conventions.rules_models import (
     rule_13_tenant_models,
@@ -162,6 +163,7 @@ __all__ = [
     "rule_47_redaction",
     "rule_48_replacement_values",
     "rule_4_public_surface",
+    "rule_50_notification_links",
     "rule_5_dependency_direction",
     "rule_6_no_legacy_names",
     "rule_7_urls",
