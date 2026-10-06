@@ -65,6 +65,10 @@ class NotificationMessage(models.Model):
     provider_name = models.CharField(max_length=32, default="resend")
     tags_json = models.JSONField(default=list, blank=True)
     metadata_json = models.JSONField(default=dict, blank=True)
+    #: The persons the message is about, as canonical string primary keys
+    #: written by ``send_notification`` from its required ``about_users``
+    #: keyword; account anonymization selects on it (rule 50).
+    about_user_ids_json = models.JSONField(default=list, blank=True)
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

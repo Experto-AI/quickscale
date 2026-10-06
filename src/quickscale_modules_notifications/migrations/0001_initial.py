@@ -30,6 +30,7 @@ class Migration(migrations.Migration):
                 ("provider_name", models.CharField(default="resend", max_length=32)),
                 ("tags_json", models.JSONField(blank=True, default=list)),
                 ("metadata_json", models.JSONField(blank=True, default=dict)),
+                ("about_user_ids_json", models.JSONField(blank=True, default=list)),
                 (
                     "status",
                     models.CharField(

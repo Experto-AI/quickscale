@@ -92,6 +92,16 @@ class QuickscaleNotificationsConfig(AppConfig):
             PersonalDataField(
                 app_label=self.label,
                 model_name="NotificationMessage",
+                field_name="about_user_ids_json",
+                treatment=PersonalDataTreatment.SCRUB,
+                note=(
+                    "The person's id is removed from the stored link list; "
+                    "other persons' links stay."
+                ),
+            ),
+            PersonalDataField(
+                app_label=self.label,
+                model_name="NotificationMessage",
                 field_name="last_error",
                 treatment=PersonalDataTreatment.SCRUB,
                 note="Provider error text can echo the address; redacted.",

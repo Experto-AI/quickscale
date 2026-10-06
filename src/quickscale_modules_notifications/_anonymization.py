@@ -8,23 +8,26 @@ the anonymize boundary collects this handler through the shared core
 helper exactly like the other declared handlers.
 
 Only the messages linked to the person are scrubbed: the ones delivered to
-them, the ones whose ``context_json`` records them as the actor through an
-``actor_user_id`` key that ``send_notification`` callers stamp, and — the
+them, the ones whose stored ``about_user_ids_json`` link names them — written
+by ``send_notification`` from its required ``about_users`` keyword — and, for
+messages stored before that keyword existed, the ones whose ``context_json``
+records them as the actor through an ``actor_user_id`` key, plus — the
 pre-key fallback — the ones whose ``context_json`` carries their unique
 address.  An invitation message is delivered to the invitee but renders the
-inviter's name, so the actor link, not delivery, selects the inviter's
+inviter's name, so the stored link, not delivery, selects the inviter's
 records.  A message delivered only to the person has every rendered field
 replaced wholesale, as the inventory's treatment reads; any other linked
 message keeps the content that is not about the person and loses each
 occurrence of their address, full name, and username in a value — in the raw
 and HTML-escaped spellings Django rendering stores.  Dictionary keys carry the
 stored structure and are never rewritten.  The person's own delivery
-rows and provider event payloads are scrubbed regardless.  The fallback
-matches their address, which is unique, and never their name, which can be an
-ordinary word; a name match cannot select another person's message.  An
-invitation message sent before the actor key existed names only the inviter's
-display name, so it carries no link the fallback can match and stays as
-stored — a recorded limit, not a selector.
+rows and provider event payloads are scrubbed regardless, and every selected
+message loses the person's id from its stored link list so the link never
+outlives the scrub.  The fallback matches their address, which is unique, and
+never their name, which can be an ordinary word; a name match cannot select
+another person's message.  An invitation message sent before either link
+existed names only the inviter's display name, so it carries no link the
+fallback can match and stays as stored — a recorded limit, not a selector.
 """
 
 from __future__ import annotations
@@ -58,8 +61,9 @@ def anonymize_account(
     ``original_name`` and ``original_username`` are the pre-scrub display
     spellings — the invitation email renders the full name, falling back to
     the username — removed from every linked message that carries them.  A
-    message is linked when a delivery addresses the person, when its
-    ``context_json`` names them as the actor, or when it carries their unique
+    message is linked when a delivery addresses the person, when its stored
+    ``about_user_ids_json`` link names them, when its ``context_json`` names
+    them as the actor (the pre-keyword form), or when it carries their unique
     address; no other message is read or rewritten.
     """
     email = original_email.strip()
@@ -124,16 +128,22 @@ def _scrub_messages(
 ) -> None:
     """Redact the messages linked to the person, and only those.
 
-    Three links select a message: a delivery to the person, an
-    ``actor_user_id`` context entry naming them as the actor, or — the
-    pre-key fallback — their unique address inside ``context_json``.  The
-    fallback verifies a complete address, never a name, so a namesake's
-    address or an ordinary word cannot select another person's message.
+    Four links select a message: a delivery to the person, a stored
+    ``about_user_ids_json`` entry naming them, an ``actor_user_id`` context
+    entry naming them as the actor (the pre-keyword form), or — the pre-key
+    fallback — their unique address inside ``context_json``.  The fallback
+    verifies a complete address, never a name, so a namesake's address or an
+    ordinary word cannot select another person's message.
     """
     person_message_ids = set(
         NotificationDelivery.objects.filter(pk__in=delivery_ids).values_list(
             "message_id", flat=True
         )
+    )
+    linked_message_ids = set(
+        NotificationMessage.objects.filter(
+            about_user_ids_json__contains=[str(user.pk)]
+        ).values_list("pk", flat=True)
     )
     actor_message_ids = set(
         NotificationMessage.objects.filter(
@@ -147,7 +157,12 @@ def _scrub_messages(
         ).values_list("pk", "context_json")
         if _context_names_the_address(context, email=email)
     }
-    candidate_ids = person_message_ids | actor_message_ids | fallback_message_ids
+    candidate_ids = (
+        person_message_ids
+        | linked_message_ids
+        | actor_message_ids
+        | fallback_message_ids
+    )
     if not candidate_ids:
         return
     shared_message_ids = set(
@@ -155,9 +170,10 @@ def _scrub_messages(
         .exclude(pk__in=delivery_ids)
         .values_list("message_id", flat=True)
     )
+    person_pk = str(user.pk)
     for message in NotificationMessage.objects.filter(pk__in=candidate_ids).iterator():
         if message.pk in person_message_ids and message.pk not in shared_message_ids:
-            _redact_message_wholesale(message)
+            _redact_message_wholesale(message, user_pk=person_pk)
         else:
             _redact_message_identity(
                 message,
@@ -165,10 +181,11 @@ def _scrub_messages(
                 name=name,
                 username=username,
                 deleted_address=deleted_address,
+                user_pk=person_pk,
             )
 
 
-def _redact_message_wholesale(message: NotificationMessage) -> None:
+def _redact_message_wholesale(message: NotificationMessage, *, user_pk: str) -> None:
     """Replace every rendered field of a message sent only to the person."""
     redacted_fields: list[str] = []
     for field_name in ("subject", "rendered_text", "rendered_html", "last_error"):
@@ -178,6 +195,8 @@ def _redact_message_wholesale(message: NotificationMessage) -> None:
     if message.context_json:
         message.context_json = {}
         redacted_fields.append("context_json")
+    if _remove_person_link(message, user_pk=user_pk):
+        redacted_fields.append("about_user_ids_json")
     if redacted_fields:
         message.save(update_fields=redacted_fields)
 
@@ -189,6 +208,7 @@ def _redact_message_identity(
     name: str,
     username: str,
     deleted_address: str,
+    user_pk: str,
 ) -> None:
     """Replace the person's identity inside a message's rendered fields."""
     redacted_fields: list[str] = []
@@ -217,8 +237,26 @@ def _redact_message_identity(
         if scrubbed_context != message.context_json:
             message.context_json = scrubbed_context
             redacted_fields.append("context_json")
+    if _remove_person_link(message, user_pk=user_pk):
+        redacted_fields.append("about_user_ids_json")
     if redacted_fields:
         message.save(update_fields=redacted_fields)
+
+
+def _remove_person_link(message: NotificationMessage, *, user_pk: str) -> bool:
+    """Drop *user_pk* from the message's stored link list; report a change.
+
+    Other persons' ids stay: the list is a link, not rendered content, and a
+    shared message keeps the other persons it is about.
+    """
+    stored = message.about_user_ids_json
+    if not isinstance(stored, list):
+        return False
+    remaining = [entry for entry in stored if str(entry) != user_pk]
+    if remaining == stored:
+        return False
+    message.about_user_ids_json = remaining
+    return True
 
 
 def _identity_spellings(value: str) -> tuple[str, ...]:

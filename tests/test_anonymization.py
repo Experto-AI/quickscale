@@ -300,7 +300,6 @@ def test_anonymize_redacts_an_invitation_message_sent_to_someone_else(
         "organization_name": "Acme Labs",
         "invitee_email": "invitee@example.com",
         "inviter_name": "Helios Admin",
-        "actor_user_id": str(inviter.pk),
         "role_display": "Admin",
         "accept_url": (
             "https://example.com/orgs/invitations/"
@@ -313,6 +312,7 @@ def test_anonymize_redacts_an_invitation_message_sent_to_someone_else(
             template_key="notifications.org_invitation",
             recipients=["invitee@example.com"],
             context=context,
+            about_users=[inviter],
             tags=["auth"],
             metadata={"workflow": "org-invitation"},
             mailer=lambda mail: f"provider::{mail.to[0]}",
@@ -329,6 +329,61 @@ def test_anonymize_redacts_an_invitation_message_sent_to_someone_else(
     assert "Helios Admin" not in message.rendered_html
     assert message.context_json["inviter_name"] == "[redacted]"
     assert message.context_json["invitee_email"] == "invitee@example.com"
+    # Rule 50: the stored link loses the inviter it selected on.
+    assert message.about_user_ids_json == []
+
+
+@pytest.mark.django_db
+def test_anonymize_selects_a_message_through_the_stored_link() -> None:
+    """The stored keyword link alone selects a message not delivered to them."""
+    user = _user("linked@example.com")
+    message = _message(
+        subject="About Linked Person",
+        rendered_text="Linked Person updated the workspace.",
+        rendered_html="<p>Linked Person updated the workspace.</p>",
+        context_json={"author_name": "Linked Person", "body": "shared"},
+        last_error="",
+        about_user_ids_json=[str(user.pk)],
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="archive@example.com"
+    )
+
+    anonymize_account(user, "linked@example.com", "Linked Person", user.get_username())
+
+    message.refresh_from_db()
+    assert message.about_user_ids_json == []
+    assert "Linked Person" not in message.rendered_text
+    assert message.context_json["author_name"] == "[redacted]"
+
+
+@pytest.mark.django_db
+def test_anonymize_keeps_other_persons_links_on_a_shared_message() -> None:
+    """A shared link list loses only the person being anonymized."""
+    user = _user("linked-shared@example.com")
+    other = get_user_model().objects.create_user(
+        username="linked-other",
+        email="linked-other@example.com",
+        password="LinkedOther1!",
+    )
+    message = _message(
+        subject="Shared",
+        rendered_text="Shared body",
+        rendered_html="",
+        context_json={"body": "shared"},
+        last_error="",
+        about_user_ids_json=[str(user.pk), str(other.pk)],
+    )
+    NotificationDelivery.objects.create(
+        message=message, recipient_email="archive@example.com"
+    )
+
+    anonymize_account(
+        user, "linked-shared@example.com", "Linked Shared", user.get_username()
+    )
+
+    message.refresh_from_db()
+    assert message.about_user_ids_json == [str(other.pk)]
 
 
 @pytest.mark.django_db
@@ -944,6 +999,7 @@ def test_declared_treatments_hold_on_a_populated_user() -> None:
         ("NotificationMessage", "rendered_text"): PersonalDataTreatment.SCRUB,
         ("NotificationMessage", "rendered_html"): PersonalDataTreatment.SCRUB,
         ("NotificationMessage", "context_json"): PersonalDataTreatment.SCRUB,
+        ("NotificationMessage", "about_user_ids_json"): PersonalDataTreatment.SCRUB,
         ("NotificationMessage", "last_error"): PersonalDataTreatment.SCRUB,
         ("NotificationDelivery", "failure_reason"): PersonalDataTreatment.SCRUB,
         ("NotificationDelivery", "recipient_email"): PersonalDataTreatment.SCRUB,
@@ -951,7 +1007,7 @@ def test_declared_treatments_hold_on_a_populated_user() -> None:
     }
 
     user = _user("alpha@example.com")
-    message = _message()
+    message = _message(about_user_ids_json=[str(user.pk)])
     delivery = NotificationDelivery.objects.create(
         message=message,
         recipient_email="alpha@example.com",
@@ -979,6 +1035,8 @@ def test_declared_treatments_hold_on_a_populated_user() -> None:
         ("NotificationMessage", "rendered_text"): message.rendered_text == "[redacted]",
         ("NotificationMessage", "rendered_html"): message.rendered_html == "[redacted]",
         ("NotificationMessage", "context_json"): message.context_json == {},
+        ("NotificationMessage", "about_user_ids_json"): message.about_user_ids_json
+        == [],
         ("NotificationMessage", "last_error"): message.last_error == "[redacted]",
         ("NotificationDelivery", "failure_reason"): delivery.failure_reason
         == "[redacted]",
