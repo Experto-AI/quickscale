@@ -84,10 +84,6 @@ queries were compiled, not executed. `UPPER` under a non-UTF-8 or `C` collation 
 schema: tech-audit/v6
 audited: e2623cb8bb727d177c337d1431db40e134dcfaf0
 items:
-  - {id: billing-anonymize-name-substring, status: open, severity: S4, category: I,
-     title: "Billing payload scrub replaces the name as a bare substring, including in dict keys", effort: Trivial,
-     confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_anonymization.py], first_seen: 2026-10-05, last_verified: 2026-10-05}
   - {id: dr-restore-vintage-exact-match, status: watchlist, category: I, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/recovery.py], first_seen: 2026-09-24, last_verified: 2026-10-05}
   - {id: orgs-provider-id-check-blocks-migrate, status: watchlist, category: VI, reality: generated-app,
@@ -106,25 +102,16 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 1 · total 1 open.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 0 · total 0 open.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
-| `billing-anonymize-name-substring` | S4 | I | Name replaced as a bare substring, keys included | Trivial | High | carried |
 
 ---
 
 ## 4. Findings
 
-### S4
-
-- `billing-anonymize-name-substring` · `billing/_anonymization.py:131–152` · within the person's own
-  webhook payloads, `_redact_string` replaces the name as a bare case-insensitive substring
-  (`re.sub(re.escape(name), …)`, `:151`). `_redact_identity` applies it to dict **keys** too
-  (`:135`). A short name such as "Al" or "Id" mangles field names like `total` or `customer_id`.
-  Since SA244, only payloads that contain the person's address are loaded, so the damage stays
-  inside their own events. Fix: use the notifications word-boundary matcher, and leave keys alone.
-  This is carried by SA245, which gates the 0.89.0 release.
+No open findings; the SA245 closure is re-verified in §14.
 
 ---
 
@@ -166,9 +153,9 @@ Every empty cell carries a finding ID or a stated reason.
 
 ## 6. Fix order and batching
 
-1. **Batch B (open):** `billing-anonymize-name-substring`, carried by SA245 (shared redaction
-   helpers); the anonymization **bystander** conformance test it called for is now delivered by
-   SA248 (§10). It is independent of everything else.
+1. **Batch B:** `billing-anonymize-name-substring` landed with the shared redaction helpers
+   (SA245), and the anonymization **bystander** conformance test it called for is delivered by
+   SA248 (§10); no batch remains open.
    Batch A (SA244) landed and was verified.
 
 ---
@@ -177,8 +164,8 @@ Every empty cell carries a finding ID or a stated reason.
 
 - **auth**: clean. The SA244 session filter was read (`_anonymization.py:161–176`), and the SA246
   declarations were read.
-- **billing**: `billing-anonymize-name-substring`. The SA244 SQL pre-filter was read and its SQL
-  compiled.
+- **billing**: clean. The SA244 SQL pre-filter was read and its SQL compiled; the scrub uses core's
+  word-bounded `redact_names`/`replace_address` helpers and leaves payload keys alone.
 - **notifications**: clean. Linked-message selection was read in full, and the actor key and address
   fallback were verified.
 - **orgs**: clean. The SA246 W006 check and `_personal_data.py` were read, and both invite views pass
@@ -372,6 +359,11 @@ The six items from the prior passes are carried (`git show 8e4122f2:docs/others/
 - 2026-10-05 — `crm-stage-seed-lost-on-commit-failure`: carried (trigger not fired).
 - 2026-10-05 — `orgs-disabled-in-saas-wedges-site`: carried (trigger not fired).
 - 2026-10-05 — `anonymize-prefilter-ascii-only-casefold`: new watchlist (introduced by SA244, `b179990b`).
+- 2026-10-06 — `billing-anonymize-name-substring`: **resolved** (SA245, `abbc09d0`; re-verified at
+  `9917fec2`). Billing scrubs through core's `replace_address`/`redact_names`; name matching is
+  word-bounded, dict keys are never rewritten, and billing's
+  `test_anonymize_never_rewrites_payload_keys` pins it. The finding is dropped from the index and
+  summary.
 - 2026-10-06 — the anonymization **bystander** conformance test gap closed (SA248,
   `notifications/tests/test_anonymization_bystanders.py`): every registered template key renders
   with a sentinel user, the anonymizer selects the linked message, and a bystander's message stays
