@@ -562,6 +562,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 **6. Testing:**
 - [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
 - [ ] The module declares the treatment of its own user-linked personal-data fields on its `AppConfig` through `personal_data_declarations` (records from `quickscale_core.runtime`), and its anonymization test asserts the declared treatments on a populated user (rule 49)
+- [ ] A personal-data field the module declares that the candidate walk cannot see (an identity name, a JSON payload, rendered text) is pinned in the module's own tests, not in orgs' central inventory test (rule 49)
 - [ ] 90% overall mean + 80% per file minimum coverage (CI enforced)
 - [ ] Tests use concrete models (not abstract stubs)
 - [ ] Required test files: `test_apps.py`, `test_services.py`, `test_migrations.py` (with models), and `test_isolation.py` plus `test_rls_boundary.py` (with tenant models)
