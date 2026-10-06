@@ -343,3 +343,16 @@ def test_declared_treatments_hold_on_a_populated_user(
         assert row.user_id == user.pk
     event.refresh_from_db()
     assert user.email not in str(event.payload)
+
+
+def test_declared_non_candidate_fields_stay_pinned() -> None:
+    """The payload the candidate walk cannot see stays declared in billing's tests."""
+    from quickscale_core.runtime import PersonalDataField
+
+    config = apps.get_app_config("quickscale_billing")
+    declared = {
+        (entry.model_name, entry.field_name)
+        for entry in config.personal_data_declarations()
+        if isinstance(entry, PersonalDataField)
+    }
+    assert declared >= {("WebhookEvent", "payload")}
