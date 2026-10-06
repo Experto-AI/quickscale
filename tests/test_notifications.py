@@ -99,6 +99,29 @@ class TestNotifySubmission:
             template_key="notifications.forms_submission"
         ).exists()
 
+    def test_declares_an_explicit_empty_about_users(
+        self,
+        submission,
+        field_value,
+        monkeypatch,
+        django_capture_on_commit_callbacks,
+    ):
+        """Rule 50: a submission is about no platform user, stated explicitly."""
+        recorded: list[dict[str, object]] = []
+
+        def recording_send(*args, **kwargs):
+            recorded.append(kwargs)
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms._email.send_notification",
+            recording_send,
+        )
+        with django_capture_on_commit_callbacks(execute=True):
+            status = notify_submission(submission)
+
+        assert status == "queued"
+        assert recorded and recorded[0]["about_users"] == []
+
     def test_delivery_exception_does_not_propagate(
         self,
         submission,
