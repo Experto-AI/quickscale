@@ -549,6 +549,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     username to `[redacted]` through the `quickscale_core.runtime` helpers, matches names at word
     boundaries, and never rewrites payload keys, so an account named `Bill` no longer corrupts
     `billing_details`.
+  - **Personal-data pins live with their module.** Auth, billing, and notifications pin the
+    personal-data fields the candidate walk cannot see in their own tests, and the orgs inventory
+    test accepts only orgs', contrib, and third-party keys — failing on a pinned key from another
+    installed module.
   - **Notifications declare whom each message is about.** `send_notification` takes a required
     `about_users` keyword, stores the linked users on the message, and account anonymization
     selects on that link, falling back to the retired `actor_user_id` context key and the

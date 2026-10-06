@@ -1050,3 +1050,24 @@ def test_declared_treatments_hold_on_a_populated_user() -> None:
     }
     assert set(outcomes) == set(declared)
     assert all(outcomes.values()), outcomes
+
+
+def test_declared_non_candidate_fields_stay_pinned() -> None:
+    """Fields the candidate walk cannot see stay declared in notifications' tests."""
+    from quickscale_core.runtime import PersonalDataField
+
+    config = apps.get_app_config("quickscale_notifications")
+    declared = {
+        (entry.model_name, entry.field_name)
+        for entry in config.personal_data_declarations()
+        if isinstance(entry, PersonalDataField)
+    }
+    assert declared >= {
+        ("NotificationMessage", "subject"),
+        ("NotificationMessage", "rendered_text"),
+        ("NotificationMessage", "rendered_html"),
+        ("NotificationMessage", "context_json"),
+        ("NotificationMessage", "last_error"),
+        ("NotificationDelivery", "failure_reason"),
+        ("NotificationDeliveryEvent", "payload_json"),
+    }
