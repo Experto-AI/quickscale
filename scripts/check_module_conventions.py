@@ -8,8 +8,10 @@ of the Module Conventions rules the harness covers.  This check runs the
 detectors for the rules the shipped tree already meets.  Each detector has a
 control case in ``scripts/tests_module_conventions/`` proving it rejects
 a violation.  Rules not yet enforced here are recorded in ``OPEN_RULES`` with
-the ticket or mechanism that closes them, and the test suite keeps the two sets
-a partition of the recorded rule numbers.
+the ticket or mechanism that closes them; rules whose clauses ride other rules
+or an external gate are listed in ``DELEGATED_RULES``.  The test suite keeps
+covered, open, and delegated a partition of the rule headings decisions.md
+declares, so no rule can be silently omitted.
 
 Each covered rule is enforced over the statically checkable clauses of the
 rule; SA215 extends the harness to the rules and clauses still open.
@@ -40,9 +42,14 @@ from scripts.module_conventions.core import (
     load_corpus,
 )
 from scripts.module_conventions.registry import (
+    DECISIONS_DOC_RELATIVE_PATH,
+    DELEGATED_RULES,
     OPEN_RULES,
     RULES,
     check_conventions,
+    decisions_rule_numbers,
+    partition_violations,
+    rule_numbers_in_decisions,
 )
 from scripts.module_conventions.rule_44 import (
     rule_44_role_checks,
@@ -117,6 +124,8 @@ from scripts.module_conventions.rules_webhooks import (
 __all__ = [
     "AuthorityError",
     "Corpus",
+    "DECISIONS_DOC_RELATIVE_PATH",
+    "DELEGATED_RULES",
     "MODULE_LAYERS",
     "Module",
     "OPEN_RULES",
@@ -124,8 +133,10 @@ __all__ = [
     "THEME_SEAM_TEMPLATE",
     "THEME_SEAM_TEMPLATES",
     "check_conventions",
+    "decisions_rule_numbers",
     "load_corpus",
     "main",
+    "partition_violations",
     "rule_10_checks_errors",
     "rule_11_package_files",
     "rule_12_manifest_options",
@@ -169,6 +180,7 @@ __all__ = [
     "rule_7_urls",
     "rule_8_templates",
     "rule_9_http_apis",
+    "rule_numbers_in_decisions",
 ]
 
 
@@ -187,7 +199,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Found {len(violations)} module convention violation(s).")
         return 1
     covered = ", ".join(str(rule.number) for rule in RULES)
-    print(f"All {len(RULES)} covered module conventions pass (rules {covered}).")
+    delegated = "; ".join(f"{number} ({carrier})" for number, carrier in DELEGATED_RULES)
+    print(
+        f"All {len(RULES)} covered module conventions pass (rules {covered}); "
+        f"delegated: {delegated}."
+    )
     return 0
 
 

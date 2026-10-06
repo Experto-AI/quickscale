@@ -453,16 +453,12 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
    authoring checklist names the declaration and the populated-user assertion.)*
 3. **Stale term.** *(resolved by SA246: module-extension.md now says "auth's anonymize boundary"
    instead of "auth's account-deletion collector".)*
-4. **Delegated rules are hard to see.** Rules 41 and 46 have no detector of their own. Their
-   clauses ride rules 7/31/37 and 19/28, and only a comment in the partition test says so
-   (`scripts/tests_module_conventions/test_core.py:53–57`). (Correction: the `8e4122f2` pass
-   cited `test_check_module_conventions.py:7282`; SA247 deleted that file.) The success line
-   ("42 covered") does not list 41, 46, or 49, so a reader cannot tell "delegated" from "missing".
-6. **The rule partition is open-world on the rule list.** `RECORDED_RULE_NUMBERS`
-   (`test_core.py:58`) is hand-kept and omits 41, 46, and 49; rule 49 is in neither `RULES` nor
-   `OPEN_RULES`, though decisions.md rule 40 names its gate. A rule 50 added to decisions.md would
-   pass the partition unnoticed. Fix: parse the `**N.` headings of decisions.md § Module
-   Conventions and require each to be covered, open, or listed as delegated with its carriers.
+4. **Delegated rules are hard to see.** *(resolved by SA250: `DELEGATED_RULES` lists rule 40
+   (this harness), 41 (rules 7/31/37), 46 (rules 19/28), and 49 (the inventory test and `W006`),
+   and the harness success line names each with its carrier.)*
+6. **The rule partition is open-world on the rule list.** *(resolved by SA250: the partition test
+   now parses the `**N.` headings of decisions.md § Module Conventions and requires a covered,
+   open, or delegated entry for each, with a control that adds an unlisted heading and fails.)*
 7. **Frozen evidence anchors.** `module-conventions-inventory.md` cites
    `check_module_conventions.py:142/4465/4653` and `test_check_module_conventions.py`, which SA247
    moved. The inventory is frozen evidence; accepted as historical, not re-anchored.
@@ -600,3 +596,6 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
 - 2026-10-05 (b) — `anonymize-redaction-helper-copies`, `anonymize-replacement-values`, `anonymize-executor-naming`: resolved (abbc09d0, 9203630f, 199eb250 — harness rules 47–48 pass at f00ed460).
 - 2026-10-05 (b) — all other prior IDs: still resolved (harness passes at f00ed460; SA247 split verified behavior-neutral by the same 42-rule success line; cells not re-read).
 - 2026-10-06 — `semantic-personal-data-central-pin`: **resolved** (SA249 — rule 49 amendment; auth, billing, and notifications pin their non-candidate rows in their own tests, and the inventory test accepts only orgs', contrib, and third-party pinned keys, with a control re-adding an auth key).
+- 2026-10-06 — Enforcement gaps 4 and 6: **resolved** (SA250 — `DELEGATED_RULES` lists rules
+  40/41/46/49 with their carriers and the harness success line names them; the partition test
+  parses the decisions.md rule headings and a control fails on an added heading).

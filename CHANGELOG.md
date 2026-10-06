@@ -560,6 +560,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `actor_user_id` spelling for that fallback — the harness fails a module source that writes it
     as a mapping key, subscript key, or call keyword — and a conformance test exercises every
     registered template key.
+  - **Conventions coverage derives from the recorded rules.** The module-conventions partition
+    test reads the Module Conventions rule headings in `decisions.md`, so every rule is covered by
+    a detector, recorded open, or delegated to its carrier rules or external gate, and the harness
+    success line names each delegated rule with its carrier.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
