@@ -293,7 +293,7 @@ class Migration(migrations.Migration):
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
-                ("published_date", models.DateTimeField(blank=True, null=True)),
+                ("published_at", models.DateTimeField(blank=True, null=True)),
                 (
                     "author",
                     models.ForeignKey(
@@ -332,7 +332,7 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "ordering": ["-published_date", "-created_at"],
+                "ordering": ["-published_at", "-created_at"],
                 "base_manager_name": "all_objects",
             },
             managers=[
@@ -358,7 +358,7 @@ class Migration(migrations.Migration):
             model_name="category",
             constraint=models.UniqueConstraint(
                 fields=("id", "organization"),
-                name="quickscale_blog_category_id_org_unique",
+                name="quickscale_blog_category_id_organization_unique",
             ),
         ),
         migrations.AddConstraint(
@@ -378,7 +378,7 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name="post",
             index=models.Index(
-                fields=["-published_date"], name="qs_blog_post_publish_idx"
+                fields=["-published_at"], name="qs_blog_post_publish_idx"
             ),
         ),
         migrations.AddIndex(

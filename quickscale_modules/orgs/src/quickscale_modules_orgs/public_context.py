@@ -1,6 +1,6 @@
 """Public-context helpers for orgs-owned anonymous/public read operations.
 
-SA11.1 provides a CBV mixin that generalizes the proven tenant-context
+Provides a CBV mixin that generalizes the proven tenant-context
 priming idiom from ``social_manifest.py:444-447`` for public/anonymous
 read paths in other modules.
 

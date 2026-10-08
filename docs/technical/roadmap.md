@@ -36,10 +36,9 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 |---|---|---|---|---|
 | SA251 | Make Stripe checkout and payment outcomes complete and recoverable | 2 | — | Required |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
-| SA266 | Sweep module models, templates, tests, and commands onto the written rules before the freeze | 1 | — | Optional |
 | SA259 | Generate gate wiring from the registry instead of holding copies by parity | 2 | — | Optional |
 | SA265 | Put cross-module vocabulary, capabilities, and private names in their owners | 3 | — | Optional |
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA259, SA265, SA266 | Optional |
+| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA259, SA265 | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA256 | Fix `deploy railway` environment writes and DR media streaming | 2 | — | Optional |
@@ -56,8 +55,8 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 ═╗ SA266 ──► SA204 ──► SA153 ──► SA154 (inventory)
-               (interleaves while SA191 waits on the maintainer)
+Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
+               (SA191 runs slice (b) first; slice (a) waits on the maintainer)
 Track 2: SA251 ──► SA256 ──► SA259 ──► SA253 ──► SA255 ──► SA260 ──► SA263
 Track 3: SA254 ──► SA265 ──► SA258 ──► SA264 ──► SA262 ──► SA261
      release path:  SA251 → publish 0.89.0
@@ -74,14 +73,13 @@ handoff note (what landed, what is next, what to watch) committed with the work.
 when its last slice lands; slices are not scheduled.
 
 **Order.** SA251 and SA252 led: they gate the 0.89.0 publish. Every change to a shipped
-module `0001_initial` (SA257's composite constraints, SA265's billing column on the tenant root,
-SA266's model and constraint renames) lands before SA204 freezes migration history, and SA204
+module `0001_initial` (SA257's composite constraints, SA265's billing column on the tenant root)
+lands before SA204 freezes migration history, and SA204
 lands before SA153 slice (a), whose schema work is `0002+` from the start (arch audit §7).
 SA259 lands before the new gates it cheapens (SA204's hash gate, SA253's rendered-artifact gate).
 SA258 lands before SA191's cutover so `bap-web-new` starts on thin includes and pays one adoption
 step instead of one per release. SA154 is an inventory, not work. SA191 runs slice (b) first;
-slice (a) waits on the maintainer's production dump, and Track 1 takes SA266 while it
-waits.
+slice (a) waits on the maintainer's production dump.
 
 ### Track states
 
@@ -605,23 +603,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   core's capability helper and `contracts/module_options.py`; `module-extension.md`; decisions;
   the harness; and the coherence audit.
 
-- [ ] **SA266 — Sweep module models, templates, tests, and commands onto the written rules before the freeze.**
-
-  **Context:** tax-level drift across modules (coherence `model-basics`, `constraint-purpose-tokens`,
-  `template-folder-depth`, `test-file-names`, `ticket-ids-in-shipped-source`,
-  `command-flag-conventions`). The model and constraint renames rewrite `0001_initial`, so they
-  land before SA204 or never cheaply.
-
-  **Acceptance:** coherence §6 proposals 9, 6 (page depth), 10, and 12 and proposal 3's constraint
-  tokens are merged and enforced: model basics hold with no `Meta.app_label`; constraint names use
-  the lowercased model token, field-named purposes, and the `_unique` suffix; pages are flat under
-  `quickscale_<module>/` and admin overrides under `admin/<label>/<model>/`; `tests/templates/`
-  is allowed and no other non-test file; no ticket id appears in shipped source or `module.yml`;
-  commands use `--json`, `--trigger {manual,scheduled}` defaulting to `manual`, and `--confirm
-  <identifier>` for destructive runs. Release notes list moved template paths for host overrides.
-
-  **Surfaces:** module models and `0001_initial`, templates, tests, management commands,
-  decisions, the harness, and the coherence audit.
+- [x] **SA266 — Sweep module models, templates, tests, and commands onto the written rules before the freeze.**
 
 - [x] **SA214 — Harden the fresh-first migration tool into the standard upgrade path.**
 

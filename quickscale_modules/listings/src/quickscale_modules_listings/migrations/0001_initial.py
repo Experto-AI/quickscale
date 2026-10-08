@@ -110,7 +110,7 @@ class Migration(migrations.Migration):
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (
-                    "published_date",
+                    "published_at",
                     models.DateTimeField(
                         blank=True,
                         help_text="Date when listing was published",
@@ -119,14 +119,12 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "Listing",
-                "verbose_name_plural": "Listings",
-                "ordering": ["-published_date", "-created_at"],
+                "ordering": ["-published_at", "-created_at"],
                 "abstract": False,
                 "base_manager_name": "all_objects",
                 "indexes": [
                     models.Index(
-                        fields=["-published_date"],
+                        fields=["-published_at"],
                         name="qs_listings_listing_pub_idx",
                     ),
                     models.Index(

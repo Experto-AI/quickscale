@@ -3280,7 +3280,7 @@ class TestDevOpsTemplateRendering:
         assert "check-tenant-isolation:" in output
         assert "quickscale_orgs_check_tenant_isolation" in output
         assert "--postgres-only" in output
-        assert "--format json" in output
+        assert "--json" in output
         assert "QUICKSCALE_ALLOW_BYPASSRLS=1" in output
         assert "RUNTIME_DATABASE_URL='' poetry run python manage.py migrate" in output
 
@@ -3309,7 +3309,7 @@ class TestDevOpsTemplateRendering:
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
         """Generated CI workflow must exercise the SA15.1 widened classification
-        contract via check_tenant_isolation --postgres-only --format json.
+        contract via check_tenant_isolation --postgres-only --json.
 
         The management command internally runs get_unclassified_concrete_models()
         which uses the SA15.1 widened scope (all non-contrib, non-third-party
@@ -3329,9 +3329,7 @@ class TestDevOpsTemplateRendering:
         assert "--postgres-only" in output, (
             "CI must pass --postgres-only (required for FORCE-RLS checks)"
         )
-        assert "--format json" in output, (
-            "CI must use JSON output for structured parsing"
-        )
+        assert "--json" in output, "CI must use JSON output for structured parsing"
         # Classification runs before --postgres-only skip (CR-SA14-002).
         assert "migrate" in output, (
             "Migrations must run before check_tenant_isolation so the "
@@ -3352,7 +3350,7 @@ class TestDevOpsTemplateRendering:
         contract via the check-tenant-isolation target.
 
         The target runs both migrations and the classification check with
-        --postgres-only --format json, proving that the generated project's
+        --postgres-only --json, proving that the generated project's
         local workflow triggers the same widened contract as CI
         (CR-SA15.1-002).
         """
@@ -3367,7 +3365,7 @@ class TestDevOpsTemplateRendering:
             "Makefile target must invoke check_tenant_isolation"
         )
         assert "--postgres-only" in output, "Makefile must pass --postgres-only"
-        assert "--format json" in output, "Makefile must use JSON output format"
+        assert "--json" in output, "Makefile must use JSON output format"
         # Migrations run first so the schema is available.
         assert "migrate" in output, (
             "Makefile must run migrations before the classification check"

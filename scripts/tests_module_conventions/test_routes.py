@@ -608,3 +608,48 @@ def test_authorization_controls() -> None:
         views=('def index(request):\n    """redirect_to_login"""\n    return None\n'),
     )
     assert _violations(checker.rule_19_authorization, documented) == []
+
+
+def test_template_folder_depth_control() -> None:
+    module = _golden_module()
+    for folder in ("demo", "reports"):
+        nested = _with_files(
+            module,
+            **{
+                f"templates/quickscale_demo/{folder}/page.html": (
+                    '{% extends "quickscale_demo/base.html" %}\n'
+                    "{% block demo_content %}{% endblock %}\n"
+                )
+            },
+        )
+        assert any(
+            "is not flat under" in violation
+            for violation in _violations(checker.rule_8_templates, nested)
+        )
+
+
+def test_admin_override_path_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        **{
+            "admin.py": (
+                "class WidgetAdmin:\n"
+                "    change_list_template = 'quickscale_demo/admin/widget/change_list.html'\n"
+            )
+        },
+    )
+    assert any(
+        "admin override" in violation for violation in _violations(checker.rule_8_templates, broken)
+    )
+    bare = _with_files(
+        module,
+        **{
+            "admin.py": (
+                "class WidgetAdmin:\n    change_list_template = 'admin/change_list.html'\n"
+            )
+        },
+    )
+    assert any(
+        "admin override" in violation for violation in _violations(checker.rule_8_templates, bare)
+    )

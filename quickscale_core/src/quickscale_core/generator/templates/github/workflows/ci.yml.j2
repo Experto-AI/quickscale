@@ -119,7 +119,7 @@ jobs:
         DJANGO_SETTINGS_MODULE: "{{ package_name }}.settings.base"
 
     - name: Run tenant isolation conformance check
-      run: poetry run python manage.py quickscale_orgs_check_tenant_isolation --postgres-only --format json
+      run: poetry run python manage.py quickscale_orgs_check_tenant_isolation --postgres-only --json
       env:
         DATABASE_URL: postgres://postgres@localhost/postgres
         DJANGO_SETTINGS_MODULE: "{{ package_name }}.settings.base"

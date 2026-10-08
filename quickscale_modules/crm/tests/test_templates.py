@@ -11,7 +11,7 @@ import quickscale_modules_crm
 
 MODULE_PATH = Path(quickscale_modules_crm.__file__).parent
 BASE_TEMPLATE = MODULE_PATH / "templates" / "quickscale_crm" / "base.html"
-CHILD_DIR = MODULE_PATH / "templates" / "quickscale_crm" / "crm"
+CHILD_DIR = MODULE_PATH / "templates" / "quickscale_crm"
 
 
 class TestBaseTemplateInheritance:

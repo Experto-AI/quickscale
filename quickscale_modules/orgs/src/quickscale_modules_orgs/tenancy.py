@@ -63,7 +63,7 @@ from django.db import models
 
 
 # ---------------------------------------------------------------------------
-# SA14.5 — Refresh FORCE RLS policies from the current template
+# Refresh FORCE RLS policies from the current template
 # ---------------------------------------------------------------------------
 
 
@@ -71,7 +71,7 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
     """Drop and recreate FORCE RLS policies on all discovered tenant tables.
 
     Uses the current ``_FORCE_RLS_FORWARD_SQL`` template so that any
-    template changes (e.g. the SA14.5 ``operator_access`` OR clause) take
+    template changes (e.g. the ``operator_access`` OR clause) take
     effect on existing policies.
 
     The function discovers tenant models from their ``TenantModel``
@@ -160,7 +160,7 @@ def refresh_force_rls_policies(schema_editor: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# SA1.4 — Default-deny classification check
+# Default-deny classification check
 # ---------------------------------------------------------------------------
 # Every concrete model from a project-owned app must carry a marker-derived
 # classification — either a tenant contract or an explicit
@@ -318,14 +318,14 @@ def get_concrete_project_models() -> list[type[models.Model]]:
     Uses :func:`is_project_app` to scope the search to project-owned
     apps.  Abstract and proxy models are excluded.  Auto-created models
     (e.g. implicit ManyToMany through tables) are included so that they
-    are covered by the default-deny classification guarantee (SA1.4).
+    are covered by the default-deny classification guarantee.
 
     Returns:
         A list of concrete Django model classes from project-owned apps.
-        Uses :func:`is_project_app` with the widened SA15.1 scope: all
+        Uses :func:`is_project_app` with the widened scope: all
         non-contrib, non-third-party installed apps.  Auto-created through
         models are included so they are covered by the default-deny
-        classification guarantee (SA1.4).
+        classification guarantee.
     """
     from django.apps import apps
 
@@ -384,7 +384,7 @@ def is_classified_in_registry(model: type[models.Model]) -> bool:
     * It is a tenant model identified by ``TenantModel`` inheritance,
       **or**
     * It is an auto-created implicit ManyToMany through model whose
-      project-owned endpoints are marker-classified (SA15.1 — Option A).
+      project-owned endpoints are marker-classified (Option A).
 
     The historical function name is retained for compatibility. The
     shipped-module parity registry lives in test code and is never consulted
@@ -407,11 +407,11 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
     ``tenant_excluded``.
 
     A model is unclassified when it has no marker-derived tenant contract
-    (SA15.1). The test-owned shipped-module registry is deliberately not part
+    The test-owned shipped-module registry is deliberately not part
     of this runtime decision.
     Auto-created implicit ManyToMany through models whose source and
     target models are both classified are considered classified via
-    relation inference (SA15.1 — Option A).
+    relation inference (Option A).
 
     Returns:
         A list of unclassified model classes.
@@ -422,7 +422,7 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
 
 
 # ---------------------------------------------------------------------------
-# Marker-based derived registry overview (SA15.3)
+# Marker-based derived registry overview
 # ---------------------------------------------------------------------------
 # This function produces a human-readable tenant-table registry from model
 # markers, replacing the hand-maintained HTML count assertions that were
@@ -438,7 +438,7 @@ def get_unclassified_concrete_models() -> list[type[models.Model]]:
 # The derived overview uses ``_is_classified_by_marker_only`` — a marker-only
 # classification path that consults no registry oracle.  This ensures the
 # derived view is purely marker-driven: every model must be detectable by
-# markers alone, with no registry fallback at any layer (SA15.3 — follow-up).
+# markers alone, with no registry fallback at any layer (follow-up).
 # ---------------------------------------------------------------------------
 
 

@@ -123,8 +123,8 @@ existing organization ownership and FORCE RLS requirements in place, but this re
 model-facing names: every organization-scoped model now inherits `TenantModel` (a `TenantManager` on
 a model that does not inherit it fails startup), cross-module reverse accessors take the
 `quickscale_<module>_<name>` form, and model choice constants become `TextChoices` members. A
-project that reads an old reverse accessor or choice constant updates to the new name. Organization purge adds a fail-closed precondition but no new command-line
-option; cancelled subscriptions remain purgeable, while any current row without a Stripe
+project that reads an old reverse accessor or choice constant updates to the new name. Organization purge adds fail-closed preconditions and requires
+`--confirm <slug or uuid>` on a destructive run; cancelled subscriptions remain purgeable, while any current row without a Stripe
 subscription ID blocks purge and dry run until reconciled. An incomplete subscription or one-time
 purchase Checkout reservation must reach provider-confirmed expiry first. Reconciliation runs
 outside database transactions; completed subscription sessions retain their subscription identity
@@ -268,6 +268,34 @@ notification logging moves from `quickscale_modules_forms.notifications` to
 `quickscale_modules_forms.views`, and orgs' VIEW-AS debug-helper logging moves from
 `quickscale_modules_orgs.debug_helpers` to `quickscale_modules_orgs.debug_views`. The operator
 step is to update log filters, handlers, and alert rules keyed on the retired channel names.
+
+The module-conventions sweep changes host-overridable template paths, one model field name,
+constraint names, and operator-facing command flags, so an existing project or cron job updates
+with this release:
+
+- Moved template paths (an override of the old path renames to the new one):
+  `templates/quickscale_blog/blog/post_list.html`, `post_detail.html`, `category_list.html`, and
+  `tag_list.html` move up one folder to `templates/quickscale_blog/<name>.html`;
+  `templates/quickscale_listings/listings/listing_list.html` and `listing_detail.html`,
+  `templates/quickscale_crm/crm/dashboard.html`,
+  `templates/quickscale_forms/forms/form_page.html`, and
+  `templates/quickscale_billing/billing/portal_return.html` move the same way; and
+  `templates/quickscale_orgs/admin/org_change_list.html` moves to
+  `templates/admin/quickscale_orgs/organization/change_list.html`.
+- Blog's `Post.published_date` and listings' `AbstractListing.published_date` become
+  `published_at`; admin, RSS, and template consumers move with them.
+- Module constraint names take the lowercased model class name, a field-named purpose, and the
+  `_unique` suffix inside the clean-break `0001_initial` (for example
+  `quickscale_crm_company_id_org_unique` becomes
+  `quickscale_crm_company_id_organization_unique`).
+- `quickscale_backups_create --scheduled` is removed; use `--trigger scheduled`. A bare
+  `quickscale_backups_prune` now records `manual` provenance, so a scheduler names
+  `--trigger scheduled`. `quickscale_orgs_check_tenant_isolation --format json` becomes `--json`;
+  a destructive `quickscale_orgs_purge_organization` requires `--confirm <slug-or-uuid>` matching
+  the organization's slug or UUID, while dry runs and `--slug` preflight do not;
+  `quickscale_forms_anonymize_submissions` takes `--trigger {manual,scheduled}`, defaults to
+  `manual`, and refuses only a scheduled run while the module is switched off, so an existing
+  cron job names `--trigger scheduled`.
 
 ## Delivery provenance
 

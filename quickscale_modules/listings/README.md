@@ -47,7 +47,7 @@ Module-to-module use goes through `services.py` (Module Conventions rule 4):
 | `featured_image_alt` | CharField | Alt text for accessibility |
 | `created_at` | DateTimeField | Auto-set on creation |
 | `updated_at` | DateTimeField | Auto-set on update |
-| `published_date` | DateTimeField | Set when the status becomes PUBLISHED |
+| `published_at` | DateTimeField | Set when the status becomes PUBLISHED |
 
 ### Publish API
 
@@ -123,7 +123,7 @@ REST_FRAMEWORK.setdefault(
 
 Template customization: all templates extend `quickscale_listings/base.html`.
 Override the base at `templates/quickscale_listings/base.html` or individual pages at
-`templates/quickscale_listings/listings/<page>.html`. The module ships zero-style semantic
+`templates/quickscale_listings/<page>.html`. The module ships zero-style semantic
 templates; add your own CSS in the project.
 
 ## Extending

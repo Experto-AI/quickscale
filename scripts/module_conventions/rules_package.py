@@ -21,6 +21,7 @@ from scripts.module_conventions.core import (
     _declared_exports,
     _docstring_nodes,
     _is_settings_receiver,
+    _keyword,
     _model_classes,
     _parse,
     _service_module_bindings,
@@ -30,6 +31,38 @@ from scripts.module_conventions.core import (
     _string_assignments,
     _string_list,
 )
+
+CONFIRM_COMMAND_KEYWORDS = ("purge", "restore")
+
+
+def _command_flags(tree: ast.Module) -> dict[str, ast.Call]:
+    """Map each ``add_argument`` option string to the call declaring it."""
+    flags: dict[str, ast.Call] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _call_func_name(node) == "add_argument":
+            for argument in node.args:
+                if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+                    flags.setdefault(argument.value, node)
+    return flags
+
+
+def _literal_strings(node: ast.expr | None) -> set[str]:
+    """Return the string members of a literal list, tuple, or set."""
+    if not isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return set()
+    return {
+        element.value
+        for element in node.elts
+        if isinstance(element, ast.Constant) and isinstance(element.value, str)
+    }
+
+
+def _constant_string(node: ast.expr | None) -> str | None:
+    """Return a string literal's value, or None for anything else."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
 
 DESTRUCTIVE_COMMAND_KEYWORDS = (
     "purge",
@@ -364,6 +397,38 @@ def rule_17_management_commands(corpus: Corpus) -> list[str]:
             if command == "__init__":
                 continue
             tree = _parse(text)
+            flags = _command_flags(tree)
+            if "--format" in flags:
+                violations.append(
+                    f"rule 17: {module.name}: {command} spells machine output --format; use --json"
+                )
+            if "--scheduled" in flags:
+                violations.append(
+                    f"rule 17: {module.name}: {command} keeps the retired "
+                    "--scheduled alias; use --trigger scheduled"
+                )
+            trigger = flags.get("--trigger")
+            if trigger is not None:
+                choices = _literal_strings(_keyword(trigger, "choices"))
+                if "manual" not in choices or "scheduled" not in choices:
+                    violations.append(
+                        f"rule 17: {module.name}: {command} --trigger must offer "
+                        "manual and scheduled"
+                    )
+                if (
+                    _keyword(trigger, "default") is None
+                    or _constant_string(_keyword(trigger, "default")) != "manual"
+                ):
+                    violations.append(
+                        f"rule 17: {module.name}: {command} --trigger must default to manual"
+                    )
+            if (
+                any(keyword in command for keyword in CONFIRM_COMMAND_KEYWORDS)
+                and "--confirm" not in flags
+            ):
+                violations.append(
+                    f"rule 17: {module.name}: {command} deletes data and takes no --confirm"
+                )
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call) and _call_func_name(node) == "print":
                     violations.append(f"rule 17: {module.name}: {command} calls print()")

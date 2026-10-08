@@ -98,7 +98,7 @@ contract_vintage:
     - "Recreate the Stripe webhook endpoint at API version 2026-06-24.dahlia and point it at /billing/webhooks/stripe/: an endpoint on an older API version stops processing billing webhooks (500s) until it is recreated, and events refused under the old version are not credited automatically, so reconcile them once the endpoint is updated — resend each event to the new endpoint (Stripe Dashboard Resend, or stripe events resend --webhook-endpoint=<endpoint_id>, up to 30 days) and, when an event is still refused or outside the resend window, credit the affected invoice once through the module's credit_user service."
 
 # ---------------------------------------------------------------------------
-# Manifest derivation rules (T2.3 Phase 3)
+# Manifest derivation rules
 # ---------------------------------------------------------------------------
 derivation:
   wiring_projections:

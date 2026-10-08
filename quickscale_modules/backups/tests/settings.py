@@ -54,7 +54,7 @@ TEMPLATES = [
     }
 ]
 
-WSGI_APPLICATION = "tests.wsgi.application"
+WSGI_APPLICATION = "tests._wsgi.application"
 
 # Backups module now uses the PostgreSQL/RLS integration seam
 # via QS_BACKUPS_DB_* env vars, matching every other module's pattern.

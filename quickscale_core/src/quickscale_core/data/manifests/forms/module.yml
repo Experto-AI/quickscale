@@ -81,7 +81,7 @@ retired_options:
     'api_enabled' instead.
 
 # ---------------------------------------------------------------------------
-# Manifest derivation rules (T2.3 Phase 3)
+# Manifest derivation rules
 # ---------------------------------------------------------------------------
 derivation:
   wiring_projections:

@@ -51,7 +51,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_filter = ["is_personal"]
     search_fields = ["name", "slug", "stripe_customer_id"]
     ordering = ["name"]
-    change_list_template = "quickscale_orgs/admin/org_change_list.html"
+    change_list_template = "admin/quickscale_orgs/organization/change_list.html"
 
     # ------------------------------------------------------------------
     # VIEW-AS admin affordances — direct session set/clear
@@ -160,7 +160,7 @@ class OrganizationInvitationAdmin(admin.ModelAdmin):
 
 
 # ---------------------------------------------------------------------------
-# SA14.1 — Generalized org-scoped admin base (Finding: operator-read-path-undefined)
+# Generalized org-scoped admin base (Finding: operator-read-path-undefined)
 # ---------------------------------------------------------------------------
 # The helpers below generalise the pattern social/admin.py already proves
 # works under RLS.  TenantModelAdmin subclasses get automatic org-scoped

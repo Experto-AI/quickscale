@@ -232,7 +232,16 @@ class TestFormsAnonymizeSubmissions:
     def test_disabled_module_refuses_the_retention_job(self):
         """Rule 1 (D3): a switched-off module runs none of its scheduled jobs."""
         with pytest.raises(CommandError, match="QUICKSCALE_FORMS_ENABLED"):
-            call_command("quickscale_forms_anonymize_submissions", verbosity=0)
+            call_command(
+                "quickscale_forms_anonymize_submissions",
+                trigger="scheduled",
+                verbosity=0,
+            )
+
+    @override_settings(QUICKSCALE_FORMS_ENABLED=False)
+    def test_disabled_module_keeps_a_manual_retention_run(self):
+        """An operator's manual run stays available while the module is off."""
+        call_command("quickscale_forms_anonymize_submissions", verbosity=0)
 
     def test_anonymize_does_not_touch_recent_submissions(self, form):
         """Submissions newer than data_retention_days are not anonymized"""
@@ -514,6 +523,7 @@ class TestPurgeOrganization:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,

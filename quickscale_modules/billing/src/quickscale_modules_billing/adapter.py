@@ -8,7 +8,7 @@ when the module package is importable.
 When the module package is **not** importable,
 :func:`refresh_managed_adapters` raises
 :class:`~quickscale_core.contracts.module_discovery.ImproperlyConfigured` — bundled/installed
-without module source is not a supported context (AF7 fail-hard decision).
+without module source is not a supported context (fail-hard decision).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def _billing_post_hook(
     """
     settings = dict(spec.settings)
 
-    # SA17.2 — Legacy bool() coercion on required enabled flag.
+    # Legacy bool coercion on required enabled flag.
     # The key must already be present (AppConfig.ready() enforces it).
     settings["QUICKSCALE_BILLING_ENABLED"] = bool(
         settings["QUICKSCALE_BILLING_ENABLED"]

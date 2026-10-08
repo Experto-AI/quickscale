@@ -3,7 +3,7 @@
 This is the *only* management command the CLI uses for DR operations —
 it replaces the previous protocol of one management command per DR
 operation.  The CLI passes the adapter function name and its keyword
-arguments as JSON via stdin (SA31); this command dispatches to the
+arguments as JSON via stdin; this command dispatches to the
 adapter and writes the JSON result to stdout.
 
 Management commands for admin/manual use (``quickscale_backups_create``,
@@ -53,7 +53,7 @@ class Command(BaseCommand):
                 raise CommandError("--args-json must be a JSON object.")
             return kwargs
 
-        # Read from stdin (SA31 transport)
+        # Read from stdin (transport)
         raw = sys.stdin.read()
         if not raw.strip():
             raise CommandError(

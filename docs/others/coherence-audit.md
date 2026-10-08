@@ -1677,3 +1677,37 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   dashboard requires login and the active organization's `viewer` role through orgs' one role
   check; billing's `AllowAny` half remains open for SA262, and `members_diverging` is now
   `[billing]`).
+
+### 2026-10-08 (e) — SA266 conventions sweep (harness 43 rules, 251 controls)
+
+- 2026-10-08 (e) — `model-basics`: **resolved** (SA266 — `Meta.app_label` removed from the seven
+  modules that set it; the six modules' default-equal `verbose_name`/`verbose_name_plural`
+  removed while irregular plurals stay; blog's and listings' `published_date` renamed to
+  `published_at`, with their `0001_initial` rewritten in place; harness rule 14 now refuses an
+  explicit `app_label`, a non-`_at` `DateTimeField` name outside a `_start`/`_end` period
+  boundary, and a default-equal `verbose_name`, with controls). Item 21.
+- 2026-10-08 (e) — `template-folder-depth`: **resolved** (SA266 — nine page templates of blog,
+  listings, crm, forms, and billing flattened under `templates/quickscale_<module>/`; orgs'
+  admin override moved to `templates/admin/quickscale_orgs/organization/change_list.html`; the
+  v0.89.0 release note lists every moved path; harness rule 8 rejects a module-named page
+  sub-folder and an admin override outside `admin/<label>/<model>/`, with controls). Item 22.
+- 2026-10-08 (e) — `test-file-names`: **resolved** (SA266 — six tracked non-test files renamed to
+  private helpers (`_wsgi.py`, `_diag_setlocal.py`, `_stripe_payloads.py`, `_models.py`,
+  `_views.py`, `_bypassed_boundary.py`); rule 29's file set now names `tests/templates/` and
+  `__init__.py`, and the harness closes the set over `tests/` entries, with controls). Item 23.
+- 2026-10-08 (e) — `ticket-ids-in-shipped-source`: **resolved** (SA266 — every `SA`/`AF`/`CR-SA`
+  and `T<n>.<n>` id removed from shipped module source and the six `(T2.3 Phase 3)` manifest
+  headers; the harness reuses the ticket vocabulary over `src/**/*.py` and `module.yml`, with
+  controls). Item 24.
+- 2026-10-08 (e) — `constraint-purpose-tokens`: **resolved** (SA266 — twelve `UniqueConstraint`
+  names now use the lowercased class name, `organization` instead of `org`, and the `_unique`
+  suffix, inside the rewritten `0001_initial`s; notifications' full shape exceeds 63 characters,
+  so its purpose abbreviates to `recipient_unique`; harness rule 25 checks the class token, the
+  `org` token, and the `_unique` placement, with controls). Item 25.
+- 2026-10-08 (e) — `command-flag-conventions`: **resolved** (SA266 — orgs'
+  `check_tenant_isolation --format json` becomes `--json`; a destructive
+  `quickscale_orgs_purge_organization` requires `--confirm <slug>`; `quickscale_backups_prune`
+  defaults to `manual`; `quickscale_forms_anonymize_submissions` takes
+  `--trigger {manual,scheduled}` and refuses only the scheduled run while off; backups'
+  `--scheduled` alias is retired for `--trigger scheduled`; harness rule 17 checks the flag
+  vocabulary, with controls). Item 16.

@@ -75,7 +75,7 @@ dependencies:
   - posthog>=7.33.0,<8.0.0
 
 # ---------------------------------------------------------------------------
-# Manifest derivation rules (T2.3 Phase 3)
+# Manifest derivation rules
 # ---------------------------------------------------------------------------
 derivation:
   # Module-level wiring projections — always contributed regardless of options.

@@ -1,4 +1,4 @@
-"""SA1.3 — Generic tenant-isolation conformance management command.
+"""Generic tenant-isolation conformance management command.
 
 Discovers tenant models by marker (a ``TenantModel`` subclass, directly or
 through a module's abstract base) across **all** installed app labels — not
@@ -12,7 +12,7 @@ Usage::
 
     python manage.py quickscale_orgs_check_tenant_isolation
     python manage.py quickscale_orgs_check_tenant_isolation --postgres-only
-    python manage.py quickscale_orgs_check_tenant_isolation --format json
+    python manage.py quickscale_orgs_check_tenant_isolation --json
 
 Failures raise ``CommandError`` so the management runner reports the failure
 and exits non-zero.
@@ -51,7 +51,7 @@ def _unclassified_payload(unclassified: list) -> list[dict[str, object]]:
 
 
 class Command(BaseCommand):
-    """SA1.3 conformance command: discover tenant models and verify isolation."""
+    """Conformance command: discover tenant models and verify isolation."""
 
     help = (
         "Discover tenant models by TenantModel inheritance across all "
@@ -66,20 +66,21 @@ class Command(BaseCommand):
             action="store_true",
             default=False,
             help="Skip PostgreSQL-specific checks on non-PostgreSQL connections. "
-            "The SA1.4 classification check still runs (CR-SA14-002).",
+            "The classification check still runs.",
         )
         parser.add_argument(
-            "--format",
-            choices=("human", "json"),
-            default="human",
-            help="Output format (default: human).",
+            "--json",
+            action="store_true",
+            dest="as_json",
+            default=False,
+            help="Emit the structured JSON report for automation.",
         )
 
-    def _read_options(self, options: dict) -> tuple[bool, str]:
-        """Return the parsed ``--postgres-only`` and ``--format`` options."""
+    def _read_options(self, options: dict) -> tuple[bool, bool]:
+        """Return the parsed ``--postgres-only`` and ``--json`` options."""
         postgres_only: bool = options.get("postgres_only", False)  # type: ignore[assignment]
-        fmt: str = options.get("format", "human")  # type: ignore[assignment]
-        return postgres_only, fmt
+        as_json: bool = bool(options.get("as_json", False))
+        return postgres_only, as_json
 
     def _write_classification_hint(self, model: type[models.Model]) -> None:
         """Write remediation guidance for an unclassified model."""
@@ -181,13 +182,13 @@ class Command(BaseCommand):
         self,
         *,
         postgres_only: bool,
-        fmt: str,
+        as_json: bool,
         unclassified: list,
         has_unclassified: bool,
     ) -> str | None:
         """Report the no-tenant-models outcome, raising on unclassified models."""
         is_pg_skip = postgres_only and connection.vendor != "postgresql"
-        if fmt == "json":
+        if as_json:
             self.stdout.write(
                 json.dumps(
                     self._no_models_json_payload(
@@ -208,9 +209,9 @@ class Command(BaseCommand):
             raise CommandError(_UNCLASSIFIED_FAILURE)
         return None
 
-    def _write_postgres_skip_clean(self, fmt: str) -> None:
+    def _write_postgres_skip_clean(self, as_json: bool) -> None:
         """Write the clean ``--postgres-only`` skip output."""
-        if fmt == "json":
+        if as_json:
             self.stdout.write(
                 json.dumps(
                     {
@@ -224,12 +225,12 @@ class Command(BaseCommand):
         else:
             self.stdout.write("SKIP: --postgres-only and not connected to PostgreSQL.")
 
-    def _handle_postgres_skip(self, *, fmt: str, unclassified: list) -> str | None:
+    def _handle_postgres_skip(self, *, as_json: bool, unclassified: list) -> str | None:
         """Report the ``--postgres-only`` skip, raising on unclassified models."""
         if not unclassified:
-            self._write_postgres_skip_clean(fmt)
+            self._write_postgres_skip_clean(as_json)
             return None
-        if fmt == "json":
+        if as_json:
             self.stdout.write(
                 json.dumps(
                     {
@@ -327,35 +328,37 @@ class Command(BaseCommand):
         )
 
     def handle(self, **options: object) -> str | None:
-        postgres_only, fmt = self._read_options(options)
+        postgres_only, as_json = self._read_options(options)
 
         models = get_tenant_models()
 
-        # ---- SA1.4 — Classification check runs before any --postgres-only
+        # ---- Classification check runs before any --postgres-only
         # skip so that DB-agnostic unclassified-model detection cannot be
-        # bypassed (CR-SA14-002). -------------------------------------------
+        # bypassed. -------------------------------------------
         unclassified = get_unclassified_concrete_models()
         has_unclassified = len(unclassified) > 0
 
         if not models:
             return self._handle_no_tenant_models(
                 postgres_only=postgres_only,
-                fmt=fmt,
+                as_json=as_json,
                 unclassified=unclassified,
                 has_unclassified=has_unclassified,
             )
 
-        # ---- SA1.3 — Tenant model isolation check -------------------------
+        # ---- Tenant model isolation check -------------------------
         results = [check_tenant_model_isolation(m) for m in models]
         passed_count = sum(1 for r in results if r["passed"])
         failed_count = len(results) - passed_count
 
         # If --postgres-only and not on PostgreSQL, report classification
-        # findings and skip the remaining output (CR-SA14-002).
+        # findings and skip the remaining output.
         if postgres_only and connection.vendor != "postgresql":
-            return self._handle_postgres_skip(fmt=fmt, unclassified=unclassified)
+            return self._handle_postgres_skip(
+                as_json=as_json, unclassified=unclassified
+            )
 
-        if fmt == "json":
+        if as_json:
             self.stdout.write(
                 json.dumps(
                     self._json_report(

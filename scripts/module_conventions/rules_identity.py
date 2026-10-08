@@ -28,6 +28,10 @@ from scripts.module_conventions.core import (
 
 TICKET_IN_TEST = re.compile(r"(?<![A-Za-z0-9])(?:SA|AF)\d+|CR-SA\d+")
 
+# Shipped source and manifests additionally carry the plan-phase ``T<n>.<n>``
+# ids the audit counts alongside ``SA``/``AF`` ids.
+TICKET_IN_SHIPPED = re.compile(TICKET_IN_TEST.pattern + r"|T\d+\.\d+")
+
 # Rule 28's allowed package-file names: rule 11's files, rule 10's files,
 # rule 16's files, the Django and DRF names, and auth's allauth adapter.
 RULE_28_ALLOWED_FILES = frozenset(
@@ -544,9 +548,43 @@ def rule_24_small_conventions(corpus: Corpus) -> list[str]:
     return violations
 
 
+def _tests_entry_allowed(rel: str) -> bool:
+    """Return whether one ``tests/`` entry is inside rule 29's file set."""
+    parts = rel.split("/")
+    if parts[0] == "templates" or parts[0].endswith("_app"):
+        return True
+    if len(parts) > 1:
+        return parts[0].startswith("_")
+    name = parts[0]
+    if name in {"__init__.py", "conftest.py"} or name.startswith("_"):
+        return True
+    if name.startswith("test_") and name.endswith(".py"):
+        return True
+    return (name.startswith("settings") or name.startswith("urls")) and name.endswith(".py")
+
+
 def rule_29_test_names(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
+        for rel in module.tests:
+            if not _tests_entry_allowed(rel):
+                violations.append(
+                    f"rule 29: {module.name}: {rel} is outside rule 29's tests file set"
+                )
+        for rel, text in module.files.items():
+            if not rel.endswith(".py"):
+                continue
+            for lineno, line in enumerate(text.splitlines(), start=1):
+                if TICKET_IN_SHIPPED.search(line):
+                    violations.append(
+                        f"rule 29: {module.name}: {rel}:{lineno} carries a ticket id "
+                        "in shipped source"
+                    )
+        for lineno, line in enumerate(module.manifest_text.splitlines(), start=1):
+            if TICKET_IN_SHIPPED.search(line):
+                violations.append(
+                    f"rule 29: {module.name}: module.yml:{lineno} carries a ticket id"
+                )
         for rel, text in module.tests.items():
             basename = Path(rel).name
             if not basename.startswith("test_") or not basename.endswith(".py"):

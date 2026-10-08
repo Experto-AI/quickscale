@@ -44,7 +44,7 @@ from quickscale_modules_orgs.tenancy import (
     apply_force_rls,
 )
 
-from tests.stripe_payloads import checkout_session_event
+from tests._stripe_payloads import checkout_session_event
 
 # ---------------------------------------------------------------------------
 # Restricted role helpers (mirror the social module pattern)

@@ -2,7 +2,7 @@
 
 Implementation detail of
 :mod:`quickscale_modules_billing._subscription_checkout`: these helpers keep
-the orchestration modules below the repository file-length gate (SA242).
+the orchestration modules below the repository file-length gate.
 """
 
 from __future__ import annotations

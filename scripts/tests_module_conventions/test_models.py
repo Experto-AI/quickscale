@@ -414,3 +414,237 @@ def test_constraint_name_controls() -> None:
         "UniqueConstraint without a name" in violation
         for violation in _violations(checker.rule_25_constraint_names, abstract_constraint)
     )
+
+
+def test_model_basics_app_label_control() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_14_model_basics, module) == []
+    broken = _with_files(
+        module,
+        models=module.files["models.py"].replace(
+            "    class Meta(TenantModel.Meta):\n        ordering = ['pk']",
+            "    class Meta(TenantModel.Meta):\n        app_label = 'quickscale_demo'\n"
+            "        ordering = ['pk']",
+        ),
+    )
+    assert any(
+        "app_label" in violation for violation in _violations(checker.rule_14_model_basics, broken)
+    )
+
+
+def test_model_basics_datetime_suffix_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        models=module.files["models.py"].replace(
+            "    class Meta(TenantModel.Meta):",
+            "    published_date = models.DateTimeField(auto_now_add=True)\n\n"
+            "    class Meta(TenantModel.Meta):",
+        ),
+    )
+    assert any(
+        "_at suffix" in violation for violation in _violations(checker.rule_14_model_basics, broken)
+    )
+    accepted = _with_files(
+        module,
+        models=module.files["models.py"].replace(
+            "    class Meta(TenantModel.Meta):",
+            "    published_at = models.DateTimeField(auto_now_add=True)\n\n"
+            "    class Meta(TenantModel.Meta):",
+        ),
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+def test_model_basics_verbose_name_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        models=module.files["models.py"].replace(
+            "    class Meta(TenantModel.Meta):\n        ordering = ['pk']",
+            "    class Meta(TenantModel.Meta):\n        verbose_name = 'Widget'\n"
+            "        ordering = ['pk']",
+        ),
+    )
+    assert any(
+        "verbose_name" in violation
+        for violation in _violations(checker.rule_14_model_basics, broken)
+    )
+    accepted = _with_files(
+        module,
+        models=module.files["models.py"].replace(
+            "    class Meta(TenantModel.Meta):\n        ordering = ['pk']",
+            "    class Meta(TenantModel.Meta):\n        verbose_name_plural = 'Widgetry'\n"
+            "        ordering = ['pk']",
+        ),
+    )
+    assert _violations(checker.rule_14_model_basics, accepted) == []
+
+
+def test_constraint_token_controls() -> None:
+    module = _golden_module()
+    wrong_model = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        constraints = [\n"
+            "            models.UniqueConstraint(\n"
+            "                fields=['slug'], name='quickscale_demo_gadget_slug_unique'\n"
+            "            )\n"
+            "        ]\n"
+        ),
+    )
+    assert any(
+        "must start with quickscale_demo_widget_" in violation
+        for violation in _violations(checker.rule_25_constraint_names, wrong_model)
+    )
+    org_token = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        constraints = [\n"
+            "            models.UniqueConstraint(\n"
+            "                fields=['slug'], name='quickscale_demo_widget_org_unique'\n"
+            "            )\n"
+            "        ]\n"
+        ),
+    )
+    assert any(
+        "as 'org'" in violation
+        for violation in _violations(checker.rule_25_constraint_names, org_token)
+    )
+    no_suffix = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        constraints = [\n"
+            "            models.UniqueConstraint(\n"
+            "                fields=['slug'], name='quickscale_demo_widget_slug'\n"
+            "            )\n"
+            "        ]\n"
+        ),
+    )
+    assert any(
+        "must end with _unique" in violation
+        for violation in _violations(checker.rule_25_constraint_names, no_suffix)
+    )
+
+
+def test_constraint_field_purpose_control() -> None:
+    module = _golden_module()
+    wrong_field = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        constraints = [\n"
+            "            models.UniqueConstraint(\n"
+            "                fields=['slug'], name='quickscale_demo_widget_title_unique'\n"
+            "            )\n"
+            "        ]\n"
+        ),
+    )
+    assert any(
+        "constrained field" in violation
+        for violation in _violations(checker.rule_25_constraint_names, wrong_field)
+    )
+    opaque_condition = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "def populated(value):\n"
+            "    return models.Q(**{value + '__isnull': False})\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        constraints = [\n"
+            "            models.UniqueConstraint(\n"
+            "                fields=['slug'],\n"
+            "                condition=populated('slug'),\n"
+            "                name='quickscale_demo_widget_slug_unique',\n"
+            "            )\n"
+            "        ]\n"
+        ),
+    )
+    assert _violations(checker.rule_25_constraint_names, opaque_condition) == []
+
+
+def test_model_basics_auth_base_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        models=(
+            "from django.contrib.auth.models import AbstractUser\n\n\n"
+            "class Account(AbstractUser):\n"
+            "    class Meta:\n"
+            "        app_label = 'quickscale_demo'\n"
+            "        verbose_name = 'Account'\n"
+        ),
+    )
+    violations = _violations(checker.rule_14_model_basics, broken)
+    assert any("app_label" in violation for violation in violations)
+    assert any("verbose_name" in violation for violation in violations)
+
+
+def test_constraint_suffix_only_purpose_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        constraints = [\n"
+            "            models.UniqueConstraint(\n"
+            "                fields=['slug'], name='quickscale_demo_widget_unique'\n"
+            "            )\n"
+            "        ]\n"
+        ),
+    )
+    assert any(
+        "names no constrained field" in violation
+        for violation in _violations(checker.rule_25_constraint_names, broken)
+    )
+
+
+def test_check_constraint_purpose_control() -> None:
+    module = _golden_module()
+    wrong_field = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        constraints = [\n"
+            "            models.CheckConstraint(\n"
+            "                condition=models.Q(quantity__gte=0),\n"
+            "                name='quickscale_demo_widget_price_positive',\n"
+            "            )\n"
+            "        ]\n"
+        ),
+    )
+    assert any(
+        "names no checked field" in violation
+        for violation in _violations(checker.rule_25_constraint_names, wrong_field)
+    )
+    correct_field = _with_files(
+        module,
+        models=(
+            "from django.db import models\n\n\n"
+            "class Widget(models.Model):\n"
+            "    class Meta:\n"
+            "        constraints = [\n"
+            "            models.CheckConstraint(\n"
+            "                condition=models.Q(quantity__gte=0),\n"
+            "                name='quickscale_demo_widget_quantity_positive',\n"
+            "            )\n"
+            "        ]\n"
+        ),
+    )
+    assert _violations(checker.rule_25_constraint_names, correct_field) == []

@@ -1,4 +1,4 @@
-"""SA28 last-owner guard and organization locking for account deletion.
+"""Last-owner guard and organization locking for account deletion.
 
 The account-deletion view mixes these helpers in; they read and lock the
 organizations the deletion touches, but they never call the removal
@@ -103,7 +103,7 @@ class _AccountDeletionGuardMixin:
         org still has other members.
 
         Delegates to the canonical ``OrganizationMembership`` check
-        (SA47).  Sole-member personal orgs are naturally skipped here
+        Sole-member personal orgs are naturally skipped here
         (no other members to protect) because ``is_last_owner_with_members``
         checks for other members first.  Personal orgs with other members
         are included so that last-owner protection applies to them too.

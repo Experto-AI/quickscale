@@ -158,7 +158,7 @@ The DR engine split is a maintainer-side code reorganization. The `backups` modu
 ### Notes for Existing Projects
 
 The following surfaces are preserved:
-- **Management commands** (e.g., cron jobs calling `manage.py backups_create --scheduled`): these are **preserved** and continue to work with backward-compatible env-var fallback. Note that they import from `quickscale-core` at runtime, so the dependency must be satisfied (see Step 2 above).
+- **Management commands** (e.g., cron jobs calling `manage.py backups_create --trigger scheduled`): these are **preserved** and continue to work with backward-compatible env-var fallback. Note that they import from `quickscale-core` at runtime, so the dependency must be satisfied (see Step 2 above).
 
 - **If you rely on the stdout-JSON format of the old management commands for scripting:** the management commands remain thin wrappers over the same service layer. The output format is functionally equivalent. Verify your integration if you parse specific keys from `backups_report` or `backups_restore`.
 
@@ -197,7 +197,7 @@ After migration:
 - [ ] `quickscale dr report` reads back stored snapshots
 - [ ] Management commands continue to work:
   ```bash
-  python manage.py backups_create --scheduled
+  python manage.py backups_create --trigger scheduled
   python manage.py backups_report <snapshot_id>
   ```
 - [ ] The retained management commands accept env-var fallback (`QUICKSCALE_DR_TARGET_*`)

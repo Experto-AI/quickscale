@@ -49,18 +49,17 @@ class Organization(models.Model):
     objects = OrganizationManager()
 
     class Meta:
-        app_label = "quickscale_orgs"
         ordering = ["name"]
         constraints = [
             models.UniqueConstraint(
                 fields=["is_system"],
                 condition=models.Q(is_system=True),
-                name="quickscale_orgs_organization_unique_system_org",
+                name="quickscale_orgs_organization_is_system_unique",
             ),
             models.UniqueConstraint(
                 fields=["stripe_customer_id"],
                 condition=~models.Q(stripe_customer_id=""),
-                name="quickscale_orgs_organization_unique_nonempty_stripe_customer",
+                name="quickscale_orgs_organization_stripe_customer_id_unique",
             ),
         ]
 
@@ -155,7 +154,6 @@ class OrganizationMembership(models.Model):
         def get_role_display(self) -> str: ...
 
     class Meta:
-        app_label = "quickscale_orgs"
         ordering = ["organization_id", "user_id"]
         constraints = [
             models.UniqueConstraint(
@@ -197,7 +195,7 @@ class OrganizationMembership(models.Model):
         account deletion, or demotion below owner) without stranding
         the other members ownerless.
 
-        This is the canonical SA47 last-owner check, consolidating the
+        This is the canonical last-owner check, consolidating the
         semantics that were previously duplicated across
         ``AccountDeleteView._get_blocking_orgs_for_deletion``,
         ``MemberListView``, and ``OrgApiMemberRemoveView``.
@@ -404,7 +402,6 @@ class OrganizationInvitation(models.Model):
         organization_id: uuid.UUID | None
 
     class Meta:
-        app_label = "quickscale_orgs"
         ordering = ["email"]
 
     @classmethod
@@ -477,14 +474,14 @@ class OrganizationInvitation(models.Model):
 
 
 class OrganizationTombstone(models.Model):
-    """Record of a purged (permanently deleted) organization (T1.17).
+    """Record of a purged (permanently deleted) organization.
 
     This is the authoritative rerun guard: when an organization no longer
     exists in the live ``Organization`` table, a matching row here means
     the purge already happened.  Re-runs return no-op success instead of
     erroring.
 
-    The payload stays minimal per CR-PR-T117-004 — only the deleted org's
+    The payload stays minimal per CR-PR-only the deleted org's
     UUID, the purge timestamp, and strictly necessary operator metadata.
     Slug and name are explicitly excluded.
 
@@ -518,9 +515,6 @@ class OrganizationTombstone(models.Model):
     )
 
     class Meta:
-        app_label = "quickscale_orgs"
-        verbose_name = "organization tombstone"
-        verbose_name_plural = "organization tombstones"
         ordering = ["-purged_at"]
 
     def __str__(self) -> str:

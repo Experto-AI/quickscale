@@ -136,6 +136,7 @@ class Module:
     files: Mapping[str, str]
     root_files: Mapping[str, str]
     tests: Mapping[str, str]
+    manifest_text: str = ""
 
 
 @dataclass(frozen=True)
@@ -241,6 +242,7 @@ def load_corpus(repo_root: Path) -> Corpus:
                 files=_read_tree(package_dir, repo_root),
                 root_files=root_files,
                 tests=_read_tree(module_dir / "tests", repo_root),
+                manifest_text=manifest_path.read_text(encoding="utf-8", errors="replace"),
             )
         )
 

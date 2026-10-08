@@ -155,7 +155,7 @@ Creating posts:
 
 Template customization: all templates extend `quickscale_blog/base.html`. Override the
 base at `templates/quickscale_blog/base.html` or individual pages at
-`templates/quickscale_blog/blog/<page>.html`. The module ships zero-style semantic templates;
+`templates/quickscale_blog/<page>.html`. The module ships zero-style semantic templates;
 add your own CSS in the project.
 
 Troubleshooting:
@@ -165,7 +165,7 @@ Troubleshooting:
   `{% load markdownx %}` with `{{ post.content|markdownify }}`.
 - **Images not uploading** — check `MEDIA_URL`, `MEDIA_ROOT`, and the development media route.
 - **Thumbnails not generating** — ensure Pillow is installed.
-- **RSS feed not validating** — ensure posts have `published_date` set and status published.
+- **RSS feed not validating** — ensure posts have `published_at` set and status published.
 
 ## Extending
 

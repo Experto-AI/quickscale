@@ -55,8 +55,6 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "organization tombstone",
-                "verbose_name_plural": "organization tombstones",
                 "ordering": ["-purged_at"],
             },
         ),
@@ -85,12 +83,12 @@ class Migration(migrations.Migration):
                     models.UniqueConstraint(
                         condition=models.Q(("is_system", True)),
                         fields=("is_system",),
-                        name="quickscale_orgs_organization_unique_system_org",
+                        name="quickscale_orgs_organization_is_system_unique",
                     ),
                     models.UniqueConstraint(
                         condition=models.Q(("stripe_customer_id", ""), _negated=True),
                         fields=("stripe_customer_id",),
-                        name="quickscale_orgs_organization_unique_nonempty_stripe_customer",
+                        name="quickscale_orgs_organization_stripe_customer_id_unique",
                     ),
                 ],
             },

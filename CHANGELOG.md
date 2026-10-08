@@ -604,6 +604,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     expiring a terminal one, and voiding an absent one), and
     `quickscale_billing_reconcile_checkouts` clears outstanding rows under the organization's
     provider mutation mutex.
+  - **Module conventions hold under the harness.** Module pages sit flat under
+    `templates/quickscale_<module>/`, admin overrides live under `admin/<label>/<model>/`,
+    constraints use the lowercased class name with field-named purposes and a `_unique` suffix,
+    and model `Meta` blocks carry no `app_label` or default-equal `verbose_name`. Scheduled
+    commands default to `--trigger manual` (backups' `--scheduled` alias is retired, orgs' machine
+    output is `--json`, a destructive org purge requires `--confirm <slug>`, forms' retention job
+    takes `--trigger`), and shipped module source and manifests carry no ticket ids.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -43,7 +43,7 @@ class LatestPostsFeed(Feed):
 
         return Post.all_objects.filter(
             status="published", organization=Organization.objects.get_system_org()
-        ).order_by("-published_date")[:20]
+        ).order_by("-published_at")[:20]
 
     def item_title(self, item: Post) -> str:
         """Return post title"""
@@ -59,7 +59,7 @@ class LatestPostsFeed(Feed):
 
     def item_pubdate(self, item):  # type: ignore[no-untyped-def]
         """Return post publication date"""
-        return item.published_date
+        return item.published_at
 
     def item_author_name(self, item: Post) -> str | None:
         """Return post author name"""

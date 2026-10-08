@@ -49,7 +49,7 @@ def _copy_admin_upload_crash_safe(
 def _write_all_bytes(fd: int, src_f: Any) -> None:
     """Write every byte of *src_f* to *fd*, retrying short writes.
 
-    CR-SA53-REV-002: Retry short ``os.write()`` returns using
+    Retry short ``os.write`` returns using
     memoryview slicing so a partial write never silently truncates the
     artifact.
     """

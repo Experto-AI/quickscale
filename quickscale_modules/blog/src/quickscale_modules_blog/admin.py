@@ -90,14 +90,14 @@ class PostAdmin(OrgAwareAdminMixin, TenantModelAdmin, MarkdownxModelAdmin):
         "status",
         "category",
         "organization",
-        "published_date",
+        "published_at",
         "created_at",
     ]
-    list_filter = ["organization", "status", "category", "created_at", "published_date"]
+    list_filter = ["organization", "status", "category", "created_at", "published_at"]
     search_fields = ["title", "content", "author__username"]
     prepopulated_fields = {"slug": ("title",)}
     filter_horizontal = ["tags"]
-    date_hierarchy = "published_date"
+    date_hierarchy = "published_at"
 
     fieldsets = [
         (
@@ -128,7 +128,7 @@ class PostAdmin(OrgAwareAdminMixin, TenantModelAdmin, MarkdownxModelAdmin):
         (
             "Dates",
             {
-                "fields": ["published_date"],
+                "fields": ["published_at"],
                 "classes": ["collapse"],
             },
         ),

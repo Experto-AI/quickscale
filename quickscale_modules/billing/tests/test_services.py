@@ -60,7 +60,7 @@ from quickscale_modules_billing.services import (
 )
 from quickscale_modules_orgs.models import Organization
 
-from tests.stripe_payloads import (
+from tests._stripe_payloads import (
     invoice_event,
     normalize_stripe_object,
     stripe_event,

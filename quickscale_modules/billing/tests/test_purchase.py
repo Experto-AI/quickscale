@@ -42,7 +42,7 @@ from quickscale_modules_billing.services import (
 )
 from quickscale_modules_orgs.current_org import org_scope
 
-from tests.stripe_payloads import (
+from tests._stripe_payloads import (
     checkout_session_event,
     normalize_stripe_object,
 )

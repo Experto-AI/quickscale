@@ -8,7 +8,7 @@ when the module package is importable.
 When the module package is **not** importable,
 :func:`refresh_managed_adapters` raises
 :class:`~quickscale_core.contracts.module_discovery.ImproperlyConfigured` — bundled/installed
-without module source is not a supported context (AF7 fail-hard decision).
+without module source is not a supported context (fail-hard decision).
 """
 
 from __future__ import annotations
@@ -27,13 +27,13 @@ def _crm_post_hook(
     cannot express: per-page counts are forced to ``int`` and the API
     enabled flag is forced to ``bool``.
 
-    SA17.3 — no default fallbacks: all three settings must be present in
+    no default fallbacks: all three settings must be present in
     the resolved configuration (``module.yml`` derivation provides them;
     ``AppConfig.ready()`` enforces presence at Django startup).
     """
     settings = dict(spec.settings)
 
-    # SA17.3 — Legacy int()/bool() coercions on required settings.
+    # Legacy int/bool coercions on required settings.
     # The keys must already be present (AppConfig.ready() enforces it).
     settings["QUICKSCALE_CRM_DEALS_PER_PAGE"] = int(
         settings["QUICKSCALE_CRM_DEALS_PER_PAGE"]

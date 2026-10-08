@@ -27,7 +27,7 @@ class TenantTableStatus(Enum):
     EXCLUDED_REVIEWED = auto()
     #: Known violation: child/detail table that lacks a direct
     #: ``organization_id`` column and FORCE-RLS policy. Tracked here
-    #: with equality-footprint metadata until a later AF1 phase lands
+    #: with equality-footprint metadata until a later phase lands
     #: the schema migration.
     PENDING_REMEDIATION = auto()
 
@@ -128,7 +128,7 @@ def tenant_org_fk(
     inherit the tenant contract from ``TenantModel`` rather than calling this
     helper directly.  D3 enforces ``on_delete=PROTECT`` — accidental cascade
     is not possible; teardown is always explicit via
-    ``quickscale_orgs_purge_organization`` (T1.17).
+    ``quickscale_orgs_purge_organization``.
 
     Args:
         related_name: Standard Django related_name for the FK reverse
