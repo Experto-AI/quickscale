@@ -130,3 +130,47 @@ def test_tenant_tables_carry_the_force_rls_contract() -> None:
     for model in tenant_models:
         mismatches = _force_rls_policy_mismatches(model._meta.db_table)
         assert mismatches == [], f"{model.__name__}: {mismatches}"
+
+
+def test_post_category_composite_fk_clears_only_the_local_key() -> None:
+    """The post→category composite FK clears only ``category_id`` on delete.
+
+    Django's collector nulls the relation before deleting a row, so the
+    database-level ``ON DELETE SET NULL (category_id)`` action is proven with
+    a raw DELETE inside a rolled-back transaction: the post loses its category
+    key while its ``organization_id`` stays intact.
+    """
+    from django.db import transaction
+
+    from quickscale_modules_blog.models import Category, Post
+    from quickscale_modules_orgs.current_org import org_scope
+    from quickscale_modules_orgs.models import Organization
+
+    with transaction.atomic():
+        org = Organization.objects.create(
+            name="Blog Set Null Org", slug="blog-set-null-org"
+        )
+        with org_scope(org):
+            category = Category.objects.create(
+                name="Set Null",
+                slug="set-null",
+                organization=org,
+            )
+            post = Post.objects.create(
+                title="Set Null Post",
+                slug="set-null-post",
+                content="Composite FK proof.",
+                category=category,
+                organization=org,
+            )
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM quickscale_blog_category WHERE id = %s",
+                [category.pk],
+            )
+
+        post.refresh_from_db()
+        assert post.category_id is None
+        assert post.organization_id == org.pk
+        transaction.set_rollback(True)
