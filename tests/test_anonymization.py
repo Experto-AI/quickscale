@@ -53,7 +53,11 @@ def test_anonymize_removes_only_the_persons_memberships(leaver, inviter, org_a, 
     )
 
     anonymize_account(
-        leaver, "Leaver@Example.com", "Leaver Person", leaver.get_username()
+        leaver,
+        "Leaver@Example.com",
+        "Leaver Person",
+        leaver.get_username(),
+        email_verified=True,
     )
 
     assert not OrganizationMembership.objects.filter(user=leaver).exists()
@@ -72,7 +76,11 @@ def test_anonymize_scrubs_and_withdraws_pending_invitations(leaver, inviter, org
     )
 
     anonymize_account(
-        leaver, "Leaver@Example.com", "Leaver Person", leaver.get_username()
+        leaver,
+        "Leaver@Example.com",
+        "Leaver Person",
+        leaver.get_username(),
+        email_verified=True,
     )
 
     invitation.refresh_from_db()
@@ -102,7 +110,11 @@ def test_anonymize_keeps_accepted_and_expired_records(leaver, inviter, org_a, or
     )
 
     anonymize_account(
-        leaver, "Leaver@Example.com", "Leaver Person", leaver.get_username()
+        leaver,
+        "Leaver@Example.com",
+        "Leaver Person",
+        leaver.get_username(),
+        email_verified=True,
     )
 
     accepted.refresh_from_db()
@@ -133,7 +145,11 @@ def test_anonymize_withdraws_pending_invitations_the_person_sent(leaver, org_a, 
     accepted.save(update_fields=["accepted_at"])
 
     anonymize_account(
-        leaver, "Leaver@Example.com", "Leaver Person", leaver.get_username()
+        leaver,
+        "Leaver@Example.com",
+        "Leaver Person",
+        leaver.get_username(),
+        email_verified=True,
     )
 
     pending.refresh_from_db()
@@ -143,3 +159,60 @@ def test_anonymize_withdraws_pending_invitations_the_person_sent(leaver, org_a, 
     assert pending.invited_by_id == leaver.pk
     assert accepted.accepted_at == accepted_at
     assert accepted.invited_by_id == leaver.pk
+
+
+@pytest.mark.django_db
+def test_unverified_address_leaves_every_matching_invitation_intact(
+    leaver, inviter, org_a, org_b
+):
+    """An unverified address may belong to someone else, so it selects nothing."""
+    own_pending = OrganizationInvitation.objects.create(
+        organization=org_a,
+        email="leaver@example.com",
+        invited_by=inviter,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+    other_tenant_pending = OrganizationInvitation.objects.create(
+        organization=org_b,
+        email="leaver@example.com",
+        invited_by=inviter,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+
+    anonymize_account(
+        leaver,
+        "Leaver@Example.com",
+        "Leaver Person",
+        leaver.get_username(),
+        email_verified=False,
+    )
+
+    own_pending.refresh_from_db()
+    other_tenant_pending.refresh_from_db()
+    assert own_pending.email == "leaver@example.com"
+    assert own_pending.expires_at > timezone.now()
+    assert other_tenant_pending.email == "leaver@example.com"
+    assert other_tenant_pending.expires_at > timezone.now()
+
+
+@pytest.mark.django_db
+def test_unverified_address_still_withdraws_invitations_the_person_sent(leaver, org_a):
+    """The person's own keys select their sent invitations even unverified."""
+    sent = OrganizationInvitation.objects.create(
+        organization=org_a,
+        email="candidate@example.com",
+        invited_by=leaver,
+        expires_at=timezone.now() + timedelta(days=7),
+    )
+
+    anonymize_account(
+        leaver,
+        "Leaver@Example.com",
+        "Leaver Person",
+        leaver.get_username(),
+        email_verified=False,
+    )
+
+    sent.refresh_from_db()
+    assert sent.expires_at <= timezone.now()
+    assert sent.email == "candidate@example.com"
