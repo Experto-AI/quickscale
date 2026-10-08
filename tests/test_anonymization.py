@@ -29,7 +29,9 @@ def test_anonymize_redacts_the_identity_in_an_identified_payload(user) -> None:
         },
     )
 
-    anonymize_account(user, user.email, "Test User", user.get_username())
+    anonymize_account(
+        user, user.email, "Test User", user.get_username(), email_verified=True
+    )
 
     event.refresh_from_db()
     assert event.payload["data"]["object"]["customer_details"] == {
@@ -66,7 +68,9 @@ def test_anonymize_never_rewrites_payload_keys(user) -> None:
         },
     )
 
-    anonymize_account(user, user.email, "Bill", user.get_username())
+    anonymize_account(
+        user, user.email, "Bill", user.get_username(), email_verified=True
+    )
 
     event.refresh_from_db()
     assert event.payload["data"]["object"] == {
@@ -92,7 +96,9 @@ def test_anonymize_keeps_the_sentinel_when_the_name_matches_it(user) -> None:
         },
     )
 
-    anonymize_account(user, user.email, "Deleted", user.get_username())
+    anonymize_account(
+        user, user.email, "Deleted", user.get_username(), email_verified=True
+    )
 
     event.refresh_from_db()
     assert event.payload["data"]["object"] == {
@@ -111,7 +117,9 @@ def test_anonymize_leaves_events_without_the_address_untouched(user) -> None:
         payload=payload,
     )
 
-    anonymize_account(user, user.email, "Test User", user.get_username())
+    anonymize_account(
+        user, user.email, "Test User", user.get_username(), email_verified=True
+    )
 
     event.refresh_from_db()
     assert event.payload == payload
@@ -136,7 +144,9 @@ def test_anonymize_leaves_a_namesakes_payload_untouched(user) -> None:
         payload=namesake_payload,
     )
 
-    anonymize_account(user, user.email, "Test User", user.get_username())
+    anonymize_account(
+        user, user.email, "Test User", user.get_username(), email_verified=True
+    )
 
     event.refresh_from_db()
     assert event.payload == namesake_payload
@@ -161,7 +171,9 @@ def test_anonymize_leaves_an_overlapping_address_untouched(user) -> None:
         payload=overlapping_payload,
     )
 
-    anonymize_account(user, user.email, "Test User", user.get_username())
+    anonymize_account(
+        user, user.email, "Test User", user.get_username(), email_verified=True
+    )
 
     event.refresh_from_db()
     assert event.payload == overlapping_payload
@@ -183,7 +195,9 @@ def test_anonymize_redacts_a_quoted_address_in_free_text(user) -> None:
         payload=payload,
     )
 
-    anonymize_account(user, user.email, "Test User", user.get_username())
+    anonymize_account(
+        user, user.email, "Test User", user.get_username(), email_verified=True
+    )
 
     event.refresh_from_db()
     assert (
@@ -209,7 +223,9 @@ def test_anonymize_redacts_an_address_whose_local_part_starts_with_a_quote(
         payload=payload,
     )
 
-    anonymize_account(user, address, "Test User", user.get_username())
+    anonymize_account(
+        user, address, "Test User", user.get_username(), email_verified=True
+    )
 
     event.refresh_from_db()
     deleted_address = f"deleted-{user.pk}@invalid"
@@ -229,7 +245,9 @@ def test_anonymize_without_an_address_is_a_no_op(user) -> None:
         payload=payload,
     )
 
-    anonymize_account(user, "   ", "Test User", user.get_username())
+    anonymize_account(
+        user, "   ", "Test User", user.get_username(), email_verified=True
+    )
 
     event.refresh_from_db()
     assert event.payload == payload
@@ -248,7 +266,9 @@ def test_anonymize_matches_a_non_ascii_address_stored_in_another_case(user) -> N
         payload={"data": {"object": {"email": "ÉLODIE@EXAMPLE.COM"}}},
     )
 
-    anonymize_account(user, "élodie@example.com", "", user.get_username())
+    anonymize_account(
+        user, "élodie@example.com", "", user.get_username(), email_verified=True
+    )
 
     event.refresh_from_db()
     assert event.payload["data"]["object"]["email"] == f"deleted-{user.pk}@invalid"
@@ -282,7 +302,9 @@ def test_anonymize_prefilters_events_before_the_python_walk(user, monkeypatch) -
 
     monkeypatch.setattr(billing_anonymization, "_contains_email", spy)
 
-    anonymize_account(user, user.email, "Test User", user.get_username())
+    anonymize_account(
+        user, user.email, "Test User", user.get_username(), email_verified=True
+    )
 
     untouched.refresh_from_db()
     identified.refresh_from_db()
@@ -355,7 +377,9 @@ def test_declared_treatments_hold_on_a_populated_user(
         payload={"data": {"object": {"customer_details": {"email": user.email}}}},
     )
 
-    anonymize_account(user, user.email, "Test User", user.get_username())
+    anonymize_account(
+        user, user.email, "Test User", user.get_username(), email_verified=True
+    )
 
     for row in (subscription, balance, transaction, checkout):
         row.refresh_from_db()
@@ -375,3 +399,53 @@ def test_declared_non_candidate_fields_stay_pinned() -> None:
         if isinstance(entry, PersonalDataField)
     }
     assert declared >= {("WebhookEvent", "payload")}
+
+
+@pytest.mark.django_db
+def test_unverified_address_leaves_every_stored_payload_untouched(user) -> None:
+    """WebhookEvent carries no user link, so an unverified address scrubs nothing.
+
+    The same unverified address may belong to another customer whose events
+    carry it, so no stored payload is rewritten without verification.
+    """
+    own_event = WebhookEvent.objects.create(
+        stripe_event_id="evt-unverified-own",
+        event_type="customer.updated",
+        payload={
+            "data": {
+                "object": {
+                    "customer_details": {"email": user.email, "name": "Test User"},
+                }
+            }
+        },
+    )
+    other_event = WebhookEvent.objects.create(
+        stripe_event_id="evt-unverified-other",
+        event_type="customer.updated",
+        payload={
+            "data": {
+                "object": {
+                    "customer_details": {"email": user.email, "name": "Other Customer"},
+                }
+            }
+        },
+    )
+
+    anonymize_account(
+        user,
+        user.email,
+        "Test User",
+        user.get_username(),
+        email_verified=False,
+    )
+
+    own_event.refresh_from_db()
+    other_event.refresh_from_db()
+    assert own_event.payload["data"]["object"]["customer_details"] == {
+        "email": user.email,
+        "name": "Test User",
+    }
+    assert other_event.payload["data"]["object"]["customer_details"] == {
+        "email": user.email,
+        "name": "Other Customer",
+    }
