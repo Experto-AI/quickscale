@@ -762,6 +762,12 @@ answers with `500` so Stripe retries, and it logs each event's reported version.
 The Stripe webhook endpoint for this module **must** use API version `2026-06-24.dahlia` and
 point at `/billing/webhooks/stripe/`.
 
+Delayed-notification payment methods (SEPA, ACH, Bacs, bank transfer) are supported: a
+`checkout.session.completed` whose `payment_status` is `unpaid` binds the purchase reservation
+without crediting it, `checkout.session.async_payment_succeeded` credits the one-time purchase
+exactly once, and `checkout.session.async_payment_failed` releases the reservation so it no
+longer blocks account deletion or organization purge.
+
 **Upgrade note:** a deployment whose webhook endpoint is on an older API version stops
 processing all billing webhooks (`500`s) until the endpoint is recreated at
 `2026-06-24.dahlia`. Events refused under the old version are not credited automatically, so
