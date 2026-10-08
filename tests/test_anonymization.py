@@ -236,6 +236,25 @@ def test_anonymize_without_an_address_is_a_no_op(user) -> None:
 
 
 @pytest.mark.django_db
+def test_anonymize_matches_a_non_ascii_address_stored_in_another_case(user) -> None:
+    """The SQL pre-filter folds non-ASCII case the way the Python verifier does.
+
+    Pins the UTF-8 database assumption: under a ``C`` ctype, ``UPPER`` folds
+    only ASCII and this row would be skipped.
+    """
+    event = WebhookEvent.objects.create(
+        stripe_event_id="evt-non-ascii-case",
+        event_type="customer.updated",
+        payload={"data": {"object": {"email": "ÉLODIE@EXAMPLE.COM"}}},
+    )
+
+    anonymize_account(user, "élodie@example.com", "", user.get_username())
+
+    event.refresh_from_db()
+    assert event.payload["data"]["object"]["email"] == f"deleted-{user.pk}@invalid"
+
+
+@pytest.mark.django_db
 def test_anonymize_prefilters_events_before_the_python_walk(user, monkeypatch) -> None:
     """Only rows whose payload mentions the address are loaded and examined."""
     from quickscale_modules_billing import _anonymization as billing_anonymization
