@@ -1,6 +1,6 @@
 """Social module manager imports from the shared orgs tenant-scoping seam.
 
-T1.9 — drop module-local TenantScopedManager/OperatorManager in favor of
+Drop module-local TenantScopedManager/OperatorManager in favor of
 orgs.managers.TenantManager.
 
 Dual-manager contract (now via TenantManager):
