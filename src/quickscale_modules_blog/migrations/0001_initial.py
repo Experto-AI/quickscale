@@ -11,7 +11,12 @@ import quickscale_modules_blog.models
 from django.conf import settings
 from django.db import migrations, models
 
-from quickscale_modules_orgs.tenancy import apply_force_rls, revert_force_rls
+from quickscale_modules_orgs.tenancy import (
+    add_composite_child_fk,
+    apply_force_rls,
+    remove_composite_child_fk,
+    revert_force_rls,
+)
 
 BLOG_CATEGORY_RLS_POLICY = "blog_category_org_isolation"
 BLOG_TAG_RLS_POLICY = "blog_tag_org_isolation"
@@ -21,6 +26,7 @@ BLOG_CATEGORY_TABLE = "quickscale_blog_category"
 BLOG_TAG_TABLE = "quickscale_blog_tag"
 BLOG_MEDIA_ASSET_TABLE = "quickscale_blog_blogmediaasset"
 BLOG_POST_TABLE = "quickscale_blog_post"
+BLOG_POST_CATEGORY_ORG_FK = "quickscale_blog_post_category_org_fk"
 _BLOG_RLS_TARGETS = (
     (BLOG_CATEGORY_TABLE, BLOG_CATEGORY_RLS_POLICY),
     (BLOG_TAG_TABLE, BLOG_TAG_RLS_POLICY),
@@ -34,6 +40,29 @@ def _forward_rls(apps: Any, schema_editor: Any) -> None:
     del apps
     revert_force_rls(schema_editor, _BLOG_RLS_TARGETS)
     apply_force_rls(schema_editor, _BLOG_RLS_TARGETS)
+
+
+def _forward_composite_fks(apps: Any, schema_editor: Any) -> None:
+    """Add the composite org-equality FK for the post→category reference."""
+    del apps
+    add_composite_child_fk(
+        schema_editor,
+        child_table=BLOG_POST_TABLE,
+        constraint_name=BLOG_POST_CATEGORY_ORG_FK,
+        child_fk_column="category_id",
+        parent_table=BLOG_CATEGORY_TABLE,
+        on_delete="SET NULL (category_id)",
+    )
+
+
+def _reverse_composite_fks(apps: Any, schema_editor: Any) -> None:
+    """Reverse the post→category composite FK."""
+    del apps
+    remove_composite_child_fk(
+        schema_editor,
+        child_table=BLOG_POST_TABLE,
+        constraint_name=BLOG_POST_CATEGORY_ORG_FK,
+    )
 
 
 class Migration(migrations.Migration):
@@ -326,6 +355,13 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AddConstraint(
+            model_name="category",
+            constraint=models.UniqueConstraint(
+                fields=("id", "organization"),
+                name="quickscale_blog_category_id_org_unique",
+            ),
+        ),
+        migrations.AddConstraint(
             model_name="tag",
             constraint=models.UniqueConstraint(
                 fields=("name", "organization"),
@@ -363,6 +399,11 @@ class Migration(migrations.Migration):
         migrations.RunPython(
             code=_forward_rls,
             reverse_code=migrations.RunPython.noop,
+            hints={"target_db": "default"},
+        ),
+        migrations.RunPython(
+            code=_forward_composite_fks,
+            reverse_code=_reverse_composite_fks,
             hints={"target_db": "default"},
         ),
     ]

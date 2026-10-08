@@ -187,6 +187,11 @@ class Category(TenantModel):
                 fields=["slug", "organization"],
                 name="quickscale_blog_category_slug_organization_unique",
             ),
+            # Make the category row a valid composite-FK target for posts.
+            models.UniqueConstraint(
+                fields=["id", "organization"],
+                name="quickscale_blog_category_id_org_unique",
+            ),
         ]
 
     def __str__(self) -> str:
