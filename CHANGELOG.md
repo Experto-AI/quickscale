@@ -580,6 +580,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     test reads the Module Conventions rule headings in `decisions.md`, so every rule is covered by
     a detector, recorded open, or delegated to its carrier rules or external gate, and the harness
     success line names each delegated rule with its carrier.
+  - **Billing checkout sessions hand Stripe absolute return URLs.** Checkout, subscription, and
+    billing-portal sessions build their success, cancel, and return URLs from the incoming request
+    as absolute URLs, and the Stripe client refuses a relative one before calling the provider.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -13,10 +13,11 @@ their value.
 
 **Release status.** 0.88.0 is published and carries two S1 billing defects fixed on `v89` (with
 real Stripe keys, every webhook and every checkout fails); the fix ships in 0.89.0, which is not
-published yet ([publish_procedure.md](publish_procedure.md)). Only the webhook half is fixed:
-checkout and portal sessions still send relative return URLs that Stripe rejects (tech audit
-`billing-checkout-relative-redirect-urls`), so 0.89.0 is not published until SA251 lands. SA252
-(a live credential sent to PostHog) is also required for 0.89.0.
+published yet ([publish_procedure.md](publish_procedure.md)). The webhook half and the checkout
+relative-URL code repair are fixed — checkout and portal sessions now build absolute return URLs
+(tech audit `billing-checkout-relative-redirect-urls`) — while the live Stripe test-mode checkout
+record and SA251's remaining slices are outstanding; SA252 (a live credential sent to PostHog) is
+also required, so 0.89.0 is not published until SA251 and SA252 land.
 
 The 2026-10-08 audits ([arch](../others/arch-audit.md), [tech](../others/tech-audit.md),
 [coherence](../others/coherence-audit.md)) are scheduled as SA251–SA266. Each ticket names the
@@ -358,7 +359,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   releases it, on the existing event-dedup key. 0.89.0's release notes name the checkout fix.
 
   **Slices:**
-  - [ ] (a) Absolute return URLs with the `StripeClient` guard and the test-mode record.
+  - [ ] (a) Absolute return URLs with the `StripeClient` guard and the test-mode record. The
+    request-built absolute URLs and the client guard landed with tests; the live Stripe test-mode
+    checkout record still needs test credentials and a running recipient.
   - [ ] (b) Unknown-outcome resolution and the operator reconciler.
   - [ ] (c) Delayed-payment webhook events.
 
