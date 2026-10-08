@@ -21,7 +21,7 @@ from PIL import Image, UnidentifiedImageError
 
 IMAGE_BOMB_VALIDATION_ERROR = "Image exceeds safe pixel limit"
 
-#: SA239: the fixed extension for each Pillow format the modules accept. A
+#: the fixed extension for each Pillow format the modules accept. A
 #: stored name never takes its extension from the client-supplied filename;
 #: an unrecognized or absent format resolves to ``.bin``.
 _IMAGE_EXTENSION_BY_FORMAT: dict[str, str] = {
@@ -33,7 +33,7 @@ _IMAGE_EXTENSION_BY_FORMAT: dict[str, str] = {
 
 
 def _image_extension_for_format(image_format: str | None) -> str:
-    """Return the fixed extension for a validated Pillow image format (SA239)."""
+    """Return the fixed extension for a validated Pillow image format."""
     return _IMAGE_EXTENSION_BY_FORMAT.get(str(image_format or "").upper(), ".bin")
 
 
@@ -80,7 +80,7 @@ def _setting(settings_obj: Any | Mapping[str, Any], key: str) -> Any:
 def _normalize_backend(raw_backend: str | None) -> str:
     """Normalize a storage backend name or raise ImproperlyConfigured.
 
-    SA30: rejects missing, empty, and unrecognized values instead of silently
+    Rejects missing, empty, and unrecognized values instead of silently
     falling back to ``local``.
     """
     if not raw_backend or not raw_backend.strip():
@@ -269,7 +269,7 @@ def build_upload_path(
     """Build a cache-friendly upload path segmented by module and year/month.
 
     Rule 23: keyword-only after the one leading subject, so a new parameter
-    never reorders a caller's positional arguments.  SA239: the stored
+    never reorders a caller's positional arguments. The stored
     extension is the fixed mapping of the validated ``image_format``
     (``validate_file_upload``'s return), never the client-supplied filename.
     """
