@@ -1026,6 +1026,11 @@ Added:
 - 2026-10-08 — new watchlist: `backups-upload-restore-by-model-permission`,
   `single-sync-worker-vendor-calls`, `allow-bypassrls-serving-undetected`,
   `migrate-runs-per-replica`.
+- 2026-10-08 — `billing-checkout-relative-redirect-urls`: **code resolved** (SA251, slice a). The
+  purchase, subscription, and portal views build their return URLs with
+  `request.build_absolute_uri(reverse(...))`, and `StripeClient` refuses a URL without a scheme
+  and host before any provider call; view tests pin the absolute values and contract tests pin the
+  refusals. The live Stripe test-mode checkout record is still owed, so the finding stays open.
 - 2026-10-08 — `analytics-distinct-id-is-session-key`: **resolved** (SA252). The distinct ID is
   the signed-in user's stable non-secret ID when authenticated identity linkage is enabled and a
   random session-stored anonymous ID otherwise; `get_distinct_id` reads no session key, the
