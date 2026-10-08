@@ -292,8 +292,8 @@ _QUOTE_ENTITIES = ("&#x27;", "&#39;", "&quot;", "&apos;")
 #: Matches one address token in either raw or HTML-escaped rendering, used to
 #: keep name/username redaction out of complete unrelated addresses.
 _ADDRESS_OR_ESCAPED_PATTERN = re.compile(
-    r"(?:(?:&[A-Za-z0-9#]+;)|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-])+"
-    r"@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"
+    r"(?:(?:&[A-Za-z0-9#]+;)|[\w.!#$%&'*+/=?^`{|}~-])+"
+    r"@(?:[^\W_]|-)+(?:\.(?:[^\W_]|-)+)+"
 )
 
 
