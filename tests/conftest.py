@@ -27,7 +27,7 @@ if not settings.configured:
     settings.configure(default_settings=global_settings, **overrides)
     django.setup()
 
-from tests.models import ConcreteListing
+from tests.listing_app.models import ConcreteListing
 
 
 @pytest.fixture(scope="session")

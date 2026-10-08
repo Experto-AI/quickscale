@@ -40,7 +40,7 @@ retired_options:
     'per_page' instead.
 
 # ---------------------------------------------------------------------------
-# Manifest derivation rules (T2.3 Phase 3)
+# Manifest derivation rules
 # ---------------------------------------------------------------------------
 derivation:
   wiring_projections:

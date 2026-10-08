@@ -16,7 +16,7 @@ from .models import Listing
 class AbstractListingAdmin(TenantModelAdmin):
     """Base admin class for listing models - extend for concrete models
 
-    SA14.3: inherits from ``TenantModelAdmin`` which provides org-scoped
+    inherits from ``TenantModelAdmin`` which provides org-scoped
     querysets via ``_org_db_context`` view wrappers.  Concrete subclasses
     (e.g. ``PropertyListingAdmin``) inherit the same scoping without
     additional overrides.
@@ -28,13 +28,13 @@ class AbstractListingAdmin(TenantModelAdmin):
         "location",
         "organization",
         "status",
-        "published_date",
+        "published_at",
         "created_at",
     ]
-    list_filter = ["organization", "status", "created_at", "published_date"]
+    list_filter = ["organization", "status", "created_at", "published_at"]
     search_fields = ["title", "description", "location"]
     prepopulated_fields = {"slug": ("title",)}
-    date_hierarchy = "published_date"
+    date_hierarchy = "published_at"
     ordering = ["-created_at"]
 
     fieldsets = [
@@ -59,7 +59,7 @@ class AbstractListingAdmin(TenantModelAdmin):
         (
             "Status",
             {
-                "fields": ["status", "published_date"],
+                "fields": ["status", "published_at"],
             },
         ),
     ]
