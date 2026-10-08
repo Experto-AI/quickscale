@@ -34,8 +34,6 @@ class NotificationSettings(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_notifications"
-        verbose_name = "Notification settings"
         verbose_name_plural = "Notification settings"
 
     def __str__(self) -> str:
@@ -85,10 +83,7 @@ class NotificationMessage(models.Model):
         deliveries: models.Manager["NotificationDelivery"]
 
     class Meta:
-        app_label = "quickscale_notifications"
         ordering = ["-created_at"]
-        verbose_name = "Notification message"
-        verbose_name_plural = "Notification messages"
 
     def __str__(self) -> str:
         return f"{self.template_key} ({self.status})"
@@ -132,15 +127,13 @@ class NotificationDelivery(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_notifications"
         ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=["message", "recipient_email"],
-                name="quickscale_notifications_delivery_message_recipient_unique",
+                name="quickscale_notifications_notificationdelivery_recipient_unique",
             )
         ]
-        verbose_name = "Notification delivery"
         verbose_name_plural = "Notification deliveries"
 
     def __str__(self) -> str:
@@ -169,10 +162,7 @@ class NotificationDeliveryEvent(models.Model):
     received_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "quickscale_notifications"
         ordering = ["received_at"]
-        verbose_name = "Notification delivery event"
-        verbose_name_plural = "Notification delivery events"
 
     def __str__(self) -> str:
         if self.provider_event_id:
