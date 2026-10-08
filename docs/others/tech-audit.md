@@ -244,7 +244,7 @@ items:
      title: "Checkout and portal sessions are created with relative return URLs that Stripe rejects",
      effort: Trivial, confidence: High, reality: generated-app,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/views.py],
-     depends_on: [], chain: [billing-reservation-unknown-outcome-permanent],
+     depends_on: [], chain: [],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: analytics-distinct-id-is-session-key, status: open, severity: S2, category: III,
      title: "Server-side analytics distinct ID is derived from a live credential",
@@ -266,13 +266,6 @@ items:
      anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/views.py,
                quickscale_modules/notifications/src/quickscale_modules_notifications/_webhooks.py],
      depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: billing-reservation-unknown-outcome-permanent, status: open, severity: S3, category: I,
-     title: "A failed checkout create leaves a reservation that blocks account deletion and purge forever",
-     effort: Medium, confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_checkout.py,
-               quickscale_modules/billing/src/quickscale_modules_billing/_removal.py],
-     depends_on: [], chain: [billing-checkout-relative-redirect-urls],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: anonymize-matches-unverified-address, status: open, severity: S3, category: III,
      title: "Self-service account removal rewrites other tenants' rows selected by an unverified address",
      effort: Small, confidence: High, reality: generated-app,
@@ -295,7 +288,7 @@ items:
      title: "One-time purchases paid by a delayed payment method are never credited",
      effort: Small, confidence: Medium, reality: generated-app,
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_webhooks.py],
-     depends_on: [], chain: [billing-reservation-unknown-outcome-permanent],
+     depends_on: [], chain: [],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: generated-ci-mutable-action-tags, status: open, severity: S3, category: VII,
      title: "Generated CI uses mutable third-party action tags and no permissions block",
@@ -366,7 +359,7 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 2 · S3 — 8 · S4 — 8 · total 18 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 2 · S3 — 7 · S4 — 8 · total 17 open. Watchlist: 7.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
@@ -374,7 +367,6 @@ items:
 | `analytics-distinct-id-is-session-key` | S2 | III | Server-side analytics distinct ID is derived from a live credential | Small | High | new |
 | `generated-ci-fails-out-of-box` | S3 | X | Generated CI workflow cannot pass on a fresh project | Small | High | new |
 | `notifications-webhook-rejects-resend` | S3 | IX | Webhook accepts only a signing contract Resend never sends | Medium | High | new |
-| `billing-reservation-unknown-outcome-permanent` | S3 | I | Failed checkout create blocks account deletion and purge forever | Medium | High | new |
 | `anonymize-matches-unverified-address` | S3 | III | Self-service removal rewrites other tenants' rows by unverified address | Small | High | new |
 | `org-invitation-email-unthrottled` | S3 | III | Unlimited invitation emails with attacker-chosen text | Small | High | new |
 | `deploy-settings-module-from-service-name` | S3 | VI | Deploy overwrites `DJANGO_SETTINGS_MODULE` from the service name | Trivial | High | new — **quick win** |
@@ -425,9 +417,9 @@ items:
 
   The subscription checkout and the portal fail the same way. No billing purchase,
   subscription, or portal session can be created.
-  - **Chain:** each failed attempt leaves the `PREPARING` row described in
-    `billing-reservation-unknown-outcome-permanent`. That turns every purchase attempt into a
-    permanent account-deletion and purge blocker. Combined: Moderate × Direct = S2.
+  - **Chain:** at audit time each failed attempt left a `PREPARING` row with an unknown provider
+    outcome, turning every purchase attempt into a permanent account-deletion and purge blocker;
+    that reservation now resolves by provider lookup (SA251, slice b).
 - **Evidence:**
   - `views.py:245` — `success_url=reverse("quickscale_billing:purchase_success"),`.
   - `_checkout.py:98-101` only strips the value.
@@ -542,30 +534,6 @@ items:
     built from Resend's documented payload. Alternatively, document the relay that re-signs.
   - **Effort:** Medium. **Confidence:** High (vendor contract confirmed, §1).
   - **Age:** since `1a143fce` (v0.78.0).
-
-- **`billing-reservation-unknown-outcome-permanent`** · S3 (Moderate × Common: any Stripe error at
-  create, including a transient network error) · R2 · `billing/_checkout.py:116-157`,
-  `_removal.py:80-86`, `:176-180`.
-  - **Defect:**
-    - A one-time checkout persists a `PREPARING` reservation before the provider call, and
-      keeps it on *any* exception — even Stripe's definitive 4xx, which guarantees nothing was
-      created.
-    - No code path moves a `PREPARING` row without a session ID to a terminal state. Only a
-      later successful create for the same user, org, and plan does.
-    - `reconcile_purchase_checkouts_for_removal` then refuses: "creation outcome is unknown;
-      reconcile provider state before retrying removal". No reconciler exists, so self-service
-      account deletion and org purge are blocked until someone edits the database.
-    - Incomplete subscription reservations without a session ID block purge the same way
-      (`_removal.py:176-180`).
-  - **Chain:** with `billing-checkout-relative-redirect-urls`, every purchase attempt creates such
-    a row.
-  - **Fix:**
-    - Classify `stripe.error.InvalidRequestError` (4xx) as definitive and mark the reservation
-      terminal.
-    - For unknown outcomes, reconcile by searching the provider for the idempotency reference
-      (`metadata['…reference']`) before refusing.
-    - Give operators a command for both.
-  - **Effort:** Medium. **Confidence:** High.
 
 - **`anonymize-matches-unverified-address`** · S3 (Moderate × Common) · R2 with default auth
   options · `orgs/_anonymization.py:46-55`, `notifications/_anonymization.py:78-84`, `:153-160`,
@@ -694,7 +662,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Entry point | AuthN | AuthZ | Input validation | Output encoding | Rate limit | Timeout | Idempotency | Error shape | Audit |
 |---|---|---|---|---|---|---|---|---|---|
 | `StripeWebhookView` | Stripe SDK signature over raw body | n/a | named-release gate | JSON | none by rule 26 | SDK default (watch `single-sync-worker-vendor-calls`) | advisory mutex + unique `WebhookEvent` | rule 9; async events: `billing-async-payment-never-credited` | `WebhookEvent` row |
-| Billing JSON views | session (CSRF) | owner via `_require_request_organization` | DRF serializers | JSON | `quickscale_billing_*` scopes | SDK default | Stripe idempotency keys; reservations: `billing-reservation-unknown-outcome-permanent` | rule 9 | reservation rows; return URLs: `billing-checkout-relative-redirect-urls` |
+| Billing JSON views | session (CSRF) | owner via `_require_request_organization` | DRF serializers | JSON | `quickscale_billing_*` scopes | SDK default | Stripe idempotency keys; unknown-outcome reservations reconcile against the provider | rule 9 | reservation rows; return URLs: `billing-checkout-relative-redirect-urls` |
 | `NotificationWebhookView` | custom HMAC: `notifications-webhook-rejects-resend` | n/a | required fields | JSON | none by rule 26 | n/a | idempotency key | rule 9 | delivery event row |
 | Orgs JSON API | session (CSRF) | `min_org_role` on the org it acts on | `JSONParser` + forms | JSON | DRF `user` default; invites: `org-invitation-email-unthrottled` | n/a | n/a | rule 9 | n/a |
 | Orgs HTML views | `LoginRequiredMixin` | `SaasModeRequiredMixin` + `OrgRoleMixin`; VIEW-AS: `viewas-overrides-management-org` | Django forms | autoescape | none: `org-invitation-email-unthrottled` | n/a | n/a | Django | n/a |
@@ -724,8 +692,6 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 
 1. **Billing batch.**
    - `billing-checkout-relative-redirect-urls` first. It is Trivial and unblocks every purchase.
-   - Then `billing-reservation-unknown-outcome-permanent`. Land it before users accumulate rows,
-     and add the operator reconciler to clear the rows already created.
    - `billing-async-payment-never-credited` is independent (`_webhooks.py`) and can run in
      parallel.
    - **Release note:** do not publish 0.89.0 as a fix for the arch-audit red flag until the first
@@ -751,7 +717,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Subsystem | Verdict | What was read |
 |---|---|---|
 | orgs | `viewas-overrides-management-org`; invite part of `org-invitation-email-unthrottled`; invitation scrub part of `anonymize-matches-unverified-address` | Middleware, priming, scopes, permissions, views, API, invitations, anonymization (full). Tenant isolation layers verified. |
-| billing | `billing-checkout-relative-redirect-urls`, `billing-reservation-unknown-outcome-permanent`, `billing-async-payment-never-credited` | Views, webhooks, credits, checkout, client, removal (full). Signature, dedupe, and ledger locking verified. |
+| billing | `billing-checkout-relative-redirect-urls`, `billing-async-payment-never-credited` | Views, webhooks, credits, checkout, client, removal (full). Signature, dedupe, and ledger locking verified. |
 | notifications | `notifications-webhook-rejects-resend` | Webhook path and anonymization (full). |
 | analytics | `analytics-distinct-id-is-session-key`, `analytics-dashboard-unauthenticated` | Full. |
 | forms | `forms-notification-status-misreported` | Views and notification helper (full). Public-path scoping, throttle, and CSV neutralization verified. |
@@ -1084,3 +1050,11 @@ Added:
   `request.build_absolute_uri(reverse(...))`, and `StripeClient` refuses a URL without a scheme
   and host before any provider call; view tests pin the absolute values and contract tests pin the
   refusals. The live Stripe test-mode checkout record is still owed, so the finding stays open.
+- 2026-10-08 — `billing-reservation-unknown-outcome-permanent`: **resolved** (SA251, slice b). A
+  definitive Stripe 4xx rejection resolves the reservation against the provider before it is
+  closed (`_removal.py` `_resolve_definitively_failed_purchase_checkout`,
+  `_subscription_checkout_steps.py` `_resolve_definitively_failed_subscription_checkout`); a
+  session-less reservation is looked up by its stored reference and adopted, expired, or voided
+  (`StripeClient.find_checkout_session_by_reference`, `_removal.py`, `_subscription_checkout.py`);
+  and `quickscale_billing_reconcile_checkouts` clears accumulated rows under the organization's
+  provider mutation mutex. Verified by the billing, orgs, and auth suites.

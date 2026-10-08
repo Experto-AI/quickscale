@@ -37,6 +37,7 @@ from quickscale_modules_billing._stripe_client import (
     _translate_stripe_errors as _translate_stripe_errors,
 )
 from quickscale_modules_billing.exceptions import (
+    BillingError,
     BillingWebhookError,
 )
 from quickscale_modules_billing.models import (
@@ -95,6 +96,43 @@ def get_or_create_stripe_customer(
         raise BillingWebhookError("Stripe customer creation did not return an id.")
     _sync_organization_customer_id(organization, created_customer_id)
     return created_customer_id, True
+
+
+def _resolve_existing_customer_id_for_reconciliation(
+    *,
+    organization: Any,
+    stripe_client: Any,
+    reservation_customer_id: str = "",
+) -> str:
+    """Return the organization's Stripe customer id without creating one.
+
+    Reconciliation must not add provider state, so an organization with no
+    recorded customer id is looked up by reference and a miss is reported as
+    an empty id: no customer means no provider checkout can exist.
+    """
+    for candidate in (
+        reservation_customer_id,
+        str(getattr(organization, "stripe_customer_id", "") or ""),
+    ):
+        normalized_candidate = candidate.strip()
+        if normalized_candidate:
+            return normalized_candidate
+    remote_customers = stripe_client.search_customers(
+        organization_reference=_organization_reference(organization),
+    )
+    customer_ids = sorted(
+        {
+            str(customer.get("id") or "").strip()
+            for customer in remote_customers
+            if str(customer.get("id") or "").strip()
+        }
+    )
+    if len(customer_ids) > 1:
+        raise BillingError(
+            "Multiple Stripe customers match the organization for checkout "
+            "reconciliation; manual billing reconciliation is required."
+        )
+    return customer_ids[0] if customer_ids else ""
 
 
 def _resolve_user_from_reference(user_reference: str) -> Any | None:

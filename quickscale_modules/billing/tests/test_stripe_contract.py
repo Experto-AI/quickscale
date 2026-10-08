@@ -30,6 +30,7 @@ from quickscale_modules_billing.models import (
 from quickscale_modules_billing._settings import STRIPE_API_VERSION
 from quickscale_modules_billing.exceptions import (
     BillingConfigurationError,
+    BillingError,
     BillingValidationError,
 )
 from quickscale_modules_billing._stripe_client import StripeClient
@@ -278,6 +279,127 @@ def test_stripe_client_refuses_urls_without_a_scheme_and_host(bad_url: str) -> N
         )
 
     assert calls == []
+
+
+def _checkout_session_list_client(
+    page: dict[str, Any],
+) -> tuple[StripeClient, list[dict[str, Any]]]:
+    """Return a StripeClient whose Session.list answers the given page."""
+    list_calls: list[dict[str, Any]] = []
+
+    def list_sessions(**kwargs: Any) -> dict[str, Any]:
+        list_calls.append(kwargs)
+        return page
+
+    stripe_module = SimpleNamespace(
+        api_key="",
+        checkout=SimpleNamespace(Session=SimpleNamespace(list=list_sessions)),
+    )
+    return StripeClient(stripe_module=stripe_module, api_key=TEST_API_KEY), list_calls
+
+
+def test_stripe_client_finds_a_checkout_session_by_reservation_reference() -> None:
+    """The client lists the customer's sessions and matches on the marker."""
+    stripe_client, list_calls = _checkout_session_list_client(
+        {
+            "data": [
+                {
+                    "id": "cs_other",
+                    "metadata": {
+                        "quickscale_purchase_checkout_reference": (
+                            "quickscale_billing.purchasecheckout:1"
+                        )
+                    },
+                },
+                {
+                    "id": "cs_match",
+                    "metadata": {
+                        "quickscale_purchase_checkout_reference": (
+                            "quickscale_billing.purchasecheckout:2"
+                        )
+                    },
+                },
+            ]
+        }
+    )
+
+    session = stripe_client.find_checkout_session_by_reference(
+        customer_id="cus_lookup",
+        metadata_key="quickscale_purchase_checkout_reference",
+        reference="quickscale_billing.purchasecheckout:2",
+    )
+
+    assert session is not None
+    assert session["id"] == "cs_match"
+    assert list_calls == [{"customer": "cus_lookup", "limit": 100}]
+
+
+def test_stripe_client_reports_no_checkout_session_for_a_missing_reference() -> None:
+    """A customer with no matching session resolves to ``None``, not an error."""
+    stripe_client, _list_calls = _checkout_session_list_client(
+        {
+            "data": [
+                {
+                    "id": "cs_other",
+                    "metadata": {
+                        "quickscale_purchase_checkout_reference": (
+                            "quickscale_billing.purchasecheckout:1"
+                        )
+                    },
+                }
+            ]
+        }
+    )
+
+    session = stripe_client.find_checkout_session_by_reference(
+        customer_id="cus_lookup",
+        metadata_key="quickscale_purchase_checkout_reference",
+        reference="quickscale_billing.purchasecheckout:9",
+    )
+
+    assert session is None
+
+
+def test_stripe_client_refuses_ambiguous_checkout_session_references() -> None:
+    """Two sessions for one reservation reference fail closed."""
+    reference = "quickscale_billing.purchasecheckout:2"
+    stripe_client, _list_calls = _checkout_session_list_client(
+        {
+            "data": [
+                {
+                    "id": "cs_first",
+                    "metadata": {"quickscale_purchase_checkout_reference": reference},
+                },
+                {
+                    "id": "cs_second",
+                    "metadata": {"quickscale_purchase_checkout_reference": reference},
+                },
+            ]
+        }
+    )
+
+    with pytest.raises(BillingError, match="multiple checkout sessions"):
+        stripe_client.find_checkout_session_by_reference(
+            customer_id="cus_lookup",
+            metadata_key="quickscale_purchase_checkout_reference",
+            reference=reference,
+        )
+
+
+def test_stripe_client_refuses_a_missing_checkout_session_list_support() -> None:
+    """A stub SDK without Session.list fails closed instead of guessing."""
+    stripe_module = SimpleNamespace(
+        api_key="",
+        checkout=SimpleNamespace(Session=SimpleNamespace()),
+    )
+    stripe_client = StripeClient(stripe_module=stripe_module, api_key=TEST_API_KEY)
+
+    with pytest.raises(BillingConfigurationError, match="list support"):
+        stripe_client.find_checkout_session_by_reference(
+            customer_id="cus_lookup",
+            metadata_key="quickscale_purchase_checkout_reference",
+            reference="quickscale_billing.purchasecheckout:2",
+        )
 
 
 @pytest.mark.django_db

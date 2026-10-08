@@ -733,7 +733,21 @@ module's paths are:
 
 ## Management commands
 
-This module ships no management commands.
+`quickscale_billing_reconcile_checkouts` resolves checkout reservations whose
+Stripe creation outcome is unknown — rows left by a provider rejection recorded
+before this contract, or by a response lost in transit — before account
+deletion or organization purge. Each outstanding purchase and subscription
+reservation is resolved against Stripe under the organization's provider
+mutation mutex: a session-bearing row is retrieved by its session id, and a
+session-less row is looked up by its stored reservation reference. A
+provider-confirmed expired session and a session Stripe does not hold are both
+closed, and a live session is adopted so the existing refusal guard reports
+provider truth. The command reports every organization it cannot clear.
+
+```bash
+python manage.py quickscale_billing_reconcile_checkouts
+python manage.py quickscale_billing_reconcile_checkouts --organization <org-uuid> --dry-run
+```
 
 ## Operations
 

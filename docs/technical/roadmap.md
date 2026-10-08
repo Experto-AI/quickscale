@@ -362,7 +362,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [ ] (a) Absolute return URLs with the `StripeClient` guard and the test-mode record. The
     request-built absolute URLs and the client guard landed with tests; the live Stripe test-mode
     checkout record still needs test credentials and a running recipient.
-  - [ ] (b) Unknown-outcome resolution and the operator reconciler.
+  - [x] (b) Unknown-outcome resolution and the operator reconciler. A definitive 4xx rejection
+    resolves the reservation against the provider before it is closed; a session-less reservation
+    is looked up by its stored reference and adopted, expired, or voided; and
+    `quickscale_billing_reconcile_checkouts` clears accumulated rows under the organization's
+    provider mutation mutex. Next: slice (c).
   - [ ] (c) Delayed-payment webhook events.
 
   **Surfaces:** `billing/views.py`, `_checkout.py`, `_removal.py`, `_webhooks.py`,
