@@ -31,13 +31,15 @@ def anonymize_account(
     original_email: str,
     original_name: str,
     original_username: str,
+    *,
+    email_verified: bool,
 ) -> None:
     """Clear the person's author profile and queue its avatar file deletion.
 
     The pre-scrub identity arguments are unused; the profile is reached by the
-    user link.
+    user link, so no address selector runs and the verification flag is unused.
     """
-    del original_email, original_name, original_username
+    del original_email, original_name, original_username, email_verified
     profile = AuthorProfile.objects.filter(user=user).first()
     if profile is None:
         return
