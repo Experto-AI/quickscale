@@ -91,7 +91,7 @@ def _prepare_thumbnail_image(image: Image.Image, image_format: str) -> Image.Ima
     return image
 
 
-#: SA239: the fixed extension for each Pillow format, so the stored name never
+#: the fixed extension for each Pillow format, so the stored name never
 #: takes its extension from the client-supplied filename.  Mirrors storage's
 #: map, which the builder cannot use when storage is not installed.
 _IMAGE_EXTENSION_BY_FORMAT: dict[str, str] = {
@@ -123,7 +123,7 @@ def _content_image_format(content: Any) -> str | None:
 
 
 class _BlogMediaAssetFile(ImageFieldFile):
-    """FieldFile that records a new upload's validated format (SA239).
+    """FieldFile that records a new upload's validated format.
 
     ``FieldFile.save`` receives the bytes in every flow — model assignment and
     a direct ``instance.file.save(name, content)`` — while ``upload_to``
@@ -148,7 +148,7 @@ class _BlogMediaAssetImageField(models.ImageField):
 def blog_media_upload_to(instance: "BlogMediaAsset", filename: str) -> str:
     """Build a stable, collision-resistant upload path for blog media assets.
 
-    SA239: the stored extension is the fixed mapping of the format Pillow
+    the stored extension is the fixed mapping of the format Pillow
     read from the upload, never the client-supplied filename's suffix.
     """
     image_format = getattr(
@@ -190,7 +190,7 @@ class Category(TenantModel):
             # Make the category row a valid composite-FK target for posts.
             models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="quickscale_blog_category_id_org_unique",
+                name="quickscale_blog_category_id_organization_unique",
             ),
         ]
 
@@ -360,12 +360,12 @@ class Post(TenantModel):
     tags = models.ManyToManyField(Tag, blank=True, related_name="posts")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    published_date = models.DateTimeField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
 
     class Meta(TenantModel.Meta):
-        ordering = ["-published_date", "-created_at"]
+        ordering = ["-published_at", "-created_at"]
         indexes = [
-            models.Index(fields=["-published_date"], name="qs_blog_post_publish_idx"),
+            models.Index(fields=["-published_at"], name="qs_blog_post_publish_idx"),
             models.Index(fields=["status"], name="qs_blog_post_status_idx"),
             models.Index(fields=["slug"], name="qs_blog_post_slug_idx"),
         ]
@@ -384,9 +384,9 @@ class Post(TenantModel):
         if not self.slug:
             self.slug = slugify(self.title)
 
-        # Set published_date when status changes to published
-        if self.status == self.Status.PUBLISHED and not self.published_date:
-            self.published_date = timezone.now()
+        # Set published_at when status changes to published
+        if self.status == self.Status.PUBLISHED and not self.published_at:
+            self.published_at = timezone.now()
 
         # Auto-generate excerpt from content if not provided
         if not self.excerpt and self.content:

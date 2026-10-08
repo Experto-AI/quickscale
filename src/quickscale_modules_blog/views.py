@@ -43,7 +43,7 @@ from .throttles import BlogApiThrottle
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Org-resolution helpers for the single-URL contract (T1.6)
+# Org-resolution helpers for the single-URL contract
 # ---------------------------------------------------------------------------
 
 
@@ -290,7 +290,7 @@ class PostListView(BlogPublicReadMixin, ListView):
     """Display paginated list of published blog posts"""
 
     model = Post
-    template_name = "quickscale_blog/blog/post_list.html"
+    template_name = "quickscale_blog/post_list.html"
     context_object_name = "posts"
 
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
@@ -311,7 +311,7 @@ class PostDetailView(BlogPublicReadMixin, DetailView):
     """Display single blog post"""
 
     model = Post
-    template_name = "quickscale_blog/blog/post_detail.html"
+    template_name = "quickscale_blog/post_detail.html"
     context_object_name = "post"
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
@@ -334,7 +334,7 @@ class CategoryListView(BlogPublicReadMixin, ListView):
     """Display posts filtered by category"""
 
     model = Post
-    template_name = "quickscale_blog/blog/category_list.html"
+    template_name = "quickscale_blog/category_list.html"
     context_object_name = "posts"
 
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
@@ -365,7 +365,7 @@ class TagListView(BlogPublicReadMixin, ListView):
     """Display posts filtered by tag"""
 
     model = Post
-    template_name = "quickscale_blog/blog/tag_list.html"
+    template_name = "quickscale_blog/tag_list.html"
     context_object_name = "posts"
 
     def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]

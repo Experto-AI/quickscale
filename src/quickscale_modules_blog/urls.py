@@ -18,7 +18,7 @@ def _blog_rss_enabled() -> bool:
 
     Must be explicitly configured.  Startup validation in
     ``AppConfig.ready()`` ensures this setting is always present
-    (SA17.5) — no fallback default.
+    — no fallback default.
     """
     value = settings.QUICKSCALE_BLOG_RSS_ENABLED
     if isinstance(value, bool):

@@ -377,8 +377,8 @@ class TestPost:
             )
         assert post.excerpt == "Custom excerpt"
 
-    def test_post_published_date_auto_set(self, author_user, org, blog_org_scope):
-        """Test published_date is set when status changes to published"""
+    def test_post_published_at_auto_set(self, author_user, org, blog_org_scope):
+        """Test published_at is set when status changes to published"""
         with blog_org_scope(org):
             post = Post.objects.create(
                 title="Test",
@@ -387,12 +387,12 @@ class TestPost:
                 status="draft",
                 organization=org,
             )
-        assert post.published_date is None
+        assert post.published_at is None
 
         with blog_org_scope(org):
             post.status = "published"
             post.save()
-        assert post.published_date is not None
+        assert post.published_at is not None
 
     def test_post_with_category_and_tags(self, author_user, org, blog_org_scope):
         """Test post with category and tags"""
