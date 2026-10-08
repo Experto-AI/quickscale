@@ -152,7 +152,7 @@ packages.
 |---|---|---|---|
 | Tenant rows isolated by organization | FORCE RLS two-policy contract; restricted runtime role; boot guard (`orgs/checks.py`); ContextVar → per-transaction `SET LOCAL` priming (`_current_org_priming.py:152–260`) | **structural** | — |
 | Model enrollment as tenant (incl. project-owned) | `TenantModel` inheritance; W003–W005/E003 system checks run in the project | **structural** | — |
-| A tenant row references only its own org's rows | composite `(fk, organization_id)` FK for 6 hand-listed FKs; RLS-scoped serializer lookups elsewhere | **convention** (gated for 6) | open-world (hand-listed pairs) |
+| A tenant row references only its own org's rows | composite `(fk, organization_id)` FK for every tenant-to-tenant FK, derived from model metadata by the `quickscale_orgs.W007` check and the conformance tests; RLS-scoped serializer lookups elsewhere | **structural** (gated) | closed-world over model metadata |
 | Org-role authorization in module views | one helper (`user_has_org_role`, SA237); its use is checked by harness rules 19/44 (spelling detectors) | structural helper + gated use | open-world (rule 44 admits it) |
 | Request integrity (CSRF; webhook signature and replay) | DRF `SessionAuthentication` bases; `check_csrf_exempt_gate.py` pairing; rule 26 detector; unique provider-event DB key | structural + gated | closed-world over `csrf_exempt` |
 | Module layer order and file names | `quickscale_core/tests/test_module_import_graph.py` + rule 34; rule 28 allowlists | gated | **closed-world** |
@@ -183,7 +183,6 @@ are the sound decisions in §8.
 | 1 | `clean-break-schema-no-data-path` | Module schemas have no data upgrade path | now | High | M | one-way door | `0001_initial` is rewritten in place every release, so no database or backup crosses a release |
 | 2 | `generated-file-ownership-unmodeled` (regressed) | Module-facing contracts live in user-owned generated files | now | High | M | two-way door | The module↔project seam is emitted once into user-owned files; each change becomes a hand-applied prose step per project |
 | 3 | `rules-held-by-parity-not-derivation` | Rules are kept as hand-synced copies held by parity gates | now | High | M | two-way door | Each rule is restated by hand in N places plus a gate to keep them equal; the governance layer outgrew the product |
-| 4 | `tenant-reference-equality-partial` | Cross-row tenant equality is storage-enforced for a hand-listed subset | 6–18 months | Medium | S | two-way door (before the freeze) | 6 of 10 shipped intra-tenant FKs carry an org-equality constraint; project FKs are covered by nothing |
 
 ---
 
@@ -196,7 +195,7 @@ items:
   - {id: clean-break-schema-no-data-path, status: open, rank: 1,
      title: "Module schemas have no data upgrade path", lenses: [I, XIX, XVI],
      horizon: now, confidence: High, size: M, reversibility: one-way door,
-     depends_on: [tenant-reference-equality-partial], amplifies: [generated-file-ownership-unmodeled],
+     depends_on: [], amplifies: [generated-file-ownership-unmodeled],
      anchors: [docs/technical/decisions.md, quickscale_modules/blog/src/quickscale_modules_blog/migrations/0001_initial.py,
                quickscale_core/src/quickscale_core/dr_engine/recovery.py],
      first_seen: 2026-09-23, last_verified: 2026-10-08}
@@ -214,13 +213,6 @@ items:
      anchors: [scripts/gate_registry.json, scripts/check_gate_parity.py, scripts/sync_ci_gate_jobs.py,
                scripts/module_conventions/core.py, scripts/check_split_facade_imports.py,
                quickscale_core/src/quickscale_core/data/manifests],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: tenant-reference-equality-partial, status: open, rank: 4,
-     title: "Cross-row tenant equality is storage-enforced for a hand-listed subset", lenses: [I, II],
-     horizon: 6–18 months, confidence: Medium, size: S, reversibility: two-way door,
-     depends_on: [], amplifies: [],
-     anchors: [quickscale_modules/crm/src/quickscale_modules_crm/models.py, quickscale_modules/orgs/tests/test_tenant_table_conformance.py,
-               docs/technical/module-extension.md],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: lockstep-release-unit, status: accepted, title: "Core, CLI, and modules release as one unit", lenses: [XIII, XIX]}
   - {id: privileged-command-four-stations, status: accepted, title: "Privileged command set declared at four stations", lenses: [II]}
@@ -341,9 +333,9 @@ items:
   - **Guard:** SA204's hash-manifest gate with the inverted `0002` canary, plus a check that
     frozen migrations import no `_`-prefixed module symbols, plus a restore-forward test: a
     backup at vintage N restores and migrates under N+1.
-  - **First step:** land Finding 4's composite constraints inside `0001` while it can still
-    change, promote `_BlogMediaAssetImageField` to a public field, then record the freeze
-    decision.
+  - **First step:** promote `_BlogMediaAssetImageField` to a public field, then record the
+    freeze decision. (The four missing composite constraints landed with SA257 while `0001`
+    could still change.)
 
 ### Finding 2: Module-facing contracts live in user-owned generated files
 
@@ -490,8 +482,8 @@ items:
   - **Compounding:** `scripts/` grew from 3.5k to 69.7k lines in six months and now exceeds all
     module source (42.8k). Gates went from 7 to 20 in two months, and numbered rules from 0 to
     50 in a week.
-- **Horizon & trigger:** `now`. Every new rule or gate fires it; SA204 and Finding 4's fix each
-  add one.
+- **Horizon & trigger:** `now`. Every new rule or gate fires it; SA204's freeze gate adds
+  one.
 - **Confidence:** High for the mechanism and the measurements. Medium for attributing delivery
   cost, since commit share is a proxy.
 - **Context dependence:** `wrong-for-now`. The dimension is team shape: one maintainer
@@ -545,7 +537,6 @@ items:
       first (`billing/services.py:131–135`).
     - **The privileged-command set** appears at four stations; "none is a single source of
       truth" ([decisions.md:1832](../technical/decisions.md)).
-    - **The composite-FK pairs** are listed twice (Finding 4).
   - **The governance code is exempt from its own bar.** `check_quality.sh` scans only package
     `src/` directories (`:163–178`). Ten non-test gate and tooling scripts exceed the 800-line
     fail line (for example `check_gate_parity.py` at 2,887 lines, `publish_module.py` at 1,651,
@@ -595,8 +586,7 @@ items:
   construction are enforced there, and their detectors are removed. Governance code meets the
   same quality bar as product code.
 - **Do-nothing cost:**
-  - About 12 edits per new gate, plus a detector and vocabulary per rule. SA204 and Finding 4
-    each add a gate.
+  - About 12 edits per new gate, plus a detector and vocabulary per rule. SA204 adds a gate.
   - At current rates the next 12 months add more governance surface than product surface.
   - Split packages outside the hand-listed scope stay unchecked.
   - Defects in `scripts/` (fix density .29) keep consuming delivery time.
@@ -625,110 +615,14 @@ items:
   - **First step:** generate the Makefile gate targets and the `check_ci_locally.sh` stage list
     from `gate_registry.json`.
 
-### Finding 4: Cross-row tenant equality is storage-enforced for a hand-listed subset
-
-- **ID:** `tenant-reference-equality-partial` (new).
-- **Rank rationale:** High blast radius, Medium likelihood, linear compounding.
-  - **Blast radius:** this crosses the isolation boundary. A cross-organization reference lets
-    one organization's delete cascade into another's rows, or block another's purge, because
-    referential actions bypass RLS.
-  - **Likelihood:** harm needs a write path that skips RLS-scoped validation. SA153 adds new
-    tenant references in project code that nothing checks.
-  - **Compounding:** a fixed cost per new foreign key.
-- **Horizon & trigger:** `6–18 months`. The triggers are SA153 slice (a), the gallery child
-  tables, and slice (d), the listing-linked CRM inquiry.
-- **Confidence:** Medium. The mechanism was read and the FKs censused. Request paths are
-  mitigated: crm serializers resolve IDs through `all_objects` under RLS
-  (`crm/serializers.py:268–275, 552–565`). **Settling step:** census the non-request writers
-  (commands, seeds, project services, operator paths) for any that set these FKs from
-  unscoped IDs.
-- **Context dependence:** `wrong-regardless` for the isolation invariant. It lives in R2.
-- **Problem:** The rule "a tenant row references only its own organization's rows" has no
-  structural owner. A composite `(fk, organization_id)` constraint enforces it for six
-  hand-listed FKs. Other intra-tenant FKs, and every project-owned FK, depend on each write
-  path validating through RLS-scoped lookups. PostgreSQL FK checks and `ON DELETE` actions
-  bypass RLS.
-- **Evidence:**
-  - **What the decisions require.**
-    [decisions.md:1842](../technical/decisions.md) requires a denormalized `organization_id`
-    and a direct RLS policy on child tables, but says nothing about reference equality.
-    `:1848` describes composite FKs as "added by the `_ADD_COMPOSITE_FK_SQL` helper".
-  - **Census of shipped FKs between tenant models:** ten.
-    - **With a composite org FK (six):** crm `ContactNote.contact` and `DealNote.deal`; forms
-      `FormField.form`, `FormSubmission.form`, `FormFieldValue.submission`, and
-      `FormFieldValue.field`.
-    - **Without one (four):** crm `Contact.company` (`models.py:101`, CASCADE), `Deal.contact`
-      (`:172`, CASCADE), and `Deal.stage` (`:184`, PROTECT); blog `Post.category`
-      (`models.py:348`, SET_NULL).
-  - **Coverage is open-world.** The pairs are hand-listed twice
-    (`orgs/tests/test_composite_fk_conformance.py:24`,
-    `orgs/tests/test_tenant_table_conformance.py:50`). Nothing derives the set of
-    tenant-to-tenant FKs from model metadata.
-  - **Project side:** [module-extension.md §Project-Owned Tenant Models](../technical/module-extension.md)
-    documents RLS, provider IDs, removal, and personal data, but never mentions composite or
-    child equality (0 occurrences). `orgs/checks.py` registers no reference-equality check.
-    `add_composite_child_fk` is public (`orgs/tenancy.py:41`) but undocumented for projects.
-- **Counter-evidence:**
-  - **Trigger-based equality on the four uncovered FKs:** none. The crm and blog `0001`
-    migrations add composites for notes only.
-  - **A runtime system check:** W001–W006 and E001–E004 cover no references.
-  - **Write-path validation:** DRF serializers reject other-org IDs through RLS-scoped
-    lookups, and the admin uses `make_same_org_validated_form`. This mitigation is real.
-  - **Still unguarded:** ORM writes outside requests (commands, seeds, project services, data
-    migrations) and operator paths.
-  - **The prior pass's probe B** exonerated SA153's personal-data and notification stations.
-    It did not examine reference equality.
-- **Why it compounds:**
-  - **Growth variable:** tenant-to-tenant FKs. There are ten shipped today, SA153 adds
-    gallery→property and inquiry→listing in project code, and SA154 adds more.
-  - **Per new FK:** each must remember both the composite constraint and its two list entries.
-    For project FKs nothing reminds anyone.
-  - **Built on top:** the crm and forms data models, the PROTECT teardown in the purge plan,
-    and SA153.
-- **Detection signal:**
-  - A per-FK join comparing `organization_id` on both sides returns rows.
-  - Purge refusals that name another organization's rows.
-- **Steelman:** The composite FKs went on detail tables reached through user-supplied parent
-  IDs. Peer references such as `Deal.contact` are only ever set through RLS-scoped
-  serializers, so storage enforcement there is belt-and-braces. It also needs
-  `UNIQUE(id, organization_id)` on every parent. Do not fix if every tenant write is a request
-  write.
-- **Correct shape:** Every FK between tenant models, shipped or project-owned, is backed by a
-  storage-level organization-equality constraint or carries a recorded exemption. The set is
-  derived from model metadata at check time.
-- **Do-nothing cost:** SA153 ships at least two new unchecked tenant references. Every seed,
-  command, or project service that writes IDs is a chance to persist a cross-organization
-  reference, which then lets one org's deletion cascade into another's rows or block another
-  org's purge (the GDPR path).
-- **Options:**
-  1. **A derived orgs system check.** Walk the marker-derived tenant models and find FKs that
-     point to other tenant models. Require a composite constraint (checked in
-     `pg_constraint`) or a declared `tenant_reference_exemptions` entry. The check runs in
-     projects, like W006. Also document `add_composite_child_fk` in `module-extension.md`.
-     Effort S–M, low risk, can start as a Warning. **Live option.**
-  2. **A `TenantForeignKey` field.** It emits the composite constraint through its own
-     migration operation, making the invariant structural by construction. Effort M, medium
-     risk.
-  3. **Accept and rely on RLS-scoped validation,** documenting that all tenant writes go
-     through request paths. The revocation trigger is the first non-request writer.
-- **Recommendation:** Option 1, before SA153 slice (a). Add composites for the four shipped
-  FKs in the same change, while `0001` can still change; after SA204's freeze they would need
-  `0002` migrations.
-  - **Size:** S.
-  - **Reversibility:** `two-way door` before the freeze.
-  - **Guard:** the derived check itself, closed-world over metadata. It replaces both
-    hand-listed tuples.
-  - **First step:** a W-level check that lists every tenant-to-tenant FK with its constraint
-    status.
-
 ---
 
 ## 6. Change-cost probes
 
 | Probe | Stations, measured | Verdict |
 |---|---|---|
-| **SA153 gallery child table in a project app** | (1) model on `TenantModel`/`AbstractListing` with `Meta` inheritance; (2) project migration calling `apply_force_rls` (base policy name ≤56 bytes); (3) composite org FK — undocumented, unchecked; (4) `provider_id_classification`; (5) `removal_obligations`; (6) `personal_data_declarations` (+ handler if not `KEEP_LINK`); (7) `TenantModelAdmin`; (8) `about_users` on any notification; (9) boundary tests. Runtime checks W003–W006/E001–E003 hold (1), (2), (4), (5), (6) **in the project** | Mostly **exonerating**: host-project code is under the module contract (§8). One gap → Finding 4 |
-| **SA153 listing inquiry + project model with an agent email + "inquiry received" email** (prior probe B, re-verified) | inquiry lands in `crm` (already declared); the email field needs a `personal_data_declarations` entry (W006 warns otherwise); the new sender must pass the required `about_users` keyword (`notifications/services.py:86–91`); rule 50 fails a hand-stamped key | **Exonerated** by SA246/SA248. Reference equality of inquiry→listing is the Finding 4 gap |
+| **SA153 gallery child table in a project app** | (1) model on `TenantModel`/`AbstractListing` with `Meta` inheritance; (2) project migration calling `apply_force_rls` (base policy name ≤56 bytes); (3) composite org FK — documented and checked (W007); (4) `provider_id_classification`; (5) `removal_obligations`; (6) `personal_data_declarations` (+ handler if not `KEEP_LINK`); (7) `TenantModelAdmin`; (8) `about_users` on any notification; (9) boundary tests. Runtime checks W003–W007/E001–E003 hold (1), (2), (4), (5), (6) **in the project** | Mostly **exonerating**: host-project code is under the module contract (§8). The reference-equality gap closed with SA257 |
+| **SA153 listing inquiry + project model with an agent email + "inquiry received" email** (prior probe B, re-verified) | inquiry lands in `crm` (already declared); the email field needs a `personal_data_declarations` entry (W006 warns otherwise); the new sender must pass the required `about_users` keyword (`notifications/services.py:86–91`); rule 50 fails a hand-stamped key | **Exonerated** by SA246/SA248. Reference equality of inquiry→listing is checked by the derived W007 system check |
 | **SA191 rebuild of `bap-web`** (prior probe A, re-evaluated) | 9 stations (facade import, port, project-owned migrations, reseed, verify, deploy + runtime role, Stripe endpoint, rollback, label/URL renames). The prior pass recorded SA214 tooling 3 of them; SA191 now runs as a prompt-driven port that does not use that tool | **Finding evidence** → Findings 1 (reseed) and 2 (three upgrade mechanisms) |
 | **A module contract change reaching a deployed project** (historical: SA223 moved orgs' JSON API to `/orgs/api/`) | Automatic: subtree pull, `urls_modules.py` and `settings/modules.py` regeneration. Manual: `frontend/src/hooks/useOrgs.ts`, `<package>/urls.py`, overridden orgs templates. Declaration: `project_contract.yml` step + vintage gate. Operator: `--confirm-contract-adoption` | **Finding evidence** → Finding 2 |
 | **Adding one gate** (historical: `check-module-conventions`, `check-split-facade-imports`) | ≈12 stations (listed in Finding 3), held by a parity checker rather than generated | **Finding evidence** → Finding 3 |
@@ -739,9 +633,6 @@ items:
 
 ## 7. Fix order and interactions
 
-- **Finding 4 → Finding 1.** Add the four missing composite constraints, and promote
-  `_BlogMediaAssetImageField`, while `0001` may still change. After SA204's freeze each needs a
-  `0002`. Both should land before SA153's slice (a) and its go-live.
 - **Finding 1 and personal data.** If SA153 adds personal fields to shipped modules, they land
   as `0002+` migrations *and* declaration entries, so the freeze's first migrations are born
   classified (carried from the prior pass).
@@ -750,7 +641,7 @@ items:
 - **Findings 1 and 2 amplify each other.** Together they make every upgrade a big-bang event:
   code by hand and data by reseed. Fixing either one halves the cost of the other.
 - **Finding 3 is independent but cheapens everything else.** Every other fix adds a guard
-  (SA204's hash gate, Finding 4's check, Finding 2's emission test). With option 1 in place,
+  (SA204's hash gate, Finding 2's emission test). With option 1 in place,
   each costs 2 stations instead of about 12. Do option 1 first if more than one new gate is
   coming.
 - **No conflicts found.** Finding 2's move generates one last adoption step per seam piece,

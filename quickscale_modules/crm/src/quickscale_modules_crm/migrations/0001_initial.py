@@ -10,6 +10,7 @@ from django.conf import settings
 from django.db import migrations, models
 
 from quickscale_modules_orgs.tenancy import (
+    add_composite_child_fk,
     apply_force_rls,
     remove_composite_child_fk,
     revert_force_rls,
@@ -47,6 +48,9 @@ CRM_CONTACT_ID_ORG_UNIQUE = "quickscale_crm_contact_id_org_unique"
 CRM_DEAL_ID_ORG_UNIQUE = "quickscale_crm_deal_id_org_unique"
 CRM_CONTACTNOTE_CONTACT_ORG_FK = "quickscale_crm_contactnote_contact_org_fk"
 CRM_DEALNOTE_DEAL_ORG_FK = "quickscale_crm_dealnote_deal_org_fk"
+CRM_CONTACT_COMPANY_ORG_FK = "quickscale_crm_contact_company_org_fk"
+CRM_DEAL_CONTACT_ORG_FK = "quickscale_crm_deal_contact_org_fk"
+CRM_DEAL_STAGE_ORG_FK = "quickscale_crm_deal_stage_org_fk"
 
 
 def _add_composite_fk(
@@ -99,6 +103,55 @@ def _reverse_note_composite_fks_and_rls(apps: Any, schema_editor: Any) -> None:
         schema_editor,
         child_table=CRM_DEALNOTE_TABLE,
         constraint_name=CRM_DEALNOTE_DEAL_ORG_FK,
+    )
+
+
+def _forward_tenant_reference_composite_fks(apps: Any, schema_editor: Any) -> None:
+    """Add the composite org-equality FK for every CRM tenant reference."""
+    del apps
+    add_composite_child_fk(
+        schema_editor,
+        child_table=CRM_CONTACT_TABLE,
+        constraint_name=CRM_CONTACT_COMPANY_ORG_FK,
+        child_fk_column="company_id",
+        parent_table=CRM_COMPANY_TABLE,
+        on_delete="CASCADE",
+    )
+    add_composite_child_fk(
+        schema_editor,
+        child_table=CRM_DEAL_TABLE,
+        constraint_name=CRM_DEAL_CONTACT_ORG_FK,
+        child_fk_column="contact_id",
+        parent_table=CRM_CONTACT_TABLE,
+        on_delete="CASCADE",
+    )
+    add_composite_child_fk(
+        schema_editor,
+        child_table=CRM_DEAL_TABLE,
+        constraint_name=CRM_DEAL_STAGE_ORG_FK,
+        child_fk_column="stage_id",
+        parent_table=CRM_STAGE_TABLE,
+        on_delete="RESTRICT",
+    )
+
+
+def _reverse_tenant_reference_composite_fks(apps: Any, schema_editor: Any) -> None:
+    """Reverse the CRM tenant-reference composite FKs."""
+    del apps
+    remove_composite_child_fk(
+        schema_editor,
+        child_table=CRM_CONTACT_TABLE,
+        constraint_name=CRM_CONTACT_COMPANY_ORG_FK,
+    )
+    remove_composite_child_fk(
+        schema_editor,
+        child_table=CRM_DEAL_TABLE,
+        constraint_name=CRM_DEAL_CONTACT_ORG_FK,
+    )
+    remove_composite_child_fk(
+        schema_editor,
+        child_table=CRM_DEAL_TABLE,
+        constraint_name=CRM_DEAL_STAGE_ORG_FK,
     )
 
 
@@ -541,9 +594,28 @@ class Migration(migrations.Migration):
                 name="quickscale_crm_contact_id_org_unique",
             ),
         ),
+        migrations.AddConstraint(
+            model_name="company",
+            constraint=models.UniqueConstraint(
+                fields=("id", "organization"),
+                name="quickscale_crm_company_id_org_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="stage",
+            constraint=models.UniqueConstraint(
+                fields=("id", "organization"),
+                name="quickscale_crm_stage_id_org_unique",
+            ),
+        ),
         migrations.RunPython(
             code=_forward_note_composite_fks_and_rls,
             reverse_code=_reverse_note_composite_fks_and_rls,
+            hints={"target_db": "default"},
+        ),
+        migrations.RunPython(
+            code=_forward_tenant_reference_composite_fks,
+            reverse_code=_reverse_tenant_reference_composite_fks,
             hints={"target_db": "default"},
         ),
         migrations.RunPython(

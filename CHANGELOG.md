@@ -592,12 +592,22 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Billing checkout sessions hand Stripe absolute return URLs.** Checkout, subscription, and
     billing-portal sessions build their success, cancel, and return URLs from the incoming request
     as absolute URLs, and the Stripe client refuses a relative one before calling the provider.
+  - **Tenant-to-tenant references are storage-enforced.** Every foreign key between tenant models
+    — including CRM contact→company, deal→contact, and deal→stage and blog post→category — carries
+    a composite `(fk, organization_id)` constraint, and a warning-level `quickscale_orgs.W007`
+    system check derives the reference set from model metadata and reports a tenant-to-tenant
+    foreign key that lacks one unless the child model records a reasoned
+    `tenant_reference_exemptions` entry.
   - **Unresolved billing checkout outcomes reconcile against Stripe.** A definitively rejected
     checkout create closes its reservation only after a provider lookup proves no session exists,
     an unknown outcome resolves by looking the reservation up at Stripe (adopting a live session,
     expiring a terminal one, and voiding an absent one), and
     `quickscale_billing_reconcile_checkouts` clears outstanding rows under the organization's
     provider mutation mutex.
+  - **Delayed billing payments credit when they settle.** A completed one-time checkout whose
+    payment is still unpaid is accepted and bound, `checkout.session.async_payment_succeeded`
+    credits the purchase exactly once when the money settles, and
+    `checkout.session.async_payment_failed` releases the reservation.
   - **Self-registration is hardened against cross-tenant and relay abuse.** Account removal's
     address-based scrubs run only for an allauth-verified address, organization invitation sends
     are throttled per sender and per organization through the `quickscale_orgs_invite` and

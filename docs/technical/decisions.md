@@ -1877,7 +1877,7 @@ anyone adding or changing migrations.
 
 3. **No raw cross-table `organization_id` DML in migrations.** A bounded tripwire test regex-scans for the `UPDATE … SET organization_id` cross-table shape against an explicit allowlist; it is a smoke check, not a soundness proof. Correctness is proven by the `pg_policies`/catalog/data parity gate against the baseline (22 FORCE-RLS tables / 44 policies). Any new allowlist entry must be scoped to exact file-plus-statement identity.
 
-4. **Preserved schema surfaces — keep matching the baseline:** forms' four presets / 16 fields (auto-created via initial data migration), the five parent UNIQUE constraints and six composite FKs, and listings' pinned index names.
+4. **Preserved schema surfaces — keep matching the baseline:** forms' four presets / 16 fields (auto-created via initial data migration), the eight parent UNIQUE constraints and ten composite FKs, and listings' pinned index names.
 
 5. **Quality maxima stay under the fixed threshold lines.** Remediation may only
    reduce a measured maximum or leave it unchanged. A migration that would push

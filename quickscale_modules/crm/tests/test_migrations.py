@@ -69,6 +69,39 @@ def test_deal_parent_unique_constraint_exists() -> None:
     )
 
 
+def test_company_parent_unique_constraint_exists() -> None:
+    """The named ``quickscale_crm_company_id_org_unique`` constraint exists on
+    the company table."""
+    executor = MigrationExecutor(connection)
+    executor.migrate([(APP_LABEL, MIG_0001)])
+
+    apps = executor.loader.project_state([(APP_LABEL, MIG_0001)]).apps
+    Company = apps.get_model(APP_LABEL, "Company")
+
+    constraints = Company._meta.constraints
+    constraint_names = {c.name for c in constraints}
+    assert "quickscale_crm_company_id_org_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_crm_company_id_org_unique "
+        "on Company"
+    )
+
+
+def test_stage_parent_unique_constraint_exists() -> None:
+    """The named ``quickscale_crm_stage_id_org_unique`` constraint exists on
+    the stage table."""
+    executor = MigrationExecutor(connection)
+    executor.migrate([(APP_LABEL, MIG_0001)])
+
+    apps = executor.loader.project_state([(APP_LABEL, MIG_0001)]).apps
+    Stage = apps.get_model(APP_LABEL, "Stage")
+
+    constraints = Stage._meta.constraints
+    constraint_names = {c.name for c in constraints}
+    assert "quickscale_crm_stage_id_org_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_crm_stage_id_org_unique on Stage"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Composite FK proofs — PostgreSQL pg_constraint catalog checks
 # ---------------------------------------------------------------------------
@@ -104,6 +137,27 @@ class TestCrmCompositeFkCatalogProofs:
             "parent_table": "quickscale_crm_deal",
             "child_fk_column": "deal_id",
             "on_delete": "c",
+        },
+        {
+            "constraint_name": "quickscale_crm_contact_company_org_fk",
+            "child_table": "quickscale_crm_contact",
+            "parent_table": "quickscale_crm_company",
+            "child_fk_column": "company_id",
+            "on_delete": "c",
+        },
+        {
+            "constraint_name": "quickscale_crm_deal_contact_org_fk",
+            "child_table": "quickscale_crm_deal",
+            "parent_table": "quickscale_crm_contact",
+            "child_fk_column": "contact_id",
+            "on_delete": "c",
+        },
+        {
+            "constraint_name": "quickscale_crm_deal_stage_org_fk",
+            "child_table": "quickscale_crm_deal",
+            "parent_table": "quickscale_crm_stage",
+            "child_fk_column": "stage_id",
+            "on_delete": "r",
         },
     ]
 
@@ -168,8 +222,8 @@ class TestCrmCompositeFkCatalogProofs:
                     f"must NOT be INITIALLY DEFERRED, got condeferred={condeferred}"
                 )
 
-    def test_composite_fk_on_delete_is_cascade(self) -> None:
-        """Each composite FK uses ON DELETE CASCADE."""
+    def test_composite_fk_on_delete_matches_declaration(self) -> None:
+        """Each composite FK uses its declared ON DELETE action."""
         with connection.cursor() as cursor:
             for entry in self.EXPECTED_FKS:
                 cursor.execute(
@@ -757,7 +811,9 @@ class TestCrmParentOrgMutationRejection:
         """Updating Contact.organization_id fails when a ContactNote
         references the old (contact_id, organization_id) pair.
 
-        A restricted role is expected to fail at the FORCE-RLS boundary before
+        The contact's own company reference is re-pointed to org B so the
+        note's incoming composite FK is the only violated constraint.  A
+        restricted role is expected to fail at the FORCE-RLS boundary before
         PostgreSQL evaluates the composite FK.  A role with BYPASSRLS reaches
         the FK and must receive the original integrity error.
         """
@@ -790,8 +846,17 @@ class TestCrmParentOrgMutationRejection:
             )
 
             if _current_role_bypasses_rls():
+                # Re-point the contact's own outbound tenant reference so the
+                # only violated constraint is the note's incoming composite FK.
+                with org_scope(org_b):
+                    company_b = Company.objects.create(
+                        name="Acme Corp B", organization=org_b
+                    )
                 with pytest.raises(IntegrityError), transaction.atomic():
-                    Contact.all_objects.filter(pk=contact.pk).update(organization=org_b)
+                    Contact.all_objects.filter(pk=contact.pk).update(
+                        organization=org_b,
+                        company=company_b,
+                    )
             else:
                 with (
                     pytest.raises(ProgrammingError, match="row-level security policy"),
@@ -803,6 +868,8 @@ class TestCrmParentOrgMutationRejection:
         """Updating Deal.organization_id fails when a DealNote
         references the old (deal_id, organization_id) pair.
 
+        The deal's own contact and stage references are re-pointed to org B so
+        the note's incoming composite FK is the only violated constraint.
         Restricted-role execution must fail closed at FORCE RLS; a bypass role
         must still reach and prove the composite-FK rejection.
         """
@@ -848,8 +915,28 @@ class TestCrmParentOrgMutationRejection:
             )
 
             if _current_role_bypasses_rls():
+                # Re-point the deal's own outbound tenant references so the
+                # only violated constraint is the note's incoming composite FK.
+                with org_scope(org_b):
+                    company_b = Company.objects.create(
+                        name="Acme Corp B", organization=org_b
+                    )
+                    contact_b = Contact.all_objects.create(
+                        organization=org_b,
+                        first_name="DealMut B",
+                        last_name="Target",
+                        email="dealmut-b@test.com",
+                        company=company_b,
+                    )
+                    stage_b = Stage.objects.create(
+                        name="Test Stage B", order=1, organization=org_b
+                    )
                 with pytest.raises(IntegrityError), transaction.atomic():
-                    Deal.all_objects.filter(pk=deal.pk).update(organization=org_b)
+                    Deal.all_objects.filter(pk=deal.pk).update(
+                        organization=org_b,
+                        contact=contact_b,
+                        stage=stage_b,
+                    )
             else:
                 with (
                     pytest.raises(ProgrammingError, match="row-level security policy"),
@@ -860,9 +947,9 @@ class TestCrmParentOrgMutationRejection:
     def test_contact_org_id_mutation_without_children_succeeds(self) -> None:
         """Prove the positive control without bypassing restricted-role RLS.
 
-        A bypass role can complete the cross-org mutation when no child exists;
-        a restricted role must reject the write at FORCE RLS even without a
-        child row.
+        A bypass role can complete the cross-org move when no child exists and
+        every outbound tenant reference moves with the row; a restricted role
+        must reject the write at FORCE RLS even without a child row.
         """
         from quickscale_modules_crm.models import Company, Contact
         from quickscale_modules_orgs.current_org import org_scope
@@ -882,7 +969,14 @@ class TestCrmParentOrgMutationRejection:
             )
 
             if _current_role_bypasses_rls():
-                Contact.all_objects.filter(pk=contact.pk).update(organization=org_b)
+                with org_scope(org_b):
+                    company_b = Company.objects.create(
+                        name="Acme Corp B", organization=org_b
+                    )
+                Contact.all_objects.filter(pk=contact.pk).update(
+                    organization=org_b,
+                    company=company_b,
+                )
             else:
                 with (
                     pytest.raises(ProgrammingError, match="row-level security policy"),
@@ -894,3 +988,4 @@ class TestCrmParentOrgMutationRejection:
             with org_scope(org_b):
                 contact.refresh_from_db()
             assert contact.organization_id == org_b.pk
+            assert contact.company_id == company_b.pk

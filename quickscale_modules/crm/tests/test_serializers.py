@@ -455,20 +455,21 @@ class TestF115Phase2SerializerHelperOrgScoping:
         from quickscale_modules_crm.models import Company, Contact
 
         with org_scope(org_a):
-            company = Company.objects.create(name="Shared Corp", organization=org_a)
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
             Contact.objects.create(
                 first_name="Org-A",
                 last_name="Contact",
                 email="orga@example.com",
-                company=company,
+                company=company_a,
                 organization=org_a,
             )
         with org_scope(org_b):
+            company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
             Contact.objects.create(
                 first_name="Org-B",
                 last_name="Contact",
                 email="orgb@example.com",
-                company=company,
+                company=company_b,
                 organization=org_b,
             )
 
@@ -480,9 +481,20 @@ class TestF115Phase2SerializerHelperOrgScoping:
         request.org = org_a  # Simulate TenantMiddleware
 
         set_current_org_id(org_a.id)
-        serializer = CompanySerializer(company, context={"request": request})
-        # Should only count org-A contacts (1), not org-B contacts
-        assert serializer.data["contact_count"] == 1
+        # Scoped to org A, only org-A data counts: company A has one contact,
+        # while company B's contact belongs to org B and is not counted.
+        assert (
+            CompanySerializer(company_a, context={"request": request}).data[
+                "contact_count"
+            ]
+            == 1
+        )
+        assert (
+            CompanySerializer(company_b, context={"request": request}).data[
+                "contact_count"
+            ]
+            == 0
+        )
 
     def test_stage_serializer_deal_count_is_org_scoped(self, org_a, org_b, org_a_admin):
         """StageSerializer.get_deal_count() only counts org-scoped deals."""
@@ -493,8 +505,8 @@ class TestF115Phase2SerializerHelperOrgScoping:
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
         with org_scope(org_a):
-            stage = Stage.objects.create(
-                name="Shared Stage", order=1, organization=org_a
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
             )
             company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
             contact_a = Contact.objects.create(
@@ -508,10 +520,13 @@ class TestF115Phase2SerializerHelperOrgScoping:
                 title="Org-A Deal",
                 contact=contact_a,
                 amount=Decimal("1000.00"),
-                stage=stage,
+                stage=stage_a,
                 organization=org_a,
             )
         with org_scope(org_b):
+            stage_b = Stage.objects.create(
+                name="Org-B Stage", order=1, organization=org_b
+            )
             company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
             contact_b = Contact.objects.create(
                 first_name="Org-B",
@@ -524,7 +539,7 @@ class TestF115Phase2SerializerHelperOrgScoping:
                 title="Org-B Deal",
                 contact=contact_b,
                 amount=Decimal("2000.00"),
-                stage=stage,
+                stage=stage_b,
                 organization=org_b,
             )
 
@@ -536,9 +551,16 @@ class TestF115Phase2SerializerHelperOrgScoping:
         request.org = org_a  # Simulate TenantMiddleware
 
         set_current_org_id(org_a.id)
-        serializer = StageSerializer(stage, context={"request": request})
-        # Should only count org-A deals (1), not org-B deals
-        assert serializer.data["deal_count"] == 1
+        # Scoped to org A, only org-A deals count: stage A has one deal, while
+        # stage B's deal belongs to org B and is not counted.
+        assert (
+            StageSerializer(stage_a, context={"request": request}).data["deal_count"]
+            == 1
+        )
+        assert (
+            StageSerializer(stage_b, context={"request": request}).data["deal_count"]
+            == 0
+        )
 
     def test_contact_detail_serializer_deal_count_is_org_scoped(
         self, org_a, org_b, org_a_admin
@@ -551,12 +573,12 @@ class TestF115Phase2SerializerHelperOrgScoping:
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
         with org_scope(org_a):
-            company = Company.objects.create(name="Shared Corp", organization=org_a)
-            contact = Contact.objects.create(
-                first_name="Shared",
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Org-A",
                 last_name="Contact",
                 email="shared@example.com",
-                company=company,
+                company=company_a,
                 organization=org_a,
             )
             stage_a = Stage.objects.create(
@@ -564,18 +586,26 @@ class TestF115Phase2SerializerHelperOrgScoping:
             )
             Deal.objects.create(
                 title="Org-A Deal",
-                contact=contact,
+                contact=contact_a,
                 amount=Decimal("1000.00"),
                 stage=stage_a,
                 organization=org_a,
             )
         with org_scope(org_b):
+            company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+            contact_b = Contact.objects.create(
+                first_name="Org-B",
+                last_name="Contact",
+                email="orgb-deals@example.com",
+                company=company_b,
+                organization=org_b,
+            )
             stage_b = Stage.objects.create(
                 name="Org-B Stage", order=1, organization=org_b
             )
             Deal.objects.create(
                 title="Org-B Deal",
-                contact=contact,
+                contact=contact_b,
                 amount=Decimal("2000.00"),
                 stage=stage_b,
                 organization=org_b,
@@ -589,9 +619,20 @@ class TestF115Phase2SerializerHelperOrgScoping:
         request.org = org_a  # Simulate TenantMiddleware
 
         set_current_org_id(org_a.id)
-        serializer = ContactDetailSerializer(contact, context={"request": request})
-        # Should only count org-A deals (1), not org-B deals
-        assert serializer.data["deal_count"] == 1
+        # Scoped to org A, only org-A deals count: contact A has one deal,
+        # while contact B's deal belongs to org B and is not counted.
+        assert (
+            ContactDetailSerializer(contact_a, context={"request": request}).data[
+                "deal_count"
+            ]
+            == 1
+        )
+        assert (
+            ContactDetailSerializer(contact_b, context={"request": request}).data[
+                "deal_count"
+            ]
+            == 0
+        )
 
     def test_contact_list_serializer_tag_names_is_org_scoped(
         self, org_a, org_b, org_a_admin
@@ -724,22 +765,28 @@ class TestF115Phase2SerializerHelperOrgScoping:
                 name="Personal-Tag", organization=personal_org
             )
 
-        # Create cross-org data that should NOT be visible when scoped
-        # to the personal org.
+        # Create a second organization's self-consistent data that should NOT
+        # be visible when scoped to the personal org.
         with org_scope(org_a):
             cross_tag = Tag.objects.create(name="Cross-Tag", organization=org_a)
-            Contact.objects.create(
+            cross_company = Company.objects.create(
+                name="Cross Corp", organization=org_a
+            )
+            cross_contact = Contact.objects.create(
                 first_name="Cross",
                 last_name="Contact",
                 email="cross@example.com",
-                company=company,
+                company=cross_company,
                 organization=org_a,
+            )
+            cross_stage = Stage.objects.create(
+                name="Cross Stage", order=1, organization=org_a
             )
             Deal.objects.create(
                 title="Cross Deal",
-                contact=contact,
+                contact=cross_contact,
                 amount=Decimal("2000.00"),
-                stage=stage,
+                stage=cross_stage,
                 organization=org_a,
             )
 
@@ -762,10 +809,29 @@ class TestF115Phase2SerializerHelperOrgScoping:
         )
         deal_serializer = DealListSerializer(deal, context={"request": request})
 
-        # All serializer helpers should see only personal-org data.
+        # All serializer helpers should see only personal-org data; the same
+        # helpers applied to org-A rows under personal scope see none of it.
         assert company_serializer.data["contact_count"] == 1
         assert stage_serializer.data["deal_count"] == 1
         assert contact_serializer.data["deal_count"] == 1
+        assert (
+            CompanySerializer(cross_company, context={"request": request}).data[
+                "contact_count"
+            ]
+            == 0
+        )
+        assert (
+            StageSerializer(cross_stage, context={"request": request}).data[
+                "deal_count"
+            ]
+            == 0
+        )
+        assert (
+            ContactDetailSerializer(cross_contact, context={"request": request}).data[
+                "deal_count"
+            ]
+            == 0
+        )
         assert "Personal-Tag" in contact_list_serializer.data["tag_names"]
         assert "Cross-Tag" not in contact_list_serializer.data["tag_names"]
         assert "Personal-Tag" in deal_serializer.data["tag_names"]
@@ -801,18 +867,22 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
         from quickscale_modules_crm.models import Company, Contact
 
-        with org_scope(org_b):
-            foreign_company = Company.objects.create(
-                name="Org-B Corp", organization=org_b
-            )
         with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
             contact = Contact.objects.create(
                 first_name="Org-A",
                 last_name="Contact",
                 email="orga@example.com",
-                company=foreign_company,
+                company=company_a,
                 organization=org_a,
             )
+        with org_scope(org_b):
+            foreign_company = Company.objects.create(
+                name="Org-B Corp", organization=org_b
+            )
+        # The composite FK forbids persisting a cross-org reference, so the
+        # defensive serializer path is probed with an in-memory reassignment.
+        contact.company = foreign_company
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/contacts/")
@@ -830,18 +900,22 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
         from quickscale_modules_crm.models import Company, Contact
 
-        with org_scope(org_b):
-            foreign_company = Company.objects.create(
-                name="Org-B Corp", organization=org_b
-            )
         with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
             contact = Contact.objects.create(
                 first_name="Org-A",
                 last_name="Contact",
                 email="orga-detail@example.com",
-                company=foreign_company,
+                company=company_a,
                 organization=org_a,
             )
+        with org_scope(org_b):
+            foreign_company = Company.objects.create(
+                name="Org-B Corp", organization=org_b
+            )
+        # The composite FK forbids persisting a cross-org reference, so the
+        # defensive serializer path is probed with an in-memory reassignment.
+        contact.company = foreign_company
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/contacts/")
@@ -901,6 +975,25 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga@example.com",
+                company=company_a,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+            deal = Deal.objects.create(
+                title="Org-A Deal",
+                contact=contact_a,
+                amount=Decimal("1000.00"),
+                stage=stage_a,
+                organization=org_a,
+            )
         with org_scope(org_b):
             foreign_company = Company.objects.create(
                 name="Org-B Corp", organization=org_b
@@ -915,14 +1008,10 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
             foreign_stage = Stage.objects.create(
                 name="Org-B Stage", order=1, organization=org_b
             )
-        with org_scope(org_a):
-            deal = Deal.objects.create(
-                title="Org-A Deal",
-                contact=foreign_contact,
-                amount=Decimal("1000.00"),
-                stage=foreign_stage,
-                organization=org_a,
-            )
+        # The composite FKs forbid persisting cross-org references, so the
+        # defensive serializer path is probed with in-memory reassignments.
+        deal.contact = foreign_contact
+        deal.stage = foreign_stage
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/deals/")
@@ -944,6 +1033,25 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
 
         from quickscale_modules_crm.models import Company, Contact, Deal, Stage
 
+        with org_scope(org_a):
+            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
+            contact_a = Contact.objects.create(
+                first_name="Org-A",
+                last_name="Contact",
+                email="orga-detail@example.com",
+                company=company_a,
+                organization=org_a,
+            )
+            stage_a = Stage.objects.create(
+                name="Org-A Stage", order=1, organization=org_a
+            )
+            deal = Deal.objects.create(
+                title="Org-A Deal",
+                contact=contact_a,
+                amount=Decimal("1000.00"),
+                stage=stage_a,
+                organization=org_a,
+            )
         with org_scope(org_b):
             foreign_company = Company.objects.create(
                 name="Org-B Corp", organization=org_b
@@ -958,14 +1066,10 @@ class TestCRMRev001ForeignRelatedObjectIsolation:
             foreign_stage = Stage.objects.create(
                 name="Org-B Stage", order=1, organization=org_b
             )
-        with org_scope(org_a):
-            deal = Deal.objects.create(
-                title="Org-A Deal",
-                contact=foreign_contact,
-                amount=Decimal("1000.00"),
-                stage=foreign_stage,
-                organization=org_a,
-            )
+        # The composite FKs forbid persisting cross-org references, so the
+        # defensive serializer path is probed with in-memory reassignments.
+        deal.contact = foreign_contact
+        deal.stage = foreign_stage
 
         factory = APIRequestFactory()
         request = factory.get(f"/orgs/{org_a.slug}/crm/api/deals/")

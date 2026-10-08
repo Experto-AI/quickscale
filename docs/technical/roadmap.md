@@ -36,11 +36,10 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 |---|---|---|---|---|
 | SA251 | Make Stripe checkout and payment outcomes complete and recoverable | 2 | — | Required |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
-| SA257 | Derive cross-row tenant equality for every tenant-to-tenant FK | 1 | — | Optional |
 | SA266 | Sweep module models, templates, tests, and commands onto the written rules before the freeze | 1 | — | Optional |
 | SA259 | Generate gate wiring from the registry instead of holding copies by parity | 2 | — | Optional |
 | SA265 | Put cross-module vocabulary, capabilities, and private names in their owners | 3 | — | Optional |
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA257, SA259, SA265, SA266 | Optional |
+| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA259, SA265, SA266 | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA256 | Fix `deploy railway` environment writes and DR media streaming | 2 | — | Optional |
@@ -56,7 +55,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 ═╗ SA257 ──► SA266 ──► SA204 ──► SA153 ──► SA154 (inventory)
+Track 1: SA191 ═╗ SA266 ──► SA204 ──► SA153 ──► SA154 (inventory)
                (interleaves while SA191 waits on the maintainer)
 Track 2: SA251 ──► SA256 ──► SA259 ──► SA253 ──► SA255 ──► SA260 ──► SA263
 Track 3: SA265 ──► SA258 ──► SA264 ──► SA262 ──► SA261
@@ -80,7 +79,7 @@ lands before SA153 slice (a), whose schema work is `0002+` from the start (arch 
 SA259 lands before the new gates it cheapens (SA204's hash gate, SA253's rendered-artifact gate).
 SA258 lands before SA191's cutover so `bap-web-new` starts on thin includes and pays one adoption
 step instead of one per release. SA154 is an inventory, not work. SA191 runs slice (b) first;
-slice (a) waits on the maintainer's production dump, and Track 1 takes SA257 and SA266 while it
+slice (a) waits on the maintainer's production dump, and Track 1 takes SA266 while it
 waits.
 
 ### Track states
@@ -364,8 +363,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     resolves the reservation against the provider before it is closed; a session-less reservation
     is looked up by its stored reference and adopted, expired, or voided; and
     `quickscale_billing_reconcile_checkouts` clears accumulated rows under the organization's
-    provider mutation mutex. Next: slice (c).
-  - [ ] (c) Delayed-payment webhook events.
+    provider mutation mutex.
+  - [x] (c) Delayed-payment webhook events. An unpaid completed checkout binds its reservation
+    and is accepted; `checkout.session.async_payment_succeeded` credits the purchase exactly once
+    and `checkout.session.async_payment_failed` releases the reservation, on the existing
+    event-dedup key. Next: the slice-(a) live checkout record.
 
   **Surfaces:** `billing/views.py`, `_checkout.py`, `_removal.py`, `_webhooks.py`,
   `_stripe_client.py`, their tests, the billing README, and the tech audit.
@@ -422,24 +424,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** `commands/_deploy_service_config.py`, `dr_engine/_media.py`, their tests, and the
   tech audit.
 
-- [ ] **SA257 — Derive cross-row tenant equality for every tenant-to-tenant FK.**
-
-  **Context:** 6 of the 10 shipped intra-tenant FKs carry a composite `(fk, organization_id)`
-  constraint, held by hand-listed tuples, and project FKs are covered by nothing. A seed, command,
-  or project service that writes IDs can persist a cross-organization reference, which then lets
-  one org's deletion cascade into another's rows or block its purge (arch audit
-  `tenant-reference-equality-partial`, option 1). SA153 adds at least two such references.
-
-  **Acceptance:** an orgs system check walks the marker-derived tenant models, finds every FK to
-  another tenant model, and requires a composite constraint present in `pg_constraint` or a
-  declared `tenant_reference_exemptions` entry; it runs in projects like W006, starts as a
-  Warning, and replaces both hand-listed tuples. The four missing shipped composites land inside
-  their module's `0001_initial`, before SA204. `module-extension.md` documents
-  `add_composite_child_fk` for project-owned tenant tables.
-
-  **Surfaces:** orgs `checks.py` (Track 3 reviews), the affected modules' models and
-  `0001_initial`, `orgs/tests/test_tenant_table_conformance.py`, `module-extension.md`, and the
-  arch audit.
+- [x] **SA257 — Derive cross-row tenant equality for every tenant-to-tenant FK.**
 
 - [ ] **SA258 — Move the module↔project seam from user-owned generated files into the runtime.**
 
