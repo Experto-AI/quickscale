@@ -580,6 +580,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     test reads the Module Conventions rule headings in `decisions.md`, so every rule is covered by
     a detector, recorded open, or delegated to its carrier rules or external gate, and the harness
     success line names each delegated rule with its carrier.
+  - **Tenant-to-tenant references are storage-enforced.** Every foreign key between tenant models
+    — including CRM contact→company, deal→contact, and deal→stage and blog post→category — carries
+    a composite `(fk, organization_id)` constraint, and a warning-level `quickscale_orgs.W007`
+    system check derives the reference set from model metadata and reports a tenant-to-tenant
+    foreign key that lacks one unless the child model records a reasoned
+    `tenant_reference_exemptions` entry.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

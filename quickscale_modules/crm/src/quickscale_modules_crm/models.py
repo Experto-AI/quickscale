@@ -68,6 +68,12 @@ class Company(TenantModel):
         app_label = "quickscale_crm"
         ordering = ["name"]
         verbose_name_plural = "Companies"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["id", "organization"],
+                name="quickscale_crm_company_id_org_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -158,6 +164,11 @@ class Stage(TenantModel):
                 fields=["terminal_semantic", "organization"],
                 name="quickscale_crm_stage_terminal_semantic_organization_unique",
                 condition=Q(organization__isnull=False),
+            ),
+            # Make the stage row a valid composite-FK target for deals.
+            models.UniqueConstraint(
+                fields=["id", "organization"],
+                name="quickscale_crm_stage_id_org_unique",
             ),
         ]
 

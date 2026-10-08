@@ -133,6 +133,48 @@ deletes with its row. The two values are exported as `PROVIDER_BACKED` and
 strings are equivalent. Shipped module models declare their provider fields
 from their own app configuration and need no model attribute.
 
+Every foreign key between tenant models — shipped or project-owned — is
+checked by the `quickscale_orgs.W007` system check: it derives the reference
+set from model metadata and warns when a reference has neither a composite
+`(fk_column, organization_id)` constraint to the parent's
+`(pk_column, organization_id)` pair nor a reasoned
+`tenant_reference_exemptions` entry on the child model. Add the pair from the
+child's own migration through `quickscale_modules_orgs.tenancy`: the parent
+needs a UNIQUE `(id, organization_id)` constraint — declare it as a `Meta`
+`UniqueConstraint` or call `add_parent_unique_constraint()` — and the child
+needs `add_composite_child_fk()`:
+
+```python
+def forward(apps, schema_editor):
+    add_parent_unique_constraint(
+        schema_editor, "properties_property", "property_id_org_unique",
+    )
+    add_composite_child_fk(
+        schema_editor,
+        child_table="properties_propertyinquiry",
+        constraint_name="property_inquiry_property_org_fk",
+        child_fk_column="property_id",
+        parent_table="properties_property",
+        on_delete="CASCADE",
+    )
+```
+
+The composite constraint mirrors the relation's `on_delete`: `CASCADE`,
+`RESTRICT` for `PROTECT`, or `SET NULL (child_fk_column)` for a nullable
+`SET_NULL` relation, which clears only the local key and skips enforcement
+for its NULL rows while leaving `organization_id` intact. When the equality
+is deliberately not storage-enforced, record the reason on the child model
+instead:
+
+```python
+class PropertyInquiry(TenantModel):
+    ...
+    tenant_reference_exemptions = {
+        "property": "Reviewed: rows are imported by the project's own "
+        "importer, which enforces the organization pair.",
+    }
+```
+
 A project app also declares the removal obligations it owns on its own
 `AppConfig`; `orgs` discovers them, and the aggregate names no module's labels
 or fields (an app may still declare provider state stored on another installed
