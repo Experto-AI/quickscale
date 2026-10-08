@@ -23,6 +23,13 @@ Covers every code path in ``check_personal_data_declarations()``:
 * Control — a project-app ``EmailField`` on a user-referencing model fails the
   real walk, and a collected declaration silences it
 
+Covers every code path in ``check_tenant_reference_equality()``:
+
+* W007 — exception during tenant-reference discovery
+* W007 — one message per uncovered tenant-to-tenant reference
+* Control — a missing composite FK warns, a recorded exemption silences it,
+  an unreadable or stale exemption is reported, and the installed walk passes
+
 Covers the ``check_tenant_manager_inheritance()`` paths:
 
 * E003 — a model carrying a ``TenantManager`` without ``TenantModel``
@@ -48,9 +55,51 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.db import models
 from pytest import MonkeyPatch
 
 from quickscale_modules_orgs.checks import check_tenant_isolation
+
+#: Throwaway models for the tenant-reference discovery regressions.  The app
+#: label is deliberately not installed: the probes never reach the database,
+#: the app registry walk, or the conformance registries.
+_PROBE_APP_LABEL = "tenant_reference_probe"
+
+
+class ReferenceProbeParent(models.Model):
+    """Concrete probe parent with a natural key for ``to_field`` relations."""
+
+    code = models.CharField(max_length=20, unique=True)
+
+    class Meta:
+        app_label = _PROBE_APP_LABEL
+
+
+class ReferenceProbeParentProxy(ReferenceProbeParent):
+    """A proxy of the probe parent, mirroring a project specialization."""
+
+    class Meta:
+        proxy = True
+        app_label = _PROBE_APP_LABEL
+
+
+class ReferenceProbeChild(models.Model):
+    """Probe child whose foreign keys target the proxy and a natural key."""
+
+    parent = models.ForeignKey(
+        ReferenceProbeParentProxy,
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    parent_by_code = models.ForeignKey(
+        ReferenceProbeParent,
+        to_field="code",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+
+    class Meta:
+        app_label = _PROBE_APP_LABEL
 
 
 def _make_mock_model(
@@ -397,6 +446,272 @@ class TestCheckPersonalDataDeclarationsW006:
         assert messages, "the other fixture fields stay undeclared"
         named = " ".join(message.msg for message in messages)
         assert "project_tenant_app.ProjectListing.contact_email" not in named
+
+
+# ---------------------------------------------------------------------------
+# Tenant-reference equality check (W007) tests
+# ---------------------------------------------------------------------------
+
+
+def _patch_missing_composite_constraints(monkeypatch: MonkeyPatch) -> None:
+    """Make every look-up report no composite constraint (no database read)."""
+    from quickscale_modules_orgs import _tenancy_references
+
+    monkeypatch.setattr(
+        _tenancy_references,
+        "find_composite_reference_constraint",
+        lambda reference: None,
+    )
+
+
+class TestCheckTenantReferenceEqualityW007:
+    """A tenant-to-tenant FK without composite equality is reported."""
+
+    @patch("quickscale_modules_orgs._tenancy_references.tenant_reference_equality_gaps")
+    def test_returns_w007_on_discovery_exception(self, mock_gaps: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_tenant_reference_equality
+
+        mock_gaps.side_effect = ValueError("Simulated reference failure")
+
+        messages = check_tenant_reference_equality(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_orgs.W007"
+        assert "Failed to read the tenant-reference equality state" in messages[0].msg
+
+    @patch("quickscale_modules_orgs._tenancy_references.tenant_reference_equality_gaps")
+    def test_returns_w007_for_each_gap(self, mock_gaps: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_tenant_reference_equality
+
+        mock_gaps.return_value = (
+            "acme_app.propertylisting.agent references acme_app.agent without a "
+            "composite (fk, organization_id) constraint",
+        )
+
+        messages = check_tenant_reference_equality(app_configs=None)
+
+        assert len(messages) == 1
+        assert messages[0].id == "quickscale_orgs.W007"
+        assert "acme_app.propertylisting.agent" in messages[0].msg
+        assert "add_composite_child_fk" in messages[0].hint
+        assert "tenant_reference_exemptions" in messages[0].hint
+
+    @patch("quickscale_modules_orgs._tenancy_references.tenant_reference_equality_gaps")
+    def test_no_gaps_returns_no_messages(self, mock_gaps: MagicMock) -> None:
+        from quickscale_modules_orgs.checks import check_tenant_reference_equality
+
+        mock_gaps.return_value = ()
+
+        assert check_tenant_reference_equality(app_configs=None) == []
+
+
+def test_missing_composite_reference_warns(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """A real derived reference without a catalog constraint is reported."""
+    from quickscale_modules_orgs import _tenancy_references
+
+    _patch_missing_composite_constraints(monkeypatch)
+
+    gaps = _tenancy_references.tenant_reference_equality_gaps()
+
+    named = "\n".join(gaps)
+    assert "quickscale_crm.contact.company references quickscale_crm.company" in named
+    assert "quickscale_blog.post.category references quickscale_blog.category" in named
+    assert "quickscale_crm.deal.stage references quickscale_crm.stage" in named
+
+
+def test_reference_discovery_resolves_proxy_and_natural_key_targets() -> None:
+    """Proxy targets resolve to their concrete model; to_field sets the column."""
+    from quickscale_modules_orgs._tenancy_references import get_tenant_references
+
+    references = get_tenant_references([ReferenceProbeParent, ReferenceProbeChild])
+    by_field = {reference.field_name: reference for reference in references}
+
+    assert set(by_field) == {"parent", "parent_by_code"}
+    assert by_field["parent"].parent_label == (
+        "tenant_reference_probe.referenceprobeparent"
+    )
+    assert by_field["parent"].parent_table == ReferenceProbeParent._meta.db_table
+    assert by_field["parent"].parent_target_column == "id"
+    assert by_field["parent_by_code"].parent_target_column == "code"
+
+
+def test_proxy_targeted_reference_without_composite_warns(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """A reference to a proxy of a tenant model is walked and can gap."""
+    from quickscale_modules_orgs import _tenancy_references
+
+    _patch_missing_composite_constraints(monkeypatch)
+
+    gaps = _tenancy_references.tenant_reference_equality_gaps(
+        [ReferenceProbeParent, ReferenceProbeChild]
+    )
+    named = "\n".join(gaps)
+    assert (
+        "tenant_reference_probe.referenceprobechild.parent references "
+        "tenant_reference_probe.referenceprobeparent" in named
+    )
+    assert (
+        "tenant_reference_probe.referenceprobechild.parent_by_code references "
+        "tenant_reference_probe.referenceprobeparent" in named
+    )
+
+
+class _FakeCatalogCursor:
+    """Cursor stub returning pre-seeded ``pg_constraint`` rows."""
+
+    def __init__(self, rows: list[tuple]) -> None:
+        self._rows = rows
+
+    def execute(self, sql: str, params: list) -> None:
+        del sql, params
+
+    def fetchall(self) -> list[tuple]:
+        return list(self._rows)
+
+    def __enter__(self) -> "_FakeCatalogCursor":
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+
+def _patch_catalog_rows(monkeypatch: MonkeyPatch, rows: list[tuple]) -> None:
+    """Make the composite-constraint lookup read *rows* instead of PostgreSQL."""
+
+    class _FakeConnection:
+        vendor = "postgresql"
+
+        def cursor(self) -> _FakeCatalogCursor:
+            return _FakeCatalogCursor(rows)
+
+    from quickscale_modules_orgs import _tenancy_references
+
+    monkeypatch.setattr(_tenancy_references, "connection", _FakeConnection())
+
+
+def test_catalog_matcher_requires_exactly_two_pairs(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """Only the exact two-column equality pairing backs a reference."""
+    from quickscale_modules_orgs import _tenancy_references
+
+    reference = _tenancy_references.TenantReference(
+        model_label="probe.child",
+        field_name="parent",
+        child_table="probe_child",
+        fk_column="parent_id",
+        parent_label="probe.parent",
+        parent_table="probe_parent",
+        parent_target_column="id",
+        exempt_reason=None,
+    )
+
+    _patch_catalog_rows(
+        monkeypatch,
+        [
+            (
+                "exact_fk",
+                ["parent_id", "organization_id"],
+                ["id", "organization_id"],
+                False,
+            )
+        ],
+    )
+    constraint = _tenancy_references.find_composite_reference_constraint(reference)
+    assert constraint is not None
+    assert constraint.constraint_name == "exact_fk"
+
+    # A wider composite whose extra key column is nullable cannot guarantee
+    # the equality under MATCH SIMPLE and must not be accepted.
+    _patch_catalog_rows(
+        monkeypatch,
+        [
+            (
+                "wider_nullable_fk",
+                ["parent_id", "organization_id", "locale"],
+                ["id", "organization_id", "locale"],
+                False,
+            )
+        ],
+    )
+    assert _tenancy_references.find_composite_reference_constraint(reference) is None
+
+
+def test_recorded_exemption_suppresses_the_gap(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """A reasoned tenant_reference_exemptions entry replaces the constraint."""
+    from quickscale_modules_crm.models import ContactNote
+    from quickscale_modules_orgs import _tenancy_references
+
+    _patch_missing_composite_constraints(monkeypatch)
+    reason = "Fixture note rows are reviewed and retained."
+    monkeypatch.setattr(
+        ContactNote,
+        "tenant_reference_exemptions",
+        {"contact": reason},
+        raising=False,
+    )
+
+    references = _tenancy_references.get_tenant_references()
+    exempted = next(
+        reference
+        for reference in references
+        if reference.model_label == "quickscale_crm.contactnote"
+        and reference.field_name == "contact"
+    )
+    assert exempted.exempt_reason == reason
+
+    gaps = _tenancy_references.tenant_reference_equality_gaps()
+    assert "quickscale_crm.contactnote.contact" not in "\n".join(gaps)
+
+
+def test_unreadable_exemption_is_reported(monkeypatch: MonkeyPatch) -> None:
+    """A non-mapping declaration fails closed with a named gap."""
+    from quickscale_modules_crm.models import ContactNote
+    from quickscale_modules_orgs import _tenancy_references
+
+    monkeypatch.setattr(
+        ContactNote,
+        "tenant_reference_exemptions",
+        ["contact"],
+        raising=False,
+    )
+
+    gaps = _tenancy_references.tenant_reference_equality_gaps()
+
+    assert len(gaps) == 1
+    assert "non-mapping" in gaps[0]
+    assert "quickscale_crm.contactnote" in gaps[0]
+
+
+def test_stale_exemption_is_reported(monkeypatch: MonkeyPatch) -> None:
+    """An exemption naming no tenant-to-tenant FK is reported."""
+    from quickscale_modules_crm.models import ContactNote
+    from quickscale_modules_orgs import _tenancy_references
+
+    _patch_missing_composite_constraints(monkeypatch)
+    monkeypatch.setattr(
+        ContactNote,
+        "tenant_reference_exemptions",
+        {"not_a_reference": "Reason."},
+        raising=False,
+    )
+
+    gaps = _tenancy_references.tenant_reference_equality_gaps()
+
+    assert any("not_a_reference" in gap for gap in gaps)
+
+
+@pytest.mark.django_db
+def test_tenant_reference_equality_passes_for_installed_models() -> None:
+    """Every installed tenant reference (modules and fixtures) is backed."""
+    from quickscale_modules_orgs.checks import check_tenant_reference_equality
+
+    assert check_tenant_reference_equality(app_configs=None) == []
 
 
 # ---------------------------------------------------------------------------

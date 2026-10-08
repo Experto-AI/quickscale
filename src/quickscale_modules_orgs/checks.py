@@ -34,6 +34,9 @@ The checks:
    model's personal-data candidate field has no declared treatment or reasoned
    exclusion, or when a declared treatment's app contributes no anonymization
    handler.
+8. ``check_tenant_reference_equality`` (SA257) — warns when a foreign key
+   between tenant models has no composite ``(fk, organization_id)`` constraint
+   and no recorded ``tenant_reference_exemptions`` entry.
 
 Module Conventions rule 28: the AST helpers that compare live constants and
 follow a boundary implementation's entry path live in ``_checks_structure``
@@ -42,14 +45,15 @@ declaration (pinned by ``quickscale_core.tests.test_privileged_command_contract`
 the RLS boot guard's ``os.environ`` reads (rule 35), and the
 ``_boundary_implementations`` patch seam stay on this module.
 
-The isolation, classification, and personal-data checks use the same
-marker-based discovery as the management command.  They emit ``WARNING`` level
-messages so they do not block startup in development or pre-migration states.
-Use the management command for a pass/fail exit code in CI.  They stay
-registered through ``@register`` rather than the eager runner:
-``check_tenant_isolation`` reads live PostgreSQL catalog state, so it cannot
-run from ``ready()`` in processes that must start without a database (and none
-of them may block a startup, being warning-only).
+The isolation, classification, personal-data, and tenant-reference equality
+checks use the same marker-based discovery as the management command.  They
+emit ``WARNING`` level messages so they do not block startup in development or
+pre-migration states.  Use the management command for a pass/fail exit code in
+CI.  They stay registered through ``@register`` rather than the eager runner:
+``check_tenant_isolation`` and ``check_tenant_reference_equality`` read live
+PostgreSQL catalog state, so they cannot run from ``ready()`` in processes that
+must start without a database (and none of them may block a startup, being
+warning-only).
 
 The role, stray-manager, provider-ID, and discharge checks run eagerly
 through the helper.  The provider-ID and discharge checks are ``ERROR``
@@ -75,6 +79,7 @@ from django.db import connection
 
 import quickscale_modules_orgs._checks_structure as _checks_structure
 import quickscale_modules_orgs._personal_data as _personal_data
+import quickscale_modules_orgs._tenancy_references as _tenancy_references
 
 from quickscale_modules_orgs.removal import (
     ORGANIZATION_MODEL_LABEL as ORGANIZATION_MODEL_LABEL,
@@ -385,6 +390,56 @@ def check_personal_data_declarations(
         )
         for gap in gaps
     ]
+
+
+# ---------------------------------------------------------------------------
+# SA257 — Tenant-reference equality check
+# ---------------------------------------------------------------------------
+
+
+@register("quickscale_orgs")
+def check_tenant_reference_equality(
+    _app_configs: object = None, **kwargs: object
+) -> list:
+    """Warn on tenant-to-tenant foreign keys without equality enforcement.
+
+    Walks the marker-derived tenant models, derives every foreign key that
+    points at another tenant model, and reports each reference that neither
+    carries a composite ``(fk, organization_id)`` constraint to the parent's
+    ``(target column, organization_id)`` pair in PostgreSQL nor is covered by
+    a reasoned ``tenant_reference_exemptions`` entry on the child model.
+    Reports an unreadable exemption declaration and an exemption that names no
+    tenant-to-tenant foreign key as well.
+
+    The reference set is derived from model metadata at check time, so a
+    project-owned foreign key is covered without editing vendored module
+    source, and a new reference cannot escape the check by being left off a
+    hand-maintained list.
+
+    Returns:
+        A list of ``Warning`` instances, one per uncovered reference.
+    """
+    try:
+        gaps = _tenancy_references.tenant_reference_equality_gaps()
+    except Exception as exc:
+        return [
+            Warning(
+                f"Failed to read the tenant-reference equality state: {exc}",
+                hint="Ensure Django apps are fully loaded before this check runs.",
+                id="quickscale_orgs.W007",
+            )
+        ]
+
+    hint = (
+        "Give every foreign key between tenant models a composite "
+        "(fk_column, organization_id) constraint to the parent's "
+        "(target column, organization_id) pair — add one in the child's "
+        "migration with quickscale_modules_orgs.tenancy."
+        "add_parent_unique_constraint() and add_composite_child_fk() — or "
+        "record a reasoned 'tenant_reference_exemptions' entry on the child "
+        "model."
+    )
+    return [Warning(gap, hint=hint, id="quickscale_orgs.W007") for gap in gaps]
 
 
 # ---------------------------------------------------------------------------
