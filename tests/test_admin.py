@@ -922,22 +922,21 @@ class TestDealNoteAdminSameOrgValidation:
             Stage,
         )
 
-        with org_scope(org_a):
-            company_a = Company.objects.create(name="Org-A Corp", organization=org_a)
-            contact_a = Contact.objects.create(
-                first_name="Contact",
-                last_name="A",
-                email="contact-a@org-a.com",
-                company=company_a,
-                organization=org_a,
-            )
-            stage_a = Stage.objects.create(name="Stage A", order=1, organization=org_a)
         with org_scope(org_b):
+            company_b = Company.objects.create(name="Org-B Corp", organization=org_b)
+            contact_b = Contact.objects.create(
+                first_name="Contact",
+                last_name="B",
+                email="contact-b@org-b.com",
+                company=company_b,
+                organization=org_b,
+            )
+            stage_b = Stage.objects.create(name="Stage B", order=1, organization=org_b)
             deal_b = Deal.objects.create(
                 title="Foreign Deal",
-                contact=contact_a,
+                contact=contact_b,
                 amount=1000,
-                stage=stage_a,
+                stage=stage_b,
                 organization=org_b,
             )
 
