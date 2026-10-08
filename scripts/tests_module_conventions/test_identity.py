@@ -974,3 +974,43 @@ def test_module_list_template_control() -> None:
         },
     )
     assert checker.rule_37_module_lists(orgs_reservation) == []
+
+
+def test_tests_file_set_control() -> None:
+    module = _golden_module()
+    disallowed = replace(module, tests={**module.tests, "helpers.py": "VALUE = 1\n"})
+    assert any(
+        "outside rule 29" in violation
+        for violation in _violations(checker.rule_29_test_names, disallowed)
+    )
+    allowed = replace(
+        module,
+        tests={
+            **module.tests,
+            "_helpers.py": "VALUE = 1\n",
+            "templates/base.html": "x\n",
+        },
+    )
+    assert _violations(checker.rule_29_test_names, allowed) == []
+
+
+def test_shipped_source_ticket_control() -> None:
+    module = _golden_module()
+    broken = _with_files(module, models=module.files["models.py"] + "\n# SA999 legacy note\n")
+    assert any(
+        "in shipped source" in violation
+        for violation in _violations(checker.rule_29_test_names, broken)
+    )
+    phase = _with_files(module, models=module.files["models.py"] + "\n# T9.9 legacy note\n")
+    assert any(
+        "in shipped source" in violation
+        for violation in _violations(checker.rule_29_test_names, phase)
+    )
+
+
+def test_manifest_ticket_control() -> None:
+    module = _golden_module()
+    broken = replace(module, manifest_text="# Manifest rules (T2.3 Phase 3)\n")
+    assert any(
+        "module.yml" in violation for violation in _violations(checker.rule_29_test_names, broken)
+    )

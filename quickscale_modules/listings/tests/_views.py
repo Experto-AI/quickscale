@@ -1,7 +1,7 @@
 """Views for testing the listings module"""
 
 from quickscale_modules_listings.views import ListingDetailView, ListingListView
-from tests.models import ConcreteListing
+from tests.listing_app.models import ConcreteListing
 
 
 class ConcreteListingListView(ListingListView):

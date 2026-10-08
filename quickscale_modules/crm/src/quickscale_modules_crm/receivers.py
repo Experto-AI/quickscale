@@ -1,6 +1,6 @@
 """Signal receivers for the QuickScale CRM module.
 
-SA7.1 — ``seed_crm_default_stages_on_org_created`` is the CRM-side
+``seed_crm_default_stages_on_org_created`` is the CRM-side
 receiver of the ``organization_created`` signal from the orgs module,
 replacing the old reverse-import pattern in ``crm_bootstrap.py``.
 """

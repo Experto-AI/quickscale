@@ -43,7 +43,7 @@ from .serializers import (
 def _resolve_active_org(request: Request | HttpRequest) -> Any:
     """Return the active organization for the current request.
 
-    SA11.6 flat-route contract: the active org is resolved strictly from
+    Flat-route contract: the active org is resolved strictly from
     ``request.org`` (set by ``TenantMiddleware``).  No personal-org fallback
     or warm-on-read stage-seeding side effect is performed — stages are
     seeded once at org-creation time via the ``organization_created`` signal.
@@ -123,7 +123,7 @@ class CRMDashboardView(LoginRequiredMixin, OrgRoleMixin, TemplateView):
     the organization's viewer role is refused (Module Conventions rule 19).
     """
 
-    template_name = "quickscale_crm/crm/dashboard.html"
+    template_name = "quickscale_crm/dashboard.html"
     min_org_role = OrgRole.VIEWER
 
     def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
@@ -133,7 +133,7 @@ class CRMDashboardView(LoginRequiredMixin, OrgRoleMixin, TemplateView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
 
-        # T1.5: flat /crm route contract — always use solo-style URLs.
+        # Flat /crm route contract — always use solo-style URLs.
         context["crm_dashboard_url"] = reverse("quickscale_crm:dashboard")
         context["crm_api_root_url"] = "/crm/api/"
         context["crm_api_prefix"] = "/crm/api/"
@@ -257,7 +257,7 @@ class CRMModelViewSet(CRMApiEnabledMixin, viewsets.ModelViewSet):
 class OrgScopedReadMixin(CRMModelViewSet):
     """Read-scoping seam for CRM primary resource querysets.
 
-    T1.5 flat-route contract: querysets are scoped to the active organization
+    Flat-route contract: querysets are scoped to the active organization
     via the unified ``_resolve_active_org`` seam.  No NULL/global fallback.
 
     Subclasses set ``_org_scope_field`` to the FK field used for filtering:

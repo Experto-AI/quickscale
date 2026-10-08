@@ -41,7 +41,8 @@
       "sa235-context-processor-billing-urls": "Regenerated 2026-10-03 \u2014 the generated context processor resolves billing's template URL from the module's named routes (quickscale_billing:pricing_page and quickscale_billing:dashboard) instead of repeating /billing/... path strings, the retired organization-scoped /orgs/<slug>/billing/pricing/ value is gone, and the projected QUICKSCALE_BILLING_ENABLED setting gates the value so an absent or switched-off billing yields None (SA235, rule 41). 1 fixture hash updated per variant: testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative.",
       "v88-dockerfile-start-sh": "Regenerated 2026-09-14 \u2014 Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
+      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
+      "sa266": "Regenerated 2026-10-08 \u2014 the generated Makefile check-tenant-isolation target and .github/workflows/ci.yml isolation step now pass --json to quickscale_orgs_check_tenant_isolation, whose machine-output flag is --json; --format json is retired. Only these two generated paths changed in react_default; react_empty and react_selected do not render the tenant-isolation step. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -93,7 +94,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "1f9fd6afea3992dcdccaa3bfada4b00a4c5ef64f08172aebd47389f1f584356b"
+      "sha256": "7c6d6790013bc6a98eb4a8f37924b22b8d18f40e5326c9e75f573a8cd935a6a0"
     },
     ".gitignore": {
       "mode": "644",
@@ -109,7 +110,7 @@
     },
     "Makefile": {
       "mode": "644",
-      "sha256": "40ba0de63f9f0c52ceef81afe9dcabed481e8d3fe4a8ac721b8110a3456b4738"
+      "sha256": "c5ecf40858df844bab8f7f463b5a84d5998c7d56c01ad41828aa177218c95ecf"
     },
     "OPERATIONS.md": {
       "mode": "644",

@@ -117,7 +117,8 @@ module's paths are:
 - `quickscale_forms_seed_presets` — creates the four built-in form presets. Idempotent and safe
   to run multiple times.
 - `quickscale_forms_anonymize_submissions` — nulls `ip_address` and clears `user_agent` for
-  submissions older than each form's `data_retention_days`; a GDPR compliance helper.
+  submissions older than each form's `data_retention_days`; a GDPR compliance helper. `--trigger`
+  defaults to `manual`; a `scheduled` run refuses while the module is switched off.
 
 ## Operations
 
@@ -145,9 +146,10 @@ migration hardcode the historical 365-day default and do not inherit the runtime
 Existing forms always keep their stored per-row retention window regardless of how they were
 created.
 
-Schedule `python manage.py quickscale_forms_anonymize_submissions` periodically — daily is a
-reasonable interval — through your cron or platform scheduler; the module ships no scheduler,
-and anonymization runs only when the command is invoked.
+Schedule `python manage.py quickscale_forms_anonymize_submissions --trigger scheduled`
+periodically — daily is a reasonable interval — through your cron or platform scheduler; the
+module ships no scheduler, a scheduled run refuses while the module is switched off, and
+anonymization runs only when the command is invoked.
 
 ## Extending
 

@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 
 from quickscale_modules_listings.filters import ListingFilter, get_listing_filter
-from tests.models import ConcreteListing
+from tests.listing_app.models import ConcreteListing
 
 
 @pytest.mark.django_db

@@ -498,3 +498,78 @@ def test_package_file_controls() -> None:
         "does not publish is_enabled()" in violation
         for violation in _violations(checker.rule_11_package_files, no_enabled)
     )
+
+
+def test_command_flag_conventions_controls() -> None:
+    module = _golden_module()
+    format_flag = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_report.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('--format', choices=('human', 'json'))\n"
+            )
+        },
+    )
+    assert any(
+        "--format" in violation
+        for violation in _violations(checker.rule_17_management_commands, format_flag)
+    )
+    scheduled_alias = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_report.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('--scheduled', action='store_true')\n"
+            )
+        },
+    )
+    assert any(
+        "--scheduled" in violation
+        for violation in _violations(checker.rule_17_management_commands, scheduled_alias)
+    )
+    bad_trigger = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_report.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('--trigger', choices=['scheduled'], "
+                "default='scheduled')\n"
+            )
+        },
+    )
+    violations = _violations(checker.rule_17_management_commands, bad_trigger)
+    assert any("--trigger must offer" in violation for violation in violations)
+    assert any("--trigger must default" in violation for violation in violations)
+    purge_without_confirm = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_purge.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('--dry-run', action='store_true')\n"
+            )
+        },
+    )
+    assert any(
+        "--confirm" in violation
+        for violation in _violations(checker.rule_17_management_commands, purge_without_confirm)
+    )
+    conforming = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_purge.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('--confirm')\n"
+                "        parser.add_argument('--dry-run', action='store_true')\n"
+                "        parser.add_argument('--trigger', choices=['manual', 'scheduled'], "
+                "default='manual')\n"
+                "        parser.add_argument('--json', action='store_true')\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_17_management_commands, conforming) == []

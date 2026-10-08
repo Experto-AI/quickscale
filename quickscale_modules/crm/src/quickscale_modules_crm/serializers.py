@@ -9,14 +9,14 @@ from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
     """Return the current organization ID for create stamping.
 
-    SA11.6 flat-route contract: resolves ``request.org`` (set by
+    Flat-route contract: resolves ``request.org`` (set by
     ``TenantMiddleware``).  No personal-org fallback is performed — callers
     must ensure ``request.org`` is set before invoking the serializer.
     Raises ``ValidationError`` when no org context is available.
 
     The contextvar is already set by ``TenantMiddleware._call_with_org``
     via ``org_scope()``; this function only reads the org ID for stamping
-    purposes and does not re-set the contextvar (T1.19 — unified entry
+    purposes and does not re-set the contextvar (unified entry
     point).
     """
     request = serializer.context.get("request")
@@ -36,13 +36,13 @@ def _request_org_id(serializer: serializers.Serializer) -> int | str | None:
 def _read_org_id(serializer: serializers.Serializer) -> int | str | None:
     """Return the current organization ID for read filtering.
 
-    T1.5 flat-route contract: always returns the active org ID from
+    Flat-route contract: always returns the active org ID from
     ``request.org``, or ``None`` when no request context is available.
 
     The contextvar is already set by ``TenantMiddleware._call_with_org``
     via ``org_scope()``; this function only reads the org ID for
-    scoping purposes and does not re-set the contextvar (T1.19 —
-    unified entry point).
+    scoping purposes and does not re-set the contextvar
+    (unified entry point).
     """
     request = serializer.context.get("request")
     if request is None:
@@ -249,7 +249,7 @@ class ContactListSerializer(serializers.ModelSerializer):
     def get_tag_names(self, obj: Contact) -> list[str]:
         """Return list of tag names.
 
-        T1.5: scoped to the active organization.
+        Scoped to the active organization.
         """
         org_id = _read_org_id(self)
         if org_id is not None:
@@ -533,7 +533,7 @@ class DealListSerializer(serializers.ModelSerializer):
     def get_tag_names(self, obj: Deal) -> list[str]:
         """Return list of tag names.
 
-        T1.5: scoped to the active organization.
+        Scoped to the active organization.
         """
         org_id = _read_org_id(self)
         if org_id is not None:
@@ -691,7 +691,7 @@ class BulkUpdateStageSerializer(serializers.Serializer):
     def validate_stage_id(self, value: Stage) -> Stage:
         """Reject non-owned stages.
 
-        SA11.6 flat-route contract: the target stage must belong to the
+        Flat-route contract: the target stage must belong to the
         active organization resolved from ``request.org`` (set by
         middleware).  No personal-org fallback is performed.
         """

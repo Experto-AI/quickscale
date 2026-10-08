@@ -103,7 +103,6 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                "verbose_name": "Backup policy",
                 "verbose_name_plural": "Backup policies",
             },
         ),
@@ -213,8 +212,6 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "Backup artifact",
-                "verbose_name_plural": "Backup artifacts",
                 "ordering": ["-created_at"],
             },
         ),
@@ -274,8 +271,6 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "Backup snapshot",
-                "verbose_name_plural": "Backup snapshots",
                 "ordering": ["-created_at"],
             },
         ),

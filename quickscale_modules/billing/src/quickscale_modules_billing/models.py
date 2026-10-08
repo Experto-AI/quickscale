@@ -83,7 +83,6 @@ class Plan(models.Model):
         price_display: str
 
     class Meta:
-        app_label = "quickscale_billing"
         ordering = ["name"]
 
     def __str__(self) -> str:
@@ -109,7 +108,7 @@ class CreditBalance(TenantModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_billing"
+        pass
 
     @classmethod
     def get_or_create_for_org(cls, organization: Any) -> tuple["CreditBalance", bool]:
@@ -165,7 +164,6 @@ class CreditTransaction(TenantModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_billing"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -221,7 +219,6 @@ class PurchaseCheckout(TenantModel):
         plan_id: int
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_billing"
         ordering = ["-id"]
 
     def __str__(self) -> str:
@@ -292,7 +289,6 @@ class Subscription(TenantModel):
         organization_id: UUID | None
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_billing"
         ordering = ["-id"]
         constraints = [
             models.UniqueConstraint(
@@ -351,7 +347,6 @@ class WebhookEvent(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = "quickscale_billing"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(

@@ -53,7 +53,7 @@ class AbstractListing(TenantModel):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    published_date = models.DateTimeField(
+    published_at = models.DateTimeField(
         null=True,
         blank=True,
         help_text="Date when listing was published",
@@ -61,13 +61,13 @@ class AbstractListing(TenantModel):
 
     class Meta(TenantModel.Meta):
         abstract = True
-        ordering = ["-published_date", "-created_at"]
+        ordering = ["-published_at", "-created_at"]
         # Rule 25's recorded abstract-base exception: a fixed or templated name
         # is inherited by every subclass, so two concrete models collide in the
         # shared schema (or break Django's 30-character E034 check).  Django
         # generates a unique, bounded name per concrete subclass instead.
         indexes = [
-            models.Index(fields=["-published_date"]),
+            models.Index(fields=["-published_at"]),
             models.Index(fields=["status"]),
             models.Index(fields=["slug"]),
         ]
@@ -76,13 +76,13 @@ class AbstractListing(TenantModel):
         return self.title
 
     def save(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
-        """Auto-generate slug and set published_date on status change"""
+        """Auto-generate slug and set published_at on status change"""
         if not self.slug:
             self.slug = slugify(self.title)
 
-        # Set published_date when status changes to published
-        if self.status == self.Status.PUBLISHED and not self.published_date:
-            self.published_date = timezone.now()
+        # Set published_at when status changes to published
+        if self.status == self.Status.PUBLISHED and not self.published_at:
+            self.published_at = timezone.now()
 
         super().save(*args, **kwargs)
 
@@ -121,12 +121,8 @@ class Listing(AbstractListing):
 
     class Meta(AbstractListing.Meta):
         abstract = False
-        verbose_name = "Listing"
-        verbose_name_plural = "Listings"
         indexes = [
-            models.Index(
-                fields=["-published_date"], name="qs_listings_listing_pub_idx"
-            ),
+            models.Index(fields=["-published_at"], name="qs_listings_listing_pub_idx"),
             models.Index(fields=["status"], name="qs_listings_listing_status_idx"),
             models.Index(fields=["slug"], name="qs_listings_listing_slug_idx"),
         ]

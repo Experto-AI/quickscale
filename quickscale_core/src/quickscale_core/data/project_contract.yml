@@ -218,3 +218,8 @@ steps:
     title: "Adopt the billing async-payment webhook events"
     adoption_steps:
       - "Compare the current OPERATIONS.md Stripe Billing section and subscribe the project's Stripe webhook endpoint to `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed` alongside the events it already receives. A delayed-notification payment method (SEPA, ACH, Bacs, bank transfer) completes its one-time Checkout before the money settles, so without both events the purchase is charged but never credited, and a failed payment keeps blocking account deletion and organization purge."
+  - id: sa266-command-flags
+    minimum: "0.89.0"
+    title: "Adopt the tenant-isolation command's --json flag"
+    adoption_steps:
+      - "Compare and manually adopt the current Makefile check-tenant-isolation target and .github/workflows/ci.yml isolation step: both invoke `quickscale_orgs_check_tenant_isolation --postgres-only --json`, because the command's machine output flag is `--json` and `--format json` is no longer accepted."

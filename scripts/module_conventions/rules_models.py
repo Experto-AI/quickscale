@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from collections.abc import Mapping
 
 from scripts.module_conventions.core import (
@@ -25,6 +26,95 @@ from scripts.module_conventions.core import (
 ALLOWED_DERIVED_CHOICE_NAMES = ("INVITABLE_ORG_ROLE_CHOICES", "SOCIAL_PROVIDER_CHOICES")
 
 SINGLETON_ORDERING_EXEMPTIONS = ("BackupPolicy", "NotificationSettings")
+
+_CAMEL_TO_SPACES = re.compile(r"((?<=[a-z0-9])[A-Z]|(?!^)[A-Z](?=[a-z]))")
+
+
+def _django_default_verbose_name(class_name: str) -> str:
+    """Return the verbose name Django computes for an undeclared model."""
+    return _CAMEL_TO_SPACES.sub(r" \1", class_name).strip().lower()
+
+
+def _assignment_targets(statement: ast.stmt) -> list[ast.Name]:
+    """Return the plain-name targets of one assignment statement."""
+    if isinstance(statement, ast.Assign):
+        candidates: list[ast.expr] = list(statement.targets)
+    elif isinstance(statement, ast.AnnAssign):
+        candidates = [statement.target]
+    else:
+        return []
+    return [target for target in candidates if isinstance(target, ast.Name)]
+
+
+_AUTH_MODEL_BASES = ("AbstractUser", "AbstractBaseUser")
+
+
+def _model_basics_classes(tree: ast.Module) -> list[ast.ClassDef]:
+    """Return model classes plus auth-style bases rule 14's new clauses cover."""
+    classes = list(_model_classes(tree))
+    known = {node.name for node in classes}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef) or node.name in known:
+            continue
+        if set(_class_names(node)) & set(_AUTH_MODEL_BASES):
+            classes.append(node)
+    return classes
+
+
+def _literal_field_tokens(call: ast.Call) -> set[str] | None:
+    """Return the tokens of a literal ``fields`` list, or None when not literal."""
+    fields = _keyword(call, "fields")
+    if not isinstance(fields, (ast.List, ast.Tuple)):
+        return None
+    tokens: set[str] = set()
+    for element in fields.elts:
+        value = _literal(element)
+        if not isinstance(value, str):
+            return None
+        tokens.update(part for part in value.split("_") if part)
+    return tokens
+
+
+def _condition_tokens(call: ast.Call) -> set[str] | None:
+    """Return the tokens of a literal ``Q`` condition, or None when opaque."""
+    condition = _keyword(call, "condition")
+    if condition is None:
+        return set()
+    tokens: set[str] = set()
+    for node in ast.walk(condition):
+        if isinstance(node, ast.Call):
+            if _call_func_name(node) != "Q" or node.args:
+                return None
+            for keyword in node.keywords:
+                if keyword.arg:
+                    tokens.update(part for part in keyword.arg.split("__") if part)
+                    tokens.update(part for part in keyword.arg.split("_") if part)
+    return tokens
+
+
+def _constraint_owners(tree: ast.Module) -> dict[int, str]:
+    """Map each Meta constraint call to the model class that declares it."""
+    owners: dict[int, str] = {}
+    for node in _model_classes(tree):
+        meta = _meta_class(node)
+        if meta is None:
+            continue
+        for statement in meta.body:
+            value: ast.expr | None = None
+            if isinstance(statement, ast.Assign):
+                value = statement.value
+            elif isinstance(statement, ast.AnnAssign):
+                value = statement.value
+            if isinstance(value, (ast.List, ast.Tuple)):
+                candidates = [element for element in value.elts if isinstance(element, ast.Call)]
+            elif isinstance(value, ast.Call):
+                candidates = [value]
+            else:
+                continue
+            for candidate in candidates:
+                if _call_func_name(candidate) in {"UniqueConstraint", "CheckConstraint"}:
+                    owners[id(candidate)] = node.name
+    return owners
 
 
 def _is_abstract(node: ast.ClassDef) -> bool:
@@ -323,6 +413,60 @@ def rule_14_model_basics(corpus: Corpus) -> list[str]:
             ):
                 if module.name != "orgs":
                     violations.append(f"rule 14: {module.name}: UUID primary key outside orgs")
+        for node in _model_basics_classes(tree):
+            explicit_singular: str | None = None
+            explicit_plural: str | None = None
+            meta = _meta_class(node)
+            if meta is not None:
+                for statement in meta.body:
+                    for target in _assignment_targets(statement):
+                        if target.id == "app_label":
+                            violations.append(
+                                f"rule 14: {module.name}: {node.name}.Meta sets app_label"
+                            )
+                        if target.id in {"verbose_name", "verbose_name_plural"}:
+                            value = statement.value
+                            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                                if target.id == "verbose_name":
+                                    explicit_singular = value.value
+                                else:
+                                    explicit_plural = value.value
+            default_singular = _django_default_verbose_name(node.name)
+            if (
+                explicit_singular is not None
+                and explicit_singular.strip().lower() == default_singular
+            ):
+                violations.append(
+                    f"rule 14: {module.name}: {node.name}.Meta.verbose_name repeats "
+                    "Django's default"
+                )
+            effective_singular = (
+                explicit_singular.strip().lower()
+                if explicit_singular is not None
+                else default_singular
+            )
+            if (
+                explicit_plural is not None
+                and explicit_plural.strip().lower() == f"{effective_singular}s"
+            ):
+                violations.append(
+                    f"rule 14: {module.name}: {node.name}.Meta.verbose_name_plural "
+                    "repeats Django's default"
+                )
+            for statement in node.body:
+                if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                    continue
+                value = statement.value
+                if not isinstance(value, ast.Call):
+                    continue
+                if _call_func_name(value) != "DateTimeField":
+                    continue
+                for target in _assignment_targets(statement):
+                    if not target.id.endswith("_at") and not target.id.endswith(("_start", "_end")):
+                        violations.append(
+                            f"rule 14: {module.name}: {node.name}.{target.id} is a "
+                            "DateTimeField without the _at suffix"
+                        )
         classes = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
         for node in _model_classes(tree):
             if _is_abstract(node):
@@ -426,6 +570,68 @@ def _abstract_meta_calls(tree: ast.Module) -> set[int]:
     return abstract_calls
 
 
+def _token_matches(token: str, candidates: set[str]) -> bool:
+    """Return whether a purpose token names one of the candidate tokens."""
+    return any(token in candidate or candidate in token for candidate in candidates)
+
+
+def _check_purpose_names_fields(
+    module_name: str,
+    rel: str,
+    node: ast.Call,
+    name: str,
+    purpose_tokens: list[str],
+    violations: list[str],
+) -> None:
+    """Rule 25: a unique constraint's purpose names its constrained fields."""
+    field_tokens = _literal_field_tokens(node)
+    if field_tokens is None or not purpose_tokens:
+        return
+    condition_tokens = _condition_tokens(node)
+    if condition_tokens is None:
+        # A helper-built condition is opaque; require at least one field token.
+        if not any(_token_matches(token, field_tokens) for token in purpose_tokens):
+            violations.append(
+                f"rule 25: {module_name}: {rel}:{node.lineno} constraint {name!r} "
+                "does not name a constrained field"
+            )
+        return
+    allowed = field_tokens | condition_tokens
+    for token in purpose_tokens:
+        if not _token_matches(token, allowed):
+            violations.append(
+                f"rule 25: {module_name}: {rel}:{node.lineno} constraint {name!r} "
+                f"purpose token {token!r} names no constrained field"
+            )
+
+
+def _check_constraint_names_checked_field(
+    module_name: str,
+    rel: str,
+    node: ast.Call,
+    name: str,
+    purpose_tokens: list[str],
+    violations: list[str],
+) -> bool:
+    """
+    Rule 25: a check constraint's purpose names a checked field.
+
+    Returns True when the purpose satisfied the clause (or the condition is
+    opaque and therefore not statically checkable).
+    """
+    condition_tokens = _condition_tokens(node)
+    if condition_tokens is None or not purpose_tokens:
+        return True
+    allowed = condition_tokens | (_literal_field_tokens(node) or set())
+    if any(_token_matches(token, allowed) for token in purpose_tokens):
+        return True
+    violations.append(
+        f"rule 25: {module_name}: {rel}:{node.lineno} constraint {name!r} "
+        "purpose names no checked field"
+    )
+    return False
+
+
 def rule_25_constraint_names(corpus: Corpus) -> list[str]:
     """Rule 25: every constraint and index sets a stemmed name."""
     violations: list[str] = []
@@ -435,6 +641,7 @@ def rule_25_constraint_names(corpus: Corpus) -> list[str]:
                 continue
             tree = _parse(text)
             abstract_calls = _abstract_meta_calls(tree)
+            owners = _constraint_owners(tree)
             for meta in (
                 node
                 for node in ast.walk(tree)
@@ -480,14 +687,56 @@ def rule_25_constraint_names(corpus: Corpus) -> list[str]:
                             "exceeds Django's 30-character limit"
                         )
                 else:
-                    if not name.startswith(f"quickscale_{module.name}_"):
+                    owner = owners.get(id(node))
+                    prefix = (
+                        f"quickscale_{module.name}_{owner.lower()}_"
+                        if owner is not None
+                        else f"quickscale_{module.name}_"
+                    )
+                    if not name.startswith(prefix):
                         violations.append(
                             f"rule 25: {module.name}: {rel}:{node.lineno} constraint {name!r} "
-                            f"must start with quickscale_{module.name}_"
+                            f"must start with {prefix}"
                         )
                     elif len(name) > 63:
                         violations.append(
                             f"rule 25: {module.name}: {rel}:{node.lineno} constraint {name!r} "
                             "exceeds PostgreSQL's 63-character limit"
                         )
+                    else:
+                        purpose_tokens = name[len(prefix) :].split("_")
+                        if "org" in purpose_tokens:
+                            violations.append(
+                                f"rule 25: {module.name}: {rel}:{node.lineno} constraint {name!r} "
+                                "names the organization field as 'org'"
+                            )
+                        if kind == "UniqueConstraint":
+                            if purpose_tokens[-1] != "unique":
+                                violations.append(
+                                    f"rule 25: {module.name}: {rel}:{node.lineno} constraint "
+                                    f"{name!r} must end with _unique"
+                                )
+                            elif "unique" in purpose_tokens[:-1]:
+                                violations.append(
+                                    f"rule 25: {module.name}: {rel}:{node.lineno} constraint "
+                                    f"{name!r} uses 'unique' outside the _unique suffix"
+                                )
+                            elif not purpose_tokens[:-1]:
+                                violations.append(
+                                    f"rule 25: {module.name}: {rel}:{node.lineno} constraint "
+                                    f"{name!r} purpose names no constrained field"
+                                )
+                            else:
+                                _check_purpose_names_fields(
+                                    module.name,
+                                    rel,
+                                    node,
+                                    name,
+                                    purpose_tokens[:-1],
+                                    violations,
+                                )
+                        else:
+                            _check_constraint_names_checked_field(
+                                module.name, rel, node, name, purpose_tokens, violations
+                            )
     return violations

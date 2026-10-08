@@ -23,8 +23,6 @@ class User(AbstractUser):
     # Users can add custom fields in their project if needed
 
     class Meta:
-        verbose_name = "User"
-        verbose_name_plural = "Users"
         ordering = ["-date_joined"]
 
     def get_absolute_url(self) -> str:

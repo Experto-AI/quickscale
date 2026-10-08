@@ -2,7 +2,7 @@
 
 from django.urls import include, path
 
-from tests.views import ConcreteListingListView, ConcreteListingDetailView
+from tests._views import ConcreteListingListView, ConcreteListingDetailView
 
 urlpatterns = [
     path("listings/", include("quickscale_modules_listings.urls")),

@@ -70,7 +70,8 @@ def test_backups_create_command_routes_scheduled_trigger() -> None:
     ):
         call_command(
             "quickscale_backups_create",
-            "--scheduled",
+            "--trigger",
+            "scheduled",
             stdout=stdout,
             stderr=StringIO(),
         )
@@ -473,7 +474,8 @@ def test_backups_create_refuses_scheduled_runs_when_disabled(settings) -> None:
     with pytest.raises(CommandError, match="scheduled backup runs do not run"):
         call_command(
             "quickscale_backups_create",
-            "--scheduled",
+            "--trigger",
+            "scheduled",
             stdout=StringIO(),
             stderr=StringIO(),
         )
@@ -506,11 +508,17 @@ def test_backups_create_keeps_manual_runs_when_disabled(settings) -> None:
 
 
 def test_backups_prune_refuses_scheduled_runs_when_disabled(settings) -> None:
-    """Rule 1 (D3): a bare prune is the scheduled run and refuses while off."""
+    """Rule 1 (D3): a scheduled prune refuses while the module is off."""
     settings.QUICKSCALE_BACKUPS_ENABLED = False
 
     with pytest.raises(CommandError, match="scheduled pruning runs do not run"):
-        call_command("quickscale_backups_prune", stdout=StringIO(), stderr=StringIO())
+        call_command(
+            "quickscale_backups_prune",
+            "--trigger",
+            "scheduled",
+            stdout=StringIO(),
+            stderr=StringIO(),
+        )
 
 
 def test_backups_prune_keeps_admin_runs_when_disabled(settings) -> None:

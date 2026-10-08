@@ -127,7 +127,7 @@ class BaseSocialItem(TenantModel):
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         # Capture previous org ownership before the mutation so we can
-        # invalidate both the old and new cache partitions (CR-T1-9-001).
+        # invalidate both the old and new cache partitions (001).
         previous_org_id: object = None
         if self.pk is not None:
             previous = (
@@ -165,9 +165,7 @@ class SocialLink(BaseSocialItem):
     cache_keys = (SOCIAL_LINKS_CACHE_KEY,)
 
     class Meta(BaseSocialItem.Meta):
-        app_label = "quickscale_social"
-        verbose_name = "Social link"
-        verbose_name_plural = "Social links"
+        pass
 
 
 class SocialEmbed(BaseSocialItem):
@@ -276,6 +274,4 @@ class SocialEmbed(BaseSocialItem):
         self.refresh_resolution_metadata()
 
     class Meta(BaseSocialItem.Meta):
-        app_label = "quickscale_social"
-        verbose_name = "Social embed"
-        verbose_name_plural = "Social embeds"
+        pass

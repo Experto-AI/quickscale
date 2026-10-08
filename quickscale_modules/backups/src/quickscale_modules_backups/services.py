@@ -265,7 +265,7 @@ def validate_policy_snapshot(policy: BackupPolicySnapshot) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# SA43 / SA20 — Async restore dispatch lifecycle
+# Async restore dispatch lifecycle
 # ---------------------------------------------------------------------------
 
 _ARTIFACT_RESTORE_CLAIMABLE_STATUSES: frozenset[str] = frozenset(
@@ -374,8 +374,8 @@ def _guard_trusted_admin_upload(
     confirmation: str,
 ) -> None:
     """Reject an already-restoring artifact or a mismatched confirmation."""
-    # CR-SA20-REV-001: Reject already-restoring artifacts with parity to
-    # the recorded-artifact branch.  CR-SA38-001: stale-aware — a stale
+    # Reject already-restoring artifacts with parity to
+    # the recorded-artifact branch. Stale-aware — a stale
     # Status.RESTORING artifact surfaces the same recovery guidance as
     # _get_admin_restore_ineligible_reason rather than a permanent block.
     if trusted_artifact.status == BackupArtifact.Status.RESTORING:
@@ -403,7 +403,7 @@ def _persist_trusted_admin_upload(
     trusted_artifact: Any,
 ) -> None:
     """Copy the staged upload to the authoritative directory and persist it."""
-    # CR-SA20-005: Always remap to a trusted path under
+    # Always remap to a trusted path under
     # get_local_backup_directory().  Ignore any unsafe persisted
     # local_path — persist only after a successful copy.
     policy_snapshot = load_policy_snapshot()
@@ -414,7 +414,7 @@ def _persist_trusted_admin_upload(
         raise BackupError(f"Failed to materialize the restore artifact: {exc}") from exc
     local_path = local_dir / trusted_artifact.filename
 
-    # CR-SA53 / CR-SA53-REV-001: Crash-safe copy — copy to a securely
+    # Crash-safe copy — copy to a securely
     # created unique temp file under the target directory (mkstemp
     # prevents symlink pre-seeding attacks), then atomically replace into
     # place so that a copy failure never destroys the existing local
@@ -502,14 +502,14 @@ def dispatch_background_restore(
     """
     manage_py = _get_manage_py()
 
-    # CR-SA20-007: Snapshot pre-spawn state so that a spawn failure can
+    # Snapshot pre-spawn state so that a spawn failure can
     # roll back cleanly, preserving prior restore_started_at and
     # restore_error on retry from FAILED / RESTORED.
     pre_spawn_status = artifact.status
     pre_spawn_restore_started_at = artifact.restore_started_at
     pre_spawn_restore_error = artifact.restore_error
 
-    # CR-SA20-REV-002: Atomic compare-and-swap — concurrent submissions
+    # Atomic compare-and-swap — concurrent submissions
     # for the same artifact cannot both dispatch Popen.
     if not _atomic_claim_restore(artifact):
         if artifact.status == BackupArtifact.Status.DELETED:
@@ -554,7 +554,7 @@ def dispatch_background_restore(
 
 
 # ---------------------------------------------------------------------------
-# SA37 — Async create/prune dispatch lifecycle
+# Async create/prune dispatch lifecycle
 # ---------------------------------------------------------------------------
 
 
@@ -571,8 +571,8 @@ def dispatch_background_create(
     Parameters
     ----------
     trigger :
-        Provenance to pass as ``--trigger <value>``.  Preserves
-        backward-compatible ``--scheduled`` for the scheduled path.
+        Provenance to pass as ``--trigger <value>``; a bare invocation
+        defaults to manual.
 
     Raises
     ------
@@ -581,11 +581,9 @@ def dispatch_background_create(
     """
     manage_py = _get_manage_py()
     argv = [sys.executable, manage_py, "quickscale_backups_create"]
-    if trigger == "scheduled":
-        argv.append("--scheduled")
-    elif trigger != "manual":
-        # CR-SA37-001: pass non-default triggers (e.g. "admin") as
-        # --trigger so the management command preserves provenance.
+    if trigger != "manual":
+        # Name each non-default trigger (e.g. "scheduled", "admin") so the
+        # management command preserves provenance.
         argv.extend(["--trigger", trigger])
 
     try:
@@ -610,8 +608,8 @@ def dispatch_background_prune(
     ----------
     trigger :
         Provenance to pass as ``--trigger <value>``.  A bare command
-        invocation defaults to the scheduled path, so the manual and admin
-        paths are named explicitly.
+        invocation defaults to manual, so the scheduled and admin paths are
+        named explicitly.
 
     Raises
     ------
@@ -620,7 +618,7 @@ def dispatch_background_prune(
     """
     manage_py = _get_manage_py()
     argv = [sys.executable, manage_py, "quickscale_backups_prune"]
-    argv.extend(["--trigger", "scheduled" if trigger == "scheduled" else trigger])
+    argv.extend(["--trigger", trigger])
     try:
         subprocess.Popen(argv, close_fds=True)  # noqa: S603 - fixed argv list, shell disabled
     except Exception as exc:
@@ -630,7 +628,7 @@ def dispatch_background_prune(
 
 
 # ---------------------------------------------------------------------------
-# SA38 — Stale restore detection and guarded reset
+# Stale restore detection and guarded reset
 # ---------------------------------------------------------------------------
 
 STALE_RESTORE_THRESHOLD_MINUTES: int = 30

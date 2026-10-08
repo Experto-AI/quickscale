@@ -70,7 +70,7 @@ def notify_submission(submission: "FormSubmission") -> str:
 def _prepare_submission_notification(
     submission: "FormSubmission",
 ) -> tuple[str, Callable[[], None] | None]:
-    # CR-SA85-REV-007: dereference submission.form inside org_scope so
+    # dereference submission.form inside org_scope so
     # that lazy FK traversal finds the related Form under the correct
     # RLS context.  Extract the fields we need before the scope exits.
     from quickscale_modules_orgs.current_org import org_scope

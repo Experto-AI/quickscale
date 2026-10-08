@@ -1,10 +1,10 @@
 """Listings module manager contract — delegates to shared orgs TenantManager.
 
-T1.8: Replaced module-local ``TenantScopedManager``/``OperatorManager`` with
+Replaced module-local ``TenantScopedManager``/``OperatorManager`` with
 the shared ``TenantManager`` from ``quickscale_modules_orgs.managers``.
 Scoping is now ambient via the ContextVar set by ``TenantMiddleware``.
 
-Follow-up CR-T18-001: ``OperatorManager`` is now a proper subclass that
+Follow-up ``OperatorManager`` is now a proper subclass that
 passes ``super_scope=True`` so callers who instantiate ``OperatorManager()``
 get the correct operator-bypass semantics.
 """

@@ -1,6 +1,6 @@
 """Signal definitions for the QuickScale organizations module.
 
-SA7.1 — ``organization_created`` is the canonical extension seam for
+``organization_created`` is the canonical extension seam for
 cross-module behavior on org creation.  Receivers are connected by the
 consuming module's ``AppConfig.ready()``, not by the orgs package.
 

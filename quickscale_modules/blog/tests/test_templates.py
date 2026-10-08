@@ -11,7 +11,7 @@ import quickscale_modules_blog
 
 MODULE_PATH = Path(quickscale_modules_blog.__file__).parent
 BASE_TEMPLATE = MODULE_PATH / "templates" / "quickscale_blog" / "base.html"
-CHILD_DIR = MODULE_PATH / "templates" / "quickscale_blog" / "blog"
+CHILD_DIR = MODULE_PATH / "templates" / "quickscale_blog"
 
 
 class TestBaseTemplateInheritance:

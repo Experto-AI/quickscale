@@ -97,15 +97,15 @@ This module ships no URLs.
 
 ## Management commands
 
-- `quickscale_backups_create` — create a private database backup artifact. `--scheduled`
-  marks a scheduler-driven run.
+- `quickscale_backups_create` — create a private database backup artifact. `--trigger`
+  takes `manual` (the default), `scheduled`, or the admin UI's `admin`.
 - `quickscale_backups_dr_adapter_call` — thin CLI bridge to call DR adapter functions from
   within a Docker context; not for admin use.
 - `quickscale_backups_pin` — set or clear a rollback pin on one stored backup snapshot.
 - `quickscale_backups_prune` — delete expired backup files and mark their metadata as deleted,
-  according to the active retention policy. A bare invocation is the scheduled run
-  (`--trigger scheduled` is the default); `--trigger manual` and `--trigger admin` (the admin
-  action) stay available while the module is switched off.
+  according to the active retention policy. `--trigger` defaults to `manual`; `--trigger
+  scheduled` refuses while the module is switched off, and `--trigger manual` / `--trigger
+  admin` (the admin action) stay available.
 - `quickscale_backups_record_verification` — record one plan or execute verification report
   for a backup snapshot.
 - `quickscale_backups_report` — report one stored backup snapshot by `snapshot_id`.
@@ -129,7 +129,7 @@ not a supported restore input for generated PostgreSQL projects.
 
 ```bash
 python manage.py quickscale_backups_create
-python manage.py quickscale_backups_create --scheduled
+python manage.py quickscale_backups_create --trigger scheduled
 python manage.py quickscale_backups_validate 12
 python manage.py quickscale_backups_prune
 python manage.py quickscale_backups_restore 12 --confirm BACKUP_FILENAME.dump --dry-run
@@ -178,8 +178,8 @@ Guardrails:
 - JSON artifacts are export-only for generated PostgreSQL projects; do not treat them as
   disaster-recovery backups.
 - Admin download and validate only operate when the local artifact file is present.
-- Scheduled execution is command-driven only. Run `quickscale_backups_create --scheduled` and a
-  bare `quickscale_backups_prune` (the scheduled default) on the declared `schedule` (default
+- Scheduled execution is command-driven only. Run `quickscale_backups_create --trigger
+  scheduled` and `quickscale_backups_prune --trigger scheduled` on the declared `schedule` (default
   `0 2 * * *`) so artifacts past `retention_days` do not accumulate; the module ships no
   scheduler, so the operator's cron or platform scheduler runs both. While the module is switched
   off, those scheduled runs refuse with `QUICKSCALE_BACKUPS_ENABLED` named; the admin action and

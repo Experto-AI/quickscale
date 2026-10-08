@@ -1240,7 +1240,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
             lambda: {
                 RemovalBoundary.PURGE: (
                     "quickscale_modules_orgs",
-                    "tests.bypassed_boundary",
+                    "tests._bypassed_boundary",
                     "BypassingPurgeBoundary.handle",
                 )
             },
@@ -1264,7 +1264,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
             lambda: {
                 RemovalBoundary.PURGE: (
                     "quickscale_modules_orgs",
-                    "tests.bypassed_boundary",
+                    "tests._bypassed_boundary",
                     "DeadBranchPurgeBoundary.handle",
                 )
             },
@@ -1290,7 +1290,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
             lambda: {
                 RemovalBoundary.PURGE: (
                     "quickscale_modules_orgs",
-                    "tests.bypassed_boundary",
+                    "tests._bypassed_boundary",
                     "ConstantExpressionPurgeBoundary.handle",
                 )
             },
@@ -1316,7 +1316,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
             lambda: {
                 RemovalBoundary.PURGE: (
                     "quickscale_modules_orgs",
-                    "tests.bypassed_boundary",
+                    "tests._bypassed_boundary",
                     "OperandValuedPurgeBoundary.handle",
                 )
             },
@@ -1342,7 +1342,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
             lambda: {
                 RemovalBoundary.PURGE: (
                     "quickscale_modules_orgs",
-                    "tests.bypassed_boundary",
+                    "tests._bypassed_boundary",
                     "ShortCircuitPurgeBoundary.handle",
                 )
             },
@@ -1388,7 +1388,7 @@ class TestCheckRemovalObligationDischargeWiringE002:
             lambda: {
                 RemovalBoundary.ANONYMIZE: (
                     "quickscale_modules_auth",
-                    "tests.bypassed_boundary",
+                    "tests._bypassed_boundary",
                     "BypassingAccountDeleteBoundary.handle",
                 )
             },

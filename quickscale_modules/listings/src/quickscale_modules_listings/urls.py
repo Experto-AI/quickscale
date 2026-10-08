@@ -1,6 +1,6 @@
 """URL configuration for QuickScale listings module
 
-T1.8: Single flat URL tree (D1/D5).  Org-scoped routes under
+Single flat URL tree (D1/D5). Org-scoped routes under
 ``/orgs/<slug>/listings/...`` removed.  All views use flat paths.
 """
 

@@ -1,8 +1,8 @@
-"""Create the site organization once (SA240).
+"""Create the site organization once.
 
 ``quickscale_orgs_create_site_org <slug> <name>`` gives a deploy step an
 idempotent way to create the organization a fresh project serves from.
-SA191's cutover runs it in the same step as ``migrate``, before the catalog
+The bap-web cutover runs it in the same step as ``migrate``, before the catalog
 is reseeded under the restricted runtime role.
 
 The organization table is control-plane data outside the tenant-isolation

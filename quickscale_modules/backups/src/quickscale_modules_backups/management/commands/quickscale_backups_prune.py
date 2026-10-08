@@ -15,9 +15,9 @@ class Command(BaseCommand):
         parser.add_argument(
             "--trigger",
             choices=["manual", "scheduled", "admin"],
-            default="scheduled",
+            default="manual",
             help=(
-                "Invocation provenance (default: scheduled). A module switched "
+                "Invocation provenance (default: manual). A module switched "
                 "off refuses scheduled runs; manual and admin runs stay."
             ),
         )
@@ -29,7 +29,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
-        trigger = str(options.get("trigger") or "scheduled")
+        trigger = str(options.get("trigger") or "manual")
         if trigger == "scheduled" and not bool(settings.QUICKSCALE_BACKUPS_ENABLED):
             # Rule 1 (D3): a module switched off runs none of its scheduled
             # jobs; operator and admin invocations stay available like the

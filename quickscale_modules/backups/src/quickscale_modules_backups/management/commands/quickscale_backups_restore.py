@@ -1,17 +1,17 @@
 """
 Validate or execute a guarded backup restore.
 
-SA20: When an artifact carries Status.RESTORING, the command persists
+When an artifact carries Status.RESTORING, the command persists
 restore_started_at on entry and transitions to Status.FAILED + restore_error
 on failure. Admin-triggered background restores are observable through
 the artifact's status and error fields.
 
-CR-SA20-006: The ``--local-only`` flag forces
+The ``--local-only`` flag forces
 ``RestoreSourceResolutionMode.LOCAL_ONLY`` so the child never falls
 back to remote materialization even when the local file disappears
 after enqueue.
 
-CR-SA20-007: The admin parent now persists Status.RESTORING before
+The admin parent now persists Status.RESTORING before
 Popen (not after), so a fast child terminal update is never missed or
 overwritten.  The failure handler here catches all ``Exception``
 subclasses (not just ``BackupError``) so that fast failures and
@@ -50,7 +50,7 @@ def _require_single_restore_source(options: dict[str, Any]) -> None:
 def _mark_restore_started(artifact_id: int | None) -> Any:
     """Load the target artifact and stamp a RESTORING row's start time.
 
-    SA20: if this artifact was marked Status.RESTORING by the admin
+    if this artifact was marked Status.RESTORING by the admin
     dispatch, track the lifecycle.
     """
     if artifact_id is None:
@@ -74,7 +74,7 @@ def _mark_restore_started(artifact_id: int | None) -> Any:
 def _record_restore_failure(artifact: Any, exc: Exception) -> None:
     """Record a failed restore on a RESTORING artifact.
 
-    SA20 / CR-SA20-007: Record failure for Status.RESTORING artifacts on
+    Record failure for Status.RESTORING artifacts on
     any exception (BackupError, fast failures, generic crashes) so the
     status is never stranded.  Refresh DB state unconditionally before
     writing to handle concurrent status changes.
@@ -162,7 +162,7 @@ class Command(BaseCommand):
         _require_single_restore_source(options)
         artifact = _mark_restore_started(options["artifact_id"])
 
-        # CR-SA20-006: Map --local-only to LOCAL_ONLY resolution mode so
+        # Map --local-only to LOCAL_ONLY resolution mode so
         # the child never falls back to remote materialization.
         resolution_mode = "local_only" if options["local_only"] else None
 

@@ -3,9 +3,9 @@
 The command module keeps ``Command.handle``, ``_purge_by_uuid``,
 ``_dry_run_by_uuid``, ``_resolve_models``, ``_model_label``, and the
 provider-state guard methods whose call sites resolve test patch seams through
-the command module; the preflight, tombstone, reserved-org guard, ownership
-printing, and cache-invalidation helpers live here so the command file stays
-inside the file-length contract (Module Conventions rule 28).
+the command module; the targeting validation, confirmation, preflight, tombstone,
+reserved-org guard, ownership printing, and cache-invalidation helpers live here so
+the command file stays inside the file-length contract (Module Conventions rule 28).
 """
 
 from __future__ import annotations
@@ -150,6 +150,49 @@ class _PurgeSupportMixin:
                 total_owned += count
         if not total_owned:
             self.stdout.write("  No owned rows found.")
+
+    def _require_confirmation(self, org_id: uuid.UUID, confirm: str | None) -> None:
+        """Refuse a destructive purge before any provider write without --confirm."""
+        slug = (
+            Organization.objects.filter(pk=org_id)
+            .values_list("slug", flat=True)
+            .first()
+        )
+        if slug is None:
+            # The purge path reports the missing organization itself.
+            return
+        if confirm is None or confirm not in {slug, str(org_id)}:
+            raise CommandError(
+                "--confirm must exactly match the organization's slug or "
+                f"UUID ({slug!r} or {org_id}) before a purge may proceed."
+            )
+
+    def _validate_targeting(
+        self,
+        raw_org_id: str | None,
+        slug: str | None,
+        dry_run: bool,
+    ) -> None:
+        """Reject impossible targeting combinations and warn on ignored flags."""
+        if raw_org_id and slug:
+            raise CommandError(
+                "Cannot combine --organization-id (destructive) with --slug "
+                "(non-destructive preflight). Use one targeting flag at a time."
+            )
+
+        if not raw_org_id and not slug:
+            raise CommandError(
+                "Specify --organization-id <uuid> for destructive execution or "
+                "--slug <slug> for non-destructive preflight."
+            )
+
+        if slug and dry_run:
+            self.stdout.write(
+                self.style.WARNING(
+                    "Warning: --dry-run has no effect with --slug (preflight is "
+                    "always non-destructive)."
+                )
+            )
 
     def _print_purge_summary(
         self,

@@ -1,4 +1,4 @@
-"""Purge an organization and all owned rows (T1.17).
+"""Purge an organization and all owned rows.
 
 Destructive execution is locked to ``--organization-id <uuid>`` only.
 
@@ -182,6 +182,17 @@ class Command(_PurgeSupportMixin, BaseCommand):
             help="Slug of the organization for non-destructive preflight/lookup.",
         )
         parser.add_argument(
+            "--confirm",
+            type=str,
+            required=False,
+            default=None,
+            help=(
+                "Must exactly match the organization's slug or UUID before a "
+                "destructive purge proceeds. Not needed for --dry-run or --slug "
+                "preflight."
+            ),
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             default=False,
@@ -194,38 +205,12 @@ class Command(_PurgeSupportMixin, BaseCommand):
             help="Override reserved-org guard (System and personal orgs).",
         )
 
-    def _validate_targeting(
-        self,
-        raw_org_id: str | None,
-        slug: str | None,
-        dry_run: bool,
-    ) -> None:
-        """Reject impossible targeting combinations and warn on ignored flags."""
-        if raw_org_id and slug:
-            raise CommandError(
-                "Cannot combine --organization-id (destructive) with --slug "
-                "(non-destructive preflight). Use one targeting flag at a time."
-            )
-
-        if not raw_org_id and not slug:
-            raise CommandError(
-                "Specify --organization-id <uuid> for destructive execution or "
-                "--slug <slug> for non-destructive preflight."
-            )
-
-        if slug and dry_run:
-            self.stdout.write(
-                self.style.WARNING(
-                    "Warning: --dry-run has no effect with --slug (preflight is "
-                    "always non-destructive)."
-                )
-            )
-
     def handle(self, *args: object, **options: Any) -> str | None:
         del args
         raw_org_id: str | None = options.get("organization_id")
         slug: str | None = options.get("slug")
         dry_run: bool = options.get("dry_run", False)
+        confirm: str | None = options.get("confirm")
         self._force: bool = options.get("force", False)
 
         self._validate_targeting(raw_org_id, slug, dry_run)
@@ -237,6 +222,12 @@ class Command(_PurgeSupportMixin, BaseCommand):
         # Organization ID mode — parse UUID and dispatch.
         assert raw_org_id is not None  # noqa: S101 - internal invariant guaranteed by the caller
         org_id = _parse_organization_id(raw_org_id)
+
+        if not dry_run:
+            # Refuse before provider reconciliation so an unconfirmed purge
+            # performs no provider write at all; _purge_by_uuid rechecks under
+            # the organization lock before deleting.
+            self._require_confirmation(org_id, confirm)
 
         coordinator = RemovalCoordinator(RemovalBoundary.PURGE)
         self._require_dischargeable_obligations(coordinator)
@@ -253,7 +244,7 @@ class Command(_PurgeSupportMixin, BaseCommand):
                     provider_expired_checkouts=provider_expired_checkouts,
                 )
             self._reconcile_provider_states(org_id, persist=True)
-            return self._purge_by_uuid(org_id, coordinator=coordinator)
+            return self._purge_by_uuid(org_id, coordinator=coordinator, confirm=confirm)
 
     # ------------------------------------------------------------------
     # Dry run by UUID
@@ -316,6 +307,7 @@ class Command(_PurgeSupportMixin, BaseCommand):
         org_id: uuid.UUID,
         *,
         coordinator: RemovalCoordinator,
+        confirm: str | None,
     ) -> str | None:
         """Irrevocably delete the organization and all owned rows.
 
@@ -333,6 +325,15 @@ class Command(_PurgeSupportMixin, BaseCommand):
                 # commits first and is observed or waits and then fails closed.
                 organization = self._lock_organization(org_id)
                 self._guard_reserved_org(organization)
+                if confirm is None or confirm not in {
+                    organization.slug,
+                    str(organization.pk),
+                }:
+                    raise CommandError(
+                        "--confirm must exactly match the organization's slug or "
+                        f"UUID ({organization.slug!r} or {organization.pk}) before a "
+                        "purge may proceed."
+                    )
 
                 # Establish consistent org context for RLS-protected tables
                 # BEFORE checking, counting, or deleting. Under PostgreSQL
@@ -353,7 +354,7 @@ class Command(_PurgeSupportMixin, BaseCommand):
                     coordinator.discharge_stage(RemovalAction.DELETE)
 
                     # Org-level rows — use _raw_delete to bypass model delete()
-                    # and signal receivers (notably the SA70 pre_delete backstop
+                    # and signal receivers (notably the pre_delete backstop
                     # on OrganizationMembership). The purge is intentionally
                     # destroying the org and all its rows; individual row-level
                     # protections are irrelevant here.
@@ -654,13 +655,13 @@ class Command(_PurgeSupportMixin, BaseCommand):
         )
 
     def _guard_provider_backed_fields(self, organization: Organization) -> None:
-        """Refuse a purge while a row carries provider-backed state (SA208/SA213).
+        """Refuse a purge while a row carries provider-backed state.
 
         Project-owned models classify their non-relational ``*_id`` fields in
         ``provider_id_classification``.  A field classified provider-backed
         that holds a value is provider state the purge cannot reconcile, so
         the purge refuses and names every such field.  An obligation may also
-        declare its own provider fields (SA213); unless the declaring module
+        declare its own provider fields; unless the declaring module
         marks a field boundary-guarded, the same refusal applies to it, so a
         project app's declaration is enforced without bespoke boundary code.
 

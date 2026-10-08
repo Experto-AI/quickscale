@@ -1,9 +1,9 @@
 """Signal receivers for the QuickScale organizations module.
 
-SA70 — ``_protect_last_owner_on_membership_delete`` is a ``pre_delete``
+``_protect_last_owner_on_membership_delete`` is a ``pre_delete``
 receiver on ``OrganizationMembership`` that acts as a backstop for the
 last-owner invariant.  Connected sender-free by importing this module once
-in ``QuickscaleOrgsConfig.ready()`` (SA203) so the historical model class a
+in ``QuickscaleOrgsConfig.ready()`` so the historical model class a
 data migration deletes through also reaches it; the receiver filters on
 the model's app label and name.
 
@@ -24,9 +24,9 @@ def _protect_last_owner_on_membership_delete(
     instance: Any,
     **kwargs: object,
 ) -> None:
-    """SA70 backstop: prevent cascade deletion from removing the last owner.
+    """backstop: prevent cascade deletion from removing the last owner.
 
-    The model-level ``OrganizationMembership.delete()`` override (SA47)
+    The model-level ``OrganizationMembership.delete()`` override
     protects the last-owner invariant when a membership is removed
     through the model's own ``delete()`` method.  However, Django's
     deletion collector can bypass the model ``delete()`` override under
@@ -38,7 +38,7 @@ def _protect_last_owner_on_membership_delete(
     raises when the membership being removed is the sole owner of an
     org that has other members.
 
-    SA203: the receiver is connected without a sender so that it also
+    the receiver is connected without a sender so that it also
     fires for the historical model class a data migration renders through
     ``apps.get_model()``.  Historical and live classes share the app label
     and model name, so the guard below matches on that identity rather
@@ -60,7 +60,7 @@ def _protect_last_owner_on_membership_delete(
     # Import here to avoid circular import at module level.
     from quickscale_modules_orgs.models import OrganizationMembership, OrgRole
 
-    # SA203: the sender-free connection sees every model's deletions; keep
+    # the sender-free connection sees every model's deletions; keep
     # only the membership model, whose historical class shares this label.
     if sender._meta.label_lower != OrganizationMembership._meta.label_lower:
         return
@@ -73,7 +73,7 @@ def _protect_last_owner_on_membership_delete(
         return
 
     # During cascade deletion the org row still exists at pre_delete time.
-    # SA203: pass the user's pk, not ``instance.user`` — a historical model
+    # pass the user's pk, not ``instance.user`` — a historical model
     # instance from a data migration is rejected by the live model's
     # related-field lookup (``check_query_object_type``).
     if not OrganizationMembership.is_last_owner_with_members(

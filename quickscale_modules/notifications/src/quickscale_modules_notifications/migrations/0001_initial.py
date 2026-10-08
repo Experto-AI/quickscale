@@ -51,8 +51,6 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                "verbose_name": "Notification message",
-                "verbose_name_plural": "Notification messages",
                 "ordering": ["-created_at"],
             },
         ),
@@ -96,7 +94,6 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                "verbose_name": "Notification settings",
                 "verbose_name_plural": "Notification settings",
             },
         ),
@@ -143,7 +140,6 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                "verbose_name": "Notification delivery",
                 "verbose_name_plural": "Notification deliveries",
                 "ordering": ["created_at"],
             },
@@ -178,8 +174,6 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "Notification delivery event",
-                "verbose_name_plural": "Notification delivery events",
                 "ordering": ["received_at"],
             },
         ),
@@ -196,7 +190,7 @@ class Migration(migrations.Migration):
             model_name="notificationdelivery",
             constraint=models.UniqueConstraint(
                 fields=("message", "recipient_email"),
-                name="quickscale_notifications_delivery_message_recipient_unique",
+                name="quickscale_notifications_notificationdelivery_recipient_unique",
             ),
         ),
     ]

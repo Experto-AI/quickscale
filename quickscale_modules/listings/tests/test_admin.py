@@ -10,7 +10,7 @@ from markdownx.widgets import AdminMarkdownxWidget
 
 from quickscale_modules_listings.admin import AbstractListingAdmin, ListingAdmin
 from quickscale_modules_listings.models import Listing
-from tests.models import ConcreteListing
+from tests.listing_app.models import ConcreteListing
 
 User = get_user_model()
 
@@ -36,14 +36,14 @@ class TestAbstractListingAdmin:
             "location",
             "organization",
             "status",
-            "published_date",
+            "published_at",
             "created_at",
         ]
         assert AbstractListingAdmin.list_display == expected
 
     def test_list_filter_fields(self):
         """Test admin list_filter contains expected fields"""
-        expected = ["organization", "status", "created_at", "published_date"]
+        expected = ["organization", "status", "created_at", "published_at"]
         assert AbstractListingAdmin.list_filter == expected
 
     def test_search_fields(self):
@@ -57,7 +57,7 @@ class TestAbstractListingAdmin:
 
     def test_date_hierarchy(self):
         """Test admin date_hierarchy is set correctly"""
-        assert AbstractListingAdmin.date_hierarchy == "published_date"
+        assert AbstractListingAdmin.date_hierarchy == "published_at"
 
     def test_ordering(self):
         """Test admin ordering is set correctly"""

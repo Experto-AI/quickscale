@@ -395,7 +395,7 @@ class BackupPolicyAdmin(RestoreWorkflowAdminMixin):
     def command_driven_notice(self, obj: BackupPolicy) -> str:
         return (
             "Scheduled execution remains command-driven only. Use platform cron or "
-            "scheduled jobs that call 'python manage.py quickscale_backups_create --scheduled'."
+            "scheduled jobs that call 'python manage.py quickscale_backups_create --trigger scheduled'."
         )
 
     @admin.display(description="Restore safety")

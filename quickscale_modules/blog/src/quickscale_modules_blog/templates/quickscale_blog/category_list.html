@@ -1,10 +1,13 @@
 {% extends "quickscale_blog/base.html" %}
 
-{% block title %}{{ tag.name }} - Blog{% endblock %}
+{% block title %}{{ category.name }} - Blog{% endblock %}
 
 {% block blog_content %}
 <article>
-    <h1>Posts tagged with "{{ tag.name }}"</h1>
+    <h1>{{ category.name }}</h1>
+    {% if category.description %}
+    <p>{{ category.description }}</p>
+    {% endif %}
 
     {% if posts %}
         {% for post in posts %}
@@ -24,13 +27,10 @@
                         {{ post.author.get_full_name|default:post.author.username }}
                         on
                     {% endif %}
-                    <time datetime="{{ post.published_date|date:'Y-m-d' }}">
-                        {{ post.published_date|date:"Y-m-d" }}
+                    <time datetime="{{ post.published_at|date:'Y-m-d' }}">
+                        {{ post.published_at|date:"Y-m-d" }}
                     </time>
                 </p>
-                {% if post.category %}
-                <p>Category: <a href="{% url 'quickscale_blog:category_list' post.category.slug %}">{{ post.category.name }}</a></p>
-                {% endif %}
             </footer>
         </article>
         {% endfor %}
@@ -52,7 +52,7 @@
         </nav>
         {% endif %}
     {% else %}
-        <p>No posts with this tag.</p>
+        <p>No posts in this category.</p>
     {% endif %}
 
     <p><a href="{% url 'quickscale_blog:post_list' %}">← Back to all posts</a></p>

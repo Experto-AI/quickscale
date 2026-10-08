@@ -39,7 +39,7 @@ from quickscale_modules_billing.services import (
     handle_stripe_event,
 )
 
-from tests.stripe_payloads import (
+from tests._stripe_payloads import (
     TEST_API_KEY,
     invoice_event,
     stripe_event,

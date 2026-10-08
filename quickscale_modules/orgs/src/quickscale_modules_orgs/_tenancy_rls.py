@@ -28,7 +28,7 @@ CREATE POLICY {policy_name} ON {table}
 
 -- Read-only operator policy: allows cross-tenant reads when operator_access GUC is set.
 -- Deliberately FOR SELECT only — operator_access must NOT grant write or delete
--- visibility across tenant boundaries (CR-SA14.5-001).
+-- visibility across tenant boundaries.
 CREATE POLICY {policy_name}_select ON {table}
     FOR SELECT
     USING (

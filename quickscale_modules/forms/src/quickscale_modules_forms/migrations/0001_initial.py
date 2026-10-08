@@ -30,9 +30,11 @@ _FORMS_ALL_RLS_TARGETS = (
     (FORMS_FORMSUBMISSION_TABLE, FORMS_FORMSUBMISSION_RLS_POLICY),
     (FORMS_FORMFIELDVALUE_TABLE, FORMS_FORMFIELDVALUE_RLS_POLICY),
 )
-FORMS_FORM_ID_ORG_UNIQUE = "quickscale_forms_form_id_org_unique"
-FORMS_FORMFIELD_ID_ORG_UNIQUE = "quickscale_forms_formfield_id_org_unique"
-FORMS_FORMSUBMISSION_ID_ORG_UNIQUE = "quickscale_forms_formsubmission_id_org_unique"
+FORMS_FORM_ID_ORG_UNIQUE = "quickscale_forms_form_id_organization_unique"
+FORMS_FORMFIELD_ID_ORG_UNIQUE = "quickscale_forms_formfield_id_organization_unique"
+FORMS_FORMSUBMISSION_ID_ORG_UNIQUE = (
+    "quickscale_forms_formsubmission_id_organization_unique"
+)
 FORMS_FORMFIELD_FORM_ORG_FK = "quickscale_forms_formfield_form_org_fk"
 FORMS_FORMSUBMISSION_FORM_ORG_FK = "quickscale_forms_formsubmission_form_org_fk"
 FORMS_FORMFIELDVALUE_SUBMISSION_ORG_FK = (
@@ -554,14 +556,14 @@ class Migration(migrations.Migration):
             model_name="form",
             constraint=models.UniqueConstraint(
                 fields=("id", "organization"),
-                name="quickscale_forms_form_id_org_unique",
+                name="quickscale_forms_form_id_organization_unique",
             ),
         ),
         migrations.AddConstraint(
             model_name="formfield",
             constraint=models.UniqueConstraint(
                 fields=("id", "organization"),
-                name="quickscale_forms_formfield_id_org_unique",
+                name="quickscale_forms_formfield_id_organization_unique",
             ),
         ),
         migrations.AddConstraint(
@@ -575,7 +577,7 @@ class Migration(migrations.Migration):
             model_name="formsubmission",
             constraint=models.UniqueConstraint(
                 fields=("id", "organization"),
-                name="quickscale_forms_formsubmission_id_org_unique",
+                name="quickscale_forms_formsubmission_id_organization_unique",
             ),
         ),
         migrations.RunPython(

@@ -132,6 +132,7 @@ def test_purge_refuses_a_populated_declared_provider_field(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             dry_run=True,
             stdout=StringIO(),
             stderr=StringIO(),
@@ -142,6 +143,7 @@ def test_purge_refuses_a_populated_declared_provider_field(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -176,6 +178,7 @@ def test_purge_deletes_rows_with_an_empty_declared_provider_field(
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -231,6 +234,7 @@ def test_purge_refuses_a_populated_declared_organization_field(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             dry_run=True,
             stdout=StringIO(),
             stderr=StringIO(),
@@ -241,6 +245,7 @@ def test_purge_refuses_a_populated_declared_organization_field(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -265,6 +270,7 @@ def test_purge_deletes_with_an_empty_declared_organization_field(
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -312,6 +318,7 @@ def test_purge_fails_closed_on_an_uninspectable_declared_field(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -360,6 +367,7 @@ def test_purge_runs_a_declared_cache_hook(declared_cache_hook: list) -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -421,6 +429,7 @@ def test_purge_fails_closed_on_an_unknown_declared_label(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -535,6 +544,7 @@ def test_purge_resolves_boundary_guarded_labels_too(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -584,6 +594,7 @@ def test_purge_rejects_an_undischargeable_declaration_before_deleting(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,

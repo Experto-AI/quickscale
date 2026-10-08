@@ -284,8 +284,8 @@ class TestPostAdmin:
                 "status": "draft",
                 "category": "",
                 "tags": [],
-                "published_date_0": "",
-                "published_date_1": "",
+                "published_at_0": "",
+                "published_at_1": "",
                 "_save": "Save",
             },
         )
@@ -323,8 +323,8 @@ class TestPostAdmin:
                     "category": "",
                     "tags": [],
                     "organization": str(org.pk),
-                    "published_date_0": "",
-                    "published_date_1": "",
+                    "published_at_0": "",
+                    "published_at_1": "",
                     "_save": "Save",
                 },
             )
@@ -366,8 +366,8 @@ class TestPostAdmin:
                 "category": "",
                 "tags": [],
                 "organization": str(org.pk),
-                "published_date_0": "",
-                "published_date_1": "",
+                "published_at_0": "",
+                "published_at_1": "",
             }
         )
 
@@ -418,8 +418,8 @@ class TestPostAdmin:
                 "status": post.status,
                 "category": "",
                 "tags": [],
-                "published_date_0": "",
-                "published_date_1": "",
+                "published_at_0": "",
+                "published_at_1": "",
             },
             instance=post,
         )

@@ -240,6 +240,12 @@ def _route_name_violations(module: str, name: str, where: str) -> list[str]:
     return violations
 
 
+def _is_admin_model_override(value: str) -> bool:
+    """Return whether a template path is Django's ``admin/<label>/<model>/``."""
+    parts = value.split("/")
+    return len(parts) >= 4 and parts[0] == "admin" and all(parts[1:4]) and value.endswith(".html")
+
+
 def rule_8_templates(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
@@ -277,6 +283,11 @@ def rule_8_templates(corpus: Corpus) -> list[str]:
                     )
             for rel in pages:
                 text = module.files[rel]
+                parts = rel.split("/")[1:-1]
+                if len(parts) > 1:
+                    violations.append(
+                        f"rule 8: {module.name}: {rel} is not flat under templates/{stem}/"
+                    )
                 if re.search(r"<html\b", text, re.IGNORECASE):
                     violations.append(f"rule 8: {module.name}: {rel} emits <html>")
                 if rel == base_rel:
@@ -308,6 +319,24 @@ def rule_8_templates(corpus: Corpus) -> list[str]:
                 violations.append(
                     f"rule 8: {module.name}: template tag library {library!r} lacks the {stem} stem"
                 )
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            for node in ast.walk(_parse(text)):
+                if not isinstance(node, ast.Assign):
+                    continue
+                for target in node.targets:
+                    if not isinstance(target, ast.Name) or target.id not in {
+                        "change_list_template",
+                        "change_form_template",
+                    }:
+                        continue
+                    value = _literal(node.value)
+                    if isinstance(value, str) and not _is_admin_model_override(value):
+                        violations.append(
+                            f"rule 8: {module.name}: {rel} admin override {value!r} is not "
+                            "under admin/<label>/<model>/"
+                        )
     return violations
 
 

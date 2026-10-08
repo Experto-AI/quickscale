@@ -44,8 +44,8 @@ _CRM_NOTE_RLS_TARGETS = (
     (CRM_DEALNOTE_TABLE, CRM_DEALNOTE_RLS_POLICY),
 )
 
-CRM_CONTACT_ID_ORG_UNIQUE = "quickscale_crm_contact_id_org_unique"
-CRM_DEAL_ID_ORG_UNIQUE = "quickscale_crm_deal_id_org_unique"
+CRM_CONTACT_ID_ORG_UNIQUE = "quickscale_crm_contact_id_organization_unique"
+CRM_DEAL_ID_ORG_UNIQUE = "quickscale_crm_deal_id_organization_unique"
 CRM_CONTACTNOTE_CONTACT_ORG_FK = "quickscale_crm_contactnote_contact_org_fk"
 CRM_DEALNOTE_DEAL_ORG_FK = "quickscale_crm_dealnote_deal_org_fk"
 CRM_CONTACT_COMPANY_ORG_FK = "quickscale_crm_contact_company_org_fk"
@@ -554,7 +554,7 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 condition=models.Q(("organization__isnull", True)),
                 fields=("terminal_semantic",),
-                name="quickscale_crm_stage_terminal_semantic_unique_null_org",
+                name="quickscale_crm_stage_terminal_semantic_null_unique",
             ),
         ),
         migrations.AddConstraint(
@@ -570,7 +570,7 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 condition=models.Q(("organization__isnull", True)),
                 fields=("name",),
-                name="quickscale_crm_tag_name_unique_null_org",
+                name="quickscale_crm_tag_name_null_unique",
             ),
         ),
         migrations.AddConstraint(
@@ -584,28 +584,29 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="deal",
             constraint=models.UniqueConstraint(
-                fields=("id", "organization"), name="quickscale_crm_deal_id_org_unique"
+                fields=("id", "organization"),
+                name="quickscale_crm_deal_id_organization_unique",
             ),
         ),
         migrations.AddConstraint(
             model_name="contact",
             constraint=models.UniqueConstraint(
                 fields=("id", "organization"),
-                name="quickscale_crm_contact_id_org_unique",
+                name="quickscale_crm_contact_id_organization_unique",
             ),
         ),
         migrations.AddConstraint(
             model_name="company",
             constraint=models.UniqueConstraint(
                 fields=("id", "organization"),
-                name="quickscale_crm_company_id_org_unique",
+                name="quickscale_crm_company_id_organization_unique",
             ),
         ),
         migrations.AddConstraint(
             model_name="stage",
             constraint=models.UniqueConstraint(
                 fields=("id", "organization"),
-                name="quickscale_crm_stage_id_org_unique",
+                name="quickscale_crm_stage_id_organization_unique",
             ),
         ),
         migrations.RunPython(

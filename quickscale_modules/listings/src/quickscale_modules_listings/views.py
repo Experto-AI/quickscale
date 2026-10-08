@@ -1,6 +1,6 @@
 """Views for QuickScale listings module
 
-T1.8: Single-URL contract (D1/D5). All views use the flat route tree.
+Single-URL contract (D1/D5). All views use the flat route tree.
 Org scoping is ambient via the ContextVar set by ``TenantMiddleware``.
 Public/anonymous reads resolve the System org (D2).
 """
@@ -143,7 +143,7 @@ class ListingListView(ListingsPublicReadMixin, ListView):
     """Display paginated list of published listings with filtering"""
 
     model = Listing
-    template_name = "quickscale_listings/listings/listing_list.html"
+    template_name = "quickscale_listings/listing_list.html"
     context_object_name = "listings"
     filterset_class: type[Any] | None = None
 
@@ -194,7 +194,7 @@ class ListingDetailView(ListingsPublicReadMixin, DetailView):
     """Display single listing detail"""
 
     model = Listing
-    template_name = "quickscale_listings/listings/listing_detail.html"
+    template_name = "quickscale_listings/listing_detail.html"
     context_object_name = "listing"
     slug_url_kwarg = "slug"
 

@@ -75,7 +75,7 @@ _ModelClass = type[models.Model]
 def declared_provider_backed_fields(
     models: Iterable[type[models.Model]],
 ) -> list[tuple[type[models.Model], str]]:
-    """Return every ``(model, field_name)`` classified provider-backed (SA208).
+    """Return every ``(model, field_name)`` classified provider-backed.
 
     Raises:
         ValueError: when a model's ``provider_id_classification`` is not a

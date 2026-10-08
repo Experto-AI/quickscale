@@ -6,7 +6,7 @@ import pytest
 from django.utils import timezone
 
 from quickscale_modules_orgs.models import Organization
-from tests.models import ConcreteListing
+from tests.listing_app.models import ConcreteListing
 
 # ---------------------------------------------------------------------------
 # PostgreSQL detection for physical catalog checks
@@ -57,24 +57,24 @@ class TestAbstractListingViaConcreteModel:
         )
         assert listing.slug == "custom-slug"
 
-    def test_published_date_auto_set(self, listing_factory):
-        """Test published_date is set when status changes to published"""
+    def test_published_at_auto_set(self, listing_factory):
+        """Test published_at is set when status changes to published"""
         listing = listing_factory(status="draft")
-        assert listing.published_date is None
+        assert listing.published_at is None
 
         listing.status = "published"
         listing.save()
-        assert listing.published_date is not None
-        assert listing.published_date <= timezone.now()
+        assert listing.published_at is not None
+        assert listing.published_at <= timezone.now()
 
-    def test_published_date_not_overwritten(self, listing_factory):
-        """Test published_date is not overwritten on subsequent saves"""
+    def test_published_at_not_overwritten(self, listing_factory):
+        """Test published_at is not overwritten on subsequent saves"""
         listing = listing_factory(status="published")
-        original_date = listing.published_date
+        original_date = listing.published_at
 
         listing.title = "Updated Title"
         listing.save()
-        assert listing.published_date == original_date
+        assert listing.published_at == original_date
 
     def test_get_absolute_url(self, listing_factory):
         """Test get_absolute_url returns flat route pattern (D1)"""
@@ -106,8 +106,8 @@ class TestAbstractListingViaConcreteModel:
         assert with_price.has_price is True
         assert without_price.has_price is False
 
-    def test_ordering_by_published_date(self, listing_factory):
-        """Test default ordering by -published_date"""
+    def test_ordering_by_published_at(self, listing_factory):
+        """Test default ordering by -published_at"""
         listing1 = listing_factory(title="First", status="published")
         listing2 = listing_factory(title="Second", status="published")
 
@@ -238,7 +238,7 @@ class TestListingModel:
         (``%(class)s_listings``) so the reverse relation from Organization
         is unique per model.
         """
-        from tests.models import AlternateListing
+        from tests.listing_app.models import AlternateListing
 
         system_org = Organization.objects.get_system_org()
         ConcreteListing.objects.create(
@@ -269,7 +269,7 @@ class TestListingModel:
         unique per concrete subclass and fit within the portable 30-char
         maximum recommended for cross-database compatibility.
         """
-        from tests.models import AlternateListing
+        from tests.listing_app.models import AlternateListing
 
         concrete_names = {idx.name for idx in ConcreteListing._meta.indexes}
         alternate_names = {idx.name for idx in AlternateListing._meta.indexes}
@@ -291,7 +291,7 @@ class TestListingModel:
         across the full system check suite.
         """
         from django.core.checks import run_checks
-        from tests.models import AlternateListing
+        from tests.listing_app.models import AlternateListing
 
         # Force model-cls resolution for both subclasses by accessing _meta.
         _ = ConcreteListing._meta.indexes  # noqa

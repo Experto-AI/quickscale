@@ -77,7 +77,7 @@ class QuickscaleCrmConfig(AppConfig):
         )
 
     def ready(self) -> None:
-        # ---- SA7.1 — organization_created signal receiver -----------------
+        # ---- organization_created signal receiver -----------------
         # Import receivers to connect the seed_crm_default_stages_on_org_created
         # receiver.  The @receiver decorator runs at import time, so importing
         # the module is sufficient.

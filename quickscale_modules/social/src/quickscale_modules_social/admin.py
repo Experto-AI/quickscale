@@ -1,6 +1,6 @@
 """Admin configuration for the QuickScale social module.
 
-SA64 — social admin uses ``TenantModelAdmin`` (imported from
+Social admin uses ``TenantModelAdmin`` (imported from
 ``quickscale_modules_orgs.admin``) for per-org scoping with both
 ContextVar and DB-level ``app.current_org_id`` propagation.
 

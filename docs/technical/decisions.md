@@ -305,7 +305,7 @@ files.
   restore requires exact filename confirmation plus the environment gate; CLI
   restore keeps its existing syntax under the same guardrails
 - ✅ Scheduled execution is command-driven only (`manage.py quickscale_backups_create
-  --scheduled`, or an equivalent platform cron job)
+  --trigger scheduled`, or an equivalent platform cron job)
 - ✅ Private-remote credentials are referenced by environment-variable **name**
   only
 - ✅ When `modules.backups.local_directory` is repo-relative, `quickscale apply`
@@ -645,6 +645,9 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   `{% block content %}`; every page extends it and fills `<module>_content`. No module template
   emits `<html>` or fills the project's `content` block directly. Templates under the rule 2
   folder exceptions (`account/`, `admin/`) follow the software that loads them.
+- ✅ Pages are flat under `templates/quickscale_<module>/`; no page sits below that folder.
+  ✅ Admin overrides follow Django's `admin/<label>/<model>/` path under the `admin/`
+  exception, never a module folder.
 - ✅ Email templates under `templates/quickscale_<module>/email/`.
 - ✅ Static files under `static/quickscale_<module>/{css,js,img}/`.
 - ✅ Template-tag libraries are named `quickscale_<module>`, or `quickscale_<module>_<purpose>`
@@ -794,7 +797,8 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   `base_manager_name`; the manager-only ("dual-manager") tenant form.
 
 **14. Model basics.**
-- ✅ Timestamps `created_at` / `updated_at`; other moments `<event>_at`.
+- ✅ Timestamps `created_at` / `updated_at`; other moments `<event>_at` (a period boundary
+  keeps `_start` / `_end`: it names a range, not a moment).
 - ✅ Primary keys are the `BigAutoField` default; a `UUIDField` key only for an identifier shown
   outside the site. Listed exception: orgs (`Organization`, `OrganizationTombstone`, invitation
   token).
@@ -807,8 +811,10 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   one namespace for every installed module.
 - ✅ Every concrete model defines `__str__` and `Meta.ordering`; a singleton or one-per-parent model
   (a `OneToOneField` owner, or `BackupPolicy`, `NotificationSettings`) may omit the ordering.
+- ✅ A module model sets no `Meta.app_label`; the `AppConfig` label is the one source.
 - ✅ English only: modules do not call `gettext`, and set `verbose_name` only where Django's default
-  reads wrong. Adding translation is a separate decision.
+  reads wrong — a `verbose_name` or `verbose_name_plural` equal to the value Django computes from
+  the class name is refused. Adding translation is a separate decision.
 
 **15. Package root.** `__init__.py` holds `__version__` and `__all__ = ["__version__"]` and nothing
 else. ❌ `default_app_config` (removed in Django 4.1), re-exports from the package root — the
@@ -826,6 +832,13 @@ public surface is `services.py` (rule 4).
 - ✅ A command subclasses `BaseCommand`, writes through `self.stdout` / `self.stderr` with
   `self.style`, and reports an expected failure by raising `CommandError` (a clean message and a
   non-zero exit).
+- ✅ Machine-readable output is `--json`; no command spells it `--format`.
+- ✅ A command an operator schedules takes `--trigger {manual, scheduled}`, defaults to `manual`,
+  and only a `scheduled` run is refused while its module is off. The admin UI passes its own
+  `admin` provenance through the same option; no command defaults to `scheduled`, and the retired
+  `--scheduled` alias is not kept.
+- ✅ A command that deletes another tenant's or the whole database's data takes
+  `--confirm <identifier>`, which must match the targeted object before the deletion proceeds.
 - ✅ A command that deletes, anonymizes, or overwrites data takes `--dry-run`, which reports what
   would change and writes nothing; database-only work runs in `transaction.atomic()`.
 - ✅ Modules ship no scheduler. A command a site should run periodically is listed under the
@@ -911,7 +924,9 @@ public surface is `services.py` (rule 4).
 
 **25. Constraint and index names.**
 - ✅ Every `UniqueConstraint`, `CheckConstraint`, and `Index` sets `name`. A constraint is
-  `quickscale_<module>_<model>_<purpose>` (at most 63 characters); an index is
+  `quickscale_<module>_<lowercased model class name>_<purpose>` (at most 63 characters), where the
+  purpose names the constrained fields (`organization`, never `org`) and a uniqueness constraint
+  ends `_unique`; an index is
   `qs_<module>_<model>_<field>_idx`, abbreviated to fit Django's 30-character limit. PostgreSQL
   index and unique-constraint names are one namespace per schema, shared with the project.
 - ✅ Exception: an `Index` declared in a `Meta` with `abstract = True` may stay unnamed. A fixed or
@@ -959,8 +974,9 @@ named `_<name>.py`. Any other name needs a decision edit.
 
 **29. Test names.** Test files are `test_<subject>.py`, named for what they protect; neither the file
 name nor its docstrings and comments carry a ticket number (`SA<n>`, `AF<n>`, `CR-SA<n>-<n>`); the
-test checks both. Other files in `tests/` are `conftest.py`,
-`settings*.py`, `urls*.py`, private `_<name>.py` helpers, and test apps named `<purpose>_app/`.
+test checks both. Other files in `tests/` are `conftest.py`, `__init__.py`, `settings*.py`,
+`urls*.py`, private `_`-prefixed files and folders, `templates/` for test-only templates, and test apps
+named `<purpose>_app/`. Shipped module source and `module.yml` follow the same no-ticket-id rule.
 
 **30. Settings written by module wiring.**
 - ✅ A module's wiring (`adapter.py`, `module.yml`) writes its own settings and the Django or

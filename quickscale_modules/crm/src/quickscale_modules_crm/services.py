@@ -66,10 +66,10 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
       4. Seed the four canonical default stages only when the recheck
          still observes zero org-local rows.
 
-    SA74: Primes the tenant ContextVar for the entire function scope so
+    Primes the tenant ContextVar for the entire function scope so
     FORCE RLS policies see ``app.current_org_id`` during all queries
     (prechecks, INSERT from ``_seed_default_stages``, and the return
-    SELECT).  The AF9 connection-layer execute wrapper issues ``SET LOCAL
+    SELECT). The connection-layer execute wrapper issues ``SET LOCAL
     app.current_org_id`` from the ContextVar on every tenant statement,
     so setting the ContextVar is sufficient for both reads and writes.
     ``_seed_default_stages`` additionally wraps its writes in
@@ -85,7 +85,7 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
         _restore_current_org_id,
     )
 
-    # SA74: save and set tenant context for the duration of this call.
+    # save and set tenant context for the duration of this call.
     prior_org_id = get_current_org_id()
     set_current_org_id(organization.pk)
     try:
@@ -114,16 +114,16 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
         return list(Stage.all_objects.filter(organization=organization))
     finally:
         set_current_org_id(prior_org_id)
-        # CR-SA74-001: Restore the DB-side GUC and clear the AF9
+        # Restore the DB-side GUC and clear the
         # per-transaction priming memo so that subsequent no-context
         # queries inside the same outer transaction do NOT inherit the
         # seeded tenant scope.
         #
-        # The AF9 execute wrapper issues SET LOCAL app.current_org_id
+        # The execute wrapper issues SET LOCAL app.current_org_id
         # (transaction-scoped) when the ContextVar is set.  On function
         # exit the ContextVar is restored above, but without an explicit
         # SET LOCAL the DB GUC still carries the seeded org UUID for the
-        # lifetime of the enclosing transaction.  The AF9 wrapper skips
+        # lifetime of the enclosing transaction. The wrapper skips
         # re-priming when ContextVar is None, so the stale GUC leaks the
         # seeded org to later no-context queries — breaking fail-closed
         # tenant isolation (RLS sees the leaked org instead of NULL).
@@ -136,7 +136,7 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
 
         if connection.vendor == "postgresql" and connection.in_atomic_block:
             _restore_current_org_id(prior_org_id)
-            # Clear AF9 per-transaction priming memo so the next tenant
+            # Clear per-transaction priming memo so the next tenant
             # query in this transaction re-primes unconditionally.
             if hasattr(connection, "_af9_primed_for_txn"):
                 del connection._af9_primed_for_txn

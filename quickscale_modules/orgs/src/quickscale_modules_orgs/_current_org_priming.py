@@ -1,7 +1,7 @@
 """ContextVar seam and connection-layer GUC priming for current-org scope.
 
 ``current_org.py`` re-exports these names (Module Conventions rule 28).  The
-ContextVar-backed current-org id and the AF9 execute wrapper that primes
+ContextVar-backed current-org id and the execute wrapper that primes
 ``app.current_org_id`` from it live here; the request-scoped scopes and the
 operator-access seam stay on the facade.
 """
@@ -58,7 +58,7 @@ def reset_current_org_id() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AF9 Phase 1 — Connection-layer GUC priming
+# Connection-layer GUC priming
 # ---------------------------------------------------------------------------
 # The execute wrapper below is installed on every Django DatabaseWrapper
 # via ``install_priming_wrapper()``.  It intercepts ``cursor.execute()``
@@ -78,7 +78,7 @@ def reset_current_org_id() -> None:
 #    block that issues ``SET LOCAL`` before the original SQL, then
 #    exits immediately.  This ensures ``SET LOCAL`` and the tenant SQL
 #    share the same transaction scope without holding a request-long
-#    atomic (AF4 regression guard).
+# atomic (regression guard).
 #
 # The wrapper operates exclusively on the live DatabaseWrapper/cursor
 # from ``context['connection']`` — it does **not** reuse the global
@@ -115,7 +115,7 @@ def _clear_priming_memo(connection: Any) -> None:
 
     Must be called whenever the GUC is modified outside the priming
     execute wrapper so that the next wrapped statement re-primes
-    unconditionally (SA83).  Idempotent — safe to call when the memo
+    unconditionally. Idempotent — safe to call when the memo
     is already absent.
     """
     if hasattr(connection, _PRIMED_FOR_TXN):
@@ -163,7 +163,7 @@ def _make_priming_execute_wrapper() -> Any:
     See module docstring for the two code paths (explicit transaction and
     autocommit).
     """
-    # NOTE(SA4.2): Per-transaction priming memo eliminates redundant
+    # NOTE: Per-transaction priming memo eliminates redundant
     #   SET LOCAL calls inside the same explicit transaction.  We store
     #   a connection attribute ``_af9_primed_for_txn`` set to the primed
     #   org_id string, and ``_af9_primed_atomic`` set to the outermost
@@ -171,14 +171,14 @@ def _make_priming_execute_wrapper() -> Any:
     #   the same atomic block, if the memo matches the current org_id we
     #   skip the SET LOCAL.
     #
-    #   CR-SA42-001 fix: the memo carries the outermost Atomic object
+    # fix: the memo carries the outermost Atomic object
     #   reference so it is invalidated across explicit-transaction
     #   boundaries even when no intervening autocommit query fires on a
     #   reused connection.  We use Python's ``is`` operator on the stored
     #   Atomic reference to detect object identity changes.  This avoids
     #   CPython memory-address reuse where ``id()`` returns the same value
     #   for two different Atomic objects allocated at the same address
-    #   (the core CR-SA42-001 defect).  Each ``transaction.atomic()``
+    # (the core defect). Each ``transaction.atomic()``
     #   creates a new ``Atomic`` instance, so ``current_atomic is not
     #   memo_atomic`` across transactions — the memo is cleared on
     #   mismatch, forcing the first statement in the new transaction to
@@ -212,7 +212,7 @@ def _make_priming_execute_wrapper() -> Any:
         org_id_str = str(org_id)
 
         # ---- Explicit transaction path ----------------------------------
-        # CR-SA42-001: Per-transaction memo with atomic block identity.
+        # Per-transaction memo with atomic block identity.
         # The memo carries the outermost ``atomic_blocks[0]`` identity so
         # it is invalidated across explicit-transaction boundaries even
         # when no intervening autocommit query fires on a reused connection.
@@ -226,7 +226,7 @@ def _make_priming_execute_wrapper() -> Any:
             # object identity changes across transactions.  Using
             # ``is`` on the stored reference avoids CPython memory-address
             # reuse where ``id()`` can return the same value for two
-            # different atomic objects (CR-SA42-001).
+            # different atomic objects.
             current_atomic = conn.atomic_blocks[0] if conn.atomic_blocks else None
             memo_atomic = getattr(conn, "_af9_primed_atomic", _SENTINEL)
             if memo_atomic is not _SENTINEL and current_atomic is not memo_atomic:
@@ -251,7 +251,7 @@ def _make_priming_execute_wrapper() -> Any:
 
         # Wrap in a short atomic so SET LOCAL and the tenant SQL share
         # a transaction scope.  The atomic is entered and exited
-        # immediately — no request-long transaction (AF4 guard).
+        # immediately — no request-long transaction (guard).
         from django.db import transaction
 
         with transaction.atomic(using=conn.alias):
@@ -262,7 +262,7 @@ def _make_priming_execute_wrapper() -> Any:
 
 
 def install_priming_wrapper(connection: Any) -> bool:
-    """Install the AF9 priming execute wrapper on a ``DatabaseWrapper``.
+    """Install the priming execute wrapper on a ``DatabaseWrapper``.
 
     Idempotent — subsequent calls on the same connection are no-ops and
     return ``False``.  The wrapper is appended directly to

@@ -9,11 +9,11 @@ The ``require_current_org`` accessor is the strict fail-closed entry point:
 it raises :class:`CurrentOrgError` when no organization context is available
 instead of silently returning ``None``.
 
-T1.2 adds ``ContextVar``-backed helpers (``set_current_org_id``,
+``ContextVar``-backed helpers (``set_current_org_id``,
 ``get_current_org_id``, ``reset_current_org_id``) so that tenant-scoped
 managers can auto-filter without a ``request`` reference.
 
-AF9 Phase 1 adds the connection-layer execute wrapper that primes the
+The connection-layer execute wrapper primes the
 PostgreSQL GUC ``app.current_org_id`` from the ContextVar on the live
 cursor before tenant SQL executes.  The ContextVar seam and the wrapper stay
 in ``_current_org_priming``; this facade re-exports their public names and
@@ -76,7 +76,7 @@ def require_current_org(request: Any) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# T1.15 — shared SET LOCAL helper for non-middleware callers
+# shared SET LOCAL helper for non-middleware callers
 # ---------------------------------------------------------------------------
 
 
@@ -129,7 +129,7 @@ def reset_db_current_org_id() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T1.17 — combined helper for non-middleware callers
+# combined helper for non-middleware callers
 # ---------------------------------------------------------------------------
 
 
@@ -170,7 +170,7 @@ def _restore_current_org_id(prior: uuid.UUID | None) -> None:
     Issues ``SET LOCAL`` (transaction-scoped) to restore *prior* or to clear
     the GUC to its default (empty string) when *prior* was ``None``.  Using
     ``SET LOCAL`` instead of ``RESET`` avoids session-level side effects that
-    can leak across test transactions (CR-AF11-001).
+    can leak across test transactions.
     """
     from django.db import connection
 
@@ -247,13 +247,13 @@ def _tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
         # Restore the DB GUC so nested _tenant_context() stays in sync.
         # Use SET LOCAL with DEFAULT when prior was None so we reset the
         # transaction-scoped GUC without affecting the session default
-        # (CR-AF11-001 regression: RESET is session-scoped and can
+        # (regression: RESET is session-scoped and can
         # interact unexpectedly with connection-level state).
         _restore_current_org_id(prior)
 
 
 # ---------------------------------------------------------------------------
-# T1.19 — unified org_scope context manager
+# unified org_scope context manager
 # ---------------------------------------------------------------------------
 
 
@@ -269,7 +269,7 @@ def org_scope(organization: Any) -> Iterator[None]:
 
     On exit it restores both the prior ContextVar value and the prior DB-side
     ``app.current_org_id`` so tenant context never leaks across call
-    boundaries, even under nested ``org_scope()`` use (T1.19 fail-closed
+    boundaries, even under nested ``org_scope`` use (fail-closed
     contract).
 
     Parameters
@@ -286,7 +286,7 @@ def org_scope(organization: Any) -> Iterator[None]:
     prior = get_current_org_id()
     if organization is None:
         # Reset both ContextVar and DB so that RLS fail-closed behavior
-        # is enforced even under a nested scope (CR-T119-001).
+        # is enforced even under a nested scope.
         set_current_org_id(None)
         from django.db import transaction
 
@@ -306,7 +306,7 @@ def org_scope(organization: Any) -> Iterator[None]:
 
     # DB-backed path: set both ContextVar and DB inside an atomic block,
     # and restore both before the atomic exits so that nested scopes do
-    # not leave the DB side desynchronized (CR-T119-001).
+    # not leave the DB side desynchronized.
     set_current_org_id(organization.pk)
     from django.db import transaction
 
@@ -325,7 +325,7 @@ def org_scope(organization: Any) -> Iterator[None]:
 
 
 # ---------------------------------------------------------------------------
-# SA21.2 — shared canonical client-IP resolver for module/runtime code
+# shared canonical client-IP resolver for module/runtime code
 # ---------------------------------------------------------------------------
 # Provides the importable live runtime resolver ``get_client_ip(request)`` for
 # forms, blog, and other module callers.  Generated settings supply
@@ -426,7 +426,7 @@ class ClientIPThrottleMixin:
 
 
 # ---------------------------------------------------------------------------
-# SA14.5 — operator_access context manager
+# operator_access context manager
 # ---------------------------------------------------------------------------
 # Superuser-gated, audit-logged context manager for cross-tenant reads.
 # Temporarily sets the PostgreSQL GUC ``app.operator_access`` to ``'on'``
@@ -448,10 +448,10 @@ def _get_operator_access() -> str:
     Raises :class:`django.core.exceptions.ImproperlyConfigured` when
     called on PostgreSQL outside an active ``transaction.atomic()``
     block, because ``current_setting`` reads would see session-level
-    state rather than transaction-scoped GUC values (SA39).
+    state rather than transaction-scoped GUC values.
 
     Used by :func:`operator_access` to save/restore the prior GUC for
-    nesting safety (CR-SA14.5-002).
+    nesting safety.
     """
     from django.core.exceptions import ImproperlyConfigured
     from django.db import connection
@@ -480,7 +480,7 @@ def _set_operator_access(value: str) -> None:
 
     Raises :class:`django.core.exceptions.ImproperlyConfigured` when
     called on PostgreSQL outside an active ``transaction.atomic()``
-    block, because ``SET LOCAL`` would be a silent no-op (SA39).
+    block, because ``SET LOCAL`` would be a silent no-op.
 
     No-op on non-PostgreSQL databases.
 
@@ -526,7 +526,7 @@ def operator_access(*, reason: str) -> Iterator[None]:
 
     Temporarily sets the PostgreSQL GUC ``app.operator_access`` to
     ``'on'`` via ``SET LOCAL`` so that FORCE RLS policies allow queries
-    matching **any** ``organization_id`` (see the SA14.5 OR clause added
+    matching **any** ``organization_id`` (see the OR clause added
     to ``_tenancy_rls._FORCE_RLS_FORWARD_SQL`` ``_select`` sub-policy).
 
     The elevation is **transaction-scoped**: ``SET LOCAL`` applies only
@@ -536,7 +536,7 @@ def operator_access(*, reason: str) -> Iterator[None]:
 
     **Nesting-safe**: saves the prior ``app.operator_access`` GUC value
     on entry and restores it on exit, so nested ``operator_access()``
-    use correctly preserves the outer scope (CR-SA14.5-002).
+    use correctly preserves the outer scope.
 
     **Superuser-gated:** callers must verify ``user.is_superuser``
     before entering this context manager.  Views and management commands
@@ -642,22 +642,22 @@ def account_deletion_user_reference_organization_ids(
 
 
 # ---------------------------------------------------------------------------
-# SA13.4 — Compatibility aliases (retained after hard-fail gate)
+# Compatibility aliases (retained after hard-fail gate)
 # ---------------------------------------------------------------------------
-# These compatibility aliases are retained even though the SA13.4 lint gate
+# These compatibility aliases are retained even though the lint gate
 # now hard-fails on new external use.  The aliases exist for backward
 # compatibility with management-command and test code that references them
-# through the orgs-internal exemption.  AF9 None-path hardening was
-# deferred per SA13.4-AF9-DEFERRAL (see roadmap.md) — the aliases confirm
+# through the orgs-internal exemption. None-path hardening was
+# deferred (see roadmap.md) — the aliases confirm
 # that no semantic change was made to the None-context wrapper path in this
 # release.
 # ---------------------------------------------------------------------------
 
 set_db_current_org_id = _set_db_current_org_id
-"""SA13.1 compatibility alias — prefer :func:`org_scope` for new code."""
+"""Compatibility alias — prefer :func:`org_scope` for new code."""
 
 set_current_org_for_context = _set_current_org_for_context
-"""SA13.1 compatibility alias — prefer :func:`org_scope` for new code."""
+"""Compatibility alias — prefer :func:`org_scope` for new code."""
 
 tenant_context = _tenant_context
-"""SA13.1 compatibility alias — prefer :func:`org_scope` for new code."""
+"""Compatibility alias — prefer :func:`org_scope` for new code."""

@@ -10,13 +10,8 @@ from quickscale_core.runtime import ADAPTER_FUNCTIONS, BackupError
 
 
 def _resolve_backup_trigger(options: dict[str, Any]) -> str:
-    """Resolve the trigger provenance from the explicit flags."""
-    raw_trigger = options.get("trigger")
-    if raw_trigger:
-        return str(raw_trigger)
-    if options["scheduled"]:
-        return "scheduled"
-    return "manual"
+    """Resolve the trigger provenance from the explicit option."""
+    return str(options.get("trigger") or "manual")
 
 
 def _require_scheduled_module_enabled(trigger: str) -> None:
@@ -69,12 +64,11 @@ class Command(BaseCommand):
         parser.add_argument(
             "--trigger",
             choices=["manual", "scheduled", "admin"],
-            help="Explicit trigger provenance. Overrides --scheduled when given.",
-        )
-        parser.add_argument(
-            "--scheduled",
-            action="store_true",
-            help="Mark the created artifact as coming from an external scheduler.",
+            default="manual",
+            help=(
+                "Invocation provenance (default: manual). A scheduled run is "
+                "refused while the module is off; manual and admin runs stay."
+            ),
         )
         parser.add_argument(
             "--resume",

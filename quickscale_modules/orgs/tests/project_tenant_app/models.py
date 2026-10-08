@@ -25,7 +25,7 @@ class ProjectListing(AbstractListing):
         verbose_name_plural = "Project listings"
         indexes = [
             models.Index(
-                fields=["-published_date"],
+                fields=["-published_at"],
                 name="project_listing_pub_idx",
             ),
             models.Index(fields=["status"], name="project_listing_status_idx"),

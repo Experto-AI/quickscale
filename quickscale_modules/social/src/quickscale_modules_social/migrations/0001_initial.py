@@ -147,8 +147,6 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "Social embed",
-                "verbose_name_plural": "Social embeds",
                 "ordering": ["display_order", "title", "pk"],
                 "abstract": False,
                 "base_manager_name": "all_objects",
@@ -215,8 +213,6 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "Social link",
-                "verbose_name_plural": "Social links",
                 "ordering": ["display_order", "title", "pk"],
                 "abstract": False,
                 "base_manager_name": "all_objects",

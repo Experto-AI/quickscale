@@ -34,7 +34,7 @@ INSTALLED_APPS = [
     "markdownx",
     "quickscale_modules_orgs",
     "quickscale_modules_listings",
-    "tests",  # Required for ConcreteListing model
+    "tests.listing_app.apps.ListingAppConfig",  # ConcreteListing fixture app
 ]
 
 MIDDLEWARE = [
