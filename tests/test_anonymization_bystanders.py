@@ -96,6 +96,7 @@ def test_each_registered_template_links_its_person(
         sentinel.email,
         "Sentinel Person",
         sentinel.get_username(),
+        email_verified=True,
     )
 
     linked.refresh_from_db()
