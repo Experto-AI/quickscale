@@ -272,16 +272,28 @@ class AccountDeleteView(
         captured once and passed to every hook.  A handler may run in any
         order, and auth's own handler mutates the account row, so the
         username must be snapshotted too: the invitation display falls back to
-        it when the person has no full name.  The caller holds one transaction
-        around this call, so a failing executor rolls the whole account
-        deletion back; file effects are scheduled on commit (Module
+        it when the person has no full name.  Whether the address is
+        allauth-verified is captured here too, before any hook runs: auth's
+        own hook deletes the login addresses, and only a verified address may
+        drive a handler's cross-tenant address selector.  The caller holds one
+        transaction around this call, so a failing executor rolls the whole
+        account deletion back; file effects are scheduled on commit (Module
         Conventions rule 21).
         """
         original_email = user.email
         original_name = user.get_full_name().strip()
         original_username = str(getattr(user, "username", "") or "").strip()
+        email_verified = _anonymize_boundary.account_email_verified(
+            user, original_email
+        )
         for _, hook in _anonymize_boundary.discover_anonymize_hooks():
-            hook(user, original_email, original_name, original_username)
+            hook(
+                user,
+                original_email,
+                original_name,
+                original_username,
+                email_verified=email_verified,
+            )
         coordinator.discharge_stage(RemovalAction.ANONYMIZE)
 
     def _account_deletion_handlers(self) -> tuple[Any, ...]:

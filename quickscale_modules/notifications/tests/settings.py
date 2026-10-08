@@ -23,6 +23,8 @@ ALLOWED_HOSTS = ["*"]
 # Required by quickscale_modules_orgs; saas is the correct mode for
 # orgs-dependent module test suites (forms, blog, listings, crm, social).
 QUICKSCALE_ORGS_ENABLED = True
+QUICKSCALE_ORGS_INVITE_RATE_LIMIT = "20/day"
+QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT = 50
 QUICKSCALE_ORGS_MODE = "saas"
 
 INSTALLED_APPS = [

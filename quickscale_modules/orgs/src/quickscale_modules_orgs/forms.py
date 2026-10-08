@@ -7,6 +7,7 @@ from datetime import timedelta
 from typing import Any, cast
 
 from django import forms
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.text import slugify
@@ -153,10 +154,20 @@ class OrgSettingsForm(forms.ModelForm):
 
 
 class InviteForm(forms.Form):
-    """Create a pending organization invitation with deterministic validation."""
+    """Create a pending organization invitation with deterministic validation.
+
+    Beyond the duplicate checks, the organization's active pending-invitation
+    count is capped by ``QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT``; the cap
+    is enforced under the organization's row lock in :meth:`save`, so two
+    concurrent sends cannot both pass it.
+    """
 
     _CURRENT_MEMBER_ERROR = "This email already belongs to a current member."
     _PENDING_INVITATION_ERROR = "This email already has a pending invitation."
+    _PENDING_LIMIT_ERROR = (
+        "This organization already holds the maximum number of pending "
+        "invitations. Revoke or wait for one to expire before inviting again."
+    )
 
     email = forms.EmailField()
     role = forms.ChoiceField(choices=OrgRole.choices)
@@ -209,7 +220,12 @@ class InviteForm(forms.Form):
         return role
 
     def save(self) -> OrganizationInvitation:
-        """Persist a normalized pending invitation for the target organization."""
+        """Persist a normalized pending invitation for the target organization.
+
+        The duplicate recheck and the pending cap run inside one transaction
+        with the organization row locked, so a concurrent pair of sends cannot
+        both pass either guard.
+        """
 
         email = self._normalize_email(self.cleaned_data["email"])
 
@@ -223,6 +239,11 @@ class InviteForm(forms.Form):
             )
             if error_message is not None:
                 raise forms.ValidationError({"email": error_message})
+            if (
+                self._pending_invitation_count(organization)
+                >= settings.QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT
+            ):
+                raise forms.ValidationError(self._PENDING_LIMIT_ERROR)
 
             return OrganizationInvitation.objects.create(
                 organization=organization,
@@ -235,6 +256,15 @@ class InviteForm(forms.Form):
     @staticmethod
     def _normalize_email(value: Any) -> str:
         return str(value).strip().lower()
+
+    @staticmethod
+    def _pending_invitation_count(organization: Organization) -> int:
+        """Return the organization's active pending-invitation count."""
+        return OrganizationInvitation.objects.filter(
+            organization=organization,
+            accepted_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        ).count()
 
     def _get_email_availability_error(
         self,

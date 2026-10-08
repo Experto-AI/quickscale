@@ -178,18 +178,25 @@ class QuickscaleOrgsConfig(AppConfig):
         original_email: str,
         original_name: str,
         original_username: str,
+        *,
+        email_verified: bool,
     ) -> None:
         """Scrub orgs' personal data as the ``owned-personal-data`` executor.
 
         The anonymize boundary runs this hook inside its anonymization
-        transaction: the person leaves every organization and their invitation
-        addresses are scrubbed, pending ones withdrawn.  The pre-scrub identity
+        transaction: the person leaves every organization and, when the
+        boundary verified the address, their invitation addresses are
+        scrubbed and pending ones withdrawn.  The pre-scrub identity
         arguments let handler order not matter.
         """
         from quickscale_modules_orgs import _anonymization
 
         _anonymization.anonymize_account(
-            user, original_email, original_name, original_username
+            user,
+            original_email,
+            original_name,
+            original_username,
+            email_verified=email_verified,
         )
 
     def anonymize_handlers(self) -> tuple[Any, ...]:

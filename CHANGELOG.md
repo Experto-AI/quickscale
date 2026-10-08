@@ -608,6 +608,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     payment is still unpaid is accepted and bound, `checkout.session.async_payment_succeeded`
     credits the purchase exactly once when the money settles, and
     `checkout.session.async_payment_failed` releases the reservation.
+  - **Self-registration is hardened against cross-tenant and relay abuse.** Account removal's
+    address-based scrubs run only for an allauth-verified address, organization invitation sends
+    are throttled per sender and per organization through the `quickscale_orgs_invite` and
+    `quickscale_orgs_invite_organization` scopes with a per-organization pending cap and a bounded,
+    escaped email text, and management pages resolve their organization from the route slug rather
+    than a VIEW-AS session.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
