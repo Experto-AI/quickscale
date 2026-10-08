@@ -937,23 +937,30 @@ def test_purge_organization_refuses_current_subscription_without_provider_id(
 @pytest.mark.parametrize(
     "future_expiry", [False, True], ids=["unknown-expiry", "future-expiry"]
 )
-def test_purge_organization_refuses_pending_subscription_checkout(
+def test_purge_organization_resolves_a_sessionless_pending_checkout(
     dry_run: bool,
     future_expiry: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A pending reservation prevents purge from racing checkout creation."""
+    """A session-less reservation the provider never created no longer blocks.
+
+    A dry run still rehearses the pre-reconciliation refusal because it does
+    not persist the resolved absence; the destructive run clears the row.
+    """
+    from quickscale_modules_billing import _stripe_client
+
     owner = get_user_model().objects.create_user(
-        username="pending-checkout-owner",
-        email="pending-checkout-owner@example.com",
+        username=f"pending-checkout-owner-{dry_run}-{future_expiry}",
+        email=f"pending-checkout-owner-{dry_run}-{future_expiry}@example.com",
         password="secret123",
     )
     organization = Organization.objects.create(
-        name="Pending Checkout",
-        slug="pending-checkout",
+        name=f"Pending Checkout {dry_run} {future_expiry}",
+        slug=f"pending-checkout-{dry_run}-{future_expiry}",
     )
     plan = _create_plan(
-        slug="growth-pending-checkout",
-        price_id="price_growth_pending_checkout",
+        slug=f"growth-pending-checkout-{dry_run}-{future_expiry}",
+        price_id=f"price_growth_pending_checkout_{dry_run}_{future_expiry}",
     )
     set_current_org_id(organization.pk)
     try:
@@ -971,7 +978,90 @@ def test_purge_organization_refuses_pending_subscription_checkout(
     finally:
         reset_current_org_id()
 
-    with pytest.raises(CommandError, match="checkout is pending"):
+    stripe_client = MagicMock()
+    stripe_client.search_customers.return_value = []
+    monkeypatch.setattr(
+        _stripe_client,
+        "get_stripe_client",
+        lambda **kwargs: stripe_client,
+    )
+
+    if dry_run:
+        with pytest.raises(CommandError, match="checkout is pending"):
+            call_command(
+                "quickscale_orgs_purge_organization",
+                organization_id=str(organization.pk),
+                dry_run=True,
+                stdout=StringIO(),
+                stderr=StringIO(),
+                verbosity=0,
+            )
+        assert Organization.objects.filter(pk=organization.pk).exists()
+        assert not OrganizationTombstone.objects.filter(
+            organization_id=organization.pk
+        ).exists()
+        return
+
+    call_command(
+        "quickscale_orgs_purge_organization",
+        organization_id=str(organization.pk),
+        stdout=StringIO(),
+        stderr=StringIO(),
+        verbosity=0,
+    )
+
+    assert not Organization.objects.filter(pk=organization.pk).exists()
+    assert OrganizationTombstone.objects.filter(
+        organization_id=organization.pk
+    ).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("dry_run", [False, True], ids=["purge", "dry-run"])
+def test_purge_organization_refuses_a_sessionless_checkout_still_open_at_the_provider(
+    dry_run: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session-less reservation the provider still holds open keeps blocking."""
+    from quickscale_modules_billing import _stripe_client
+
+    owner = get_user_model().objects.create_user(
+        username=f"sessionless-open-owner-{dry_run}",
+        email=f"sessionless-open-owner-{dry_run}@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name=f"Sessionless Open {dry_run}",
+        slug=f"sessionless-open-{dry_run}",
+    )
+    plan = _create_plan(
+        slug=f"growth-sessionless-open-{dry_run}",
+        price_id=f"price_growth_sessionless_open_{dry_run}",
+    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            status=Subscription.Status.INCOMPLETE,
+            stripe_customer_id="cus_sessionless_open",
+        )
+    finally:
+        reset_current_org_id()
+
+    stripe_client = MagicMock()
+    stripe_client.find_checkout_session_by_reference.return_value = {
+        "id": "cs_sessionless_open",
+        "status": "open",
+    }
+    monkeypatch.setattr(
+        _stripe_client,
+        "get_stripe_client",
+        lambda **kwargs: stripe_client,
+    )
+
+    with pytest.raises(CommandError, match="still open"):
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
