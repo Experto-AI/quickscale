@@ -1025,3 +1025,41 @@ class TestAdminAffordances:
         assert response.status_code == 200
         content = response.content.decode()
         assert "VIEW-AS DEBUG MODE" not in content
+
+
+# ---------------------------------------------------------------------------
+# VIEW-AS — management pages resolve the organization from the URL
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_view_as_management_page_acts_on_the_url_organization(client, settings) -> None:
+    """A superuser editing /orgs/<B>/settings/ under VIEW-AS changes B, not A."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    superuser = get_user_model().objects.create_superuser(
+        username="super-scope",
+        email="super-scope@example.com",
+        password="secret123",
+    )
+    impersonated = Organization.objects.create(name="Impersonated", slug="impersonated")
+    routed = Organization.objects.create(name="Routed", slug="routed")
+    client.force_login(superuser)
+    session = client.session
+    session[DEBUG_AS_ORG_SESSION_KEY] = str(impersonated.pk)
+    session.save()
+
+    response = client.get(f"/orgs/{routed.slug}/settings/")
+
+    assert response.status_code == 200
+    assert response.context["organization"] == routed
+
+    response = client.post(
+        f"/orgs/{routed.slug}/settings/",
+        {"name": "Routed Renamed", "slug": routed.slug},
+    )
+
+    assert response.status_code == 302
+    routed.refresh_from_db()
+    impersonated.refresh_from_db()
+    assert routed.name == "Routed Renamed"
+    assert impersonated.name == "Impersonated"

@@ -436,6 +436,20 @@ def test_organization_context_uses_org_slug_when_request_org_missing(rf) -> None
     assert str(organization) == "Fallback Org"
 
 
+@pytest.mark.django_db
+def test_organization_context_prefers_the_route_slug_over_request_org(rf) -> None:
+    """A management route acts on its URL's organization, not the VIEW-AS org."""
+    impersonated = Organization.objects.create(name="Impersonated", slug="impersonated")
+    routed = Organization.objects.create(name="Routed", slug="routed")
+    view = DummyOrganizationContextView()
+    request = rf.get("/")
+    request.org = impersonated
+    view.request = request
+    view.kwargs = {"org_slug": routed.slug}
+
+    assert view.get_organization() == routed
+
+
 def test_organization_context_requires_org_slug_or_request_org(rf) -> None:
     view = DummyOrganizationContextView()
     view.request = rf.get("/")

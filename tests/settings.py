@@ -115,6 +115,8 @@ AUTHENTICATION_BACKENDS = [
 LOGIN_REDIRECT_URL = "/"
 QUICKSCALE_ORGS_ENABLED = True
 QUICKSCALE_ORGS_MODE = "solo"
+QUICKSCALE_ORGS_INVITE_RATE_LIMIT = "20/day"
+QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT = 50
 USE_X_FORWARDED_FOR = False
 TRUSTED_PROXY_COUNT = 0
 
@@ -124,6 +126,11 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
+    # The orgs wiring contributes the invitation throttle scopes (rule 32).
+    "DEFAULT_THROTTLE_RATES": {
+        "quickscale_orgs_invite": "20/day",
+        "quickscale_orgs_invite_organization": "20/day",
+    },
     "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
 }
 
