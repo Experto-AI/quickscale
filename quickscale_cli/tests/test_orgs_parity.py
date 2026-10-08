@@ -19,7 +19,12 @@ from quickscale_core.contracts.resolvers import (
 )
 from quickscale_core.manifest.option_validation import validate_module_options
 
-_EXPECTED_DEFAULTS: dict[str, object] = {"enabled": True, "mode": "solo"}
+_EXPECTED_DEFAULTS: dict[str, object] = {
+    "enabled": True,
+    "mode": "solo",
+    "invite_rate_limit": "20/day",
+    "pending_invitation_limit": 50,
+}
 _MODES = ["solo", "saas"]
 
 
@@ -62,26 +67,26 @@ class TestOrgResolution:
 
     def test_saas_mode_override(self) -> None:
         assert resolve_manifest_module_options("orgs", {"mode": "saas"}) == {
-            "enabled": True,
+            **_EXPECTED_DEFAULTS,
             "mode": "saas",
         }
 
     def test_mode_is_stripped_and_lowercased(self) -> None:
         assert resolve_manifest_module_options("orgs", {"mode": "  SaaS  "}) == {
-            "enabled": True,
+            **_EXPECTED_DEFAULTS,
             "mode": "saas",
         }
 
     def test_invalid_mode_passes_through_resolution(self) -> None:
         """SA27: resolution does not coerce an invalid mode; validation refuses."""
         assert resolve_manifest_module_options("orgs", {"mode": "team"}) == {
-            "enabled": True,
+            **_EXPECTED_DEFAULTS,
             "mode": "team",
         }
 
     def test_blank_mode_resolves_to_empty(self) -> None:
         assert resolve_manifest_module_options("orgs", {"mode": "   "}) == {
-            "enabled": True,
+            **_EXPECTED_DEFAULTS,
             "mode": "",
         }
 
@@ -146,7 +151,7 @@ class TestOrgConfigurator:
         config = entry.configure(
             non_interactive=True, existing_config={"mode": "  SaaS  "}
         )
-        assert config == {"enabled": True, "mode": "saas"}
+        assert config == {**_EXPECTED_DEFAULTS, "mode": "saas"}
 
     @patch("quickscale_cli.commands.module_config.click.prompt")
     @patch("quickscale_cli.commands.module_config.click.confirm")
@@ -154,12 +159,13 @@ class TestOrgConfigurator:
         self, mock_confirm, mock_prompt
     ) -> None:
         mock_confirm.return_value = True
-        mock_prompt.return_value = "saas"
+        # click converts the integer prompt itself; the mock returns its type.
+        mock_prompt.side_effect = ["saas", "20/day", 50]
 
         entry = MODULE_CONFIGURATOR_REGISTRY["orgs"]
         config = entry.configure(non_interactive=False)
 
-        assert config == {"enabled": True, "mode": "saas"}
-        _, kwargs = mock_prompt.call_args
+        assert config == {**_EXPECTED_DEFAULTS, "mode": "saas"}
+        _, kwargs = mock_prompt.call_args_list[0]
         choice = kwargs["type"]
         assert list(choice.choices) == _MODES
