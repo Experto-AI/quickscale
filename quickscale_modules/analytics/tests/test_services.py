@@ -426,18 +426,49 @@ def test_get_distinct_id_uses_user_pk_when_opted_in(rf: RequestFactory) -> None:
 
     assert services.get_distinct_id(request) == str(user.pk)
 
+    session_key = request.session.session_key
+    assert session_key
+    assert session_key not in services.get_distinct_id(request)
+
 
 @pytest.mark.django_db()
-def test_get_distinct_id_defaults_to_session_key(rf: RequestFactory) -> None:
-    """Anonymous-by-default mode should use a stable session-scoped identifier."""
+def test_get_distinct_id_keeps_signed_in_users_anonymous_by_default(
+    rf: RequestFactory,
+) -> None:
+    """Documented contract: identity linkage is opt-in, so the default stays anonymous."""
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="analytics-default-anon",
+        email="analytics-default-anon@example.com",
+        password="password123",
+    )
     request = rf.get("/")
     _add_session(request)
-    request.user = SimpleNamespace(is_authenticated=False, is_staff=False)
+    request.user = user
 
     distinct_id = services.get_distinct_id(request)
 
-    assert distinct_id.startswith("session:")
-    assert distinct_id != "anonymous"
+    assert distinct_id.startswith("anonymous:")
+    assert distinct_id != str(user.pk)
+
+
+@pytest.mark.django_db()
+def test_get_distinct_id_defaults_to_a_random_session_scoped_id(
+    rf: RequestFactory,
+) -> None:
+    """Anonymous-by-default mode uses a random stored ID, never the session key."""
+    request = rf.get("/")
+    _add_session(request)
+    request.user = SimpleNamespace(is_authenticated=False, is_staff=False)
+    session_key = request.session.session_key
+    assert session_key
+
+    distinct_id = services.get_distinct_id(request)
+
+    assert distinct_id.startswith("anonymous:")
+    assert distinct_id == services.get_distinct_id(request)
+    assert session_key not in distinct_id
+    assert request.session[services._ANONYMOUS_SESSION_KEY] in distinct_id
 
 
 @override_settings(QUICKSCALE_ANALYTICS_EXCLUDE_STAFF=True)
@@ -451,52 +482,31 @@ def test_get_distinct_id_returns_blank_for_excluded_staff(
     assert services.get_distinct_id(request) == ""
 
 
-def test_get_distinct_id_creates_session_key_when_missing(rf: RequestFactory) -> None:
-    """Session-backed anonymous IDs should bootstrap a session key when possible."""
-
-    class SessionWithCreate:
-        def __init__(self) -> None:
-            self.session_key: str | None = None
-
-        def create(self) -> None:
-            self.session_key = "created-session-key"
-
-    request = rf.get("/")
-    request.user = SimpleNamespace(is_authenticated=False, is_staff=False)
-    request.session = SessionWithCreate()
-
-    assert services.get_distinct_id(request) == "session:created-session-key"
-
-
-def test_get_distinct_id_uses_save_when_create_is_unavailable(
+def test_get_distinct_id_without_a_session_still_returns_a_random_id(
     rf: RequestFactory,
 ) -> None:
-    """The distinct-id helper should fall back to session.save() when needed."""
-
-    class SessionWithSave:
-        def __init__(self) -> None:
-            self.session_key: str | None = None
-
-        def save(self) -> None:
-            self.session_key = "saved-session-key"
+    """A request with no usable session receives a fresh random anonymous ID."""
 
     request = rf.get("/")
     request.user = SimpleNamespace(is_authenticated=False, is_staff=False)
-    request.session = SessionWithSave()
 
-    assert services.get_distinct_id(request) == "session:saved-session-key"
+    distinct_id = services.get_distinct_id(request)
+
+    assert distinct_id.startswith("anonymous:")
+    assert distinct_id != services.get_distinct_id(request)
 
 
-def test_get_distinct_id_returns_anonymous_when_session_bootstrap_fails(
+def test_get_distinct_id_degrades_when_the_session_is_unusable(
     rf: RequestFactory,
     caplog,
 ) -> None:
-    """Session initialization failures should degrade to a stable anonymous ID."""
+    """An unreadable session degrades to a random ID without raising."""
 
     class BrokenSession:
-        session_key: str | None = None
+        def get(self, key: str) -> None:
+            raise RuntimeError("boom")
 
-        def create(self) -> None:
+        def __setitem__(self, key: str, value: str) -> None:
             raise RuntimeError("boom")
 
     request = rf.get("/")
@@ -505,8 +515,46 @@ def test_get_distinct_id_returns_anonymous_when_session_bootstrap_fails(
 
     caplog.set_level(logging.DEBUG, logger=services.__name__)
 
-    assert services.get_distinct_id(request) == "anonymous"
-    assert "could not initialize a session key" in caplog.text
+    distinct_id = services.get_distinct_id(request)
+
+    assert distinct_id.startswith("anonymous:")
+    assert "could not persist an anonymous ID" in caplog.text
+
+
+@pytest.mark.django_db()
+def test_no_distinct_id_contains_the_session_key(rf: RequestFactory) -> None:
+    """Verification: no request mode derives its outbound ID from the session key."""
+    anonymous = rf.get("/")
+    _add_session(anonymous)
+    anonymous.user = SimpleNamespace(is_authenticated=False, is_staff=False)
+    anonymous_session_key = anonymous.session.session_key
+    assert anonymous_session_key
+
+    assert anonymous_session_key not in services.get_distinct_id(anonymous)
+
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="analytics-plain",
+        email="analytics-plain@example.com",
+        password="password123",
+    )
+    authenticated = rf.get("/")
+    _add_session(authenticated)
+    authenticated.user = user
+    assert authenticated.session.session_key not in services.get_distinct_id(
+        authenticated
+    )
+
+    staff_user = user_model.objects.create_user(
+        username="analytics-staff-check",
+        email="analytics-staff-check@example.com",
+        password="password123",
+        is_staff=True,
+    )
+    staff = rf.get("/")
+    _add_session(staff)
+    staff.user = staff_user
+    assert staff.session.session_key not in services.get_distinct_id(staff)
 
 
 @pytest.mark.django_db()
