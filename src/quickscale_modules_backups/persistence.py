@@ -5,7 +5,7 @@ Implements ``BackupArtifactPersistence`` and ``BackupPolicyPersistence`` using
 the backups module models.  Module-level singleton instances are registered
 during ``AppConfig.ready()``.
 
-SA89b Phase 1 expands both providers to cover all executable ORM lifecycle
+Both providers cover all executable ORM lifecycle
 edges: artifact CRUD, snapshot CRUD, and policy introspection.
 """
 
@@ -171,7 +171,7 @@ def _summarize_full_backup_contract_issues(
 class _BackupArtifactPersistenceProvider:
     """Django-backed artifact persistence — queries ``BackupArtifact``.
 
-    SA89b Phase 1 expands from single-method upload resolution to full
+    The artifact provider covers upload resolution to full
     artifact and snapshot CRUD, encapsulating all executable ORM lifecycle
     edges behind the provider seam.
     """
@@ -418,7 +418,7 @@ class _BackupArtifactPersistenceProvider:
 class _BackupPolicyPersistenceProvider:
     """Django-backed policy persistence — reads/writes ``BackupPolicy``.
 
-    SA89b Phase 1 adds has_any_policy and ensure_default_policy for policy
+    The policy provider adds has_any_policy and ensure_default_policy for policy
     introspection without direct ORM access from dr_engine.
     """
 

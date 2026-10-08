@@ -75,8 +75,6 @@ class BackupPolicy(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_backups"
-        verbose_name = "Backup policy"
         verbose_name_plural = "Backup policies"
 
     def __str__(self) -> str:
@@ -163,10 +161,7 @@ class BackupArtifact(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_backups"
         ordering = ["-created_at"]
-        verbose_name = "Backup artifact"
-        verbose_name_plural = "Backup artifacts"
 
     def __str__(self) -> str:
         return cast(str, self.filename)
@@ -248,10 +243,7 @@ class BackupSnapshot(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "quickscale_backups"
         ordering = ["-created_at"]
-        verbose_name = "Backup snapshot"
-        verbose_name_plural = "Backup snapshots"
 
     def __str__(self) -> str:
         return cast(str, self.snapshot_id)
