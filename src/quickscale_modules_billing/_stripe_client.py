@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping
 from functools import wraps
 from importlib import import_module
 from typing import Any, ParamSpec, TypeVar
+from urllib.parse import urlsplit
 
 from quickscale_modules_billing._payload import (
     _normalize_mapping as _normalize_mapping,
@@ -33,6 +34,7 @@ from quickscale_modules_billing._settings import (
 from quickscale_modules_billing.exceptions import (
     BillingConfigurationError,
     BillingError,
+    BillingValidationError,
     BillingWebhookError,
     BillingWebhookSignatureError,
 )
@@ -106,6 +108,8 @@ class StripeClient:
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """Create a Stripe Checkout Session for a one-time purchase."""
+        _require_absolute_url(field_name="success_url", value=success_url)
+        _require_absolute_url(field_name="cancel_url", value=cancel_url)
         self._activate_api_key()
         checkout_session_api = self._resolve_checkout_session_api()
         create_kwargs: dict[str, Any] = {
@@ -138,6 +142,8 @@ class StripeClient:
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         """Create a Stripe Checkout Session for a recurring subscription."""
+        _require_absolute_url(field_name="success_url", value=success_url)
+        _require_absolute_url(field_name="cancel_url", value=cancel_url)
         self._activate_api_key()
         checkout_session_api = self._resolve_checkout_session_api()
         create_kwargs: dict[str, Any] = {
@@ -162,6 +168,7 @@ class StripeClient:
         return_url: str,
     ) -> dict[str, Any]:
         """Create a Stripe Billing Portal Session for an existing customer."""
+        _require_absolute_url(field_name="return_url", value=return_url)
         self._activate_api_key()
         billing_portal_session_api = self._resolve_billing_portal_session_api()
         created_session = billing_portal_session_api.create(
@@ -321,6 +328,23 @@ class StripeClient:
                 "Stripe Billing Portal SDK support is unavailable in this environment."
             )
         return billing_portal_session_api
+
+
+def _require_absolute_url(*, field_name: str, value: str) -> None:
+    """Refuse a redirect URL without a scheme and host.
+
+    Stripe answers ``url_invalid`` for a path-only ``success_url``,
+    ``cancel_url``, or ``return_url``, so the client refuses it locally
+    before any provider call instead of forwarding a URL it knows Stripe
+    will reject.
+    """
+    message = f"Stripe {field_name} must be an absolute URL with a scheme and host."
+    try:
+        parsed = urlsplit(value)
+    except ValueError as exc:
+        raise BillingValidationError(message) from exc
+    if not parsed.scheme or not parsed.hostname:
+        raise BillingValidationError(message)
 
 
 def _stripe_error_classes() -> tuple[type[BaseException], ...]:
