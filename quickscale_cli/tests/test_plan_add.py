@@ -631,9 +631,11 @@ class TestPlanNewProjectConfigureModules:
             # - \n: webhook secret env var
             # - \n: billing currency
             # - \n: api rate limit default
-            # Orgs configurator (2 prompts, manifest order):
+            # Orgs configurator (4 prompts, manifest order):
             # - \n: enable orgs (default yes)
             # - \n: orgs mode default (solo)
+            # - \n: invite rate limit default (20/day)
+            # - \n: pending invitation limit default (50)
             # Notifications configurator (required, 11 prompts, manifest order):
             # - \n: enable notifications runtime (default yes)
             # - \n: provider default (resend)
@@ -650,7 +652,7 @@ class TestPlanNewProjectConfigureModules:
             result = runner.invoke(
                 plan,
                 ["myapp", "--configure-modules"],
-                input=("\n\nauth,billing\nn\ny\ny\n" + "\n" * 22 + "y\n"),
+                input=("\n\nauth,billing\nn\ny\ny\n" + "\n" * 24 + "y\n"),
             )
 
             assert result.exit_code == 0

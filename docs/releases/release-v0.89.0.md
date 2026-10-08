@@ -116,6 +116,22 @@ analytics must invalidate existing sessions after upgrading and purge or re-key 
 persons created with those IDs; do this after the upgrade so no new session key reaches PostHog.
 The module's overview page also now requires login and the active organization's `viewer` role.
 
+**Self-registration hardening.** Account removal no longer runs its address-based scrubs — orgs'
+invitation addresses, notifications' recipient deliveries and address fallback, and billing's
+stored webhook payloads — unless allauth holds a verified address for the account; an unverified
+address may belong to someone else and now selects nothing, and the boundary captures the
+verification before any scrub runs. Organization invitation sends are throttled through the
+`quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization)
+DRF scopes, both fed by `invite_rate_limit` (default `20/day`), each organization caps its active
+pending invitations (`pending_invitation_limit`, default `50`), and the invitation email's
+sender-chosen organization and inviter names are bounded by their stored fields and rendered
+escaped. A
+management page under a VIEW-AS session now acts on the organization its URL names, not the
+impersonated one. A project app that declares its own `anonymize_account` executor must accept
+the boundary's `email_verified` keyword, as
+[module-extension.md](../technical/module-extension.md) now shows; an executor written to the old
+four-argument contract fails the deletion closed instead of running an unverified selector.
+
 ## Compatibility
 
 The validation-source changes affect repository tests only. The tenant-enrollment capability keeps

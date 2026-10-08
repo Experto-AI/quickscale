@@ -1412,12 +1412,20 @@ def test_handle_stripe_event_credits_purchase_from_purchase_time_metadata_when_p
 
 
 @pytest.mark.django_db
-def test_handle_stripe_event_rejects_unpaid_checkout_session(
+def test_handle_stripe_event_binds_unpaid_checkout_session_reservation(
     user,
     organization,
+    org_context,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A delayed-notification payment defers its credit until settlement."""
     plan = _create_one_time_plan(slug="unpaid-plan", price_id="price_purchase_unpaid")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.PREPARING,
+    )
     fake_client = FakePurchaseStripeClient(
         event=_checkout_session_completed_event(
             event_id="evt_checkout_unpaid",
@@ -1425,11 +1433,15 @@ def test_handle_stripe_event_rejects_unpaid_checkout_session(
             customer_id="cus_purchase_unpaid",
             payment_intent_id="pi_purchase_unpaid",
             metadata={
+                "quickscale_org_reference": _organization_reference(organization),
                 "quickscale_user_reference": _user_reference(user),
                 "quickscale_plan_slug": plan.slug,
                 "quickscale_plan_credits": str(plan.credits_per_period),
                 "quickscale_plan_interval": plan.billing_interval,
                 "stripe_price_id": plan.stripe_price_id,
+                "quickscale_purchase_checkout_reference": _payload._purchase_checkout_reference(
+                    reservation
+                ),
             },
             payment_status="unpaid",
         )
@@ -1438,20 +1450,373 @@ def test_handle_stripe_event_rejects_unpaid_checkout_session(
         settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_unpaid"
     )
 
-    with pytest.raises(BillingWebhookError, match="not settled"):
+    result = handle_stripe_event(
+        body=b'{"id":"evt_checkout_unpaid"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    reservation.refresh_from_db()
+    webhook_event = WebhookEvent.objects.get(stripe_event_id="evt_checkout_unpaid")
+
+    assert result.duplicate is False
+    assert result.status == "processed"
+    assert webhook_event.processed is True
+    assert webhook_event.processing_error == ""
+    assert reservation.status == PurchaseCheckout.Status.OPEN
+    assert reservation.stripe_checkout_session_id == "cs_purchase_unpaid"
+    assert not CreditTransaction.all_objects.filter(organization=organization).exists()
+    assert not CreditBalance.all_objects.filter(organization=organization).exists()
+
+
+@pytest.mark.django_db
+def test_handle_stripe_event_credits_purchase_on_async_payment_succeeded(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A settled delayed payment credits the one-time purchase."""
+    plan = _create_one_time_plan(slug="async-plan", price_id="price_purchase_async")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_checkout_session_id="cs_purchase_async",
+        status=PurchaseCheckout.Status.OPEN,
+    )
+    fake_client = FakePurchaseStripeClient(
+        event=checkout_session_event(
+            event_id="evt_checkout_async_succeeded",
+            event_type="checkout.session.async_payment_succeeded",
+            checkout_session_id="cs_purchase_async",
+            customer_id="cus_purchase_async",
+            payment_intent_id="pi_purchase_async",
+            metadata={
+                "quickscale_org_reference": _organization_reference(organization),
+                "quickscale_user_reference": _user_reference(user),
+                "quickscale_plan_slug": plan.slug,
+                "quickscale_plan_credits": str(plan.credits_per_period),
+                "quickscale_plan_interval": plan.billing_interval,
+                "stripe_price_id": plan.stripe_price_id,
+            },
+        )
+    )
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_async"
+    )
+
+    result = handle_stripe_event(
+        body=b'{"id":"evt_checkout_async_succeeded"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    transaction_row = CreditTransaction.all_objects.get(organization=organization)
+    webhook_event = WebhookEvent.objects.get(
+        stripe_event_id="evt_checkout_async_succeeded"
+    )
+    reservation.refresh_from_db()
+
+    assert result.duplicate is False
+    assert result.status == "processed"
+    assert webhook_event.processed is True
+    assert (
+        CreditBalance.all_objects.get(organization=organization).balance
+        == plan.credits_per_period
+    )
+    assert (
+        transaction_row.transaction_type == CreditTransaction.TransactionType.PURCHASE
+    )
+    assert transaction_row.stripe_event_id == "evt_checkout_async_succeeded"
+    assert transaction_row.stripe_object_id == "cs_purchase_async"
+    assert reservation.status == PurchaseCheckout.Status.COMPLETED
+
+
+@pytest.mark.django_db
+def test_handle_stripe_event_credits_async_settlement_exactly_once(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second settlement event for one session cannot double-credit it."""
+    plan = _create_one_time_plan(slug="async-once", price_id="price_purchase_once")
+    PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_checkout_session_id="cs_purchase_once",
+        status=PurchaseCheckout.Status.OPEN,
+    )
+    metadata = {
+        "quickscale_org_reference": _organization_reference(organization),
+        "quickscale_user_reference": _user_reference(user),
+        "quickscale_plan_slug": plan.slug,
+        "quickscale_plan_credits": str(plan.credits_per_period),
+        "quickscale_plan_interval": plan.billing_interval,
+        "stripe_price_id": plan.stripe_price_id,
+    }
+    fake_client = FakePurchaseStripeClient(
+        event=_checkout_session_completed_event(
+            event_id="evt_checkout_sync_completed",
+            checkout_session_id="cs_purchase_once",
+            customer_id="cus_purchase_once",
+            payment_intent_id="pi_purchase_once",
+            metadata=metadata,
+        )
+    )
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_once"
+    )
+
+    first_result = handle_stripe_event(
+        body=b'{"id":"evt_checkout_sync_completed"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+    fake_client.event = checkout_session_event(
+        event_id="evt_checkout_async_second",
+        event_type="checkout.session.async_payment_succeeded",
+        checkout_session_id="cs_purchase_once",
+        customer_id="cus_purchase_once",
+        payment_intent_id="pi_purchase_once",
+        metadata=metadata,
+    )
+    second_result = handle_stripe_event(
+        body=b'{"id":"evt_checkout_async_second"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    assert first_result.status == "processed"
+    assert second_result.status == "processed"
+    assert CreditTransaction.all_objects.filter(organization=organization).count() == 1
+    assert (
+        CreditBalance.all_objects.get(organization=organization).balance
+        == plan.credits_per_period
+    )
+
+
+@pytest.mark.django_db
+def test_handle_stripe_event_releases_reservation_on_async_payment_failed(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed delayed payment releases the reservation without a credit."""
+    plan = _create_one_time_plan(slug="async-failed", price_id="price_purchase_failed")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_checkout_session_id="cs_purchase_failed",
+        status=PurchaseCheckout.Status.OPEN,
+    )
+    fake_client = FakePurchaseStripeClient(
+        event=checkout_session_event(
+            event_id="evt_checkout_async_failed",
+            event_type="checkout.session.async_payment_failed",
+            checkout_session_id="cs_purchase_failed",
+            customer_id="cus_purchase_failed",
+            payment_intent_id="pi_purchase_failed",
+            metadata={
+                "quickscale_org_reference": _organization_reference(organization),
+                "quickscale_user_reference": _user_reference(user),
+                "quickscale_plan_slug": plan.slug,
+                "quickscale_plan_credits": str(plan.credits_per_period),
+                "quickscale_plan_interval": plan.billing_interval,
+                "stripe_price_id": plan.stripe_price_id,
+            },
+        )
+    )
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_purchase_failed"
+    )
+
+    result = handle_stripe_event(
+        body=b'{"id":"evt_checkout_async_failed"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    reservation.refresh_from_db()
+    webhook_event = WebhookEvent.objects.get(
+        stripe_event_id="evt_checkout_async_failed"
+    )
+
+    assert result.duplicate is False
+    assert result.status == "processed"
+    assert webhook_event.processed is True
+    assert reservation.status == PurchaseCheckout.Status.EXPIRED
+    assert not CreditTransaction.all_objects.filter(organization=organization).exists()
+    assert not CreditBalance.all_objects.filter(organization=organization).exists()
+
+
+@pytest.mark.django_db
+def test_handle_stripe_event_accepts_unpaid_completion_after_async_failure(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An out-of-order unpaid completion after failure stays a no-op."""
+    plan = _create_one_time_plan(slug="late-unpaid", price_id="price_late_unpaid")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_checkout_session_id="cs_late_unpaid",
+        status=PurchaseCheckout.Status.OPEN,
+    )
+    metadata = {
+        "quickscale_org_reference": _organization_reference(organization),
+        "quickscale_user_reference": _user_reference(user),
+        "quickscale_plan_slug": plan.slug,
+        "quickscale_plan_credits": str(plan.credits_per_period),
+        "quickscale_plan_interval": plan.billing_interval,
+        "stripe_price_id": plan.stripe_price_id,
+    }
+    fake_client = FakePurchaseStripeClient(
+        event=checkout_session_event(
+            event_id="evt_late_unpaid_failed",
+            event_type="checkout.session.async_payment_failed",
+            checkout_session_id="cs_late_unpaid",
+            customer_id="cus_late_unpaid",
+            payment_intent_id="pi_late_unpaid",
+            metadata=metadata,
+        )
+    )
+    monkeypatch.setattr(
+        settings, "QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_late_unpaid"
+    )
+
+    failed_result = handle_stripe_event(
+        body=b'{"id":"evt_late_unpaid_failed"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+    fake_client.event = _checkout_session_completed_event(
+        event_id="evt_late_unpaid_completed",
+        checkout_session_id="cs_late_unpaid",
+        customer_id="cus_late_unpaid",
+        payment_intent_id="pi_late_unpaid",
+        metadata=metadata,
+        payment_status="unpaid",
+    )
+    completed_result = handle_stripe_event(
+        body=b'{"id":"evt_late_unpaid_completed"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    reservation.refresh_from_db()
+    webhook_event = WebhookEvent.objects.get(
+        stripe_event_id="evt_late_unpaid_completed"
+    )
+
+    assert failed_result.status == "processed"
+    assert completed_result.status == "processed"
+    assert webhook_event.processed is True
+    assert webhook_event.processing_error == ""
+    assert reservation.status == PurchaseCheckout.Status.EXPIRED
+    assert not CreditTransaction.all_objects.filter(organization=organization).exists()
+    assert not CreditBalance.all_objects.filter(organization=organization).exists()
+
+
+@pytest.mark.django_db
+def test_handle_stripe_event_async_payment_failed_conflicts_with_credit(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed payment for an already credited reservation stays unprocessed."""
+    plan = _create_one_time_plan(
+        slug="async-failed-conflict", price_id="price_purchase_failed_conflict"
+    )
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        stripe_checkout_session_id="cs_purchase_failed_conflict",
+        status=PurchaseCheckout.Status.COMPLETED,
+    )
+    fake_client = FakePurchaseStripeClient(
+        event=checkout_session_event(
+            event_id="evt_checkout_async_failed_conflict",
+            event_type="checkout.session.async_payment_failed",
+            checkout_session_id="cs_purchase_failed_conflict",
+            customer_id="cus_purchase_failed_conflict",
+            metadata={
+                "quickscale_org_reference": _organization_reference(organization),
+                "quickscale_user_reference": _user_reference(user),
+                "quickscale_plan_slug": plan.slug,
+                "quickscale_plan_credits": str(plan.credits_per_period),
+                "quickscale_plan_interval": plan.billing_interval,
+                "stripe_price_id": plan.stripe_price_id,
+            },
+        )
+    )
+    monkeypatch.setattr(
+        settings,
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_purchase_failed_conflict",
+    )
+
+    with pytest.raises(BillingWebhookError, match="conflicts with a completed"):
         handle_stripe_event(
-            body=b'{"id":"evt_checkout_unpaid"}',
+            body=b'{"id":"evt_checkout_async_failed_conflict"}',
             signature="t=1,v1=test-signature",
             stripe_client=fake_client,
         )
 
-    webhook_event = WebhookEvent.objects.get(stripe_event_id="evt_checkout_unpaid")
-
-    assert webhook_event.processed is False
-    assert (
-        webhook_event.processing_error
-        == "Stripe checkout session payment is not settled."
+    reservation.refresh_from_db()
+    webhook_event = WebhookEvent.objects.get(
+        stripe_event_id="evt_checkout_async_failed_conflict"
     )
+
+    assert reservation.status == PurchaseCheckout.Status.COMPLETED
+    assert webhook_event.processed is False
+
+
+@pytest.mark.django_db
+def test_handle_stripe_event_async_payment_succeeded_ignores_subscription_mode(
+    user,
+    organization,
+    org_context,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Subscription settlement is owned by the subscription events, not here."""
+    fake_client = FakePurchaseStripeClient(
+        event=checkout_session_event(
+            event_id="evt_checkout_async_subscription",
+            event_type="checkout.session.async_payment_succeeded",
+            checkout_session_id="cs_subscription_async",
+            customer_id="cus_subscription_async",
+            metadata={
+                "quickscale_org_reference": _organization_reference(organization),
+                "quickscale_user_reference": _user_reference(user),
+            },
+            mode="subscription",
+        )
+    )
+    monkeypatch.setattr(
+        settings,
+        "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+        "whsec_async_subscription",
+    )
+
+    result = handle_stripe_event(
+        body=b'{"id":"evt_checkout_async_subscription"}',
+        signature="t=1,v1=test-signature",
+        stripe_client=fake_client,
+    )
+
+    assert result.status == "processed"
+    assert not CreditTransaction.all_objects.filter(organization=organization).exists()
+    assert not CreditBalance.all_objects.filter(organization=organization).exists()
 
 
 def test_purchase_webhook_view_accepts_checkout_session_completed_event(

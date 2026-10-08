@@ -46,20 +46,34 @@ class OrganizationContextMixin:
     _acting_membership_loaded = False
 
     def get_organization(self) -> Organization:
+        """Return the route's organization, falling back to the request's.
+
+        A management route carries its organization in the URL, and that is
+        the one the page acts on: during a VIEW-AS debug session the
+        middleware also sets ``request.org`` to the impersonated organization,
+        so preferring the request context would edit the wrong tenant
+        (tech audit ``viewas-overrides-management-org``).  A route without a
+        slug falls back to the middleware-resolved ``request.org``, and a
+        route whose slug the request context already holds uses it without a
+        second lookup.
+        """
         if self._organization is not None:
             return self._organization
 
         organization = getattr(self.request, "org", None)
+        org_slug = self.kwargs.get("org_slug")
+        if org_slug:
+            if isinstance(organization, Organization) and organization.slug == org_slug:
+                self._organization = organization
+                return organization
+            self._organization = get_object_or_404(Organization, slug=org_slug)
+            return self._organization
+
         if isinstance(organization, Organization):
             self._organization = organization
             return organization
 
-        org_slug = self.kwargs.get("org_slug")
-        if not org_slug:
-            raise Http404("Organization not found.")
-
-        self._organization = get_object_or_404(Organization, slug=org_slug)
-        return self._organization
+        raise Http404("Organization not found.")
 
     def get_acting_membership(self) -> OrganizationMembership | None:
         if self._acting_membership_loaded:

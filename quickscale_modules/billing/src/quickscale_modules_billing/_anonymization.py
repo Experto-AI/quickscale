@@ -8,7 +8,11 @@ from the payloads that belong to the person.
 
 An event is the person's only when its stored payload carries the person's
 address: the address is unique to one customer, so a namesake customer's event
-with the same name and a different address is left untouched.  Inside an
+with the same name and a different address is left untouched.  Because the
+payload address is the only key billing holds and it was never proven owned,
+the scrub runs only when the boundary reports the account's address verified;
+``WebhookEvent`` carries no user link, so an unverified address selects
+nothing (tech audit ``anonymize-matches-unverified-address``).  Inside an
 identified payload the address is replaced with the shared
 ``DELETED_ADDRESS(pk)`` sentinel and the name at word boundaries with the
 shared name matcher.  Only values are scrubbed: payload keys are never
@@ -29,17 +33,24 @@ def anonymize_account(
     original_email: str,
     original_name: str,
     original_username: str,
+    *,
+    email_verified: bool,
 ) -> None:
     """Redact the person's email and name from the stored Stripe payloads.
 
     Only payloads that carry the pre-scrub address are rewritten, so another
     customer's event is never touched — including a customer whose address
-    merely contains the person's address as a substring.  The rows are
+    merely contains the person's address as a substring.  The address is the
+    only selector billing holds, so an unverified one scrubs nothing: without
+    the boundary's verification the address may belong to someone else, and
+    ``WebhookEvent`` carries no user link to fall back to.  The rows are
     pre-filtered in SQL on the address before the Python walk, so an event
     that never mentions it is never loaded.  ``original_username`` is unused:
     billing's inventory does not list the username as a stored personal field.
     """
     del original_username
+    if not email_verified:
+        return
     email = original_email.strip()
     if not email:
         return

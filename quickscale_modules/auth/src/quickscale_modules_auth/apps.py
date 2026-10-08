@@ -54,12 +54,18 @@ class QuickscaleAuthConfig(AppConfig):
         original_email: str,
         original_name: str,
         original_username: str,
+        *,
+        email_verified: bool,
     ) -> None:
         """Scrub the account row as auth's declared ``ANONYMIZE`` executor."""
         from quickscale_modules_auth import _anonymization
 
         _anonymization.anonymize_account(
-            user, original_email, original_name, original_username
+            user,
+            original_email,
+            original_name,
+            original_username,
+            email_verified=email_verified,
         )
 
     def anonymize_handlers(self) -> tuple[Any, ...]:

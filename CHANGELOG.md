@@ -604,6 +604,16 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     expiring a terminal one, and voiding an absent one), and
     `quickscale_billing_reconcile_checkouts` clears outstanding rows under the organization's
     provider mutation mutex.
+  - **Delayed billing payments credit when they settle.** A completed one-time checkout whose
+    payment is still unpaid is accepted and bound, `checkout.session.async_payment_succeeded`
+    credits the purchase exactly once when the money settles, and
+    `checkout.session.async_payment_failed` releases the reservation.
+  - **Self-registration is hardened against cross-tenant and relay abuse.** Account removal's
+    address-based scrubs run only for an allauth-verified address, organization invitation sends
+    are throttled per sender and per organization through the `quickscale_orgs_invite` and
+    `quickscale_orgs_invite_organization` scopes with a per-organization pending cap and a bounded,
+    escaped email text, and management pages resolve their organization from the route slug rather
+    than a VIEW-AS session.
   - **Module conventions hold under the harness.** Module pages sit flat under
     `templates/quickscale_<module>/`, admin overrides live under `admin/<label>/<model>/`,
     constraints use the lowercased class name with field-named purposes and a `_unique` suffix,

@@ -29,6 +29,18 @@ write it to the generated settings, and `quickscale.yml` carries the desired val
 |--------|------|---------|----------------|-------------|
 | `enabled` | boolean | `true` | `QUICKSCALE_ORGS_ENABLED` | Mount the module's organization pages and API. Off keeps the app, its data, the tenant middleware, and the admin installed but mounts none of its organization URLs in either mode; an installed module that lists `orgs` in `required_modules` (auth, billing, blog, crm, listings, social) makes `apply` refuse the switch. |
 | `mode` | string | `solo` | `QUICKSCALE_ORGS_MODE` | Organization runtime mode: `solo` or `saas`. |
+| `invite_rate_limit` | string | `20/day` | `QUICKSCALE_ORGS_INVITE_RATE_LIMIT` | Throttle rate for organization invitation sends, per sender and per organization, through the `quickscale_orgs_invite` and `quickscale_orgs_invite_organization` DRF scopes. Format: `<count>/<period>`. |
+| `pending_invitation_limit` | integer | `50` | `QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT` | Maximum active pending invitations one organization may hold; further invitations are refused until older ones are revoked or expire. |
+
+Both invite paths (the HTML members surface and the JSON API) are throttled through two scopes
+fed by `invite_rate_limit`: the sender bucket does not reset on revoke and re-invite and spans
+every organization, and the organization bucket aggregates every sender of one organization, so
+neither adding admins nor creating organizations multiplies the budget. Both buckets are charged
+only after the invitation passes its role and eligibility checks, so an attempt refused by the
+role gate, validation, the pending cap, or the duplicate guard spends neither budget; a throttle
+refusal rolls the invitation back, so no invitation and no email result. The per-organization
+pending cap is enforced under the organization row lock, and the invitation email's sender-chosen
+text (organization and inviter names) is bounded by its stored fields and rendered escaped.
 
 In `solo` mode the module creates and serves each user's personal organization; the
 organization API and the leaf organization pages answer `404`. In `saas` mode organizations are

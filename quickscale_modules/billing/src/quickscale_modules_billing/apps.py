@@ -130,12 +130,18 @@ class QuickscaleBillingConfig(AppConfig):
         original_email: str,
         original_name: str,
         original_username: str,
+        *,
+        email_verified: bool,
     ) -> None:
         """Redact stored provider payloads as billing's declared executor."""
         from quickscale_modules_billing import _anonymization
 
         _anonymization.anonymize_account(
-            user, original_email, original_name, original_username
+            user,
+            original_email,
+            original_name,
+            original_username,
+            email_verified=email_verified,
         )
 
     def anonymize_handlers(self) -> tuple[Any, ...]:

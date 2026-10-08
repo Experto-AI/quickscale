@@ -322,6 +322,14 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
             "quickscale_modules/forms/src/quickscale_modules_forms/throttles.py",
             "FormSubmitThrottle",
         ),
+        (
+            "quickscale_modules/orgs/src/quickscale_modules_orgs/throttles.py",
+            "OrgInviteOrganizationThrottle",
+        ),
+        (
+            "quickscale_modules/orgs/src/quickscale_modules_orgs/throttles.py",
+            "OrgInviteThrottle",
+        ),
     ], f"Unexpected first-party throttle inventory: {throttle_classes!r}"
 
     blog_throttle = next(
@@ -368,6 +376,11 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
         (
             "quickscale_modules/notifications/src/quickscale_modules_notifications/views.py",
             "NotificationWebhookView",
+            (),
+        ),
+        (
+            "quickscale_modules/orgs/src/quickscale_modules_orgs/views.py",
+            "OrgApiInviteView",
             (),
         ),
     ]
