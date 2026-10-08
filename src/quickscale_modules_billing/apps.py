@@ -1,6 +1,6 @@
 """Django app configuration for QuickScale billing.
 
-SA17.2 — fail-hard billing enabled-flag setting: requires
+Fail-hard billing enabled-flag setting: requires
 ``QUICKSCALE_BILLING_ENABLED`` in Django settings at startup
 instead of silently defaulting to ``True``.
 """

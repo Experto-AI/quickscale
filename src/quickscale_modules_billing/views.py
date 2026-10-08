@@ -511,7 +511,7 @@ class PricingPageView(TemplateView):
 class BillingPortalReturnView(TemplateView):
     """Public return page for hosted Stripe billing portal sessions."""
 
-    template_name = "quickscale_billing/billing/portal_return.html"
+    template_name = "quickscale_billing/portal_return.html"
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
