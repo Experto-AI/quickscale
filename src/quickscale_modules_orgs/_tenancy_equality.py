@@ -166,10 +166,10 @@ def disable_child_parent_equality(
 
 # ---------------------------------------------------------------------------
 # Composite-FK child-parent ``organization_id`` equality infrastructure
-# (AF12 Phase 1)
+#
 # ---------------------------------------------------------------------------
 # DB-enforced composite foreign keys that replace the old trigger-based
-# child-parent org equality (AF1 Phase 2 approach).  Each parent table
+# child-parent org equality. Each parent table
 # receives a UNIQUE constraint on ``(id, organization_id)``, and each
 # child table receives a composite FOREIGN KEY referencing that pair.
 #
@@ -188,7 +188,7 @@ def disable_child_parent_equality(
 #     )
 #
 #     PARENT_TABLE = "quickscale_crm_contact"
-#     PARENT_UNIQUE = "quickscale_crm_contact_id_org_unique"
+#     PARENT_UNIQUE = "quickscale_crm_contact_id_organization_unique"
 #     CHILD_TABLE = "quickscale_crm_contactnote"
 #     CHILD_FK = "quickscale_crm_contactnote_contact_org_fk"
 #

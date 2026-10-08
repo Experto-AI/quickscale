@@ -1,6 +1,6 @@
 """Django app configuration for QuickScale organizations.
 
-SA68 Phase 1 — BYPASSRLS/SUPERUSER boot guard: raises
+BYPASSRLS/SUPERUSER boot guard: raises
 ``ImproperlyConfigured`` at startup when connected as a PostgreSQL role
 with the BYPASSRLS privilege and/or the SUPERUSER attribute.  The guard
 has two narrow exemptions:
@@ -16,12 +16,12 @@ All other startup paths (including ``manage.py runserver``,
 gunicorn, and WSGI) remain fail-closed regardless of
 ``QUICKSCALE_ORGS_MODE`` or ``DEBUG``.
 
-AF9 Phase 1 — installs the connection-layer GUC priming execute wrapper
+The priming seam installs the connection-layer GUC priming execute wrapper
 on every Django ``DatabaseWrapper`` so that ``SET LOCAL app.current_org_id``
 is derived from the ContextVar in the same transaction as tenant SQL.
 
-SA203 — the privileged-command exemption narrows to ``check_rls_role()``
-alone; the priming install, the SA70 last-owner ``pre_delete`` backstop,
+The privileged-command exemption narrows to ``check_rls_role()``
+alone; the priming install, the last-owner ``pre_delete`` backstop,
 and the check registration run on every startup path.
 """
 
@@ -51,7 +51,7 @@ def _install_priming_on_connection(
     connection: object,
     **kwargs: object,
 ) -> None:
-    """Signal handler: install the AF9 priming wrapper on a new connection.
+    """Signal handler: install the priming wrapper on a new connection.
 
     Connected in ``QuickscaleOrgsConfig.ready()`` to
     ``django.db.backends.signals.connection_created`` so that every new
@@ -209,7 +209,7 @@ class QuickscaleOrgsConfig(AppConfig):
         # for ``manage.py check``.  Order matters: rule 3's generic check
         # validates QUICKSCALE_ORGS_MODE before the BYPASSRLS/SUPERUSER role guard.
         #
-        # SA203: a privileged command exempts *only* the role check, inside
+        # a privileged command exempts *only* the role check, inside
         # check_rls_role.  The installations below stay unconditional, so a
         # privileged ``migrate`` still gets the GUC priming wrapper and the
         # last-owner ``pre_delete`` backstop — the backstop is what fails a
@@ -244,7 +244,7 @@ class QuickscaleOrgsConfig(AppConfig):
             ],
         )
 
-        # ---- AF9 Phase 1 — GUC priming execute wrapper ------------------
+        # ---- GUC priming execute wrapper ------------------
         # Install on any connections already created (defensive — at
         # ready() time the connection pool is typically empty) and
         # connect the signal for all future connections.
@@ -255,12 +255,12 @@ class QuickscaleOrgsConfig(AppConfig):
             install_priming_wrapper(conn)
         connection_created.connect(_install_priming_on_connection)
 
-        # ---- SA70 — pre_delete receiver backstop for last-owner invariant -
+        # ---- pre_delete receiver backstop for last-owner invariant -
         # Import receivers.py so its @receiver backstop connects, so that
         # cascade-driven membership deletions (e.g. user.delete()) also
         # enforce the last-owner invariant.
         #
-        # SA203: connected without a sender so the receiver also fires for
+        # connected without a sender so the receiver also fires for
         # the historical model class a data migration deletes through
         # (``apps.get_model()`` returns a different class); the receiver
         # filters on the model's app label and name.  A sender-free receiver

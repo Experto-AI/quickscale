@@ -118,6 +118,7 @@ def test_credit_mutation_serializes_with_organization_purge(
             call_command(
                 "quickscale_orgs_purge_organization",
                 organization_id=str(organization.pk),
+                confirm=str(organization.pk),
                 stdout=StringIO(),
                 stderr=StringIO(),
                 verbosity=0,
@@ -282,6 +283,23 @@ def test_purge_organization_requires_uuid_or_slug() -> None:
 
 
 @pytest.mark.django_db
+def test_purge_without_confirm_reconciles_nothing() -> None:
+    """A missing --confirm refuses before any provider reconciliation write."""
+    organization = Organization.objects.create(name="No confirm", slug="no-confirm")
+    with patch.object(Command, "_reconcile_provider_states") as reconcile:
+        with pytest.raises(CommandError, match="--confirm"):
+            call_command(
+                "quickscale_orgs_purge_organization",
+                organization_id=str(organization.pk),
+                stdout=StringIO(),
+                stderr=StringIO(),
+                verbosity=0,
+            )
+    reconcile.assert_not_called()
+    assert Organization.objects.filter(pk=organization.pk).exists()
+
+
+@pytest.mark.django_db
 def test_purge_organization_rejects_combined_targeting_flags() -> None:
     """quickscale_orgs_purge_organization must error when both --organization-id and --slug are given."""
     organization = Organization.objects.create(name="Test", slug="test")
@@ -291,6 +309,7 @@ def test_purge_organization_rejects_combined_targeting_flags() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
+            confirm=str(organization.pk),
             slug="test",
             stdout=stdout,
             stderr=stderr,
@@ -366,6 +385,7 @@ def test_purge_organization_missing_uuid_no_tombstone_errors() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=missing_uuid,
+            confirm=missing_uuid,
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -384,6 +404,7 @@ def test_purge_organization_missing_uuid_with_tombstone_is_noop() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(purged_org_id),
+            confirm=str(purged_org_id),
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -421,6 +442,7 @@ def test_purge_organization_dry_run_is_noop() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(organization.pk),
+        confirm=str(organization.pk),
         dry_run=True,
         stdout=stdout,
         stderr=StringIO(),
@@ -448,6 +470,7 @@ def test_purge_organization_reserved_org_refused() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(system_org.pk),
+            confirm=str(system_org.pk),
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -484,6 +507,7 @@ def test_purge_organization_invitations_appear_in_dry_run_counts() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(organization.pk),
+        confirm=str(organization.pk),
         dry_run=True,
         stdout=stdout,
         stderr=StringIO(),
@@ -517,6 +541,7 @@ def test_purge_organization_creates_tombstone() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -550,6 +575,7 @@ def test_purge_organization_rerun_after_purge_is_noop() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=first_stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -564,6 +590,7 @@ def test_purge_organization_rerun_after_purge_is_noop() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=second_stdout,
             stderr=second_stderr,
             verbosity=0,
@@ -584,6 +611,7 @@ def test_purge_organization_rejects_invalid_uuid_format() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id="not-a-uuid",
+            confirm="not-a-uuid",
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -627,6 +655,7 @@ def test_purge_organization_deletes_memberships_and_invitations() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -690,6 +719,7 @@ def test_purge_organization_one_owner_multi_member_succeeds() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -766,6 +796,7 @@ def test_purge_organization_refuses_live_stripe_subscription(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
+            confirm=str(organization.pk),
             dry_run=dry_run,
             stdout=StringIO(),
             stderr=StringIO(),
@@ -861,6 +892,7 @@ def test_purge_organization_with_terminal_billing_rows() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -918,6 +950,7 @@ def test_purge_organization_refuses_current_subscription_without_provider_id(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
+            confirm=str(organization.pk),
             dry_run=dry_run,
             stdout=StringIO(),
             stderr=StringIO(),
@@ -991,6 +1024,7 @@ def test_purge_organization_resolves_a_sessionless_pending_checkout(
             call_command(
                 "quickscale_orgs_purge_organization",
                 organization_id=str(organization.pk),
+                confirm=str(organization.pk),
                 dry_run=True,
                 stdout=StringIO(),
                 stderr=StringIO(),
@@ -1005,6 +1039,7 @@ def test_purge_organization_resolves_a_sessionless_pending_checkout(
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(organization.pk),
+        confirm=str(organization.pk),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -1065,6 +1100,7 @@ def test_purge_organization_refuses_a_sessionless_checkout_still_open_at_the_pro
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
+            confirm=str(organization.pk),
             dry_run=dry_run,
             stdout=StringIO(),
             stderr=StringIO(),
@@ -1126,6 +1162,7 @@ def test_purge_organization_refuses_open_purchase_checkout(dry_run: bool) -> Non
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
+            confirm=str(organization.pk),
             dry_run=dry_run,
             stdout=StringIO(),
             stderr=StringIO(),
@@ -1202,6 +1239,7 @@ def test_purge_organization_allows_expired_subscription_checkout(
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         dry_run=dry_run,
         stdout=StringIO(),
         stderr=StringIO(),
@@ -1293,6 +1331,7 @@ def test_purge_organization_refuses_completed_checkout_past_local_expiry(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
+            confirm=str(organization.pk),
             dry_run=dry_run,
             stdout=StringIO(),
             stderr=StringIO(),
@@ -1384,6 +1423,7 @@ def test_purge_organization_rollback_on_error() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -1423,6 +1463,7 @@ def test_purge_organization_slug_reuse_safe() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -1522,6 +1563,7 @@ def test_purge_organization_sets_db_current_org_id_on_postgres() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -1596,6 +1638,7 @@ def test_purge_organization_refuses_personal_org_by_default(
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(organization.pk),
+            confirm=str(organization.pk),
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -1647,6 +1690,7 @@ def test_purge_organization_force_overrides_system_org_guard() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(system_org.pk),
+        confirm=str(system_org.pk),
         force=True,
         stdout=stdout,
         stderr=StringIO(),
@@ -1683,6 +1727,7 @@ def test_purge_organization_force_overrides_personal_org_guard() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         force=True,
         stdout=stdout,
         stderr=StringIO(),
@@ -1704,6 +1749,7 @@ def test_purge_organization_dry_run_with_force_bypasses_guard() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(system_org.pk),
+        confirm=str(system_org.pk),
         dry_run=True,
         force=True,
         stdout=stdout,
@@ -2091,6 +2137,7 @@ def test_purge_organization_deletes_social_rows() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -2122,6 +2169,7 @@ def test_purge_organization_deletes_forms_rows() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -2150,6 +2198,7 @@ def test_purge_organization_deletes_listings_rows() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -2184,6 +2233,7 @@ def test_purge_organization_deletes_project_owned_child_rows() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -2222,6 +2272,7 @@ def test_purge_organization_deletes_project_owned_self_protected_rows() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -2267,6 +2318,7 @@ def test_purge_refuses_rows_carrying_provider_backed_project_values() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             dry_run=True,
             stdout=StringIO(),
             stderr=StringIO(),
@@ -2277,6 +2329,7 @@ def test_purge_refuses_rows_carrying_provider_backed_project_values() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -2317,6 +2370,7 @@ def test_purge_deletes_rows_without_provider_backed_values() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -2375,6 +2429,7 @@ def test_provider_backed_guard_serializes_concurrent_project_updates(
             call_command(
                 "quickscale_orgs_purge_organization",
                 organization_id=str(org_id),
+                confirm=str(org_id),
                 stdout=StringIO(),
                 stderr=StringIO(),
                 verbosity=0,
@@ -2447,6 +2502,7 @@ def test_purge_organization_deletes_blog_rows() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -2508,6 +2564,7 @@ def test_purge_organization_deletes_crm_rows() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -2561,6 +2618,7 @@ def test_purge_organization_dry_run_counts_all_modules() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         dry_run=True,
         stdout=stdout,
         stderr=StringIO(),
@@ -2624,6 +2682,7 @@ def test_purge_organization_clears_social_cache() -> None:
     call_command(
         "quickscale_orgs_purge_organization",
         organization_id=str(org_id),
+        confirm=str(org_id),
         stdout=StringIO(),
         stderr=StringIO(),
         verbosity=0,
@@ -2667,6 +2726,7 @@ def test_purge_cache_failure_happens_after_database_commit() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -2703,6 +2763,7 @@ def test_purge_tombstone_retry_heals_social_cache() -> None:
         call_command(
             "quickscale_orgs_purge_organization",
             organization_id=str(org_id),
+            confirm=str(org_id),
             stdout=StringIO(),
             stderr=StringIO(),
             verbosity=0,
@@ -2774,7 +2835,7 @@ def test_check_tenant_isolation_pass_on_current_models() -> None:
 
 @pytest.mark.django_db
 def test_check_tenant_isolation_json_output() -> None:
-    """The --format json option must produce valid JSON with pass/fail status."""
+    """The --json option must produce valid JSON with pass/fail status."""
     from io import StringIO
 
     stdout = StringIO()
@@ -2782,7 +2843,7 @@ def test_check_tenant_isolation_json_output() -> None:
 
     call_command(
         "quickscale_orgs_check_tenant_isolation",
-        format="json",
+        as_json=True,
         stdout=stdout,
         stderr=stderr,
         verbosity=0,
@@ -2823,7 +2884,7 @@ def test_project_tenant_listing_appears_in_human_and_json_output() -> None:
     json_stdout = StringIO()
     call_command(
         "quickscale_orgs_check_tenant_isolation",
-        format="json",
+        as_json=True,
         stdout=json_stdout,
         stderr=StringIO(),
         verbosity=0,
@@ -2928,7 +2989,7 @@ def test_check_tenant_isolation_model_without_org_id_through_command() -> None:
         with pytest.raises(CommandError):
             call_command(
                 "quickscale_orgs_check_tenant_isolation",
-                format="json",
+                as_json=True,
                 stdout=stdout,
                 stderr=stderr,
                 verbosity=0,
@@ -3031,10 +3092,10 @@ def test_check_tenant_isolation_detects_all_enrolled_models() -> None:
 
 @pytest.mark.django_db
 def test_check_tenant_isolation_json_postgres_only_skip() -> None:
-    """--postgres-only --format json on non-PostgreSQL must emit clean JSON.
+    """--postgres-only --json on non-PostgreSQL must emit clean JSON.
 
     Regression: the --postgres-only skip branch must emit
-    JSON-only output with status ``skip`` when ``--format json`` is
+    JSON-only output with status ``skip`` when ``--json`` is
     specified and the database is not PostgreSQL.
     """
     from io import StringIO
@@ -3051,7 +3112,7 @@ def test_check_tenant_isolation_json_postgres_only_skip() -> None:
         call_command(
             "quickscale_orgs_check_tenant_isolation",
             postgres_only=True,
-            format="json",
+            as_json=True,
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -3068,10 +3129,10 @@ def test_check_tenant_isolation_json_postgres_only_skip() -> None:
 
 @pytest.mark.django_db
 def test_check_tenant_isolation_json_no_models() -> None:
-    """get_tenant_models()==[] with --format json must emit clean JSON.
+    """get_tenant_models()==[] with --json must emit clean JSON.
 
     Regression: the no-models warning branch must emit
-    JSON-only output with status ``warning`` when ``--format json`` is
+    JSON-only output with status ``warning`` when ``--json`` is
     specified and no tenant models are discovered.
     """
     from io import StringIO
@@ -3087,7 +3148,7 @@ def test_check_tenant_isolation_json_no_models() -> None:
     ):
         call_command(
             "quickscale_orgs_check_tenant_isolation",
-            format="json",
+            as_json=True,
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -3108,7 +3169,7 @@ def test_check_tenant_isolation_json_no_models() -> None:
 
 @pytest.mark.django_db
 def test_check_tenant_isolation_json_no_models_postgres_only_skip() -> None:
-    """get_tenant_models()==[] with --postgres-only --format json on
+    """get_tenant_models()==[] with --postgres-only --json on
     non-PostgreSQL must emit a single valid JSON document.
 
     Regression: the no-models payload and the --postgres-only skip must
@@ -3135,7 +3196,7 @@ def test_check_tenant_isolation_json_no_models_postgres_only_skip() -> None:
         call_command(
             "quickscale_orgs_check_tenant_isolation",
             postgres_only=True,
-            format="json",
+            as_json=True,
             stdout=stdout,
             stderr=stderr,
             verbosity=0,
@@ -3260,7 +3321,7 @@ def test_classification_check_fails_on_unclassified_model_json() -> None:
         with pytest.raises(CommandError) as excinfo:
             call_command(
                 "quickscale_orgs_check_tenant_isolation",
-                format="json",
+                as_json=True,
                 stdout=stdout,
                 stderr=stderr,
                 verbosity=0,
@@ -3414,7 +3475,7 @@ def test_postgres_only_classification_still_runs_json() -> None:
                 call_command(
                     "quickscale_orgs_check_tenant_isolation",
                     postgres_only=True,
-                    format="json",
+                    as_json=True,
                     stdout=stdout,
                     stderr=stderr,
                     verbosity=0,

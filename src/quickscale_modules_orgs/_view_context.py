@@ -16,7 +16,7 @@ from quickscale_modules_orgs.models import Organization, OrganizationMembership,
 
 
 def _is_saas_mode() -> bool:
-    # SA14.6: QUICKSCALE_ORGS_MODE is guaranteed by the boot guard in
+    # QUICKSCALE_ORGS_MODE is guaranteed by the boot guard in
     # QuickscaleOrgsConfig.ready() — direct access, no fallback.
     return settings.QUICKSCALE_ORGS_MODE == "saas"
 

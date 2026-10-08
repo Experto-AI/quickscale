@@ -94,7 +94,7 @@ OWNED_PERSONAL_DATA = "owned-personal-data"
 SOCIAL_CACHE_STATE = "social-cache-state"
 PURGE_TOMBSTONE = "purge-tombstone"
 
-#: Model-level ``provider_id_classification`` values (SA208). A model classifies
+#: Model-level ``provider_id_classification`` values. A model classifies
 #: each of its non-relational ``*_id`` fields with one of these so a project-owned
 #: app can declare its provider obligations without editing vendored orgs source.
 PROVIDER_BACKED = "provider-backed"

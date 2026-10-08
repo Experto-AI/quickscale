@@ -205,7 +205,7 @@ def table_has_force_rls(db_table: str) -> bool | None:
 def check_tenant_model_isolation(
     model: type[models.Model],
 ) -> dict[str, object]:
-    """Run the full SA1.3 isolation check against a single model.
+    """Run the full isolation check against a single model.
 
     Checks:
     1. The model has a direct ``organization_id`` column.

@@ -543,7 +543,7 @@ class TestAddRemoveParentUniqueConstraint:
     """Tests for ``add_parent_unique_constraint`` and its reverse."""
 
     TABLE = "quickscale_crm_contact"
-    CONSTRAINT = "quickscale_crm_contact_id_org_unique"
+    CONSTRAINT = "quickscale_crm_contact_id_organization_unique"
 
     def test_add_creates_unique_on_postgres(self) -> None:
         schema_editor = MagicMock()
@@ -625,10 +625,10 @@ class TestAddRemoveParentUniqueConstraint:
         add_parent_unique_constraint(
             schema_editor,
             table="quickscale_crm_contact",
-            constraint_name="quickscale_crm_contact_id_org_unique",
+            constraint_name="quickscale_crm_contact_id_organization_unique",
         )
         sql = schema_editor.execute.call_args[0][0]
-        assert "quickscale_crm_contact_id_org_unique" in sql
+        assert "quickscale_crm_contact_id_organization_unique" in sql
         assert "quickscale_crm_contact" in sql
 
 

@@ -12,29 +12,29 @@ by rule 3's generic settings check, registered from ``ready()`` before these.
 
 The checks:
 
-1. ``check_rls_role`` (SA68 Phase 1) — the always-on BYPASSRLS/SUPERUSER
+1. ``check_rls_role`` — the always-on BYPASSRLS/SUPERUSER
    boot guard, with its two narrow exemptions (a sanctioned privileged
    command, or the ``QUICKSCALE_ALLOW_BYPASSRLS=1`` escape hatch).
-2. ``check_tenant_isolation`` (SA1.3) — warns when tenant models lack
+2. ``check_tenant_isolation`` — warns when tenant models lack
    ``organization_id`` or the exact FORCE-RLS policy contract.
-3. ``check_model_classification`` (SA1.4) — warns when a concrete project
+3. ``check_model_classification`` — warns when a concrete project
    model has no marker-derived tenant classification.
-4. ``check_tenant_manager_inheritance`` (SA222) — errors when a model
+4. ``check_tenant_manager_inheritance`` — errors when a model
    carries a ``TenantManager`` without inheriting ``TenantModel``, because
    inheritance is the only tenant marker.
-5. ``check_provider_id_conformance`` (SA208) — errors when a tenant model's
+5. ``check_provider_id_conformance`` — errors when a tenant model's
    non-relational ``*_id`` field is neither covered by a declared
    refuse-or-reconcile obligation nor classified by the model's own
    ``provider_id_classification`` declaration.
-6. ``check_removal_obligation_discharge`` (SA213) — errors when a declared
+6. ``check_removal_obligation_discharge`` — errors when a declared
    obligation demands an action its removal boundary has no shared-coordinator
    route for, because only a boundary that bypasses the coordinator could
    discharge it.
-7. ``check_personal_data_declarations`` (SA246) — warns when a project-owned
+7. ``check_personal_data_declarations`` — warns when a project-owned
    model's personal-data candidate field has no declared treatment or reasoned
    exclusion, or when a declared treatment's app contributes no anonymization
    handler.
-8. ``check_tenant_reference_equality`` (SA257) — warns when a foreign key
+8. ``check_tenant_reference_equality`` — warns when a foreign key
    between tenant models has no composite ``(fk, organization_id)`` constraint
    and no recorded ``tenant_reference_exemptions`` entry.
 
@@ -140,17 +140,17 @@ def _is_privileged_command() -> bool:
     unrecognised value the guard still fails closed (return ``False``) — it
     is not a catch-all escape hatch.
 
-    SA68 Phase 1 replaces the old ``sys.argv`` inspection with the
+    replaces the old ``sys.argv`` inspection with the
     explicit env-var contract set by the generated ``start.sh`` and
     ``Dockerfile`` launchers.
 
-    SA68 CR-SA68-001: widened from a ``== "migrate"`` check to a
+    widened from a ``== "migrate"`` check to a
     membership test against ``_PRIVILEGED_COMMANDS`` so that
     ``createcachetable`` (and future sanctioned values) also skip the
     boot guard without requiring the ``QUICKSCALE_ALLOW_BYPASSRLS=1``
     escape hatch.
 
-    SA2.1: For the separate ``QUICKSCALE_ALLOW_BYPASSRLS=1`` escape
+    For the separate ``QUICKSCALE_ALLOW_BYPASSRLS=1`` escape
     hatch see ``check_rls_role``.
     """
     return os.environ.get("QUICKSCALE_PRIVILEGED_COMMAND") in _PRIVILEGED_COMMANDS
@@ -162,7 +162,7 @@ def check_rls_role(
 ) -> list[CheckMessage]:
     """Verify the connected PostgreSQL role does not have BYPASSRLS or SUPERUSER.
 
-    SA2.1: The guard is always active (regardless of ``QUICKSCALE_ORGS_MODE``
+    The guard is always active (regardless of ``QUICKSCALE_ORGS_MODE``
     or ``DEBUG``) with two narrow exemptions:
 
     1. ``QUICKSCALE_PRIVILEGED_COMMAND`` set to a sanctioned value
@@ -280,7 +280,7 @@ def check_tenant_isolation(_app_configs: object = None, **kwargs: object) -> lis
 
 
 # ---------------------------------------------------------------------------
-# SA1.4 — Default-deny classification system check
+# Default-deny classification system check
 # ---------------------------------------------------------------------------
 
 
@@ -343,7 +343,7 @@ def check_model_classification(_app_configs: object = None, **kwargs: object) ->
 
 
 # ---------------------------------------------------------------------------
-# SA246 — Personal-data declaration coverage check
+# Personal-data declaration coverage check
 # ---------------------------------------------------------------------------
 
 
@@ -393,7 +393,7 @@ def check_personal_data_declarations(
 
 
 # ---------------------------------------------------------------------------
-# SA257 — Tenant-reference equality check
+# Tenant-reference equality check
 # ---------------------------------------------------------------------------
 
 
@@ -494,7 +494,7 @@ def check_tenant_manager_inheritance(
 
 
 # ---------------------------------------------------------------------------
-# SA208 — Provider-ID removal-conformance system check
+# Provider-ID removal-conformance system check
 # ---------------------------------------------------------------------------
 
 
@@ -551,7 +551,7 @@ def check_provider_id_conformance(
 
 
 # ---------------------------------------------------------------------------
-# SA213 — Removal-obligation discharge system check
+# Removal-obligation discharge system check
 # ---------------------------------------------------------------------------
 
 
