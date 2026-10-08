@@ -27,6 +27,11 @@ from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 
 from quickscale_modules_orgs._tenancy_policy import _force_rls_policy_mismatches
+from quickscale_modules_orgs._tenancy_references import (
+    TenantReference,
+    find_composite_reference_constraint,
+    get_tenant_references,
+)
 from quickscale_modules_orgs.current_org import (
     reset_current_org_id,
     set_current_org_id,
@@ -46,38 +51,21 @@ from tests._tenant_table_registry import TENANT_TABLE_REGISTRY
 
 QS_APP_PREFIX = "quickscale_"
 
-#: (child_table, constraint_name, parent_table) for every composite FK.
-_COMPOSITE_FK_PAIRS: tuple[tuple[str, str, str], ...] = (
-    (
-        "quickscale_crm_contactnote",
-        "quickscale_crm_contactnote_contact_org_fk",
-        "quickscale_crm_contact",
-    ),
-    (
-        "quickscale_crm_dealnote",
-        "quickscale_crm_dealnote_deal_org_fk",
-        "quickscale_crm_deal",
-    ),
-    (
-        "quickscale_forms_formfield",
-        "quickscale_forms_formfield_form_org_fk",
-        "quickscale_forms_form",
-    ),
-    (
-        "quickscale_forms_formsubmission",
-        "quickscale_forms_formsubmission_form_org_fk",
-        "quickscale_forms_form",
-    ),
-    (
-        "quickscale_forms_formfieldvalue",
-        "quickscale_forms_formfieldvalue_submission_org_fk",
-        "quickscale_forms_formsubmission",
-    ),
-    (
-        "quickscale_forms_formfieldvalue",
-        "quickscale_forms_formfieldvalue_field_org_fk",
-        "quickscale_forms_formfield",
-    ),
+#: Every installed tenant-to-tenant foreign key from a QuickScale module child
+#: table, derived from model metadata — never hand-listed — so a new reference
+#: cannot escape the gates below by being left off a list.  Project-owned
+#: references are covered by the derived composite-FK gate in
+#: ``test_composite_fk_conformance.py`` and by the W007 check tests.
+_TENANT_REFERENCES: tuple[TenantReference, ...] = tuple(
+    reference
+    for reference in get_tenant_references()
+    if reference.exempt_reason is None
+    and reference.model_label.split(".", 1)[0].startswith(QS_APP_PREFIX)
+)
+
+#: Every distinct child table carrying a derived tenant reference.
+_TENANT_REFERENCE_CHILD_TABLES: tuple[str, ...] = tuple(
+    dict.fromkeys(reference.child_table for reference in _TENANT_REFERENCES)
 )
 
 
@@ -444,7 +432,7 @@ def test_excluded_model_lacks_tenant_manager(entry: Any) -> None:
 
 @pytest.mark.parametrize(
     "child_table",
-    tuple(dict.fromkeys(pair[0] for pair in _COMPOSITE_FK_PAIRS)),
+    _TENANT_REFERENCE_CHILD_TABLES,
 )
 def test_completed_remediation_child_is_enrolled(child_table: str) -> None:
     """Every remediated child is enrolled with direct organization ownership."""
@@ -466,28 +454,27 @@ def test_completed_remediation_child_is_enrolled(child_table: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "fk_pair",
-    _COMPOSITE_FK_PAIRS,
-    ids=lambda pair: pair[1],
+    "reference",
+    _TENANT_REFERENCES,
+    ids=lambda reference: f"{reference.child_table}.{reference.field_name}",
 )
 def test_completed_remediation_parent_fk_matches_seam(
-    fk_pair: tuple[str, str, str],
+    reference: TenantReference,
 ) -> None:
-    """Every remediated child retains a Django FK to its parent."""
-    child_table, constraint_name, parent_table = fk_pair
-    model = _model_for_db_table(child_table)
-    parent_model = _model_for_db_table(parent_table)
+    """Every derived reference resolves to the child's Django FK to its parent."""
+    model = _model_for_db_table(reference.child_table)
+    parent_model = _model_for_db_table(reference.parent_table)
 
-    # Find the many-to-one FK field(s) pointing to the parent model's PK.
-    parent_fk_fields = [
-        f
-        for f in model._meta.get_fields()
-        if isinstance(f, models.ForeignKey) and f.remote_field.model == parent_model
-    ]
-    assert parent_fk_fields, (
-        f"Remediated child table {child_table} has no ForeignKey to "
-        f"AF12 parent {parent_table} for {constraint_name}."
+    field = model._meta.get_field(reference.field_name)
+    assert isinstance(field, models.ForeignKey), (
+        f"Derived reference {reference.model_label}.{reference.field_name} "
+        "does not resolve to a ForeignKey."
     )
+    assert field.remote_field.model is parent_model, (
+        f"Derived reference {reference.model_label}.{reference.field_name} "
+        f"points at {field.remote_field.model}, not {parent_model}."
+    )
+    assert field.column == reference.fk_column
 
 
 # ---------------------------------------------------------------------------
@@ -807,44 +794,29 @@ def test_force_rls_catalog_checks_ignore_same_named_table_in_other_schema() -> N
     reason="Composite FK conformance check requires PostgreSQL.",
 )
 @pytest.mark.parametrize(
-    "fk_pair",
-    _COMPOSITE_FK_PAIRS,
-    ids=lambda p: p[1],
+    "reference",
+    _TENANT_REFERENCES,
+    ids=lambda reference: f"{reference.child_table}.{reference.field_name}",
 )
-def test_enrolled_child_table_has_composite_fk(fk_pair: tuple[str, str, str]) -> None:
+def test_enrolled_child_table_has_composite_fk(reference: TenantReference) -> None:
     """Every enrolled child/detail table must have a composite FK constraint
     in ``pg_constraint``.
 
-    Verifies that a constraint matching the naming contract exists in
-    ``pg_constraint``, proving the DB-level child-parent ``organization_id``
+    Verifies — name-independently, by matching the exact ``(fk_column,
+    organization_id)`` child columns and ``(pk_column, organization_id)``
+    parent columns — that the DB-level child-parent ``organization_id``
     equality is enforced through a composite FOREIGN KEY rather than the old
     trigger-based approach.
     """
-    from django.db import connection
+    constraint = find_composite_reference_constraint(reference)
 
-    child_table, constraint_name, parent_table = fk_pair
-
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT 1
-            FROM pg_constraint pc
-            JOIN pg_class child_cls ON child_cls.oid = pc.conrelid
-            JOIN pg_class parent_cls ON parent_cls.oid = pc.confrelid
-            WHERE pc.contype = 'f'
-              AND pc.conname = %s
-              AND child_cls.relname = %s
-              AND parent_cls.relname = %s
-            """,
-            [constraint_name, child_table, parent_table],
-        )
-        row = cursor.fetchone()
-        assert row is not None, (
-            f"Child table {child_table} is missing the expected "
-            f"composite FK '{constraint_name}' referencing "
-            f"{parent_table}(id, organization_id). "
-            f"The constraint must be added by the module's AF12 Phase 1 migration."
-        )
+    assert constraint is not None, (
+        f"Child table {reference.child_table} is missing the expected composite "
+        f"FK covering ({reference.fk_column}, organization_id) referencing "
+        f"{reference.parent_table}({reference.parent_target_column}, "
+        f"organization_id). The constraint must be added by the module's AF12 "
+        "Phase 1 migration."
+    )
 
 
 # ---------------------------------------------------------------------------
