@@ -1079,3 +1079,8 @@ Added:
 - 2026-10-08 — new watchlist: `backups-upload-restore-by-model-permission`,
   `single-sync-worker-vendor-calls`, `allow-bypassrls-serving-undetected`,
   `migrate-runs-per-replica`.
+- 2026-10-08 — `billing-checkout-relative-redirect-urls`: **code resolved** (SA251, slice a). The
+  purchase, subscription, and portal views build their return URLs with
+  `request.build_absolute_uri(reverse(...))`, and `StripeClient` refuses a URL without a scheme
+  and host before any provider call; view tests pin the absolute values and contract tests pin the
+  refusals. The live Stripe test-mode checkout record is still owed, so the finding stays open.
