@@ -36,6 +36,9 @@ def test_replacement_values_are_the_one_set() -> None:
         # the complete address is replaced wherever it occurs, case-insensitively
         ("Contact test@example.com now", "test@example.com", "Contact deleted@ now"),
         ("TEST@EXAMPLE.COM", "test@example.com", "deleted@"),
+        # internationalized addresses match whole, in any case, and never as a substring
+        ("ÉLODIE@EXÄMPLE.COM", "élodie@exämple.com", "deleted@"),
+        ("josé.élodie@example.com", "élodie@example.com", "josé.élodie@example.com"),
         # a quoted occurrence keeps its delimiter around the replacement
         ("Reach 'test@example.com' now", "test@example.com", "Reach 'deleted@' now"),
         # a quote that belongs to the address's own local part is not a delimiter
@@ -82,6 +85,9 @@ def test_replace_address_keeps_other_addresses(
             "[redacted] invited invitee@example.com",
         ),
         ("Ann (ann) Smith", "Ann", "ann", "[redacted] ([redacted]) Smith"),
+        # word boundaries are Unicode-aware: a name inside a longer word stays
+        ("Anaïs and Ana", "Ana", "", "Anaïs and [redacted]"),
+        ("José Pérez", "José", "", "[redacted] Pérez"),
         # empty spellings change nothing
         ("unchanged", "", "", "unchanged"),
         # HTML-escaped spellings are notifications' rendered-store opt-in

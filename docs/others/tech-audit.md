@@ -92,10 +92,6 @@ items:
      anchors: [quickscale_modules/crm/src/quickscale_modules_crm/receivers.py], first_seen: 2026-10-03, last_verified: 2026-10-05}
   - {id: orgs-disabled-in-saas-wedges-site, status: watchlist, category: VI, reality: generated-app,
      anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py], first_seen: 2026-10-03, last_verified: 2026-10-05}
-  - {id: anonymize-prefilter-ascii-only-casefold, status: watchlist, category: I, reality: generated-app,
-     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_anonymization.py,
-               quickscale_modules/notifications/src/quickscale_modules_notifications/_anonymization.py],
-     first_seen: 2026-10-05, last_verified: 2026-10-05}
 ```
 
 ---
@@ -111,7 +107,7 @@ items:
 
 ## 4. Findings
 
-No open findings; the SA245 closure is re-verified in §14.
+No open findings; the SA245 closure is re-verified in §13.
 
 ---
 
@@ -195,7 +191,7 @@ Every empty cell carries a finding ID or a stated reason.
   warning. It is warning-only by design, and the message carries the exception text.
 - **Rejected (design, not a defect):** the W006 candidate rules do not flag `CharField` name fields.
   The inventory is a stated heuristic, with the closed-world test as its backstop. Handed to
-  coherence (§13).
+  coherence (§12).
 - Prior clean sweeps are carried.
 
 ---
@@ -212,9 +208,10 @@ The six items from the prior passes are carried (`git show 8e4122f2:docs/others/
   conformance test landed with SA248: `notifications/tests/test_anonymization_bystanders.py`
   renders every registered template key with a sentinel user and asserts the anonymizer selects
   its linked message while a bystander's message stays byte-identical.
-- The SA244 anonymization tests run on PostgreSQL, but nothing pins the `icontains` pre-filter
-  against a non-ASCII address whose stored case differs. A single test would pin
-  `anonymize-prefilter-ascii-only-casefold`.
+- The non-ASCII address gap is closed: billing's
+  `test_anonymize_matches_a_non_ascii_address_stored_in_another_case` runs the SQL pre-filter
+  and the matcher on PostgreSQL, and core's redaction table pins internationalized addresses and
+  Unicode word boundaries.
 
 ---
 
@@ -227,14 +224,7 @@ The six items from the prior passes are carried (`git show 8e4122f2:docs/others/
 - `crm-stage-seed-lost-on-commit-failure` — **Not fired**: the delta touched only crm `apps.py`
   (declarations).
 - `orgs-disabled-in-saas-wedges-site` — **Not fired**: `middleware.py` is unchanged.
-- `anonymize-prefilter-ascii-only-casefold` (new, introduced by SA244) — the SQL pre-filter folds
-  case with PostgreSQL `UPPER`, while the Python verifier uses `str.casefold`. If the database
-  ctype is `C`/non-UTF-8, or the address uses non-ASCII letters whose case differs between
-  `User.email` and the stored payload or context, the pre-filter skips a row that the old full walk
-  would have scrubbed. The person's address would then stay in their own event. This fails §0
-  consequential/live today: it needs an internationalized local part, a case mismatch, and a
-  non-UTF-8 collation, and Stripe and the app store the address as entered. Trigger: a database
-  provisioned with a `C` ctype, or address normalization that changes case.
+
 - The carried one-liners (Stripe SDK timeout, sender-free `pre_delete`, `org_scope` `finally`
   SQL, DRF throttle history, credit-dedup scan, `QUICKSCALE_PRIVILEGED_COMMAND`, analytics JSON
   escaping, `BackupError` echo, `set_railway_variable`, future-dated notification timestamps) are
@@ -242,16 +232,7 @@ The six items from the prior passes are carried (`git show 8e4122f2:docs/others/
 
 ---
 
-## 12. Questions that would change severity
-
-1. (carried) Do generated deployments run `manage.py clearsessions`? Since SA244, expired session
-   rows are skipped, so they hold the person's session data until the host purges them.
-2. Is the production database always created with a UTF-8 ctype? A `C` ctype gives
-   `anonymize-prefilter-ascii-only-casefold` a live precondition.
-
----
-
-## 13. Coherence hand-offs
+## 12. Coherence hand-offs
 
 - `personal_data_declarations` blocks are hand-written per module with repeated
   `PersonalDataField(app_label=self.label, …)` boilerplate, and `CharField` identity fields (display
@@ -260,7 +241,7 @@ The six items from the prior passes are carried (`git show 8e4122f2:docs/others/
 
 ---
 
-## 14. Reconciliation log
+## 13. Reconciliation log
 
 - 2026-09-23 — **process note:** the 2026-09-23 closeout commits (SA198–SA203) regenerated this
   file without log lines for ten prior IDs. Every prior ID was reinstated below after being
@@ -368,3 +349,11 @@ The six items from the prior passes are carried (`git show 8e4122f2:docs/others/
   `notifications/tests/test_anonymization_bystanders.py`): every registered template key renders
   with a sentinel user, the anonymizer selects the linked message, and a bystander's message stays
   byte-identical.
+- 2026-10-08 — `anonymize-prefilter-ascii-only-casefold`: **resolved**, and its premise was
+  wrong. A PostgreSQL test showed the SQL pre-filter finds a non-ASCII address in another case.
+  The miss was in core's `_ADDRESS_PATTERN`, which accepted only ASCII letters, so an
+  internationalized address was never scrubbed in any case. The address pattern, the
+  notifications escaped-address pattern, and the name word boundaries are now Unicode-aware;
+  billing and core tests pin it. Dropped from the index and watchlist.
+- 2026-10-08 — Questions: **purged** (`clearsessions`, database ctype). The ctype question is moot
+  now that the fix is verified on a UTF-8 database and the matcher no longer depends on ASCII.

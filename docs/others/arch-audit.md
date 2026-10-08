@@ -15,7 +15,7 @@ Django 6 project generator, and twelve first-party modules embedded into generat
 Vite/React, Docker, and Railway. Public contracts: the CLI; `quickscale.yml` and applied state;
 module manifests (option schemas, URL mounts, and now UI routes, SA235); the generated trees;
 upgrade semantics; and `quickscale_core.runtime.settings`. Two **deployment realities**: the
-generator with its CI, and the generated projects (`bap-web`, `experto-ai-web`). Tenant isolation
+generator with its CI, and the generated project (`bap-web`). Tenant isolation
 is dual-layer (`TenantManager` + `FORCE RLS` under a restricted role). **New this delta:** account
 removal no longer deletes the user row; it disables and scrubs it through per-module
 `anonymize_account` handlers (SA216), backed by a test-time personal-data inventory (SA242). One
@@ -47,7 +47,7 @@ never import their facade (SA234).
   cross-module contract its message calls a scoping fix: the orgs invitation send now stamps an
   `actor_user_id` key into notification context (`orgs/views.py:200`), and notifications'
   anonymizer selects on it (`notifications/_anonymization.py:146`). That key appears in no
-  signature, doc, or gate → new finding 2.
+  signature, doc, or gate → a new finding, since closed by SA248.
 
 **Measurements (§3).** Filter: `--no-merges -M`, commits touching > 30 files dropped; lockfiles,
 `*.md`, JSON, `module.yml`, version files, and tests excluded.
@@ -85,8 +85,8 @@ never import their facade (SA234).
 - **Lens activation.** Active: I, II, III, IV, V,   VII, VIII, IX, XII, XV, XVI, **XVIII** (new:
   user-facing deletion promise), XIX. Inert: VI, X, XIV (single-process generated apps, no scale
   threshold planned); XVII (no metered driver); XX (one contributor). Archetypes: code generator,
-  CLI, multi-tenant. Findings came from I/XVI/XIX (finding 1) and III/VII/XVIII (finding 2,
-  closed by SA248).
+  CLI, multi-tenant. Findings came from I/XVI/XIX (finding 1) and III/VII/XVIII (the notification
+  person-link finding, closed by SA248).
 - **Needs runtime confirmation:** a restored `bap-web` dump against current code (finding 1).
 - **Open leads:** none.
 
@@ -171,7 +171,7 @@ SA205's restore refusal still contains the restore side.
 **Why it compounds:** growth variable is **module schema changes × deployed projects holding
 data**. New this pass: migrations can reference private model symbols, so each such reference made
 before the freeze becomes a name that can never be renamed or moved afterwards (1 today, 0 before).
-Built on top: `bap-web` post-SA191, `experto-ai-web`, every future production project.
+Built on top: `bap-web` post-SA191, every future production project.
 
 **Detection signal:** `InconsistentMigrationHistory` or missing-column `ProgrammingError` during
 `start.sh` migrate; SA205's refusal on restore; an `AttributeError` loading a migration after a
@@ -220,7 +220,7 @@ agent contact email.**
    **Exonerated by SA246.**
 3. An "inquiry received" email to the agent naming the inquirer: a new `send_notification`
    caller now states whom it is about through the required `about_users` keyword, and rule 50
-   fails a hand-stamped key. **Verdict: finding 2 evidence; closed by SA248.**
+   fails a hand-stamped key. **Exonerated by SA248.**
 
 **Probe C: add a module option** — unchanged since SA217. **Exonerated.**
 
@@ -235,7 +235,7 @@ agent contact email.**
   for a declared treatment, not that it executes each row; per-module tests cover that for
   shipped modules. `personal-data-coverage-shipped-only` stays **resolved**.
 - **SA244 (anonymization scoping):** the over-broad selectors are gone and scans are bounded.
-  **Minted** the `actor_user_id` convention → new finding 2.
+  **Minted** the `actor_user_id` convention → `notification-person-link-by-convention`, closed by SA248.
 - **SA247 (harness split):** behavior-preserving; devtool, outside product packages; no facade
   patching in tests. No new structural commitment beyond W8's existing note.
 
@@ -290,16 +290,12 @@ entries, so the freeze's first migrations are born classified.
 - Prior rejections (privileged-command copy-pair, conventions harness size, SA223 mounts) —
   unchanged; not re-investigated.
 
-## Questions that would change the ranking
-
-- **`clean-break-schema-no-data-path`:** will `experto-ai-web` migrate too? (Carried; unanswered.)
-- The prior question on `generated-file-ownership-unmodeled` ("regenerate and port" as the
-  permanent model) is **retired**: SA214 tooled the port as an explicitly one-off path.
-
 *No red flags this pass.*
 
 ## Reconciliation log
 
+- 2026-10-08 — Questions: **purged**. The `experto-ai-web` migration question is dropped with
+  that project's removal from the docs; only `bap-web` is in scope.
 - 2026-10-06 — `notification-person-link-by-convention`: **closed** by SA248. `send_notification`
   takes a required `about_users` keyword and stores the canonical ids on the message; the
   anonymizer selects on them and keeps the `actor_user_id` and address fallbacks for already-stored

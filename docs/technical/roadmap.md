@@ -148,7 +148,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Migrate `bap-web` into a new repository at `/home/victor/code/bap-web-new`, once, without the
   fresh-first tool: a fresh `quickscale plan` + `apply` recipient, then a coding assistant ports the
   donor by following [bap-web-migration-prompt.md](../planning/bap-web-migration-prompt.md).
-  Hardening the tool is SA214. `experto-ai-web` is out of scope.
+  Hardening the tool is SA214.
 
   **Context:** `bap-web` is the beta site behind the property portal, generated 2026-03-05 on
   v0.62.0 with the `showcase_react` theme and `auth`, `listings`, and `forms`. It carries a
@@ -293,7 +293,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 The [architecture audit](../others/arch-audit.md) and [technical audit](../others/tech-audit.md) own
 deferred findings, watch notes, and their growth triggers; items stay there until a trigger fires.
-Open question: whether `experto-ai-web` migrates too. Standing scope rules, presence contracts, and resource safeguards
+Standing scope rules, presence contracts, and resource safeguards
 live in [decisions](decisions.md) and
 [validation policy](validation_policy.md#candidate-review-and-integration).
 

@@ -2087,12 +2087,11 @@ exercises the fresh-first path, including one iterate regeneration case.
 
 ### Beta-Site External Verification Scope {#beta-site-external-verification-scope}
 
-**Decision:** Verifying the *deployed* state of `experto-ai-web`
-and `bap-web` — confirming a specific commit's generator/template changes
-actually reached those running sites, checking their live Redis
+**Decision:** Verifying the *deployed* state of `bap-web` — confirming a specific commit's generator/template changes
+actually reached that running site, checking their live Redis
 configuration, or inspecting/patching their donor-owned `settings/production.py`
 — is **permanently out of scope for this monorepo's automated tooling and for
-any coding-agent session operating inside it.** Neither site's repository nor
+any coding-agent session operating inside it.** Neither the site's repository nor
 its Railway deployment is reachable from here; this is a structural property
 of the two-repo maintainer workflow (`quickscale_devtools/beta_migration/`,
 [beta-site-migration.md](../planning/beta-site-migration.md)), not a
@@ -2117,7 +2116,7 @@ human maintainer applied the fix to a live external deployment.
 
 **Standing rule for future findings:** any roadmap item, tech-audit finding,
 or arch-audit red flag whose acceptance criteria requires inspecting or
-patching the live `experto-ai-web`/`bap-web` deployments (not just this
+patching the live `bap-web` deployment (not just this
 repo's generator output) is closed on discovery with a pointer to this
 section, rather than left open as a blocked roadmap item. Record the
 manual-verification ask as a maintainer to-do in

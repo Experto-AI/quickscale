@@ -21,9 +21,11 @@ REDACTED = "[redacted]"
 
 #: Matches one complete email address.  A replacement is decided per complete
 #: match, never per raw substring, so ``test@example.com`` found inside
-#: ``protest@example.com`` cannot rewrite another person's address.
+#: ``protest@example.com`` cannot rewrite another person's address.  Letters
+#: and digits are Unicode-aware, so an internationalized address
+#: (``élodie@exämple.com``) is matched as one complete address too.
 _ADDRESS_PATTERN = re.compile(
-    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"
+    r"[\w.!#$%&'*+/=?^`{|}~-]+@(?:[^\W_]|-)+(?:\.(?:[^\W_]|-)+)+"
 )
 
 #: Quote delimiters an address is commonly wrapped in inside free text.
@@ -67,7 +69,8 @@ def redact_names(value: str, *, name: str = "", username: str = "") -> str:
     """Replace name and username spellings at word boundaries in *value*.
 
     A spelling is replaced only as a whole word, so a short name such as
-    ``Bill`` never rewrites ``billing_details`` or ``Billing plan``, and never
+    ``Bill`` never rewrites ``billing_details`` or ``Billing plan`` (nor ``Ana``
+    inside ``Anaïs``: word characters are Unicode-aware), and never
     inside a complete address, so a name cannot corrupt another person's
     address.  Empty spellings are ignored.
     """
@@ -92,7 +95,7 @@ def _redact_name_spellings(value: str, *, name: str, username: str) -> str:
     for spelling in (name, username):
         if spelling:
             value = re.sub(
-                rf"(?<![A-Za-z0-9_]){re.escape(spelling)}(?![A-Za-z0-9_])",
+                rf"(?<!\w){re.escape(spelling)}(?!\w)",
                 REDACTED,
                 value,
                 flags=re.IGNORECASE,

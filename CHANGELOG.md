@@ -24,6 +24,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
 ## Releases
 
 - v0.89.0 — prepared, not published — [Development Maintenance](docs/releases/release-v0.89.0.md). Begins the post-v0.88 maintenance line with source-derived validation expectations.
+  - **Account anonymization scrubs internationalized addresses.** The shared redaction matcher
+    recognizes non-ASCII email addresses in any case and matches names at Unicode word boundaries,
+    so `élodie@example.com` is scrubbed and `Ana` no longer rewrites `Anaïs`.
   - **Split-facade seams use the defining module.** Test seams and collaborator calls across the CLI
     command and utility facades, `dr_engine`, billing, and the auth, backups, notifications, and orgs
     module facades resolve through the module that defines each name, facades re-export public names

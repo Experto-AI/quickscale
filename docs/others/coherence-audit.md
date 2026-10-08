@@ -67,14 +67,14 @@ delta adds two:
 **Declared conventions.**
 
 - decisions.md § Module Conventions rules 1–49. Rule 40's harness covers 42 of them, and running it
-  at `8e4122f2` gave `All 40 covered module conventions pass`; SA245 adds rules 47–48 (§12), and
+  at `8e4122f2` gave `All 40 covered module conventions pass`; SA245 adds rules 47–48 (§11), and
   rule 49 (personal-data declarations) is held by the closed-world inventory test and the `W006`
-  check (§12).
+  check (§11).
   - `OPEN_RULES` = 21 (a review rule plus per-module rollback tests), 27 (the user-FK gate), and
     30 (`collect_wiring`).
   - Rules 41 and 46 have no detector of their own. Their clauses run inside rules 7, 31, 37
     (rule 41) and 19, 28 (rule 46), as the partition-test comment at
-    `scripts/test_check_module_conventions.py:7282` records.
+    partition test in `scripts/tests_module_conventions/` records (moved by SA247).
 - **The anonymization contract.** module-extension.md (lines 185–195) states the `ANONYMIZE`
   declaration and the `(self,)` capability. The personal-data inventory is enforced by
   `orgs/tests/test_personal_data_inventory.py`, which is closed-world over candidate fields and
@@ -163,7 +163,7 @@ items:
   - {id: theme-module-presence, status: resolved, rule: "rule 31", aspect: P, check: conformance, closed_world: false, resolved_by: a621299b, first_seen: 2026-09-28, last_verified: 2026-10-05}
   - {id: module-lists-outside-members, status: resolved, rule: "rule 37", aspect: L, check: conformance, closed_world: false, resolved_by: a621299b, first_seen: 2026-09-28, last_verified: 2026-10-05}
   # 41 items of passes 1–6, resolved at or before c10b529e and held by the harness at 8e4122f2:
-  # see the reconciliation log (§12) for each ID, its rule and its resolving commit.
+  # see the reconciliation log (§11) for each ID, its rule and its resolving commit.
 ```
 
 ---
@@ -175,12 +175,12 @@ regressed.
 
 | ID | Aspect | Cost | Diverging / population | Status |
 |---|---|---|---|---|
-| `semantic-personal-data-central-pin` | C | ambiguity, tax | 3 / 9 modules with user data | resolved (see §12, rule 49) |
-| `anonymize-redaction-helper-copies` | C | defect, tax | 2 / 5 handlers | resolved (see §12, rule 47) |
-| `anonymize-replacement-values` | G | ambiguity, tax | 2 / 5 handlers | resolved (see §12, rule 48) |
-| `personal-data-inventory-ownership` | C | tax, ambiguity | 8 / 9 modules with user data | resolved (rule 49, see §12) |
-| `anonymize-executor-naming` | D | tax | 1 / 5 handlers | resolved (see §12, rule 48) |
-| `write-effects-on-commit` | F | — | 0 / 6 | resolved (correction, see §12) |
+| `semantic-personal-data-central-pin` | C | ambiguity, tax | 3 / 9 modules with user data | resolved (see §11, rule 49) |
+| `anonymize-redaction-helper-copies` | C | defect, tax | 2 / 5 handlers | resolved (see §11, rule 47) |
+| `anonymize-replacement-values` | G | ambiguity, tax | 2 / 5 handlers | resolved (see §11, rule 48) |
+| `personal-data-inventory-ownership` | C | tax, ambiguity | 8 / 9 modules with user data | resolved (rule 49, see §11) |
+| `anonymize-executor-naming` | D | tax | 1 / 5 handlers | resolved (see §11, rule 48) |
+| `write-effects-on-commit` | F | — | 0 / 6 | resolved (correction, see §11) |
 | 49 other prior items | A–P | — | 0 | resolved |
 
 ---
@@ -267,7 +267,7 @@ accepts only orgs', contrib, and third-party pins.
 The table is unchanged from inventory §23, plus blog. All 6 modules with effects schedule them
 with `transaction.on_commit` and have a rollback or on-commit test. notifications' rollback test
 is `tests/test_services.py:325–341`, and its `dispatch_after_commit` escape hatch has been
-removed. No drift remains (see the correction in §12).
+removed. No drift remains (see the correction in §11).
 
 ---
 
@@ -509,16 +509,7 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
 
 ---
 
-## 11. Questions that would change a rule
-
-- Should a scrubbed provider payload keep the account link (`deleted-<pk>@invalid`) or lose it
-  (`[redacted]`)? This decides Item 2's option A vs B.
-- Will forms submissions or crm contacts ever be treated as the user's personal data, rather than
-  the organization's? A yes adds a third text scrubber and raises Item 1's urgency.
-
----
-
-## 12. Reconciliation log
+## 11. Reconciliation log
 
 - 2026-10-05 — **Location.** The coherence audit moves from
   `docs/planning/module-conventions-inventory.md` (passes 1–8) to this file. The inventory's index
@@ -599,3 +590,5 @@ collector in auth's own `_anonymize_boundary.py` · check: a harness clause, clo
 - 2026-10-06 — Enforcement gaps 4 and 6: **resolved** (SA250 — `DELEGATED_RULES` lists rules
   40/41/46/49 with their carriers and the harness success line names them; the partition test
   parses the decisions.md rule headings and a control fails on an added heading).
+- 2026-10-08 — Questions: **purged**. Both rule questions concerned items already resolved by
+  rules 47–49. Enforcement gap 6's partition-test anchor now names the SA247 location.

@@ -1,13 +1,13 @@
 # Beta Site Migration Playbook
 
-A guide for keeping `experto-ai-web` and `bap-web` current with new QuickScale releases.
+A guide for keeping `bap-web` current with new QuickScale releases.
 
 Trigger prompt for the maintainer command or report-assisted recovery:
 > "I have a new quickscale project at `/tmp/xxxx`, incorporate the current web at `$HOME/current-web` — follow `docs/planning/beta-site-migration.md`"
 
 ## Current maintainer automation surface (updated for v0.89.0)
 
-This playbook documents the beta-site-only maintainer workflow introduced in v0.81.0 and tightened in v0.89.0 for `experto-ai-web` and `bap-web`.
+This playbook documents the beta-site-only maintainer workflow introduced in v0.81.0 and tightened in v0.89.0 for `bap-web`.
 
 ```bash
 make beta-migrate-fresh DONOR=/abs/path/to/existing-beta-site RECIPIENT=/abs/path/to/fresh-scaffold
@@ -235,7 +235,7 @@ The result is in the RECIPIENT directory (`/tmp/xxxx`). Railway is watching the 
 git repo. Copy the result there to deploy.
 
 ```bash
-EXISTING_REPO="$HOME/Code/experto-ai-web"   # the repo Railway is connected to
+EXISTING_REPO="$HOME/Code/bap-web"   # the repo Railway is connected to
 
 cd "$EXISTING_REPO"
 git status   # stash or commit any pending work
@@ -305,7 +305,7 @@ Use this after the initial catch-up. The beta site is current — just keeping i
 ### 2a — Update existing module code
 
 ```bash
-cd ~/Code/experto-ai-web
+cd ~/Code/bap-web
 git checkout -b update/qs-v<version>
 quickscale update              # pulls latest for all installed modules via git subtree
 git diff HEAD                  # review changes to managed files
@@ -318,7 +318,7 @@ git add -A && git commit -m "chore: update quickscale modules to v<version>"
 ### 2b — Add a single new module
 
 ```bash
-cd ~/Code/experto-ai-web
+cd ~/Code/bap-web
 git checkout -b feat/add-<module>
 
 # 1. Add module to quickscale.yml under modules:
@@ -382,13 +382,13 @@ railway variables --set \
 git push origin <branch-name>
 
 # Or deploy directly:
-railway up --service experto-ai-web
+railway up --service bap-web
 ```
 
 ### Confirm migrations ran
 
 ```bash
-railway logs --service experto-ai-web --follow
+railway logs --service bap-web --follow
 # Expect lines like: Applying social.0001_initial... OK
 ```
 
@@ -396,7 +396,7 @@ railway logs --service experto-ai-web --follow
 
 ```bash
 # Railway dashboard: Deployments tab → previous deployment → Redeploy
-railway redeploy <deployment-id> --service experto-ai-web
+railway redeploy <deployment-id> --service bap-web
 ```
 
 ---
@@ -423,16 +423,15 @@ railway redeploy <deployment-id> --service experto-ai-web
 ### Outstanding maintainer to-do (SA67, tracked outside roadmap.md)
 
 Per `decisions.md §Beta-Site External Verification Scope`, verifying and
-patching the *live* deployed state of `experto-ai-web`/`bap-web` is out of
+patching the *live* deployed state of `bap-web` is out of
 scope for repo automation and any coding-agent session — no repository or
-deployment access to either site exists from within this monorepo. This is a
+deployment access to the site exists from within this monorepo. This is a
 manual maintainer action, not a roadmap.md checklist item:
 
 ```
-[ ] experto-ai-web: diff deployed start.sh + settings/production.py against
+[ ] bap-web: diff deployed start.sh + settings/production.py against
     current templates; record Redis presence for deployment history and reconcile
     SA63/SA68's complete env-pair bridge before invoking the current maintainer tool
-[ ] bap-web: same check
 [ ] Record the outcome here (date, Redis state, whether a patch was needed)
 ```
 
