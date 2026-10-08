@@ -24,15 +24,23 @@ def anonymize_account(
     original_email: str,
     original_name: str,
     original_username: str,
+    *,
+    email_verified: bool,
 ) -> None:
     """Disable the account and scrub the fields the inventory lists for it.
 
     The login addresses allauth holds exist only for sign-in and are deleted;
     the person's sessions are removed so the disabled account cannot be
     resumed from one.  The account row takes the shared deterministic
-    ``DELETED_ADDRESS(pk)`` so the same address can register again.
+    ``DELETED_ADDRESS(pk)`` so the same address can register again.  The
+    verification flag is unused: auth owns the account row and matches by pk.
     """
-    del original_email, original_name, original_username  # matched by pk.
+    del (
+        original_email,
+        original_name,
+        original_username,
+        email_verified,
+    )  # matched by pk.
     user.username = _unused_scrubbed_username(user)
     user.email = DELETED_ADDRESS(user.pk)
     user.first_name = ""

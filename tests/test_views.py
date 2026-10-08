@@ -2774,8 +2774,17 @@ class TestAccountDeleteViewAnonymization:
         self, authenticated_client, user
     ):
         """A later handler receives the pre-scrub identity, not the scrubbed row."""
+        from allauth.account.models import EmailAddress
+
         from quickscale_modules_billing.models import WebhookEvent
 
+        # The payload's address selector runs only for a verified address.
+        EmailAddress.objects.create(
+            user=user,
+            email=user.email,
+            verified=True,
+            primary=True,
+        )
         event = WebhookEvent.objects.create(
             stripe_event_id="evt-account-close",
             event_type="customer.updated",
@@ -2795,11 +2804,20 @@ class TestAccountDeleteViewAnonymization:
         self, authenticated_client, user, monkeypatch
     ):
         """A failing executor rolls the whole deletion back, scrubs included."""
+        from allauth.account.models import EmailAddress
         from django.contrib.auth import get_user_model
 
         import quickscale_modules_billing._anonymization as billing_anonymization
         from quickscale_modules_billing.models import WebhookEvent
 
+        # The payload's address selector runs only for a verified address, so
+        # the scrub must actually rewrite the payload before the executor fails.
+        EmailAddress.objects.create(
+            user=user,
+            email=user.email,
+            verified=True,
+            primary=True,
+        )
         event = WebhookEvent.objects.create(
             stripe_event_id="evt-account-close-failure",
             event_type="customer.updated",
@@ -2808,9 +2826,20 @@ class TestAccountDeleteViewAnonymization:
         scrub = billing_anonymization.anonymize_account
 
         def redact_then_fail(
-            user_arg, original_email, original_name, original_username
+            user_arg,
+            original_email,
+            original_name,
+            original_username,
+            *,
+            email_verified,
         ):
-            scrub(user_arg, original_email, original_name, original_username)
+            scrub(
+                user_arg,
+                original_email,
+                original_name,
+                original_username,
+                email_verified=email_verified,
+            )
             raise RuntimeError("post-redaction failure")
 
         monkeypatch.setattr(

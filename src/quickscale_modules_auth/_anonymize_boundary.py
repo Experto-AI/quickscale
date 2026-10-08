@@ -7,7 +7,10 @@ capability: every installed app that holds personal data about a user declares
 its handler, and the anonymize boundary runs each declared app's own
 ``anonymize_account`` executor — the hook named by ``STAGE_EXECUTOR_HOOKS``
 for the ``ANONYMIZE`` action — before discharging the stage through the shared
-coordinator.
+coordinator.  The executor receives the pre-scrub identity (address, full
+name, username) and an ``email_verified`` keyword stating whether the
+account's address is allauth-verified; an address-based selector may run only
+when it is true.
 
 A module that cannot import ``quickscale_modules_orgs`` (notifications) still
 declares the capability and exposes the hook: the capability is read from
@@ -18,6 +21,7 @@ the removal vocabulary.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from django.apps import apps
 
@@ -30,6 +34,31 @@ from quickscale_modules_orgs.removal import (
 
 #: AppConfig attribute through which an app declares its anonymize handler.
 ANONYMIZE_HANDLERS_CAPABILITY = "anonymize_handlers"
+
+
+def account_email_verified(user: Any, email: str) -> bool:
+    """Return whether *email* is a verified login address of *user*.
+
+    An address is verified only when allauth holds a verified ``EmailAddress``
+    row for it.  With the default ``email_verification: none`` the address a
+    self-registered account typed at signup stays unverified, so self-service
+    registration alone never grants the address-based cross-tenant selectors
+    an anonymization handler may run; a project without allauth has no
+    verified addresses at all.  The boundary captures this before any hook
+    runs, because auth's own hook deletes the account's login addresses.
+    """
+    address = str(email or "").strip()
+    if not address:
+        return False
+    try:
+        email_address = apps.get_model("account", "EmailAddress")
+    except LookupError:
+        return False
+    return email_address.objects.filter(
+        user=user,
+        email__iexact=address,
+        verified=True,
+    ).exists()
 
 
 def discover_anonymize_hooks() -> tuple[tuple[str, Callable[..., None]], ...]:
