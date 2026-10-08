@@ -22,9 +22,12 @@ def _orgs_post_hook(
     assembly, so an invalid mode fails closed.  The manifest declares the
     ``orgs/`` mount and its mode-dependent placement (solo mounts before the
     project's home route, saas after it) as conditional wiring projections;
-    this hook only projects the settings the declarative resolver cannot, and
+    this hook projects the settings the declarative resolver cannot, and
     carries the resolved URL includes through unchanged (Module Conventions
-    rule 7).
+    rule 7).  It also contributes the ``quickscale_orgs_invite`` and
+    ``quickscale_orgs_invite_organization`` DRF throttle scopes from the
+    ``invite_rate_limit`` option (rule 32), for rule 30's merge into the
+    generated ``REST_FRAMEWORK`` block.
     """
     issues = validate_module_options(load_module_manifest("orgs"), resolved)
     if issues:
@@ -35,11 +38,25 @@ def _orgs_post_hook(
 
     mode = str(resolved["mode"]).strip().lower()
     settings = dict(spec.settings)
+    invite_rate_limit = str(settings["QUICKSCALE_ORGS_INVITE_RATE_LIMIT"]).strip()
     settings.update(
         {
             "QUICKSCALE_ORGS_MODE": mode,
+            "QUICKSCALE_ORGS_INVITE_RATE_LIMIT": invite_rate_limit,
+            "QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT": int(
+                settings["QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT"]
+            ),
         }
     )
+    # Rule 32 — both invitation scopes carry the module stem and take the
+    # invite_rate_limit option's rate: one bucket per sender, one per target
+    # organization, contributed here for rule 30's merge.
+    settings["REST_FRAMEWORK"] = {
+        "DEFAULT_THROTTLE_RATES": {
+            "quickscale_orgs_invite": invite_rate_limit,
+            "quickscale_orgs_invite_organization": invite_rate_limit,
+        },
+    }
 
     if not bool(resolved["enabled"]):
         # Rule 1 (D3): off keeps the module installed — apps, middleware,

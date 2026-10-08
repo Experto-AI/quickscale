@@ -25,7 +25,9 @@ def test_anonymize_clears_the_profile_fields(user) -> None:
     """The profile row stays; its personal fields are cleared."""
     profile = AuthorProfile.objects.create(user=user, bio="Personal bio")
 
-    anonymize_account(user, "test@example.com", "Test User", user.get_username())
+    anonymize_account(
+        user, "test@example.com", "Test User", user.get_username(), email_verified=True
+    )
 
     profile.refresh_from_db()
     assert profile.bio == ""
@@ -76,7 +78,13 @@ def test_declared_treatments_hold_on_a_populated_user(
         )
 
     with django_capture_on_commit_callbacks(execute=True):
-        anonymize_account(user, "test@example.com", "Test User", user.get_username())
+        anonymize_account(
+            user,
+            "test@example.com",
+            "Test User",
+            user.get_username(),
+            email_verified=True,
+        )
 
     profile.refresh_from_db()
     assert profile.user_id == user.pk
@@ -90,7 +98,9 @@ def test_declared_treatments_hold_on_a_populated_user(
 @pytest.mark.django_db
 def test_anonymize_without_a_profile_is_a_no_op(user) -> None:
     """A person who never authored keeps no profile row to clear."""
-    anonymize_account(user, "test@example.com", "Test User", user.get_username())
+    anonymize_account(
+        user, "test@example.com", "Test User", user.get_username(), email_verified=True
+    )
 
     assert not AuthorProfile.objects.filter(user=user).exists()
 
@@ -108,7 +118,13 @@ def test_anonymize_deletes_the_avatar_file_on_commit(
     assert storage.exists(name)
 
     with django_capture_on_commit_callbacks(execute=True):
-        anonymize_account(user, "test@example.com", "Test User", user.get_username())
+        anonymize_account(
+            user,
+            "test@example.com",
+            "Test User",
+            user.get_username(),
+            email_verified=True,
+        )
 
     profile.refresh_from_db()
     assert profile.bio == ""
@@ -136,7 +152,11 @@ def test_anonymize_reports_a_failed_avatar_deletion_without_raising(
     with caplog.at_level(logging.ERROR, logger="quickscale_modules_blog.apps"):
         with django_capture_on_commit_callbacks(execute=True):
             anonymize_account(
-                user, "test@example.com", "Test User", user.get_username()
+                user,
+                "test@example.com",
+                "Test User",
+                user.get_username(),
+                email_verified=True,
             )
 
     assert "remove it from storage manually" in caplog.text
@@ -159,7 +179,11 @@ def test_rolled_back_anonymization_keeps_the_avatar_file(user) -> None:
     with pytest.raises(_Rollback):
         with transaction.atomic():
             anonymize_account(
-                user, "test@example.com", "Test User", user.get_username()
+                user,
+                "test@example.com",
+                "Test User",
+                user.get_username(),
+                email_verified=True,
             )
             raise _Rollback
 

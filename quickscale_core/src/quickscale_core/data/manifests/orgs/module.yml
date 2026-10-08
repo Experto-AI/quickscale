@@ -18,6 +18,22 @@ config:
       description: "Organization runtime mode (solo or saas)"
       validation:
         choices: ["solo", "saas"]
+
+    invite_rate_limit:
+      type: string
+      default: "20/day"
+      django_setting: QUICKSCALE_ORGS_INVITE_RATE_LIMIT
+      description: "Throttle rate for organization invitation sends, per sender and per organization. Format: '<count>/<period>'."
+      validation:
+        pattern: ^\d+/(second|minute|hour|day)$
+
+    pending_invitation_limit:
+      type: integer
+      default: 50
+      django_setting: QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT
+      description: "Maximum active pending invitations one organization may hold; further invitations are refused until older ones are revoked or expire."
+      validation:
+        min: 1
   immutable: {}
 
 required_modules:
@@ -81,3 +97,9 @@ derivation:
           target_key: mode
           rule_type: lowercase
           description: "Canonicalize mode to lowercase"
+    invite_rate_limit:
+      normalization_rules:
+        - source_key: invite_rate_limit
+          target_key: invite_rate_limit
+          rule_type: strip
+          description: "Strip whitespace from invite_rate_limit"

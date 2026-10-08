@@ -13,21 +13,26 @@ by ``send_notification`` from its required ``about_users`` keyword — and, for
 messages stored before that keyword existed, the ones whose ``context_json``
 records them as the actor through an ``actor_user_id`` key, plus — the
 pre-key fallback — the ones whose ``context_json`` carries their unique
-address.  An invitation message is delivered to the invitee but renders the
-inviter's name, so the stored link, not delivery, selects the inviter's
-records.  A message delivered only to the person has every rendered field
-replaced wholesale, as the inventory's treatment reads; any other linked
-message keeps the content that is not about the person and loses each
-occurrence of their address, full name, and username in a value — in the raw
-and HTML-escaped spellings Django rendering stores.  Dictionary keys carry the
-stored structure and are never rewritten.  The person's own delivery
-rows and provider event payloads are scrubbed regardless, and every selected
-message loses the person's id from its stored link list so the link never
-outlives the scrub.  The fallback matches their address, which is unique, and
-never their name, which can be an ordinary word; a name match cannot select
-another person's message.  An invitation message sent before either link
-existed names only the inviter's display name, so it carries no link the
-fallback can match and stays as stored — a recorded limit, not a selector.
+address.  The two address-based selectors (the recipient address and the
+context fallback) run only when the boundary reports the account's address
+verified: an unverified address may belong to someone else, so it never
+selects a row, and the user-linked keys carry the scrub
+(tech audit ``anonymize-matches-unverified-address``).  An invitation message
+is delivered to the invitee but renders the inviter's name, so the stored
+link, not delivery, selects the inviter's records.  A message delivered only
+to the person has every rendered field replaced wholesale, as the inventory's
+treatment reads; any other linked message keeps the content that is not about
+the person and loses each occurrence of their address, full name, and
+username in a value — in the raw and HTML-escaped spellings Django rendering
+stores.  Dictionary keys carry the stored structure and are never rewritten.
+The person's own delivery rows and provider event payloads are scrubbed when
+the address is verified, and every selected message loses the person's id
+from its stored link list so the link never outlives the scrub.  The fallback
+matches their address, which is unique, and never their name, which can be an
+ordinary word; a name match cannot select another person's message.  An
+invitation message sent before either link existed names only the inviter's
+display name, so it carries no link the fallback can match and stays as
+stored — a recorded limit, not a selector.
 """
 
 from __future__ import annotations
@@ -55,16 +60,21 @@ def anonymize_account(
     original_email: str,
     original_name: str,
     original_username: str,
+    *,
+    email_verified: bool,
 ) -> None:
     """Scrub the person's deliveries, event payloads, and linked messages.
 
     ``original_name`` and ``original_username`` are the pre-scrub display
     spellings — the invitation email renders the full name, falling back to
     the username — removed from every linked message that carries them.  A
-    message is linked when a delivery addresses the person, when its stored
-    ``about_user_ids_json`` link names them, when its ``context_json`` names
-    them as the actor (the pre-keyword form), or when it carries their unique
-    address; no other message is read or rewritten.
+    message is linked when its stored ``about_user_ids_json`` link names them,
+    when its ``context_json`` names them as the actor (the pre-keyword form),
+    or when a delivery addresses the person or its ``context_json`` carries
+    their unique address — the two address-based selectors run only when
+    ``email_verified`` says the boundary verified the address, because an
+    unverified address may belong to someone else; no other message is read
+    or rewritten.
     """
     email = original_email.strip()
     if not email:
@@ -75,11 +85,13 @@ def anonymize_account(
         username = ""
     deleted_address = DELETED_ADDRESS(user.pk)
 
-    delivery_ids = list(
-        NotificationDelivery.objects.filter(recipient_email__iexact=email).values_list(
-            "pk", flat=True
+    delivery_ids: list[Any] = []
+    if email_verified:
+        delivery_ids = list(
+            NotificationDelivery.objects.filter(
+                recipient_email__iexact=email
+            ).values_list("pk", flat=True)
         )
-    )
     if delivery_ids:
         NotificationDelivery.objects.filter(
             pk__in=delivery_ids,
@@ -97,6 +109,7 @@ def anonymize_account(
         name=name,
         username=username,
         deleted_address=deleted_address,
+        email_verified=email_verified,
     )
 
 
@@ -125,15 +138,19 @@ def _scrub_messages(
     name: str,
     username: str,
     deleted_address: str,
+    email_verified: bool,
 ) -> None:
     """Redact the messages linked to the person, and only those.
 
     Four links select a message: a delivery to the person, a stored
     ``about_user_ids_json`` entry naming them, an ``actor_user_id`` context
     entry naming them as the actor (the pre-keyword form), or — the pre-key
-    fallback — their unique address inside ``context_json``.  The fallback
-    verifies a complete address, never a name, so a namesake's address or an
-    ordinary word cannot select another person's message.
+    fallback — their unique address inside ``context_json``.  The two
+    address-based selectors run only when the boundary verified the address:
+    an unverified address may belong to someone else, so it never selects a
+    message.  The fallback verifies a complete address, never a name, so a
+    namesake's address or an ordinary word cannot select another person's
+    message.
     """
     person_message_ids = set(
         NotificationDelivery.objects.filter(pk__in=delivery_ids).values_list(
@@ -150,13 +167,15 @@ def _scrub_messages(
             context_json__actor_user_id=str(user.pk)
         ).values_list("pk", flat=True)
     )
-    fallback_message_ids = {
-        pk
-        for pk, context in NotificationMessage.objects.filter(
-            context_json__icontains=email
-        ).values_list("pk", "context_json")
-        if _context_names_the_address(context, email=email)
-    }
+    fallback_message_ids: set[Any] = set()
+    if email_verified:
+        fallback_message_ids = {
+            pk
+            for pk, context in NotificationMessage.objects.filter(
+                context_json__icontains=email
+            ).values_list("pk", "context_json")
+            if _context_names_the_address(context, email=email)
+        }
     candidate_ids = (
         person_message_ids
         | linked_message_ids

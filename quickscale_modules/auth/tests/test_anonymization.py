@@ -11,7 +11,10 @@ from django.test import Client
 from django.utils import timezone
 
 from quickscale_modules_auth._anonymization import anonymize_account
-from quickscale_modules_auth._anonymize_boundary import discover_anonymize_hooks
+from quickscale_modules_auth._anonymize_boundary import (
+    account_email_verified,
+    discover_anonymize_hooks,
+)
 
 
 def _session_user_ids() -> set[str]:
@@ -28,7 +31,13 @@ def test_anonymize_account_disables_and_clears_the_account_row(user) -> None:
     user.last_login = user.date_joined
     user.save(update_fields=["last_login"])
 
-    anonymize_account(user, "TestUser@Example.com", "Test User", user.get_username())
+    anonymize_account(
+        user,
+        "TestUser@Example.com",
+        "Test User",
+        user.get_username(),
+        email_verified=True,
+    )
 
     user.refresh_from_db()
     assert user.username == f"deleted-{user.pk}"
@@ -66,7 +75,13 @@ def test_declared_treatments_hold_on_a_populated_user(user) -> None:
     user.last_login = user.date_joined
     user.save(update_fields=["last_login"])
 
-    anonymize_account(user, "TestUser@Example.com", "Test User", user.get_username())
+    anonymize_account(
+        user,
+        "TestUser@Example.com",
+        "Test User",
+        user.get_username(),
+        email_verified=True,
+    )
 
     user.refresh_from_db()
     scrubbed = {
@@ -103,6 +118,82 @@ def test_declared_non_candidate_fields_stay_pinned() -> None:
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("verified", [True, False])
+def test_account_delete_passes_the_allauth_verification_to_every_hook(
+    authenticated_client, user, monkeypatch, verified
+) -> None:
+    """The boundary captures verification before any hook deletes the rows."""
+    from typing import Any
+
+    from allauth.account.models import EmailAddress
+    from django.urls import reverse
+
+    import quickscale_modules_auth.views as auth_views
+
+    if verified:
+        EmailAddress.objects.create(
+            user=user,
+            email=user.email,
+            verified=True,
+            primary=True,
+        )
+    captured: list[dict[str, Any]] = []
+
+    def fake_hook(*args: Any, **kwargs: Any) -> None:
+        captured.append(kwargs)
+
+    monkeypatch.setattr(
+        auth_views._anonymize_boundary,
+        "discover_anonymize_hooks",
+        lambda: (("fake_app", fake_hook),),
+    )
+
+    response = authenticated_client.post(reverse("quickscale_auth:account_delete"))
+
+    assert response.status_code == 302
+    assert captured == [{"email_verified": verified}]
+
+
+@pytest.mark.django_db
+def test_account_email_verified_reads_allauth_verification(user) -> None:
+    """Only an allauth-verified row for the address counts as verified."""
+    from allauth.account.models import EmailAddress
+
+    assert account_email_verified(user, user.email) is False
+
+    EmailAddress.objects.create(
+        user=user,
+        email=user.email,
+        verified=False,
+        primary=True,
+    )
+    assert account_email_verified(user, user.email) is False
+
+    EmailAddress.objects.filter(user=user).update(verified=True)
+    assert account_email_verified(user, user.email) is True
+
+
+@pytest.mark.django_db
+def test_account_email_verified_ignores_another_persons_verified_address(user) -> None:
+    """A verified row held by someone else never verifies this account."""
+    from allauth.account.models import EmailAddress
+
+    other = get_user_model().objects.create_user(
+        username="verified-holder",
+        email="shared@example.com",
+        password="OtherPass123!",
+    )
+    EmailAddress.objects.create(
+        user=other,
+        email="shared@example.com",
+        verified=True,
+        primary=True,
+    )
+
+    assert account_email_verified(user, "shared@example.com") is False
+
+
+@pytest.mark.django_db
 def test_anonymize_account_deletes_the_login_addresses(user) -> None:
     """The addresses allauth holds exist only to sign in."""
     from allauth.account.models import EmailAddress
@@ -114,7 +205,13 @@ def test_anonymize_account_deletes_the_login_addresses(user) -> None:
         primary=True,
     )
 
-    anonymize_account(user, "testuser@example.com", "Test User", user.get_username())
+    anonymize_account(
+        user,
+        "testuser@example.com",
+        "Test User",
+        user.get_username(),
+        email_verified=True,
+    )
 
     assert EmailAddress.objects.filter(user=user).count() == 0
 
@@ -133,7 +230,13 @@ def test_anonymize_account_deletes_only_the_persons_sessions(user) -> None:
     other_client.force_login(other)
     assert _session_user_ids() == {str(user.pk), str(other.pk)}
 
-    anonymize_account(user, "testuser@example.com", "Test User", user.get_username())
+    anonymize_account(
+        user,
+        "testuser@example.com",
+        "Test User",
+        user.get_username(),
+        email_verified=True,
+    )
 
     assert _session_user_ids() == {str(other.pk)}
 
@@ -148,7 +251,13 @@ def test_anonymize_account_leaves_expired_sessions_to_the_session_purge(user) ->
         expire_date=timezone.now() - timedelta(days=1)
     )
 
-    anonymize_account(user, "testuser@example.com", "Test User", user.get_username())
+    anonymize_account(
+        user,
+        "testuser@example.com",
+        "Test User",
+        user.get_username(),
+        email_verified=True,
+    )
 
     assert Session.objects.filter(pk=session.pk).exists()
 
@@ -162,7 +271,13 @@ def test_anonymize_account_tolerates_a_random_session_key(user) -> None:
         expire_date="2999-01-01T00:00:00Z",
     )
 
-    anonymize_account(user, "testuser@example.com", "Test User", user.get_username())
+    anonymize_account(
+        user,
+        "testuser@example.com",
+        "Test User",
+        user.get_username(),
+        email_verified=True,
+    )
 
     assert Session.objects.filter(pk=session.pk).exists()
 
@@ -288,7 +403,13 @@ def test_anonymize_account_avoids_a_taken_deleted_username(user) -> None:
         password="NamesakePass123!",
     )
 
-    anonymize_account(user, "testuser@example.com", "Test User", user.get_username())
+    anonymize_account(
+        user,
+        "testuser@example.com",
+        "Test User",
+        user.get_username(),
+        email_verified=True,
+    )
 
     user.refresh_from_db()
     other.refresh_from_db()

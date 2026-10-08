@@ -237,8 +237,12 @@ class PropertiesConfig(AppConfig):
 ```
 
 A declared treatment other than `KEEP_LINK` needs the declaring app's own
-`anonymize_account` executor and `anonymize_handlers` capability, as above; a
-`PersonalDataExclusion` records a candidate field confirmed not to hold personal
+`anonymize_account` executor and `anonymize_handlers` capability, as above; the
+executor receives the pre-scrub identity (address, full name, username) and an
+`email_verified` keyword stating whether allauth holds a verified login address
+for that account, and it may run an address-based selector only when the keyword
+is true — the address a self-registered account typed is otherwise unproven and
+may belong to someone else. A `PersonalDataExclusion` records a candidate field confirmed not to hold personal
 data, with its reason. `orgs` keeps only the rows no installed module declares
 for itself (its own, Django contrib's, and the installed third-party rows).
 

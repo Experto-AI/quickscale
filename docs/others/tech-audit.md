@@ -255,19 +255,6 @@ items:
      anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/views.py,
                quickscale_modules/notifications/src/quickscale_modules_notifications/_webhooks.py],
      depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: anonymize-matches-unverified-address, status: open, severity: S3, category: III,
-     title: "Self-service account removal rewrites other tenants' rows selected by an unverified address",
-     effort: Small, confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/_anonymization.py,
-               quickscale_modules/notifications/src/quickscale_modules_notifications/_anonymization.py,
-               quickscale_modules/billing/src/quickscale_modules_billing/_anonymization.py],
-     depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: org-invitation-email-unthrottled, status: open, severity: S3, category: III,
-     title: "Any self-registered saas user can send unlimited invitation emails with chosen text",
-     effort: Small, confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/views.py,
-               quickscale_modules/orgs/src/quickscale_modules_orgs/forms.py],
-     depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: deploy-settings-module-from-service-name, status: open, severity: S3, category: VI,
      title: "deploy railway overwrites DJANGO_SETTINGS_MODULE with one derived from the service name",
      effort: Trivial, confidence: High, reality: cli,
@@ -293,11 +280,6 @@ items:
   - {id: frontend-image-floating-deps, status: open, severity: S4, category: VII, effort: Small,
      confidence: High, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: viewas-overrides-management-org, status: open, severity: S4, category: I, effort: Small,
-     confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/middleware.py,
-               quickscale_modules/orgs/src/quickscale_modules_orgs/_view_context.py],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: social-payload-echoes-exception-text, status: open, severity: S4, category: VI,
      effort: Trivial, confidence: High, reality: generated-app,
@@ -344,21 +326,18 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 1 · S3 — 7 · S4 — 7 · total 15 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 1 · S3 — 5 · S4 — 6 · total 12 open. Watchlist: 7.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
 | `billing-checkout-relative-redirect-urls` | S2 | I | Checkout/portal sessions get relative return URLs that Stripe rejects | Trivial | High | new — **quick win** |
 | `generated-ci-fails-out-of-box` | S3 | X | Generated CI workflow cannot pass on a fresh project | Small | High | new |
 | `notifications-webhook-rejects-resend` | S3 | IX | Webhook accepts only a signing contract Resend never sends | Medium | High | new |
-| `anonymize-matches-unverified-address` | S3 | III | Self-service removal rewrites other tenants' rows by unverified address | Small | High | new |
-| `org-invitation-email-unthrottled` | S3 | III | Unlimited invitation emails with attacker-chosen text | Small | High | new |
 | `deploy-settings-module-from-service-name` | S3 | VI | Deploy overwrites `DJANGO_SETTINGS_MODULE` from the service name | Trivial | High | new — **quick win** |
 | `billing-async-payment-never-credited` | S3 | I | Delayed-payment purchases are never credited | Small | Medium | new |
 | `generated-ci-mutable-action-tags` | S3 | VII | Generated CI on mutable action tags, no `permissions:` | Small | High | new |
 | `docker-healthcheck-always-unhealthy` | S4 | VI | Image `HEALTHCHECK` gets 400 under production settings | Trivial | High | new |
 | `frontend-image-floating-deps` | S4 | VII | Production image resolves npm deps unpinned when no lockfile | Small | High | new |
-| `viewas-overrides-management-org` | S4 | I | VIEW-AS org replaces the URL's org on management pages | Small | High | new |
 | `social-payload-echoes-exception-text` | S4 | VI | Public social payload returns `str(exc)` | Trivial | High | new |
 | `forms-notification-status-misreported` | S4 | VI | Submission reports `queued` when notifications are disabled | Trivial | High | new |
 | `deploy-runtime-url-unquoted-password` | S4 | IX | Reused runtime password embedded unquoted in a URL | Trivial | High | new |
@@ -483,46 +462,6 @@ items:
   - **Effort:** Medium. **Confidence:** High (vendor contract confirmed, §1).
   - **Age:** since `1a143fce` (v0.78.0).
 
-- **`anonymize-matches-unverified-address`** · S3 (Moderate × Common) · R2 with default auth
-  options · `orgs/_anonymization.py:46-55`, `notifications/_anonymization.py:78-84`, `:153-160`,
-  `billing/_anonymization.py:43-56`; `auth/module.yml:27-33` (`email_verification` default
-  `"none"`).
-  - **Defect:** Account removal selects rows across all tenants by the account's email address,
-    and that address was never proven owned:
-    - pending and past `OrganizationInvitation` rows, which are expired and re-addressed;
-    - `NotificationDelivery` and linked `NotificationMessage` rows, which are rewritten or
-      wholesale-redacted;
-    - billing `WebhookEvent` payloads, where the email and the account's chosen name are redacted.
-  - **Failure scenario:**
-    1. Anyone registers an unregistered address X (an invitee's address, or a form-notification
-       inbox such as `sales@…`).
-    2. They immediately delete the account.
-    3. Every pending invitation to X in every organization is withdrawn. Every notification
-       delivery to X, in every tenant, loses its recipient and content. Matching Stripe event
-       payloads are rewritten.
-  - **Oracle:** this violates oracle 10 (self-service removal gets no cross-tenant write scope).
-  - **Secondary angle:** the same unverified identity enables classic account pre-hijacking.
-  - **Fix:**
-    - Run address-based selectors only for addresses the account verified (allauth
-      `EmailAddress.verified`). Otherwise scope them to rows linked by user ID.
-    - Alternatively, require verified email before removal runs those selectors.
-  - **Effort:** Small. **Confidence:** High.
-
-- **`org-invitation-email-unthrottled`** · S3 (Moderate × Common, saas mode) · R2 ·
-  `orgs/views.py:236-283` (`InviteView`, a plain Django `FormView`, no throttle) and `:340`
-  (`OrgApiInviteView`, default `user` rate only); `forms.py:155-260`.
-  - **Defect:** Any self-registered user can repeatedly:
-    - create an organization (no cap, name up to 255 characters, rendered in the email);
-    - set their own display name (also rendered in the email);
-    - invite arbitrary addresses, then revoke and re-invite.
-
-    Each invite sends an email from the site's verified sending domain. The result is a phishing
-    and spam relay, plus the risk that the email provider suspends the account that also carries
-    password resets.
-  - **Fix:** Add a scoped DRF throttle on both invite paths (`quickscale_orgs_invite`). Cap
-    pending invitations per org, and invitations per sender per day.
-  - **Effort:** Small. **Confidence:** High.
-
 - **`deploy-settings-module-from-service-name`** · S3 (High × Rare: a non-default name) · R1→R2 ·
   `quickscale_cli/commands/_deploy_service_config.py:86-94`; `deployment_commands.py:114-116`.
   - **Defect:** Every `quickscale deploy railway` sets
@@ -576,11 +515,6 @@ items:
   caret ranges (`package.json.j2`). No lockfile is generated by `apply`, so a project deployed
   before `quickscale up` creates one builds with whatever npm resolves that day. · Commit a
   generated `pnpm-lock.yaml` and use `--frozen-lockfile` in the image.
-- `viewas-overrides-management-org` · `middleware.py:155-157`, `_view_context.py:52-55` · During
-  VIEW-AS the middleware sets `request.org` on management paths too, so
-  `OrganizationContextMixin.get_organization()` returns the impersonated org instead of the URL's
-  `org_slug`. A superuser editing `/orgs/<B>/settings/` changes org A. · Prefer the slug when the
-  route carries one.
 - `social-payload-echoes-exception-text` · `manifest/social_manifest.py:396-400`, `:446-456`,
   `:470-480` · The generated public social payload views return `str(exc)` (database errors carry
   host, role, and table names) to anonymous callers. This violates rules 9 and 26. · Return a
@@ -608,8 +542,8 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | `StripeWebhookView` | Stripe SDK signature over raw body | n/a | named-release gate | JSON | none by rule 26 | SDK default (watch `single-sync-worker-vendor-calls`) | advisory mutex + unique `WebhookEvent` | rule 9; async events: `billing-async-payment-never-credited` | `WebhookEvent` row |
 | Billing JSON views | session (CSRF) | owner via `_require_request_organization` | DRF serializers | JSON | `quickscale_billing_*` scopes | SDK default | Stripe idempotency keys; unknown-outcome reservations reconcile against the provider | rule 9 | reservation rows; return URLs: `billing-checkout-relative-redirect-urls` |
 | `NotificationWebhookView` | custom HMAC: `notifications-webhook-rejects-resend` | n/a | required fields | JSON | none by rule 26 | n/a | idempotency key | rule 9 | delivery event row |
-| Orgs JSON API | session (CSRF) | `min_org_role` on the org it acts on | `JSONParser` + forms | JSON | DRF `user` default; invites: `org-invitation-email-unthrottled` | n/a | n/a | rule 9 | n/a |
-| Orgs HTML views | `LoginRequiredMixin` | `SaasModeRequiredMixin` + `OrgRoleMixin`; VIEW-AS: `viewas-overrides-management-org` | Django forms | autoescape | none: `org-invitation-email-unthrottled` | n/a | n/a | Django | n/a |
+| Orgs JSON API | session (CSRF) | `min_org_role` on the org it acts on | `JSONParser` + forms | JSON | invite sends: `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization), both charged only after the role gate and the form's locked eligibility checks pass; other endpoints: DRF `user` default | n/a | n/a | rule 9 | n/a |
+| Orgs HTML views | `LoginRequiredMixin` | `SaasModeRequiredMixin` + `OrgRoleMixin`; the route slug wins over VIEW-AS | Django forms | autoescape | invite sends: `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization), both charged only after the role gate and the form's locked eligibility checks pass; pending cap per organization | n/a | n/a | Django | n/a |
 | Invitation accept | login | token + normalized email match | UUID | autoescape | n/a | n/a | `select_for_update` | Django | n/a |
 | VIEW-AS | login | superuser, POST only | slug | n/a | n/a | n/a | n/a | 404 | INFO log |
 | CRM API | session (CSRF) | `HasOrgRole` viewer/member | serializers reject foreign-org FKs; composite FKs | DRF | DRF defaults | n/a | n/a | rule 9 | n/a |
@@ -619,8 +553,8 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Blog/listings public reads | none | System org or active org via `org_scope` | slug | markdown over escaped text + href scheme filter | none | n/a | n/a | Django | n/a |
 | Social payload endpoints (generated) | none | System or active org; org-partitioned cache | n/a | `JsonResponse` | none | n/a | n/a | `social-payload-echoes-exception-text` | n/a |
 | Analytics page | session (login required) | active organization's `viewer` role | n/a | autoescape | none | n/a | n/a | Django | n/a |
-| `AccountDeleteView` → anonymize boundary | login | self; last-owner check under locks | form | autoescape | allauth N/A | provider I/O outside atomics | compensating resume | messages | skip log; cross-tenant selectors: `anonymize-matches-unverified-address` |
-| auth (allauth) | allauth | n/a | allauth forms | autoescape | allauth `ACCOUNT_RATE_LIMITS` defaults | n/a | n/a | allauth | n/a; ownership: `anonymize-matches-unverified-address` (verification default `none`) |
+| `AccountDeleteView` → anonymize boundary | login | self; last-owner check under locks | form | autoescape | allauth N/A | provider I/O outside atomics | compensating resume | messages | skip log; address-based selectors require a verified address |
+| auth (allauth) | allauth | n/a | allauth forms | autoescape | allauth `ACCOUNT_RATE_LIMITS` defaults | n/a | n/a | allauth | n/a; address-based anonymization selectors require allauth verification |
 | Backups admin restore | admin session | `change_backuppolicy` + `QUICKSCALE_BACKUPS_ALLOW_RESTORE` (watch) | confirmation = filename; custom-dump only | autoescape | n/a | background `Popen` | atomic claim | messages | status row |
 | `TenantMiddleware` | — | saas membership or 403; solo personal org; VIEW-AS superuser | UUID parse | n/a | n/a | n/a | n/a | 403/redirect; unmounted orgs pass through (`a621299b`) | n/a |
 | Management commands (purge/prune/anonymize/restore) | shell | reserved-org guards | args | n/a | n/a | n/a | `--dry-run` on all destructive commands | `CommandError` | tombstones/logs |
@@ -650,8 +584,12 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
    `generated-ci-fails-out-of-box`, `generated-ci-mutable-action-tags`,
    `docker-healthcheck-always-unhealthy`, `frontend-image-floating-deps`. These touch overlapping
    templates (`ci.yml.j2`, `Dockerfile.j2`), so land them together.
-4. **Self-registration hardening:** `anonymize-matches-unverified-address` and
-   `org-invitation-email-unthrottled`. These are independent files and can run in parallel.
+4. **Self-registration hardening (landed).** `anonymize-matches-unverified-address`,
+   `org-invitation-email-unthrottled`, and `viewas-overrides-management-org` are fixed: the
+   anonymization handlers gate their address selectors on allauth verification, both invite paths
+   carry the `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per
+   organization) scopes with a per-organization pending cap, and management pages resolve their
+   organization from the route slug.
 5. **`notifications-webhook-rejects-resend`.** Independent.
 6. **CLI deploy:** `deploy-settings-module-from-service-name` with
    `deploy-runtime-url-unquoted-password` (same file).
@@ -663,7 +601,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 
 | Subsystem | Verdict | What was read |
 |---|---|---|
-| orgs | `viewas-overrides-management-org`; invite part of `org-invitation-email-unthrottled`; invitation scrub part of `anonymize-matches-unverified-address` | Middleware, priming, scopes, permissions, views, API, invitations, anonymization (full). Tenant isolation layers verified. |
+| orgs | clean. Management pages resolve the route slug over VIEW-AS; invitation sends are throttled per sender with a per-organization pending cap; invitation scrubs gate on a verified address. | Middleware, priming, scopes, permissions, views, API, invitations, anonymization (full). Tenant isolation layers verified. |
 | billing | `billing-checkout-relative-redirect-urls`, `billing-async-payment-never-credited` | Views, webhooks, credits, checkout, client, removal (full). Signature, dedupe, and ledger locking verified. |
 | notifications | `notifications-webhook-rejects-resend` | Webhook path and anonymization (full). |
 | analytics | clean. The distinct ID no longer derives from the session key, and the overview page requires login and the viewer role. | Full. |
@@ -671,7 +609,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | blog | clean | Views, upload validation, `upload_to`, markdown rendering (full). |
 | listings | clean | Publish API and service (full). |
 | crm | clean | Serializers and viewset permissions (sampled). |
-| auth | clean except the default noted in `anonymize-matches-unverified-address` | Delete view and adapters. |
+| auth | clean. The anonymize boundary captures allauth verification before the hooks run, and address-based selectors require it. | Delete view and adapters. |
 | social | `social-payload-echoes-exception-text` (generated views) | Cache keys clean. |
 | storage | clean | Manifest defaults only. |
 | backups | clean; one watch item | Admin restore and dispatch (sampled). |
@@ -833,8 +771,6 @@ Added:
    re-signs? A relay downgrades `notifications-webhook-rejects-resend` to a documentation fix.
 3. Are delayed-notification payment methods (SEPA, ACH, Bacs, bank transfer) enabled on the
    Stripe accounts in use? This decides whether `billing-async-payment-never-credited` is live.
-4. Do production projects keep the auth default `email_verification: none`? `mandatory`
-   downgrades `anonymize-matches-unverified-address`.
 
 ---
 
@@ -1015,3 +951,27 @@ Added:
   (`StripeClient.find_checkout_session_by_reference`, `_removal.py`, `_subscription_checkout.py`);
   and `quickscale_billing_reconcile_checkouts` clears accumulated rows under the organization's
   provider mutation mutex. Verified by the billing, orgs, and auth suites.
+- 2026-10-08 — `anonymize-matches-unverified-address`: **resolved** (SA254). Auth's anonymize
+  boundary captures whether allauth holds a verified `EmailAddress` for the account's address
+  before any hook runs, and passes it as the `email_verified` keyword to every executor; orgs,
+  notifications, and billing run their address-based selectors only when it is true, scoping an
+  unverified account to its user-linked rows (billing's `WebhookEvent` has no user link, so an
+  unverified address scrubs nothing). Tests pin a verified and an unverified address, including a
+  second tenant holding the same unverified address. Dropped from the index and summary.
+- 2026-10-08 — `org-invitation-email-unthrottled`: **resolved** (SA254). Both invite paths carry
+  the `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per target
+  organization) DRF scopes, both fed by the `invite_rate_limit` option; both buckets are charged
+  only after the role gate and the form's locked eligibility checks pass, so neither an
+  unauthorized, invalid, cap-refused, nor duplicate attempt drains them, and a refused throttle
+  rolls the just-written invitation back so no email is sent. Each organization caps its active
+  pending invitations at
+  `pending_invitation_limit` under the organization row lock, and the invitation email's
+  sender-chosen organization and inviter names are bounded by their stored fields and rendered
+  escaped. Tests cover 429 past the scope rates on both paths, the organization aggregate budget
+  across senders, the pending cap, and the bounding and escaping. Dropped from the index and
+  summary.
+- 2026-10-08 — `viewas-overrides-management-org`: **resolved** (SA254).
+  `OrganizationContextMixin.get_organization()` resolves the route's `org_slug` before falling
+  back to `request.org`, so a management page under VIEW-AS acts on the organization its URL
+  names; a regression test edits `/orgs/<B>/settings/` under a VIEW-AS session for A and proves B
+  changes and A does not. Dropped from the index and summary.

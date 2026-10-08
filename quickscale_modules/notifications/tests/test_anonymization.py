@@ -72,7 +72,13 @@ def test_anonymize_scrubs_a_sole_recipient_message_delivery_and_event() -> None:
         },
     )
 
-    anonymize_account(user, "Alpha@Example.com", "Alpha Person", user.get_username())
+    anonymize_account(
+        user,
+        "Alpha@Example.com",
+        "Alpha Person",
+        user.get_username(),
+        email_verified=True,
+    )
 
     deleted_address = f"deleted-{user.pk}@invalid"
     delivery.refresh_from_db()
@@ -98,7 +104,13 @@ def test_anonymize_keeps_a_shared_message_and_other_recipients(queued_message) -
     alpha = queued_message.deliveries.get(recipient_email="alpha@example.com")
     beta = queued_message.deliveries.get(recipient_email="beta@example.com")
 
-    anonymize_account(user, "alpha@example.com", "Alpha Person", user.get_username())
+    anonymize_account(
+        user,
+        "alpha@example.com",
+        "Alpha Person",
+        user.get_username(),
+        email_verified=True,
+    )
 
     queued_message.refresh_from_db()
     alpha.refresh_from_db()
@@ -131,7 +143,13 @@ def test_anonymize_redacts_identity_from_a_shared_message() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "alpha@example.com", "Alpha Person", user.get_username())
+    anonymize_account(
+        user,
+        "alpha@example.com",
+        "Alpha Person",
+        user.get_username(),
+        email_verified=True,
+    )
 
     message.refresh_from_db()
     beta.refresh_from_db()
@@ -166,7 +184,13 @@ def test_anonymize_redacts_an_html_escaped_name_in_a_shared_message() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "alpha@example.com", "Anne O'Connor", user.get_username())
+    anonymize_account(
+        user,
+        "alpha@example.com",
+        "Anne O'Connor",
+        user.get_username(),
+        email_verified=True,
+    )
 
     message.refresh_from_db()
     assert message.subject == "Hi [redacted]"
@@ -192,7 +216,13 @@ def test_anonymize_leaves_identity_bearing_context_keys_untouched() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "alpha@example.com", "Alpha Person", user.get_username())
+    anonymize_account(
+        user,
+        "alpha@example.com",
+        "Alpha Person",
+        user.get_username(),
+        email_verified=True,
+    )
 
     message.refresh_from_db()
     assert message.context_json == {
@@ -221,7 +251,13 @@ def test_anonymize_leaves_provider_payload_keys_untouched() -> None:
         },
     )
 
-    anonymize_account(user, "alpha@example.com", "Alpha Person", user.get_username())
+    anonymize_account(
+        user,
+        "alpha@example.com",
+        "Alpha Person",
+        user.get_username(),
+        email_verified=True,
+    )
 
     event.refresh_from_db()
     assert event.payload_json == {
@@ -248,7 +284,9 @@ def test_anonymize_keeps_the_sentinel_when_a_name_matches_it() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "alpha@example.com", "Deleted", user.get_username())
+    anonymize_account(
+        user, "alpha@example.com", "Deleted", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     deleted_address = f"deleted-{user.pk}@invalid"
@@ -273,7 +311,9 @@ def test_anonymize_leaves_an_overlapping_address_untouched() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "test@example.com", "", user.get_username())
+    anonymize_account(
+        user, "test@example.com", "", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     assert message.rendered_text == "Contact protest@example.com"
@@ -319,7 +359,11 @@ def test_anonymize_redacts_an_invitation_message_sent_to_someone_else(
         )
 
     anonymize_account(
-        inviter, "helios@example.com", "Helios Admin", inviter.get_username()
+        inviter,
+        "helios@example.com",
+        "Helios Admin",
+        inviter.get_username(),
+        email_verified=True,
     )
 
     message.refresh_from_db()
@@ -349,7 +393,13 @@ def test_anonymize_selects_a_message_through_the_stored_link() -> None:
         message=message, recipient_email="archive@example.com"
     )
 
-    anonymize_account(user, "linked@example.com", "Linked Person", user.get_username())
+    anonymize_account(
+        user,
+        "linked@example.com",
+        "Linked Person",
+        user.get_username(),
+        email_verified=True,
+    )
 
     message.refresh_from_db()
     assert message.about_user_ids_json == []
@@ -379,7 +429,11 @@ def test_anonymize_keeps_other_persons_links_on_a_shared_message() -> None:
     )
 
     anonymize_account(
-        user, "linked-shared@example.com", "Linked Shared", user.get_username()
+        user,
+        "linked-shared@example.com",
+        "Linked Shared",
+        user.get_username(),
+        email_verified=True,
     )
 
     message.refresh_from_db()
@@ -410,7 +464,9 @@ def test_anonymize_redacts_an_html_escaped_address() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "o'connor@example.com", "", user.get_username())
+    anonymize_account(
+        user, "o'connor@example.com", "", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     deleted_address = f"deleted-{user.pk}@invalid"
@@ -444,7 +500,9 @@ def test_anonymize_preserves_an_overlapping_escaped_address() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "o'connor@example.com", "", user.get_username())
+    anonymize_account(
+        user, "o'connor@example.com", "", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     assert "proo&#x27;connor@example.com" in message.rendered_html
@@ -469,7 +527,7 @@ def test_anonymize_redacts_an_address_whose_local_part_starts_with_a_quote() -> 
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, address, "", "ann")
+    anonymize_account(user, address, "", "ann", email_verified=True)
 
     message.refresh_from_db()
     deleted_address = f"deleted-{user.pk}@invalid"
@@ -492,7 +550,9 @@ def test_anonymize_leaves_unrelated_text_with_a_short_name_untouched() -> None:
         message=message, recipient_email="joanne@example.com"
     )
 
-    anonymize_account(user, "ann@example.com", "Ann", "qs-anon-user")
+    anonymize_account(
+        user, "ann@example.com", "Ann", "qs-anon-user", email_verified=True
+    )
 
     message.refresh_from_db()
     assert message.subject == "Annual announcement for Joanne"
@@ -525,7 +585,7 @@ def test_anonymize_redacts_a_username_only_inviters_message() -> None:
         message=message, recipient_email="invitee@example.com"
     )
 
-    anonymize_account(inviter, "helios@example.com", "", "helios")
+    anonymize_account(inviter, "helios@example.com", "", "helios", email_verified=True)
 
     message.refresh_from_db()
     assert "helios" not in message.rendered_text
@@ -559,7 +619,9 @@ def test_anonymize_preserves_an_entity_continued_escaped_address() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "o'connor@example.com", "", user.get_username())
+    anonymize_account(
+        user, "o'connor@example.com", "", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     assert "x&amp;o&#x27;connor@example.com" in message.rendered_html
@@ -586,7 +648,7 @@ def test_anonymize_preserves_other_addresses_when_redacting_names() -> None:
         message=message, recipient_email="joanne@example.com"
     )
 
-    anonymize_account(user, "ann@example.com", "Ann", "helios")
+    anonymize_account(user, "ann@example.com", "Ann", "helios", email_verified=True)
 
     message.refresh_from_db()
     assert message.rendered_text == (
@@ -616,7 +678,7 @@ def test_anonymize_redacts_a_quoted_apostrophe_address() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, address, "", "ann")
+    anonymize_account(user, address, "", "ann", email_verified=True)
 
     message.refresh_from_db()
     deleted_address = f"deleted-{user.pk}@invalid"
@@ -651,7 +713,9 @@ def test_anonymize_preserves_an_escaped_unrelated_address_when_redacting_names()
         message=message, recipient_email="joanne@example.com"
     )
 
-    anonymize_account(user, "ann@example.com", "Ann", "qs-anon-user")
+    anonymize_account(
+        user, "ann@example.com", "Ann", "qs-anon-user", email_verified=True
+    )
 
     message.refresh_from_db()
     assert "ann&amp;smith@example.com" in message.rendered_html
@@ -684,7 +748,9 @@ def test_anonymize_preserves_an_ampersand_leading_unrelated_address() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "o'connor@example.com", "", user.get_username())
+    anonymize_account(
+        user, "o'connor@example.com", "", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     assert "&amp;o&#x27;connor@example.com" in message.rendered_html
@@ -716,7 +782,9 @@ def test_anonymize_preserves_an_ampersand_behind_quote_entities() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "o'connor@example.com", "", user.get_username())
+    anonymize_account(
+        user, "o'connor@example.com", "", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     assert "&amp;&#x27;&#x27;&#x27;&#x27;o&#x27;connor@example.com" in (
@@ -749,7 +817,9 @@ def test_anonymize_redacts_a_quoted_escaped_apostrophe_address() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "o'connor@example.com", "", user.get_username())
+    anonymize_account(
+        user, "o'connor@example.com", "", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     deleted_address = f"deleted-{user.pk}@invalid"
@@ -780,7 +850,7 @@ def test_anonymize_redacts_a_quoted_escaped_leading_apostrophe_address() -> None
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, address, "", "ann")
+    anonymize_account(user, address, "", "ann", email_verified=True)
 
     message.refresh_from_db()
     deleted_address = f"deleted-{user.pk}@invalid"
@@ -806,7 +876,9 @@ def test_anonymize_redacts_a_quoted_address_in_free_text() -> None:
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "test@example.com", "", user.get_username())
+    anonymize_account(
+        user, "test@example.com", "", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     deleted_address = f"deleted-{user.pk}@invalid"
@@ -819,7 +891,9 @@ def test_anonymize_without_a_matching_delivery_changes_nothing(queued_message) -
     """A person with no deliveries leaves every stored record untouched."""
     user = _user("nobody@example.com")
 
-    anonymize_account(user, "nobody@example.com", "Nobody", user.get_username())
+    anonymize_account(
+        user, "nobody@example.com", "Nobody", user.get_username(), email_verified=True
+    )
 
     queued_message.refresh_from_db()
     assert queued_message.subject == "Queued message"
@@ -835,7 +909,13 @@ def test_anonymize_keeps_an_empty_render_field_empty() -> None:
         recipient_email="alpha@example.com",
     )
 
-    anonymize_account(user, "alpha@example.com", "Alpha Person", user.get_username())
+    anonymize_account(
+        user,
+        "alpha@example.com",
+        "Alpha Person",
+        user.get_username(),
+        email_verified=True,
+    )
 
     message.refresh_from_db()
     assert message.rendered_html == ""
@@ -862,7 +942,9 @@ def test_anonymize_leaves_an_unrelated_message_with_a_common_word_untouched() ->
     )
     before = _rendered_snapshot(message)
 
-    anonymize_account(user, "alpha@example.com", "Ann", user.get_username())
+    anonymize_account(
+        user, "alpha@example.com", "Ann", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     assert _rendered_snapshot(message) == before
@@ -884,7 +966,9 @@ def test_anonymize_leaves_a_substring_address_context_untouched() -> None:
     )
     before = _rendered_snapshot(message)
 
-    anonymize_account(user, "ann@example.com", "Ann", user.get_username())
+    anonymize_account(
+        user, "ann@example.com", "Ann", user.get_username(), email_verified=True
+    )
 
     message.refresh_from_db()
     assert _rendered_snapshot(message) == before
@@ -915,7 +999,13 @@ def test_anonymize_redacts_a_pre_key_message_that_names_the_person_by_address() 
         message=message, recipient_email="beta@example.com"
     )
 
-    anonymize_account(user, "helios@example.com", "Helios Admin", user.get_username())
+    anonymize_account(
+        user,
+        "helios@example.com",
+        "Helios Admin",
+        user.get_username(),
+        email_verified=True,
+    )
 
     message.refresh_from_db()
     deleted_address = f"deleted-{user.pk}@invalid"
@@ -970,6 +1060,7 @@ def test_anonymize_leaves_a_pre_actor_key_invitation_without_an_address_link() -
         "pre-key-inviter@example.com",
         "Pre-Key Inviter",
         inviter.get_username(),
+        email_verified=True,
     )
 
     message.refresh_from_db()
@@ -1024,7 +1115,13 @@ def test_declared_treatments_hold_on_a_populated_user() -> None:
         },
     )
 
-    anonymize_account(user, "Alpha@Example.com", "Alpha Person", user.get_username())
+    anonymize_account(
+        user,
+        "Alpha@Example.com",
+        "Alpha Person",
+        user.get_username(),
+        email_verified=True,
+    )
 
     deleted_address = f"deleted-{user.pk}@invalid"
     message.refresh_from_db()
@@ -1071,3 +1168,89 @@ def test_declared_non_candidate_fields_stay_pinned() -> None:
         ("NotificationDelivery", "failure_reason"),
         ("NotificationDeliveryEvent", "payload_json"),
     }
+
+
+@pytest.mark.django_db
+def test_unverified_address_leaves_deliveries_and_their_messages_untouched() -> None:
+    """An unverified address may belong to someone else, so it selects nothing."""
+    user = _user("unverified@example.com")
+    message = _message()
+    delivery = NotificationDelivery.objects.create(
+        message=message,
+        recipient_email="unverified@example.com",
+        failure_reason="unverified@example.com mailbox full",
+    )
+    event = NotificationDeliveryEvent.objects.create(
+        delivery=delivery,
+        idempotency_key="unverified-1",
+        event_type="bounced",
+        status_after="bounced",
+        payload_json={"to": "unverified@example.com"},
+    )
+    before = _rendered_snapshot(message)
+
+    anonymize_account(
+        user,
+        "Unverified@Example.com",
+        "Unverified Person",
+        user.get_username(),
+        email_verified=False,
+    )
+
+    delivery.refresh_from_db()
+    event.refresh_from_db()
+    message.refresh_from_db()
+    assert delivery.recipient_email == "unverified@example.com"
+    assert delivery.failure_reason == "unverified@example.com mailbox full"
+    assert event.payload_json == {"to": "unverified@example.com"}
+    assert _rendered_snapshot(message) == before
+
+
+@pytest.mark.django_db
+def test_unverified_address_skips_the_context_fallback_selector() -> None:
+    """A message selected only by the address fallback stays as stored."""
+    user = _user("fallback@example.com")
+    message = _message(
+        context_json={"recipient": "fallback@example.com", "body": "pre-key"},
+        about_user_ids_json=[],
+    )
+    before = _rendered_snapshot(message)
+
+    anonymize_account(
+        user,
+        "fallback@example.com",
+        "Fallback Person",
+        user.get_username(),
+        email_verified=False,
+    )
+
+    message.refresh_from_db()
+    assert _rendered_snapshot(message) == before
+    assert message.context_json["recipient"] == "fallback@example.com"
+
+
+@pytest.mark.django_db
+def test_unverified_address_still_scrubs_a_user_linked_message() -> None:
+    """The person's own link selects the message even without verification."""
+    user = _user("linked-unverified@example.com")
+    message = _message(
+        subject="About Linked Unverified",
+        rendered_text="Linked Unverified updated the workspace.",
+        rendered_html="",
+        context_json={"author_name": "Linked Unverified", "body": "shared"},
+        last_error="",
+        about_user_ids_json=[str(user.pk)],
+    )
+
+    anonymize_account(
+        user,
+        "linked-unverified@example.com",
+        "Linked Unverified",
+        user.get_username(),
+        email_verified=False,
+    )
+
+    message.refresh_from_db()
+    assert message.about_user_ids_json == []
+    assert "Linked Unverified" not in message.rendered_text
+    assert message.context_json["author_name"] == "[redacted]"

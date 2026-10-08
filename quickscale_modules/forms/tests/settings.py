@@ -15,6 +15,8 @@ SECRET_KEY = "test-secret-key-for-forms-module"
 DEBUG = True
 
 QUICKSCALE_ORGS_ENABLED = True
+QUICKSCALE_ORGS_INVITE_RATE_LIMIT = "20/day"
+QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT = 50
 QUICKSCALE_ORGS_MODE = "saas"
 
 # The notifications webhook signing secret must resolve because the suite

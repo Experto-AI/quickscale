@@ -365,7 +365,7 @@ Plan.features             → JSONField(default=list) (sole entitlement source)
 
 `Organization.stripe_customer_id` is the Stripe customer identifier. Every populated Stripe customer id is globally unique across organizations, with a database constraint as the final concurrency backstop; cross-org reuse is rejected before assignment. The Org Owner's email is the Stripe billing email. When the Owner transfers ownership, the Stripe customer record stays with the organization (not the departing user).
 
-Account removal disables and anonymizes the account in place: the user row is retained so billing and authored records keep their attribution, and the person's memberships are removed. The removal discovers the organizations holding the person's billing provider state through the narrow orgs-owned read-only seam (one indexed query per matching tenant model; no elevated scope exposed to the request), locks those organizations together with the person's member organizations, and requires each one's one-time purchase checkouts to be provider-terminal before the scrub — a checkout can stay attributed in an organization the person has left. Invitations are control-plane rows, so the invitation scrub matches the person's address globally without elevated scope. No cross-tenant write scope is used and no reference is nulled.
+Account removal disables and anonymizes the account in place: the user row is retained so billing and authored records keep their attribution, and the person's memberships are removed. The removal discovers the organizations holding the person's billing provider state through the narrow orgs-owned read-only seam (one indexed query per matching tenant model; no elevated scope exposed to the request), locks those organizations together with the person's member organizations, and requires each one's one-time purchase checkouts to be provider-terminal before the scrub — a checkout can stay attributed in an organization the person has left. Invitations are control-plane rows, so the invitation scrub matches the person's address globally without elevated scope — but only when allauth verifies that address; an unverified address selects nothing and the person's own keys scope the rest. No cross-tenant write scope is used and no reference is nulled.
 
 Credit transactions stay attributed to the acting user (`CreditTransaction.user`) while debiting the authoritative organization balance; that user link survives account removal and nulls cleanly on operator hard delete, so the org ledger row remains intact.
 
@@ -492,6 +492,17 @@ Invitations are active only in SaaS mode. In Solo mode the invitation views stay
 5. Expired or already-accepted tokens return HTTP 410 with a user-facing message.
 6. Revoking an invitation deletes the `OrganizationInvitation` row; the token URL becomes HTTP 404.
 7. Ordinary SaaS no-membership traffic still goes to `/orgs/new/`; the public invitation accept path is the narrow bootstrap carveout for pending invite continuation.
+
+Both invite paths (the HTML members surface and the JSON API) are throttled through two DRF
+scopes fed by the `invite_rate_limit` option: `quickscale_orgs_invite` per sender (revoking and
+re-inviting does not reset it, and it spans every organization) and
+`quickscale_orgs_invite_organization` per target organization (every sender shares one budget).
+Both buckets are charged only after the role and eligibility checks pass, so an attempt refused
+by the role gate, validation, the pending cap, or the duplicate guard spends neither budget; a
+throttle refusal rolls the invitation back, so no invitation and no email result. Each
+organization additionally caps its active pending invitations at `pending_invitation_limit`,
+enforced under the organization row lock. The invitation email's sender-chosen text (the
+organization and inviter names) is bounded by its stored fields and rendered escaped.
 
 ### Focused Validation Notes
 

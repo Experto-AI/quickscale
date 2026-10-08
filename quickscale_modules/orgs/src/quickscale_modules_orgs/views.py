@@ -40,6 +40,7 @@ from rest_framework.exceptions import (
     NotAuthenticated as NotAuthenticated,
     NotFound as NotFound,
     PermissionDenied as PermissionDenied,
+    Throttled as Throttled,
     ValidationError as DRFValidationError,
 )
 from rest_framework.parsers import JSONParser as JSONParser
@@ -97,6 +98,10 @@ from quickscale_modules_orgs.models import (
 from quickscale_modules_orgs.permissions import (
     OrgRoleMixin,
     user_has_org_role as user_has_org_role,
+)
+from quickscale_modules_orgs.throttles import (
+    OrgInviteOrganizationThrottle,
+    OrgInviteThrottle,
 )
 
 _UNSET = object()
@@ -196,7 +201,12 @@ class InvitationNotificationMixin:
         invitation: OrganizationInvitation,
     ) -> dict[str, str]:
         # The inviter link travels as the sender's ``about_users`` argument
-        # (rule 50); the context carries render data only.
+        # (rule 50); the context carries render data only.  The sender chooses
+        # the organization's and inviter's names, but each is bounded by its
+        # own stored field (255 for the organization name, the account name
+        # fields for the inviter) — never truncated here, so the stored
+        # spelling is the one account anonymization matches — and the
+        # template's autoescaping escapes it in the HTML body.
         return {
             "organization_name": invitation.organization.name,
             "invitee_email": invitation.email,
@@ -274,9 +284,28 @@ class InviteView(
         )
 
     def form_valid(self, form: InviteForm) -> HttpResponse:
-        invitation = self.save_invitation_form(form)
-        if invitation is None:
-            return self.form_invalid(form)
+        # Rule 32: the invitation send is throttled per sender and per target
+        # organization.  Both buckets are charged only after the form's locked
+        # eligibility checks pass: an attempt the pending cap or duplicate
+        # guard refuses never spends a budget, and a refused throttle rolls
+        # the just-written invitation back so no email is sent.
+        try:
+            with transaction.atomic():
+                invitation = self.save_invitation_form(form)
+                if invitation is None:
+                    return self.form_invalid(form)
+                if not OrgInviteThrottle().allow_request(
+                    self.request, self
+                ) or not OrgInviteOrganizationThrottle().allow_request(
+                    self.request, self
+                ):
+                    raise Throttled()
+        except Throttled:
+            return HttpResponse(
+                "Too many invitation sends. Try again later.",
+                status=429,
+                content_type="text/plain",
+            )
 
         return self.get_members_redirect()
 
@@ -345,6 +374,11 @@ class OrgApiInviteView(
     """Create an organization invitation from a JSON payload."""
 
     min_org_role = OrgRole.ADMIN
+    # Both buckets are charged manually after the form's locked eligibility
+    # checks (below), exactly like the HTML path, so an attempt the role gate,
+    # the pending cap, or the duplicate guard refuses never spends a budget;
+    # DRF's own throttle pass is therefore disabled for this view.
+    throttle_classes = ()
 
     def post(
         self,
@@ -359,9 +393,16 @@ class OrgApiInviteView(
         if not form.is_valid():
             raise DRFValidationError(_view_serialization._form_error_data(form))
 
-        invitation = self.save_invitation_form(form)
-        if invitation is None:
-            raise DRFValidationError(_view_serialization._form_error_data(form))
+        # A refused throttle rolls the just-written invitation back, so the
+        # 429 leaves no invitation and sends no email.
+        with transaction.atomic():
+            invitation = self.save_invitation_form(form)
+            if invitation is None:
+                raise DRFValidationError(_view_serialization._form_error_data(form))
+            if not OrgInviteThrottle().allow_request(
+                request, self
+            ) or not OrgInviteOrganizationThrottle().allow_request(request, self):
+                raise Throttled()
 
         return Response(
             {"invitation": _view_serialization._serialize_invitation(invitation)},

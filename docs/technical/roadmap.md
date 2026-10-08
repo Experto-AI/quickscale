@@ -48,7 +48,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA255 | Accept Resend's real webhook signature in notifications | 2 | — | Optional |
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
 | SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
-| SA254 | Harden self-registration: anonymize scope, invitation throttle, VIEW-AS scope | 3 | — | Optional |
 | SA258 | Move the module↔project seam from user-owned generated files into the runtime | 3 | — | Optional |
 | SA264 | One module error base, one HTTP mapping, and one startup-check order | 3 | — | Optional |
 | SA262 | One JSON API contract: guards, 401, pagination, throttles, and DRF keys | 3 | SA264 | Optional |
@@ -60,7 +59,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 Track 1: SA191 ═╗ SA257 ──► SA266 ──► SA204 ──► SA153 ──► SA154 (inventory)
                (interleaves while SA191 waits on the maintainer)
 Track 2: SA251 ──► SA256 ──► SA259 ──► SA253 ──► SA255 ──► SA260 ──► SA263
-Track 3: SA254 ──► SA265 ──► SA258 ──► SA264 ──► SA262 ──► SA261
+Track 3: SA265 ──► SA258 ──► SA264 ──► SA262 ──► SA261
      release path:  SA251 → publish 0.89.0
      critical path: SA191 → SA153, joined by SA259 (T2) and SA265 (T3) → SA204 → SA153
 ```
@@ -92,7 +91,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA251 | yes | yes | yes | **yes** | no |
-| 3 | SA254 | yes | yes | yes | **yes** | no |
+| 3 | SA265 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -393,23 +392,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** `ci.yml.j2`, `Dockerfile.j2`, the test-settings line of `base.py.j2`,
   `scripts/check_workflow_security.py`, the new gate, and the tech audit.
 
-- [ ] **SA254 — Harden self-registration: anonymize scope, invitation throttle, VIEW-AS scope.**
-
-  **Context:** with the auth default `email_verification: none`, self-service removal rewrites
-  other tenants' rows selected by an unverified address (tech audit
-  `anonymize-matches-unverified-address`, S3). Any self-registered saas user can send unlimited
-  invitation emails with chosen text (`org-invitation-email-unthrottled`, S3). A VIEW-AS
-  organization replaces the URL's organization on management pages
-  (`viewas-overrides-management-org`, S4).
-
-  **Acceptance:** the orgs, notifications, and billing anonymization handlers select rows by the
-  user's own keys or a verified address only, with a test where another tenant holds the same
-  unverified address. Invitation sends are throttled per user and per organization through a
-  rule 32 scope, and the free-text message is bounded and escaped. Management pages resolve the
-  organization from the URL, never from VIEW-AS.
-
-  **Surfaces:** the three `_anonymization.py` handlers, orgs `views.py`, `forms.py`,
-  `middleware.py`, `_view_context.py`, their tests, and the tech audit.
+- [x] **SA254 — Harden self-registration: anonymize scope, invitation throttle, VIEW-AS scope.**
 
 - [ ] **SA255 — Accept Resend's real webhook signature in notifications.**
 
