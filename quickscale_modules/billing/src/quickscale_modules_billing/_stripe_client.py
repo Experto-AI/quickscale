@@ -250,6 +250,49 @@ class StripeClient:
         checkout_session = checkout_session_api.retrieve(checkout_session_id)
         return _normalize_mapping(checkout_session)
 
+    def find_checkout_session_by_reference(
+        self,
+        *,
+        customer_id: str,
+        metadata_key: str,
+        reference: str,
+    ) -> dict[str, Any] | None:
+        """Return the customer's Checkout Session carrying one reservation marker.
+
+        Stripe exposes no metadata search for Checkout Sessions, so the
+        reservation is looked up in the customer's session list and matched on
+        its immutable reference.  ``None`` means the customer holds no such
+        session, which proves the refused or lost create request produced no
+        provider object.
+        """
+        self._activate_api_key()
+        normalized_reference = reference.strip()
+        if not normalized_reference:
+            raise BillingValidationError(
+                "A checkout reconciliation reference is required."
+            )
+        checkout_session_api = self._resolve_checkout_session_api()
+        list_sessions = getattr(checkout_session_api, "list", None)
+        if list_sessions is None:
+            raise BillingConfigurationError(
+                "Stripe Checkout Session list support is unavailable in this "
+                "environment."
+            )
+        matches = [
+            item
+            for item in _checkout_session_list_items(
+                list_sessions(customer=customer_id, limit=100)
+            )
+            if _checkout_session_metadata_reference(item, metadata_key)
+            == normalized_reference
+        ]
+        if len(matches) > 1:
+            raise BillingError(
+                "Stripe returned multiple checkout sessions carrying the same "
+                "reservation reference; manual provider reconciliation is required."
+            )
+        return matches[0] if matches else None
+
     def retrieve_payment_intent(self, *, payment_intent_id: str) -> dict[str, Any]:
         """Return a normalized Stripe PaymentIntent payload."""
         self._activate_api_key()
@@ -345,6 +388,53 @@ def _require_absolute_url(*, field_name: str, value: str) -> None:
         raise BillingValidationError(message) from exc
     if not parsed.scheme or not parsed.hostname:
         raise BillingValidationError(message)
+
+
+def _checkout_session_list_items(list_result: Any) -> list[dict[str, Any]]:
+    """Normalize a Checkout Session list page and every following page."""
+    auto_paging_iter = getattr(list_result, "auto_paging_iter", None)
+    if callable(auto_paging_iter):
+        return [_normalize_mapping(item) for item in auto_paging_iter()]
+    items = getattr(list_result, "data", list_result)
+    if isinstance(items, Mapping):
+        items = items.get("data", [])
+    return [_normalize_mapping(item) for item in items or []]
+
+
+def _checkout_session_metadata_reference(
+    checkout_session: Mapping[str, Any],
+    metadata_key: str,
+) -> str:
+    """Return one checkout session's metadata marker, normalized."""
+    metadata = checkout_session.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return ""
+    return str(metadata.get(metadata_key) or "").strip()
+
+
+def _stripe_definitive_error_classes() -> tuple[type[BaseException], ...]:
+    """Stripe error classes that prove the request created no provider object.
+
+    A 4xx rejection (bad request, bad credentials, missing permission) is a
+    definitive answer from the provider: the refused call created nothing, so
+    a reservation left by it can be closed instead of holding an unknown
+    outcome.  The SDK is an optional runtime dependency, so the classes are
+    resolved at the service boundary; an empty tuple simply matches nothing.
+    """
+    try:
+        stripe_module = import_module("stripe")
+    except ImportError:
+        return ()
+    classes: list[type[BaseException]] = []
+    for class_name in (
+        "InvalidRequestError",
+        "AuthenticationError",
+        "PermissionError",
+    ):
+        error_class = getattr(stripe_module, class_name, None)
+        if isinstance(error_class, type) and issubclass(error_class, BaseException):
+            classes.append(error_class)
+    return tuple(classes)
 
 
 def _stripe_error_classes() -> tuple[type[BaseException], ...]:

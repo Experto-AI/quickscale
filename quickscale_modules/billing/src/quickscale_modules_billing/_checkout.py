@@ -49,8 +49,9 @@ from quickscale_modules_billing.models import (
     Plan,
     PurchaseCheckout,
 )
-import quickscale_modules_billing._stripe_client as _stripe_client
 import quickscale_modules_billing._locks as _locks
+import quickscale_modules_billing._removal as _removal
+import quickscale_modules_billing._stripe_client as _stripe_client
 
 
 def create_checkout_session(
@@ -153,18 +154,27 @@ def _create_checkout_session(
     )
     session_metadata[_PURCHASE_CHECKOUT_REFERENCE_METADATA_KEY] = reservation_reference
 
-    checkout_session = resolved_client.create_checkout_session(
-        customer_id=customer_id,
-        price_id=plan.stripe_price_id,
-        success_url=normalized_success_url,
-        cancel_url=normalized_cancel_url,
-        session_metadata=session_metadata,
-        payment_intent_metadata=session_metadata,
-        client_reference_id=_user_reference(user),
-        idempotency_key=_build_purchase_checkout_create_idempotency_key(
-            reservation_reference
-        ),
-    )
+    try:
+        checkout_session = resolved_client.create_checkout_session(
+            customer_id=customer_id,
+            price_id=plan.stripe_price_id,
+            success_url=normalized_success_url,
+            cancel_url=normalized_cancel_url,
+            session_metadata=session_metadata,
+            payment_intent_metadata=session_metadata,
+            client_reference_id=_user_reference(user),
+            idempotency_key=_build_purchase_checkout_create_idempotency_key(
+                reservation_reference
+            ),
+        )
+    except _stripe_client._stripe_definitive_error_classes():
+        _removal._resolve_definitively_failed_purchase_checkout(
+            organization,
+            reservation,
+            customer_id=customer_id,
+            stripe_client=resolved_client,
+        )
+        raise
     checkout_session_id = str(checkout_session.get("id") or "").strip()
     checkout_url = str(checkout_session.get("url") or "").strip()
     if not checkout_session_id:

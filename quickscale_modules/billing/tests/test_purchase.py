@@ -124,6 +124,7 @@ class FakePurchaseStripeClient:
     checkout_sessions: dict[str, dict[str, Any]] = field(default_factory=dict)
     event: dict[str, Any] | None = None
     searched_references: list[str] = field(default_factory=list)
+    searched_checkout_references: list[dict[str, Any]] = field(default_factory=list)
     created_customers: list[dict[str, Any]] = field(default_factory=list)
     created_checkout_payloads: list[dict[str, Any]] = field(default_factory=list)
     retrieved_price_ids: list[str] = field(default_factory=list)
@@ -236,6 +237,30 @@ class FakePurchaseStripeClient:
             dict(self.checkout_sessions.get(checkout_session_id, {})),
         )
 
+    def find_checkout_session_by_reference(
+        self,
+        *,
+        customer_id: str,
+        metadata_key: str,
+        reference: str,
+    ) -> dict[str, Any] | None:
+        self.searched_checkout_references.append(
+            {
+                "customer_id": customer_id,
+                "metadata_key": metadata_key,
+                "reference": reference,
+            }
+        )
+        for session in self.checkout_sessions.values():
+            normalized_session = normalize_stripe_object(
+                stripe.checkout.Session,
+                dict(session),
+            )
+            metadata = normalized_session.get("metadata") or {}
+            if str(metadata.get(metadata_key) or "") == reference:
+                return normalized_session
+        return None
+
 
 @pytest.mark.django_db
 def test_create_checkout_session_returns_stripe_url_and_attaches_metadata(
@@ -347,6 +372,114 @@ def test_create_checkout_session_retains_preparing_reservation_on_provider_error
     reservation = PurchaseCheckout.all_objects.get(organization=organization)
     assert reservation.status == PurchaseCheckout.Status.PREPARING
     assert reservation.stripe_checkout_session_id is None
+
+
+@pytest.mark.django_db
+def test_create_checkout_session_closes_reservation_on_definitive_provider_error(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A 4xx provider rejection proves nothing was created and closes the row."""
+    plan = _create_one_time_plan(slug="checkout-definitive-error")
+    fake_client = FakePurchaseStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "one_time",
+            }
+        }
+    )
+
+    def reject_request(**kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        raise stripe.InvalidRequestError("No such price", None)
+
+    fake_client.create_checkout_session = reject_request  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="checkout session creation failed"):
+        create_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    reservation = PurchaseCheckout.all_objects.get(organization=organization)
+    assert reservation.status == PurchaseCheckout.Status.EXPIRED
+    assert reservation.stripe_checkout_session_id is None
+
+
+@pytest.mark.django_db
+def test_create_checkout_session_preserves_a_reused_reservation_when_retry_is_rejected(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A definitive retry rejection must not hide the first attempt's session."""
+    plan = _create_one_time_plan(slug="checkout-retry-rejected")
+    fake_client = FakePurchaseStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "one_time",
+            }
+        }
+    )
+    provider_create = fake_client.create_checkout_session
+
+    def create_then_lose_response(**kwargs: Any) -> dict[str, Any]:
+        created = provider_create(**kwargs)
+        payload = fake_client.created_checkout_payloads[-1]
+        fake_client.checkout_sessions[created["id"]] = {
+            "id": created["id"],
+            "status": "open",
+            "metadata": dict(payload["session_metadata"]),
+        }
+        raise RuntimeError("provider response lost")
+
+    fake_client.create_checkout_session = create_then_lose_response  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="response lost"):
+        create_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    def reject_retry(**kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        raise stripe.PermissionError("Permission denied")
+
+    fake_client.create_checkout_session = reject_retry  # type: ignore[method-assign]
+    with pytest.raises(BillingError, match="checkout session creation failed"):
+        create_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    reservation = PurchaseCheckout.all_objects.get(organization=organization)
+    assert reservation.status == PurchaseCheckout.Status.PREPARING
+    assert reservation.stripe_checkout_session_id == "cs_test_123"
+
+    with pytest.raises(BillingValidationError, match="is still open"):
+        reconcile_purchase_checkouts_for_removal(
+            organization.pk,
+            persist=True,
+            stripe_client=fake_client,
+        )
 
 
 @pytest.mark.django_db
@@ -672,25 +805,159 @@ def test_purchase_checkout_removal_reconciliation_rejects_live_provider_state(
 
 
 @pytest.mark.django_db
-def test_purchase_checkout_removal_reconciliation_rejects_preparing_reservation(
+@pytest.mark.parametrize("persist", [False, True], ids=["dry-run", "persist"])
+def test_purchase_checkout_reconciliation_closes_unknown_outcome_without_a_session(
     user,
     organization,
     org_context,
+    persist: bool,
 ) -> None:
-    plan = _create_one_time_plan(slug="reconcile-preparing")
-    PurchaseCheckout.all_objects.create(
+    """A reservation Stripe holds no session for resolves to nothing created."""
+    plan = _create_one_time_plan(slug=f"reconcile-absent-{persist}")
+    reservation = PurchaseCheckout.all_objects.create(
         user=user,
         organization=organization,
         plan=plan,
         status=PurchaseCheckout.Status.PREPARING,
     )
+    fake_client = FakePurchaseStripeClient()
 
-    with pytest.raises(BillingError, match="still being prepared"):
+    expired_ids = reconcile_purchase_checkouts_for_removal(
+        organization.pk,
+        persist=persist,
+        stripe_client=fake_client,
+    )
+
+    reservation.refresh_from_db()
+    assert expired_ids == ()
+    assert fake_client.searched_references == [_organization_reference(organization)]
+    assert reservation.status == (
+        PurchaseCheckout.Status.EXPIRED
+        if persist
+        else PurchaseCheckout.Status.PREPARING
+    )
+
+
+@pytest.mark.django_db
+def test_purchase_checkout_reconciliation_expires_a_session_found_by_reference(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A session-less reservation is resolved through its provider reference."""
+    plan = _create_one_time_plan(slug="reconcile-found-expired")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.PREPARING,
+    )
+    reference = _payload._purchase_checkout_reference(reservation)
+    fake_client = FakePurchaseStripeClient(
+        customers=[{"id": "cus_reconcile_searched"}],
+        checkout_sessions={
+            "cs_reconcile_found": {
+                "id": "cs_reconcile_found",
+                "status": "expired",
+                "metadata": {"quickscale_purchase_checkout_reference": reference},
+            }
+        },
+    )
+
+    expired_ids = reconcile_purchase_checkouts_for_removal(
+        organization.pk,
+        persist=True,
+        stripe_client=fake_client,
+    )
+
+    reservation.refresh_from_db()
+    assert expired_ids == ("cs_reconcile_found",)
+    assert reservation.status == PurchaseCheckout.Status.EXPIRED
+    assert reservation.stripe_checkout_session_id == "cs_reconcile_found"
+    assert fake_client.searched_checkout_references == [
+        {
+            "customer_id": "cus_reconcile_searched",
+            "metadata_key": "quickscale_purchase_checkout_reference",
+            "reference": reference,
+        }
+    ]
+
+
+@pytest.mark.django_db
+def test_purchase_checkout_reconciliation_refuses_a_live_session_found_by_reference(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A live session found by reference is adopted and refuses removal."""
+    plan = _create_one_time_plan(slug="reconcile-found-open")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.PREPARING,
+    )
+    reference = _payload._purchase_checkout_reference(reservation)
+    organization.stripe_customer_id = "cus_reconcile_org"
+    organization.save(update_fields=["stripe_customer_id"])
+    fake_client = FakePurchaseStripeClient(
+        checkout_sessions={
+            "cs_reconcile_open": {
+                "id": "cs_reconcile_open",
+                "status": "open",
+                "metadata": {"quickscale_purchase_checkout_reference": reference},
+            }
+        }
+    )
+
+    with pytest.raises(BillingValidationError, match="is still open"):
         reconcile_purchase_checkouts_for_removal(
             organization.pk,
             persist=True,
-            stripe_client=FakePurchaseStripeClient(),
+            stripe_client=fake_client,
         )
+
+    reservation.refresh_from_db()
+    assert reservation.status == PurchaseCheckout.Status.PREPARING
+    assert reservation.stripe_checkout_session_id == "cs_reconcile_open"
+
+
+@pytest.mark.django_db
+def test_purchase_checkout_reconciliation_refuses_a_completed_session_found_by_reference(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A completed session found by reference refuses until its webhook runs."""
+    plan = _create_one_time_plan(slug="reconcile-found-complete")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.PREPARING,
+    )
+    reference = _payload._purchase_checkout_reference(reservation)
+    organization.stripe_customer_id = "cus_reconcile_complete_org"
+    organization.save(update_fields=["stripe_customer_id"])
+    fake_client = FakePurchaseStripeClient(
+        checkout_sessions={
+            "cs_reconcile_complete": {
+                "id": "cs_reconcile_complete",
+                "status": "complete",
+                "metadata": {"quickscale_purchase_checkout_reference": reference},
+            }
+        }
+    )
+
+    with pytest.raises(BillingValidationError, match="credit synchronization"):
+        reconcile_purchase_checkouts_for_removal(
+            organization.pk,
+            persist=True,
+            stripe_client=fake_client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.stripe_checkout_session_id == "cs_reconcile_complete"
 
 
 @pytest.mark.django_db

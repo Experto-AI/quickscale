@@ -91,10 +91,16 @@ from quickscale_modules_billing._subscription_checkout_steps import (
     _create_and_persist_checkout_session as _create_and_persist_checkout_session,
 )
 from quickscale_modules_billing._subscription_checkout_steps import (
+    _adopt_unknown_outcome_subscription_reservation as _adopt_unknown_outcome_subscription_reservation,
+)
+from quickscale_modules_billing._subscription_checkout_steps import (
     _expire_provider_expired_reservation as _expire_provider_expired_reservation,
 )
 from quickscale_modules_billing._subscription_checkout_steps import (
     _find_checkout_reservation as _find_checkout_reservation,
+)
+from quickscale_modules_billing._subscription_checkout_steps import (
+    _find_unknown_outcome_checkout_session as _find_unknown_outcome_checkout_session,
 )
 from quickscale_modules_billing._subscription_checkout_steps import (
     _initial_subscription_checkout_reservation as _initial_subscription_checkout_reservation,
@@ -110,6 +116,9 @@ from quickscale_modules_billing._subscription_checkout_steps import (
 )
 from quickscale_modules_billing._subscription_checkout_steps import (
     _resolve_checkout_reconciliation_client as _resolve_checkout_reconciliation_client,
+)
+from quickscale_modules_billing._subscription_checkout_steps import (
+    _void_unknown_outcome_subscription_reservation as _void_unknown_outcome_subscription_reservation,
 )
 
 
@@ -249,13 +258,21 @@ def reconcile_organization_removal_subscription_checkout(
     stripe_client: Any | None = None,
     settings_snapshot: BillingSettingsSnapshot | None = None,
 ) -> SubscriptionCheckoutReconciliation:
-    """Inspect an elapsed checkout and optionally persist terminal provider state."""
+    """Inspect an elapsed checkout and resolve an unknown outcome.
+
+    Organization removal reconciles an elapsed session-bearing reservation as
+    before, and additionally resolves every session-less reservation against
+    the provider: an unknown creation outcome has no local expiry to wait for,
+    so it is looked up by its stored reference instead of blocking the purge
+    forever.
+    """
     return _reconcile_subscription_checkout(
         organization_id,
         elapsed_only=True,
         persist=persist,
         stripe_client=stripe_client,
         settings_snapshot=settings_snapshot,
+        include_unknown_outcome=True,
     )
 
 
@@ -276,6 +293,24 @@ def reconcile_account_deletion_subscription_checkout(
     )
 
 
+@_translate_stripe_errors("Stripe subscription checkout reconciliation failed.")
+def _reconcile_all_subscription_checkouts(
+    organization_id: Any,
+    *,
+    persist: bool,
+    stripe_client: Any | None = None,
+    settings_snapshot: BillingSettingsSnapshot | None = None,
+) -> SubscriptionCheckoutReconciliation:
+    """Inspect every unresolved subscription reservation (operator pass)."""
+    return _reconcile_subscription_checkout(
+        organization_id,
+        elapsed_only=False,
+        persist=persist,
+        stripe_client=stripe_client,
+        settings_snapshot=settings_snapshot,
+    )
+
+
 def _reconcile_subscription_checkout(
     organization_id: Any,
     *,
@@ -283,6 +318,7 @@ def _reconcile_subscription_checkout(
     persist: bool,
     stripe_client: Any | None,
     settings_snapshot: BillingSettingsSnapshot | None,
+    include_unknown_outcome: bool = False,
 ) -> SubscriptionCheckoutReconciliation:
     """Read one checkout from Stripe and persist it only when requested."""
     organization_model = apps.get_model(
@@ -295,7 +331,11 @@ def _reconcile_subscription_checkout(
     if organization is None:
         return SubscriptionCheckoutReconciliation()
 
-    reservation = _find_checkout_reservation(organization, elapsed_only=elapsed_only)
+    reservation = _find_checkout_reservation(
+        organization,
+        elapsed_only=elapsed_only,
+        include_unknown_outcome=include_unknown_outcome,
+    )
     if reservation is None:
         return SubscriptionCheckoutReconciliation()
 
@@ -303,11 +343,41 @@ def _reconcile_subscription_checkout(
         stripe_client, settings_snapshot
     )
     checkout_session_id = str(reservation.stripe_checkout_session_id or "").strip()
-    checkout_session = _normalize_mapping(
-        resolved_client.retrieve_checkout_session(
-            checkout_session_id=checkout_session_id,
+    if not checkout_session_id:
+        checkout_session = _find_unknown_outcome_checkout_session(
+            organization=organization,
+            reservation=reservation,
+            stripe_client=resolved_client,
         )
-    )
+        if checkout_session is None:
+            # The provider holds no session for this reservation, so the
+            # unknown create outcome resolved to "nothing was created".
+            _void_unknown_outcome_subscription_reservation(
+                organization,
+                reservation,
+                persist=persist,
+            )
+            return SubscriptionCheckoutReconciliation(provider_status="absent")
+        checkout_session_id = str(checkout_session.get("id") or "").strip()
+        if not checkout_session_id:
+            raise BillingError(
+                "Stripe checkout reconciliation returned a session without an id."
+            )
+        if persist:
+            _adopt_unknown_outcome_subscription_reservation(
+                organization,
+                reservation,
+                checkout_session_id=checkout_session_id,
+                checkout_expires_at=_extract_checkout_session_expires_at(
+                    checkout_session
+                ),
+            )
+    else:
+        checkout_session = _normalize_mapping(
+            resolved_client.retrieve_checkout_session(
+                checkout_session_id=checkout_session_id,
+            )
+        )
     provider_status = str(checkout_session.get("status") or "").strip().lower()
     if provider_status == "expired":
         persisted_customer_id = _expire_provider_expired_reservation(

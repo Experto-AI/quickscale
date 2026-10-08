@@ -1855,13 +1855,12 @@ class TestAccountDeleteView:
             checkout_session_id="cs_former_purchase_open"
         )
 
-    def test_account_delete_blocks_unknown_purchase_checkout_in_a_former_organization(
+    def test_account_delete_resolves_unknown_purchase_checkout_in_a_former_organization(
         self, authenticated_client, user
     ):
-        """A former organization's unknown purchase outcome keeps the account intact."""
+        """A former organization's unknown purchase outcome resolves as absent."""
         from unittest.mock import MagicMock, patch
 
-        from django.contrib import messages as messages_framework
         from django.contrib.auth import get_user_model
 
         from quickscale_modules_billing.models import Plan, PurchaseCheckout
@@ -1901,7 +1900,7 @@ class TestAccountDeleteView:
             billing_interval=Plan.BillingInterval.ONE_TIME,
         )
         with org_scope(organization):
-            PurchaseCheckout.objects.create(
+            purchase_checkout = PurchaseCheckout.objects.create(
                 organization=organization,
                 user=user,
                 plan=plan,
@@ -1909,6 +1908,7 @@ class TestAccountDeleteView:
             )
         former_membership.delete()
         stripe_client = MagicMock()
+        stripe_client.search_customers.return_value = []
 
         with patch(
             "quickscale_modules_billing._stripe_client.get_stripe_client",
@@ -1918,14 +1918,16 @@ class TestAccountDeleteView:
                 reverse("quickscale_auth:account_delete")
             )
 
-        assert response.status_code == 200
+        assert response.status_code == 302
         retained = get_user_model().objects.get(pk=user.pk)
-        assert retained.is_active is True
-        assert any(
-            "creation outcome is unknown" in str(message.message)
-            for message in messages_framework.get_messages(response.wsgi_request)
-        )
+        assert retained.is_active is False
+        assert retained.email == f"deleted-{user.pk}@invalid"
+        with org_scope(organization):
+            purchase_checkout.refresh_from_db()
+        assert purchase_checkout.status == PurchaseCheckout.Status.EXPIRED
         stripe_client.retrieve_checkout_session.assert_not_called()
+        stripe_client.find_checkout_session_by_reference.assert_not_called()
+        stripe_client.search_customers.assert_called_once()
 
     def test_account_delete_locks_a_former_organization_for_the_purchase_check(
         self, authenticated_client, user

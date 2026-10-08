@@ -161,13 +161,15 @@ for the module's API: creating or renaming an organization to it is refused.
 `quickscale_orgs_purge_organization` refuses both destructive execution and `--dry-run` while
 the organization has a current Stripe-backed subscription, a pending subscription checkout, or
 a preparing/open one-time purchase checkout. Before opening the purge transaction it asks
-billing to reconcile hosted checkouts with Stripe: only a provider-confirmed expired session
-becomes purgeable, while a completed or open session remains blocked and a purchase whose
-creation outcome is unknown requires provider reconciliation. Dry-run inspects provider state
-without persisting it; destructive execution persists reconciliation before purge. Billing
-provider operations and purge share an organization-keyed PostgreSQL advisory mutex; local
-billing writes separately lock the organization row, and Stripe calls remain outside database
-transactions.
+billing to reconcile hosted checkouts with Stripe: a provider-confirmed expired session
+becomes purgeable, a completed or open session remains blocked, and a reservation whose
+creation outcome is unknown is looked up at Stripe by its stored reference and resolved — a
+live session stays blocked, while an expired or absent one clears. Dry-run inspects provider
+state without persisting it; destructive execution persists reconciliation before purge.
+`quickscale_billing_reconcile_checkouts` runs the same reconciliation for rows accumulated
+before the upgrade. Billing provider operations and purge share an organization-keyed
+PostgreSQL advisory mutex; local billing writes separately lock the organization row, and
+Stripe calls remain outside database transactions.
 
 The command derives its tenant-row coverage and child-before-parent deletion order from
 installed tenant-model and foreign-key metadata, with explicit overrides available for
