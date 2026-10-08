@@ -168,6 +168,7 @@ def test_check_reports_missing_projected_settings_when_debug_is_excluded(
     assert "quickscale apply" in messages[0].msg
 
 
+@pytest.mark.django_db
 @override_settings()
 def test_missing_enabled_setting_fails_check_migrate_and_runserver(settings) -> None:
     """The registered check fails check, migrate, and runserver alike."""
