@@ -266,7 +266,7 @@ class TestFormsBootstrapIdempotent:
 
 
 def test_form_parent_unique_constraint_exists() -> None:
-    """The named ``quickscale_forms_form_id_org_unique`` constraint exists on the
+    """The named ``quickscale_forms_form_id_organization_unique`` constraint exists on the
     form table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -276,13 +276,13 @@ def test_form_parent_unique_constraint_exists() -> None:
 
     constraints = Form._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "quickscale_forms_form_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint quickscale_forms_form_id_org_unique on Form"
+    assert "quickscale_forms_form_id_organization_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_forms_form_id_organization_unique on Form"
     )
 
 
 def test_formfield_parent_unique_constraint_exists() -> None:
-    """The named ``quickscale_forms_formfield_id_org_unique`` constraint exists on the
+    """The named ``quickscale_forms_formfield_id_organization_unique`` constraint exists on the
     formfield table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -292,13 +292,13 @@ def test_formfield_parent_unique_constraint_exists() -> None:
 
     constraints = FormField._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "quickscale_forms_formfield_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint quickscale_forms_formfield_id_org_unique on FormField"
+    assert "quickscale_forms_formfield_id_organization_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_forms_formfield_id_organization_unique on FormField"
     )
 
 
 def test_formsubmission_parent_unique_constraint_exists() -> None:
-    """The named ``quickscale_forms_formsubmission_id_org_unique`` constraint exists on the
+    """The named ``quickscale_forms_formsubmission_id_organization_unique`` constraint exists on the
     formsubmission table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -308,8 +308,10 @@ def test_formsubmission_parent_unique_constraint_exists() -> None:
 
     constraints = FormSubmission._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "quickscale_forms_formsubmission_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint quickscale_forms_formsubmission_id_org_unique "
+    assert (
+        "quickscale_forms_formsubmission_id_organization_unique" in constraint_names
+    ), (
+        "Missing parent UNIQUE constraint quickscale_forms_formsubmission_id_organization_unique "
         "on FormSubmission"
     )
 

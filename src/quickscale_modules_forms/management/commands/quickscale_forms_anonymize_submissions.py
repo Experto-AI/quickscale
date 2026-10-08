@@ -19,6 +19,15 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
+            "--trigger",
+            choices=["manual", "scheduled"],
+            default="manual",
+            help=(
+                "Invocation provenance (default: manual). A scheduled run is "
+                "refused while the module is off; a manual run stays."
+            ),
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             default=False,
@@ -30,12 +39,13 @@ class Command(BaseCommand):
 
         from quickscale_modules_orgs.current_org import operator_access, org_scope
 
-        if not bool(settings.QUICKSCALE_FORMS_ENABLED):
+        trigger = str(options.get("trigger") or "manual")
+        if trigger == "scheduled" and not bool(settings.QUICKSCALE_FORMS_ENABLED):
             # Rule 1 (D3): a module switched off runs none of its scheduled
             # jobs; the retention anonymizer is the forms module's only one.
             raise CommandError(
                 "The forms module is disabled (QUICKSCALE_FORMS_ENABLED is "
-                "False); the retention job does not run."
+                "False); scheduled retention runs do not run."
             )
 
         dry_run = bool(options.get("dry_run", False))

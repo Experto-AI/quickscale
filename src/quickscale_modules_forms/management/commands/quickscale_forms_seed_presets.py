@@ -202,7 +202,7 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             # Phase 1 — Read inventory: find which preset slugs already exist
-            # in the System org.  operator_access is SELECT-only (SA14.5):
+            # in the System org. operator_access is SELECT-only:
             # it lets us see cross-tenant rows without elevating write
             # privilege.
             with operator_access(

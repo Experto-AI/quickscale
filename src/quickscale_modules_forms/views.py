@@ -1,6 +1,6 @@
 """Views for QuickScale Forms module
 
-T1.7: single flat route tree (D1/D5).  Route-sniffing and per-org scoping
+Single flat route tree (D1/D5). Route-sniffing and per-org scoping
 via URL kwargs are removed.  Public schema/submit endpoints resolve the
 System org (D2) for anonymous requests; superuser admin views use the
 operator path (``all_objects``) for cross-tenant visibility.
@@ -171,7 +171,7 @@ class FormsAdminApiMixin:
         APIView.initial(self, request, *args, **kwargs)
 
     # ------------------------------------------------------------------
-    # SA85 Phase 4 — retained-role helpers
+    # retained-role helpers
     # ------------------------------------------------------------------
 
     def _is_superuser(self) -> bool:
@@ -393,7 +393,7 @@ class FormSubmitAPIView(CreateAPIView):
 class AdminFormListAPIView(FormsAdminApiMixin, ListAPIView):
     """Viewer-role: list all forms with submission counts.
 
-    SA85 Phase 4 retained-role behavior:
+    retained-role behavior:
     * Superuser: cross-tenant read via ``operator_access`` (audited).
     * Regular member with active org: scoped to that org via RLS.
     * Regular member without org: refused by the permission (403).
@@ -417,13 +417,13 @@ class AdminFormListAPIView(FormsAdminApiMixin, ListAPIView):
 class AdminSubmissionListAPIView(FormsAdminApiMixin, ListAPIView):
     """Viewer-role: paginated list of submissions for a given form.
 
-    SA85 Phase 4 retained-role behavior:
+    retained-role behavior:
     * Superuser: cross-tenant read via ``operator_access`` (audited).
     * Regular member with active org: scoped to that org via RLS.
     * Regular member without org: refused by the permission (403).
 
     Child ``FormFieldValue`` prefetch continues to use ``all_objects``
-    (AF1-CR-002 invariant) regardless of user role.
+    (invariant) regardless of user role.
     """
 
     pagination_class = FormsSubmissionPagination
@@ -470,7 +470,7 @@ class AdminSubmissionListAPIView(FormsAdminApiMixin, ListAPIView):
 class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
     """Viewer-role GET / member-role PATCH for a single submission (status / is_spam only).
 
-    SA85 Phase 4 retained-role behavior:
+    retained-role behavior:
     * **GET**: Superuser may read cross-tenant via ``operator_access`` (audited).
       A regular member is scoped to the active org or fail-closed.
     * **PATCH**: Target identified through allowed read elevation.  The actual
@@ -507,7 +507,7 @@ class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
         return obj
 
     def partial_update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        # SA85 Phase 4: superuser get_object uses operator_access for
+        # superuser get_object uses operator_access for
         # cross-tenant read; regular staff uses scoped queryset.
         if self._is_superuser():
             instance = self._with_superuser_operator_access(self.get_object)
@@ -518,12 +518,12 @@ class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
         patch_data = {k: v for k, v in request.data.items() if k in allowed_fields}
         serializer = self.get_serializer(instance, data=patch_data, partial=True)
         serializer.is_valid(raise_exception=True)
-        # SA85 Phase 4: save inside the submission's org scope so the write
+        # save inside the submission's org scope so the write
         # respects the target tenant boundary regardless of how the object
         # was read (superuser cross-tenant or staff scoped).  Materialize
         # serializer.data inside org_scope so that lazy FK traversals (e.g.
         # form.title via form_title source) resolve under the correct RLS
-        # context (CR-SA85-REV-002).
+        # context.
         with org_scope(instance.organization):
             serializer.save()
             response_data = serializer.data
@@ -533,17 +533,17 @@ class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
 class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
     """Viewer-role: stream all submissions for a form as a CSV file.
 
-    SA85 Phase 4 retained-role behavior:
+    retained-role behavior:
     * Superuser: cross-tenant read via ``operator_access`` (audited).
     * Regular member with active org: scoped to that org via RLS.
     * Regular member without org: refused by the permission (403).
 
     Child ``FormField`` / ``FormFieldValue`` queries continue to use
-    ``all_objects`` (AF1-CR-002 / AF1-CR-REV-001 invariants).
+    ``all_objects`` (invariants).
     """
 
     def get(self, request: Request, pk: int, *args: Any, **kwargs: Any) -> HttpResponse:
-        # SA85 Phase 4: wrap the entire method in operator_access for superuser
+        # wrap the entire method in operator_access for superuser
         if self._is_superuser():
             return self._with_superuser_operator_access(
                 self._export_csv, request, pk, *args, **kwargs
@@ -563,7 +563,7 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
             .order_by("-submitted_at")
         )
 
-        # Harden AF1-CR-002: batch-load all field values via all_objects to avoid
+        # Harden batch-load all field values via all_objects to avoid
         # implicit FK traversal through the default (RLS-scoped) manager.
         all_values = list(
             FormFieldValue.all_objects.filter(submission__form=form).values(
@@ -572,7 +572,7 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
         )
 
         # CSV column order follows form field definition order, not alphabetical
-        # by field_name — preserves form-designer ordering (AF1-CR-REV-001).
+        # by field_name — preserves form-designer ordering.
         # Use all_objects on the operator path to bypass RLS — a staff user with
         # no org context or a mismatched org must still see the correct columns.
         form_field_names: list[str] = list(
@@ -632,7 +632,7 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
 class FormPageView(TemplateView):
     """Optional server-side entry point — renders a React mount point div"""
 
-    template_name = "quickscale_forms/forms/form_page.html"
+    template_name = "quickscale_forms/form_page.html"
 
     def get_context_data(self, **kwargs: Any) -> dict:
         context = super().get_context_data(**kwargs)

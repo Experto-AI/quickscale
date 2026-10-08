@@ -65,7 +65,6 @@ class Form(TenantModel):
         fields: models.Manager["FormField"]
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_forms"
         ordering = ["title"]
         constraints = [
             models.UniqueConstraint(
@@ -74,7 +73,7 @@ class Form(TenantModel):
             ),
             models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="quickscale_forms_form_id_org_unique",
+                name="quickscale_forms_form_id_organization_unique",
             ),
         ]
 
@@ -121,7 +120,6 @@ class FormField(TenantModel):
     is_active = models.BooleanField(default=True)
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_forms"
         ordering = ["order"]
         constraints = [
             models.UniqueConstraint(
@@ -130,7 +128,7 @@ class FormField(TenantModel):
             ),
             models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="quickscale_forms_formfield_id_org_unique",
+                name="quickscale_forms_formfield_id_organization_unique",
             ),
         ]
 
@@ -162,12 +160,11 @@ class FormSubmission(TenantModel):
         form_id: int | None
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_forms"
         ordering = ["-submitted_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="quickscale_forms_formsubmission_id_org_unique",
+                name="quickscale_forms_formsubmission_id_organization_unique",
             ),
         ]
 
@@ -196,7 +193,6 @@ class FormFieldValue(TenantModel):
     value = models.TextField()
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_forms"
         ordering = ["submission_id", "pk"]
 
     def __str__(self) -> str:
