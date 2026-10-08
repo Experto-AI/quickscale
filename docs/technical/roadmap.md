@@ -364,8 +364,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     resolves the reservation against the provider before it is closed; a session-less reservation
     is looked up by its stored reference and adopted, expired, or voided; and
     `quickscale_billing_reconcile_checkouts` clears accumulated rows under the organization's
-    provider mutation mutex. Next: slice (c).
-  - [ ] (c) Delayed-payment webhook events.
+    provider mutation mutex.
+  - [x] (c) Delayed-payment webhook events. An unpaid completed checkout binds its reservation
+    and is accepted; `checkout.session.async_payment_succeeded` credits the purchase exactly once
+    and `checkout.session.async_payment_failed` releases the reservation, on the existing
+    event-dedup key. Next: the slice-(a) live checkout record.
 
   **Surfaces:** `billing/views.py`, `_checkout.py`, `_removal.py`, `_webhooks.py`,
   `_stripe_client.py`, their tests, the billing README, and the tech audit.

@@ -273,12 +273,6 @@ items:
      effort: Trivial, confidence: High, reality: cli,
      anchors: [quickscale_cli/src/quickscale_cli/commands/_deploy_service_config.py],
      depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: billing-async-payment-never-credited, status: open, severity: S3, category: I,
-     title: "One-time purchases paid by a delayed payment method are never credited",
-     effort: Small, confidence: Medium, reality: generated-app,
-     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_webhooks.py],
-     depends_on: [], chain: [],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: generated-ci-mutable-action-tags, status: open, severity: S3, category: VII,
      title: "Generated CI uses mutable third-party action tags and no permissions block",
      effort: Small, confidence: High, reality: generated-app,
@@ -344,7 +338,7 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 1 · S3 — 7 · S4 — 7 · total 15 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 1 · S3 — 6 · S4 — 7 · total 14 open. Watchlist: 7.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
@@ -354,7 +348,6 @@ items:
 | `anonymize-matches-unverified-address` | S3 | III | Self-service removal rewrites other tenants' rows by unverified address | Small | High | new |
 | `org-invitation-email-unthrottled` | S3 | III | Unlimited invitation emails with attacker-chosen text | Small | High | new |
 | `deploy-settings-module-from-service-name` | S3 | VI | Deploy overwrites `DJANGO_SETTINGS_MODULE` from the service name | Trivial | High | new — **quick win** |
-| `billing-async-payment-never-credited` | S3 | I | Delayed-payment purchases are never credited | Small | Medium | new |
 | `generated-ci-mutable-action-tags` | S3 | VII | Generated CI on mutable action tags, no `permissions:` | Small | High | new |
 | `docker-healthcheck-always-unhealthy` | S4 | VI | Image `HEALTHCHECK` gets 400 under production settings | Trivial | High | new |
 | `frontend-image-floating-deps` | S4 | VII | Production image resolves npm deps unpinned when no lockfile | Small | High | new |
@@ -535,23 +528,6 @@ items:
     `deployment_commands.py:100`), or stop setting the variable and rely on the image's `ENV`.
   - **Effort:** Trivial. **Confidence:** High.
 
-- **`billing-async-payment-never-credited`** · S3 (High × Rare: needs a delayed-notification
-  payment method enabled on the Stripe account) · R2 · `billing/_webhooks.py:183-198`, `:129-160`;
-  `_stripe_client.py:107-118` (no `payment_method_types`); `OPERATIONS.md.j2:118-120`.
-  - **Defect:** For SEPA, ACH, Bacs, or bank-transfer payments, `checkout.session.completed`
-    arrives with `payment_status="unpaid"`. The handler raises "payment is not settled" and the
-    event stays unprocessed, so Stripe retries for three days. The later
-    `checkout.session.async_payment_succeeded` event is not dispatched (`"ignored"`, marked
-    processed), and the documented webhook event list omits it. The customer is charged and never
-    credited.
-  - **Chain:** the reservation stays `OPEN`, and removal reconciliation then refuses "completed and
-    may require credit synchronization" forever.
-  - **Fix:** On completed+unpaid, bind the reservation and return 200. Credit on
-    `async_payment_succeeded`, expire on `async_payment_failed`. Add both events to the
-    documented list. Alternatively, restrict Checkout to immediate methods with
-    `payment_method_types=["card"]`.
-  - **Effort:** Small. **Confidence:** Medium (depends on the account's payment methods, Q4).
-
 - **`generated-ci-mutable-action-tags`** · S3 (Critical × Unlikely: needs an upstream action
   compromise) · R2 · `ci.yml.j2:42,45,76,83,108,134,137,142,151`.
   - **Defect:** The generated workflow uses `actions/checkout@v6`, `snok/install-poetry@v1`,
@@ -605,7 +581,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 
 | Entry point | AuthN | AuthZ | Input validation | Output encoding | Rate limit | Timeout | Idempotency | Error shape | Audit |
 |---|---|---|---|---|---|---|---|---|---|
-| `StripeWebhookView` | Stripe SDK signature over raw body | n/a | named-release gate | JSON | none by rule 26 | SDK default (watch `single-sync-worker-vendor-calls`) | advisory mutex + unique `WebhookEvent` | rule 9; async events: `billing-async-payment-never-credited` | `WebhookEvent` row |
+| `StripeWebhookView` | Stripe SDK signature over raw body | n/a | named-release gate | JSON | none by rule 26 | SDK default (watch `single-sync-worker-vendor-calls`) | advisory mutex + unique `WebhookEvent` | rule 9 | `WebhookEvent` row |
 | Billing JSON views | session (CSRF) | owner via `_require_request_organization` | DRF serializers | JSON | `quickscale_billing_*` scopes | SDK default | Stripe idempotency keys; unknown-outcome reservations reconcile against the provider | rule 9 | reservation rows; return URLs: `billing-checkout-relative-redirect-urls` |
 | `NotificationWebhookView` | custom HMAC: `notifications-webhook-rejects-resend` | n/a | required fields | JSON | none by rule 26 | n/a | idempotency key | rule 9 | delivery event row |
 | Orgs JSON API | session (CSRF) | `min_org_role` on the org it acts on | `JSONParser` + forms | JSON | DRF `user` default; invites: `org-invitation-email-unthrottled` | n/a | n/a | rule 9 | n/a |
@@ -636,8 +612,6 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 
 1. **Billing batch.**
    - `billing-checkout-relative-redirect-urls` first. It is Trivial and unblocks every purchase.
-   - `billing-async-payment-never-credited` is independent (`_webhooks.py`) and can run in
-     parallel.
    - **Release note:** do not publish 0.89.0 as a fix for the arch-audit red flag until the first
      item lands.
 2. **Analytics batch (landed).** `analytics-distinct-id-is-session-key` and
@@ -664,7 +638,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Subsystem | Verdict | What was read |
 |---|---|---|
 | orgs | `viewas-overrides-management-org`; invite part of `org-invitation-email-unthrottled`; invitation scrub part of `anonymize-matches-unverified-address` | Middleware, priming, scopes, permissions, views, API, invitations, anonymization (full). Tenant isolation layers verified. |
-| billing | `billing-checkout-relative-redirect-urls`, `billing-async-payment-never-credited` | Views, webhooks, credits, checkout, client, removal (full). Signature, dedupe, and ledger locking verified. |
+| billing | `billing-checkout-relative-redirect-urls` | Views, webhooks, credits, checkout, client, removal (full). Signature, dedupe, and ledger locking verified. |
 | notifications | `notifications-webhook-rejects-resend` | Webhook path and anonymization (full). |
 | analytics | clean. The distinct ID no longer derives from the session key, and the overview page requires login and the viewer role. | Full. |
 | forms | `forms-notification-status-misreported` | Views and notification helper (full). Public-path scoping, throttle, and CSV neutralization verified. |
@@ -831,9 +805,7 @@ Added:
    accepted the relative URL, `billing-checkout-relative-redirect-urls` dies.
 2. Is the notifications webhook meant to receive Resend directly, or through a relay that
    re-signs? A relay downgrades `notifications-webhook-rejects-resend` to a documentation fix.
-3. Are delayed-notification payment methods (SEPA, ACH, Bacs, bank transfer) enabled on the
-   Stripe accounts in use? This decides whether `billing-async-payment-never-credited` is live.
-4. Do production projects keep the auth default `email_verification: none`? `mandatory`
+3. Do production projects keep the auth default `email_verification: none`? `mandatory`
    downgrades `anonymize-matches-unverified-address`.
 
 ---
@@ -1015,3 +987,9 @@ Added:
   (`StripeClient.find_checkout_session_by_reference`, `_removal.py`, `_subscription_checkout.py`);
   and `quickscale_billing_reconcile_checkouts` clears accumulated rows under the organization's
   provider mutation mutex. Verified by the billing, orgs, and auth suites.
+- 2026-10-08 — `billing-async-payment-never-credited`: **resolved** (SA251, slice c). A
+  `checkout.session.completed` whose `payment_status` is `unpaid` binds the purchase reservation
+  and is accepted instead of raising, `checkout.session.async_payment_succeeded` credits the
+  one-time purchase through the existing ledger dedup, and `checkout.session.async_payment_failed`
+  expires the reservation under the organization's provider mutation mutex. Both events are
+  dispatched, and the generated operations guide lists them.

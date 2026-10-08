@@ -117,7 +117,9 @@ API version `2026-06-24.dahlia`, and its webhook endpoint must use that same ver
 1. In the Stripe Dashboard, create a webhook endpoint for
    `https://<your-host>/billing/webhooks/stripe/` at API version `2026-06-24.dahlia`,
    subscribed to the billing events you use (`invoice.paid`, `invoice.payment_failed`,
-   `checkout.session.completed`, `checkout.session.expired`, `customer.subscription.*`).
+   `checkout.session.completed`, `checkout.session.expired`,
+   `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
+   `customer.subscription.*`).
 2. Set the endpoint's signing secret in the configured webhook secret environment variable
    (`QUICKSCALE_BILLING_WEBHOOK_SECRET` by default; the name comes from
    `modules.billing.webhook_secret_env_var` in `quickscale.yml`).

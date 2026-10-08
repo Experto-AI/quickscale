@@ -212,3 +212,9 @@ steps:
       - "Reduce frontend/src/index.css to `@import \"../design/tokens.css\";` and frontend/tailwind.config.js to a config whose presets consume ./design/tailwind.preset.js while its content globs stay in the entry config. The Django-rendered shell and the React host then resolve one token source, and frontend/design/ is never overwritten by a later upgrade or apply."
       - "Preserve every relative reference while moving the design: rebase CSS `url()` and `@import` targets that were relative to frontend/src/ to the equivalent `../src/...` path (or move the referenced files into frontend/design/), and rebase relative JavaScript module specifiers in the Tailwind config the same way. Tailwind `content` globs resolve against the frontend working directory, so never rebase them. The maintainer migration blocks and names any reference it cannot preserve rather than silently dropping a design resource."
       - "Make future color, radius, font, and brand changes in frontend/design/ (tokens.css, the preset, fonts/, brand/) instead of frontend/src/index.css or frontend/tailwind.config.js."
+
+  - id: sa251-billing-async-payment-events
+    minimum: "0.89.0"
+    title: "Adopt the billing async-payment webhook events"
+    adoption_steps:
+      - "Compare the current OPERATIONS.md Stripe Billing section and subscribe the project's Stripe webhook endpoint to `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed` alongside the events it already receives. A delayed-notification payment method (SEPA, ACH, Bacs, bank transfer) completes its one-time Checkout before the money settles, so without both events the purchase is charged but never credited, and a failed payment keeps blocking account deletion and organization purge."
