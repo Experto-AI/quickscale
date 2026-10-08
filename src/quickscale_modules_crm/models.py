@@ -10,7 +10,7 @@ This module provides 7 core models for CRM functionality:
 - ContactNote: Notes on contacts (parent-derived, no dual manager)
 - DealNote: Notes on deals (parent-derived, no dual manager)
 
-SA1.1: All 7 models now inherit ``TenantModel`` from
+All 7 models now inherit ``TenantModel`` from
 ``quickscale_orgs``, which provides:
 - ``organization`` FK (``tenant_org_fk``, PROTECT-guarded)
 - ``objects`` (TenantManager): contextvar-auto-scoped queryset
@@ -34,13 +34,12 @@ class Tag(TenantModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_crm"
         ordering = ["name"]
         constraints = [
             # Block duplicate names within the NULL-owned bucket.
             models.UniqueConstraint(
                 fields=["name"],
-                name="quickscale_crm_tag_name_unique_null_org",
+                name="quickscale_crm_tag_name_null_unique",
                 condition=Q(organization__isnull=True),
             ),
             # Block duplicate names within the same non-null org bucket.
@@ -65,13 +64,12 @@ class Company(TenantModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_crm"
         ordering = ["name"]
         verbose_name_plural = "Companies"
         constraints = [
             models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="quickscale_crm_company_id_org_unique",
+                name="quickscale_crm_company_id_organization_unique",
             ),
         ]
 
@@ -114,12 +112,11 @@ class Contact(TenantModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_crm"
         ordering = ["last_name", "first_name"]
         constraints = [
             models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="quickscale_crm_contact_id_org_unique",
+                name="quickscale_crm_contact_id_organization_unique",
             ),
         ]
 
@@ -150,13 +147,12 @@ class Stage(TenantModel):
     )
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_crm"
         ordering = ["order", "name"]
         constraints = [
             # Block duplicate terminal semantics within the NULL-owned bucket.
             models.UniqueConstraint(
                 fields=["terminal_semantic"],
-                name="quickscale_crm_stage_terminal_semantic_unique_null_org",
+                name="quickscale_crm_stage_terminal_semantic_null_unique",
                 condition=Q(organization__isnull=True),
             ),
             # Block duplicate terminal semantics within the same non-null org bucket.
@@ -168,7 +164,7 @@ class Stage(TenantModel):
             # Make the stage row a valid composite-FK target for deals.
             models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="quickscale_crm_stage_id_org_unique",
+                name="quickscale_crm_stage_id_organization_unique",
             ),
         ]
 
@@ -214,12 +210,11 @@ class Deal(TenantModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_crm"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=["id", "organization"],
-                name="quickscale_crm_deal_id_org_unique",
+                name="quickscale_crm_deal_id_organization_unique",
             ),
         ]
 
@@ -251,7 +246,6 @@ class ContactNote(TenantModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_crm"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -295,7 +289,6 @@ class DealNote(TenantModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta(TenantModel.Meta):
-        app_label = "quickscale_crm"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:

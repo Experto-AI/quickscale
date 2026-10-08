@@ -38,7 +38,7 @@ def _current_role_bypasses_rls() -> bool:
 
 
 def test_contact_parent_unique_constraint_exists() -> None:
-    """The named ``quickscale_crm_contact_id_org_unique`` constraint exists on
+    """The named ``quickscale_crm_contact_id_organization_unique`` constraint exists on
     the contact table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -48,13 +48,13 @@ def test_contact_parent_unique_constraint_exists() -> None:
 
     constraints = Contact._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "quickscale_crm_contact_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint quickscale_crm_contact_id_org_unique on Contact"
+    assert "quickscale_crm_contact_id_organization_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_crm_contact_id_organization_unique on Contact"
     )
 
 
 def test_deal_parent_unique_constraint_exists() -> None:
-    """The named ``quickscale_crm_deal_id_org_unique`` constraint exists on the
+    """The named ``quickscale_crm_deal_id_organization_unique`` constraint exists on the
     deal table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -64,13 +64,13 @@ def test_deal_parent_unique_constraint_exists() -> None:
 
     constraints = Deal._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "quickscale_crm_deal_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint quickscale_crm_deal_id_org_unique on Deal"
+    assert "quickscale_crm_deal_id_organization_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_crm_deal_id_organization_unique on Deal"
     )
 
 
 def test_company_parent_unique_constraint_exists() -> None:
-    """The named ``quickscale_crm_company_id_org_unique`` constraint exists on
+    """The named ``quickscale_crm_company_id_organization_unique`` constraint exists on
     the company table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -80,14 +80,14 @@ def test_company_parent_unique_constraint_exists() -> None:
 
     constraints = Company._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "quickscale_crm_company_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint quickscale_crm_company_id_org_unique "
+    assert "quickscale_crm_company_id_organization_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_crm_company_id_organization_unique "
         "on Company"
     )
 
 
 def test_stage_parent_unique_constraint_exists() -> None:
-    """The named ``quickscale_crm_stage_id_org_unique`` constraint exists on
+    """The named ``quickscale_crm_stage_id_organization_unique`` constraint exists on
     the stage table."""
     executor = MigrationExecutor(connection)
     executor.migrate([(APP_LABEL, MIG_0001)])
@@ -97,8 +97,8 @@ def test_stage_parent_unique_constraint_exists() -> None:
 
     constraints = Stage._meta.constraints
     constraint_names = {c.name for c in constraints}
-    assert "quickscale_crm_stage_id_org_unique" in constraint_names, (
-        "Missing parent UNIQUE constraint quickscale_crm_stage_id_org_unique on Stage"
+    assert "quickscale_crm_stage_id_organization_unique" in constraint_names, (
+        "Missing parent UNIQUE constraint quickscale_crm_stage_id_organization_unique on Stage"
     )
 
 
