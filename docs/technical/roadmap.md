@@ -13,10 +13,11 @@ their value.
 
 **Release status.** 0.88.0 is published and carries two S1 billing defects fixed on `v89` (with
 real Stripe keys, every webhook and every checkout fails); the fix ships in 0.89.0, which is not
-published yet ([publish_procedure.md](publish_procedure.md)). Only the webhook half is fixed:
-checkout and portal sessions still send relative return URLs that Stripe rejects (tech audit
-`billing-checkout-relative-redirect-urls`), so 0.89.0 is not published until SA251 lands. SA252
-(a live credential sent to PostHog) is also required for 0.89.0.
+published yet ([publish_procedure.md](publish_procedure.md)). The webhook half and the checkout
+relative-URL code repair are fixed — checkout and portal sessions now build absolute return URLs
+(tech audit `billing-checkout-relative-redirect-urls`) — while the live Stripe test-mode checkout
+record and SA251's remaining slices are outstanding. SA252 (a live credential sent to PostHog) is
+fixed on `v89`, so 0.89.0 is not published until SA251 lands.
 
 The 2026-10-08 audits ([arch](../others/arch-audit.md), [tech](../others/tech-audit.md),
 [coherence](../others/coherence-audit.md)) are scheduled as SA251–SA266. Each ticket names the
@@ -34,7 +35,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
 | SA251 | Make Stripe checkout and payment outcomes complete and recoverable | 2 | — | Required |
-| SA252 | Stop deriving the analytics distinct ID from the session key, and guard the dashboard | 3 | — | Required |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA266 | Sweep module models, templates, tests, and commands onto the written rules before the freeze | 1 | — | Optional |
 | SA259 | Generate gate wiring from the registry instead of holding copies by parity | 2 | — | Optional |
@@ -50,7 +50,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA254 | Harden self-registration: anonymize scope, invitation throttle, VIEW-AS scope | 3 | — | Optional |
 | SA258 | Move the module↔project seam from user-owned generated files into the runtime | 3 | — | Optional |
 | SA264 | One module error base, one HTTP mapping, and one startup-check order | 3 | — | Optional |
-| SA262 | One JSON API contract: guards, 401, pagination, throttles, and DRF keys | 3 | SA252, SA264 | Optional |
+| SA262 | One JSON API contract: guards, 401, pagination, throttles, and DRF keys | 3 | SA264 | Optional |
 | SA261 | One owner per URL prefix, and theme API bases from the seam | 3 | SA258 | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -59,8 +59,8 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 Track 1: SA191 ═╗ SA266 ──► SA204 ──► SA153 ──► SA154 (inventory)
                (interleaves while SA191 waits on the maintainer)
 Track 2: SA251 ──► SA256 ──► SA259 ──► SA253 ──► SA255 ──► SA260 ──► SA263
-Track 3: SA252 ──► SA254 ──► SA265 ──► SA258 ──► SA264 ──► SA262 ──► SA261
-     release path:  SA251 ∥ SA252 → publish 0.89.0
+Track 3: SA254 ──► SA265 ──► SA258 ──► SA264 ──► SA262 ──► SA261
+     release path:  SA251 → publish 0.89.0
      critical path: SA191 → SA153, joined by SA259 (T2) and SA265 (T3) → SA204 → SA153
 ```
 
@@ -73,7 +73,7 @@ with a fresh context, scoped to that slice's text and named surfaces, and ends w
 handoff note (what landed, what is next, what to watch) committed with the work. A ticket closes
 when its last slice lands; slices are not scheduled.
 
-**Order.** SA251 and SA252 go first: they gate the 0.89.0 publish. Every change to a shipped
+**Order.** SA251 and SA252 led: they gate the 0.89.0 publish. Every change to a shipped
 module `0001_initial` (SA257's composite constraints, SA265's billing column on the tenant root,
 SA266's model and constraint renames) lands before SA204 freezes migration history, and SA204
 lands before SA153 slice (a), whose schema work is `0002+` from the start (arch audit §7).
@@ -91,7 +91,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA251 | yes | yes | yes | **yes** | no |
-| 3 | SA252 | yes | yes | yes | **yes** | no |
+| 3 | SA254 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -357,29 +357,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
   releases it, on the existing event-dedup key. 0.89.0's release notes name the checkout fix.
 
   **Slices:**
-  - [ ] (a) Absolute return URLs with the `StripeClient` guard and the test-mode record.
+  - [ ] (a) Absolute return URLs with the `StripeClient` guard and the test-mode record. The
+    request-built absolute URLs and the client guard landed with tests; the live Stripe test-mode
+    checkout record still needs test credentials and a running recipient.
   - [ ] (b) Unknown-outcome resolution and the operator reconciler.
   - [ ] (c) Delayed-payment webhook events.
 
   **Surfaces:** `billing/views.py`, `_checkout.py`, `_removal.py`, `_webhooks.py`,
   `_stripe_client.py`, their tests, the billing README, and the tech audit.
 
-- [ ] **SA252 — Stop deriving the analytics distinct ID from the session key, and guard the dashboard.**
-
-  **Context:** server-side analytics sends an identifier derived from the live session key to
-  PostHog (tech audit `analytics-distinct-id-is-session-key`, S2; scenario in the private
-  companion). The analytics overview page is the only module page with no guard
-  (`analytics-dashboard-unauthenticated`, S4; coherence `tenant-authorization`, analytics half).
-
-  **Acceptance:** the distinct ID is the user's stable non-secret ID when signed in and a random
-  anonymous ID otherwise; no value derived from `session_key` reaches an outbound client or
-  logger, and a conformance rule rejects it. The dashboard requires staff or the documented org
-  role, with a test for the anonymous and under-privileged cases. The release notes tell each
-  analytics-enabled deployment to invalidate sessions *after* upgrading and to purge or re-key
-  PostHog persons.
-
-  **Surfaces:** `analytics/services.py`, `analytics/views.py`, their tests, the analytics README,
-  the conventions harness, and the tech audit.
+- [x] **SA252 — Stop deriving the analytics distinct ID from the session key, and guard the dashboard.**
 
 - [ ] **SA253 — Make the generated project's CI, image, and healthcheck pass, and execute them in a gate.**
 

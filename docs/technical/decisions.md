@@ -888,6 +888,10 @@ public surface is `services.py` (rule 4).
   requires, and lists them in its README under Public surface. Listed exception: `$pageview`
   (PostHog's name).
 - ✅ Renaming an event is a breaking change recorded in the release notes, like a moved URL (rule 7).
+- ✅ No value derived from `session_key` (a live credential) is passed to an outbound client or
+  written to a log. A distinct ID is the user's stable non-secret ID when authenticated identity
+  linkage is enabled, and a random session-stored ID otherwise; a deployment that ran an earlier
+  release invalidates sessions and re-keys the provider's persons once.
 
 **23. Service surface.**
 - ✅ `services.py` defines `__all__`; exactly that list is the module's public service surface
@@ -1086,8 +1090,8 @@ tenant-model base,
 `Meta` inheritance, and admin, primary keys, `related_name`, `__str__` and ordering, `gettext`,
 `__init__.py` content, receivers outside `receivers.py`, command output, `CommandError`, and
 `--dry-run`, `pyproject.toml` sections, a module directory without `module.yml`, `is_staff` and
-hand-written login checks in views, email sent outside notifications, per-event analytics helpers and
-event names, `services.py` `__all__` and keyword-only signatures, `py.typed`, `datetime.now`, and
+hand-written login checks in views, email sent outside notifications, per-event analytics helpers,
+event names, and `session_key` reads, `services.py` `__all__` and keyword-only signatures, `py.typed`, `datetime.now`, and
 cache-key prefixes, constraint and index names and `unique_together`, webhook view bases, empty
 authentication and throttle classes, a signature-verifying service call in every such view (taking
 over from the CSRF pairing gate for webhooks), and response bodies, unlisted package file names, and ticket numbers in test file names, docstrings, and comments,

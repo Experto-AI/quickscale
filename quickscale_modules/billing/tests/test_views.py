@@ -1121,8 +1121,8 @@ def test_checkout_view_creates_session_with_server_owned_redirect_urls(
     }
     assert captured_call["user"] == user
     assert captured_call["plan"] == plan
-    assert captured_call["success_url"] == "/billing/purchase/success/"
-    assert captured_call["cancel_url"] == "/billing/purchase/cancel/"
+    assert captured_call["success_url"] == "http://testserver/billing/purchase/success/"
+    assert captured_call["cancel_url"] == "http://testserver/billing/purchase/cancel/"
     assert captured_call["organization"] is not None
 
 
@@ -1171,8 +1171,8 @@ def test_checkout_view_keeps_flat_redirect_urls_for_authenticated_solo_request_o
     }
     assert captured_call["user"] == user
     assert captured_call["plan"] == plan
-    assert captured_call["success_url"] == "/billing/purchase/success/"
-    assert captured_call["cancel_url"] == "/billing/purchase/cancel/"
+    assert captured_call["success_url"] == "http://testserver/billing/purchase/success/"
+    assert captured_call["cancel_url"] == "http://testserver/billing/purchase/cancel/"
     assert captured_call["organization"] is not None
 
 
@@ -1219,8 +1219,12 @@ def test_subscription_checkout_view_creates_session_with_server_owned_redirect_u
     }
     assert captured_call["user"] == user
     assert captured_call["plan"] == plan
-    assert captured_call["success_url"] == "/billing/subscription/success/"
-    assert captured_call["cancel_url"] == "/billing/subscription/cancel/"
+    assert captured_call["success_url"] == (
+        "http://testserver/billing/subscription/success/"
+    )
+    assert captured_call["cancel_url"] == (
+        "http://testserver/billing/subscription/cancel/"
+    )
     assert captured_call["organization"] is not None
 
 
@@ -1419,7 +1423,7 @@ def test_billing_portal_session_view_returns_server_owned_return_url(
         "portal_url": "https://billing.example.com/portal-session"
     }
     assert captured_call["user"] == user
-    assert captured_call["return_url"] == "/billing/portal/return/"
+    assert captured_call["return_url"] == "http://testserver/billing/portal/return/"
     assert captured_call["organization"] is not None
 
 

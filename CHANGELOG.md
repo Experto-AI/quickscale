@@ -580,6 +580,18 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     test reads the Module Conventions rule headings in `decisions.md`, so every rule is covered by
     a detector, recorded open, or delegated to its carrier rules or external gate, and the harness
     success line names each delegated rule with its carrier.
+  - **Analytics identity never derives from the session key.** The outbound PostHog distinct ID
+    is the signed-in user's stable non-secret ID when authenticated identity linkage is enabled
+    and a random session-stored anonymous ID otherwise, and a conformance rule rejects a
+    `session_key` read anywhere in module source. A deployment that ran analytics on an earlier
+    release must invalidate sessions after upgrading and purge or re-key the persons the old IDs
+    created.
+  - **The analytics overview page requires login and the viewer org role.** Anonymous visitors are
+    redirected to login, and an authenticated caller below the active organization's `viewer` role
+    is refused (`403`).
+  - **Billing checkout sessions hand Stripe absolute return URLs.** Checkout, subscription, and
+    billing-portal sessions build their success, cancel, and return URLs from the incoming request
+    as absolute URLs, and the Stripe client refuses a relative one before calling the provider.
   - **Tenant-to-tenant references are storage-enforced.** Every foreign key between tenant models
     — including CRM contact→company, deal→contact, and deal→stage and blog post→category — carries
     a composite `(fk, organization_id)` constraint, and a warning-level `quickscale_orgs.W007`

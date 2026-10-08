@@ -27,7 +27,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 | `posthog_host` | string | `https://us.i.posthog.com` | `QUICKSCALE_ANALYTICS_POSTHOG_HOST` | Fallback PostHog ingestion host used when the host env var is blank. |
 | `exclude_debug` | boolean | `true` | `QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG` | Disable analytics automatically when Django `DEBUG` is true. |
 | `exclude_staff` | boolean | `false` | `QUICKSCALE_ANALYTICS_EXCLUDE_STAFF` | Skip request-scoped analytics payloads for authenticated staff users. |
-| `anonymous_by_default` | boolean | `true` | `QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT` | Use session-based anonymous distinct IDs unless operators explicitly opt into authenticated identity linkage. |
+| `anonymous_by_default` | boolean | `true` | `QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT` | Use random session-stored anonymous distinct IDs unless operators explicitly opt into authenticated identity linkage. |
 
 The same desired state in `quickscale.yml`:
 
@@ -50,7 +50,10 @@ modules:
   `analytics_enabled_for_request(request)` answer whether capture runs for the current process and
   request. The settings snapshot and its accessor are private to the module's `_settings.py`.
 - `configure_analytics_client()` initializes the PostHog client; `capture_event()` sends an event
-  the sending module names; `get_distinct_id()` resolves the active distinct ID.
+  the sending module names; `get_distinct_id()` resolves the active distinct ID — the signed-in
+  user's stable non-secret primary key when authenticated identity linkage is enabled
+  (`anonymous_by_default: false`), and a random session-stored anonymous ID otherwise. It never
+  reads or derives the live session credential.
 - `get_template_analytics_context()` builds the dictionary the template tags render.
 - Feature modules name their own events in their `services.py` under the
   `quickscale_<module>_<event>` stem — forms, for example, emits `quickscale_forms_submitted`.
@@ -68,6 +71,9 @@ modules:
 |----------|------|------|
 | `quickscale_analytics:dashboard` | `analytics/` | Module-owned analytics overview page. |
 
+The dashboard requires login and the active organization's `viewer` role (rule 19); anonymous
+visitors are redirected to login, and a caller below the role is refused (`403`).
+
 ## Management commands
 
 This module ships no management commands.
@@ -82,9 +88,12 @@ This module ships no management commands.
   `_env_var` options name the environment variables, and `quickscale apply` renders their values
   into the `QUICKSCALE_ANALYTICS_POSTHOG_API_KEY` and
   `QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE` settings, which module code reads (rule 35).
-- `exclude_debug` and `exclude_staff` keep non-production and staff traffic out of capture;
-  `anonymous_by_default` keeps distinct IDs session-based unless authenticated identity
-  linkage is explicitly enabled.
+- `exclude_debug` and `exclude_staff` keep non-production and staff traffic out of capture.
+  `anonymous_by_default` gives visitors a random session-stored ID — signed-in users included;
+  enabling authenticated identity linkage instead names signed-in users by their stable non-secret
+  primary key. Neither path reads the session key: a deployment upgrading from a release that did
+  must invalidate sessions after upgrading and purge or re-key the PostHog persons created with
+  session-key-derived IDs (see the release note).
 - Existing React and HTML theme files remain user-owned: use the template tags only when you
   explicitly adopt analytics in server-rendered templates.
 

@@ -16,8 +16,12 @@ ALLOWED_HOSTS = ["*"]
 INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
+    "django.contrib.admin",
     "django.contrib.sessions",
+    "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
+    "quickscale_modules_orgs",
     "quickscale_modules_analytics",
 ]
 
@@ -25,7 +29,11 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "quickscale_modules_orgs.middleware.TenantMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "tests.urls"
@@ -48,7 +56,9 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("QS_ANALYTICS_DB_NAME", "test_quickscale_analytics"),
-        "USER": os.environ.get("QS_ANALYTICS_DB_USER", "postgres"),
+        # The NOBYPASSRLS role orgs' boot guard requires, shared with the
+        # other module suites; provisioned by scripts/provision_test_roles.sh.
+        "USER": os.environ.get("QS_ANALYTICS_DB_USER", "quickscale_test_role"),
         "PASSWORD": os.environ.get("QS_ANALYTICS_DB_PASSWORD", ""),
         "HOST": os.environ.get("QS_ANALYTICS_DB_HOST", "localhost"),
         "PORT": os.environ.get("QS_ANALYTICS_DB_PORT", "5432"),
@@ -59,6 +69,10 @@ USE_TZ = True
 TIME_ZONE = "UTC"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 STATIC_URL = "/static/"
+
+LOGIN_URL = "/accounts/login/"
+QUICKSCALE_ORGS_ENABLED = True
+QUICKSCALE_ORGS_MODE = "saas"
 
 QUICKSCALE_ANALYTICS_ENABLED = True
 QUICKSCALE_ANALYTICS_PROVIDER = "posthog"
@@ -77,8 +91,8 @@ QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE = ""
 
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
+MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
 MODULE_SETTINGS_SCHEMA = {
-    "analytics": load_settings_schema(
-        Path(__file__).resolve().parent.parent / "module.yml"
-    )
+    name: load_settings_schema(MODULES_ROOT / name / "module.yml")
+    for name in ("analytics", "orgs")
 }

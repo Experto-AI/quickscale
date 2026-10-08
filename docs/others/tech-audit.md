@@ -6,10 +6,6 @@ Audited: 2fd8637f (v89) · 2026-10-08 · working tree dirty (uncommitted `docs/o
 > review, not a continuation"). The prior deliverable (audited `e2623cb8`, 2026-10-05) was read
 > only **after** the sweep, to reconcile its IDs, verify its claimed closures, and carry its
 > watchlist. It held no open finding. Every prior ID has a line in §15.
->
-> **Disclosure:** the repository is public. One unfixed S2 security finding
-> (`analytics-distinct-id-is-session-key`) keeps its failure scenario, evidence, refutation, and
-> chain in a private companion outside the repository.
 
 ---
 
@@ -246,13 +242,6 @@ items:
      anchors: [quickscale_modules/billing/src/quickscale_modules_billing/views.py],
      depends_on: [], chain: [billing-reservation-unknown-outcome-permanent],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: analytics-distinct-id-is-session-key, status: open, severity: S2, category: III,
-     title: "Server-side analytics distinct ID is derived from a live credential",
-     effort: Small, confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/analytics/src/quickscale_modules_analytics/services.py],
-     fix_files: [quickscale_modules/analytics/src/quickscale_modules_analytics/services.py,
-                 quickscale_modules/analytics/tests/test_services.py],
-     depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: generated-ci-fails-out-of-box, status: open, severity: S3, category: X,
      title: "Generated CI workflow cannot pass on a fresh project", effort: Small, confidence: High,
      reality: generated-app,
@@ -325,10 +314,6 @@ items:
      effort: Trivial, confidence: High, reality: generated-app,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/_email.py],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: analytics-dashboard-unauthenticated, status: open, severity: S4, category: III,
-     effort: Trivial, confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/analytics/src/quickscale_modules_analytics/views.py],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: deploy-runtime-url-unquoted-password, status: open, severity: S4, category: IX,
      effort: Trivial, confidence: High, reality: cli,
      anchors: [quickscale_cli/src/quickscale_cli/commands/_deploy_service_config.py],
@@ -366,12 +351,11 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 2 · S3 — 8 · S4 — 8 · total 18 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 1 · S3 — 8 · S4 — 7 · total 16 open. Watchlist: 7.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
 | `billing-checkout-relative-redirect-urls` | S2 | I | Checkout/portal sessions get relative return URLs that Stripe rejects | Trivial | High | new — **quick win** |
-| `analytics-distinct-id-is-session-key` | S2 | III | Server-side analytics distinct ID is derived from a live credential | Small | High | new |
 | `generated-ci-fails-out-of-box` | S3 | X | Generated CI workflow cannot pass on a fresh project | Small | High | new |
 | `notifications-webhook-rejects-resend` | S3 | IX | Webhook accepts only a signing contract Resend never sends | Medium | High | new |
 | `billing-reservation-unknown-outcome-permanent` | S3 | I | Failed checkout create blocks account deletion and purge forever | Medium | High | new |
@@ -385,7 +369,6 @@ items:
 | `viewas-overrides-management-org` | S4 | I | VIEW-AS org replaces the URL's org on management pages | Small | High | new |
 | `social-payload-echoes-exception-text` | S4 | VI | Public social payload returns `str(exc)` | Trivial | High | new |
 | `forms-notification-status-misreported` | S4 | VI | Submission reports `queued` when notifications are disabled | Trivial | High | new |
-| `analytics-dashboard-unauthenticated` | S4 | III | Analytics overview page has no auth guard | Trivial | High | new |
 | `deploy-runtime-url-unquoted-password` | S4 | IX | Reused runtime password embedded unquoted in a URL | Trivial | High | new |
 | `dr-media-sync-whole-object-read` | S4 | IV | Media sync reads whole objects into memory | Trivial | High | new |
 
@@ -463,41 +446,6 @@ items:
   - **Releases affected:** shipped in tags `0.87.0`, `0.88.0`, and `0.89.0`.
   - The architectural audit's red flag (§14 below) expects publishing 0.89.0 to repair checkout.
     This defect is still present at that tag.
-
-### Finding 2: Server-side analytics distinct ID is derived from a live credential
-
-- **ID:** `analytics-distinct-id-is-session-key`
-- **Severity:** S2.
-  - **Rubric cell:** Critical impact (an account and session credential leaves the trust
-    boundary, including staff sessions) × Common reach.
-  - **Preconditions:** one unverified (analytics enabled), so reach moves to Rare → S2.
-  - **Reality:** R2 with the module defaults.
-  - **Flipping assumption:** who can read the PostHog project (Q3).
-- **Category:** III (secrets sent to a third party).
-- **Confidence:** High. Read end to end; tests pin the format.
-- **Location:** `quickscale_modules/analytics/src/quickscale_modules_analytics/services.py:191-224`
-  (`get_distinct_id`); caller `quickscale_modules/forms/src/quickscale_modules_forms/views.py:111-145`;
-  defaults `quickscale_modules/analytics/module.yml:53-65`.
-- **Defect:** The analytics distinct ID sent to PostHog is built directly from a value that
-  authenticates the user. Under the shipped defaults this includes signed-in and staff users.
-- **Failure scenario / Evidence / Refutation / Chain:** held in the private companion.
-- **Fix:**
-  - Never derive the distinct ID from the session key. Use a random pseudonymous ID stored in the
-    session (`session.setdefault("quickscale_analytics_id", uuid4().hex)`), or a keyed HMAC of the
-    session key with a dedicated secret.
-  - Re-pin the tests (`tests/test_services.py:439`, `:468`, `:487`) to the new form.
-  - Default `exclude_staff` to `true`.
-  - **Effort:** Small.
-- **Fix files:** `services.py`, `module.yml` (default), `tests/test_services.py`.
-  **Depends on:** none.
-- **Verification:** A test asserting the distinct ID contains no substring of
-  `request.session.session_key`, for anonymous, authenticated, and staff requests.
-- **Fix risk:** PostHog person continuity breaks once; that is acceptable. Run the post-fix
-  session invalidation described in the companion for deployments that had analytics enabled.
-- **Detection signal:** PostHog persons whose distinct ID starts with `session:`.
-- **Deliberate?** The README calls these IDs "session-based anonymous". That justification fails,
-  because the value is a credential, not an anonymous token.
-  - **Age:** since the module was introduced (`4a56ccf4`, 2026-04-04).
 
 ### S3 findings (compact)
 
@@ -672,10 +620,6 @@ items:
 - `forms-notification-status-misreported` · `forms/_email.py:44-53` · When notifications are
   disabled, the submit response reports `"queued"` while logging "skipped". · Return a distinct
   `"disabled"` status.
-- `analytics-dashboard-unauthenticated` · `analytics/views.py:15` · The module page at
-  `/analytics/` shows enabled state and the PostHog host to anonymous visitors. The rule-19 module
-  back-office pages all require a role. · Add `LoginRequiredMixin` plus `OrgRoleMixin`, or
-  staff-only.
 - `deploy-runtime-url-unquoted-password` · `_deploy_service_config.py:22-33`, `:62-68` · A reused,
   operator-set `RUNTIME_DB_PASSWORD` containing `@ : / #` is embedded raw into
   `RUNTIME_DATABASE_URL`, which breaks the URL. Generated passwords are hex and safe. · Quote with
@@ -701,12 +645,12 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Invitation accept | login | token + normalized email match | UUID | autoescape | n/a | n/a | `select_for_update` | Django | n/a |
 | VIEW-AS | login | superuser, POST only | slug | n/a | n/a | n/a | n/a | 404 | INFO log |
 | CRM API | session (CSRF) | `HasOrgRole` viewer/member | serializers reject foreign-org FKs; composite FKs | DRF | DRF defaults | n/a | n/a | rule 9 | n/a |
-| Forms public schema/submit | none (`AllowAny`) | System or active org | serializer | DRF | `FormSubmitThrottle` | Resend on commit | n/a | rule 9; status: `forms-notification-status-misreported` | submission row; analytics: `analytics-distinct-id-is-session-key` |
+| Forms public schema/submit | none (`AllowAny`) | System or active org | serializer | DRF | `FormSubmitThrottle` | Resend on commit | n/a | rule 9; status: `forms-notification-status-misreported` | submission row; analytics distinct ID is the stable non-secret or random anonymous ID |
 | Forms admin API + CSV | session (CSRF) | `HasOrgRole`; superuser via `operator_access` | DRF | CSV formula cells neutralized | DRF defaults | n/a | n/a | rule 9 | `operator_access` log |
 | Blog/listings automation APIs | session (CSRF) | `HasOrgRole(MEMBER)` | Pillow format/size/pixels; extension from format | JSON | blog scope; listings DRF defaults (hand-off) | n/a | slug 409 | rule 9 | n/a |
 | Blog/listings public reads | none | System org or active org via `org_scope` | slug | markdown over escaped text + href scheme filter | none | n/a | n/a | Django | n/a |
 | Social payload endpoints (generated) | none | System or active org; org-partitioned cache | n/a | `JsonResponse` | none | n/a | n/a | `social-payload-echoes-exception-text` | n/a |
-| Analytics page | none: `analytics-dashboard-unauthenticated` | — | n/a | autoescape | none | n/a | n/a | Django | n/a |
+| Analytics page | session (login required) | active organization's `viewer` role | n/a | autoescape | none | n/a | n/a | Django | n/a |
 | `AccountDeleteView` → anonymize boundary | login | self; last-owner check under locks | form | autoescape | allauth N/A | provider I/O outside atomics | compensating resume | messages | skip log; cross-tenant selectors: `anonymize-matches-unverified-address` |
 | auth (allauth) | allauth | n/a | allauth forms | autoescape | allauth `ACCOUNT_RATE_LIMITS` defaults | n/a | n/a | allauth | n/a; ownership: `anonymize-matches-unverified-address` (verification default `none`) |
 | Backups admin restore | admin session | `change_backuppolicy` + `QUICKSCALE_BACKUPS_ALLOW_RESTORE` (watch) | confirmation = filename; custom-dump only | autoescape | n/a | background `Popen` | atomic claim | messages | status row |
@@ -730,9 +674,12 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
      parallel.
    - **Release note:** do not publish 0.89.0 as a fix for the arch-audit red flag until the first
      item lands.
-2. **`analytics-distinct-id-is-session-key`.** Ship the code fix. Then, in each deployment that
-   ran analytics, invalidate existing sessions and purge or re-key the PostHog persons (see the
-   companion). The session invalidation must follow the fix, or new keys leak again.
+2. **Analytics batch (landed).** `analytics-distinct-id-is-session-key` and
+   `analytics-dashboard-unauthenticated` are fixed: the distinct ID is the stable non-secret ID or
+   a random anonymous ID, and the overview page requires login and the viewer org role. Each
+   deployment that ran analytics must invalidate existing sessions and purge or re-key the PostHog
+   persons after upgrading (the invalidation must follow the fix, or the old keys keep their
+   value).
 3. **Generator-output batch** (one template PR, with a gate that runs the rendered artifacts):
    `generated-ci-fails-out-of-box`, `generated-ci-mutable-action-tags`,
    `docker-healthcheck-always-unhealthy`, `frontend-image-floating-deps`. These touch overlapping
@@ -753,7 +700,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | orgs | `viewas-overrides-management-org`; invite part of `org-invitation-email-unthrottled`; invitation scrub part of `anonymize-matches-unverified-address` | Middleware, priming, scopes, permissions, views, API, invitations, anonymization (full). Tenant isolation layers verified. |
 | billing | `billing-checkout-relative-redirect-urls`, `billing-reservation-unknown-outcome-permanent`, `billing-async-payment-never-credited` | Views, webhooks, credits, checkout, client, removal (full). Signature, dedupe, and ledger locking verified. |
 | notifications | `notifications-webhook-rejects-resend` | Webhook path and anonymization (full). |
-| analytics | `analytics-distinct-id-is-session-key`, `analytics-dashboard-unauthenticated` | Full. |
+| analytics | clean. The distinct ID no longer derives from the session key, and the overview page requires login and the viewer role. | Full. |
 | forms | `forms-notification-status-misreported` | Views and notification helper (full). Public-path scoping, throttle, and CSV neutralization verified. |
 | blog | clean | Views, upload validation, `upload_to`, markdown rendering (full). |
 | listings | clean | Publish API and service (full). |
@@ -861,7 +808,8 @@ Added:
 - **A Resend/Svix contract test built from the vendor's documented payload and signature.** Would
   have caught `notifications-webhook-rejects-resend`.
 - **A conformance rule rejecting `session_key` in any value passed to an outbound client or
-  logger.** Would have caught `analytics-distinct-id-is-session-key`.
+  logger.** Would have caught `analytics-distinct-id-is-session-key`; rule 22's detector now
+  carries the clause with its control cases.
 - Carried: image-layer and broader IaC scanning.
 
 ---
@@ -905,8 +853,9 @@ Added:
   `BlogApiThrottle` and a `_RATE_LIMIT` option.
 - The generated social payload views are plain `JsonResponse` function views, against rule 9's
   DRF base. The exception-text leak is reported here as `social-payload-echoes-exception-text`.
-- `analytics` is the only module whose page has no auth or role guard. Rule 19's shape divergence
-  belongs to coherence; the info leak is the S4 above.
+- `analytics` was the only module whose page had no auth or role guard; it now requires login and
+  the viewer role (SA252). Rule 19's shape divergence for billing belongs to coherence; the info
+  leak was the S4 above.
 
 ---
 
@@ -916,11 +865,9 @@ Added:
    accepted the relative URL, `billing-checkout-relative-redirect-urls` dies.
 2. Is the notifications webhook meant to receive Resend directly, or through a relay that
    re-signs? A relay downgrades `notifications-webhook-rejects-resend` to a documentation fix.
-3. In deployments with analytics enabled, who has PostHog project access, and do signed-in users
-   submit forms? This bounds `analytics-distinct-id-is-session-key`.
-4. Are delayed-notification payment methods (SEPA, ACH, Bacs, bank transfer) enabled on the
+3. Are delayed-notification payment methods (SEPA, ACH, Bacs, bank transfer) enabled on the
    Stripe accounts in use? This decides whether `billing-async-payment-never-credited` is live.
-5. Do production projects keep the auth default `email_verification: none`? `mandatory`
+4. Do production projects keep the auth default `email_verification: none`? `mandatory`
    downgrades `anonymize-matches-unverified-address`.
 
 ---
@@ -1079,3 +1026,18 @@ Added:
 - 2026-10-08 — new watchlist: `backups-upload-restore-by-model-permission`,
   `single-sync-worker-vendor-calls`, `allow-bypassrls-serving-undetected`,
   `migrate-runs-per-replica`.
+- 2026-10-08 — `billing-checkout-relative-redirect-urls`: **code resolved** (SA251, slice a). The
+  purchase, subscription, and portal views build their return URLs with
+  `request.build_absolute_uri(reverse(...))`, and `StripeClient` refuses a URL without a scheme
+  and host before any provider call; view tests pin the absolute values and contract tests pin the
+  refusals. The live Stripe test-mode checkout record is still owed, so the finding stays open.
+- 2026-10-08 — `analytics-distinct-id-is-session-key`: **resolved** (SA252). The distinct ID is
+  the signed-in user's stable non-secret ID when authenticated identity linkage is enabled and a
+  random session-stored anonymous ID otherwise; `get_distinct_id` reads no session key, the
+  distinct-ID tests assert the session key appears in no returned value, and rule 22's detector
+  rejects a `session_key` read in module source with control cases. Dropped from the index and
+  summary; its private companion's scenario no longer applies.
+- 2026-10-08 — `analytics-dashboard-unauthenticated`: **resolved** (SA252). The overview page
+  requires login and the active organization's `viewer` role through orgs' one role check; tests
+  cover anonymous redirection, a caller with no organization context, and a non-member session
+  organization. Dropped from the index and summary.

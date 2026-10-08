@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from threading import Lock
 from typing import Any, Protocol, cast
+from uuid import uuid4
 
 import posthog
 from django.conf import settings
@@ -20,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 ANALYTICS_PROVIDER_POSTHOG = "posthog"
 ANALYTICS_POSTHOG_DEFAULT_HOST = "https://us.i.posthog.com"
+
+# Rule 22: the session holds only this module-generated random identifier.
+# The live session credential is never read to build an outbound value.
+_ANONYMOUS_SESSION_KEY = "quickscale_analytics:anonymous_id"
 
 
 class AnalyticsClient(Protocol):
@@ -188,8 +193,38 @@ def get_template_analytics_context(
     }
 
 
+def _anonymous_distinct_id(request: HttpRequest) -> str:
+    """Return a random, session-persisted anonymous distinct ID.
+
+    Rule 22: the identifier is generated here and never read from the
+    session's credential.  Persisting it in the session keeps one browser's
+    events correlated; a session that cannot be read or written still
+    receives a fresh random ID for the one capture.
+    """
+    session = getattr(request, "session", None)
+    if session is not None:
+        try:
+            anonymous_id = session.get(_ANONYMOUS_SESSION_KEY)
+            if not anonymous_id:
+                anonymous_id = uuid4().hex
+                session[_ANONYMOUS_SESSION_KEY] = anonymous_id
+            return f"anonymous:{anonymous_id}"
+        except Exception:
+            logger.debug(
+                "QuickScale analytics could not persist an anonymous ID.",
+                exc_info=True,
+            )
+    return f"anonymous:{uuid4().hex}"
+
+
 def get_distinct_id(request: HttpRequest) -> str:
-    """Return a stable distinct ID based on the runtime anonymity policy."""
+    """Return the distinct ID the runtime anonymity policy selects.
+
+    Rule 22: the identifier is never derived from ``request``'s session
+    credential.  A signed-in user is named by the stable non-secret primary
+    key when authenticated identity linkage is enabled, and every other
+    caller by a random identifier this module generates and stores.
+    """
     snapshot = get_analytics_runtime_settings()
     if snapshot.exclude_staff and _request_is_staff(request):
         return ""
@@ -203,24 +238,7 @@ def get_distinct_id(request: HttpRequest) -> str:
     ):
         return str(user.pk)
 
-    session = getattr(request, "session", None)
-    if session is not None:
-        try:
-            if session.session_key is None:
-                if hasattr(session, "create"):
-                    session.create()
-                elif hasattr(session, "save"):
-                    session.save()
-        except Exception:
-            logger.debug(
-                "QuickScale analytics could not initialize a session key.",
-                exc_info=True,
-            )
-        session_key = getattr(session, "session_key", None)
-        if session_key:
-            return f"session:{session_key}"
-
-    return "anonymous"
+    return _anonymous_distinct_id(request)
 
 
 def capture_event(

@@ -28,7 +28,10 @@ from quickscale_modules_billing.models import (
     WebhookEvent,
 )
 from quickscale_modules_billing._settings import STRIPE_API_VERSION
-from quickscale_modules_billing.exceptions import BillingConfigurationError
+from quickscale_modules_billing.exceptions import (
+    BillingConfigurationError,
+    BillingValidationError,
+)
 from quickscale_modules_billing._stripe_client import StripeClient
 from quickscale_modules_billing._payload import _stripe_named_release
 from quickscale_modules_billing.services import (
@@ -138,6 +141,143 @@ def test_activate_api_key_pins_the_api_version_on_the_sdk() -> None:
 
     assert stripe_module.api_key == TEST_API_KEY
     assert stripe_module.api_version == STRIPE_API_VERSION
+
+
+def test_stripe_client_refuses_relative_checkout_redirect_urls() -> None:
+    """A path-only success or cancel URL never reaches the Stripe SDK."""
+    calls: list[dict[str, Any]] = []
+
+    def create(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return {"id": "cs_guard", "url": "https://checkout.stripe.test/guard"}
+
+    stripe_module = SimpleNamespace(
+        api_key="",
+        checkout=SimpleNamespace(Session=SimpleNamespace(create=create)),
+    )
+    stripe_client = StripeClient(stripe_module=stripe_module, api_key=TEST_API_KEY)
+
+    with pytest.raises(BillingValidationError, match="success_url"):
+        stripe_client.create_checkout_session(
+            customer_id="cus_guard",
+            price_id="price_guard",
+            success_url="/billing/purchase/success/",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
+            session_metadata={"quickscale_user_reference": "auth.user:1"},
+            payment_intent_metadata={"quickscale_user_reference": "auth.user:1"},
+            client_reference_id="auth.user:1",
+        )
+    with pytest.raises(BillingValidationError, match="cancel_url"):
+        stripe_client.create_checkout_session(
+            customer_id="cus_guard",
+            price_id="price_guard",
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="/billing/purchase/cancel/",
+            session_metadata={"quickscale_user_reference": "auth.user:1"},
+            payment_intent_metadata={"quickscale_user_reference": "auth.user:1"},
+            client_reference_id="auth.user:1",
+        )
+
+    assert calls == []
+
+
+def test_stripe_client_refuses_relative_subscription_checkout_urls() -> None:
+    """A path-only success or cancel URL never reaches the Stripe SDK."""
+    calls: list[dict[str, Any]] = []
+
+    def create(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return {"id": "cs_guard", "url": "https://checkout.stripe.test/guard"}
+
+    stripe_module = SimpleNamespace(
+        api_key="",
+        checkout=SimpleNamespace(Session=SimpleNamespace(create=create)),
+    )
+    stripe_client = StripeClient(stripe_module=stripe_module, api_key=TEST_API_KEY)
+
+    with pytest.raises(BillingValidationError, match="success_url"):
+        stripe_client.create_subscription_checkout_session(
+            customer_id="cus_guard",
+            price_id="price_guard",
+            success_url="/billing/subscription/success/",
+            cancel_url="https://app.example.com/billing/subscription/cancel",
+            session_metadata={"quickscale_user_reference": "auth.user:1"},
+            subscription_metadata={"quickscale_user_reference": "auth.user:1"},
+            client_reference_id="auth.user:1",
+        )
+    with pytest.raises(BillingValidationError, match="cancel_url"):
+        stripe_client.create_subscription_checkout_session(
+            customer_id="cus_guard",
+            price_id="price_guard",
+            success_url="https://app.example.com/billing/subscription/success",
+            cancel_url="/billing/subscription/cancel/",
+            session_metadata={"quickscale_user_reference": "auth.user:1"},
+            subscription_metadata={"quickscale_user_reference": "auth.user:1"},
+            client_reference_id="auth.user:1",
+        )
+
+    assert calls == []
+
+
+def test_stripe_client_refuses_relative_billing_portal_return_url() -> None:
+    """A path-only portal return URL never reaches the Stripe SDK."""
+    calls: list[dict[str, Any]] = []
+
+    def create(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return {"id": "bps_guard", "url": "https://billing.stripe.test/guard"}
+
+    stripe_module = SimpleNamespace(
+        api_key="",
+        billing_portal=SimpleNamespace(Session=SimpleNamespace(create=create)),
+    )
+    stripe_client = StripeClient(stripe_module=stripe_module, api_key=TEST_API_KEY)
+
+    with pytest.raises(BillingValidationError, match="return_url"):
+        stripe_client.create_billing_portal_session(
+            customer_id="cus_guard",
+            return_url="/billing/portal/return/",
+        )
+
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "/billing/purchase/success/",
+        "//app.example.com/billing/purchase/success/",
+        "https://:443/billing/purchase/success/",
+        "https://[::1",
+    ],
+    ids=["path", "scheme-relative", "port-only-authority", "malformed-host"],
+)
+def test_stripe_client_refuses_urls_without_a_scheme_and_host(bad_url: str) -> None:
+    """Scheme-relative, host-less, and malformed URLs are refused locally."""
+    calls: list[dict[str, Any]] = []
+
+    def create(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return {"id": "cs_guard", "url": "https://checkout.stripe.test/guard"}
+
+    stripe_module = SimpleNamespace(
+        api_key="",
+        checkout=SimpleNamespace(Session=SimpleNamespace(create=create)),
+    )
+    stripe_client = StripeClient(stripe_module=stripe_module, api_key=TEST_API_KEY)
+
+    with pytest.raises(BillingValidationError, match="success_url"):
+        stripe_client.create_checkout_session(
+            customer_id="cus_guard",
+            price_id="price_guard",
+            success_url=bad_url,
+            cancel_url="https://app.example.com/billing/purchase/cancel",
+            session_metadata={"quickscale_user_reference": "auth.user:1"},
+            payment_intent_metadata={"quickscale_user_reference": "auth.user:1"},
+            client_reference_id="auth.user:1",
+        )
+
+    assert calls == []
 
 
 @pytest.mark.django_db

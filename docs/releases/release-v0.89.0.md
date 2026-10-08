@@ -107,6 +107,15 @@ is pending. Until then an enabled billing module refuses startup with `quickscal
 naming the missing projected settings, and the credential values stay in the deployment environment
 under the same names.
 
+**Analytics identity.** The analytics module's outbound PostHog distinct ID is no longer derived
+from the session key: a signed-in user is named by their stable non-secret primary key when
+authenticated identity linkage is enabled, and every other caller receives a random ID stored in
+the session. A registered conformance rule rejects a `session_key` read anywhere in module source.
+Because earlier releases sent session-key-derived IDs to PostHog, each deployment that ran
+analytics must invalidate existing sessions after upgrading and purge or re-key the PostHog
+persons created with those IDs; do this after the upgrade so no new session key reaches PostHog.
+The module's overview page also now requires login and the active organization's `viewer` role.
+
 ## Compatibility
 
 The validation-source changes affect repository tests only. The tenant-enrollment capability keeps

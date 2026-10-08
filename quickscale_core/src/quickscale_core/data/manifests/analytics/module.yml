@@ -61,10 +61,15 @@ config:
       type: boolean
       default: true
       django_setting: QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT
-      description: "Use session-based anonymous distinct IDs unless operators explicitly opt into authenticated identity linkage."
+      description: "Use random session-stored anonymous distinct IDs unless operators explicitly opt into authenticated identity linkage."
       validation: {}
 
   immutable: {}
+
+# Required first-party modules (bare names; rule 39): the overview page's
+# guard uses orgs' published role check.
+required_modules:
+  - orgs
 
 dependencies:
   - posthog>=7.33.0,<8.0.0
