@@ -92,7 +92,7 @@ class AccountDeleteView(
 
     The account row is kept: it is disabled and its personal data is
     scrubbed, so the login identity is gone while the row remains.  Guards
-    account removal with SA28 invariants:
+    account removal with invariants:
     - Blocks removal when the user is the sole owner of a shared org that
       still has other members.
     - Cancels any active subscription on the user's personal org before
@@ -105,7 +105,7 @@ class AccountDeleteView(
     success_url = reverse_lazy("home")  # Redirect to home after removal
 
     # ------------------------------------------------------------------
-    # SA28: last-owner guard, personal-org subscription cancellation,
+    # last-owner guard, personal-org subscription cancellation,
     # and success-message dispatch; form_valid is the POST entry point.
     # ------------------------------------------------------------------
 
