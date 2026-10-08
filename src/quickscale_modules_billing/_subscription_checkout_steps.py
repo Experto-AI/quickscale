@@ -18,6 +18,9 @@ from quickscale_modules_orgs.current_org import org_scope
 from quickscale_modules_billing._customers import (
     get_or_create_stripe_customer as get_or_create_stripe_customer,
 )
+from quickscale_modules_billing._customers import (
+    _resolve_existing_customer_id_for_reconciliation as _resolve_existing_customer_id_for_reconciliation,
+)
 from quickscale_modules_billing._payload import (
     _build_checkout_session_metadata as _build_checkout_session_metadata,
 )
@@ -191,18 +194,27 @@ def _create_and_persist_checkout_session(
     # A blank-session reservation can survive customer or Checkout provider
     # failure. Reusing its reference and idempotency key makes a retry safe even
     # when the first provider response was lost.
-    checkout_session = resolved_client.create_subscription_checkout_session(
-        customer_id=customer_id,
-        price_id=plan.stripe_price_id,
-        success_url=success_url,
-        cancel_url=cancel_url,
-        session_metadata=session_metadata,
-        subscription_metadata=session_metadata,
-        client_reference_id=_user_reference(user),
-        idempotency_key=_build_subscription_checkout_create_idempotency_key(
-            reservation_reference
-        ),
-    )
+    try:
+        checkout_session = resolved_client.create_subscription_checkout_session(
+            customer_id=customer_id,
+            price_id=plan.stripe_price_id,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            session_metadata=session_metadata,
+            subscription_metadata=session_metadata,
+            client_reference_id=_user_reference(user),
+            idempotency_key=_build_subscription_checkout_create_idempotency_key(
+                reservation_reference
+            ),
+        )
+    except _stripe_client._stripe_definitive_error_classes():
+        _resolve_definitively_failed_subscription_checkout(
+            organization,
+            reservation,
+            customer_id=customer_id,
+            stripe_client=resolved_client,
+        )
+        raise
     checkout_session_id = str(checkout_session.get("id") or "").strip()
     checkout_url = str(checkout_session.get("url") or "").strip()
     if not checkout_session_id:
@@ -236,27 +248,182 @@ def _create_and_persist_checkout_session(
     return checkout_url
 
 
+def _close_definitively_failed_subscription_reservation(
+    organization: Any,
+    reservation: Subscription,
+) -> None:
+    """Close a reservation whose provider create the provider itself refused.
+
+    A definitive 4xx answer proves Stripe created no checkout session, so the
+    unknown-outcome obligation is cleared instead of blocking later account
+    deletion or organization purge; an unknown transport failure keeps the
+    reservation for the provider-side reconciliation lookup.
+    """
+    from quickscale_modules_billing._subscription_checkout import (
+        _expire_subscription_reservation,
+    )
+
+    with org_scope(organization):
+        _locks._lock_organization_for_billing_mutation(organization)
+        current_reservation = (
+            Subscription.all_objects.select_for_update()
+            .filter(pk=reservation.pk)
+            .first()
+        )
+        if (
+            current_reservation is not None
+            and current_reservation.status == Subscription.Status.INCOMPLETE
+            and not str(current_reservation.stripe_subscription_id or "").strip()
+            and not str(current_reservation.stripe_checkout_session_id or "").strip()
+        ):
+            _expire_subscription_reservation(current_reservation)
+
+
+def _resolve_definitively_failed_subscription_checkout(
+    organization: Any,
+    reservation: Subscription,
+    *,
+    customer_id: str,
+    stripe_client: Any,
+) -> None:
+    """Resolve a definitive create rejection against the provider first.
+
+    The rejection proves this attempt created no session; a reused reservation
+    may still carry one from an earlier lost response, so the provider is
+    checked before the row is closed.  A failed check leaves the unknown
+    outcome obligation in place.
+    """
+    try:
+        checkout_session = stripe_client.find_checkout_session_by_reference(
+            customer_id=customer_id,
+            metadata_key=_SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY,
+            reference=_subscription_checkout_reference(reservation),
+        )
+    except _stripe_client._stripe_error_classes():
+        return
+    if checkout_session is None:
+        _close_definitively_failed_subscription_reservation(organization, reservation)
+        return
+    checkout_session_id = str(checkout_session.get("id") or "").strip()
+    if not checkout_session_id:
+        return
+    _adopt_unknown_outcome_subscription_reservation(
+        organization,
+        reservation,
+        checkout_session_id=checkout_session_id,
+        checkout_expires_at=_extract_checkout_session_expires_at(checkout_session),
+    )
+
+
+def _find_unknown_outcome_checkout_session(
+    *,
+    organization: Any,
+    reservation: Subscription,
+    stripe_client: Any,
+) -> dict[str, Any] | None:
+    """Look a subscription reservation's provider session up by its reference."""
+    customer_id = _resolve_existing_customer_id_for_reconciliation(
+        organization=organization,
+        stripe_client=stripe_client,
+        reservation_customer_id=str(reservation.stripe_customer_id or ""),
+    )
+    if not customer_id:
+        return None
+    return stripe_client.find_checkout_session_by_reference(
+        customer_id=customer_id,
+        metadata_key=_SUBSCRIPTION_CHECKOUT_REFERENCE_METADATA_KEY,
+        reference=_subscription_checkout_reference(reservation),
+    )
+
+
+def _adopt_unknown_outcome_subscription_reservation(
+    organization: Any,
+    reservation: Subscription,
+    *,
+    checkout_session_id: str,
+    checkout_expires_at: Any,
+) -> None:
+    """Bind the provider session an unknown outcome turned out to be."""
+    with org_scope(organization):
+        _locks._lock_organization_for_billing_mutation(organization)
+        current_reservation = (
+            Subscription.all_objects.select_for_update()
+            .filter(pk=reservation.pk)
+            .first()
+        )
+        if (
+            current_reservation is not None
+            and current_reservation.status == Subscription.Status.INCOMPLETE
+            and not str(current_reservation.stripe_subscription_id or "").strip()
+            and not str(current_reservation.stripe_checkout_session_id or "").strip()
+        ):
+            current_reservation.stripe_checkout_session_id = checkout_session_id
+            update_fields = ["stripe_checkout_session_id"]
+            if checkout_expires_at is not None:
+                current_reservation.checkout_expires_at = checkout_expires_at
+                update_fields.append("checkout_expires_at")
+            current_reservation.save(update_fields=update_fields)
+
+
+def _void_unknown_outcome_subscription_reservation(
+    organization: Any,
+    reservation: Subscription,
+    *,
+    persist: bool,
+) -> None:
+    """Close a reservation the provider lookup proved created nothing."""
+    if not persist:
+        return
+    from quickscale_modules_billing._subscription_checkout import (
+        _expire_subscription_reservation,
+    )
+
+    with org_scope(organization):
+        _locks._lock_organization_for_billing_mutation(organization)
+        current_reservation = (
+            Subscription.all_objects.select_for_update()
+            .filter(pk=reservation.pk)
+            .first()
+        )
+        if (
+            current_reservation is not None
+            and current_reservation.status == Subscription.Status.INCOMPLETE
+            and not str(current_reservation.stripe_subscription_id or "").strip()
+            and not str(current_reservation.stripe_checkout_session_id or "").strip()
+        ):
+            _expire_subscription_reservation(current_reservation)
+
+
 def _find_checkout_reservation(
-    organization: Any, *, elapsed_only: bool
+    organization: Any,
+    *,
+    elapsed_only: bool,
+    include_unknown_outcome: bool = False,
 ) -> Subscription | None:
-    """Return the organization's open incomplete checkout reservation, if any."""
+    """Return the organization's open incomplete checkout reservation, if any.
+
+    A session-less reservation has no local expiry to wait for; callers that
+    resolve unknown creation outcomes include it regardless of the elapsed
+    filter, and its outcome is then resolved against the provider.
+    """
     with org_scope(organization):
         reservation_queryset = Subscription.all_objects.filter(
             organization=organization,
             status=Subscription.Status.INCOMPLETE,
         )
         if elapsed_only:
-            reservation_queryset = reservation_queryset.filter(
-                checkout_expires_at__lte=timezone.now()
-            )
-        return (
-            reservation_queryset.filter(
-                Q(stripe_subscription_id__isnull=True) | Q(stripe_subscription_id="")
-            )
-            .exclude(stripe_checkout_session_id__isnull=True)
-            .exclude(stripe_checkout_session_id="")
-            .first()
-        )
+            elapsed_q = Q(checkout_expires_at__lte=timezone.now())
+            if include_unknown_outcome:
+                # A session-less reservation has no local expiry, and an
+                # adopted session whose payload carried none must still be
+                # inspected; provider truth decides both.
+                elapsed_q |= Q(stripe_checkout_session_id__isnull=True)
+                elapsed_q |= Q(stripe_checkout_session_id="")
+                elapsed_q |= Q(checkout_expires_at__isnull=True)
+            reservation_queryset = reservation_queryset.filter(elapsed_q)
+        return reservation_queryset.filter(
+            Q(stripe_subscription_id__isnull=True) | Q(stripe_subscription_id="")
+        ).first()
 
 
 def _expire_provider_expired_reservation(
