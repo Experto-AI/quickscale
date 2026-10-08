@@ -580,6 +580,15 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     test reads the Module Conventions rule headings in `decisions.md`, so every rule is covered by
     a detector, recorded open, or delegated to its carrier rules or external gate, and the harness
     success line names each delegated rule with its carrier.
+  - **Analytics identity never derives from the session key.** The outbound PostHog distinct ID
+    is the signed-in user's stable non-secret ID when authenticated identity linkage is enabled
+    and a random session-stored anonymous ID otherwise, and a conformance rule rejects a
+    `session_key` read anywhere in module source. A deployment that ran analytics on an earlier
+    release must invalidate sessions after upgrading and purge or re-key the persons the old IDs
+    created.
+  - **The analytics overview page requires login and the viewer org role.** Anonymous visitors are
+    redirected to login, and an authenticated caller below the active organization's `viewer` role
+    is refused (`403`).
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

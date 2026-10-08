@@ -66,3 +66,74 @@ def test_keyword_event_constant_control() -> None:
     assert any(
         "stem" in violation for violation in _violations(checker.rule_22_analytics_events, bad)
     )
+
+
+def test_session_key_attribute_read_is_reported() -> None:
+    """Reading the session credential in module source violates rule 22."""
+    module = _with_files(
+        _golden_module(),
+        **{
+            "services.py": (
+                '"""Demo service surface."""\n\n'
+                '__all__ = ["demo_query"]\n\n\n'
+                "def demo_query(*, session):\n"
+                "    return f'session:{session.session_key}'\n"
+            ),
+        },
+    )
+    violations = _violations(checker.rule_22_analytics_events, module)
+    assert any("session_key" in violation for violation in violations)
+
+
+def test_session_key_getattr_read_is_reported() -> None:
+    """The getattr spelling of the session credential read is reported too."""
+    module = _with_files(
+        _golden_module(),
+        **{
+            "services.py": (
+                '"""Demo service surface."""\n\n'
+                '__all__ = ["demo_query"]\n\n\n'
+                "def demo_query(*, session):\n"
+                "    return getattr(session, 'session_key', None)\n"
+            ),
+        },
+    )
+    violations = _violations(checker.rule_22_analytics_events, module)
+    assert any("session_key" in violation for violation in violations)
+
+
+def test_migration_session_key_read_is_reported() -> None:
+    """A migration logging the session credential is reported like any module source."""
+    module = _with_files(
+        _golden_module(),
+        **{
+            "migrations/0001_initial.py": (
+                '"""Demo migration."""\n\n'
+                "def cleanup(apps, schema_editor):\n"
+                "    session = object()\n"
+                "    logger.info('Removing session %s', session.session_key)\n"
+            ),
+        },
+    )
+    violations = _violations(checker.rule_22_analytics_events, module)
+    assert any("session_key" in violation for violation in violations)
+
+
+def test_random_anonymous_id_passes_the_session_key_clause() -> None:
+    """A session-stored random anonymous ID reads no credential and passes."""
+    module = _with_files(
+        _golden_module(),
+        **{
+            "services.py": (
+                '"""Demo service surface."""\n\n'
+                '__all__ = ["demo_query"]\n\n\n'
+                "def demo_query(*, session):\n"
+                "    anonymous_id = session.get('quickscale_demo:anonymous_id')\n"
+                "    if not anonymous_id:\n"
+                "        anonymous_id = 'generated'\n"
+                "        session['quickscale_demo:anonymous_id'] = anonymous_id\n"
+                "    return anonymous_id\n"
+            ),
+        },
+    )
+    assert _violations(checker.rule_22_analytics_events, module) == []

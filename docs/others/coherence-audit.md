@@ -126,8 +126,8 @@ items:
      members_diverging: [blog, listings], population: url-mount-prefixes(14 includes / 10 modules),
      rule: "rule 41 (two routes, one path)", check: none, closed_world: false, handoff: [tech],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: tenant-authorization, status: open, regressed: false, aspect: E, cost: [defect, ambiguity],
-     members_diverging: [analytics, billing], population: modules-with-pages-or-apis(9),
+  - {id: tenant-authorization, status: open, regressed: false, aspect: E, cost: [ambiguity],
+     members_diverging: [billing], population: modules-with-pages-or-apis(9),
      rule: "rule 19; JSON API Endpoint Base Contract", check: "harness rule 19 (partial)",
      closed_world: false, handoff: [tech], first_seen: 2026-09-26, last_verified: 2026-10-08}
   - {id: option-schema-and-validation, status: open, regressed: false, aspect: B, cost: [ambiguity, tax],
@@ -231,7 +231,7 @@ items:
 
 ## 3. Summary table
 
-**Counts (open):** defect 3 · collision 1 (also counted under defect) · ambiguity 17 · tax 5 ·
+**Counts (open):** defect 2 · collision 1 (also counted under defect) · ambiguity 17 · tax 5 ·
 **total 25**. 12 of the 25 are prior IDs reopened, and one of those (`upward-name-references`)
 is flagged `regressed`. The other 13 are new. One new item, `markdownx-shared-mount`, recreates a
 state the frozen inventory had warned against (§12). Resolved prior IDs still holding: 43 of 55.
@@ -240,7 +240,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 |---|---|---|---|---|---|
 | 1 | `module-enabled-switch` | B | defect, ambiguity | 5 / 12 modules (+ core `env_sync`) | open (reopened) |
 | 2 | `markdownx-shared-mount` | A | collision, defect | 2 / 10 mounting modules | open (new) |
-| 3 | `tenant-authorization` | E | defect, ambiguity | 2 / 9 | open (reopened) |
+| 3 | `tenant-authorization` | E | ambiguity | 1 / 9 | open (reopened) |
 | 4 | `option-schema-and-validation` | B | ambiguity, tax | 12 / 12 adapters | open (reopened) |
 | 5 | `module-error-http-mapping` | D | ambiguity, tax | 4 / 12 (5 variants) | open |
 | 6 | `unauthenticated-status-code` | H | ambiguity, tax | 2 / 6 (4 duplicated classes on the other side) | open |
@@ -303,7 +303,7 @@ and lock keys, throttle scopes, index names, logger names, and reverse accessors
 | Aspect | Value → members |
 |---|---|
 | Top-level keys beyond the common set | `retired_options` → 9 · `contract_vintage` → backups, billing, orgs, social · `managed_files` → social · **`middleware:` and `settings:` → orgs (read by nothing)** |
-| `required_modules` key | present → 8 · **absent** → analytics, backups, notifications, storage (`dependencies` is always present by rule 12) |
+| `required_modules` key | present → 9 · **absent** → backups, notifications, storage (`dependencies` is always present by rule 12; analytics gained `[orgs]` in SA252) |
 | `contract_vintage.id` | present → billing, orgs · absent → backups, social |
 | Option fields | `type`, `default`, `description`, `validation` (+`django_setting` on mutable) → all 86 options ✓ |
 | URL-valued options | `url` normalization + full pattern → analytics `posthog_host` · `strip` only, no check → storage `media_url`, `public_base_url`, `endpoint_url`; backups `remote_endpoint_url` |
@@ -396,8 +396,7 @@ services (harness rule 23); `__all__` present in all 12.
 | Surface | Spelling → members |
 |---|---|
 | Org-role API | DRF `IsAuthenticated, HasOrgRole(...)` → blog, crm, forms, listings · `OrgApiBaseView.min_org_role` → orgs · **`AllowAny` + hand-written `_require_authenticated` / owner check** → billing |
-| Org-role pages | `LoginRequiredMixin` + `OrgRoleMixin` → crm, orgs · public read mixins → blog, listings · `LoginRequiredMixin` → auth, billing dashboard |
-| **Unguarded page** | analytics `AnalyticsDashboardView(TemplateView)`: no login, renders the provider and PostHog host (tech-audit S4) |
+| Org-role pages | `LoginRequiredMixin` + `OrgRoleMixin` → crm, orgs, analytics · public read mixins → blog, listings · `LoginRequiredMixin` → auth, billing dashboard |
 | README lists minimum role per action (rule 19) | yes → blog, crm, forms, listings, orgs · **no** → billing (owner-only by default) |
 
 *Already consistent (keep):* one role check (`user_has_org_role`, harness rule 44); no `is_staff` in
@@ -641,29 +640,29 @@ API status codes) still need a release-notes line.
 - **Confidence:** High (both URLconfs diffed, merge code read).
 - **Hand-off:** tech (upload path depends on the installed set).
 
-### Item 3: Authorization — one page with no guard, and three ways to say "logged in"
+### Item 3: Authorization — three ways to say "logged in", and billing's fourth
 
 - **ID:** `tenant-authorization` (prior ID, reopened; not regressed: analytics' view dates from
   2026-06-16, billing's helpers from 2026-05-16)
 - **Aspect / population:** E · the 9 modules with pages or APIs.
 - **Table:** §4.E. API login spelled as DRF permission classes (blog, crm, forms, listings) /
   `OrgApiBaseView` (orgs) / `AllowAny` + `_require_authenticated()` (billing,
-  `billing/views.py:84`). Pages guarded (auth, billing, crm, orgs) / public by design (blog,
-  listings, billing pricing) / **unguarded operational page** (analytics,
-  `analytics/views.py:15`). README role table present in 5 and absent in billing.
+  `billing/views.py:84`). Pages guarded (auth, billing, crm, orgs, analytics) / public by design
+  (blog, listings, billing pricing); analytics' dashboard adopted `LoginRequiredMixin` +
+  `OrgRoleMixin(VIEWER)` in SA252. README role table present in 5 and absent in billing.
 - **Drift:** rule 19 lists three spellings of "logged in", and billing uses a fourth that the JSON
   API contract separately sanctions ("AllowAny … the billing-module pattern"). Analytics'
-  dashboard is a module-owned page with no login at all.
+  dashboard was a module-owned page with no login at all; SA252 gave it the mixin guard.
 - **Cost class:**
-  - **defect** — the unguarded page (tech-audit S4; detail stays there).
+  - **defect** — the unguarded page; resolved by SA252 (tech-audit S4).
   - **ambiguity** — two decision sections disagree on how an API says "logged in".
 - **Declared rule:** rule 19 ✅ "Logged in is `LoginRequiredMixin`, `login_required`, or DRF
   `IsAuthenticated`", and its README duty. decisions.md § JSON API Endpoint Base Contract ✅
   "`AllowAny` is used when the view performs its own auth checks (the billing-module pattern)".
 - **Options:**
   - **A.** billing adopts `IsAuthenticated` plus `HasOrgRole(OrgRole.OWNER)`, and the JSON API
-    contract drops the AllowAny sentence. Analytics' dashboard gets `LoginRequiredMixin` plus
-    staff or operator access.
+    contract drops the AllowAny sentence. Analytics' dashboard got `LoginRequiredMixin` plus the
+    viewer role (SA252).
   - **B.** Keep billing's helper and list it in rule 19 as a fourth spelling.
 - **Recommended rule (amend rule 19; edit the JSON API contract):**
   - ✅ Every module page and API declares its guard on the view: DRF permission classes or
@@ -675,10 +674,10 @@ API status codes) still need a release-notes line.
 - **Enforcement:** harness rule 19 gains two closed-world clauses: every view class has an
   explicit guard, and an `AllowAny` view body must not read `request.user.is_authenticated`
   (control: billing). The README role table becomes a rule 38 clause.
-- **Migration:** billing (~10 views), analytics (1 view); billing README; JSON API contract
-  sentence.
+- **Migration:** billing (~10 views); billing README; JSON API contract sentence. Analytics' one
+  view landed with SA252.
 - **Confidence:** High (all view classes enumerated by AST; READMEs grepped).
-- **Hand-off:** tech (analytics unguarded page, already S4 there; no new detail).
+- **Hand-off:** tech (analytics' unguarded page landed with SA252; the billing half stays here).
 
 ### Item 4: Adapters — every module validates, coerces, and defaults its options differently
 
@@ -932,7 +931,8 @@ API status codes) still need a release-notes line.
   - auth writes `AccountMiddleware` as a literal (`auth/adapter.py:82`). The derivation schema
     accepts a `middleware` wiring field that no module uses.
   - notifications inserts the `anymail` app as a literal (`adapter.py:179`).
-  - `required_modules` is absent in 4 manifests and `[]` in none.
+  - `required_modules` is absent in 3 manifests and `[]` in none (analytics gained `[orgs]` in
+    SA252).
   - `contract_vintage.id` appears in 2 of 4.
 - **Drift:** § Module Wiring Authority forbids "parsed-but-unread declarative surface" and apps
   "as a Python literal in the adapter". The harness checks literal `url_includes` only.
@@ -948,7 +948,7 @@ API status codes) still need a release-notes line.
   - ❌ An `apps`/`middleware` literal in `adapter.py`.
 - **Enforcement:** the loader becomes closed-world on top-level keys. Control: orgs' current file
   fails to load. Harness rule 7's literal detector extends to `apps` and `middleware`.
-- **Migration:** orgs, auth, notifications manifests and adapters; 4 manifests gain
+- **Migration:** orgs, auth, notifications manifests and adapters; 3 manifests gain
   `required_modules: []`.
 - **Confidence:** High.
 - **Hand-off:** none.
@@ -1423,8 +1423,8 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   (latent for host projects that call `debit_user` from a DRF view).
 - `optional-sender-guard`: forms' `notify_submission` returns `"queued"` when notifications is off,
   so the status misreports a skipped email.
-- `tenant-authorization`: analytics' dashboard has no guard. This is already the tech audit's S4,
-  and no new detail is added here.
+- `tenant-authorization`: analytics' dashboard was the unguarded page; SA252 gave it login plus
+  the viewer role, and the billing half remains the open item.
 
 **To the architectural audit** (structural roots):
 - `core-cli-module-knowledge`: the convention side of watchlist `core-holds-module-vocabulary`.
@@ -1673,3 +1673,7 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   arch-audit §14 (markdownx copy pair → `markdownx-shared-mount`; the theme's 36 TypeScript files
   naming modules beside the seam producer → `mount-path-copies`, Medium confidence, since only the
   API hooks were read). All passed §0.
+- 2026-10-08 (d) — `tenant-authorization` (analytics half): **resolved** (SA252 — the analytics
+  dashboard requires login and the active organization's `viewer` role through orgs' one role
+  check; billing's `AllowAny` half remains open for SA262, and `members_diverging` is now
+  `[billing]`).
