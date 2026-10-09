@@ -10,6 +10,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from quickscale_modules_billing._customers import (
+    _organization_customer_id,
+)
 from quickscale_modules_billing._payload import (
     _normalize_integer as _normalize_integer,
 )
@@ -132,9 +135,7 @@ def _validate_completed_checkout_provider_identity(
     provider_customer_id = _stripe_object_id(checkout_session_payload.get("customer"))
     reservation_subscription_id = str(reservation.stripe_subscription_id or "").strip()
     reservation_customer_id = str(reservation.stripe_customer_id or "").strip()
-    organization_customer_id = str(
-        getattr(organization, "stripe_customer_id", "") or ""
-    ).strip()
+    organization_customer_id = _organization_customer_id(organization)
     if (
         (
             provider_subscription_id

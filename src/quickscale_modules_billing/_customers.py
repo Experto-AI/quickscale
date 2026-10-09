@@ -41,10 +41,23 @@ from quickscale_modules_billing.exceptions import (
     BillingWebhookError,
 )
 from quickscale_modules_billing.models import (
+    BillingCustomer,
     Subscription,
 )
 import quickscale_modules_billing._stripe_client as _stripe_client
 import quickscale_modules_billing._locks as _locks
+
+
+def _organization_customer_id(organization: Any) -> str:
+    """Return the Stripe customer id recorded for *organization*, or ``""``."""
+    if organization is None:
+        return ""
+    customer_id = (
+        BillingCustomer.objects.filter(organization=organization)
+        .values_list("stripe_customer_id", flat=True)
+        .first()
+    )
+    return str(customer_id or "").strip()
 
 
 @_translate_stripe_errors("Stripe customer resolution failed.")
@@ -112,7 +125,7 @@ def _resolve_existing_customer_id_for_reconciliation(
     """
     for candidate in (
         reservation_customer_id,
-        str(getattr(organization, "stripe_customer_id", "") or ""),
+        _organization_customer_id(organization),
     ):
         normalized_candidate = candidate.strip()
         if normalized_candidate:
@@ -163,9 +176,7 @@ def _resolve_authoritative_organization_customer_id(*, organization: Any) -> str
     # Imported lazily: _subscription_checkout imports this module at load time.
     import quickscale_modules_billing._subscription_checkout as _subscription_checkout
 
-    existing_customer_id = str(
-        getattr(organization, "stripe_customer_id", "") or ""
-    ).strip()
+    existing_customer_id = _organization_customer_id(organization)
     if existing_customer_id:
         return existing_customer_id
 
@@ -212,36 +223,30 @@ def _sync_organization_customer_id(organization: Any, customer_id: str) -> None:
             locked_organization = _locks._lock_organization_for_billing_mutation(
                 organization
             )
-            existing_customer_id = str(
-                getattr(locked_organization, "stripe_customer_id", "") or ""
-            ).strip()
+            existing_customer_id = _organization_customer_id(locked_organization)
             if existing_customer_id == normalized_customer_id:
-                organization.stripe_customer_id = normalized_customer_id
                 return
             if existing_customer_id:
                 raise BillingWebhookError(
                     "Stripe customer identity conflicts with the organization's "
                     "current billing customer; automatic replacement was refused."
                 )
-            if (
-                type(organization)
-                .objects.filter(stripe_customer_id=normalized_customer_id)
-                .exclude(pk=locked_organization.pk)
-                .exists()
-            ):
+            if BillingCustomer.objects.filter(
+                stripe_customer_id=normalized_customer_id
+            ).exists():
                 raise BillingWebhookError(
                     "Stripe customer identity is already owned by another "
                     "organization; automatic assignment was refused."
                 )
-            type(organization).objects.filter(pk=locked_organization.pk).update(
-                stripe_customer_id=normalized_customer_id
+            BillingCustomer.objects.create(
+                organization=locked_organization,
+                stripe_customer_id=normalized_customer_id,
             )
     except IntegrityError as exc:
         raise BillingWebhookError(
             "Stripe customer identity is already owned by another organization; "
             "automatic assignment was refused."
         ) from exc
-    organization.stripe_customer_id = normalized_customer_id
 
 
 def _resolve_organization_by_customer_id(customer_id: str) -> Any | None:
@@ -249,21 +254,13 @@ def _resolve_organization_by_customer_id(customer_id: str) -> Any | None:
     if not normalized_customer_id:
         return None
 
-    organization_model = apps.get_model(
-        "quickscale_orgs",
-        "Organization",
+    customer = (
+        BillingCustomer.objects.select_related("organization")
+        .filter(stripe_customer_id=normalized_customer_id)
+        .first()
     )
-    matches = list(
-        organization_model._default_manager.filter(
-            stripe_customer_id=normalized_customer_id,
-        ).order_by("pk")[:2]
-    )
-    if len(matches) > 1:
-        raise BillingWebhookError(
-            "Multiple organizations match the Stripe customer id on this billing event."
-        )
-    if matches:
-        return matches[0]
+    if customer is not None:
+        return customer.organization
 
     subscription = (
         Subscription.all_objects.select_related("organization")

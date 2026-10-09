@@ -25,6 +25,7 @@ from django.db import IntegrityError, transaction
 from django.test import override_settings
 
 from quickscale_modules_billing.models import (
+    BillingCustomer,
     CreditBalance,
     CreditTransaction,
     Plan,
@@ -428,6 +429,9 @@ def test_get_or_create_stripe_customer_prefers_authoritative_org_customer(user) 
     organization = Organization.objects.create(
         name="Atlas",
         slug="atlas",
+    )
+    BillingCustomer.objects.create(
+        organization=organization,
         stripe_customer_id="cus_org_authoritative",
     )
     fake_client = FakeStripeClient()
@@ -469,8 +473,7 @@ def test_get_or_create_stripe_customer_rejects_ambiguous_historical_customers(
             stripe_client=fake_client,
         )
 
-    organization.refresh_from_db()
-    assert organization.stripe_customer_id == ""
+    assert not BillingCustomer.objects.filter(organization=organization).exists()
     assert fake_client.searched_references == []
     assert fake_client.created_payloads == []
 
@@ -485,6 +488,9 @@ def test_get_or_create_stripe_customer_rejects_customer_owned_by_another_org(
     owning_organization = Organization.objects.create(
         name="Existing Stripe Customer Owner",
         slug="existing-stripe-customer-owner",
+    )
+    BillingCustomer.objects.create(
+        organization=owning_organization,
         stripe_customer_id="cus_cross_org_historical",
     )
     Subscription.all_objects.create(
@@ -504,10 +510,11 @@ def test_get_or_create_stripe_customer_rejects_customer_owned_by_another_org(
             stripe_client=fake_client,
         )
 
-    organization.refresh_from_db()
-    owning_organization.refresh_from_db()
-    assert organization.stripe_customer_id == ""
-    assert owning_organization.stripe_customer_id == "cus_cross_org_historical"
+    assert not BillingCustomer.objects.filter(organization=organization).exists()
+    assert (
+        BillingCustomer.objects.get(organization=owning_organization).stripe_customer_id
+        == "cus_cross_org_historical"
+    )
     assert fake_client.searched_references == []
     assert fake_client.created_payloads == []
 
@@ -578,11 +585,13 @@ def test_get_or_create_stripe_customer_creates_and_persists_org_customer_with_or
         organization=organization,
         stripe_client=fake_client,
     )
-    organization.refresh_from_db()
 
     assert customer_id == "cus_created"
     assert created is True
-    assert organization.stripe_customer_id == "cus_created"
+    assert (
+        BillingCustomer.objects.get(organization=organization).stripe_customer_id
+        == "cus_created"
+    )
     assert fake_client.searched_reference_kinds == ["organization"]
     assert fake_client.searched_references == [_organization_reference(organization)]
     assert len(fake_client.created_payloads) == 1
@@ -668,7 +677,10 @@ def test_get_or_create_stripe_customer_reuses_idempotent_create_when_search_stay
     assert fake_client.created_payloads[0]["email"] == ""
     assert fake_client.created_payloads[0]["name"] == ""
     assert fake_client.created_payloads[0]["idempotency_key"]
-    assert organization.stripe_customer_id == "cus_created"
+    assert (
+        BillingCustomer.objects.get(organization=organization).stripe_customer_id
+        == "cus_created"
+    )
 
 
 @pytest.mark.django_db
@@ -1901,14 +1913,16 @@ def test_handle_stripe_event_prefers_org_reference_and_credits_authoritative_org
         signature="t=1,v1=test-signature",
         stripe_client=fake_client,
     )
-    organization.refresh_from_db()
 
     balance = CreditBalance.all_objects.get(organization=organization)
     transaction_row = CreditTransaction.all_objects.get(organization=organization)
     subscription = Subscription.all_objects.get(organization=organization)
 
     assert result.status == "processed"
-    assert organization.stripe_customer_id == "cus_org_runtime"
+    assert (
+        BillingCustomer.objects.get(organization=organization).stripe_customer_id
+        == "cus_org_runtime"
+    )
     assert balance.balance == 100
     assert balance.user is None
     assert transaction_row.user == user

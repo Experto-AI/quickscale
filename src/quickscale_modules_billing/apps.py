@@ -18,13 +18,15 @@ from quickscale_core.runtime import (
     register_module_settings_check,
 )
 from quickscale_modules_orgs.removal import (
-    BILLING_PERSONAL_DATA,
-    BILLING_PROVIDER_STATE,
     BoundaryGuardedHooks,
     ExternalProviderField,
     OrganizationRemovalObligation,
     RemovalAction,
 )
+
+#: Billing's own removal-obligation names (Module Conventions rule 2/33).
+BILLING_PERSONAL_DATA = "quickscale_billing:personal-data"
+BILLING_PROVIDER_STATE = "quickscale_billing:provider-state"
 
 
 class QuickscaleBillingConfig(AppConfig):
@@ -39,11 +41,12 @@ class QuickscaleBillingConfig(AppConfig):
         """Declare billing's organization-removal obligations.
 
         Billing owns the Stripe identifiers it writes — including the Stripe
-        customer id it stores on the organization row — so the declaration
-        lives here rather than in vendored ``orgs`` source. Purge refuses
-        while provider state is live and account deletion reconciles it.  A
-        second obligation owns the stored webhook payloads, whose customer
-        email and name the account anonymization redacts in place.
+        customer identity it records for the organization in its own table —
+        so the declaration lives here rather than in vendored ``orgs`` source.
+        Purge refuses while provider state is live and account deletion
+        reconciles it.  A second obligation owns the stored webhook payloads,
+        whose customer email and name the account anonymization redacts in
+        place.
         """
         return (
             OrganizationRemovalObligation(
@@ -102,7 +105,7 @@ class QuickscaleBillingConfig(AppConfig):
                         boundary_guarded=True,
                     ),
                     ExternalProviderField(
-                        "quickscale_orgs.organization",
+                        "quickscale_billing.billingcustomer",
                         "stripe_customer_id",
                         boundary_guarded=True,
                     ),
