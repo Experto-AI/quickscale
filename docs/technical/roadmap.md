@@ -407,7 +407,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `project_contract.yml` step moved with them. Watch: existing projects must add the `libraries`
     entry before adopting the new templates, and the theme TypeScript still enumerates its module
     surfaces. Next: slice (b).
-  - [ ] (b) `compose_rest_framework()` in `settings/base.py`.
+  - [x] (b) `compose_rest_framework()` in `settings/base.py`. The DRF composition — the one
+    error handler, authenticated-only permissions, the throttle classes and conservative rates,
+    and proxy-derived `NUM_PROXIES` — moved into
+    `quickscale_core.runtime.settings.compose_rest_framework`, which the generated base settings
+    call once with the module-contributed value and the proxy state; the
+    `sa258-runtime-drf-composition` adoption step, the facade and template tests, and the SA90
+    fixture moved with it. Watch: `production.py` still recomputes `NUM_PROXIES` through
+    `num_proxies_for` after its proxy overrides. Next: slice (c).
   - [ ] (c) Managed URLconf inclusion and the emission test.
 
   **Surfaces:** `quickscale_core.runtime` (`runtime/seam.py`), the settings templates, the

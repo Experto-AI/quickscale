@@ -13,7 +13,7 @@ from decouple import config
 from quickscale_core.runtime.settings import (
     CorrelationIdFilter,
     JsonFormatter,
-    num_proxies_for,
+    compose_rest_framework,
 )
 
 from .modules import (
@@ -253,59 +253,18 @@ if globals().get("EMAIL_BACKEND") == "anymail.backends.resend.EmailBackend":
         ANYMAIL["RESEND_SENDER_DOMAIN"] = _notifications_resend_domain
 
 
-# DRF defaults — fail-closed permissions and conservative throttle rates
-# ----------------------------------------------------------------------
-# Modules may contribute DRF configuration through MODULE_SETTINGS (for
-# example extra throttle scopes); their keys are merged in below and win on
-# collision, exactly as module settings win over the template defaults for
-# every other settings key.  The template only fills in what a module leaves
-# unset, so a project with no modules still fails closed.
-REST_FRAMEWORK = dict(globals().get("REST_FRAMEWORK", {}))
-
-# Every DRF-handled API error answers the one QuickScale shape —
-# ``{"error": {"code", "message", "fields"}}`` — produced by the shared
-# runtime handler.  ``setdefault`` lets a module-contributed handler from
-# MODULE_SETTINGS win on collision, like every other DRF key.
-REST_FRAMEWORK.setdefault(
-    "EXCEPTION_HANDLER",
-    "quickscale_core.runtime.conventions.exception_handler",
+# DRF composition — the fail-closed defaults (the one QuickScale error handler,
+# authenticated-only permissions, the throttle classes and conservative rates)
+# merged under any module-contributed REST_FRAMEWORK, plus the proxy-derived
+# NUM_PROXIES — lives in the versioned runtime settings facade, so a contract
+# fix ships through the quickscale-core lockstep pin instead of reaching only
+# freshly generated projects.  A module-contributed key still wins on every key
+# it sets; the helper only fills in what a module left unset.
+REST_FRAMEWORK = compose_rest_framework(
+    globals().get("REST_FRAMEWORK"),
+    use_x_forwarded_for=USE_X_FORWARDED_FOR,
+    trusted_proxy_count=TRUSTED_PROXY_COUNT,
 )
-
-# Module APIs default to authenticated-only unless a view explicitly opts
-# into public access via ``permission_classes``.
-REST_FRAMEWORK.setdefault(
-    "DEFAULT_PERMISSION_CLASSES",
-    [
-        "rest_framework.permissions.IsAuthenticated",
-    ],
-)
-
-# Conservative default rates an operator raises for their traffic profile.
-# They sit above interactive use and legitimate polling (a client polling
-# every two seconds stays under the per-user rate) while still bounding a
-# runaway or abusive client; a module that ships a tighter scope
-# contributes it through MODULE_SETTINGS and it merges in below.
-REST_FRAMEWORK.setdefault(
-    "DEFAULT_THROTTLE_CLASSES",
-    [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
-        "rest_framework.throttling.ScopedRateThrottle",
-    ],
-)
-_DEFAULT_DRF_THROTTLE_RATES = {
-    "anon": "1200/hour",
-    "user": "3000/hour",
-}
-REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
-    **_DEFAULT_DRF_THROTTLE_RATES,
-    **REST_FRAMEWORK.get("DEFAULT_THROTTLE_RATES", {}),
-}
-
-# Client-IP resolution for DRF throttles.  Derived from the trusted-proxy
-# settings above through the shared runtime derivation so DRF and the canonical
-# resolver cannot disagree.
-REST_FRAMEWORK["NUM_PROXIES"] = num_proxies_for(USE_X_FORWARDED_FOR, TRUSTED_PROXY_COUNT)
 
 
 # Default primary key field type

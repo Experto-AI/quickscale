@@ -1970,7 +1970,7 @@ def test_older_settings_updated_to_facade_boot(tmp_path: Path) -> None:
         "from quickscale_core.runtime.settings import (\n"
         "    CorrelationIdFilter,\n"
         "    JsonFormatter,\n"
-        "    num_proxies_for,\n"
+        "    compose_rest_framework,\n"
         ")"
     )
     adopted_import = (
@@ -1979,7 +1979,7 @@ def test_older_settings_updated_to_facade_boot(tmp_path: Path) -> None:
         "    CorrelationIdFilter,\n"
         "    CorrelationIdMiddleware,\n"
         "    JsonFormatter,\n"
-        "    num_proxies_for,\n"
+        "    compose_rest_framework,\n"
         ")"
     )
     assert facade_import in base_settings
