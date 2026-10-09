@@ -649,7 +649,7 @@ SA170's final ordered serial and concurrent campaigns passed against retained pr
 closed; their final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 **5. Template Integration (showcase_react theme):**
-- [ ] The seam's producer (`index.html.j2`) is rendered from the discovered module set, so the module's `window.__QUICKSCALE__` flag (installed and `QUICKSCALE_<MODULE>_ENABLED`) and its path (from its URL names) need no hand-written line there; nor does any list in core, the CLI, or `scripts/`, which derive the module set from discovery (Module Conventions rules 31 and 37)
+- [ ] The seam's producer (the `quickscale_seam` runtime tag) renders from the discovered module set, so the module's `window.__QUICKSCALE__` flag (installed and `QUICKSCALE_<MODULE>_ENABLED`) and its path (from its URL names) need no hand-written line; nor does any list in core, the CLI, or `scripts/`, which derive the module set from discovery (Module Conventions rules 31 and 37)
 - [ ] A module with a React surface adds its page, its `QuickScaleModules` key, and its seam-validator key in the theme ([frontend.md § Module frontend surfaces](frontend.md#module-frontend-surfaces))
 
 **6. Testing:**

@@ -42,7 +42,8 @@
       "v88-dockerfile-start-sh": "Regenerated 2026-09-14 \u2014 Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa266": "Regenerated 2026-10-08 \u2014 the generated Makefile check-tenant-isolation target and .github/workflows/ci.yml isolation step now pass --json to quickscale_orgs_check_tenant_isolation, whose machine-output flag is --json; --format json is retired. Only these two generated paths changed in react_default; react_empty and react_selected do not render the tenant-isolation step. All unrelated paths, hashes, and modes remain authoritative."
+      "sa266": "Regenerated 2026-10-08 \u2014 the generated Makefile check-tenant-isolation target and .github/workflows/ci.yml isolation step now pass --json to quickscale_orgs_check_tenant_isolation, whose machine-output flag is --json; --format json is retired. Only these two generated paths changed in react_default; react_empty and react_selected do not render the tenant-isolation step. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa258-runtime-seam-tag": "Regenerated 2026-10-09 \u2014 the React seam's module flags and paths render at request time through the quickscale_seam runtime template tag (SA258 slice a): templates/index.html and templates/social/{embeds,link_tree}.html load the library and call its tags, and testproject/settings/base.py registers the library through TEMPLATES options. 4 fixture hashes updated per variant: templates/index.html, templates/social/embeds.html, templates/social/link_tree.html, and testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -498,15 +499,15 @@
     },
     "templates/index.html": {
       "mode": "644",
-      "sha256": "49db763c46c01aaef3798e218e24bdf160883d8820b70f5f3215a4859480dcb5"
+      "sha256": "d01496995b1e05f985175cba4fd595114178c60c984f0e358cc1b66599c7e197"
     },
     "templates/social/embeds.html": {
       "mode": "644",
-      "sha256": "6d349d016417018a725f9bbb6653db20fdf533ecadef82040cd2b0f96a48a3dd"
+      "sha256": "b556b50a02cce3f06aaf19595a367bc62142cf29769b2ae48adeaebf075bb2a5"
     },
     "templates/social/link_tree.html": {
       "mode": "644",
-      "sha256": "e28c8b2752a8fc418e2f3a01295b14f5c2ce4c882ba403b3969173977f6feed0"
+      "sha256": "5271c8f57735566347244dd7affebf0b63e6c080e04aa4ff5ffd1e41ea1a3c79"
     },
     "testproject/__init__.py": {
       "mode": "644",
@@ -526,7 +527,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "63366e3ee9f038aeeb807c1ed80afda5c253d90c406ceb3d9ffb244f95740e99"
+      "sha256": "7a0dc6c518ec72fa7aa69ecd6b1616a10c02a220e5a0defa8bfeaeadc2ab4702"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -992,15 +993,15 @@
     },
     "templates/index.html": {
       "mode": "644",
-      "sha256": "49db763c46c01aaef3798e218e24bdf160883d8820b70f5f3215a4859480dcb5"
+      "sha256": "d01496995b1e05f985175cba4fd595114178c60c984f0e358cc1b66599c7e197"
     },
     "templates/social/embeds.html": {
       "mode": "644",
-      "sha256": "6d349d016417018a725f9bbb6653db20fdf533ecadef82040cd2b0f96a48a3dd"
+      "sha256": "b556b50a02cce3f06aaf19595a367bc62142cf29769b2ae48adeaebf075bb2a5"
     },
     "templates/social/link_tree.html": {
       "mode": "644",
-      "sha256": "e28c8b2752a8fc418e2f3a01295b14f5c2ce4c882ba403b3969173977f6feed0"
+      "sha256": "5271c8f57735566347244dd7affebf0b63e6c080e04aa4ff5ffd1e41ea1a3c79"
     },
     "testproject/__init__.py": {
       "mode": "644",
@@ -1020,7 +1021,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "63366e3ee9f038aeeb807c1ed80afda5c253d90c406ceb3d9ffb244f95740e99"
+      "sha256": "7a0dc6c518ec72fa7aa69ecd6b1616a10c02a220e5a0defa8bfeaeadc2ab4702"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -1486,15 +1487,15 @@
     },
     "templates/index.html": {
       "mode": "644",
-      "sha256": "49db763c46c01aaef3798e218e24bdf160883d8820b70f5f3215a4859480dcb5"
+      "sha256": "d01496995b1e05f985175cba4fd595114178c60c984f0e358cc1b66599c7e197"
     },
     "templates/social/embeds.html": {
       "mode": "644",
-      "sha256": "6d349d016417018a725f9bbb6653db20fdf533ecadef82040cd2b0f96a48a3dd"
+      "sha256": "b556b50a02cce3f06aaf19595a367bc62142cf29769b2ae48adeaebf075bb2a5"
     },
     "templates/social/link_tree.html": {
       "mode": "644",
-      "sha256": "e28c8b2752a8fc418e2f3a01295b14f5c2ce4c882ba403b3969173977f6feed0"
+      "sha256": "5271c8f57735566347244dd7affebf0b63e6c080e04aa4ff5ffd1e41ea1a3c79"
     },
     "testproject/__init__.py": {
       "mode": "644",
@@ -1514,7 +1515,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "63366e3ee9f038aeeb807c1ed80afda5c253d90c406ceb3d9ffb244f95740e99"
+      "sha256": "7a0dc6c518ec72fa7aa69ecd6b1616a10c02a220e5a0defa8bfeaeadc2ab4702"
     },
     "testproject/settings/local.py": {
       "mode": "644",

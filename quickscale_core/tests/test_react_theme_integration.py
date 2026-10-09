@@ -17,6 +17,7 @@ import pytest
 
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.generator.runtime_pins import POSTGRES_VERSION
+from quickscale_core.runtime.seam import seam_module_flags, seam_modules
 
 
 @pytest.mark.integration
@@ -312,8 +313,8 @@ class TestReactThemeGeneration:
 
         content = index_html.read_text()
 
-        # Should use Django static tags
-        assert "{% load static %}" in content
+        # Should use Django static tags and the runtime seam library
+        assert "{% load static quickscale_seam %}" in content
 
         # Should reference built frontend assets
         assert "static" in content
@@ -974,46 +975,37 @@ class TestReactThemeModuleActivationMatrix:
             assert hardcoded_path not in source
 
     @staticmethod
-    def _extract_template_module_app_map(index_html: str) -> dict[str, str]:
-        """Extract module->Django app mapping from generated index.html template.
+    def _resolved_flags(installed_apps: list[str]) -> dict[str, bool]:
+        """Resolve the runtime seam flags for an installed-app set.
 
-        Every shipped module flag carries an
-        ``and settings.QUICKSCALE_<MODULE>_ENABLED`` clause (rule 31), so the
-        pattern accepts it and asserts the enabled-setting name it matches.
+        Rule 31: the flags resolve in the ``quickscale_seam`` runtime tag from
+        the shipped inventory and the live settings, so the activation matrix
+        is a resolution property, not emitted template text.  Every shipped
+        module's enabled setting is on here, leaving ``INSTALLED_APPS`` to
+        drive each flag.
         """
-        mapping: dict[str, str] = {}
-        for module in TestReactThemeModuleActivationMatrix.APP_BACKED_MODULES:
-            pattern = (
-                rf"{module}:\s*\{{%\s*if\s*'([^']+)'\s*in\s*settings\.INSTALLED_APPS"
-                rf"(?:\s*and\s*settings\.([A-Z0-9_]+))?\s*%\}}"
-                rf"true\{{%\s*else\s*%\}}false\{{%\s*endif\s*%\}}"
-            )
-            match = re.search(pattern, index_html)
-            assert match is not None, (
-                f"Missing module activation condition for '{module}' in templates/index.html"
-            )
-            expected_setting = f"QUICKSCALE_{module.upper()}_ENABLED"
-            assert match.group(2) == expected_setting, (
-                f"Module '{module}' must require installed-and-enabled; expected "
-                f"{expected_setting!r} in templates/index.html"
-            )
-            mapping[module] = match.group(1)
-        return mapping
+        settings_obj = types.SimpleNamespace(
+            INSTALLED_APPS=list(installed_apps),
+            **{module.enabled_setting: True for module in seam_modules()},
+        )
+        return seam_module_flags(settings_obj)
 
-    def test_index_template_declares_all_module_activation_conditions(self, tmp_path):
-        """Generated React index template should include activation conditions for all modules."""
+    def test_index_template_renders_the_runtime_seam_tags(self, tmp_path):
+        """The generated index renders the seam through runtime tags, not per-module lines."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_module_matrix"
         generator.generate("react_module_matrix", output_path)
 
         index_html = (output_path / "templates" / "index.html").read_text()
-        app_map = self._extract_template_module_app_map(index_html)
-
-        expected = {
-            module: f"quickscale_modules_{module}" for module in self.APP_BACKED_MODULES
-        }
-        assert app_map == expected
-        assert "billing:" in index_html
+        assert "{% load static quickscale_seam %}" in index_html
+        modules_block = index_html.split("modules: {", 1)[1].split("owner: {", 1)[0]
+        assert "{% seam_module_flags %}" in modules_block
+        assert "{% seam_module_paths %}" in index_html.split("modulePaths: {", 1)[1]
+        # Rule 31: neither an activation test nor a per-module key stays in the
+        # emitted file; the runtime tag owns both.
+        assert "INSTALLED_APPS" not in index_html
+        for module in self.APP_BACKED_MODULES:
+            assert f"{module}:" not in modules_block
         assert "teams:" not in index_html
 
     @pytest.mark.parametrize(
@@ -1058,58 +1050,32 @@ class TestReactThemeModuleActivationMatrix:
         ],
     )
     def test_module_activation_matrix_none_some_all(
-        self, tmp_path, installed_apps, expected_true
+        self, installed_apps, expected_true
     ):
-        """Module activation naming convention should support none/some/all combinations."""
-        generator = ProjectGenerator(theme="showcase_react")
-        output_path = tmp_path / "react_module_matrix_flags"
-        generator.generate("react_module_matrix_flags", output_path)
-
-        index_html = (output_path / "templates" / "index.html").read_text()
-        app_map = self._extract_template_module_app_map(index_html)
-
-        resolved_flags = {
-            module: app_name in installed_apps for module, app_name in app_map.items()
-        }
-        expected_flags = {
-            module: module in expected_true for module in self.APP_BACKED_MODULES
-        }
+        """The runtime seam flags follow the installed-and-enabled rule."""
+        resolved_flags = self._resolved_flags(installed_apps)
+        expected_flags = {module: module in expected_true for module in resolved_flags}
 
         assert resolved_flags == expected_flags
 
-    def test_index_template_declares_social_activation_condition_and_path(
-        self, tmp_path
-    ):
-        """Generated React index template should expose social via settings-backed wiring."""
+    def test_index_template_resolves_the_social_seam_at_runtime(self, tmp_path):
+        """The generated index exposes social through the runtime seam, not literal lines."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_social_activation"
         generator.generate("react_social_activation", output_path)
 
         index_html = (output_path / "templates" / "index.html").read_text()
 
-        activation_pattern = re.compile(
-            r"social:\s*\{% if 'quickscale_modules_social' in settings\.INSTALLED_APPS "
-            r"and settings\.QUICKSCALE_SOCIAL_ENABLED %\}true"
-            r"\{% else %\}false\{% endif %\}"
-        )
-        # Rule 31: the path reverses the project's named social routes instead
-        # of writing the mount literals that used to live here.
-        path_pattern = re.compile(
-            r'social:\s*"\{% if \'quickscale_modules_social\' in '
-            r"settings\.INSTALLED_APPS and settings\.QUICKSCALE_SOCIAL_ENABLED %\}"
-            r"\{% if settings\.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %\}"
-            r"\{% url 'social-link-tree' %\}"
-            r"\{% elif settings\.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %\}"
-            r"\{% url 'social-embeds' %\}"
-            r"\{% else %\}\{% url 'social-link-tree' %\}\{% endif %\}"
-            r'\{% else %\}\{% url \'home\' %\}\{% endif %\}"'
-        )
+        # Rule 31: the activation condition and the {% url %}-based paths live
+        # in the runtime tag library; the emitted template names neither.
+        assert "{% seam_module_flags %}" in index_html
+        assert "{% seam_module_paths %}" in index_html
+        assert "quickscale_modules_social" not in index_html
+        assert "social-link-tree" not in index_html
+        assert "social-embeds" not in index_html
 
-        assert activation_pattern.search(index_html) is not None
-        assert path_pattern.search(index_html) is not None
-
-    def test_index_template_module_paths_reverse_named_routes(self, tmp_path):
-        """Rule 31: every modulePaths entry is a {% url %}, never a mount literal."""
+    def test_index_template_module_paths_render_the_runtime_tag(self, tmp_path):
+        """Rule 31: modulePaths renders the runtime tag, never a mount literal."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_seam_paths"
         generator.generate("react_seam_paths", output_path)
@@ -1119,10 +1085,7 @@ class TestReactThemeModuleActivationMatrix:
             "\n        }", 1
         )[0]
 
-        assert "{% url 'quickscale_crm_shell' %}" in module_paths_section
-        assert "{% url 'quickscale_analytics:dashboard' %}" in module_paths_section
-        assert "{% url 'social-link-tree' %}" in module_paths_section
-        assert "{% url 'social-embeds' %}" in module_paths_section
+        assert "{% seam_module_paths %}" in module_paths_section
         for mount_literal in (
             '"/crm/"',
             '"/analytics/"',
@@ -1137,7 +1100,7 @@ class TestReactThemeModuleActivationMatrix:
         assert "SPA_MODULE_URLPATTERNS" in urls_py
 
     def test_react_theme_billing_window_config_flag(self, tmp_path):
-        """Generated React index template should expose billing as a module flag only, not as a module path."""
+        """Billing is a runtime module flag, never a module path."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_billing_window_config"
         generator.generate("react_billing_window_config", output_path)
@@ -1147,16 +1110,16 @@ class TestReactThemeModuleActivationMatrix:
             "};", 1
         )[0]
 
-        assert (
-            "billing: {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS "
-            "and settings.QUICKSCALE_BILLING_ENABLED %}true{% else %}false{% endif %},"
-        ) in window_config
-        # D1 Option B: modulePaths.billing is removed until session-sync contract exists
+        # Rule 31: the flags render through the runtime tag; the emitted file
+        # carries no literal per-module key, and billing has no modulePaths
+        # entry (D1 Option B: removed until the session-sync contract exists).
+        assert "{% seam_module_flags %}" in window_config
         module_paths_section = (
             window_config.split("modulePaths: {", 1)[1].split("\n        }", 1)[0]
             if "modulePaths: {" in window_config
             else ""
         )
+        assert "billing:" not in window_config
         assert "billing:" not in module_paths_section
         assert "/billing/dashboard/" not in window_config
 
@@ -1449,7 +1412,7 @@ class TestReactThemeModuleActivationMatrix:
         assert 'href="{{ settings.QUICKSCALE_SOCIAL_EMBEDS_PATH }}"' in base_template
         assert 'id="root" class="qs-social-react-shell"' in link_tree_template
         assert "Social module not active" in link_tree_template
-        assert "{% load static %}" in link_tree_template
+        assert "{% load static quickscale_seam %}" in link_tree_template
         assert (
             "{% if 'quickscale_modules_social' in settings.INSTALLED_APPS and "
             "settings.QUICKSCALE_SOCIAL_ENABLED %}"
@@ -1463,7 +1426,7 @@ class TestReactThemeModuleActivationMatrix:
         )
         assert 'id="root" class="qs-social-react-shell"' in embeds_template
         assert "Social module not active" in embeds_template
-        assert "{% load static %}" in embeds_template
+        assert "{% load static quickscale_seam %}" in embeds_template
         assert (
             "{% if 'quickscale_modules_social' in settings.INSTALLED_APPS and "
             "settings.QUICKSCALE_SOCIAL_ENABLED %}"
@@ -1521,7 +1484,10 @@ class TestReactThemeModuleActivationMatrix:
 
         engine = Engine(
             dirs=[str(output_path / "templates")],
-            libraries={"static": static_module.__name__},
+            libraries={
+                "static": static_module.__name__,
+                "quickscale_seam": "quickscale_core.runtime.seam_tags",
+            },
         )
         rendered = engine.get_template("social/embeds.html").render(
             Context(
@@ -1573,6 +1539,20 @@ class TestReactThemeModuleActivationMatrix:
             django_settings, "ROOT_URLCONF", _seam_urlconf(), raising=False
         )
         clear_url_caches()
+        # Rule 31: the seam tags resolve from the live settings, so the enabled
+        # render reports social only while the real settings say so.
+        monkeypatch.setattr(
+            django_settings,
+            "INSTALLED_APPS",
+            ["quickscale_modules_social"],
+            raising=False,
+        )
+        for name in (
+            "QUICKSCALE_SOCIAL_ENABLED",
+            "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED",
+            "QUICKSCALE_SOCIAL_EMBEDS_ENABLED",
+        ):
+            monkeypatch.setattr(django_settings, name, True, raising=False)
 
         static_tags = Library()
 
@@ -1586,7 +1566,10 @@ class TestReactThemeModuleActivationMatrix:
 
         engine = Engine(
             dirs=[str(output_path / "templates")],
-            libraries={"static": static_module.__name__},
+            libraries={
+                "static": static_module.__name__,
+                "quickscale_seam": "quickscale_core.runtime.seam_tags",
+            },
         )
 
         for template_name in ("social/link_tree.html", "social/embeds.html"):

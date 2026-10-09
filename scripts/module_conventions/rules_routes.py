@@ -23,8 +23,8 @@ from scripts.module_conventions.core import (
 )
 
 # Rule 31's seam producers, relative to the core package.  The templates render
-# the discovered module set; the theme's TypeScript may still name its own
-# React surfaces (rule 37's allowlist).
+# the discovered module set at request time through the runtime tag library; the
+# theme's TypeScript may still name its own React surfaces (rule 37's allowlist).
 THEME_SEAM_TEMPLATE = "generator/templates/themes/showcase_react/templates/index.html.j2"
 
 THEME_SEAM_TEMPLATES: tuple[str, ...] = (
@@ -32,6 +32,11 @@ THEME_SEAM_TEMPLATES: tuple[str, ...] = (
     "generator/templates/themes/showcase_react/templates/social/link_tree.html.j2",
     "generator/templates/themes/showcase_react/templates/social/embeds.html.j2",
 )
+
+#: Rule 31's runtime seam library: every producer loads it, and its tags
+#: resolve the flags and paths from the shipped inventory and live settings
+#: (``quickscale_core.runtime.seam_tags``).
+SEAM_LIBRARY_LOAD = re.compile(r"{%\s*load\b[^%]*\bquickscale_seam\b[^%]*%}")
 
 # Rule 41's stated exception: the tenancy mode decides which side owns /orgs*
 # (solo mounts orgs before home, saas after), so orgs' React shell
@@ -543,13 +548,15 @@ def rule_19_authorization(corpus: Corpus) -> list[str]:
 
 def rule_31_theme_seam(corpus: Corpus) -> list[str]:
     """
-    Rule 31: the seam producer renders discovery, not hand-written lines.
+    Rule 31: the seam producer renders discovery at request time.
 
-    The statically checkable clauses of the seam's producer, the theme's
-    ``index.html.j2``: it emits the discovered flags and paths through the
-    seam placeholders instead of literal module lines or mount paths, and it
-    carries no ``INSTALLED_APPS`` test.  A loaded core tree without the
-    template fails; an empty synthetic corpus does not.
+    The statically checkable clauses of the seam's producers, the theme's
+    ``index.html.j2`` and its two public social pages: each loads the
+    ``quickscale_seam`` runtime tag library and renders the discovered flags
+    and paths through its tags instead of literal module lines or mount paths,
+    and the index template carries no ``INSTALLED_APPS`` test (the runtime
+    library holds it).  A loaded core tree without the template fails; an
+    empty synthetic corpus does not.
     """
     violations: list[str] = []
     index_template = corpus.core_files.get(THEME_SEAM_TEMPLATE)
@@ -561,9 +568,11 @@ def rule_31_theme_seam(corpus: Corpus) -> list[str]:
         template = corpus.core_files.get(rel)
         if template is None:
             continue
-        for placeholder in ("{{ seam_module_flags }}", "{{ seam_module_paths }}"):
-            if placeholder not in template:
-                violations.append(f"rule 31: {rel} does not render {placeholder}")
+        for tag in ("{% seam_module_flags %}", "{% seam_module_paths %}"):
+            if tag not in template:
+                violations.append(f"rule 31: {rel} does not render {tag}")
+        if SEAM_LIBRARY_LOAD.search(template) is None:
+            violations.append(f"rule 31: {rel} does not load the quickscale_seam tag library")
         for module in corpus.modules:
             name = module.name
             for mount in _declared_mounts(module):

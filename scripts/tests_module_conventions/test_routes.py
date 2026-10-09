@@ -289,19 +289,27 @@ def test_error_body_with_nonliteral_key_control() -> None:
     )
 
 
+_SEAM = "{% load static quickscale_seam %}\n{% seam_module_flags %}\n{% seam_module_paths %}\n"
+
+
 def test_theme_seam_control() -> None:
-    good = "{{ seam_module_flags }}\n{{ seam_module_paths }}\n"
+    good = _SEAM
     assert checker.rule_31_theme_seam(_seam_corpus(good)) == []
-    missing = _seam_corpus("{{ seam_module_flags }}\n")
+    missing = _seam_corpus("{% load static quickscale_seam %}\n{% seam_module_flags %}\n")
     assert any("does not render" in violation for violation in checker.rule_31_theme_seam(missing))
-    literal_line = _seam_corpus('{{ seam_module_flags }}\n"demo": true,\n{{ seam_module_paths }}\n')
+    unloaded = _seam_corpus("{% seam_module_flags %}\n{% seam_module_paths %}\n")
+    assert any(
+        "does not load the quickscale_seam tag library" in violation
+        for violation in checker.rule_31_theme_seam(unloaded)
+    )
+    literal_line = _seam_corpus('{% seam_module_flags %}\n"demo": true,\n{% seam_module_paths %}\n')
     assert any(
         "names module 'demo' literally" in violation
         for violation in checker.rule_31_theme_seam(literal_line)
     )
-    bare_key = _seam_corpus("{{ seam_module_flags }}\ndemo: true,\n{{ seam_module_paths }}\n")
+    bare_key = _seam_corpus("{% seam_module_flags %}\ndemo: true,\n{% seam_module_paths %}\n")
     assert any("bare key" in violation for violation in checker.rule_31_theme_seam(bare_key))
-    absolute_mount = _seam_corpus("{{ seam_module_flags }}\n{{ seam_module_paths }}\n'/demo/'")
+    absolute_mount = _seam_corpus("{% seam_module_flags %}\n{% seam_module_paths %}\n'/demo/'")
     assert any(
         "names module 'demo' literally" in violation
         for violation in checker.rule_31_theme_seam(absolute_mount)
@@ -315,7 +323,7 @@ def test_theme_seam_control() -> None:
     )
     auth = _with_mount(_golden_module("auth"), "accounts/")
     accounts_literal = _seam_corpus(
-        '{{ seam_module_flags }}\n{{ seam_module_paths }}\n<a href="/accounts/">Accounts</a>\n',
+        _SEAM + '<a href="/accounts/">Accounts</a>\n',
         auth,
     )
     assert any(
@@ -323,20 +331,23 @@ def test_theme_seam_control() -> None:
         for violation in checker.rule_31_theme_seam(accounts_literal)
     )
     named_url = _seam_corpus(
-        "{{ seam_module_flags }}\n{{ seam_module_paths }}\n{% url 'quickscale_auth:login' %}\n",
+        _SEAM + "{% url 'quickscale_auth:login' %}\n",
         auth,
     )
     assert checker.rule_31_theme_seam(named_url) == []
 
 
 def test_theme_seam_social_producer_control() -> None:
-    """The public social producers carry the rendered seam, not module lines."""
+    """The public social producers carry the runtime seam, not module lines."""
     social_template = checker.THEME_SEAM_TEMPLATES[1]
     corpus = replace(
         _corpus(_golden_module()),
         core_files={
-            checker.THEME_SEAM_TEMPLATE: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
-            social_template: ("{{ seam_module_flags }}\ndemo: true,\n{{ seam_module_paths }}\n"),
+            checker.THEME_SEAM_TEMPLATE: _SEAM,
+            social_template: (
+                "{% load static quickscale_seam %}\n"
+                "{% seam_module_flags %}\ndemo: true,\n{% seam_module_paths %}\n"
+            ),
         },
     )
     violations = checker.rule_31_theme_seam(corpus)
@@ -344,17 +355,18 @@ def test_theme_seam_social_producer_control() -> None:
     clean = replace(
         corpus,
         core_files={
-            checker.THEME_SEAM_TEMPLATE: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
-            social_template: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
+            checker.THEME_SEAM_TEMPLATE: _SEAM,
+            social_template: _SEAM,
         },
     )
     assert checker.rule_31_theme_seam(clean) == []
     override = replace(
         corpus,
         core_files={
-            checker.THEME_SEAM_TEMPLATE: ("{{ seam_module_flags }}\n{{ seam_module_paths }}\n"),
+            checker.THEME_SEAM_TEMPLATE: _SEAM,
             social_template: (
-                '{{ seam_module_flags }}\n"demo": "/demo/",\n{{ seam_module_paths }}\n'
+                "{% load static quickscale_seam %}\n"
+                '{% seam_module_flags %}\n"demo": "/demo/",\n{% seam_module_paths %}\n'
             ),
         },
     )

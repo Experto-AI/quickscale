@@ -1,4 +1,4 @@
-{%raw%}{% load static %}<!doctype html>
+{%raw%}{% load static quickscale_seam %}<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -19,14 +19,14 @@
       window.__QUICKSCALE__ = {
         projectName: "{%endraw%}{{ project_name }}{%raw%}",
         modules: {
-{%endraw%}{{ seam_module_flags }}{%raw%}
+{% seam_module_flags %}
         },
         owner: {
           mode: "{% if settings.QUICKSCALE_ORGS_MODE == 'saas' %}saas{% else %}solo{% endif %}",
           currentOrgSlug: {% if request.org and request.org.slug %}"{{ request.org.slug|escapejs }}"{% else %}null{% endif %}
         },
         modulePaths: {
-{%endraw%}{{ seam_module_paths }}{%raw%}
+{% seam_module_paths %}
         }
       };
     </script>{%endraw%}
