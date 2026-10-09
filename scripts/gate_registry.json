@@ -24,6 +24,9 @@
                 "ci_job": "module-core-compat",
                 "local_ci_stage": 3
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_module_core_compatibility.py"
+            ],
             "depends_on": [],
             "trigger_inputs": [
                 "quickscale_modules/backups/**"
@@ -44,6 +47,9 @@
                 "ci_job": "module-core-import-linter",
                 "local_ci_stage": 4
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_module_core_imports.py"
+            ],
             "depends_on": [],
             "trigger_inputs": [
                 "quickscale_cli/src/quickscale_cli/commands/plan_command.py",
@@ -68,6 +74,9 @@
                 "ci_job": "manifest-sync-gate",
                 "local_ci_stage": 5
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/sync_module_manifests.py"
+            ],
             "depends_on": [],
             "trigger_inputs": [
                 "quickscale_core/src/quickscale_core/generator/**",
@@ -89,6 +98,9 @@
                 "ci_job": "module-app-declaration-gate",
                 "local_ci_stage": 6
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_module_app_declaration.py"
+            ],
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -107,6 +119,9 @@
                 "ci_job": "org-context-primitives-gate",
                 "local_ci_stage": 6
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_org_context_primitives.py"
+            ],
             "depends_on": [],
             "trigger_inputs": [
                 "quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2",
@@ -128,6 +143,9 @@
                 "ci_job": "csrf-exempt-gate",
                 "local_ci_stage": 7
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_csrf_exempt_gate.py"
+            ],
             "depends_on": [],
             "trigger_inputs": [
                 "quickscale_core/tests/test_generator/test_templates.py",
@@ -152,6 +170,9 @@
                 "ci_job": "commit-testimony-gate",
                 "local_ci_stage": null
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_commit_testimony.py"
+            ],
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -169,6 +190,9 @@
                 "ci_job": "project-contract-vintage-gate",
                 "local_ci_stage": 6
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_project_contract_vintage.py"
+            ],
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -184,6 +208,9 @@
                 "ci_job": null,
                 "local_ci_stage": null
             },
+            "make_recipe": [
+                "@scripts/frontend_proof.sh"
+            ],
             "depends_on": [],
             "trigger_inputs": [
                 "Makefile",
@@ -211,6 +238,9 @@
                 "ci_job": null,
                 "local_ci_stage": null
             },
+            "make_recipe": [
+                "@scripts/smoke_install.sh"
+            ],
             "depends_on": [],
             "trigger_inputs": [
                 ".github/workflows/ci.yml",
@@ -248,6 +278,9 @@
                 "ci_job": "dependency-vulnerabilities-gate",
                 "local_ci_stage": 7
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_security_gates.py dependency-vulnerabilities"
+            ],
             "depends_on": [],
             "trigger_inputs": [
                 "pyproject.toml",
@@ -270,6 +303,9 @@
                 "ci_job": "security-static-analysis-gate",
                 "local_ci_stage": 7
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_security_gates.py security-static-analysis"
+            ],
             "depends_on": [],
             "trigger_inputs": [
                 "scripts/check_security_gates.py",
@@ -296,6 +332,9 @@
                 "ci_job": "beta-migration-smoke-gate",
                 "local_ci_stage": 7
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_beta_migration_smoke.py"
+            ],
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -313,6 +352,9 @@
                 "ci_job": "generated-deploy-posture-gate",
                 "local_ci_stage": 7
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_generated_deploy_posture.py"
+            ],
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -330,6 +372,9 @@
                 "ci_job": "workflow-security-gate",
                 "local_ci_stage": 7
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_workflow_security.py"
+            ],
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -347,6 +392,9 @@
                 "ci_job": "secret-scanning-gate",
                 "local_ci_stage": 7
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_secret_scanning.py"
+            ],
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -364,6 +412,9 @@
                 "ci_job": "module-conventions-gate",
                 "local_ci_stage": 7
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_module_conventions.py"
+            ],
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -381,6 +432,9 @@
                 "ci_job": "split-facade-gate",
                 "local_ci_stage": 7
             },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_split_facade_imports.py"
+            ],
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -396,6 +450,9 @@
                 "ci_job": null,
                 "local_ci_stage": 7
             },
+            "make_recipe": [
+                "@scripts/check_quality.sh"
+            ],
             "depends_on": [],
             "trigger_inputs": []
         }

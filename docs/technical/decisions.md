@@ -2529,6 +2529,26 @@ compensating step is one maintainer's discipline and does not generalize.
 
 ---
 
+### Gate and Rule Budget {#gate-and-rule-budget}
+
+**Architectural Decision:** No new gate or rule is added without retiring one. Adding a gate
+costs two stations — its authored `gate_registry.json` entry and the one binding the
+generated wiring cannot derive — not the roughly twelve hand edits each new gate previously
+required.
+
+**Why.** Rules were restated by hand in every execution context and held equal by a parity
+check, so every addition compounded maintenance cost and cross-track conflict (arch audit
+`rules-held-by-parity-not-derivation`, options 1 and 3). `gate_registry.json` is the only
+gate list; the Make targets, local-CI stage membership, hosted jobs, and E2E projections are
+generated from it, which makes the marginal cost of the next gate visible and bounded.
+
+**Scope.** The budget governs governance surface, not product behavior. Retiring a gate or
+rule means deleting it or folding it into a stronger one, never silencing it while it stays
+declared; a delivery that cannot retire one records that with its reason in its roadmap
+ticket.
+
+---
+
 ### Quality Thresholds Gate (SA243) {#quality-thresholds-gate}
 
 **Rule:** `make quality` has no accepted-debt baseline. Each metric carries one
