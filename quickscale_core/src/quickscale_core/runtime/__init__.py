@@ -54,6 +54,9 @@ from quickscale_core.runtime import manifest as _manifest  # noqa: F401
 #: only needs a convention helper never pays for the DR surface.
 _LAZY_CONVENTIONS_SYMBOLS: frozenset[str] = frozenset(
     {
+        "CAPABILITIES",
+        "CapabilityDeclarationObserver",
+        "CapabilityShape",
         "PersonalDataExclusion",
         "PersonalDataField",
         "PersonalDataTreatment",
@@ -185,6 +188,9 @@ __all__ = [
     "render_social_managed_views_module",
     "social_provider_supports_embeds",
     # Module-convention helpers (from conventions)
+    "CAPABILITIES",
+    "CapabilityDeclarationObserver",
+    "CapabilityShape",
     "PersonalDataExclusion",
     "PersonalDataField",
     "PersonalDataTreatment",

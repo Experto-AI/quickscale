@@ -16,10 +16,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping as Mapping
 from datetime import UTC
-from importlib import import_module
 from typing import Any, cast
 
-from django.apps import apps
 from django.conf import settings as settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
@@ -105,17 +103,26 @@ from quickscale_modules_orgs.throttles import (
 )
 
 _UNSET = object()
-_ORG_INVITATION_TEMPLATE_KEY = "notifications.org_invitation"
+_ORG_INVITATION_TEMPLATE_KEY = "quickscale_orgs.invitation"
 _MEMBERS_TEMPLATE_NAME = "quickscale_orgs/members.html"
 
 
 def _load_invitation_notification_sender() -> Any | None:
-    if not apps.is_installed("quickscale_modules_notifications"):
+    """Return the invitation sender, or ``None`` while notifications is off.
+
+    Notifications is a required module (rule 43), so it is imported directly
+    and asked only ``is_enabled()``: orgs refuses to save an invitation it
+    cannot email instead of probing the app registry or falling back to a
+    second sender.
+    """
+    from quickscale_modules_notifications.services import (
+        is_enabled as notifications_enabled,
+        send_notification,
+    )
+
+    if not notifications_enabled():
         return None
-    notifications_services = import_module("quickscale_modules_notifications.services")
-    if not notifications_services.is_enabled():
-        return None
-    return getattr(notifications_services, "send_notification", None)
+    return send_notification
 
 
 def _canonical_org_detail_path(organization: Organization) -> str:

@@ -83,6 +83,38 @@ MODULE_LAYERS: dict[str, int] = {
     "social": 3,
 }
 
+# Rule 4's closed capability vocabulary, mirroring
+# ``quickscale_core.runtime.conventions.CAPABILITIES``: every name a module may
+# declare or collect through ``collect_capabilities``.  Adding a capability is
+# a decision edit plus both entries.
+CAPABILITY_NAMES: frozenset[str] = frozenset(
+    {
+        "account_deletion_handlers",
+        "anonymize_handlers",
+        "notification_templates",
+        "organization_cache_keys",
+        "organization_pricing_url_hooks",
+        "personal_data_declarations",
+        "post_login_redirect_hooks",
+        "post_signup_redirect_hooks",
+        "removal_boundary_implementations",
+        "removal_label_prefix",
+        "removal_obligations",
+    }
+)
+
+# Rule 5 <-> rule 43: the modules a manifest declares itself to require.
+MODULE_REQUIRED_NAME = "required_modules"
+
+
+def _required_modules(module: Module) -> frozenset[str]:
+    """Return the bare module names *module*'s manifest requires."""
+    declared = module.manifest.get(MODULE_REQUIRED_NAME)
+    if not isinstance(declared, list):
+        return frozenset()
+    return frozenset(name for name in declared if isinstance(name, str))
+
+
 MODULE_IMPORT_PREFIX = "quickscale_modules_"
 
 SNAKE_CASE = re.compile(r"^[a-z][a-z0-9_]*$")

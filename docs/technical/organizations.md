@@ -481,7 +481,7 @@ Invitations are active only in SaaS mode. In Solo mode the invitation views stay
 
 1. An Admin or Owner opens the org members/admin surface and submits an invite form with an email address and role.
 2. The system creates an `OrganizationInvitation` record with a UUID token and a 7-day expiry.
-3. The notifications module renders and sends the registry-backed `org_invitation` email with the public accept URL.
+3. The notifications module renders and sends orgs' declared `quickscale_orgs.invitation` template with the public accept URL.
 4. Accept URL: `GET /orgs/invitations/<token>/accept/`
     - The URL is intentionally slugless so invite redemption can continue before org membership resolution exists.
     - Unauthenticated visitors are redirected through auth and then resumed back into `AcceptInvitationView`.

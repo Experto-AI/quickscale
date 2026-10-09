@@ -9,6 +9,7 @@ from typing import Any
 
 from scripts.module_conventions.core import (
     MODULE_IMPORT_PREFIX,
+    MODULE_LAYERS,
     SETTING_NAME_EXCEPTIONS,
     SNAKE_CASE,
     Corpus,
@@ -16,15 +17,19 @@ from scripts.module_conventions.core import (
     _attribute_chain,
     _body_nodes,
     _bound_names,
+    _call_func_name,
     _declared_exports,
     _is_settings_receiver,
+    _keyword,
     _module_target,
     _parse,
+    _required_modules,
     _scope_nodes,
     _service_module_bindings,
     _setting_name_module,
     _settings_attribute_reads,
     _settings_bindings,
+    _string_assignments,
 )
 
 OPTION_VALIDATION_KEYS = (
@@ -583,10 +588,55 @@ def _call_other_module_service(
     return None
 
 
+def _reference_module_name(value: str) -> str | None:
+    """Resolve a package stem or app label to a module name."""
+    target = _module_target(tuple(value.split(".")))
+    if target is not None:
+        return target[0]
+    for name in MODULE_LAYERS:
+        if value == f"quickscale_{name}":
+            return name
+    return None
+
+
+def _guarded_module_name(node: ast.expr | None, constants: Mapping[str, str]) -> str | None:
+    """Resolve the module an ``apps.is_installed`` argument names."""
+    value: str | None = None
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        value = node.value
+    elif isinstance(node, ast.Name):
+        value = constants.get(node.id)
+    if value is None:
+        return None
+    return _reference_module_name(value)
+
+
+def _getattr_service_owner(
+    target: ast.expr,
+    service_names: Mapping[str, str],
+    service_bindings: Mapping[tuple[str, ...], str],
+    import_module_bindings: Mapping[str, str],
+) -> str | None:
+    """Resolve the module whose services a ``getattr`` target is rooted in."""
+    if isinstance(target, ast.Name):
+        return (
+            service_names.get(target.id)
+            or service_bindings.get((target.id,))
+            or import_module_bindings.get(target.id)
+        )
+    if isinstance(target, ast.Attribute):
+        chain = _attribute_chain(target)
+        if chain is None:
+            return None
+        return _attribute_binding_module(chain, service_bindings, import_module_bindings)
+    return None
+
+
 def rule_43_optional_senders(corpus: Corpus) -> list[str]:
-    """Rule 43: an optional sender guards with ``is_enabled()`` and one error base."""
+    """Rule 43: senders guard per ``required_modules`` and one error base."""
     violations: list[str] = []
     for module in corpus.modules:
+        required = _required_modules(module)
         for rel, text in module.files.items():
             if not rel.endswith(".py") or rel.startswith("migrations/"):
                 continue
@@ -594,6 +644,30 @@ def rule_43_optional_senders(corpus: Corpus) -> list[str]:
             service_bindings = _service_module_bindings(tree)
             import_module_bindings = _import_module_service_bindings(tree)
             service_names = _other_module_service_imports(tree, module.name)
+            constants = _string_assignments(tree)
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                if _call_func_name(node) == "is_installed":
+                    argument = node.args[0] if node.args else _keyword(node, "app_name")
+                    guarded = _guarded_module_name(argument, constants)
+                    if guarded is not None and guarded in required:
+                        violations.append(
+                            f"rule 43: {module.name}: {rel}:{node.lineno} guards "
+                            f"required module {guarded} with apps.is_installed"
+                        )
+                elif _call_func_name(node) == "getattr" and len(node.args) >= 3:
+                    owner = _getattr_service_owner(
+                        node.args[0],
+                        service_names,
+                        service_bindings,
+                        import_module_bindings,
+                    )
+                    if owner is not None and owner != module.name:
+                        violations.append(
+                            f"rule 43: {module.name}: {rel}:{node.lineno} reads "
+                            f"{owner}'s service through getattr with a default"
+                        )
             for node in ast.walk(tree):
                 if not (
                     isinstance(node, ast.Attribute)

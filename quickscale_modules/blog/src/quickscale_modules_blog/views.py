@@ -97,7 +97,7 @@ def _build_media_response_url(
     """Build a public media URL through storage's services, with a local fallback.
 
     Storage's service resolves storage's own settings (rules 3, 4, and 34);
-    without storage installed, the fallback uses only the project's
+    while storage is switched off, the fallback uses only the project's
     ``MEDIA_URL`` and reads no storage setting.
     """
     services = _storage.storage_services()

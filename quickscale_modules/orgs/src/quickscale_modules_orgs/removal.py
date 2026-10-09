@@ -52,7 +52,6 @@ from quickscale_modules_orgs._removal_declarations import (
     DeclaredBoundaryGuard as DeclaredBoundaryGuard,
     coordinator_discharge_actions as coordinator_discharge_actions,
     declared_boundary_guards as _declared_boundary_guards,
-    declared_removal_obligations as declared_removal_obligations,
     get_removal_obligation as _get_removal_obligation,
     organization_removal_obligations as organization_removal_obligations,
     removal_boundary_implementations as removal_boundary_implementations,

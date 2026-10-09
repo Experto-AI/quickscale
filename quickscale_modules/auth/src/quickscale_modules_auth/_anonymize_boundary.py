@@ -28,8 +28,8 @@ from django.apps import apps
 from quickscale_core.runtime import collect_capabilities
 from quickscale_modules_orgs.removal import (
     STAGE_EXECUTOR_HOOKS,
+    OrganizationRemovalObligation,
     RemovalAction,
-    declared_removal_obligations,
 )
 
 #: AppConfig attribute through which an app declares its anonymize handler.
@@ -101,18 +101,28 @@ def _require_obligation_owners(
 ) -> None:
     """Fail closed when a declared ANONYMIZE obligation contributes no executor."""
     collected_labels = {label for label, _hook in hooks}
-    missing = sorted(
-        app_config.label
-        for app_config in apps.get_app_configs()
-        for obligation in declared_removal_obligations(app_config)
-        if obligation.anonymize_action is RemovalAction.ANONYMIZE
-        and app_config.label not in collected_labels
-    )
+    missing: list[str] = []
+
+    def _observe(app_config: object, entries: tuple[object, ...]) -> None:
+        for entry in entries:
+            if not isinstance(entry, OrganizationRemovalObligation):
+                raise ValueError(
+                    "Every removal-obligations declaration must be an "
+                    f"OrganizationRemovalObligation; got {entry!r}."
+                )
+            label = getattr(app_config, "label", "")
+            if (
+                entry.anonymize_action is RemovalAction.ANONYMIZE
+                and label not in collected_labels
+            ):
+                missing.append(str(label))
+
+    collect_capabilities("removal_obligations", on_declared=_observe)
     if missing:
         raise ValueError(
             "Every app that declares an ANONYMIZE organization-removal "
             "obligation must also declare the anonymize_handlers capability "
             "exposing its anonymize_account executor; missing from: "
-            + ", ".join(missing)
+            + ", ".join(sorted(set(missing)))
             + "."
         )

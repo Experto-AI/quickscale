@@ -26,7 +26,7 @@ def _user(email: str) -> Any:
 
 def _message(**overrides: Any) -> NotificationMessage:
     fields: dict[str, Any] = {
-        "template_key": "notifications.generic",
+        "template_key": "quickscale_notifications.generic",
         "subject": "Hello alpha@example.com",
         "from_email": "QuickScale <noreply@example.com>",
         "reply_to_email": "",
@@ -349,7 +349,7 @@ def test_anonymize_redacts_an_invitation_message_sent_to_someone_else(
     }
     with django_capture_on_commit_callbacks(execute=True):
         message = send_notification(
-            template_key="notifications.org_invitation",
+            template_key="quickscale_orgs.invitation",
             recipients=["invitee@example.com"],
             context=context,
             about_users=[inviter],
@@ -447,7 +447,7 @@ def test_anonymize_redacts_an_html_escaped_address() -> None:
 
     user = _user("o'connor@example.com")
     rendered = render_notification(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         context={"headline": "Statement", "body": "o'connor@example.com"},
     )
     message = _message(
@@ -483,7 +483,7 @@ def test_anonymize_preserves_an_overlapping_escaped_address() -> None:
 
     user = _user("o'connor@example.com")
     rendered = render_notification(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         context={"headline": "Other", "body": "proo'connor@example.com"},
     )
     message = _message(
@@ -602,7 +602,7 @@ def test_anonymize_preserves_an_entity_continued_escaped_address() -> None:
     user = _user("o'connor@example.com")
     other_address = "x&o'connor@example.com"
     rendered = render_notification(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         context={"headline": "Other", "body": other_address},
     )
     message = _message(
@@ -696,7 +696,7 @@ def test_anonymize_preserves_an_escaped_unrelated_address_when_redacting_names()
     user = _user("ann@example.com")
     other_address = "ann&smith@example.com"
     rendered = render_notification(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         context={"headline": "Other", "body": f"Ann wrote to {other_address}"},
     )
     message = _message(
@@ -731,7 +731,7 @@ def test_anonymize_preserves_an_ampersand_leading_unrelated_address() -> None:
     user = _user("o'connor@example.com")
     other_address = "&o'connor@example.com"
     rendered = render_notification(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         context={"headline": "Other", "body": f"Contact {other_address} now"},
     )
     message = _message(
@@ -765,7 +765,7 @@ def test_anonymize_preserves_an_ampersand_behind_quote_entities() -> None:
     user = _user("o'connor@example.com")
     other_address = "&''''o'connor@example.com"
     rendered = render_notification(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         context={"headline": "Other", "body": f"Contact {other_address} now"},
     )
     message = _message(
@@ -800,7 +800,7 @@ def test_anonymize_redacts_a_quoted_escaped_apostrophe_address() -> None:
 
     user = _user("o'connor@example.com")
     rendered = render_notification(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         context={"headline": "Quoted", "body": "Contact 'o'connor@example.com' now"},
     )
     message = _message(
@@ -835,7 +835,7 @@ def test_anonymize_redacts_a_quoted_escaped_leading_apostrophe_address() -> None
     user = _user("ann@example.com")
     address = "'testuser@example.com"
     rendered = render_notification(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         context={"headline": "Quoted", "body": f"Contact '{address}' now"},
     )
     message = _message(

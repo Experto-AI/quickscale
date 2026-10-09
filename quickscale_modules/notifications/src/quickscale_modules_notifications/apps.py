@@ -55,6 +55,27 @@ class QuickscaleNotificationsConfig(AppConfig):
         """
         return (self,)
 
+    def notification_templates(self) -> dict[str, Any]:
+        """Declare notifications' own generic template (rules 4, 8).
+
+        Every sender owns its keys and bodies in the
+        ``quickscale_<module>.<purpose>`` namespace; notifications keeps only
+        the generic fallback, and this module's renderer collects every
+        sender's declaration through the shared core capability helper.
+        """
+        from quickscale_modules_notifications._templates import (
+            NotificationTemplateDefinition,
+        )
+
+        return {
+            "quickscale_notifications.generic": NotificationTemplateDefinition(
+                subject_template="quickscale_notifications/email/generic_subject.txt",
+                text_template="quickscale_notifications/email/generic_body.txt",
+                html_template="quickscale_notifications/email/generic_body.html",
+                required_context=frozenset({"headline", "body"}),
+            ),
+        }
+
     def personal_data_declarations(
         self,
     ) -> tuple[PersonalDataField | PersonalDataExclusion, ...]:

@@ -545,7 +545,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `quickscale_<module>:<purpose>` defined by the declaring module, so orgs' `social-cache-state`
     became `quickscale_orgs:cache-state`. Watch: the org-row declared-refusal path
     (`ORGANIZATION_MODEL_LABEL`) now has no shipped user. Next: slice (b).
-  - [ ] (b) Capabilities, email-template ownership, and sender guards.
+  - [x] (b) Capabilities, email-template ownership, and sender guards. Core's `CAPABILITIES`
+    is the closed capability vocabulary and `collect_capabilities` the only collector (orgs' and
+    auth's `getattr` walks folded in, with the harness's rule 4 vocabulary clause); senders own
+    their keys (`quickscale_<module>.<purpose>`) and bodies under
+    `templates/quickscale_<module>/email/`, registered through the `notification_templates`
+    capability; a required module is imported directly and asked `is_enabled()` (rule 43 harness
+    clause), and forms reports `skipped` when no email is sent. Watch: blog's storage seam and
+    forms' analytics seam now key their fallback on `is_enabled()`, not `is_installed`.
+    Next: slice (c).
   - [ ] (c) Private-name imports, session keys, and core/CLI per-module knowledge.
 
   **Surfaces:** orgs, notifications, billing, forms, crm, blog, social models and services;

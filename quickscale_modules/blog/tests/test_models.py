@@ -191,9 +191,11 @@ class TestStorageSeam:
         assert services is not None
         assert services.__name__ == "quickscale_modules_storage.services"
 
-    def test_storage_services_is_none_without_the_installed_app(self):
-        """Without the app, the seam resolves to None instead of failing an import."""
-        with patch.object(_storage.django_apps, "is_installed", return_value=False):
+    def test_storage_services_is_none_while_the_module_is_off(self):
+        """A switched-off storage seam resolves to None with no is_installed guard."""
+        with patch(
+            "quickscale_modules_storage.services.is_enabled", return_value=False
+        ):
             assert _storage.storage_services() is None
 
     def test_build_public_media_url_falls_back_to_media_url_without_storage(
