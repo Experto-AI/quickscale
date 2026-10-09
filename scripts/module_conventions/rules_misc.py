@@ -427,7 +427,7 @@ def _declares_module_error(node: ast.ClassDef) -> bool:
     if node.name.endswith("Error"):
         return True
     return any(
-        base == "Exception" or base.endswith("Error") or base in _BUILTIN_EXCEPTION_BASES
+        base.endswith("Exception") or base.endswith("Error") or base in _BUILTIN_EXCEPTION_BASES
         for base in _class_names(node)
     )
 

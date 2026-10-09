@@ -111,6 +111,19 @@ def test_missing_exceptions_file_control() -> None:
         "ships no exceptions.py" in violation
         for violation in _violations(checker.rule_10_checks_errors, builtin_base)
     )
+    api_exception_base = _with_files(
+        without_exceptions,
+        services=(
+            "from rest_framework.exceptions import APIException\n\n\n"
+            "class PaymentRequired(APIException):\n"
+            "    status_code = 402\n"
+            "    default_code = 'payment_required'\n"
+        ),
+    )
+    assert any(
+        "ships no exceptions.py" in violation
+        for violation in _violations(checker.rule_10_checks_errors, api_exception_base)
+    )
 
 
 def test_settings_check_order_control() -> None:
