@@ -30,13 +30,7 @@ from __future__ import annotations
 
 from django.contrib import admin
 
-from quickscale_modules_orgs.admin import (
-    TenantModelAdmin,
-    _explicit_org_from_request,  # noqa: F401 — re-export for test suite
-    _org_db_context,  # noqa: F401 — re-export for test suite
-    _persist_org_to_session,  # noqa: F401 — re-export for test suite
-    _resolve_active_org_id,  # noqa: F401 — re-export for test suite
-)
+from quickscale_modules_orgs.admin import TenantModelAdmin
 
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 

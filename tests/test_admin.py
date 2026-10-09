@@ -38,12 +38,13 @@ from quickscale_modules_orgs.current_org import (
     set_current_org_id,
 )
 
-from quickscale_modules_social.admin import (
+from quickscale_modules_orgs.admin import (
     _explicit_org_from_request,
     _org_db_context,
     _persist_org_to_session,
     _resolve_active_org_id,
 )
+
 from quickscale_modules_social._contracts import SocialEmbedResolution
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 
@@ -1024,10 +1025,8 @@ class TestSocialAdminNonexistentOrg:
         This is the direct proof that ``get_queryset`` no longer calls
         ``set_current_org_id`` with the bogus UUID.
         """
-        from quickscale_modules_social.admin import (
-            SocialLinkAdmin,
-            _org_db_context,
-        )
+        from quickscale_modules_orgs.admin import _org_db_context
+        from quickscale_modules_social.admin import SocialLinkAdmin
 
         bogus = uuid.uuid4()
         request = _request_with_session(rf, **{ACTIVE_ORG_SESSION_KEY: str(bogus)})
