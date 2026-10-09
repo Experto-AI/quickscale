@@ -16,11 +16,13 @@ from quickscale_core.runtime import (
     register_module_settings_check,
 )
 from quickscale_modules_orgs.removal import (
-    AUTH_PERSONAL_DATA,
     OrganizationRemovalObligation,
     RemovalAction,
     RemovalBoundary,
 )
+
+#: Auth's own removal-obligation name (Module Conventions rule 2/33).
+AUTH_PERSONAL_DATA = "quickscale_auth:personal-data"
 
 
 class QuickscaleAuthConfig(AppConfig):

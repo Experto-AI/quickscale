@@ -1199,7 +1199,7 @@ class TestAccountDeleteView:
         from quickscale_modules_orgs.removal import (
             OWNED_TENANT_ROWS,
             PURGE_TOMBSTONE,
-            SOCIAL_CACHE_STATE,
+            CACHE_STATE,
         )
 
         personal_org = Organization.objects.create(
@@ -1224,7 +1224,7 @@ class TestAccountDeleteView:
         assert response.status_code == 302
         for obligation_name in (
             OWNED_TENANT_ROWS,
-            SOCIAL_CACHE_STATE,
+            CACHE_STATE,
             PURGE_TOMBSTONE,
         ):
             assert any(obligation_name in message for message in caplog.messages)
@@ -1246,7 +1246,7 @@ class TestAccountDeleteView:
         from quickscale_modules_orgs.removal import (
             OWNED_TENANT_ROWS,
             PURGE_TOMBSTONE,
-            SOCIAL_CACHE_STATE,
+            CACHE_STATE,
         )
 
         organization = Organization.objects.create(
@@ -1280,7 +1280,7 @@ class TestAccountDeleteView:
         assert response.status_code == 302
         for obligation_name in (
             OWNED_TENANT_ROWS,
-            SOCIAL_CACHE_STATE,
+            CACHE_STATE,
             PURGE_TOMBSTONE,
         ):
             assert any(

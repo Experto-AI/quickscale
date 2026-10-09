@@ -10,9 +10,8 @@ from django.core.management import call_command
 from django.core.management.base import SystemCheckError
 from django.core.management.commands import migrate, runserver
 
-from quickscale_modules_auth.apps import QuickscaleAuthConfig
+from quickscale_modules_auth.apps import AUTH_PERSONAL_DATA, QuickscaleAuthConfig
 from quickscale_modules_orgs.removal import (
-    AUTH_PERSONAL_DATA,
     RemovalAction,
     RemovalBoundary,
 )
