@@ -123,6 +123,7 @@ jobs:
         run: |
           poetry install --with dev
 
+      # BEGIN GENERATED: publish-gate-steps
       - name: Run core compatibility gate
         run: |
           make check-core-compat
@@ -174,6 +175,9 @@ jobs:
       - name: Run module conventions conformance check
         run: |
           make check-module-conventions
+
+      - name: Run split-facade import gate
+        run: |
           make check-split-facade-imports
 
       - name: Run rendered frontend proof
@@ -183,6 +187,7 @@ jobs:
       - name: Run installed-artifact smoke gate (SA110)
         run: |
           make smoke-install
+      # END GENERATED: publish-gate-steps
 
       - name: Run linting (ruff)
         run: |
