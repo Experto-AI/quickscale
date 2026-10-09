@@ -1,9 +1,11 @@
 """Canonical notification templates and rendering.
 
-Every notification is rendered from one registry entry keyed by the module's
-``notifications.<name>`` template key; the registry validates the caller's
-context before rendering.  ``services.py`` re-exports this surface (Module
-Conventions rule 28).
+Every notification is rendered from a definition its sender owns: a module
+declares its templates under a ``quickscale_<module>.<purpose>`` key through
+the rule 4 ``notification_templates`` capability, and this module collects
+every installed sender's definitions with the shared core helper.  The
+definition validates the caller's context before rendering.  ``services.py``
+re-exports this surface (Module Conventions rule 28).
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from typing import Any, cast
 
 from django.template.loader import render_to_string
 
+from quickscale_core.runtime import collect_capabilities
 from quickscale_modules_notifications.exceptions import NotificationTemplateError
 
 
@@ -37,39 +40,23 @@ class RenderedNotification:
     html_body: str
 
 
-_TEMPLATE_REGISTRY = {
-    "notifications.generic": NotificationTemplateDefinition(
-        subject_template=("quickscale_notifications/email/generic_subject.txt"),
-        text_template=("quickscale_notifications/email/generic_body.txt"),
-        html_template=("quickscale_notifications/email/generic_body.html"),
-        required_context=frozenset({"headline", "body"}),
-    ),
-    "notifications.forms_submission": NotificationTemplateDefinition(
-        subject_template=(
-            "quickscale_notifications/email/forms_submission_subject.txt"
-        ),
-        text_template=("quickscale_notifications/email/forms_submission_body.txt"),
-        html_template=("quickscale_notifications/email/forms_submission_body.html"),
-        required_context=frozenset(
-            {"form_title", "submitted_at", "fields", "ip_address", "status"}
-        ),
-    ),
-    "notifications.org_invitation": NotificationTemplateDefinition(
-        subject_template=("quickscale_notifications/email/org_invitation_subject.txt"),
-        text_template=("quickscale_notifications/email/org_invitation_body.txt"),
-        html_template=("quickscale_notifications/email/org_invitation_body.html"),
-        required_context=frozenset(
-            {
-                "organization_name",
-                "invitee_email",
-                "inviter_name",
-                "role_display",
-                "accept_url",
-                "expires_at",
-            }
-        ),
-    ),
-}
+def registered_notification_templates() -> dict[str, NotificationTemplateDefinition]:
+    """Return every installed sender's declared notification templates.
+
+    The declarations arrive through the shared core capability helper in
+    app-label order; the same key declared by two senders is refused there.
+    Keys are the sender-owned ``quickscale_<module>.<purpose>`` strings.
+    """
+    templates: dict[str, NotificationTemplateDefinition] = {}
+    for entry in collect_capabilities("notification_templates"):
+        key, definition = cast("tuple[object, object]", entry)
+        if not isinstance(definition, NotificationTemplateDefinition):
+            raise NotificationTemplateError(
+                f"Sender declared notification template {key!r} as "
+                f"{definition!r}; expected a NotificationTemplateDefinition."
+            )
+        templates[str(key)] = definition
+    return templates
 
 
 def render_notification(
@@ -78,7 +65,7 @@ def render_notification(
     context: Mapping[str, Any],
 ) -> RenderedNotification:
     """Render a canonical notification template after validating its context."""
-    definition = _TEMPLATE_REGISTRY.get(template_key)
+    definition = registered_notification_templates().get(template_key)
     if definition is None:
         raise NotificationTemplateError(
             f"Unknown notification template: {template_key}"
