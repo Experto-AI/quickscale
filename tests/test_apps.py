@@ -141,15 +141,16 @@ def test_startup_check_refuses_a_retired_setting(settings) -> None:
 
 
 def test_startup_check_refuses_every_declared_retired_setting(settings) -> None:
-    """Rule 6: every declared retired orgs name fails startup."""
-    from quickscale_modules_orgs.checks import RETIRED_SETTINGS
+    """Rule 6: every retired name the orgs manifest declares fails startup."""
+    from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
 
+    retired_settings = load_module_manifest_with_fallback("orgs").retired_settings
     config = QuickscaleOrgsConfig(
         "quickscale_modules_orgs",
         import_module("quickscale_modules_orgs"),
     )
 
-    for retired_name in RETIRED_SETTINGS:
+    for retired_name in retired_settings:
         setattr(settings, retired_name, "legacy")
         try:
             with pytest.raises(ImproperlyConfigured, match=retired_name):
