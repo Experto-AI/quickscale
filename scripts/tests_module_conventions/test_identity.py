@@ -1071,16 +1071,53 @@ def test_module_list_template_control() -> None:
         "lists 2 module names: alpha, beta" in violation
         for violation in checker.rule_37_module_lists(unrelated_alternation)
     )
-    orgs_corpus = _corpus(_golden_module("blog"), _golden_module("listings"))
-    orgs_reservation = replace(
-        orgs_corpus,
+    # The runtime URLconf's template-URL table and host route alternation are
+    # the theme seam's route knowledge and are allowlisted; an equivalent
+    # table or alternation anywhere else is not.
+    runtime_table = replace(
+        corpus,
         core_files={
-            "generator/templates/project_name/urls.py.j2": (
-                're_path(r"^orgs/(?!api(?:/|$))[^/]+/(blog|listings|members|settings)/?$", view)\n'
+            "runtime/urls.py": (
+                "_TEMPLATE_MODULE_URLS: tuple[tuple[str, str, str], ...] = (\n"
+                '    ("alpha", "quickscale_alpha:index", "quickscale_alpha:dashboard"),\n'
+                ")\n"
             )
         },
     )
-    assert checker.rule_37_module_lists(orgs_reservation) == []
+    assert checker.rule_37_module_lists(runtime_table) == []
+    other_table = replace(
+        corpus,
+        core_files={
+            "runtime/other.py": (
+                "MODULE_URLS: tuple[tuple[str, str, str], ...] = (\n"
+                '    ("alpha", "quickscale_alpha:index", "quickscale_alpha:dashboard"),\n'
+                ")\n"
+            )
+        },
+    )
+    assert any(
+        "lists 1 module name" in violation
+        for violation in checker.rule_37_module_lists(other_table)
+    )
+    route_corpus = _corpus(_golden_module("blog"), _golden_module("listings"))
+    runtime_alternation = replace(
+        route_corpus,
+        core_files={
+            "runtime/urls.py": (
+                "PATTERNS = [re_path(r'^orgs/(?!api(?:/|$))[^/]+/"
+                "(blog|listings|members|settings)/?$', view)]\n"
+            )
+        },
+    )
+    assert checker.rule_37_module_lists(runtime_alternation) == []
+    other_alternation = replace(
+        route_corpus,
+        core_files={"runtime/other.py": ("PATTERNS = [re_path(r'^(blog|listings)/?$', view)]\n")},
+    )
+    assert any(
+        "string alternation:blog|listings" in violation
+        for violation in checker.rule_37_module_lists(other_alternation)
+    )
 
 
 def test_tests_file_set_control() -> None:

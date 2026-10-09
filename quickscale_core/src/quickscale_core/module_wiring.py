@@ -263,7 +263,16 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
 
 
 def render_urls_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
-    """Render `<package>/urls_modules.py` content."""
+    """Render `<package>/urls_modules.py` content.
+
+    The file is the project's managed URLconf: it carries the module-derived
+    include buckets and composes them, through
+    :func:`quickscale_core.runtime.urls.compose_managed_urlpatterns`, in the
+    fixed order the generated project has always used, so the user-owned
+    ``<package>/urls.py`` holds one ``include()`` line and a module URL
+    change ships by regenerating this file.  The empty-specs output is
+    byte-identical to the generator's ``urls_modules.py.j2`` stub.
+    """
     pre_home_urls, post_home_urls = collect_url_wiring(module_specs)
     spa_routes = collect_spa_routes(module_specs)
 
@@ -274,11 +283,10 @@ def render_urls_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
     )
 
     def _pattern_lines(urls: list[tuple[str, str]]) -> str:
-        pattern_lines = [
+        return "\n".join(
             f'    path("{route}", include("{include_target}")),'
             for route, include_target in urls
-        ]
-        return "\n".join(pattern_lines)
+        )
 
     def _spa_route_lines(routes: list[tuple[str, str, str]]) -> str:
         lines = []
@@ -289,48 +297,41 @@ def render_urls_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
             )
         return "\n".join(lines)
 
-    if pre_home_urls or post_home_urls or spa_routes:
-        pre_home_body = _pattern_lines(pre_home_urls)
-        post_home_body = _pattern_lines(post_home_urls)
-        spa_body = _spa_route_lines(spa_routes)
-        imports = "from django.urls import URLPattern, URLResolver, include, path"
-        if spa_routes:
-            imports += ", re_path"
-        views_import = "\nfrom .views import react_shell_view\n" if spa_routes else ""
-        spa_list = (
-            "SPA_MODULE_URLPATTERNS: list[ManagedURLPattern] = [\n"
-            + f"{spa_body}\n"
-            + "]\n\n"
-            if spa_routes
-            else "SPA_MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n\n"
-        )
-        return (
-            header
-            + imports
-            + "\n"
-            + views_import
-            + "\nManagedURLPattern = URLPattern | URLResolver\n\n"
-            + "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = [\n"
-            + f"{pre_home_body}\n"
-            + "]\n\n"
-            + "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = [\n"
-            + f"{post_home_body}\n"
-            + "]\n\n"
-            + spa_list
-            + "MODULE_URLPATTERNS: list[ManagedURLPattern] = (\n"
-            + "    PRE_HOME_MODULE_URLPATTERNS + POST_HOME_MODULE_URLPATTERNS\n"
-            + ")\n"
-        )
-    else:
-        return (
-            header
-            + "from django.urls import URLPattern, URLResolver\n\n"
-            + "ManagedURLPattern = URLPattern | URLResolver\n\n"
-            + "PRE_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
-            + "POST_HOME_MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
-            + "SPA_MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
-            + "MODULE_URLPATTERNS: list[ManagedURLPattern] = []\n"
-        )
+    def _bucket(name: str, body: str) -> str:
+        if not body:
+            return f"{name}: list[ManagedURLPattern] = []\n"
+        return f"{name}: list[ManagedURLPattern] = [\n{body}\n]\n"
+
+    imports = "from django.urls import URLPattern, URLResolver"
+    if pre_home_urls or post_home_urls:
+        imports += ", include, path"
+    if spa_routes:
+        imports += ", re_path"
+
+    return (
+        header
+        + imports
+        + "\n\n"
+        + "from quickscale_core.runtime.urls import compose_managed_urlpatterns\n"
+        + "from .views import orgs_react_shell_view, react_shell_view\n\n"
+        + "ManagedURLPattern = URLPattern | URLResolver\n\n"
+        + _bucket("PRE_HOME_MODULE_URLPATTERNS", _pattern_lines(pre_home_urls))
+        + "\n"
+        + _bucket("POST_HOME_MODULE_URLPATTERNS", _pattern_lines(post_home_urls))
+        + "\n"
+        + _bucket("SPA_MODULE_URLPATTERNS", _spa_route_lines(spa_routes))
+        + "\n"
+        + "MODULE_URLPATTERNS: list[ManagedURLPattern] = (\n"
+        + "    PRE_HOME_MODULE_URLPATTERNS + POST_HOME_MODULE_URLPATTERNS\n"
+        + ")\n\n"
+        + "urlpatterns: list[ManagedURLPattern] = compose_managed_urlpatterns(\n"
+        + "    pre_home=PRE_HOME_MODULE_URLPATTERNS,\n"
+        + "    post_home=POST_HOME_MODULE_URLPATTERNS,\n"
+        + "    spa=SPA_MODULE_URLPATTERNS,\n"
+        + "    react_shell_view=react_shell_view,\n"
+        + "    orgs_shell_view=orgs_react_shell_view,\n"
+        + ")\n"
+    )
 
 
 def collect_managed_files(

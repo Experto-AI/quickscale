@@ -44,7 +44,8 @@
       "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "sa266": "Regenerated 2026-10-08 \u2014 the generated Makefile check-tenant-isolation target and .github/workflows/ci.yml isolation step now pass --json to quickscale_orgs_check_tenant_isolation, whose machine-output flag is --json; --format json is retired. Only these two generated paths changed in react_default; react_empty and react_selected do not render the tenant-isolation step. All unrelated paths, hashes, and modes remain authoritative.",
       "sa258-runtime-seam-tag": "Regenerated 2026-10-09 \u2014 the React seam's module flags and paths render at request time through the quickscale_seam runtime template tag (SA258 slice a): templates/index.html and templates/social/{embeds,link_tree}.html load the library and call its tags, and testproject/settings/base.py registers the library through TEMPLATES options. 4 fixture hashes updated per variant: templates/index.html, templates/social/embeds.html, templates/social/link_tree.html, and testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa258-runtime-drf-composition": "Regenerated 2026-10-09 \u2014 the generated settings/base.py delegates its REST_FRAMEWORK composition to quickscale_core.runtime.settings.compose_rest_framework (SA258 slice b), so the file carries one call instead of the inline DRF defaults. 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative."
+      "sa258-runtime-drf-composition": "Regenerated 2026-10-09 \u2014 the generated settings/base.py delegates its REST_FRAMEWORK composition to quickscale_core.runtime.settings.compose_rest_framework (SA258 slice b), so the file carries one call instead of the inline DRF defaults. 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa258-managed-urlconf": "Regenerated 2026-10-09 \u2014 the user-owned generated URL files hold one managed include (SA258 slice c): testproject/urls.py includes <package>.urls_modules with one path() and names no module, testproject/urls_modules.py is the managed URLconf that composes the theme shell routes and the module includes through quickscale_core.runtime.urls.compose_managed_urlpatterns, and testproject/context_processors.py delegates its module context to quickscale_core.runtime.urls.installed_module_context. 3 fixture hashes updated per variant: testproject/urls.py, testproject/urls_modules.py, and testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -520,7 +521,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "644",
-      "sha256": "ecda9c70070f0bd21fbdfe96a1ce4b1512f8a86153e80cd423827a0bf285895b"
+      "sha256": "830570c270729559618cec536badcff683e694f0491b838d9dcb118951970908"
     },
     "testproject/settings/__init__.py": {
       "mode": "644",
@@ -544,11 +545,11 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "77ad1922ceedd733da988067f82c5940df80a798a6e76173acf673ba0edc09f9"
+      "sha256": "dd367d75fc7f3b170c0aadcf9e127e29fbeb96efab4195c1d93f33c7a73c2863"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
-      "sha256": "0d4faf429732c343c58c34c9cab2ce9bc97445724132128131163171f031742e"
+      "sha256": "e62a9aa30493376c8632c024f7e27dd38d1eef6e79c325a8a6b807608a81e30b"
     },
     "testproject/views.py": {
       "mode": "644",
@@ -1014,7 +1015,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "644",
-      "sha256": "ecda9c70070f0bd21fbdfe96a1ce4b1512f8a86153e80cd423827a0bf285895b"
+      "sha256": "830570c270729559618cec536badcff683e694f0491b838d9dcb118951970908"
     },
     "testproject/settings/__init__.py": {
       "mode": "644",
@@ -1038,11 +1039,11 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "77ad1922ceedd733da988067f82c5940df80a798a6e76173acf673ba0edc09f9"
+      "sha256": "dd367d75fc7f3b170c0aadcf9e127e29fbeb96efab4195c1d93f33c7a73c2863"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
-      "sha256": "0d4faf429732c343c58c34c9cab2ce9bc97445724132128131163171f031742e"
+      "sha256": "e62a9aa30493376c8632c024f7e27dd38d1eef6e79c325a8a6b807608a81e30b"
     },
     "testproject/views.py": {
       "mode": "644",
@@ -1508,7 +1509,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "644",
-      "sha256": "ecda9c70070f0bd21fbdfe96a1ce4b1512f8a86153e80cd423827a0bf285895b"
+      "sha256": "830570c270729559618cec536badcff683e694f0491b838d9dcb118951970908"
     },
     "testproject/settings/__init__.py": {
       "mode": "644",
@@ -1532,11 +1533,11 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "77ad1922ceedd733da988067f82c5940df80a798a6e76173acf673ba0edc09f9"
+      "sha256": "dd367d75fc7f3b170c0aadcf9e127e29fbeb96efab4195c1d93f33c7a73c2863"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
-      "sha256": "0d4faf429732c343c58c34c9cab2ce9bc97445724132128131163171f031742e"
+      "sha256": "e62a9aa30493376c8632c024f7e27dd38d1eef6e79c325a8a6b807608a81e30b"
     },
     "testproject/views.py": {
       "mode": "644",

@@ -6,7 +6,8 @@ from typing import Any
 
 from django.conf import settings as django_settings
 from django.http import HttpRequest
-from django.urls import NoReverseMatch, reverse
+
+from quickscale_core.runtime.urls import installed_module_context
 
 
 def project_settings(request: HttpRequest) -> dict[str, Any]:
@@ -20,32 +21,6 @@ def project_settings(request: HttpRequest) -> dict[str, Any]:
     }
 
 
-def _billing_url(request: HttpRequest) -> str | None:
-    """Return billing's URL for the current user, or None while billing is absent or off.
-
-    The billing module owns its paths (Module Conventions rule 41), so the
-    project reverses the module's named routes instead of repeating them:
-    anonymous visitors reach the pricing page and authenticated users the
-    dashboard, in both deployment modes. The flat routes resolve against the
-    current organization through the module's middleware; no
-    organization-scoped billing URL tree exists. A switched-off billing keeps
-    its URL patterns mounted but answers as disabled (rule 1), so the projected
-    enabled setting gates the value the way the React shell gates its module
-    flags.
-    """
-    if not getattr(django_settings, "QUICKSCALE_BILLING_ENABLED", False):
-        return None
-    user = getattr(request, "user", None)
-    if user is None or not getattr(user, "is_authenticated", False):
-        route_name = "pricing_page"
-    else:
-        route_name = "dashboard"
-    try:
-        return reverse(f"quickscale_billing:{route_name}")
-    except NoReverseMatch:
-        return None
-
-
 def installed_modules(request: HttpRequest) -> dict[str, Any]:
     """Provide installed module context for templates (e.g. billing URL)."""
-    return {"modules": {"billing": {"url": _billing_url(request)}}}
+    return {"modules": installed_module_context(request)}

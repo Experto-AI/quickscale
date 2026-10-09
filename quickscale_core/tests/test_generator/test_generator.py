@@ -236,6 +236,16 @@ class TestProjectGeneratorGeneration:
             "PRE_HOME_MODULE_URLPATTERNS + POST_HOME_MODULE_URLPATTERNS"
             in urls_modules_content
         )
+        # The stub is already the managed URLconf shape: the user-owned urls.py
+        # includes it, and compose_managed_urlpatterns fixes the route order.
+        assert (
+            "from quickscale_core.runtime.urls import compose_managed_urlpatterns"
+            in urls_modules_content
+        )
+        assert (
+            "urlpatterns: list[ManagedURLPattern] = compose_managed_urlpatterns("
+            in urls_modules_content
+        )
 
     def test_generated_python_files_are_valid(self, tmp_path: Path) -> None:
         """Generated Python files should be syntactically valid"""

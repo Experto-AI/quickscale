@@ -123,11 +123,15 @@ RULE_37_ALLOWED_LITERALS: dict[tuple[str, str, str], str] = {
     ("scripts", "check_org_context_primitives.py", "EXEMPT_MODULES"): (
         "the documented orgs lint exemption"
     ),
+    ("core", "runtime/urls.py", "_TEMPLATE_MODULE_URLS"): (
+        "the theme's server-side template URL table (rule 41), the sibling of "
+        "runtime/seam._SEAM_MODULE_PATHS"
+    ),
     (
         "core",
-        "generator/templates/project_name/urls.py.j2",
-        "<template alternation:blog|listings|members|settings>",
-    ): "rule 41 exception: orgs' tenancy-mode shell reservations stay host-rendered",
+        "runtime/urls.py",
+        "<string alternation:blog|listings|members|settings>",
+    ): "the theme's host URLconf route table (rule 41)",
 }  #: Two or more distinct module names in one literal is a module enumeration
 
 #: (rule 37's prohibition).  A single name counts when it is an assigned
@@ -967,6 +971,28 @@ def _module_literal_names(
     return found
 
 
+def _string_module_alternations(
+    tree: ast.Module, vocabulary: set[str]
+) -> list[tuple[int, str, list[str]]]:
+    """
+    Return string constants carrying a module-name alternation.
+
+    Python has no dedicated spelling for an enumeration held in one string,
+    so the detector reads the same pipe-group shape the template detector
+    reads: a regex or formatted string that enumerates module names
+    (``(blog|listings)``) is a module list wherever it lives.
+    """
+    found: list[tuple[int, str, list[str]]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        for match in _TEMPLATE_PIPE_GROUP.finditer(node.value):
+            names = sorted(part for part in match.group(1).split("|") if part in vocabulary)
+            if len(names) >= RULE_37_MINIMUM_MODULE_NAMES:
+                found.append((node.lineno, f"<string alternation:{match.group(1)}>", names))
+    return found
+
+
 def _template_module_literals(text: str, vocabulary: set[str]) -> list[tuple[int, str, list[str]]]:
     """
     Return literal module enumerations found in a Jinja template's text.
@@ -1142,11 +1168,13 @@ def rule_37_module_lists(corpus: Corpus) -> list[str]:
                 continue
             if is_python and (tree_name, rel) in RULE_37_ALLOWED_LITERAL_FILES:
                 continue
-            found = (
-                _module_literal_names(_parse(text), vocabulary)
-                if is_python
-                else _template_module_literals(text, vocabulary)
-            )
+            if is_python:
+                parsed = _parse(text)
+                found = _module_literal_names(parsed, vocabulary) + _string_module_alternations(
+                    parsed, vocabulary
+                )
+            else:
+                found = _template_module_literals(text, vocabulary)
             for lineno, symbol, names in found:
                 if (tree_name, rel, symbol) in RULE_37_ALLOWED_LITERALS:
                     continue

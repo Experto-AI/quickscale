@@ -6,7 +6,8 @@ This test file validates:
 - The generator no longer accepts ``showcase_html`` as a valid theme.
 - ``_THEME_DEST_MAP`` no longer contains a ``showcase_html`` entry.
 - Generated views.py contains no HTML-only ``social_link_tree_view`` / ``social_embeds_view``.
-- Generated urls.py uses ``TemplateView`` (not function views) for social routes.
+- The runtime URLconf uses ``TemplateView`` (not function views) for social routes, and the
+  generated urls.py includes that managed URLconf.
 - Retired-theme sentinel fails before tempfile creation, file writes/copies,
   cleanup deletion, or Poetry subprocess execution (SA94 Phase 4).
 """
@@ -17,6 +18,15 @@ from unittest.mock import patch
 import pytest
 
 from quickscale_core.generator.generator import ProjectGenerator, _THEME_DEST_MAP
+
+_RUNTIME_URLCONF = (
+    Path(__file__).resolve().parents[2]
+    / "quickscale_core"
+    / "src"
+    / "quickscale_core"
+    / "runtime"
+    / "urls.py"
+)
 
 
 class TestShowcaseHtmlRemoval:
@@ -141,25 +151,33 @@ class TestReactNoModulesGeneration:
         assert "social_embeds_view" not in views_py
 
     def test_urls_uses_template_view_for_social(self) -> None:
-        """Generated urls.py must use ``TemplateView`` for social routes, not function views."""
+        """The runtime URLconf uses ``TemplateView`` for social routes, not function views."""
         urls_py = (self.output_path / self.PROJECT_NAME / "urls.py").read_text()
+        runtime_urls = _RUNTIME_URLCONF.read_text()
         # Must use TemplateView for social routes
-        assert 'TemplateView.as_view(template_name="social/link_tree.html")' in urls_py
-        assert 'TemplateView.as_view(template_name="social/embeds.html")' in urls_py
-        # Must NOT use function-view imports
+        assert (
+            'TemplateView.as_view(template_name="social/link_tree.html")'
+            in runtime_urls
+        )
+        assert (
+            'TemplateView.as_view(template_name="social/embeds.html")' in runtime_urls
+        )
+        # The user-owned urls.py includes the managed URLconf and defines no
+        # function view for the public pages.
+        assert 'path("", include(' in urls_py
         assert "social_link_tree_view" not in urls_py
         assert "social_embeds_view" not in urls_py
 
     def test_urls_has_react_shell_and_spa_catch_all(self) -> None:
-        """Generated urls.py must include the React shell view and SPA catch-all."""
+        """Generated urls.py includes the managed URLconf and the SPA catch-all."""
         urls_py = (self.output_path / self.PROJECT_NAME / "urls.py").read_text()
         views_py = (self.output_path / self.PROJECT_NAME / "views.py").read_text()
         assert (
             'react_shell_view = TemplateView.as_view(template_name="index.html")'
             in views_py
         )
-        assert "react_shell_urlpatterns" in urls_py
-        assert "urlpatterns += react_shell_urlpatterns" in urls_py
+        assert f'path("", include("{self.PROJECT_NAME}.urls_modules")),' in urls_py
+        assert "react_shell_urlpatterns" not in urls_py
         # SPA catch-all must be unconditional
         assert 're_path(r".*", react_shell_view)' in urls_py
 
@@ -194,10 +212,16 @@ class TestReactSocialGeneration:
     def test_social_routes_preserved(self) -> None:
         """Social routes must be present and use TemplateView."""
         urls_py = (self.output_path / self.PROJECT_NAME / "urls.py").read_text()
-        assert 'r"^social/?$"' in urls_py
-        assert 'r"^social/embeds/?$"' in urls_py
-        assert 'TemplateView.as_view(template_name="social/link_tree.html")' in urls_py
-        assert 'TemplateView.as_view(template_name="social/embeds.html")' in urls_py
+        runtime_urls = _RUNTIME_URLCONF.read_text()
+        assert 'r"^social/?$"' in runtime_urls
+        assert 'r"^social/embeds/?$"' in runtime_urls
+        assert (
+            'TemplateView.as_view(template_name="social/link_tree.html")'
+            in runtime_urls
+        )
+        assert (
+            'TemplateView.as_view(template_name="social/embeds.html")' in runtime_urls
+        )
         # No function view imports for social
         assert "social_link_tree_view" not in urls_py
         assert "social_embeds_view" not in urls_py
