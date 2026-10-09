@@ -12,6 +12,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.checks import CheckMessage, Error
 
+from quickscale_core.runtime import module_settings_are_supplied
 from quickscale_modules_notifications.services import NotificationSettingsSnapshot
 
 #: The projected secret settings apply writes from the `_ENV_VAR` options
@@ -35,6 +36,12 @@ def check_vendor_secrets(
     when the active email backend is the live Resend backend.  The declared
     settings are validated by the generic settings check registered first.
     """
+    if not module_settings_are_supplied("notifications"):
+        # The generic settings check names the missing declared setting;
+        # Django runs every registered check independently, so this check
+        # stays silent until the project is fully applied.
+        return []
+
     snapshot = NotificationSettingsSnapshot.from_settings()
     if not snapshot.enabled:
         return []
