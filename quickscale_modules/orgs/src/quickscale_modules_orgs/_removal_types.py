@@ -85,14 +85,13 @@ class OrganizationRemovalObligation:
         return self.anonymize_action
 
 
-AUTH_PERSONAL_DATA = "auth-personal-data"
-BILLING_PERSONAL_DATA = "billing-personal-data"
-BILLING_PROVIDER_STATE = "billing-provider-state"
-BLOG_PERSONAL_DATA = "blog-personal-data"
-OWNED_TENANT_ROWS = "owned-tenant-rows"
-OWNED_PERSONAL_DATA = "owned-personal-data"
-SOCIAL_CACHE_STATE = "social-cache-state"
-PURGE_TOMBSTONE = "purge-tombstone"
+#: orgs' own removal-obligation names.  Every declaring module defines its
+#: own name under the `quickscale_<module>:<purpose>` stem (Module Conventions
+#: rule 2/33), so orgs names no other module's vocabulary.
+OWNED_TENANT_ROWS = "quickscale_orgs:tenant-rows"
+OWNED_PERSONAL_DATA = "quickscale_orgs:personal-data"
+CACHE_STATE = "quickscale_orgs:cache-state"
+PURGE_TOMBSTONE = "quickscale_orgs:purge-tombstone"
 
 #: Model-level ``provider_id_classification`` values. A model classifies
 #: each of its non-relational ``*_id`` fields with one of these so a project-owned

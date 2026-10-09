@@ -7,6 +7,12 @@ from types import SimpleNamespace
 
 import pytest
 
+from quickscale_modules_auth.apps import AUTH_PERSONAL_DATA
+from quickscale_modules_billing.apps import (
+    BILLING_PERSONAL_DATA,
+    BILLING_PROVIDER_STATE,
+)
+from quickscale_modules_blog.apps import BLOG_PERSONAL_DATA
 from quickscale_modules_orgs import removal
 from quickscale_modules_orgs.models import (
     Organization,
@@ -14,16 +20,12 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
 )
 from quickscale_modules_orgs.removal import (
-    AUTH_PERSONAL_DATA,
-    BILLING_PERSONAL_DATA,
-    BILLING_PROVIDER_STATE,
-    BLOG_PERSONAL_DATA,
+    CACHE_STATE,
     NOT_PROVIDER_BACKED,
     OWNED_PERSONAL_DATA,
     OWNED_TENANT_ROWS,
     PROVIDER_BACKED,
     PURGE_TOMBSTONE,
-    SOCIAL_CACHE_STATE,
     STAGE_EXECUTOR_HOOKS,
     BoundaryGuardedHooks,
     ExternalProviderField,
@@ -257,7 +259,7 @@ def test_each_installed_app_declares_its_own_obligations() -> None:
     assert [obligation.name for obligation in orgs_obligations] == [
         OWNED_TENANT_ROWS,
         OWNED_PERSONAL_DATA,
-        SOCIAL_CACHE_STATE,
+        CACHE_STATE,
         PURGE_TOMBSTONE,
     ]
 
@@ -273,7 +275,7 @@ def test_discovered_aggregate_is_the_declared_set() -> None:
         BLOG_PERSONAL_DATA,
         OWNED_PERSONAL_DATA,
         OWNED_TENANT_ROWS,
-        SOCIAL_CACHE_STATE,
+        CACHE_STATE,
         PURGE_TOMBSTONE,
     }
 
@@ -638,7 +640,7 @@ def test_coordinator_discharge_and_finish_are_idempotent() -> None:
         BILLING_PROVIDER_STATE,
         OWNED_PERSONAL_DATA,
         OWNED_TENANT_ROWS,
-        SOCIAL_CACHE_STATE,
+        CACHE_STATE,
         PURGE_TOMBSTONE,
     }
     assert coordinator.finish() == discharged
@@ -658,7 +660,7 @@ def test_coordinator_records_skips_without_discharging_them() -> None:
 
     assert {obligation.name for obligation in skipped} == {
         OWNED_TENANT_ROWS,
-        SOCIAL_CACHE_STATE,
+        CACHE_STATE,
         PURGE_TOMBSTONE,
     }
     assert coordinator.skipped() == skipped

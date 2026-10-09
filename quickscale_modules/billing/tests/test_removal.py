@@ -12,14 +12,16 @@ from unittest.mock import patch
 
 import pytest
 
-from quickscale_modules_billing.apps import QuickscaleBillingConfig
+from quickscale_modules_billing.apps import (
+    BILLING_PERSONAL_DATA,
+    BILLING_PROVIDER_STATE,
+    QuickscaleBillingConfig,
+)
 from quickscale_modules_billing.models import Plan, Subscription
 from quickscale_modules_billing._removal import (
     guard_organization_removal_provider_state,
 )
 from quickscale_modules_orgs.removal import (
-    BILLING_PERSONAL_DATA,
-    BILLING_PROVIDER_STATE,
     BoundaryGuardedHooks,
     RemovalAction,
 )

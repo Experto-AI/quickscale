@@ -36,10 +36,10 @@ from quickscale_core.runtime import (
     register_module_settings_check,
 )
 from quickscale_modules_orgs.removal import (
+    CACHE_STATE,
     OWNED_PERSONAL_DATA,
     OWNED_TENANT_ROWS,
     PURGE_TOMBSTONE,
-    SOCIAL_CACHE_STATE,
     OrganizationRemovalObligation,
     RemovalAction,
     RemovalBoundary,
@@ -77,8 +77,8 @@ class QuickscaleOrgsConfig(AppConfig):
         ``AppConfig``; ``orgs`` aggregates them for both removal boundaries.
         These four are orgs' own: the marker-derived tenant rows it deletes,
         the memberships and invitation addresses it anonymizes when the
-        account is removed, the organization-scoped social cache state those
-        rows leave behind, and the purge tombstone it records.
+        account is removed, the organization-scoped cache state those rows
+        leave behind, and the purge tombstone it records.
         """
         return (
             OrganizationRemovalObligation(
@@ -96,7 +96,7 @@ class QuickscaleOrgsConfig(AppConfig):
                 anonymize_action=RemovalAction.ANONYMIZE,
             ),
             OrganizationRemovalObligation(
-                name=SOCIAL_CACHE_STATE,
+                name=CACHE_STATE,
                 purge_action=RemovalAction.INVALIDATE,
                 anonymize_action=RemovalAction.SKIP,
                 anonymize_skip_reason=(
@@ -153,7 +153,7 @@ class QuickscaleOrgsConfig(AppConfig):
     def invalidate_organization_cache(self, organization_id: object) -> None:
         """Invalidate every installed app's declared organization-scoped keys.
 
-        This is the executor for the ``social-cache-state`` obligation declared
+        This is the executor for the ``cache-state`` obligation declared
         in :meth:`removal_obligations`: the purge boundary calls it after the
         organization's rows are deleted, and the tombstone retry path calls it
         to heal an invalidation that failed.  Each cache-owning module declares
@@ -181,7 +181,7 @@ class QuickscaleOrgsConfig(AppConfig):
         *,
         email_verified: bool,
     ) -> None:
-        """Scrub orgs' personal data as the ``owned-personal-data`` executor.
+        """Scrub orgs' personal data as the ``quickscale_orgs:personal-data`` executor.
 
         The anonymize boundary runs this hook inside its anonymization
         transaction: the person leaves every organization and, when the

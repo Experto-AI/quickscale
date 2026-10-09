@@ -3,8 +3,8 @@
 Verifies the current migration chain applies cleanly,
 produces the correct final unique constraints, and installs FORCE RLS
 on tenant-scoped billing tables (CreditBalance, CreditTransaction,
-PurchaseCheckout, Subscription) while system-wide tables (Plan, WebhookEvent) do not
-receive RLS.
+PurchaseCheckout, Subscription) while system-wide tables (Plan, WebhookEvent,
+BillingCustomer) do not receive RLS.
 """
 
 from __future__ import annotations
@@ -240,6 +240,22 @@ def test_webhookevent_unique_stripe_event_id_constraint() -> None:
     )
 
 
+def test_billingcustomer_unique_stripe_customer_id_field() -> None:
+    """One Stripe customer identity cannot be recorded for two organizations."""
+    executor = MigrationExecutor(connection)
+    executor.migrate([ORGS_MIG_LATEST, (APP_LABEL, MIG_LATEST)])
+
+    apps = executor.loader.project_state([(APP_LABEL, MIG_LATEST)]).apps
+    BillingCustomer = apps.get_model(APP_LABEL, "BillingCustomer")
+
+    assert BillingCustomer._meta.get_field("stripe_customer_id").unique is True, (
+        "BillingCustomer.stripe_customer_id must be unique across organizations"
+    )
+    assert BillingCustomer._meta.get_field("organization").one_to_one is True, (
+        "BillingCustomer must hold one customer identity per organization"
+    )
+
+
 # ---------------------------------------------------------------------------
 # FORCE RLS proofs — PostgreSQL pg_policy catalog check
 # ---------------------------------------------------------------------------
@@ -304,10 +320,11 @@ def test_force_rls_installed_on_tenant_scoped_billing_tables() -> None:
             f"FORCE RLS SELECT policy '{policy}_select' on {table} not found."
         )
 
-    # Verify Plan and WebhookEvent do NOT have RLS policies.
+    # Verify Plan, WebhookEvent, and BillingCustomer do NOT have RLS policies.
     tables_without_rls = (
         "quickscale_billing_plan",
         "quickscale_billing_webhookevent",
+        "quickscale_billing_billingcustomer",
     )
     for table in tables_without_rls:
         policies_on_table = {(t, p) for (t, p) in found_policies if t == table}
@@ -465,6 +482,7 @@ def test_billing_tenant_tables_have_force_rls_enabled() -> None:
     system_tables = [
         "quickscale_billing_plan",
         "quickscale_billing_webhookevent",
+        "quickscale_billing_billingcustomer",
     ]
 
     with connection.cursor() as cursor:
@@ -603,6 +621,7 @@ def test_billing_rls_policy_has_org_predicate() -> None:
         for table in (
             "quickscale_billing_plan",
             "quickscale_billing_webhookevent",
+            "quickscale_billing_billingcustomer",
         ):
             cursor.execute(
                 "SELECT COUNT(*) FROM pg_policies WHERE tablename = %s",

@@ -1,7 +1,7 @@
 """Account-anonymization executor for orgs' own personal data.
 
 ``QuickscaleOrgsConfig.anonymize_account`` delegates here.  The app config
-declares the ``ANONYMIZE`` action on the ``owned-personal-data``
+declares the ``ANONYMIZE`` action on the ``quickscale_orgs:personal-data``
 organization-removal obligation, so the anonymize boundary runs this
 module's own work instead of marking the declaration discharged for nothing.
 

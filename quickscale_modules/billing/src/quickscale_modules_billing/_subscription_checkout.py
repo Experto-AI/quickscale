@@ -80,6 +80,7 @@ from quickscale_modules_billing.exceptions import (
     BillingValidationError,
 )
 from quickscale_modules_billing.models import (
+    BillingCustomer,
     Plan,
     Subscription,
 )
@@ -442,9 +443,12 @@ def _resolve_authoritative_subscription_reservation(
     if organization is not None:
         queryset = queryset.filter(organization=organization)
     if normalized_customer_id:
+        billing_customer_organizations = BillingCustomer.objects.filter(
+            stripe_customer_id=normalized_customer_id
+        ).values("organization_id")
         queryset = queryset.filter(
             Q(stripe_customer_id=normalized_customer_id)
-            | Q(organization__stripe_customer_id=normalized_customer_id)
+            | Q(organization_id__in=billing_customer_organizations)
         )
     return queryset.filter(Subscription.current_status_q()).first()
 

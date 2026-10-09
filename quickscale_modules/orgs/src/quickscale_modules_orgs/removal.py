@@ -62,10 +62,7 @@ from quickscale_modules_orgs._removal_provider_ids import (
     external_provider_obligation_mismatches as _external_provider_obligation_mismatches,
 )
 from quickscale_modules_orgs._removal_types import (
-    AUTH_PERSONAL_DATA as AUTH_PERSONAL_DATA,
-    BILLING_PERSONAL_DATA as BILLING_PERSONAL_DATA,
-    BILLING_PROVIDER_STATE as BILLING_PROVIDER_STATE,
-    BLOG_PERSONAL_DATA as BLOG_PERSONAL_DATA,
+    CACHE_STATE as CACHE_STATE,
     COORDINATOR_DISCHARGE_ACTIONS as COORDINATOR_DISCHARGE_ACTIONS,
     NOT_PROVIDER_BACKED as NOT_PROVIDER_BACKED,
     ORGANIZATION_MODEL_LABEL as ORGANIZATION_MODEL_LABEL,
@@ -76,7 +73,6 @@ from quickscale_modules_orgs._removal_types import (
     REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE as REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE,
     REMOVAL_LABEL_PREFIX_ATTRIBUTE as REMOVAL_LABEL_PREFIX_ATTRIBUTE,
     REMOVAL_OBLIGATIONS_ATTRIBUTE as REMOVAL_OBLIGATIONS_ATTRIBUTE,
-    SOCIAL_CACHE_STATE as SOCIAL_CACHE_STATE,
     STAGE_EXECUTOR_HOOKS as STAGE_EXECUTOR_HOOKS,
     BoundaryGuardedHooks as BoundaryGuardedHooks,
     ExternalProviderField as ExternalProviderField,
