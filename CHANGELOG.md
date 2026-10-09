@@ -661,15 +661,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     closed-world generator test fails when a user-owned emitted Django-side file enumerates module
     names or names a module URL.
 
-  - **Module errors share one base and one HTTP mapping.** A module's error hierarchy derives from
-    `Exception` and an API-visible subclass declares `status_code`/`default_code`, which the shared
-    DRF handler renders in the one error shape; `NotificationError` is renamed
-    `NotificationsError`, and `InsufficientCreditsError` answers `402` `insufficient_credits`
-    instead of `500` `billing_error`.
-  - **Module startup checks and retired settings follow one convention.** Retired setting names
-    live in each module's `module.yml` as `retired_settings` and are refused from the shipped
-    manifest, the generic settings check registers before a module's own checks, and module checks
-    no longer re-list the declared settings.
+  - **Module errors and startup checks follow one convention.** A module's error hierarchy derives
+    from `Exception` and an API-visible subclass declares `status_code`/`default_code` that the
+    shared handler renders in the one error shape (`InsufficientCreditsError` answers `402`
+    `insufficient_credits`; `NotificationError` is renamed `NotificationsError`). Retired setting
+    names live in each module's `module.yml` as `retired_settings`, and the generic settings check
+    registers before a module's own checks.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
