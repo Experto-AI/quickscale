@@ -111,6 +111,37 @@ def test_second_error_root_control() -> None:
     )
 
 
+def test_error_ancestry_control() -> None:
+    """Ancestry runs through every declaration, suffixless intermediates included."""
+    module = _golden_module()
+    chain = _with_files(
+        module,
+        exceptions=(
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class PaymentRequired(DemoError):\n    pass\n\n\n"
+            "class CardDeclined(PaymentRequired):\n    pass\n\n\n"
+            "class InsufficientFundsError(CardDeclined):\n    pass\n"
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, chain) == []
+    same_name = _with_files(
+        module,
+        exceptions=(
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class OtherError(Exception):\n    pass\n\n\n"
+            "class Errors:\n"
+            "    class OtherError(DemoError):\n"
+            "        pass\n"
+        ),
+    )
+    flagged = [
+        violation
+        for violation in _violations(checker.rule_10_checks_errors, same_name)
+        if "OtherError does not derive" in violation
+    ]
+    assert len(flagged) == 1
+
+
 def test_missing_exceptions_file_control() -> None:
     """A module without exceptions.py must raise no error class of its own."""
     module = _golden_module()

@@ -604,10 +604,11 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
             continue
         exceptions_tree = _parse(exceptions)
         exceptions_bindings = _import_bindings(exceptions_tree)
+        declarations = [
+            node for node in ast.walk(exceptions_tree) if isinstance(node, ast.ClassDef)
+        ]
         candidates = [
-            node
-            for node in ast.walk(exceptions_tree)
-            if isinstance(node, ast.ClassDef) and _declares_module_error(node, exceptions_bindings)
+            node for node in declarations if _declares_module_error(node, exceptions_bindings)
         ]
         if not candidates:
             violations.append(f"rule 10: {module.name}: exceptions.py has no {expected_base} base")
@@ -618,24 +619,31 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
                 f"rule 10: {module.name}: exceptions.py has no {expected_base} base; "
                 "the base is named after the module as spelled"
             )
-        origins_by_name = {
-            node.name: _base_origins(node, exceptions_bindings) for node in candidates
-        }
-        # Ancestry closure: a declaration belongs to the module's hierarchy when
-        # its bases reach the canonical ``<Module>Error`` base, directly or
-        # through another declaration, whatever it is named and wherever nested.
+        # Ancestry closure over every declaration in the file — suffixless
+        # intermediates included — so a declaration belongs to the module's
+        # hierarchy when its bases reach the canonical ``<Module>Error`` base,
+        # directly or through any chain of declarations.
+        origins_by_name: dict[str, list[list[tuple[str | None, str]]]] = {}
+        for node in declarations:
+            origins_by_name.setdefault(node.name, []).append(
+                _base_origins(node, exceptions_bindings)
+            )
         ancestry = {expected_base}
         changed = True
         while changed:
             changed = False
-            for name, origins in origins_by_name.items():
+            for name, origin_lists in origins_by_name.items():
                 if name in ancestry:
                     continue
-                if any(origin_name in ancestry for _module_path, origin_name in origins):
+                if any(
+                    origin_name in ancestry
+                    for origins in origin_lists
+                    for _module_path, origin_name in origins
+                ):
                     ancestry.add(name)
                     changed = True
         for node in candidates:
-            origins = origins_by_name[node.name]
+            origins = _base_origins(node, exceptions_bindings)
             if node.name == expected_base:
                 if not any(
                     module_path is None and name == "Exception" for module_path, name in origins
@@ -644,7 +652,7 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
                         f"rule 10: {module.name}: {expected_base} does not derive from Exception"
                     )
                 continue
-            if node.name not in ancestry:
+            if not any(origin_name in ancestry for _module_path, origin_name in origins):
                 violations.append(
                     f"rule 10: {module.name}: {node.name} does not derive from "
                     "the module error base"
