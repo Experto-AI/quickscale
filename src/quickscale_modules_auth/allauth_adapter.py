@@ -41,7 +41,9 @@ class QuickscaleAccountAdapter(DefaultAccountAdapter):
         returns a URL wins, and with no provider the adapter keeps Django's
         ``LOGIN_REDIRECT_URL``.
         """
-        redirect_url = _first_declared_redirect("post_login_redirect_hooks", request)
+        redirect_url = _first_declared_redirect(
+            _declared_login_redirect_hooks(), request
+        )
         if redirect_url is not None:
             return redirect_url
         # LOGIN_REDIRECT_URL is Django's own setting; read it directly.
@@ -54,18 +56,34 @@ class QuickscaleAccountAdapter(DefaultAccountAdapter):
         rule 4 ``post_signup_redirect_hooks`` capability; the first hook that
         returns a URL wins, and otherwise allauth's own fallback applies.
         """
-        redirect_url = _first_declared_redirect("post_signup_redirect_hooks", request)
+        redirect_url = _first_declared_redirect(
+            _declared_signup_redirect_hooks(), request
+        )
         if redirect_url is not None:
             return redirect_url
         return super().get_signup_redirect_url(request)
 
 
-def _first_declared_redirect(capability: str, request: Any) -> str | None:
-    """Return the first URL the hooks declared for *capability* answer."""
-    hooks = cast(
+def _declared_login_redirect_hooks() -> tuple[Callable[[Any], str | None], ...]:
+    """Return every declared post-login redirect hook (rule 4)."""
+    return cast(
         "tuple[Callable[[Any], str | None], ...]",
-        collect_capabilities(capability),
+        collect_capabilities("post_login_redirect_hooks"),
     )
+
+
+def _declared_signup_redirect_hooks() -> tuple[Callable[[Any], str | None], ...]:
+    """Return every declared post-signup redirect hook (rule 4)."""
+    return cast(
+        "tuple[Callable[[Any], str | None], ...]",
+        collect_capabilities("post_signup_redirect_hooks"),
+    )
+
+
+def _first_declared_redirect(
+    hooks: tuple[Callable[[Any], str | None], ...], request: Any
+) -> str | None:
+    """Return the first URL the collected *hooks* answer."""
     for hook in hooks:
         redirect_url = hook(request)
         if redirect_url is not None:

@@ -303,13 +303,15 @@ def test_discover_anonymize_hooks_keeps_the_collected_order(
 
     first = SimpleNamespace(label="zeta_app", anonymize_account=lambda *a: None)
     second = SimpleNamespace(label="alpha_app", anonymize_account=lambda *a: None)
+
+    def fake_collect(capability: str, **kwargs: object) -> tuple[object, ...]:
+        if capability == "anonymize_handlers":
+            return (first, second)
+        return ()
+
     monkeypatch.setattr(
         "quickscale_modules_auth._anonymize_boundary.collect_capabilities",
-        lambda capability: (first, second),
-    )
-    monkeypatch.setattr(
-        "quickscale_modules_auth._anonymize_boundary.declared_removal_obligations",
-        lambda config: (),
+        fake_collect,
     )
     monkeypatch.setattr(
         "quickscale_modules_auth._anonymize_boundary.apps.get_app_config",
@@ -331,13 +333,15 @@ def test_discover_anonymize_hooks_rejects_a_same_label_substitute(
         label="quickscale_auth",
         anonymize_account=lambda *a: None,
     )
+
+    def fake_collect(capability: str, **kwargs: object) -> tuple[object, ...]:
+        if capability == "anonymize_handlers":
+            return (substitute,)
+        return ()
+
     monkeypatch.setattr(
         "quickscale_modules_auth._anonymize_boundary.collect_capabilities",
-        lambda capability: (substitute,),
-    )
-    monkeypatch.setattr(
-        "quickscale_modules_auth._anonymize_boundary.declared_removal_obligations",
-        lambda config: (),
+        fake_collect,
     )
 
     with pytest.raises(ValueError, match="installed app config"):
@@ -351,9 +355,15 @@ def test_discover_anonymize_hooks_rejects_a_declaration_without_the_hook(
     from types import SimpleNamespace
 
     declaration = SimpleNamespace(label="acme_app")
+
+    def fake_collect(capability: str, **kwargs: object) -> tuple[object, ...]:
+        if capability == "anonymize_handlers":
+            return (declaration,)
+        return ()
+
     monkeypatch.setattr(
         "quickscale_modules_auth._anonymize_boundary.collect_capabilities",
-        lambda capability: (declaration,),
+        fake_collect,
     )
 
     with pytest.raises(ValueError, match="anonymize_account"):
@@ -377,17 +387,17 @@ def test_discover_anonymize_hooks_requires_the_capability_for_a_declaration(
         anonymize_action=RemovalAction.ANONYMIZE,
     )
     owner = SimpleNamespace(label="acme_app")
+
+    def fake_collect(
+        capability: str, *, on_declared=None, **kwargs: object
+    ) -> tuple[object, ...]:
+        if capability == "removal_obligations" and on_declared is not None:
+            on_declared(owner, (obligation,))
+        return ()
+
     monkeypatch.setattr(
         "quickscale_modules_auth._anonymize_boundary.collect_capabilities",
-        lambda capability: (),
-    )
-    monkeypatch.setattr(
-        "quickscale_modules_auth._anonymize_boundary.apps.get_app_configs",
-        lambda: [owner],
-    )
-    monkeypatch.setattr(
-        "quickscale_modules_auth._anonymize_boundary.declared_removal_obligations",
-        lambda config: (obligation,),
+        fake_collect,
     )
 
     with pytest.raises(ValueError, match="anonymize_handlers"):
