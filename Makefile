@@ -356,8 +356,8 @@ help:
 	@echo "  make refresh-action-pins          - Operator: refresh SHA-pinned actions to their latest releases (CHECK=1 reports only)"
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
 	@echo "  make isolation-conformance         - Run the PostgreSQL isolation-conformance suite"
-	@echo "  make check-gate-parity            - SA122a: verify declared gates match every execution context (exit 0 = parity, 1 = JSONL diffs)"
-	@echo "  make check-ci-gate-generation     - SA122b: verify registry-bound hosted CI jobs are generated and current"
+	@echo "  make check-gate-parity            - SA259: verify every generated gate-wiring file is current (exit 0 = current, 1 = drift)"
+	@echo "  make check-ci-gate-generation     - SA122b: verify registry-bound generated wiring is current (workflows, gates.mk, docs table)"
 	@echo ""
 	@echo "Release-only tooling (maintainers):"
 	@echo "  make help-release         - SA117 scope, publication, and module-apply gates"
@@ -1123,12 +1123,12 @@ isolation-conformance:
 		scripts/provision_ci_postgres.sh run --profile isolation -- scripts/test_isolation_conformance.sh; \
 	fi
 
-# --- Gate Registry Parity Check (SA122a) ---
+# --- Gate Wiring Currency Check (SA259) ---
 
-# Verify that every gate declared in scripts/gate_registry.json is present in
-# every execution context (Makefile, check_ci_locally.sh, ci.yml, publish.yml,
-# e2e.yml).  Exits 0 when all declared gates are wired; exits 1 with JSONL
-# diagnostics when conformance gates are missing from a required context.
+# Verify that every file generated from scripts/gate_registry.json is current:
+# the generated gates.mk include, the hosted-job/E2E/publish workflow regions,
+# and the gate-roster table in docs/technical/validation_policy.md.  Exits 0
+# when all generated files match; exits 1 with a unified diff per stale file.
 # This is a blocking diagnostic and is also invoked directly by make check.
 check-gate-parity:
 	@tmp=$$(mktemp); \
@@ -1381,7 +1381,7 @@ check:
 		fi; \
 	fi; \
 	$(MAKE) $(CHECK_GATE_TARGETS)
-	@# SA122a: parity is a direct, non-recursive mandatory check using the selected registry.
+	@# SA259: generated-wiring currency is a direct, non-recursive mandatory check using the selected registry.
 	$(PYTHON) scripts/check_gate_parity.py --registry "$(GATE_REGISTRY)"
 	@# F-006: registry-bound hosted CI generation drift must fail the mandatory gate.
 	@# Non-recursive by design: the direct Python --check (same command as the

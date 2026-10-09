@@ -57,8 +57,8 @@ show_help() {
 # future reordering cannot silently change what "--from coverage" means.
 # "static" covers the whole registry-driven fan-out as one unit: selection is
 # applied at the call sites below and never inside run_static_gates_serial /
-# run_static_gates_parallel, because check_gate_parity.py observes both of
-# those functions and requires every registered gate to appear in each.
+# run_static_gates_parallel, which both consume the single registry-derived
+# LOCAL_CONFORMANCE_GATE_* inventory loaded in the declaration prefix.
 STAGE_ORDER="install static coverage integration e2e"
 RUN_E2E=false
 PARTIAL_RUN=false
@@ -81,11 +81,9 @@ require_known_stage() {
     fi
 }
 
-# Parsed from a copy of the argument list rather than by shifting "$@".
-# check_gate_parity.py's Bash observation harness invokes this declaration
-# prefix with the script path in $1 and the gate function to run in $2, and
-# reads $2 back after the prefix executes; consuming the positional parameters
-# here would leave it with no function to call.
+# Parsed from a copy of the argument list rather than by shifting "$@", so
+# parsing never consumes positional parameters that the declaration prefix or
+# a caller may still need.
 declare -a QS_CLI_ARGS=("$@")
 qs_arg_index=0
 while [ "$qs_arg_index" -lt "${#QS_CLI_ARGS[@]}" ]; do
@@ -203,7 +201,7 @@ stage_enabled() {
 # test during a unit run, for instance) survive indefinitely; without the clear,
 # a recorded stage would hand `make retry` a pile of failures from unrelated
 # sessions.  Only ever called from the command tail, never from the declaration
-# prefix that check_gate_parity.py executes under a restricted PATH.
+# prefix that derives the registry inventory and must stay side-effect free.
 STAGE_STARTED_AT=""
 mark_stage_start() {
     STAGE_STARTED_AT="$(date +%s)"
@@ -227,8 +225,8 @@ record_stage_failure() {
 }
 
 # The registry is an input to local-CI execution. Keep this derivation in the
-# declaration prefix so the parity observer executes the same inventory that
-# the production entrypoint uses, without reaching the command-oriented tail.
+# declaration prefix, before any command side effects, so the fan-out inventory
+# is a pure function of the registry.
 GATE_REGISTRY="${GATE_REGISTRY:-$ROOT/scripts/gate_registry.json}"
 if [ -n "${PYTHON3:-}" ]; then
     REGISTRY_PYTHON=("$PYTHON3")
@@ -254,18 +252,34 @@ with open(sys.argv[1], encoding="utf-8") as registry_file:
     registry = json.load(registry_file)
 
 rows = []
+errors = []
 for registry_index, gate in enumerate(registry["gates"]):
     bindings = gate["bindings"]
     target = bindings.get("make_target")
     stage = bindings.get("local_ci_stage")
-    if (
-        isinstance(target, str)
-        and target
-        and isinstance(stage, int)
-        and not isinstance(stage, bool)
-        and 3 <= stage <= 7
-    ):
+    local_contexts = sorted(
+        context
+        for context in gate.get("required_contexts", [])
+        if context in ("local-serial", "local-parallel")
+    )
+    valid_target = isinstance(target, str) and bool(target)
+    valid_stage = isinstance(stage, int) and not isinstance(stage, bool) and 3 <= stage <= 7
+    if local_contexts and not valid_target:
+        errors.append(
+            f"{gate['id']}: declares {', '.join(local_contexts)} but has no Make target"
+        )
+    if local_contexts and not valid_stage:
+        errors.append(
+            f"{gate['id']}: declares {', '.join(local_contexts)} but local_ci_stage "
+            f"{stage!r} is outside the executable stages 3-7"
+        )
+    if valid_target and valid_stage:
         rows.append((stage, registry_index, gate["id"], target))
+
+if errors:
+    for error in errors:
+        print(f"ERROR: {error}", file=sys.stderr)
+    sys.exit(1)
 
 for stage, _, gate_id, target in sorted(rows):
     print(f"{gate_id}\t{target}\t{stage}")

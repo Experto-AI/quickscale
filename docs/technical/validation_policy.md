@@ -205,11 +205,37 @@ validated resources; preserve the runners' exact-scope cleanup contracts.
 
 ### Registered script-gate and isolation execution
 
-The registry-derived local and hosted conformance flow includes seventeen registered hosted
-gates, including the CSRF-exempt contract, behavioural-commit testimony, generated-project
-contract-vintage coupling, blocking Trivy dependency-vulnerability, Bandit static-security,
-zizmor workflow-security, gitleaks secret-scanning, module-conventions rule 40 conformance, and
-split-facade import gates. `make check-gate-suites` is the owning execution context for all current
+The registry-derived local and hosted conformance flow is generated from
+`scripts/gate_registry.json`; the table below is its current projection, and
+the generated-wiring check fails when it or any other generated file is not current.
+Every listed gate runs in each of its declared contexts.
+
+<!-- BEGIN GENERATED: gate-registry-table -->
+| Gate | Make target | Contexts | Local stage | Hosted job |
+|---|---|---|---|---|
+| `check-core-compat` | `make check-core-compat` | local-serial, local-parallel, hosted, publish, e2e-trigger | 3 | `module-core-compat` |
+| `check-module-core-imports` | `make check-module-core-imports` | local-serial, local-parallel, hosted, publish, e2e-trigger | 4 | `module-core-import-linter` |
+| `check-manifest-sync` | `make check-manifest-sync` | local-serial, local-parallel, hosted, publish, e2e-trigger | 5 | `manifest-sync-gate` |
+| `check-module-app-declaration` | `make check-module-app-declaration` | local-serial, local-parallel, hosted | 6 | `module-app-declaration-gate` |
+| `check-org-context-primitives` | `make check-org-context-primitives` | local-serial, local-parallel, hosted, publish, e2e-trigger | 6 | `org-context-primitives-gate` |
+| `check-csrf-exempt` | `make check-csrf-exempt` | local-serial, local-parallel, hosted, publish, e2e-trigger | 7 | `csrf-exempt-gate` |
+| `check-commit-testimony` | `make check-commit-testimony` | hosted | — | `commit-testimony-gate` |
+| `check-project-contract-vintage` | `make check-project-contract-vintage` | local-serial, local-parallel, hosted, publish | 6 | `project-contract-vintage-gate` |
+| `frontend-proof` | `make frontend-proof` | publish, e2e-trigger | — | — |
+| `smoke-install` | `make smoke-install` | publish, e2e-trigger | — | — |
+| `check-gate-suites` | `make check-gate-suites` | local-serial, local-parallel, hosted | 7 | `check-gate-suites` |
+| `check-dependency-vulnerabilities` | `make check-dependency-vulnerabilities` | local-serial, local-parallel, hosted, publish, e2e-trigger | 7 | `dependency-vulnerabilities-gate` |
+| `check-security-static-analysis` | `make check-security-static-analysis` | local-serial, local-parallel, hosted, publish, e2e-trigger | 7 | `security-static-analysis-gate` |
+| `check-beta-migration-smoke` | `make check-beta-migration-smoke` | local-serial, local-parallel, hosted, publish | 7 | `beta-migration-smoke-gate` |
+| `check-generated-deploy-posture` | `make check-generated-deploy-posture` | local-serial, local-parallel, hosted, publish | 7 | `generated-deploy-posture-gate` |
+| `check-workflow-security` | `make check-workflow-security` | local-serial, local-parallel, hosted, publish | 7 | `workflow-security-gate` |
+| `check-secret-scanning` | `make check-secret-scanning` | local-serial, local-parallel, hosted, publish | 7 | `secret-scanning-gate` |
+| `check-module-conventions` | `make check-module-conventions` | local-serial, local-parallel, hosted, publish | 7 | `module-conventions-gate` |
+| `check-split-facade-imports` | `make check-split-facade-imports` | local-serial, local-parallel, hosted, publish | 7 | `split-facade-gate` |
+| `quality` | `make quality` | local-serial, local-parallel | 7 | — |
+<!-- END GENERATED: gate-registry-table -->
+
+`make check-gate-suites` is the owning execution context for all current
 `scripts/test_*.py` suites and invokes exactly:
 
 ```text
