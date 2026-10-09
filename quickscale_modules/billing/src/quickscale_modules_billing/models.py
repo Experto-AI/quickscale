@@ -89,6 +89,34 @@ class Plan(models.Model):
         return self.name
 
 
+class BillingCustomer(models.Model):
+    """Billing-owned Stripe customer identity for one organization.
+
+    Control-plane model: the organization's provider identity, resolved by
+    incoming billing webhooks before any organization context exists, so it
+    is not tenant-scoped data.
+    """
+
+    tenant_excluded = (
+        "Control-plane model: the organization's Stripe customer identity, "
+        "resolved by provider webhooks before any organization context exists."
+    )
+
+    organization = models.OneToOneField(
+        "quickscale_orgs.Organization",
+        related_name="quickscale_billing_customer",
+        on_delete=models.CASCADE,
+    )
+    stripe_customer_id = models.CharField(max_length=255, unique=True)
+
+    if TYPE_CHECKING:
+        # FK attname; unset until the relation is assigned.
+        organization_id: UUID | None
+
+    def __str__(self) -> str:
+        return f"{self.organization_id} / {self.stripe_customer_id}"
+
+
 class CreditBalance(TenantModel):
     """Current credit balance snapshot for a single organization."""
 

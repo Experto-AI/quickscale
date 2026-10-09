@@ -15,13 +15,14 @@ from django.apps import apps
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
+from quickscale_modules_billing.apps import BILLING_PROVIDER_STATE
+from quickscale_modules_billing.models import BillingCustomer
 from quickscale_modules_orgs.current_org import (
     reset_current_org_id,
     set_current_org_id,
 )
 from quickscale_modules_orgs.models import Organization, OrganizationTombstone
 from quickscale_modules_orgs.removal import (
-    BILLING_PROVIDER_STATE,
     BoundaryGuardedHooks,
     ExternalProviderField,
     OrganizationRemovalObligation,
@@ -44,14 +45,14 @@ DECLARED_PROJECT_OBLIGATION = OrganizationRemovalObligation(
 )
 
 
-DECLARED_ORGANIZATION_OBLIGATION = OrganizationRemovalObligation(
-    name="sa213-organization-provider-state",
+DECLARED_CUSTOMER_OBLIGATION = OrganizationRemovalObligation(
+    name="sa213-customer-provider-state",
     purge_action=RemovalAction.REFUSE,
     anonymize_action=RemovalAction.SKIP,
     anonymize_skip_reason="Account deletion retains the organization row.",
     external_provider_fields=(
         ExternalProviderField(
-            "quickscale_orgs.organization",
+            "quickscale_billing.billingcustomer",
             "stripe_customer_id",
         ),
     ),
@@ -190,21 +191,21 @@ def test_purge_deletes_rows_with_an_empty_declared_provider_field(
 
 
 @pytest.fixture
-def declared_organization_obligation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Declare an unguarded provider field on the organization row itself."""
+def declared_customer_obligation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Declare an unguarded provider field on the billing-owned customer table."""
     config = apps.get_app_config("provider_id_app")
     monkeypatch.setattr(
         config,
         "removal_obligations",
-        lambda: (DECLARED_ORGANIZATION_OBLIGATION,),
+        lambda: (DECLARED_CUSTOMER_OBLIGATION,),
         raising=False,
     )
 
 
-def test_organization_field_declaration_passes_both_system_checks(
-    declared_organization_obligation: None,
+def test_declared_customer_field_passes_both_system_checks(
+    declared_customer_obligation: None,
 ) -> None:
-    """The organization row itself is a legal owner of a declared provider field."""
+    """The billing-owned customer table is a legal owner of a declared provider field."""
     from quickscale_modules_orgs.checks import (
         check_provider_id_conformance,
         check_removal_obligation_discharge,
@@ -215,20 +216,23 @@ def test_organization_field_declaration_passes_both_system_checks(
 
 
 @pytest.mark.django_db
-def test_purge_refuses_a_populated_declared_organization_field(
-    declared_organization_obligation: None,
+def test_purge_refuses_a_populated_declared_customer_field(
+    declared_customer_obligation: None,
 ) -> None:
-    """A declared field on the organization row refuses the purge while set."""
+    """A recorded customer identity refuses dry-run and purge alike."""
     org = Organization.objects.create(
-        name="SA213 Declared Organization Field",
-        slug="sa213-declared-organization-field",
+        name="SA213 Declared Customer Field",
+        slug="sa213-declared-customer-field",
+    )
+    BillingCustomer.objects.create(
+        organization=org,
         stripe_customer_id="cus_sa213_declared",
     )
     org_id = org.pk
 
     expected = (
         r"provider-backed values: "
-        r"quickscale_orgs\.organization\.stripe_customer_id"
+        r"quickscale_billing\.billingcustomer\.stripe_customer_id"
     )
     with pytest.raises(CommandError, match=expected):
         call_command(
@@ -256,14 +260,13 @@ def test_purge_refuses_a_populated_declared_organization_field(
 
 
 @pytest.mark.django_db
-def test_purge_deletes_with_an_empty_declared_organization_field(
-    declared_organization_obligation: None,
+def test_purge_deletes_without_a_declared_customer_field(
+    declared_customer_obligation: None,
 ) -> None:
-    """An empty organization-row provider field does not refuse the purge."""
+    """No recorded customer identity does not refuse the purge."""
     org = Organization.objects.create(
-        name="SA213 Declared Organization Empty",
-        slug="sa213-declared-organization-empty",
-        stripe_customer_id="",
+        name="SA213 Declared Customer Empty",
+        slug="sa213-declared-customer-empty",
     )
     org_id = org.pk
 

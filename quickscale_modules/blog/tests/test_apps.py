@@ -12,8 +12,8 @@ import pytest
 from django.core.exceptions import ImproperlyConfigured
 
 
-from quickscale_modules_blog.apps import QuickscaleBlogConfig
-from quickscale_modules_orgs.removal import BLOG_PERSONAL_DATA, RemovalAction
+from quickscale_modules_blog.apps import BLOG_PERSONAL_DATA, QuickscaleBlogConfig
+from quickscale_modules_orgs.removal import RemovalAction
 
 
 def test_app_config_exposes_expected_metadata() -> None:

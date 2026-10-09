@@ -49,7 +49,7 @@ class OrganizationAdmin(admin.ModelAdmin):
 
     list_display = ["name", "slug", "is_personal", "created_at", "view_as_button"]
     list_filter = ["is_personal"]
-    search_fields = ["name", "slug", "stripe_customer_id"]
+    search_fields = ["name", "slug"]
     ordering = ["name"]
     change_list_template = "admin/quickscale_orgs/organization/change_list.html"
 

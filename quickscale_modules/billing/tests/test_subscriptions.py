@@ -16,6 +16,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from quickscale_modules_billing.models import (
+    BillingCustomer,
     CreditBalance,
     CreditTransaction,
     Plan,
@@ -987,8 +988,10 @@ def test_completed_checkout_retrieval_rejects_customer_identity_conflict(
     org_context,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_complete_customer_conflict")
-    organization.stripe_customer_id = "cus_complete_expected"
-    organization.save(update_fields=["stripe_customer_id"])
+    BillingCustomer.objects.create(
+        organization=organization,
+        stripe_customer_id="cus_complete_expected",
+    )
     original_expiry = timezone.now() + timedelta(hours=1)
     reservation = Subscription.all_objects.create(
         user=user,
@@ -1030,11 +1033,13 @@ def test_completed_checkout_retrieval_rejects_customer_identity_conflict(
         )
 
     reservation.refresh_from_db()
-    organization.refresh_from_db()
     assert reservation.stripe_subscription_id in {None, ""}
     assert reservation.stripe_customer_id == "cus_complete_expected"
     assert reservation.checkout_expires_at == original_expiry
-    assert organization.stripe_customer_id == "cus_complete_expected"
+    assert (
+        BillingCustomer.objects.get(organization=organization).stripe_customer_id
+        == "cus_complete_expected"
+    )
     assert fake_client.created_subscription_checkout_payloads == []
 
 
@@ -1098,8 +1103,10 @@ def test_delayed_subscription_event_preserves_authoritative_customer_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_delayed_customer")
-    organization.stripe_customer_id = "cus_current_customer"
-    organization.save(update_fields=["stripe_customer_id"])
+    BillingCustomer.objects.create(
+        organization=organization,
+        stripe_customer_id="cus_current_customer",
+    )
     Subscription.all_objects.create(
         user=user,
         organization=organization,
@@ -1141,12 +1148,14 @@ def test_delayed_subscription_event_preserves_authoritative_customer_identity(
             stripe_client=fake_client,
         )
 
-    organization.refresh_from_db()
     historical_subscription.refresh_from_db()
     webhook_event = WebhookEvent.objects.get(
         stripe_event_id="evt_delayed_historical_subscription"
     )
-    assert organization.stripe_customer_id == "cus_current_customer"
+    assert (
+        BillingCustomer.objects.get(organization=organization).stripe_customer_id
+        == "cus_current_customer"
+    )
     assert historical_subscription.stripe_customer_id == "cus_historical_customer"
     assert historical_subscription.stripe_subscription_id == "sub_historical_customer"
     assert webhook_event.processed is False
@@ -1295,8 +1304,10 @@ def test_invoice_payment_failed_rejects_conflicting_provider_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_failed_identity_conflict")
-    organization.stripe_customer_id = "cus_current_identity"
-    organization.save(update_fields=["stripe_customer_id"])
+    BillingCustomer.objects.create(
+        organization=organization,
+        stripe_customer_id="cus_current_identity",
+    )
     subscription = Subscription.all_objects.create(
         user=user,
         organization=organization,
@@ -1331,14 +1342,16 @@ def test_invoice_payment_failed_rejects_conflicting_provider_identity(
         )
 
     subscription.refresh_from_db()
-    organization.refresh_from_db()
     webhook_event = WebhookEvent.objects.get(
         stripe_event_id="evt_failed_identity_conflict"
     )
     assert subscription.status == Subscription.Status.ACTIVE
     assert subscription.stripe_subscription_id == "sub_current_identity"
     assert subscription.stripe_customer_id == "cus_current_identity"
-    assert organization.stripe_customer_id == "cus_current_identity"
+    assert (
+        BillingCustomer.objects.get(organization=organization).stripe_customer_id
+        == "cus_current_identity"
+    )
     assert webhook_event.processed is False
 
 
@@ -1562,8 +1575,10 @@ def test_subscription_checkout_completion_binds_provider_identity_before_webhook
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_checkout_completion_identity")
-    organization.stripe_customer_id = "cus_checkout_completion_identity"
-    organization.save(update_fields=["stripe_customer_id"])
+    BillingCustomer.objects.create(
+        organization=organization,
+        stripe_customer_id="cus_checkout_completion_identity",
+    )
     reservation = Subscription.all_objects.create(
         user=user,
         organization=organization,
@@ -1607,8 +1622,10 @@ def test_subscription_checkout_completion_rejects_customer_identity_conflict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_checkout_customer_conflict")
-    organization.stripe_customer_id = "cus_checkout_expected"
-    organization.save(update_fields=["stripe_customer_id"])
+    BillingCustomer.objects.create(
+        organization=organization,
+        stripe_customer_id="cus_checkout_expected",
+    )
     reservation = Subscription.all_objects.create(
         user=user,
         organization=organization,
@@ -1641,13 +1658,15 @@ def test_subscription_checkout_completion_rejects_customer_identity_conflict(
         )
 
     reservation.refresh_from_db()
-    organization.refresh_from_db()
     webhook_event = WebhookEvent.objects.get(
         stripe_event_id="evt_checkout_customer_conflict"
     )
     assert reservation.stripe_subscription_id in {None, ""}
     assert reservation.stripe_customer_id == "cus_checkout_expected"
-    assert organization.stripe_customer_id == "cus_checkout_expected"
+    assert (
+        BillingCustomer.objects.get(organization=organization).stripe_customer_id
+        == "cus_checkout_expected"
+    )
     assert webhook_event.processed is False
 
 
@@ -1659,11 +1678,16 @@ def test_subscription_checkout_completion_rejects_conflicting_organizations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plan = _create_recurring_plan(price_id="price_cross_org_subscription")
-    organization.stripe_customer_id = "cus_cross_org_subscription_expected"
-    organization.save(update_fields=["stripe_customer_id"])
+    BillingCustomer.objects.create(
+        organization=organization,
+        stripe_customer_id="cus_cross_org_subscription_expected",
+    )
     conflicting_organization = type(organization).objects.create(
         name="Conflicting Subscription Org",
         slug="conflicting-subscription-org",
+    )
+    BillingCustomer.objects.create(
+        organization=conflicting_organization,
         stripe_customer_id="cus_cross_org_subscription",
     )
     reservation = Subscription.all_objects.create(

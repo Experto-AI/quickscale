@@ -16,6 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from quickscale_modules_billing.models import (
+    BillingCustomer,
     CreditBalance,
     CreditTransaction,
     Plan,
@@ -898,8 +899,10 @@ def test_purchase_checkout_reconciliation_refuses_a_live_session_found_by_refere
         status=PurchaseCheckout.Status.PREPARING,
     )
     reference = _payload._purchase_checkout_reference(reservation)
-    organization.stripe_customer_id = "cus_reconcile_org"
-    organization.save(update_fields=["stripe_customer_id"])
+    BillingCustomer.objects.create(
+        organization=organization,
+        stripe_customer_id="cus_reconcile_org",
+    )
     fake_client = FakePurchaseStripeClient(
         checkout_sessions={
             "cs_reconcile_open": {
@@ -937,8 +940,10 @@ def test_purchase_checkout_reconciliation_refuses_a_completed_session_found_by_r
         status=PurchaseCheckout.Status.PREPARING,
     )
     reference = _payload._purchase_checkout_reference(reservation)
-    organization.stripe_customer_id = "cus_reconcile_complete_org"
-    organization.save(update_fields=["stripe_customer_id"])
+    BillingCustomer.objects.create(
+        organization=organization,
+        stripe_customer_id="cus_reconcile_complete_org",
+    )
     fake_client = FakePurchaseStripeClient(
         checkout_sessions={
             "cs_reconcile_complete": {
@@ -1180,6 +1185,9 @@ def test_purchase_checkout_completion_rejects_conflicting_organizations(
     conflicting_organization = type(organization).objects.create(
         name="Conflicting Purchase Org",
         slug="conflicting-purchase-org",
+    )
+    BillingCustomer.objects.create(
+        organization=conflicting_organization,
         stripe_customer_id="cus_cross_org_purchase",
     )
     reservation = PurchaseCheckout.all_objects.create(

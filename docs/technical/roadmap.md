@@ -539,7 +539,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   core or the CLI.
 
   **Slices:**
-  - [ ] (a) Schema: the billing customer column and orgs' removal names (before SA204).
+  - [x] (a) Schema: the billing customer column and orgs' removal names (before SA204). The
+    Stripe customer id moved from `Organization` to billing's `BillingCustomer` control-plane
+    table (both `0001_initial`s edited in place); obligation names are
+    `quickscale_<module>:<purpose>` defined by the declaring module, so orgs' `social-cache-state`
+    became `quickscale_orgs:cache-state`. Watch: the org-row declared-refusal path
+    (`ORGANIZATION_MODEL_LABEL`) now has no shipped user. Next: slice (b).
   - [ ] (b) Capabilities, email-template ownership, and sender guards.
   - [ ] (c) Private-name imports, session keys, and core/CLI per-module knowledge.
 

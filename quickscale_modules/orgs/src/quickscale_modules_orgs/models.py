@@ -41,7 +41,6 @@ class Organization(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=150, unique=True)
-    stripe_customer_id = models.CharField(max_length=255, blank=True)
     is_personal = models.BooleanField(default=False)
     is_system = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -55,11 +54,6 @@ class Organization(models.Model):
                 fields=["is_system"],
                 condition=models.Q(is_system=True),
                 name="quickscale_orgs_organization_is_system_unique",
-            ),
-            models.UniqueConstraint(
-                fields=["stripe_customer_id"],
-                condition=~models.Q(stripe_customer_id=""),
-                name="quickscale_orgs_organization_stripe_customer_id_unique",
             ),
         ]
 

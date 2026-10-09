@@ -79,6 +79,29 @@ class Migration(migrations.Migration):
             options={"ordering": ["name"]},
         ),
         migrations.CreateModel(
+            name="BillingCustomer",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("stripe_customer_id", models.CharField(max_length=255, unique=True)),
+                (
+                    "organization",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="quickscale_billing_customer",
+                        to="quickscale_orgs.organization",
+                    ),
+                ),
+            ],
+        ),
+        migrations.CreateModel(
             name="CreditBalance",
             fields=[
                 (
