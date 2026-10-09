@@ -207,6 +207,7 @@ class TestRuntimeAllExport:
             "load_default_policy",
             "load_module_manifest",
             "load_social_manifest",
+            "module_settings_are_supplied",
             "prune_expired_backups",
             "redact_names",
             "refresh_snapshot",
