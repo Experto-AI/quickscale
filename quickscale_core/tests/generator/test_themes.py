@@ -8,6 +8,7 @@ from quickscale_core.generator import ProjectGenerator
 from quickscale_core.generator.generator import (
     REACT_THEME_SHARED_DJANGO_TEMPLATES,
 )
+from quickscale_core.runtime.seam import seam_modules, seam_path_names
 
 
 class TestThemeInitialization:
@@ -104,7 +105,7 @@ class TestProjectGenerationWithTheme:
         # Verify Django template for React exists (serves built assets)
         assert (output_path / "templates" / "index.html").exists()
         index_html = (output_path / "templates" / "index.html").read_text()
-        assert "{% load static %}" in index_html
+        assert "{% load static quickscale_seam %}" in index_html
         assert "{% static 'frontend/assets/index.js' %}" in index_html
 
         # Verify base.html exists (required by auth module and error pages)
@@ -549,8 +550,10 @@ class TestSelectedModulesReactTheme:
             "renderQuickScaleRoot(quickScaleConfig.publicPage?.surface)" in empty_main
         ), "renderQuickScaleRoot must be called with surface from validated config."
 
-    def test_window_config_always_includes_all_modules(self, tmp_path: Path) -> None:
-        """After SA105, the Django-rendered index.html always emits all module flags."""
+    def test_window_config_always_renders_the_runtime_seam(
+        self, tmp_path: Path
+    ) -> None:
+        """The Django-rendered index.html renders the runtime seam for every module."""
         generator = ProjectGenerator(
             theme="showcase_react", selected_modules=["blog", "crm"]
         )
@@ -562,29 +565,31 @@ class TestSelectedModulesReactTheme:
             "};", 1
         )[0]
 
-        # All modules are always listed
-        for module in (
-            "auth:",
-            "blog:",
-            "crm:",
-            "listings:",
-            "forms:",
-            "storage:",
-            "backups:",
-            "notifications:",
-            "analytics:",
-            "billing:",
-            "social:",
-        ):
-            assert module in window_config, (
-                f"window.__QUICKSCALE__.modules should reference {module} after SA105."
-            )
-
-        # modulePaths block always has all paths
+        # SA258: the flags and paths render through the runtime seam tags, so
+        # the emitted file stays free of per-module lines while the rendered
+        # page still reports every shipped module.
+        assert "{% seam_module_flags %}" in window_config
         module_paths_section = window_config.split("modulePaths:", 1)[1]
-        assert "crm:" in module_paths_section
-        assert "social:" in module_paths_section
-        assert "analytics:" in module_paths_section
+        assert "{% seam_module_paths %}" in module_paths_section
+
+        seam_names = {module.name for module in seam_modules()}
+        for module in (
+            "auth",
+            "blog",
+            "crm",
+            "listings",
+            "forms",
+            "storage",
+            "backups",
+            "notifications",
+            "analytics",
+            "billing",
+            "social",
+        ):
+            assert module in seam_names, (
+                f"the runtime seam should report {module} after SA105."
+            )
+        assert set(seam_path_names()) == {"crm", "social", "analytics"}
 
     # ── Dormant-file banner verification ───────────────────────────────
 

@@ -399,11 +399,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Lands before SA191's cutover.
 
   **Slices:**
-  - [ ] (a) `seam_module_flags` and `seam_module_paths` as a runtime template tag.
+  - [x] (a) `seam_module_flags` and `seam_module_paths` as a runtime template tag. The seam
+    producer moved from `generator/seam.py` to `quickscale_core.runtime.seam`, rendered by the
+    `quickscale_seam` tag library (`runtime/seam_tags.py`) that the generated `TEMPLATES` options
+    register; the theme's index and both public social pages carry one load line and two tag calls,
+    and rule 31's checker, the rule-37 allowlist, the SA90 emission fixture, and a new
+    `project_contract.yml` step moved with them. Watch: existing projects must add the `libraries`
+    entry before adopting the new templates, and the theme TypeScript still enumerates its module
+    surfaces. Next: slice (b).
   - [ ] (b) `compose_rest_framework()` in `settings/base.py`.
   - [ ] (c) Managed URLconf inclusion and the emission test.
 
-  **Surfaces:** `quickscale_core.runtime`, `generator/seam.py`, the settings templates, the
+  **Surfaces:** `quickscale_core.runtime` (`runtime/seam.py`), the settings templates, the
   generated `urls.py.j2` and theme hooks (Track 1 reviews), `project_contract.yml`, and the arch
   audit.
 

@@ -118,6 +118,12 @@ TEMPLATES = [
                 "{{ package_name }}.context_processors.project_settings",
                 "{{ package_name }}.context_processors.installed_modules",
             ],
+            # Rule 31: the React seam's module flags and paths resolve at request
+            # time through the versioned runtime library, so the theme templates
+            # carry one tag call each instead of a generated line per module.
+            "libraries": {
+                "quickscale_seam": "quickscale_core.runtime.seam_tags",
+            },
         },
     },
 ]

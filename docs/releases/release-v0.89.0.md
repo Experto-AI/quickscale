@@ -75,13 +75,18 @@ and the project's own ruff check no longer reports it unused. An existing projec
 annotation to the name.
 
 The React shell seam is now rendered from the shipped module inventory. `templates/index.html`
-carries a key for every shipped module (present as `false` when the module is absent), and its
-`modulePaths` entries reverse named routes with `{% url %}` instead of literal paths: `crm`
+renders a key for every shipped module (present as `false` when the module is absent), and its
+`modulePaths` entries reverse named routes instead of literal paths: `crm`
 through the manifest-declared `quickscale_crm_shell` route `apply` renders in
 `<package>/urls_modules.py`, `social` through `social-link-tree` or `social-embeds`, and
 `analytics` through `quickscale_analytics:dashboard`. The two public social pages render the same
-seam content through `generator/seam.py`. Existing projects compare and manually adopt the current
-`templates/index.html`, `templates/social/*.html`, `<package>/urls.py`, `<package>/views.py`, and
+seam content through the `quickscale_seam` runtime template tag that ships in
+`quickscale_core.runtime` and resolves the flags and paths from the live settings. Existing
+projects compare and manually adopt the current
+`templates/index.html`, `templates/social/*.html`, the `TEMPLATES` `libraries` entry in
+`<package>/settings/base.py` that maps `quickscale_seam` to
+`quickscale_core.runtime.seam_tags` (without it, the adopted templates fail to load the
+library), `<package>/urls.py`, `<package>/views.py`, and
 `<package>/urls_modules.py` together, because a seam path reverses a route the urls.py names.
 
 An existing project adopts the module shell route move in its project-owned

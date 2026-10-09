@@ -643,6 +643,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **The empty contracts inventory is removed.** `quickscale_core.contracts` no longer exports
     `MANIFEST_INVENTORY` and the per-module imperative-logic inventory helpers; module option
     handling is unchanged.
+  - **The React shell seam resolves at request time.** The generated `templates/index.html` and
+    public social pages render `window.__QUICKSCALE__.modules` and `.modulePaths` through the
+    `quickscale_seam` runtime template tag registered by the generated `TEMPLATES` options, so the
+    module flags and URLs follow the installed modules without editing those user-owned files again.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -83,15 +83,16 @@ It is written by `templates/index.html.j2` and carries:
 | `modulePaths` | Server-resolved base paths for `crm`, `social`, `analytics` |
 
 [decisions.md § Module Conventions](decisions.md#module-conventions) rule 31 (SA219) fixes how the
-producer fills `modules` and `modulePaths`: the generator renders `templates/index.html.j2` from
-the shipped module inventory, so `modules` carries a key for every shipped module — `true` only
+producer fills `modules` and `modulePaths`: the `quickscale_seam` runtime template tag that ships
+in `quickscale_core.runtime` renders them from the shipped module inventory and the live settings,
+so `modules` carries a key for every shipped module — `true` only
 while the module is installed and its `QUICKSCALE_<MODULE>_ENABLED` is on, `false` when the module
-is absent — and every `modulePaths` entry reverses a named route with `{% url %}` (`crm` through
+is absent — and every `modulePaths` entry reverses a named route (`crm` through
 the manifest-declared `quickscale_crm_shell` route rendered in `<package>/urls_modules.py`,
 `social` through `social-link-tree`/`social-embeds`, `analytics` through
 `quickscale_analytics:dashboard`), never a
 literal. The public social producers (`templates/social/link_tree.html.j2`,
-`templates/social/embeds.html.j2`) render that same seam content through `generator/seam.py`, and
+`templates/social/embeds.html.j2`) load and call the same tag, and
 the shared navigation applies the same installed-and-enabled
 social condition before hydrating or linking. The three-place rule below is unchanged.
 | `owner.mode` | `"solo"` or `"saas"` — see [organizations.md](organizations.md) |
@@ -181,7 +182,7 @@ In development, Vite listens on `:5173`, serves the stylesheet entry at `/static
 
 Populations 1 and 2 are **generated project files the user owns** and may edit freely ([generated_file_ownership.md](generated_file_ownership.md)). Population 4 is module-owned and updateable; users customise it by template override, which means the override stops receiving upstream fixes ([module-extension.md](module-extension.md)).
 
-Context processors `project_settings` and `installed_modules` expose `settings` and a resolved `modules.billing.url` to every template. `settings` in a template is how `index.html.j2` derives the `modules` flags, and how `base.html.j2` conditionally renders social nav links.
+Context processors `project_settings` and `installed_modules` expose `settings` and a resolved `modules.billing.url` to every template; `base.html.j2` uses `settings` to conditionally render social nav links. The `window.__QUICKSCALE__` module flags and paths resolve at request time through the `quickscale_seam` runtime template tag that `TEMPLATES` options register, not from generated per-module lines in the user-owned templates.
 
 ---
 
@@ -244,7 +245,7 @@ The authoritative statement of both rules is [decisions.md § Module Implementat
 
 ## Module frontend surfaces
 
-Modules are pluggable on the backend and **hard-wired on the frontend**. No module ships TSX. All SPA pages for module surfaces live in the theme (`src/pages/BlogPage.tsx`, `CrmPage.tsx`, `ListingsPage.tsx`, `FormsPage.tsx`, `src/pages/orgs/*`), and the module name list is declared in the theme's TypeScript (`useModules.ts`, `validateQuickScaleSeam.ts`). The producer no longer repeats it: `templates/index.html.j2` injects the generator-rendered seam (rule 31), which carries a key for every shipped module.
+Modules are pluggable on the backend and **hard-wired on the frontend**. No module ships TSX. All SPA pages for module surfaces live in the theme (`src/pages/BlogPage.tsx`, `CrmPage.tsx`, `ListingsPage.tsx`, `FormsPage.tsx`, `src/pages/orgs/*`), and the module name list is declared in the theme's TypeScript (`useModules.ts`, `validateQuickScaleSeam.ts`). The producer no longer repeats it: `templates/index.html.j2` renders the runtime seam tag (rule 31), which carries a key for every shipped module.
 
 Adding a module with a React surface therefore touches the theme. That is the current design, consistent with [module-extension.md](module-extension.md)'s "Theme/frontend → user-owned generated code" classification: modules own backend contracts, the theme owns presentation.
 
@@ -299,7 +300,7 @@ Public pages that must reach crawlers running no JavaScript go one step further:
 Recorded so they are not rediscovered as surprises. None of these are settled decisions; they are the current state.
 
 - **Two presentations for one module.** `blog` and `listings` have both a React launcher page and a server-rendered UI, even though they now share design tokens.
-- **The seam validator's module list is ungated.** `validateQuickScaleSeam.ts` declares its required module keys separately, and no gate binds that list to the shipped inventory or to `useModules.ts`. The producer is no longer a third copy — `templates/index.html.j2` injects the generator-rendered seam (rule 31) — and `test_module_manifest_contract.py` binds the rendered set to `useModules.ts`.
+- **The seam validator's module list is ungated.** `validateQuickScaleSeam.ts` declares its required module keys separately, and no gate binds that list to the shipped inventory or to `useModules.ts`. The producer is no longer a third copy — `templates/index.html.j2` renders the runtime seam tag (rule 31) — and `test_module_manifest_contract.py` binds the rendered set to `useModules.ts`.
 - **Vite dev proxy duplicates the URL-ownership table** with no gate binding them together.
 - **`manifest: true` is emitted but unused**, leaving the unhashed-filename convention as the only thing keeping `{% static %}` references valid.
 - **Theme frontend internals are explicitly out of scope** for [arch-audit.md](../others/arch-audit.md), so none of the above appears in the structural findings.

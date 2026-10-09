@@ -1,6 +1,6 @@
 {%raw%}{% extends "base.html" %}
 
-{% load static %}
+{% load static quickscale_seam %}
 
 {% block title %}Social | {% endraw %}{{ project_name }}{% raw %}{% endblock %}
 
@@ -54,10 +54,10 @@
   window.__QUICKSCALE__ = {
     projectName: "{% endraw %}{{ project_name }}{% raw %}",
     modules: {
-{%endraw%}{{ seam_module_flags }}{%raw%}
+{% seam_module_flags %}
     },
     modulePaths: {
-{%endraw%}{{ seam_module_paths }}{%raw%}
+{% seam_module_paths %}
     },
     owner: {
       mode: "solo",

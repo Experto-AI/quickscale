@@ -108,10 +108,10 @@ RULE_37_ALLOWED_LITERALS: dict[tuple[str, str, str], str] = {
     ("core", "apply/steps/env_sync.py", "ENV_EXAMPLE_MODULE_SPECS"): (
         "the .env.example managed-block presentation catalog"
     ),
-    ("core", "generator/seam.py", "_SEAM_MODULE_PATHS"): (
+    ("core", "runtime/seam.py", "_SEAM_MODULE_PATHS"): (
         "the theme seam's server-resolved path table (rule 31)"
     ),
-    ("core", "generator/seam.py", "_NON_SEAM_MODULES"): (
+    ("core", "runtime/seam.py", "_NON_SEAM_MODULES"): (
         "the theme's documented orgs exclusion (rule 31)"
     ),
     ("cli", "utils/auth_migration.py", "_CORE_AUTH_APPS"): (

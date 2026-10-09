@@ -14,16 +14,15 @@ from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
 )
 from quickscale_core.contracts.module_catalog import get_discovered_module_entries
-from quickscale_core.generator.seam import (
-    render_module_flags,
-    render_module_paths,
-    seam_modules,
-)
 from quickscale_core.manifest.entry_point import (
     MANIFEST_ADAPTER_REGISTRY,
     refresh_managed_adapters,
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.runtime.seam import (
+    seam_modules,
+    seam_path_names,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULES_ROOT = REPO_ROOT / "quickscale_modules"
@@ -382,30 +381,30 @@ _REACT_UI_EXCLUDED_MODULES: frozenset[str] = frozenset(
 
 
 def test_all_catalog_modules_in_react_index_html_modules_block() -> None:
-    """Every shipped module must appear in the rendered window.__QUICKSCALE__.modules.
+    """Every shipped module must resolve into the rendered window.__QUICKSCALE__.modules.
 
-    The generator renders the seam flags from the shipped module inventory
-    (Module Conventions rule 31) and ``index.html.j2`` injects them through
-    ``seam_module_flags``.  Without a key the module's presence flag is never
-    set in the React runtime config, so every React component that gates on
-    modules.{name} silently never activates.
+    ``index.html.j2`` renders the seam flags through the ``quickscale_seam``
+    runtime tag (Module Conventions rule 31), which resolves one key per
+    shipped module from the inventory at request time.  Without a key the
+    module's presence flag is never set in the React runtime config, so every
+    React component that gates on modules.{name} silently never activates.
 
     When adding a new module: it joins the catalog and the seam renders its
     key; also add it to the QuickScaleModules interface and the seam validator.
     """
     index_html = (REACT_TEMPLATES_DIR / "templates" / "index.html.j2").read_text()
     modules_block = index_html.split("modules: {")[1].split("owner: {")[0]
-    assert "{{ seam_module_flags }}" in modules_block, (
-        "index.html.j2 must inject the generator-rendered seam flags."
+    assert "{% seam_module_flags %}" in modules_block, (
+        "index.html.j2 must render the runtime seam flags tag."
     )
 
-    rendered_flags = render_module_flags()
+    seam_names = {module.name for module in seam_modules()}
     missing = [
         entry.name
         for entry in get_discovered_module_entries()
         # orgs carries no modules flag: the theme reports its deployment mode
         # through owner.mode instead (rule 31).
-        if entry.name != "orgs" and f"{entry.name}:" not in rendered_flags
+        if entry.name != "orgs" and entry.name not in seam_names
     ]
     assert not missing, (
         f"Modules missing from window.__QUICKSCALE__.modules: {missing!r}. "
@@ -470,7 +469,7 @@ def test_react_seam_module_paths_match_typescript_interface() -> None:
     The producer names the theme's path-bearing module surfaces (rule 31);
     asymmetry means the rendered seam and the TypeScript contract disagree.
     """
-    seam_path_keys = set(re.findall(r"^\s+(\w+):", render_module_paths(), re.MULTILINE))
+    seam_path_keys = set(seam_path_names())
     use_modules = (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts").read_text()
     interface_block = use_modules.split("interface QuickScaleModulePaths {")[1].split(
         "}"

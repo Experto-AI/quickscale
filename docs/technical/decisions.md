@@ -1000,13 +1000,15 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
 - ❌ A setting whose value depends on the order of module names.
 
 **31. The theme seam.**
-- ✅ The seam's producer, the theme's `index.html.j2`, is rendered by the generator from the
-  discovered module set (rule 37), so `window.__QUICKSCALE__.modules` carries a key for every
+- ✅ The seam's producer is the versioned runtime library: the theme's `index.html.j2` and its two
+  public social pages render `window.__QUICKSCALE__.modules` and `modulePaths` through
+  `quickscale_core.runtime`'s `quickscale_seam` template tag, resolved at request time from the
+  discovered module set (rule 37) and the live settings, so `modules` carries a key for every
   shipped module, as the seam validator requires. A key is `true` only when the module is installed
   and its `QUICKSCALE_<MODULE>_ENABLED` is on (rule 1). A `modulePaths` entry is resolved from the
-  module's URL names when it is installed (`{% url %}`), never written as a literal (rule 7). The
-  two public social pages render the same seam content through `generator/seam.py`, with no
-  hand-written per-module line. The seam itself is unchanged
+  module's URL names when it is installed, never written as a literal (rule 7), and no
+  hand-written per-module line or `INSTALLED_APPS` test lives in `index.html.j2` (the two public
+  social pages keep their installed-and-enabled hydration guards). The seam itself is unchanged
   (§[Frontend Theme Source De-Specialization](#frontend-theme-despecialization-dormant-files)).
 - ✅ The theme's TypeScript (the `QuickScaleModules` type, the seam validator, the SPA pages) still
   names the modules that have React surfaces, as [frontend.md](frontend.md) § Module frontend
@@ -1102,7 +1104,7 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
   outside the listed exceptions.
 - ❌ A literal list of module names outside a module. Allowed: rule 5's layer table, rule 40's
   test-owned mapping, the theme's module surfaces (rule 31), its server-side seam producer
-  (`generator/seam._SEAM_MODULE_PATHS`) included, core's declared release inventory above, and the
+  (`runtime/seam._SEAM_MODULE_PATHS`) included, core's declared release inventory above, and the
   `.env.example` managed-block catalog (`apply/steps/env_sync.ENV_EXAMPLE_MODULE_SPECS`), whose
   per-module prose and block order are presentation data pinned by the env-example conformance
   suite.
@@ -2260,7 +2262,8 @@ Rejected: per-project source specialization plus an ownership-manifest overlay �
 the per-file migration merge and a second hand-synced list.
 
 Module Conventions rule 31 fixes what the seam's `modules` flags mean (installed and enabled) and
-has the generator render its producer from the discovered module set.
+has the `quickscale_seam` runtime template tag render them from the discovered module set at
+request time.
 
 ---
 

@@ -910,7 +910,7 @@ def test_module_list_controls() -> None:
     )
     exclusion = replace(
         corpus,
-        core_files={"generator/seam.py": "_NON_SEAM_MODULES = frozenset({'alpha'})\n"},
+        core_files={"runtime/seam.py": "_NON_SEAM_MODULES = frozenset({'alpha'})\n"},
     )
     assert checker.rule_37_module_lists(exclusion) == []
     returned = replace(
@@ -931,7 +931,7 @@ def test_module_list_controls() -> None:
                 "    Spec(module='gamma'),\n"
                 ")\n"
             ),
-            "generator/seam.py": (
+            "runtime/seam.py": (
                 "_SEAM_MODULE_PATHS = (\n"
                 "    ('alpha', '{% url one %}'),\n"
                 "    ('beta', '{% url two %}'),\n"

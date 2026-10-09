@@ -2,7 +2,7 @@
 QuickScale runtime API facade — combined re-export surface.
 
 This is the public import path for generated-project code and module-owned
-adapters.  It re-exports all symbols from five sub-modules:
+adapters.  It re-exports all symbols from its sub-modules:
 
 * ``runtime.dr`` — DR adapter functions, primitives, and all backup-dependent
   symbols (orchestration, recovery, persistence, verification).  The sub-module
@@ -10,6 +10,9 @@ adapters.  It re-exports all symbols from five sub-modules:
   symbol is requested.
 * ``runtime.manifest`` — manifest resolver, assembler, social-manifest path
   constants, renderers, and wiring types.
+* ``runtime.seam`` — the React seam's shipped-module inventory, server-resolved
+  route table, and flag/path resolution (Module Conventions rule 31).  Pure
+  functions over a settings-like object, loaded only when requested.
 * ``runtime.conventions`` — the shared module-convention helpers (capability
   collection, startup checks, the one DRF error shape).  Loaded only when one
   of its symbols is requested, so a process without Django never imports it.
@@ -229,11 +232,16 @@ def _load_redaction() -> typing.Any:
 
 
 def __getattr__(name: str) -> typing.Any:
-    """Resolve an attribute from the manifest, conventions, admin, redaction, or DR surface."""
+    """Resolve an attribute from the manifest, seam, conventions, admin, redaction, or DR surface."""
     if name == "manifest":
         return _manifest
     if hasattr(_manifest, name):
         return getattr(_manifest, name)
+    if name == "seam":
+        # The seam producer is Django-free and served before the DR surface, so
+        # a Django-less process (the CLI's generation path included) can import
+        # it without loading the eager DR sub-module.
+        return importlib.import_module("quickscale_core.runtime.seam")
     if name == "conventions":
         return _load_conventions()
     if name in _LAZY_CONVENTIONS_SYMBOLS:
