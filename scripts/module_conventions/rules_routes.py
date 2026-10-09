@@ -38,17 +38,13 @@ THEME_SEAM_TEMPLATES: tuple[str, ...] = (
 #: (``quickscale_core.runtime.seam_tags``).
 SEAM_LIBRARY_LOAD = re.compile(r"{%\s*load\b[^%]*\bquickscale_seam\b[^%]*%}")
 
-# Rule 41's stated exception: the tenancy mode decides which side owns /orgs*
-# (solo mounts orgs before home, saas after), so orgs' React shell
-# reservations in the host URL template stay host-rendered.
+# Rule 41's stated exceptions: orgs' tenancy-mode shell reservations and
+# forms' shallow reservations stay host-rendered, but since SA258 they render
+# from the versioned runtime URLconf (quickscale_core.runtime.urls) instead of
+# a generator template, so no host template carries their mount.  The 404
+# hints test a requested path against the module's mount; they declare no
+# route.
 RULE_7_ALLOWED_TEMPLATE_MOUNTS: dict[tuple[str, str], str] = {
-    ("generator/templates/project_name/urls.py.j2", "orgs"): (
-        "rule 41 exception: tenancy-mode shell reservations stay host-rendered"
-    ),
-    ("generator/templates/project_name/urls.py.j2", "forms"): (
-        "rule 41 exception: forms' module entrypoint renders only a mount-point div, "
-        "so the host shell keeps its shallow paths working until it hydrates"
-    ),
     ("generator/templates/templates/404.html.j2", "auth"): (
         "the 404 hint tests the requested path against the module's mount; it declares no route"
     ),

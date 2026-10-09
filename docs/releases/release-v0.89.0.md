@@ -100,6 +100,21 @@ manifest-declared `spa_routes`. Custom code that reversed `crm-shell` uses
 `quickscale_crm_shell`; custom code that reversed `quickscale_blog:post_list` or
 `quickscale_listings:listing_list` now reaches the module's own view at `/blog/` and `/listings/`.
 
+Module URL inclusion now runs through managed URLconfs. The generated `<package>/urls.py` holds
+one `path("", include("<package>.urls_modules"))` entry after `admin/` and names no module; the
+managed `<package>/urls_modules.py` that `quickscale apply` regenerates composes the theme's
+shell routes (the orgs and forms reservations and the public social pages), each installed and
+enabled module's URL includes, and its manifest-declared React shell routes through
+`quickscale_core.runtime.urls.compose_managed_urlpatterns`. The generated
+`<package>/context_processors.py` resolves its module URLs through
+`quickscale_core.runtime.urls.installed_module_context`, so it names no module and no module
+route. Existing projects replace the `PRE_HOME_MODULE_URLPATTERNS` /
+`POST_HOME_MODULE_URLPATTERNS` / `SPA_MODULE_URLPATTERNS` imports and their `urlpatterns +=`
+lines, the `react_shell_urlpatterns` block, and the public social page routes with the one
+include line, and the context processor's module URL resolution with the one runtime call; the
+three buckets stay exported, so a project that has not yet adopted the shape still imports, but
+it does not receive the runtime shell-route contract.
+
 Billing's Stripe credentials now reach module code as the projected
 `QUICKSCALE_BILLING_PUBLISHABLE_KEY`, `QUICKSCALE_BILLING_SECRET_KEY`, and
 `QUICKSCALE_BILLING_WEBHOOK_SECRET` settings that `quickscale apply` renders from the environment
@@ -269,16 +284,18 @@ covered by the crm manifest's declared `spa_routes`, named `quickscale_crm_shell
 a mount-point div, so the shell must keep serving those paths. The
 generated `urls_modules.py` gains `SPA_MODULE_URLPATTERNS`, which `quickscale apply` regenerates
 from each installed and enabled module's manifest, so a switched-off module contributes no shell
-route. The operator step is the `<package>/urls.py` adoption above; projects that had customized
-the shadowing reservations must remove them or their module indexes stay unreachable.
+route. The operator step is the `<package>/urls.py` adoption above; the managed-URLconf paragraph
+there supersedes the bucket appends with one `include()` line. Projects that had customized the
+shadowing reservations must remove them or their module indexes stay unreachable.
 
 **Billing template links.** The generated `<package>/context_processors.py` resolves
-`modules.billing.url` by reversing billing's `pricing_page` and `dashboard` routes instead of
-repeating `/billing/...` path strings, so the value follows the module's paths in both deployment
-modes; the retired organization-scoped `/orgs/<slug>/billing/pricing/` value is gone because no
-organization-scoped billing URL tree exists, and while billing is absent or switched off the value
-is `None`. Existing projects compare and manually adopt the current
-`<package>/context_processors.py`.
+`modules.billing.url` by reversing billing's `pricing_page` and `dashboard` routes — since the
+managed URLconf lands, through `quickscale_core.runtime.urls.installed_module_context` — instead
+of repeating `/billing/...` path strings, so the value follows the module's paths in both
+deployment modes; the retired organization-scoped `/orgs/<slug>/billing/pricing/` value is gone
+because no organization-scoped billing URL tree exists, and while billing is absent or switched
+off the value is `None`. Existing projects compare and manually adopt the current
+`<package>/context_processors.py`, which holds one runtime call.
 
 **Analytics events and email.** Forms' submission event is renamed from `form_submit` to
 `quickscale_forms_submitted`, and analytics no longer exposes per-event helpers

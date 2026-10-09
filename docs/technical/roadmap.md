@@ -40,10 +40,9 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA255 | Accept Resend's real webhook signature in notifications | 2 | — | Optional |
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
 | SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
-| SA258 | Move the module↔project seam from user-owned generated files into the runtime | 3 | — | Optional |
 | SA264 | One module error base, one HTTP mapping, and one startup-check order | 3 | — | Optional |
 | SA262 | One JSON API contract: guards, 401, pagination, throttles, and DRF keys | 3 | SA264 | Optional |
-| SA261 | One owner per URL prefix, and theme API bases from the seam | 3 | SA258 | Optional |
+| SA261 | One owner per URL prefix, and theme API bases from the seam | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
@@ -81,7 +80,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA259 | yes | yes | yes | **yes** | yes |
-| 3 | SA258 | yes | yes | yes | **yes** | no |
+| 3 | SA264 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -390,44 +389,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** `commands/_deploy_service_config.py`, `dr_engine/_media.py`, their tests, and the
   tech audit.
 
-- [ ] **SA258 — Move the module↔project seam from user-owned generated files into the runtime.**
-
-  **Context:** module-facing contracts are emitted once into user-owned files (`urls.py`,
-  `index.html`, `useApi`/`useModules`, `settings/base.py`, `start.sh`), so every module contract
-  change becomes a hand-applied prose step per project, and three upgrade mechanisms are
-  maintained while the one real upgrade goes by prompt (arch audit
-  `generated-file-ownership-unmodeled`, regressed, option 2: extend SA206).
-
-  **Acceptance:** the seam producer, module flags and paths, DRF composition, and error-shape
-  parsing ship in `quickscale_core.runtime`: a template tag or context processor for
-  `window.__QUICKSCALE__`, a `compose_rest_framework()` helper called from `settings/base.py`, and
-  URL inclusion only through managed URLconfs. User-owned files hold a one-line include each. Each
-  moved piece adds its last adoption step to `project_contract.yml`. A closed-world generator test
-  fails when a Django-side user-owned emitted file contains a module name or module URL name.
-  Lands before SA191's cutover.
-
-  **Slices:**
-  - [x] (a) `seam_module_flags` and `seam_module_paths` as a runtime template tag. The seam
-    producer moved from `generator/seam.py` to `quickscale_core.runtime.seam`, rendered by the
-    `quickscale_seam` tag library (`runtime/seam_tags.py`) that the generated `TEMPLATES` options
-    register; the theme's index and both public social pages carry one load line and two tag calls,
-    and rule 31's checker, the rule-37 allowlist, the SA90 emission fixture, and a new
-    `project_contract.yml` step moved with them. Watch: existing projects must add the `libraries`
-    entry before adopting the new templates, and the theme TypeScript still enumerates its module
-    surfaces. Next: slice (b).
-  - [x] (b) `compose_rest_framework()` in `settings/base.py`. The DRF composition — the one
-    error handler, authenticated-only permissions, the throttle classes and conservative rates,
-    and proxy-derived `NUM_PROXIES` — moved into
-    `quickscale_core.runtime.settings.compose_rest_framework`, which the generated base settings
-    call once with the module-contributed value and the proxy state; the
-    `sa258-runtime-drf-composition` adoption step, the facade and template tests, and the SA90
-    fixture moved with it. Watch: `production.py` still recomputes `NUM_PROXIES` through
-    `num_proxies_for` after its proxy overrides. Next: slice (c).
-  - [ ] (c) Managed URLconf inclusion and the emission test.
-
-  **Surfaces:** `quickscale_core.runtime` (`runtime/seam.py`), the settings templates, the
-  generated `urls.py.j2` and theme hooks (Track 1 reviews), `project_contract.yml`, and the arch
-  audit.
+- [x] **SA258 — Move the module↔project seam from user-owned generated files into the runtime.**
 
 - [ ] **SA259 — Generate gate wiring from the registry instead of holding copies by parity.**
 

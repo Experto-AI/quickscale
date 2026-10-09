@@ -242,7 +242,9 @@ _IDENTITY_LINE_RULES: dict[
         (re.compile(r"URL configuration for\s"), ("slug",)),
         (
             re.compile(
-                r"from\s+\S+\.(?:urls_modules|views)\s+import|handler404|handler500"
+                r"from\s+\S+\.(?:urls_modules|views)\s+import"
+                r"|include\([\"'][A-Za-z_][A-Za-z0-9_]*\.urls_modules[\"']\)"
+                r"|handler404|handler500"
             ),
             ("package",),
         ),

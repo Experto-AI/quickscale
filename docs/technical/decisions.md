@@ -1103,8 +1103,9 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
 - ❌ A per-module constant, default, or equality branch on a module name in core or the CLI
   outside the listed exceptions.
 - ❌ A literal list of module names outside a module. Allowed: rule 5's layer table, rule 40's
-  test-owned mapping, the theme's module surfaces (rule 31), its server-side seam producer
-  (`runtime/seam._SEAM_MODULE_PATHS`) included, core's declared release inventory above, and the
+  test-owned mapping, the theme's module surfaces (rule 31), its server-side seam producers
+  (`runtime/seam._SEAM_MODULE_PATHS` and the runtime URLconf's host route and template-URL tables,
+  `runtime/urls.py`) included, core's declared release inventory above, and the
   `.env.example` managed-block catalog (`apply/steps/env_sync.ENV_EXAMPLE_MODULE_SPECS`), whose
   per-module prose and block order are presentation data pinned by the env-example conformance
   suite.
@@ -1158,6 +1159,12 @@ mapping that mirrors this section.
   manifest (`spa_routes`) and rendered by `apply` from the discovered, installed, and enabled set,
   after the module's own URL includes; a module that is installed but switched off contributes
   none.
+- ✅ URL inclusion happens only through managed URLconfs: the module-derived includes and the
+  theme's shell route table compose through
+  `quickscale_core.runtime.urls.compose_managed_urlpatterns` into the managed
+  `<package>/urls_modules.py` that `apply` regenerates, and the user-owned `<package>/urls.py`
+  holds one `include()` line and names no module. A generated-project contract step declares the
+  move for existing projects.
 - ✅ Project-namespace route names for module pages served by the module's own URLconf are
   `quickscale_<module>:<name>` (rule 2). A host-rendered shell route carries the module stem in a
   flat project route name (`quickscale_crm_shell`): Django resolves one resolver per namespace, so
@@ -1167,16 +1174,17 @@ mapping that mirrors this section.
   literals.
 - ❌ A module path written as a literal in generator or theme templates, or in another module's
   code. ❌ Two routes that resolve the same path.
-- **Exceptions.** orgs' `/orgs*` React shell reservations stay in `urls.py.j2` because the
+- **Exceptions.** orgs' `/orgs*` React shell reservations stay host-rendered because the
   tenancy mode decides which side owns the path (solo mounts orgs before home, saas after);
   forms' shallow reservations (`/forms`, `/forms/<slug>/`) stay host-rendered until its module
   entrypoint hydrates, because that entrypoint currently renders only a mount-point div;
   social's public `/social` and `/social/embeds` pages are the theme's host-rendered pages
   (flat route names `social-link-tree` and `social-embeds`), not a module mount: the manifest
-  declares social's `_quickscale/social/` transport include, and the project owns those public
-  theme routes; `TenantMiddleware`'s exempt prefixes (`/accounts/`, `/admin/`, `/healthcheck/`)
-  are not orgs paths; and the generated 404 hint's path tests are diagnostics against a
-  requested path, not route declarations.
+  declares social's `_quickscale/social/` transport include. The three reservations ship in the
+  versioned runtime URLconf (`quickscale_core.runtime.urls`), composed into the managed
+  `<package>/urls_modules.py`; `TenantMiddleware`'s exempt prefixes (`/accounts/`, `/admin/`,
+  `/healthcheck/`) are not orgs paths; and the generated 404 hint's path tests are diagnostics
+  against a requested path, not route declarations.
 **42. Settings snapshots.**
 - ✅ A module that needs one consistent view of several of its own settings builds it in its private
   `_settings.py` as a frozen dataclass with a `from_settings()` classmethod, reading each setting

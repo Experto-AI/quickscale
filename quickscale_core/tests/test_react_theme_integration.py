@@ -12,6 +12,7 @@ import json
 import re
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -433,8 +434,14 @@ class TestReactThemeGeneration:
         assert "useOrgBilling" not in org_dashboard
         assert "final owner cannot be removed or demoted" in org_members.lower()
 
-    def test_react_theme_reserves_org_shell_routes_ahead_of_module_urls(self, tmp_path):
-        """Generated React URLs should reserve org shell routes ahead of module URLs."""
+    def test_react_theme_shell_routes_ship_in_the_runtime_urlconf(self, tmp_path):
+        """The host shell reservations render from the runtime URLconf.
+
+        The tenancy-mode orgs reservations and the forms shallow reservations
+        stay host-rendered (rule 41's stated exceptions), but they ship in
+        ``quickscale_core.runtime.urls`` instead of the user-owned urls.py, and
+        the generated urls.py includes the managed URLconf with one line.
+        """
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "react_org_shell_routes"
         output_path = tmp_path / project_name
@@ -443,7 +450,15 @@ class TestReactThemeGeneration:
 
         urls_py = (output_path / project_name / "urls.py").read_text()
         views_py = (output_path / project_name / "views.py").read_text()
-        react_shell_prelude = urls_py.split("\nurlpatterns = [", 1)[0]
+        runtime_urls_path = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_core"
+            / "src"
+            / "quickscale_core"
+            / "runtime"
+            / "urls.py"
+        )
+        runtime_urls = runtime_urls_path.read_text()
 
         assert (
             'react_shell_view = TemplateView.as_view(template_name="index.html")'
@@ -459,44 +474,49 @@ class TestReactThemeGeneration:
             'return render(request, "index.html", {"csrf_token": get_token(request)})'
             in views_py
         )
-        assert 'path("", react_shell_view, name="home")' in react_shell_prelude
-        assert 're_path(r"^orgs/?$", orgs_react_shell_view)' in react_shell_prelude
-        assert 're_path(r"^orgs/new/?$", orgs_react_shell_view)' in react_shell_prelude
+        assert 'path("", include("react_org_shell_routes.urls_modules")),' in urls_py
+        assert 'path("", react_shell_view, name="home")' in runtime_urls
+        assert 're_path(r"^orgs/?$", orgs_shell_view)' in runtime_urls
+        assert 're_path(r"^orgs/new/?$", orgs_shell_view)' in runtime_urls
         # The org JSON API at /orgs/api/ must bypass the shell and reach Django.
         assert (
-            're_path(r"^orgs/(?!api(?:/|$))[^/]+/?$", orgs_react_shell_view)'
-            in react_shell_prelude
+            're_path(r"^orgs/(?!api(?:/|$))[^/]+/?$", orgs_shell_view)' in runtime_urls
         )
         # T1.20: CRM is flat-only — not in org-scoped shell routes.
         assert (
             'r"^orgs/(?!api(?:/|$))[^/]+/(blog|listings|members|settings)/?$"'
-            in react_shell_prelude
+            in runtime_urls
         )
         assert (
-            'r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$"'
-            not in react_shell_prelude
+            'r"^orgs/[^/]+/(blog|listings|crm|members|settings)/?$"' not in runtime_urls
         )
         # SA235 (rule 41): the CRM React shell route is manifest-declared and
         # rendered from the managed wiring after the module's own includes.
-        assert 're_path(r"^crm/?$"' not in react_shell_prelude
-        assert 'name="crm-shell"' not in react_shell_prelude
-        assert 'r"^(profile|settings)/?$"' in react_shell_prelude
-        assert 'r"^(profile|blog|listings|settings)/?$"' not in react_shell_prelude
+        assert 're_path(r"^crm/?$"' not in runtime_urls
+        assert 'name="crm-shell"' not in runtime_urls
+        assert 'r"^(profile|settings)/?$"' in runtime_urls
+        assert 'r"^(profile|blog|listings|settings)/?$"' not in runtime_urls
         # Forms keeps its shallow host reservation: its module entrypoint
         # renders only a mount-point div (rule 41 exception).
-        assert 'r"^forms/[^/]+/?$"' in react_shell_prelude
+        assert 'r"^forms/[^/]+/?$"' in runtime_urls
         # T1.7: forms routes are flat — no org-scoped forms patterns.
-        assert 'r"^orgs/[^/]+/forms/?$"' not in react_shell_prelude
-        assert 'r"^orgs/[^/]+/forms/[^/]+/?$"' not in react_shell_prelude
-        assert 'r"^orgs/[^/]+/billing/"' not in react_shell_prelude
-        assert 'r"^orgs/invitations/"' not in react_shell_prelude
-        assert 'r"^social/?$"' not in react_shell_prelude
-        assert urls_py.index("urlpatterns += react_shell_urlpatterns") < urls_py.index(
-            "urlpatterns += PRE_HOME_MODULE_URLPATTERNS"
+        assert 'r"^orgs/[^/]+/forms/?$"' not in runtime_urls
+        assert 'r"^orgs/[^/]+/forms/[^/]+/?$"' not in runtime_urls
+        assert 'r"^orgs/[^/]+/billing/"' not in runtime_urls
+        assert 'r"^orgs/invitations/"' not in runtime_urls
+        # The runtime owns the ordering: shell routes, pre-home, social,
+        # post-home, then the manifest-declared React shell routes.
+        compose_body = runtime_urls.split("def compose_managed_urlpatterns", 1)[1]
+        assert compose_body.index("*_shell_urlpatterns(") < compose_body.index(
+            "*pre_home,"
         )
-        assert urls_py.index(
-            "urlpatterns += POST_HOME_MODULE_URLPATTERNS"
-        ) < urls_py.index("urlpatterns += SPA_MODULE_URLPATTERNS")
+        assert compose_body.index("*pre_home,") < compose_body.index(
+            "*_social_urlpatterns(),"
+        )
+        assert compose_body.index("*_social_urlpatterns(),") < compose_body.index(
+            "*post_home,"
+        )
+        assert compose_body.index("*post_home,") < compose_body.index("*spa,")
 
     def test_orgs_api_paths_bypass_the_react_shell(self, tmp_path):
         """Every /orgs/api/... path falls through the shell to the module include."""
@@ -505,9 +525,18 @@ class TestReactThemeGeneration:
         output_path = tmp_path / project_name
         generator.generate(project_name, output_path)
 
-        urls_py = (output_path / project_name / "urls.py").read_text()
+        runtime_urls_path = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_core"
+            / "src"
+            / "quickscale_core"
+            / "runtime"
+            / "urls.py"
+        )
+        runtime_urls = runtime_urls_path.read_text()
         shell_patterns = [
-            re.compile(pattern) for pattern in re.findall(r'r"(\^orgs[^"]*)"', urls_py)
+            re.compile(pattern)
+            for pattern in re.findall(r'r"(\^orgs[^"]*)"', runtime_urls)
         ]
         assert len(shell_patterns) >= 4
 
@@ -809,13 +838,31 @@ class TestReactThemeBaseTemplate:
         generator.generate(project_name, output_path)
 
         source = (output_path / project_name / "context_processors.py").read_text()
+        runtime_urls = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_core"
+            / "src"
+            / "quickscale_core"
+            / "runtime"
+            / "urls.py"
+        ).read_text()
 
-        assert "/billing/" not in source
-        assert "/orgs/" not in source
-        assert "QUICKSCALE_BILLING_ENABLED" in source
-        assert 'reverse(f"quickscale_billing:{route_name}")' in source
-        assert 'route_name = "pricing_page"' in source
-        assert 'route_name = "dashboard"' in source
+        # The user-owned file names no module and no module route: it delegates
+        # to the versioned runtime resolver.
+        assert "installed_module_context(request)" in source
+        for token in (
+            "/billing/",
+            "/orgs/",
+            "QUICKSCALE_BILLING_ENABLED",
+            "quickscale_billing:",
+        ):
+            assert token not in source
+        # The runtime resolves the module's named routes and gates on its
+        # enabled setting.
+        assert "reverse(route_name)" in runtime_urls
+        assert '"quickscale_billing:pricing_page"' in runtime_urls
+        assert '"quickscale_billing:dashboard"' in runtime_urls
+        assert 'f"QUICKSCALE_{module.upper()}_ENABLED"' in runtime_urls
 
 
 @pytest.mark.integration
@@ -1097,7 +1144,7 @@ class TestReactThemeModuleActivationMatrix:
             )
 
         urls_py = (output_path / "react_seam_paths" / "urls.py").read_text()
-        assert "SPA_MODULE_URLPATTERNS" in urls_py
+        assert 'path("", include("react_seam_paths.urls_modules")),' in urls_py
 
     def test_react_theme_billing_window_config_flag(self, tmp_path):
         """Billing is a runtime module flag, never a module path."""
@@ -1386,6 +1433,15 @@ class TestReactThemeModuleActivationMatrix:
         generator.generate(project_name, output_path)
 
         urls_py = (output_path / project_name / "urls.py").read_text()
+        runtime_urls_path = (
+            Path(__file__).resolve().parents[2]
+            / "quickscale_core"
+            / "src"
+            / "quickscale_core"
+            / "runtime"
+            / "urls.py"
+        )
+        runtime_urls = runtime_urls_path.read_text()
         base_template = (output_path / "templates" / "base.html").read_text()
         link_tree_template = (
             output_path / "templates" / "social" / "link_tree.html"
@@ -1395,17 +1451,19 @@ class TestReactThemeModuleActivationMatrix:
         ).read_text()
 
         social_route = (
-            're_path(\n        r"^social/?$",\n'
-            '        TemplateView.as_view(template_name="social/link_tree.html"),'
+            're_path(\n            r"^social/?$",\n'
+            '            TemplateView.as_view(template_name="social/link_tree.html"),'
         )
         embeds_route = (
-            're_path(\n        r"^social/embeds/?$",\n'
-            '        TemplateView.as_view(template_name="social/embeds.html"),'
+            're_path(\n            r"^social/embeds/?$",\n'
+            '            TemplateView.as_view(template_name="social/embeds.html"),'
         )
 
-        assert social_route in urls_py
-        assert embeds_route in urls_py
-        assert urls_py.index('r"^social/?$"') < urls_py.index(
+        assert social_route in runtime_urls
+        assert embeds_route in runtime_urls
+        # The generated urls.py includes the managed URLconf before the SPA
+        # catch-all, so the public social pages keep precedence over it.
+        assert urls_py.index('path("", include(') < urls_py.index(
             're_path(r".*", react_shell_view)'
         )
         assert 'href="{{ settings.QUICKSCALE_SOCIAL_LINK_TREE_PATH }}"' in base_template
