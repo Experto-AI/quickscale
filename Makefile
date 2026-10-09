@@ -351,7 +351,7 @@ help:
 	@echo "  make check-workflow-security      - Blocking zizmor scan: action pinning and top-level workflow permissions"
 	@echo "  make check-secret-scanning        - Blocking gitleaks secret scan with reasoned allowlists"
 	@echo "  make check-module-conventions     - Module Conventions rule 40 conformance check over every manifest and module source"
-	@echo "  make check-split-facade-imports   - Reject a private module importing its own package's facade (SA234)"
+	@echo "  make check-split-facade-imports   - Reject a private module importing a facade in its distribution (SA234)"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts and the known-bad Dockerfile gate control"
 	@echo "  make refresh-action-pins          - Operator: refresh SHA-pinned actions to their latest releases (CHECK=1 reports only)"
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"

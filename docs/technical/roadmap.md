@@ -446,9 +446,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   a declared hand-owned exemption (`check-gate-suites` keeps its hand-written inline recipe),
   and `check_gate_parity.py` validates the new field. The publish workflow's gate-step region
   is generated from the registry through the same default selector, so `make check` fails on
-  publish drift. Decisions record the gate and rule budget. Remaining: the docs table; the
-  parity-checker shrink; the layout-derived split-facade scope; and `scripts/` under the
-  quality gate.
+  publish drift. Decisions record the gate and rule budget. The split-facade gate derives its
+  scope from the package layout: every `src/` package carrying `_*.py` modules is scanned, a
+  private module fails when it imports a facade module of its distribution or a name that
+  module only re-exports, and the twelve imports the widened scope surfaced are fixed; a
+  scope-derivation test fails when a split package is outside the scan. Remaining: the docs
+  table; the parity-checker shrink; and `scripts/` under the quality gate.
 
   **Acceptance:** `gate_registry.json` is the only gate list; the Makefile gate targets, the
   `check_ci_locally.sh` stage list, the `ci.yml`/`publish.yml`/e2e regions, and the docs table are

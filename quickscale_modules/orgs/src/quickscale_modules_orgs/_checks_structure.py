@@ -17,17 +17,19 @@ from collections.abc import Callable, Iterator
 from django.apps import apps
 from django.core.checks import Error
 
-from quickscale_modules_orgs.removal import (
+from quickscale_modules_orgs._removal_declarations import (
+    coordinator_discharge_actions,
+    removal_boundary_implementations,
+)
+from quickscale_modules_orgs._removal_types import (
     ORGANIZATION_MODEL_LABEL,
     REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE,
     ExternalProviderField,
     OrganizationRemovalObligation,
     RemovalAction,
     RemovalBoundary,
-    coordinator_discharge_actions,
-    removal_boundary_implementations,
 )
-from quickscale_modules_orgs.tenancy import has_organization_id_field
+from quickscale_modules_orgs._tenancy_discovery import has_organization_id_field
 
 
 def _constant_value(node: ast.AST) -> tuple[bool, object]:
