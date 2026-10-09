@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 from django.test import override_settings
 
+from quickscale_core.runtime.settings import compose_rest_framework
 from quickscale_modules_orgs.current_org import ClientIPThrottleMixin, get_client_ip
 
 
@@ -416,26 +417,28 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
         for path in GENERATED_SETTINGS_ROOT.rglob("*")
         if path.is_file()
         and re.search(
-            r'"DEFAULT_THROTTLE_CLASSES"\s*[,:]',
+            r"""["']DEFAULT_THROTTLE_CLASSES["']\s*(?:[,:\]]|=)""",
             path.read_text(encoding="utf-8"),
         )
     ]
+    assert generated_default_hits == [], (
+        "DRF throttle defaults ship in the runtime composition helper, not in "
+        f"generated templates; found {generated_default_hits!r}"
+    )
+
     expected_base_settings = (
         GENERATED_SETTINGS_ROOT / "project_name" / "settings" / "base.py.j2"
     )
-    assert generated_default_hits == [
-        str(expected_base_settings.relative_to(REPO_ROOT))
-    ], (
-        "Only the generated base settings may declare DRF throttle defaults; "
-        f"found {generated_default_hits!r}"
+    base_settings_text = expected_base_settings.read_text(encoding="utf-8")
+    assert "compose_rest_framework(" in base_settings_text, (
+        "The generated base settings must delegate REST_FRAMEWORK composition "
+        "to quickscale_core.runtime.settings.compose_rest_framework"
     )
 
-    base_settings_text = expected_base_settings.read_text(encoding="utf-8")
-    assert re.findall(
-        r'"(rest_framework\.throttling\.[A-Za-z]+)"',
-        base_settings_text,
-    ) == [
+    assert compose_rest_framework(use_x_forwarded_for=False, trusted_proxy_count=0)[
+        "DEFAULT_THROTTLE_CLASSES"
+    ] == [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
         "rest_framework.throttling.ScopedRateThrottle",
-    ], "Generated throttle defaults must stay on stock DRF throttle classes"
+    ], "DRF throttle defaults must stay on stock DRF throttle classes"
