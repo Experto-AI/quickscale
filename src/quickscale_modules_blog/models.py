@@ -27,7 +27,7 @@ def _build_public_media_url(stored_reference: str) -> str:
     """Return a public URL for a stored media reference.
 
     Storage's service resolves storage's own settings (rules 3, 4, and 34);
-    without storage installed, the fallback uses only the project's
+    while storage is switched off, the fallback uses only the project's
     ``MEDIA_URL`` and reads no storage setting.
     """
     services = _storage.storage_services()
