@@ -825,8 +825,9 @@ def test_purge_organization_refuses_live_stripe_subscription(
 
 @pytest.mark.django_db
 def test_purge_organization_with_terminal_billing_rows() -> None:
-    """Terminal billing rows purge successfully."""
+    """Terminal billing rows purge successfully, including the customer identity."""
     from quickscale_modules_billing.models import (
+        BillingCustomer,
         CreditBalance,
         CreditTransaction,
         Plan,
@@ -884,9 +885,33 @@ def test_purge_organization_with_terminal_billing_rows() -> None:
             plan=plan,
             status=PurchaseCheckout.Status.EXPIRED,
         )
+        BillingCustomer.objects.create(
+            organization=organization,
+            stripe_customer_id="cus_billing_purge_identity",
+        )
     finally:
         reset_current_org_id()
+    other_organization = Organization.objects.create(
+        name="Billing Purge Neighbor",
+        slug="billing-purge-neighbor",
+    )
+    BillingCustomer.objects.create(
+        organization=other_organization,
+        stripe_customer_id="cus_billing_purge_neighbor",
+    )
     org_id = organization.pk
+
+    dry_run_stdout = StringIO()
+    call_command(
+        "quickscale_orgs_purge_organization",
+        organization_id=str(org_id),
+        confirm=str(org_id),
+        dry_run=True,
+        stdout=dry_run_stdout,
+        stderr=StringIO(),
+        verbosity=0,
+    )
+    assert "Billing customers: 1" in dry_run_stdout.getvalue()
 
     stdout = StringIO()
     call_command(
@@ -901,11 +926,17 @@ def test_purge_organization_with_terminal_billing_rows() -> None:
     output = stdout.getvalue()
     assert "has been purged" in output
     assert not Organization.objects.filter(pk=org_id).exists()
-    # Verify billing rows are deleted.
+    # Verify billing rows are deleted, including the control-plane customer.
     assert CreditBalance.objects.filter(organization_id=org_id).count() == 0
     assert PurchaseCheckout.objects.filter(organization_id=org_id).count() == 0
     assert Subscription.objects.filter(organization_id=org_id).count() == 0
     assert CreditTransaction.objects.filter(organization_id=org_id).count() == 0
+    assert BillingCustomer.objects.filter(organization_id=org_id).count() == 0
+    # Another organization's recorded customer identity must survive untouched.
+    assert (
+        BillingCustomer.objects.filter(organization_id=other_organization.pk).count()
+        == 1
+    )
     # Verify tombstone.
     assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
 
@@ -2102,6 +2133,29 @@ def test_resolve_models_skips_uninstalled_apps() -> None:
     for entry in resolved:
         assert entry["model"] is not None
         assert entry["filter_key"] == "organization_id"
+
+
+def test_control_plane_organization_children_are_discovered_from_metadata() -> None:
+    """A non-tenant FK child of the organization joins the purge cleanup set."""
+    from quickscale_modules_billing.models import BillingCustomer
+    from quickscale_modules_orgs.management.commands.quickscale_orgs_purge_organization import (
+        _control_plane_organization_children,
+    )
+    from quickscale_modules_orgs.tenancy import get_tenant_models
+
+    children = _control_plane_organization_children(
+        Organization,
+        tenant_models=get_tenant_models(),
+    )
+
+    # The billing-owned customer identity is a control-plane child and must be
+    # cleared before the organization row's raw delete.
+    assert (BillingCustomer, "organization_id") in children
+    # The organization app's own rows stay with their explicit handlers, and
+    # marker-enrolled tenant models stay in the tenant plan.
+    assert all(model._meta.app_label != "quickscale_orgs" for model, _ in children)
+    tenant_keys = {model._meta.label_lower for model in get_tenant_models()}
+    assert all(model._meta.label_lower not in tenant_keys for model, _ in children)
 
 
 # ---------------------------------------------------------------------------

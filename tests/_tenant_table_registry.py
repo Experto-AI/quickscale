@@ -217,6 +217,15 @@ TENANT_TABLE_REGISTRY: list[TenantTableEntry] = [
         status=TenantTableStatus.EXCLUDED_REVIEWED,
         reason="System-wide webhook idempotency record, not tenant-owned.",
     ),
+    TenantTableEntry(
+        app_label="quickscale_billing",
+        model_name="BillingCustomer",
+        status=TenantTableStatus.EXCLUDED_REVIEWED,
+        reason=(
+            "Control-plane organization provider identity, resolved before any "
+            "organization context exists."
+        ),
+    ),
     # -- Blog (user-profile, not tenant-scoped) --
     TenantTableEntry(
         app_label="quickscale_blog",

@@ -171,6 +171,41 @@ def _topologically_order_models(
     return [models_by_key[key] for key in ordered_keys]
 
 
+def _control_plane_organization_children(
+    organization_model: type[models.Model],
+    *,
+    tenant_models: list[type[models.Model]],
+) -> list[tuple[type[models.Model], str]]:
+    """Return ``(model, filter_key)`` for non-tenant FK children of the organization row.
+
+    The organization root is deleted with a raw delete, so every installed
+    concrete model that holds a non-tenant foreign key to it must have its
+    rows removed first — Django's ``on_delete=models.CASCADE`` is Python-level
+    and is bypassed by that raw delete.  The set is derived from model metadata
+    and app labels only, never a module or model name, so a module that later
+    adds a control-plane organization child joins the purge without an edit
+    here.  Marker-enrolled tenant models are covered by the tenant plan, and
+    the organization app's own rows are handled by the caller.
+    """
+    tenant_keys = {_model_key(model) for model in tenant_models}
+    children: list[tuple[type[models.Model], str]] = []
+    for model in apps.get_models():
+        if model._meta.label_lower in tenant_keys:
+            continue
+        if model._meta.proxy or model._meta.auto_created:
+            continue
+        if model._meta.app_label == organization_model._meta.app_label:
+            continue
+        for field in model._meta.fields:
+            if (
+                isinstance(field, models.ForeignKey)
+                and field.remote_field.model is organization_model
+            ):
+                children.append((model, field.attname))
+                break
+    return sorted(children, key=lambda entry: _model_key(entry[0]))
+
+
 def _disambiguated_model_labels(
     tenant_models: list[type[models.Model]],
     *,

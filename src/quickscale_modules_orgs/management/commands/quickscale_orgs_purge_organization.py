@@ -22,6 +22,9 @@ Contract rules enforced by this command:
 * Tombstone is created in the same transaction as the purge.
 * Every marker-derived tenant model, including project-owned models, is
   deleted in an FK-derived child-before-parent order.
+* Every installed non-tenant model holding a foreign key to the organization
+  row (for example a module's control-plane provider identity) is deleted
+  before the organization row's raw delete, discovered from model metadata.
 * The shared ``set_current_org_for_context()`` helper establishes consistent
   ContextVar + ``SET LOCAL app.current_org_id`` before touching RLS-protected
   tables.
@@ -50,6 +53,7 @@ from django.db import models, transaction
 from quickscale_modules_orgs._purge_plan import (
     _PURGE_ORDER_OVERRIDES as _PURGE_ORDER_OVERRIDES,
     _carries_provider_value as _carries_provider_value,
+    _control_plane_organization_children as _control_plane_organization_children,
     _disambiguated_model_labels as _plan_disambiguated_model_labels,
     _get_filter_for_org as _get_filter_for_org,
     _get_qs as _get_qs,
@@ -365,8 +369,10 @@ class Command(_PurgeSupportMixin, BaseCommand):
                         organization=organization
                     )._raw_delete(OrganizationMembership.objects.db)
 
-                    # All known FK-referencing rows are already deleted, so
-                    # bypass Django's cascade collector for the org row too.
+                    # All known FK-referencing rows — the tenant plan, the
+                    # non-tenant organization children, and the org-owned rows
+                    # below — are already deleted, so bypass Django's cascade
+                    # collector for the org row too.
                     Organization.objects.filter(pk=organization.pk)._raw_delete(
                         Organization.objects.db
                     )
@@ -436,6 +442,21 @@ class Command(_PurgeSupportMixin, BaseCommand):
             qs = _get_qs(model, filter_kwargs)
             counts[label] = qs.count()
 
+        # Non-tenant organization children (for example a module's
+        # control-plane provider identity row).
+        control_plane_children = self._control_plane_children()
+        control_plane_labels = _plan_disambiguated_model_labels(
+            [model for model, _ in control_plane_children],
+            model_label=_model_label,
+        )
+        for (model, filter_key), label in zip(
+            control_plane_children, control_plane_labels, strict=True
+        ):
+            if label in counts:
+                label = f"{label} ({_model_key(model)})"
+            filter_kwargs = _get_filter_for_org(filter_key, organization)
+            counts[label] = _get_qs(model, filter_kwargs).count()
+
         # Org-level counts.
         counts["Organization invitations"] = OrganizationInvitation.objects.filter(
             organization=organization
@@ -474,6 +495,24 @@ class Command(_PurgeSupportMixin, BaseCommand):
             deleted_count, _ = qs.delete()
             if deleted_count:
                 self.stdout.write(f"  Deleted {deleted_count} {label.lower()}.")
+
+        # Non-tenant organization children (for example a module's
+        # control-plane provider identity row) carry a Python-level CASCADE
+        # the raw organization delete bypasses, so they are cleared here.
+        for model, filter_key in self._control_plane_children():
+            filter_kwargs = _get_filter_for_org(filter_key, organization)
+            deleted_count, _ = _get_qs(model, filter_kwargs).delete()
+            if deleted_count:
+                self.stdout.write(
+                    f"  Deleted {deleted_count} {_model_label(model).lower()}."
+                )
+
+    def _control_plane_children(self) -> list[tuple[type[models.Model], str]]:
+        """Return the non-tenant organization children the purge must clear."""
+        return _control_plane_organization_children(
+            Organization,
+            tenant_models=get_tenant_models(),
+        )
 
     def _invalidate_organization_caches(
         self,
