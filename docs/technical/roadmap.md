@@ -70,7 +70,7 @@ lands before SA153 slice (a), whose schema work is `0002+` from the start (arch 
 SA259 lands before the new gates it cheapens (SA204's hash gate, SA253's rendered-artifact gate).
 SA258 lands before SA191's cutover so `bap-web-new` starts on thin includes and pays one adoption
 step instead of one per release. SA154 is an inventory, not work. SA191 runs slice (b) first;
-slice (a) waits on the maintainer's production dump.
+slice (a) takes the production dump itself, once the maintainer has logged in to Railway.
 
 ### Track states
 
@@ -207,8 +207,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   separately and verified.
 
   **Dependencies and ownership:** Billing stays disabled. An agent delivers everything up to a
-  deploy-ready recipient and a rehearsed cutover script. The maintainer supplies the production
-  dump, creates and archives the repositories, runs the Railway cutover, carries media, and
+  deploy-ready recipient and a rehearsed cutover script, and takes the production dump read-only
+  by slice (a)'s steps. The maintainer logs in to Railway, creates and archives the repositories, runs the Railway cutover, carries media, and
   re-invites users.
 
   **Acceptance:**
@@ -236,7 +236,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Slices:**
   - [ ] (a) Rehearsal: restore the production dump into scratch PostgreSQL 18 and record the
-    `migrate --plan` inconsistency against a fresh recipient.
+    `migrate --plan` inconsistency against a fresh recipient. The dump is not in `../bap-web`
+    (its `.env` points at a local database). Take it read-only from Railway: in `../bap-web`,
+    `railway link` to the `bap-web` project, read the Postgres service's public URL with
+    `railway variables --service Postgres` (the private `DATABASE_URL` resolves only inside
+    Railway), then run
+    `railway run --service Postgres -- sh -c 'pg_dump --format=custom --no-owner --no-acl "$DATABASE_PUBLIC_URL" > /home/victor/code/bap-web-prod.dump'`.
+    Use a `pg_dump` at least as new as the server's major version (otherwise run it from a
+    `postgres:18` container). Keep the dump outside every repository and never commit it; it holds
+    real user data. Restore with `pg_restore --no-owner` into the scratch database only.
   - [ ] (b) Recipient and code port: generate the recipient, port the donor by the migration
     prompt, re-express the `modules/forms` edits, and record upstream candidates.
   - [ ] (c) Test parity: the donor's pytest and Vitest suites, SA208's check, FORCE-RLS counts,
@@ -400,9 +408,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   a declared hand-owned exemption (`check-gate-suites` keeps its hand-written inline recipe),
   and `check_gate_parity.py` validates the new field. The publish workflow's gate-step region
   is generated from the registry through the same default selector, so `make check` fails on
-  publish drift. Decisions record the gate and rule budget. Remaining: the docs table; the
-  parity-checker shrink; the layout-derived split-facade scope; and `scripts/` under the
-  quality gate.
+  publish drift. Decisions record the gate and rule budget. The split-facade gate derives its
+  scope from the package layout: every `src/` package carrying `_*.py` modules is scanned, a
+  private module fails when it imports a facade module of its distribution or a name that
+  module only re-exports, and the twelve imports the widened scope surfaced are fixed; a
+  scope-derivation test fails when a split package is outside the scan. Remaining: the docs
+  table; the parity-checker shrink; and `scripts/` under the quality gate.
 
   **Acceptance:** `gate_registry.json` is the only gate list; the Makefile gate targets, the
   `check_ci_locally.sh` stage list, the `ci.yml`/`publish.yml`/e2e regions, and the docs table are

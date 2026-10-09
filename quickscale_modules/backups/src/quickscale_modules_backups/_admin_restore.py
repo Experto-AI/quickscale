@@ -18,9 +18,9 @@ from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
 
+from quickscale_core.runtime import BackupError
 from quickscale_modules_backups._admin_forms import BackupPolicyRestoreForm
 from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
-from quickscale_modules_backups.services import BackupError
 
 
 class RestoreWorkflowAdminMixin(admin.ModelAdmin):

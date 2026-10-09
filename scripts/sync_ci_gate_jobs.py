@@ -247,7 +247,7 @@ HOSTED_JOB_CATALOG: dict[str, HostedJobSpec] = {
     ),
     "check-split-facade-imports": HostedJobSpec(
         "Split-Facade Import Gate (SA234)",
-        "Reject a private module importing its own package's facade",
+        "Reject a private module importing a facade in its distribution",
     ),
 }
 
@@ -395,7 +395,7 @@ MAKE_TARGET_COMMENTS: dict[str, str] = {
         "landed are recorded in the check's OPEN_RULES mapping."
     ),
     "check-split-facade-imports": (
-        "Reject a private module importing its own package's facade (SA234)."
+        "Reject a private module importing a facade in its distribution (SA234)."
     ),
     "frontend-proof": (
         "Render showcase_react and prove the generated frontend toolchain without Docker"

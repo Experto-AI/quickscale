@@ -420,7 +420,7 @@
         },
         {
             "id": "check-split-facade-imports",
-            "description": "SA234 split-facade gate: no private module imports its own package's facade",
+            "description": "SA234/SA259 split-facade gate: no private module imports a facade of its distribution",
             "required_contexts": [
                 "local-serial",
                 "local-parallel",

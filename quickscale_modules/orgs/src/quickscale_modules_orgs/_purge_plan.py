@@ -20,7 +20,7 @@ from django.core.management.base import CommandError
 from django.db import models
 
 from quickscale_core.runtime import collect_capabilities
-from quickscale_modules_orgs.removal import REMOVAL_LABEL_PREFIX_ATTRIBUTE
+from quickscale_modules_orgs._removal_types import REMOVAL_LABEL_PREFIX_ATTRIBUTE
 
 # Additional child-before-parent constraints belong here only when installed FK
 # metadata cannot represent them. Each pair is ``(before_label, after_label)``.
