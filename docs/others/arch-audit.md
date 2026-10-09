@@ -166,7 +166,7 @@ packages.
 | Generated-project contract adoption | `--confirm-contract-adoption` flag records step ids; monorepo gate forces a step to be *declared* | **convention** (honor system) | — |
 | Vendored module source unmodified in projects | stated in the extension contract only | **convention** | — |
 | Shipped migrations immutable | none (SA204 plans a hash-manifest gate) | **none** | — |
-| Gate present in every required context | `check_gate_parity.py` compares five hand-written contexts | gated | closed-world (registry ↔ contexts) |
+| Gate present in every required context | every projection is generated from the registry; `check_gate_parity.py` proves the generated files are current | gated | closed-world (registry → generated files) |
 | Private split module never imports its facade | `check_split_facade_imports.py` over the layout-derived scope (every `src/` package with `_*.py` modules) | gated | **closed-world over the layout** |
 | Convention prose ↔ harness | partition test parses `decisions.md` headings; vocabularies hand-mirrored | gated | rule list only |
 | Quality thresholds | `check_quality.sh` fixed fail lines (SA243) | gated | closed per metric, **but only over package `src/`** (`:163–178`) |
@@ -506,8 +506,9 @@ items:
     - `ci.yml` (`:563–619`) and `publish.yml` (`:172–177`);
     - `scripts/README.md` and `validation_policy.md`.
 
-    `check_gate_parity.py` (2,887 lines; docstring `:1–50`) *compares* the registry with five
-    hand-written contexts instead of generating them, and its test runs to 4,443 lines.
+    `check_gate_parity.py` (2,887 lines at this pass) *compared* the registry with five
+    hand-written contexts instead of generating them, and its test ran to 4,443 lines. SA259
+    shrank the checker to the generated-files-current check, and its suite with it.
   - **Conventions.** Rule 40 ([decisions.md:1075–1105](../technical/decisions.md)) puts every
     listed exception "in one test-owned mapping that mirrors this section".
     `scripts/module_conventions/core.py:27` reads "every hand-maintained vocabulary the
@@ -541,8 +542,8 @@ items:
     - **The privileged-command set** appears at four stations; "none is a single source of
       truth" ([decisions.md:1832](../technical/decisions.md)).
   - **The governance code is exempt from its own bar.** `check_quality.sh` scans only package
-    `src/` directories (`:163–178`). Ten non-test gate and tooling scripts exceed the 800-line
-    fail line (for example `check_gate_parity.py` at 2,887 lines, `publish_module.py` at 1,651,
+    `src/` directories (`:163–178`). Nine non-test gate and tooling scripts exceed the 800-line
+    fail line (for example `sync_ci_gate_jobs.py` at 1,744 lines, `publish_module.py` at 1,651,
     and `check_project_contract_vintage.py` at 1,351). The largest product file is 791 lines.
   - **Defect gravity:** `scripts/` has a fix density of .29 (79 of 269 changes), against
     .07–.23 for the modules.
@@ -813,6 +814,13 @@ requested. Each carries this pass's trigger evaluation.
 - **`check_quality.sh:170–172`.** It falls back silently to a hardcoded path list when
   discovery finds nothing: a fail-open inside a gate. Fixed in SA259: discovery is the only
   source, and an empty result fails the gate.
+- **Gate wiring held by parity.** The Make targets, local-CI stage membership, hosted jobs,
+  E2E paths, publish steps, and the gate documentation table are generated from
+  `gate_registry.json`; `check_gate_parity.py` now checks only that generated files are
+  current, and SA259's layout-derived split-facade scope replaced the hand-listed one. The
+  remaining gap is `scripts/` under the quality gate, deferred until its measured debt
+  (69 functions at CC >= 21, nine files >= 800 lines, vulture findings) can clear the fixed
+  thresholds.
 
 **Carried from the prior pass, still killed (re-checked where noted):**
 - **Core owning the personal-data vocabulary (SA246).** These are generic records consumed by

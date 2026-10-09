@@ -2539,9 +2539,9 @@ is paid continuously; the coverage it buys is already obtainable locally on dema
 re-obtained unconditionally before anything ships.
 
 **The compensating local step.** `make ci` runs the registered gate set locally with its own
-PostgreSQL lifecycle; `make ci-e2e` adds the E2E and privileged lanes. Parity between the local,
-hosted, and publish sets is machine-checked against `scripts/gate_registry.json`, so each context
-runs its declared set rather than a hand-picked subset — the registry records per-gate context
+PostgreSQL lifecycle; `make ci-e2e` adds the E2E and privileged lanes. Each context's gate
+set is generated or derived from `scripts/gate_registry.json` and checked for currency, so no
+context runs a hand-picked subset — the registry records per-gate context
 membership, including the local-only quality thresholds gate and the hosted-only commit-testimony gate. A
 partial run announces itself as `PARTIAL CI — NOT a full pass` and does not count.
 
@@ -2573,8 +2573,9 @@ required.
 **Why.** Rules were restated by hand in every execution context and held equal by a parity
 check, so every addition compounded maintenance cost and cross-track conflict (arch audit
 `rules-held-by-parity-not-derivation`, options 1 and 3). `gate_registry.json` is the only
-gate list; the Make targets, local-CI stage membership, hosted jobs, and E2E projections are
-generated from it, which makes the marginal cost of the next gate visible and bounded.
+gate list; the Make targets, local-CI stage membership, hosted jobs, E2E projections,
+publish gate steps, and the gate documentation table are generated from it, which makes
+the marginal cost of the next gate visible and bounded.
 
 **Scope.** The budget governs governance surface, not product behavior. Retiring a gate or
 rule means deleting it or folding it into a stronger one, never silencing it while it stays
