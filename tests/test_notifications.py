@@ -129,11 +129,11 @@ class TestNotifySubmission:
         monkeypatch,
         django_capture_on_commit_callbacks,
     ):
-        """A failing tracked delivery reports through NotificationError (rule 43)."""
-        from quickscale_modules_notifications.services import NotificationError
+        """A failing tracked delivery reports through NotificationsError (rule 43)."""
+        from quickscale_modules_notifications.services import NotificationsError
 
         def failing_send(*args, **kwargs):
-            raise NotificationError("SMTP connection refused")
+            raise NotificationsError("SMTP connection refused")
 
         monkeypatch.setattr(
             "quickscale_modules_forms._email.send_notification",
@@ -151,7 +151,7 @@ class TestNotifySubmission:
         monkeypatch,
         django_capture_on_commit_callbacks,
     ):
-        """Rule 43: forms catches only NotificationError; other errors stay visible."""
+        """Rule 43: forms catches only NotificationsError; other errors stay visible."""
 
         def failing_send(*args, **kwargs):
             raise RuntimeError("SMTP connection refused")

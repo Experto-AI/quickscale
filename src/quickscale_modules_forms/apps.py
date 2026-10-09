@@ -91,6 +91,6 @@ class QuickscaleFormsConfig(AppConfig):
         }
 
     def ready(self) -> None:
-        from quickscale_modules_forms.checks import RETIRED_SETTINGS
-
-        register_module_settings_check(self, "forms", retired_settings=RETIRED_SETTINGS)
+        # Rule 6's retired setting names are declared in module.yml and
+        # refused by the generic settings check.
+        register_module_settings_check(self, "forms")
