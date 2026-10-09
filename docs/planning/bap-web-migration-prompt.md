@@ -9,9 +9,10 @@ namespaces, and commands ([decisions.md § Module Conventions](../technical/deci
 SA215 also moved module back offices (blog, listings, crm, forms) from `is_staff` to org roles
 (rule 19), so the port gives `bap-web`'s editors an org role (`admin` or as the module README
 states), never `is_staff`. Start it now; the
-[schedule](../technical/roadmap.md#scheduling-table) is clear. Regenerate `bap-web-new`
-from that checkout, and update the version numbers below; the current `bap-web-new` was generated
-before the renames.
+[schedule](../technical/roadmap.md#scheduling-table) is clear. `/home/victor/code/bap-web-new`
+has since been regenerated on `v89` and ported (SA191 slice (b)); resume from the roadmap's SA191
+slices instead of regenerating the recipient. Regenerate only when starting a new migration
+iteration, and update the version numbers below when you do.
 
 ---
 
