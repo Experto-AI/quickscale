@@ -72,9 +72,6 @@ PYLINT_FAIL_MIN_LINES=20           # Fail line: blocks of >= 20 similar lines
 PYLINT_WARN_OPTION_LINES=$((PYLINT_WARN_MIN_LINES - 1))
 PYLINT_FAIL_OPTION_LINES=$((PYLINT_FAIL_MIN_LINES - 1))
 
-# Module Discovery
-MODULE_DISCOVERY_ENABLED=true      # Enable auto-discovery of modules
-
 #######################################
 # HELPER FUNCTIONS
 #######################################
@@ -161,22 +158,19 @@ discover_python_modules() {
 }
 
 get_module_paths() {
-    # Returns module paths based on configuration
-    # If auto-discovery is disabled, returns hardcoded fallback list
+    # Returns the discovered module src/ paths.
+    #
+    # Discovery is the only source: when it finds nothing, the gate fails
+    # closed instead of silently analyzing a hardcoded fallback list (SA259).
+    local discovered
+    discovered=$(discover_python_modules)
 
-    if [ "$MODULE_DISCOVERY_ENABLED" = true ]; then
-        local discovered=$(discover_python_modules)
-
-        if [ -z "$discovered" ]; then
-            print_warning "Auto-discovery found no modules, using fallback list"
-            echo "quickscale_core/src quickscale_cli/src quickscale_modules/auth/src quickscale_modules/blog/src quickscale_modules/listings/src"
-        else
-            echo "$discovered"
-        fi
-    else
-        # Fallback: hardcoded module list
-        echo "quickscale_core/src quickscale_cli/src quickscale_modules/auth/src quickscale_modules/blog/src quickscale_modules/listings/src"
+    if [ -z "$discovered" ]; then
+        print_error "Auto-discovery found no modules — refusing a hardcoded fallback list" >&2
+        return 1
     fi
+
+    echo "$discovered"
 }
 
 #######################################
@@ -187,7 +181,8 @@ analyze_dead_code() {
     print_header "Analyzing Dead Code (vulture)"
 
     # Get module paths
-    local module_paths=$(get_module_paths)
+    local module_paths
+    module_paths=$(get_module_paths) || exit 1
 
     # Build vulture arguments
     local vulture_args="--min-confidence $VULTURE_MIN_CONFIDENCE"
@@ -278,7 +273,8 @@ analyze_complexity() {
     print_header "Analyzing Code Complexity (radon)"
 
     # Get module paths
-    local module_paths=$(get_module_paths)
+    local module_paths
+    module_paths=$(get_module_paths) || exit 1
 
     # Cyclomatic Complexity (CC)
     echo "Running cyclomatic complexity analysis..."
@@ -426,7 +422,8 @@ analyze_large_files() {
     print_header "Analyzing Large Files"
 
     # Get module paths
-    local module_paths=$(get_module_paths)
+    local module_paths
+    module_paths=$(get_module_paths) || exit 1
 
     # Find files >= warning threshold.  ``grep -c ""`` counts a final
     # physical line that has no trailing newline; ``wc -l`` would undercount
@@ -479,7 +476,8 @@ analyze_duplication() {
     print_header "Analyzing Code Duplication (pylint)"
 
     # Get module paths
-    local module_paths=$(get_module_paths)
+    local module_paths
+    module_paths=$(get_module_paths) || exit 1
 
     # pylint exits 8 when it reports refactor findings (which includes every
     # R0801 block) and 0 when there are none; any other status is an analyzer

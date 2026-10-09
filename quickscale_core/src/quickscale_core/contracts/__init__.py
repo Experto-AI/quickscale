@@ -12,20 +12,6 @@ helpers, and the module catalog here. The CLI keeps backward-compatible
 shims at its original import locations.
 """
 
-from quickscale_core.contracts.imperative_inventory import (
-    ADAPTER_ONLY,
-    ADAPTER_ONLY_SYMBOLS,
-    AUTHORIZED_IMPERATIVE_MODULES,
-    DECLARATIVE_TARGET,
-    DECLARATIVE_TARGET_SYMBOLS,
-    MANIFEST_INVENTORY,
-    MANIFEST_RESOLVER,
-    MANIFEST_RESOLVER_SYMBOLS,
-    SHARED_HELPER,
-    SHARED_HELPER_SYMBOLS,
-    count_inventory_category,
-    get_manifest_inventory,
-)
 from quickscale_core.contracts.module_catalog import (
     MODULE_CATALOG,
     ModuleCatalogEntry,
@@ -87,19 +73,6 @@ __all__ = [
     "discover_shipped_module_names",
     "discover_shipped_module_paths",
     "validate_active_module_subset",
-    # Imperative-logic inventory
-    "ADAPTER_ONLY",
-    "ADAPTER_ONLY_SYMBOLS",
-    "AUTHORIZED_IMPERATIVE_MODULES",
-    "DECLARATIVE_TARGET",
-    "DECLARATIVE_TARGET_SYMBOLS",
-    "MANIFEST_INVENTORY",
-    "MANIFEST_RESOLVER",
-    "MANIFEST_RESOLVER_SYMBOLS",
-    "SHARED_HELPER",
-    "SHARED_HELPER_SYMBOLS",
-    "count_inventory_category",
-    "get_manifest_inventory",
     # Analytics constants
     "ANALYTICS_PROVIDERS",
     "ANALYTICS_PROVIDER_POSTHOG",

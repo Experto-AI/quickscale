@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -142,12 +143,38 @@ class TestQualityGateThresholds:
         stub.chmod(0o755)
         return bin_dir
 
-    def _find_stub_bin(self, tmp_path: Path, content: str = _FIND_CLEAN) -> Path:
-        """Create a stub ``find`` script reporting the controlled file sizes."""
+    def _find_stub_bin(
+        self,
+        tmp_path: Path,
+        content: str = _FIND_CLEAN,
+        *,
+        delegate_discovery: bool = True,
+    ) -> Path:
+        """
+        Create a stub ``find`` script reporting the controlled file sizes.
+
+        Module discovery invokes ``find`` for ``pyproject.toml`` files; when
+        ``delegate_discovery`` is true those calls exec the real ``find`` so
+        the gate discovers the actual repository packages, while every other
+        invocation returns the controlled fixture output.
+        """
         bin_dir = tmp_path / "findbin"
         bin_dir.mkdir(parents=True, exist_ok=True)
         stub = bin_dir / "find"
-        stub.write_text(content, encoding="utf-8")
+        delegation = ""
+        if delegate_discovery:
+            real_find = shutil.which("find")
+            assert real_find is not None, "test environment must provide find"
+            delegation = (
+                "# Delegate module discovery to the real find; stub only scans.\n"
+                'for stub_arg in "$@"; do\n'
+                '    if [ "$stub_arg" = "pyproject.toml" ]; then\n'
+                f'        exec "{real_find}" "$@"\n'
+                "    fi\n"
+                "done\n"
+            )
+        body = content.split("\n", 1)[1] if content.startswith("#!") else content
+        stub.write_text(f"#!/bin/bash\n{delegation}{body}", encoding="utf-8")
         stub.chmod(0o755)
         return bin_dir
 
@@ -164,11 +191,14 @@ class TestQualityGateThresholds:
         pylint_warn_raw: str | None = None,
         pylint_exit: int = 8,
         find_content: str = _FIND_CLEAN,
+        delegate_discovery: bool = True,
     ) -> subprocess.CompletedProcess:
         """Run the real ``check_quality.sh`` with controlled analyzer output."""
         env = os.environ.copy()
         stub_bin = self._stub_bin(tmp_path)
-        find_bin = self._find_stub_bin(tmp_path, find_content)
+        find_bin = self._find_stub_bin(
+            tmp_path, find_content, delegate_discovery=delegate_discovery
+        )
         env["PATH"] = f"{stub_bin}:{find_bin}:{env.get('PATH', '')}"
         env["QUALITY_OUTPUT_DIR"] = str(quality_output_dir)
         env["QS_VULTURE_FIXTURE"] = vulture
@@ -477,6 +507,24 @@ class TestQualityGateThresholds:
         assert status["warning_count"] == 0
         markdown = (quality_output_dir / "quality_report.md").read_text(encoding="utf-8")
         assert "✓ Pass" in markdown
+
+    # ------------------------------------------------------------------
+    # Module discovery: a miss fails closed instead of a fallback list
+    # ------------------------------------------------------------------
+
+    def test_empty_module_discovery_fails_closed(
+        self, tmp_path: Path, quality_output_dir: Path
+    ) -> None:
+        """No discovered modules fails the gate; the hardcoded list is refused."""
+        result = self._run_shell(
+            tmp_path,
+            quality_output_dir,
+            find_content=_FIND_CLEAN,
+            delegate_discovery=False,
+        )
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "Auto-discovery found no modules" in result.stdout + result.stderr
+        assert not (quality_output_dir / "quality_gate_status.json").exists()
 
     # ------------------------------------------------------------------
     # SA242: physical-line counting and the exact 799/800 boundary

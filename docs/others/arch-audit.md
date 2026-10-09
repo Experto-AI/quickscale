@@ -804,9 +804,10 @@ requested. Each carries this pass's trigger evaluation.
   log channels, or orgs `_personal_data.py:226` importing a name `tenancy.py` defines itself.
   The scope gap is Finding 3.
 - **`contracts/imperative_inventory.py`.** It is vestigial (163 lines, every inventory empty).
-  A deletion ticket.
+  Deleted in SA259: the module, its `contracts` re-exports, and its tests are removed.
 - **`check_quality.sh:170–172`.** It falls back silently to a hardcoded path list when
-  discovery finds nothing: a fail-open inside a gate. A ticket for the tech audit.
+  discovery finds nothing: a fail-open inside a gate. Fixed in SA259: discovery is the only
+  source, and an empty result fails the gate.
 
 **Carried from the prior pass, still killed (re-checked where noted):**
 - **Core owning the personal-data vocabulary (SA246).** These are generic records consumed by
