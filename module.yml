@@ -39,6 +39,13 @@ retired_options:
     Legacy config key 'listings_per_page' is no longer supported. Use
     'per_page' instead.
 
+# Retired Django setting names are refused at startup with the message
+# declared here; the generic settings check reads this section.
+retired_settings:
+  LISTINGS_PER_PAGE: >-
+    Legacy setting 'LISTINGS_PER_PAGE' is no longer supported. Use
+    'QUICKSCALE_LISTINGS_PER_PAGE' instead.
+
 # ---------------------------------------------------------------------------
 # Manifest derivation rules
 # ---------------------------------------------------------------------------
