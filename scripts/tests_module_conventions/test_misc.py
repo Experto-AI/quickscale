@@ -56,7 +56,7 @@ def test_api_exception_hierarchy_control() -> None:
         ),
     )
     assert any(
-        "derives from APIException" in violation
+        "deriving from APIException" in violation
         for violation in _violations(checker.rule_10_checks_errors, broken)
     )
 
@@ -123,6 +123,50 @@ def test_missing_exceptions_file_control() -> None:
     assert any(
         "ships no exceptions.py" in violation
         for violation in _violations(checker.rule_10_checks_errors, api_exception_base)
+    )
+
+
+def test_api_exception_prohibition_control() -> None:
+    """No module class may derive from DRF's ``APIException``, anywhere."""
+    module = _golden_module()
+    assert _violations(checker.rule_10_checks_errors, module) == []
+    suffixless_in_exceptions = _with_files(
+        module,
+        exceptions=(
+            "from rest_framework.exceptions import APIException\n\n\n"
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class PaymentRequired(DemoError, APIException):\n"
+            "    status_code = 402\n"
+            "    default_code = 'payment_required'\n"
+        ),
+    )
+    assert any(
+        "deriving from APIException" in violation
+        for violation in _violations(checker.rule_10_checks_errors, suffixless_in_exceptions)
+    )
+    in_other_file = _with_files(
+        module,
+        services=(
+            "from rest_framework.exceptions import APIException\n\n\n"
+            "class PaymentRequired(APIException):\n"
+            "    status_code = 402\n"
+            "    default_code = 'payment_required'\n"
+        ),
+    )
+    assert any(
+        "deriving from APIException" in violation
+        for violation in _violations(checker.rule_10_checks_errors, in_other_file)
+    )
+    aliased_import = _with_files(
+        module,
+        services=(
+            "from rest_framework.exceptions import APIException as DrfError\n\n\n"
+            "class PaymentRequired(DrfError):\n    pass\n"
+        ),
+    )
+    assert any(
+        "deriving from APIException" in violation
+        for violation in _violations(checker.rule_10_checks_errors, aliased_import)
     )
 
 

@@ -432,6 +432,28 @@ def _declares_module_error(node: ast.ClassDef) -> bool:
     )
 
 
+def _api_exception_names(tree: ast.Module) -> set[str]:
+    """
+    Return the local names a module resolves to DRF's ``APIException``.
+
+    ``APIException`` itself, the attribute form ``exceptions.APIException``
+    (whose attribute name ``_class_names`` already reports), and every import
+    alias are covered, so the prohibition is checked on the class's base
+    regardless of how the module spells it.
+    """
+    names = {"APIException"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").endswith("exceptions"):
+            for alias in node.names:
+                if alias.name == "APIException":
+                    names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.endswith(".APIException"):
+                    names.add(alias.asname or alias.name.rsplit(".", 1)[-1])
+    return names
+
+
 def rule_10_checks_errors(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
@@ -474,6 +496,22 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
                             violations.append(
                                 f"rule 10: {module.name}: ready() catches a registration failure"
                             )
+        # Rule 10's APIException prohibition is closed-world over every
+        # module-defined class in every package file: the hierarchy derives
+        # from Exception alone, whatever a class is named and wherever it sits.
+        for rel, text in sorted(module.files.items()):
+            if not rel.endswith(".py"):
+                continue
+            file_tree = _parse(text)
+            forbidden = _api_exception_names(file_tree)
+            for node in file_tree.body:
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                if any(parent in forbidden for parent in _class_names(node)):
+                    violations.append(
+                        f"rule 10: {module.name}: {rel} defines {node.name} deriving "
+                        "from APIException; the module hierarchy derives from Exception alone"
+                    )
         expected_base = _expected_error_base(module.name)
         exceptions = module.files.get("exceptions.py")
         if exceptions is None:
@@ -500,12 +538,6 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
             )
         for node in error_classes:
             parents = _class_names(node)
-            if any(parent.endswith("APIException") for parent in parents):
-                violations.append(
-                    f"rule 10: {module.name}: {node.name} derives from APIException; "
-                    "the module hierarchy derives from Exception alone"
-                )
-                continue
             if node.name == expected_base:
                 if "Exception" not in parents:
                     violations.append(
