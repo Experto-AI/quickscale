@@ -578,6 +578,37 @@ def test_shared_stem_control() -> None:
     assert any("database function" in violation for violation in violations)
 
 
+def test_session_key_stem_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        views="DEMO_SESSION_KEY = 'quickscale_modules_demo.demo_state'\n",
+    )
+    assert any(
+        "session key" in violation
+        for violation in _violations(checker.rule_33_shared_stems, broken)
+    )
+    prefixed = _with_files(module, views="DEMO_SESSION_KEY = 'quickscale_demo:demo_state'\n")
+    assert _violations(checker.rule_33_shared_stems, prefixed) == []
+    literal = _with_files(
+        module,
+        views="def index(request):\n    request.session['demokey'] = 'x'\n",
+    )
+    assert any(
+        "session key" in violation
+        for violation in _violations(checker.rule_33_shared_stems, literal)
+    )
+    literal_prefixed = _with_files(
+        module,
+        views=(
+            "def index(request):\n"
+            "    request.session['quickscale_demo:state'] = 'x'\n"
+            "    return request.session.get('quickscale_demo:state')\n"
+        ),
+    )
+    assert _violations(checker.rule_33_shared_stems, literal_prefixed) == []
+
+
 def test_ticket_filename_control() -> None:
     module = _golden_module()
     broken = replace(
@@ -910,6 +941,82 @@ def test_module_list_controls() -> None:
         },
     )
     assert checker.rule_37_module_lists(presentation) == []
+
+
+def test_module_knowledge_branch_and_constant_controls() -> None:
+    corpus = _corpus(_golden_module("alpha"), _golden_module("beta"))
+    branch = replace(
+        corpus,
+        cli_files={
+            "commands/select.py": "def pick(module_name):\n    return module_name == 'alpha'\n"
+        },
+    )
+    assert any(
+        "branches on module name 'alpha'" in violation
+        for violation in checker.rule_37_module_lists(branch)
+    )
+    attribute = replace(
+        corpus,
+        cli_files={"commands/select.py": "def pick(entry):\n    return entry.name == 'beta'\n"},
+    )
+    assert any(
+        "branches on module name 'beta'" in violation
+        for violation in checker.rule_37_module_lists(attribute)
+    )
+    membership = replace(
+        corpus,
+        cli_files={"commands/select.py": "def pick(modules):\n    return 'alpha' in modules\n"},
+    )
+    assert checker.rule_37_module_lists(membership) == []
+    subscript = replace(
+        corpus,
+        cli_files={"commands/select.py": "def pick(entry):\n    return entry['name'] == 'alpha'\n"},
+    )
+    assert any(
+        "branches on module name 'alpha'" in violation
+        for violation in checker.rule_37_module_lists(subscript)
+    )
+    call = replace(
+        corpus,
+        cli_files={
+            "commands/select.py": "def pick(entry):\n    return entry.get('name') == 'beta'\n"
+        },
+    )
+    assert any(
+        "branches on module name 'beta'" in violation
+        for violation in checker.rule_37_module_lists(call)
+    )
+    constant = replace(corpus, cli_files={"commands/const.py": "ALPHA_STATE = 'x'\n"})
+    assert any(
+        "module-prefixed constant ALPHA_STATE" in violation
+        for violation in checker.rule_37_module_lists(constant)
+    )
+    other_file_constant = replace(
+        corpus, core_files={"contracts/registry.py": "ALPHA_STATE = 'x'\n"}
+    )
+    assert any(
+        "module-prefixed constant ALPHA_STATE" in violation
+        for violation in checker.rule_37_module_lists(other_file_constant)
+    )
+    script_branch = replace(
+        corpus,
+        script_files={"other.py": "def pick(module_name):\n    return module_name == 'alpha'\n"},
+    )
+    assert checker.rule_37_module_lists(script_branch) == []
+    storage = replace(
+        _corpus(_golden_module("storage")),
+        cli_files={
+            "utils/_dependency_io.py": (
+                "def skip(module_name):\n    return module_name != 'storage'\n"
+            )
+        },
+    )
+    assert checker.rule_37_module_lists(storage) == []
+    social = replace(
+        _corpus(_golden_module("social")),
+        core_files={"manifest/social_manifest.py": "SOCIAL_STATUS_ENABLED = 'enabled'\n"},
+    )
+    assert checker.rule_37_module_lists(social) == []
 
 
 def test_module_list_template_control() -> None:

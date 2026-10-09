@@ -33,7 +33,6 @@ from quickscale_core.contracts.module_discovery import (
 )
 from quickscale_core.contracts.module_options import (
     ANALYTICS_PROVIDER_POSTHOG,
-    ANALYTICS_PROVIDERS,
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     BILLING_ENV_VAR_OPTION_NAMES,
@@ -74,7 +73,6 @@ __all__ = [
     "discover_shipped_module_paths",
     "validate_active_module_subset",
     # Analytics constants
-    "ANALYTICS_PROVIDERS",
     "ANALYTICS_PROVIDER_POSTHOG",
     # Backups constants
     "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",

@@ -121,7 +121,7 @@ RULES: tuple[Rule, ...] = (
     Rule(34, "references by name", rule_34_name_references),
     Rule(35, "secrets", rule_35_secrets),
     Rule(36, "type-check configuration", rule_36_typecheck_config),
-    Rule(37, "module lists outside the modules", rule_37_module_lists),
+    Rule(37, "module lists and per-module knowledge outside the modules", rule_37_module_lists),
     Rule(38, "README content", rule_38_readme_content),
     Rule(39, "module dependencies", rule_39_module_dependencies),
     Rule(42, "settings snapshots", rule_42_settings_snapshots),

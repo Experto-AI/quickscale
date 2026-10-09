@@ -31,8 +31,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 |---|---|---|---|---|
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA259 | Generate gate wiring from the registry instead of holding copies by parity | 2 | — | Optional |
-| SA265 | Put cross-module vocabulary, capabilities, and private names in their owners | 3 | — | Optional |
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA259, SA265 | Optional |
+| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA259 | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA251 | Make Stripe checkout and payment outcomes complete and recoverable | 2 | — | Required |
@@ -51,13 +50,13 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
 Track 2: SA259 ──► SA251 ──► SA256 ──► SA253 ──► SA255 ──► SA260 ──► SA263
-Track 3: SA265 ──► SA258 ──► SA264 ──► SA262 ──► SA261
+Track 3: SA258 ──► SA264 ──► SA262 ──► SA261
      release path:  SA251 → publish 0.89.0
-     critical path: SA191 → SA153, joined by SA259 (T2) and SA265 (T3) → SA204 → SA153
+     critical path: SA191 → SA153, joined by SA259 (T2) → SA204 → SA153
 ```
 
 Arrows within a track are queue order; the table holds the actual dependency edges. Cross-track
-edges: SA204 waits on SA259 (Track 2) and SA265 (Track 3); SA191's cutover slice (e) waits on
+edges: SA204 waits on SA259 (Track 2); SA191's cutover slice (e) waits on
 SA258 (Track 3) as an ordering rule, not a table edge, so slices (a)–(d) are not blocked.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -67,7 +66,7 @@ when its last slice lands; slices are not scheduled.
 
 **Order.** SA259 runs first on Track 2 because SA204 waits on it; SA251 (gates the 0.89.0
 publish) runs as soon as Stripe test keys are available. Every change to a shipped module `0001_initial`
-(SA265's billing column on the tenant root) lands before SA204 freezes migration history, and SA204
+lands before SA204 freezes migration history, and SA204
 lands before SA153 slice (a), whose schema work is `0002+` from the start (arch audit §7).
 SA259 lands before the new gates it cheapens (SA204's hash gate, SA253's rendered-artifact gate).
 SA258 lands before SA191's cutover so `bap-web-new` starts on thin includes and pays one adoption
@@ -82,7 +81,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA259 | yes | yes | yes | **yes** | yes |
-| 3 | SA265 | yes | yes | yes | **yes** | no |
+| 3 | SA258 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -521,50 +520,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** module `exceptions.py` and `checks.py`, core's exception handler, manifests,
   decisions, the harness, and the coherence audit.
 
-- [ ] **SA265 — Put cross-module vocabulary, capabilities, and private names in their owners.**
-
-  **Context:** lower layers hold higher layers' words: orgs' removal-obligation names,
-  notifications' email-template keys, and `Organization.stripe_customer_id`, a billing column on
-  the tenant root (coherence `upward-name-references`, regressed). Capabilities have two
-  collectors and no list of names (`capability-collection`); private names are imported across
-  modules (`module-dependency-direction`); required modules are guarded as optional, so forms
-  reports `queued` when notifications is off (`optional-sender-guard`, tech
-  `forms-notification-status-misreported`); session keys follow no namespace
-  (`session-and-host-names`); core and the CLI keep per-module constants and branches
-  (`core-cli-module-knowledge`, the convention side of arch watchlist
-  `core-holds-module-vocabulary`).
-
-  **Acceptance:** coherence §6 proposals 3, 4, 14, 15, and 17 are merged and enforced. Senders own
-  and register their email templates and obligation names by capability; the Stripe customer ID
-  moves to a billing-owned table inside billing's and orgs' `0001_initial` before SA204; core's
-  `CAPABILITIES` lists every name and shape and `collect_capabilities` is the only collector; no
-  module imports another's `_`-prefixed name; required modules are imported directly and asked
-  `is_enabled()`, and forms reports `skipped` when no email is sent; session keys are
-  `quickscale_<module>:<name>`. `module-extension.md` lists every core edit a new module needs,
-  and the harness rejects any other per-module constant or `module_name == "<module>"` branch in
-  core or the CLI.
-
-  **Slices:**
-  - [x] (a) Schema: the billing customer column and orgs' removal names (before SA204). The
-    Stripe customer id moved from `Organization` to billing's `BillingCustomer` control-plane
-    table (both `0001_initial`s edited in place); obligation names are
-    `quickscale_<module>:<purpose>` defined by the declaring module, so orgs' `social-cache-state`
-    became `quickscale_orgs:cache-state`. Watch: the org-row declared-refusal path
-    (`ORGANIZATION_MODEL_LABEL`) now has no shipped user. Next: slice (b).
-  - [x] (b) Capabilities, email-template ownership, and sender guards. Core's `CAPABILITIES`
-    is the closed capability vocabulary and `collect_capabilities` the only collector (orgs' and
-    auth's `getattr` walks folded in, with the harness's rule 4 vocabulary clause); senders own
-    their keys (`quickscale_<module>.<purpose>`) and bodies under
-    `templates/quickscale_<module>/email/`, registered through the `notification_templates`
-    capability; a required module is imported directly and asked `is_enabled()` (rule 43 harness
-    clause), and forms reports `skipped` when no email is sent. Watch: blog's storage seam and
-    forms' analytics seam now key their fallback on `is_enabled()`, not `is_installed`.
-    Next: slice (c).
-  - [ ] (c) Private-name imports, session keys, and core/CLI per-module knowledge.
-
-  **Surfaces:** orgs, notifications, billing, forms, crm, blog, social models and services;
-  core's capability helper and `contracts/module_options.py`; `module-extension.md`; decisions;
-  the harness; and the coherence audit.
+- [x] **SA265 — Put cross-module vocabulary, capabilities, and private names in their owners.**
 
 ## Deferred constraints and references
 

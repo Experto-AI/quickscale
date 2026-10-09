@@ -1,7 +1,6 @@
 {% load quickscale_orgs_debug %}
 {% debug_as_active as is_debug_active %}
 {% if is_debug_active %}
-{% with debug_org_id=request.session.quickscale_modules_orgs.debug_as_org_id %}
 <div style="background: #dc2626; color: #fff; padding: 0.75rem 1rem; text-align: center; font-size: 0.875rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     <strong>VIEW-AS DEBUG MODE</strong>
     &mdash; You are browsing as <strong>{{ request.org.name|default:"an organization" }}</strong>.
@@ -15,5 +14,4 @@
     </form>
     {% endif %}
 </div>
-{% endwith %}
 {% endif %}

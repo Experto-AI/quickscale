@@ -18,12 +18,8 @@ from typing import Any, Final
 # ---------------------------------------------------------------------------
 
 ANALYTICS_PROVIDER_POSTHOG: Final[str] = "posthog"
-ANALYTICS_PROVIDERS: Final[tuple[str, ...]] = (ANALYTICS_PROVIDER_POSTHOG,)
 
 ANALYTICS_POSTHOG_DEFAULT_HOST: Final[str] = "https://us.i.posthog.com"
-ANALYTICS_POSTHOG_EU_HOST: Final[str] = "https://eu.i.posthog.com"
-
-ANALYTICS_EVENT_PAGEVIEW: Final[str] = "$pageview"
 
 
 # ---------------------------------------------------------------------------
@@ -389,11 +385,8 @@ def _raise_for_retired_module_options(
 
 __all__ = [
     # Analytics constants
-    "ANALYTICS_EVENT_PAGEVIEW",
     "ANALYTICS_POSTHOG_DEFAULT_HOST",
-    "ANALYTICS_POSTHOG_EU_HOST",
     "ANALYTICS_PROVIDER_POSTHOG",
-    "ANALYTICS_PROVIDERS",
     # Backups constants
     "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",

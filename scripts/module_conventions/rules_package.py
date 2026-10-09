@@ -11,6 +11,7 @@ from typing import Any, cast
 from scripts.module_conventions.core import (
     CAPABILITY_NAMES,
     MODULE_ABSTRACT_BASES,
+    MODULE_IMPORT_PREFIX,
     ORG_PUBLIC_SURFACE,
     Corpus,
     Module,
@@ -24,6 +25,7 @@ from scripts.module_conventions.core import (
     _is_settings_receiver,
     _keyword,
     _model_classes,
+    _module_target,
     _parse,
     _service_module_bindings,
     _setting_name_module,
@@ -165,6 +167,88 @@ def _module_bindings(tree: ast.Module) -> set[str]:
     return bound
 
 
+def _module_member_bindings(
+    tree: ast.Module, module_name: str
+) -> dict[str, tuple[str, tuple[str, ...]]]:
+    """
+    Map local names bound to another module's package, file, or symbol.
+
+    ``import quickscale_modules_orgs.current_org as org_context`` binds the
+    file (path ``("current_org",)``), as does ``from
+    quickscale_modules_orgs import admin``; a dotted import without an alias
+    binds the package root and is left to the raw-path scan; ``from
+    quickscale_modules_orgs.models import Organization`` binds a symbol
+    (path length two) whose own attributes are object members, not module
+    names, so it carries no private-member surface.
+    """
+    bindings: dict[str, tuple[str, tuple[str, ...]]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if "." in alias.name and alias.asname is None:
+                    continue
+                target = _module_target(tuple(alias.name.split(".")))
+                if target is None or target[0] == module_name:
+                    continue
+                bindings[alias.asname or alias.name.split(".")[0]] = target
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            target = _module_target(tuple(node.module.split(".")))
+            if target is None or target[0] == module_name:
+                continue
+            if target[1]:
+                continue
+            for alias in node.names:
+                bindings[alias.asname or alias.name] = (target[0], (alias.name,))
+    return bindings
+
+
+def _private_member_accesses(tree: ast.Module, module_name: str) -> list[tuple[int, str, str]]:
+    """
+    Return reads of another module's private member through its package path.
+
+    A module reaches a foundation's member through the published file
+    (``org_context._restore_current_org_id``) or through the raw package path
+    (``quickscale_modules_orgs.admin._org_db_context``); both bypass rule 4's
+    import-name clause, so they are checked here.  A private name deeper in a
+    symbol's own attributes (``Organization._meta``) is not a module private
+    name and does not count.
+    """
+    bindings = _module_member_bindings(tree, module_name)
+    found: list[tuple[int, str, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute):
+            continue
+        chain = _attribute_chain(node)
+        if chain is None:
+            continue
+        binding = bindings.get(chain[0])
+        if binding is not None and binding[1]:
+            other, path = binding
+            surface = _public_surface(other)
+            if path[0] in surface and len(chain) > 1 and chain[1].startswith("_"):
+                found.append((node.lineno, ".".join(chain), other))
+            continue
+        other: str | None = None
+        after: tuple[str, ...] = ()
+        if chain[0].startswith(MODULE_IMPORT_PREFIX) and len(chain[0]) > len(MODULE_IMPORT_PREFIX):
+            other = chain[0][len(MODULE_IMPORT_PREFIX) :]
+            after = chain[1:]
+        elif chain[0] == "quickscale_modules" and len(chain) > 1:
+            other = chain[1]
+            after = chain[2:]
+        if other is None or other == module_name:
+            continue
+        surface = _public_surface(other)
+        for position, component in enumerate(after):
+            if component not in surface:
+                continue
+            following = after[position + 1 :]
+            if following and following[0].startswith("_"):
+                found.append((node.lineno, ".".join(chain), other))
+            break
+    return found
+
+
 def rule_4_public_surface(corpus: Corpus) -> list[str]:
     """Enforce the public-surface and capability-vocabulary rules (rule 4)."""
     violations: list[str] = []
@@ -185,6 +269,18 @@ def rule_4_public_surface(corpus: Corpus) -> list[str]:
                             f"rule 4: {module.name}: {rel}:{lineno} imports {other}:{component} "
                             "outside the module's public surface"
                         )
+                if path and path[0] in surface:
+                    for name in names:
+                        if name.startswith("_"):
+                            violations.append(
+                                f"rule 4: {module.name}: {rel}:{lineno} imports private "
+                                f"name {name!r} from {other}"
+                            )
+            for lineno, expression, other in _private_member_accesses(tree, module.name):
+                violations.append(
+                    f"rule 4: {module.name}: {rel}:{lineno} reads private member "
+                    f"{expression} of {other}"
+                )
             for attribute, lineno in _settings_attribute_reads(tree):
                 owner = _setting_name_module(attribute)
                 if owner is not None and owner != module.name:
