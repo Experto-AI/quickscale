@@ -37,12 +37,28 @@ from quickscale_modules_orgs.removal import (
     declared_boundary_guards,
     declared_provider_backed_fields,
     declared_refusal_fields,
-    declared_removal_obligations,
     external_provider_obligation_mismatches,
     organization_removal_obligations,
     removal_boundary_implementations,
 )
 from quickscale_modules_orgs.tenancy import get_tenant_models
+
+
+def _declared(
+    config: SimpleNamespace,
+) -> tuple[OrganizationRemovalObligation, ...]:
+    """Return the shared aggregate for a one-app registry holding *config*.
+
+    The per-app declaration reader was folded into ``collect_capabilities``
+    (rule 4), so these tests exercise the one collection path with the app
+    under test as the only installed app.
+    """
+    patch = pytest.MonkeyPatch()
+    patch.setattr(removal.apps, "get_app_configs", lambda: [config])
+    try:
+        return organization_removal_obligations()
+    finally:
+        patch.undo()
 
 
 def test_removal_obligation_names_are_unique_and_skips_are_explained() -> None:
@@ -238,24 +254,16 @@ def test_each_installed_app_declares_its_own_obligations() -> None:
     """Each personal-data holder declares its obligations from its AppConfig."""
     from django.apps import apps
 
-    billing_obligations = declared_removal_obligations(
-        apps.get_app_config("quickscale_billing")
-    )
+    billing_obligations = _declared(apps.get_app_config("quickscale_billing"))
     assert [obligation.name for obligation in billing_obligations] == [
         BILLING_PROVIDER_STATE,
         BILLING_PERSONAL_DATA,
     ]
-    auth_obligations = declared_removal_obligations(
-        apps.get_app_config("quickscale_auth")
-    )
+    auth_obligations = _declared(apps.get_app_config("quickscale_auth"))
     assert [obligation.name for obligation in auth_obligations] == [AUTH_PERSONAL_DATA]
-    blog_obligations = declared_removal_obligations(
-        apps.get_app_config("quickscale_blog")
-    )
+    blog_obligations = _declared(apps.get_app_config("quickscale_blog"))
     assert [obligation.name for obligation in blog_obligations] == [BLOG_PERSONAL_DATA]
-    orgs_obligations = declared_removal_obligations(
-        apps.get_app_config("quickscale_orgs")
-    )
+    orgs_obligations = _declared(apps.get_app_config("quickscale_orgs"))
     assert [obligation.name for obligation in orgs_obligations] == [
         OWNED_TENANT_ROWS,
         OWNED_PERSONAL_DATA,
@@ -303,7 +311,7 @@ def test_declared_obligations_reject_a_non_iterable_declaration() -> None:
     config = SimpleNamespace(label="acme_app", removal_obligations=42)
 
     with pytest.raises(ValueError, match="non-iterable"):
-        declared_removal_obligations(config)
+        _declared(config)
 
 
 def test_declared_obligations_reject_foreign_values() -> None:
@@ -313,7 +321,7 @@ def test_declared_obligations_reject_foreign_values() -> None:
     )
 
     with pytest.raises(ValueError, match="expected an OrganizationRemovalObligation"):
-        declared_removal_obligations(config)
+        _declared(config)
 
 
 def test_declared_obligations_reject_duplicate_names() -> None:
@@ -329,7 +337,7 @@ def test_declared_obligations_reject_duplicate_names() -> None:
     )
 
     with pytest.raises(ValueError, match="more than once"):
-        declared_removal_obligations(config)
+        _declared(config)
 
 
 def test_declared_obligations_reject_an_unexplained_skip() -> None:
@@ -342,7 +350,7 @@ def test_declared_obligations_reject_an_unexplained_skip() -> None:
     config = SimpleNamespace(label="acme_app", removal_obligations=(obligation,))
 
     with pytest.raises(ValueError, match="without a reason"):
-        declared_removal_obligations(config)
+        _declared(config)
 
 
 def test_declared_obligations_reject_an_unknown_action() -> None:
@@ -356,7 +364,7 @@ def test_declared_obligations_reject_an_unknown_action() -> None:
     config = SimpleNamespace(label="acme_app", removal_obligations=(obligation,))
 
     with pytest.raises(ValueError, match="outside the RemovalAction vocabulary"):
-        declared_removal_obligations(config)
+        _declared(config)
 
 
 def test_declared_obligations_require_an_executor_hook() -> None:
@@ -370,7 +378,7 @@ def test_declared_obligations_require_an_executor_hook() -> None:
     config = SimpleNamespace(label="acme_app", removal_obligations=(obligation,))
 
     with pytest.raises(ValueError, match="invalidate_organization_cache"):
-        declared_removal_obligations(config)
+        _declared(config)
 
 
 def test_declared_obligations_accept_an_app_owned_stage_with_its_hook() -> None:
@@ -387,7 +395,7 @@ def test_declared_obligations_accept_an_app_owned_stage_with_its_hook() -> None:
         invalidate_organization_cache=lambda organization_id: None,
     )
 
-    assert declared_removal_obligations(config) == (obligation,)
+    assert _declared(config) == (obligation,)
 
 
 def test_declared_obligations_reject_provider_fields_without_refusal() -> None:
@@ -404,7 +412,7 @@ def test_declared_obligations_reject_provider_fields_without_refusal() -> None:
     config = SimpleNamespace(label="acme_app", removal_obligations=(obligation,))
 
     with pytest.raises(ValueError, match="without a refuse-or-reconcile purge action"):
-        declared_removal_obligations(config)
+        _declared(config)
 
 
 def _boundary_guarded_obligation(
@@ -436,7 +444,7 @@ def test_declared_obligations_reject_boundary_guarded_fields_without_hooks() -> 
     )
 
     with pytest.raises(ValueError, match="without boundary_guarded_hooks"):
-        declared_removal_obligations(config)
+        _declared(config)
 
 
 def test_declared_obligations_reject_a_missing_boundary_guard_hook() -> None:
@@ -455,7 +463,7 @@ def test_declared_obligations_reject_a_missing_boundary_guard_hook() -> None:
     )
 
     with pytest.raises(ValueError, match="'reconcile' hook"):
-        declared_removal_obligations(config)
+        _declared(config)
 
 
 def test_declared_obligations_accept_boundary_guarded_fields_with_hooks() -> None:
@@ -475,7 +483,7 @@ def test_declared_obligations_accept_boundary_guarded_fields_with_hooks() -> Non
         provider_mutation_lock=lambda organization_id: nullcontext(),
     )
 
-    assert declared_removal_obligations(config) == (obligation,)
+    assert _declared(config) == (obligation,)
 
 
 def test_installed_billing_declares_its_boundary_guard_hooks() -> None:

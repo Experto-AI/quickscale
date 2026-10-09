@@ -612,7 +612,7 @@ def test_invitation_email_escapes_sender_chosen_text() -> None:
     from quickscale_modules_notifications.services import render_notification
 
     rendered = render_notification(
-        template_key="notifications.org_invitation",
+        template_key="quickscale_orgs.invitation",
         context={
             "organization_name": "<script>alert(1)</script>",
             "invitee_email": "invitee@example.com",

@@ -150,6 +150,37 @@ class QuickscaleOrgsConfig(AppConfig):
 
         return (post_signup_redirect,)
 
+    def notification_templates(self) -> dict[str, Any]:
+        """Declare orgs' own invitation template (rules 4, 8, 20).
+
+        The key is ``quickscale_orgs.invitation`` and the bodies live under
+        the module's own ``templates/quickscale_orgs/email/``; notifications
+        collects the declaration through the shared
+        ``notification_templates`` capability, so orgs' key and bodies stay
+        orgs' own.
+        """
+        from quickscale_modules_notifications.services import (
+            NotificationTemplateDefinition,
+        )
+
+        return {
+            "quickscale_orgs.invitation": NotificationTemplateDefinition(
+                subject_template="quickscale_orgs/email/invitation_subject.txt",
+                text_template="quickscale_orgs/email/invitation_body.txt",
+                html_template="quickscale_orgs/email/invitation_body.html",
+                required_context=frozenset(
+                    {
+                        "organization_name",
+                        "invitee_email",
+                        "inviter_name",
+                        "role_display",
+                        "accept_url",
+                        "expires_at",
+                    }
+                ),
+            ),
+        }
+
     def invalidate_organization_cache(self, organization_id: object) -> None:
         """Invalidate every installed app's declared organization-scoped keys.
 

@@ -13,12 +13,13 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable
 from heapq import heappop, heappush
-from typing import Any
+from typing import Any, cast
 
 from django.apps import apps
 from django.core.management.base import CommandError
 from django.db import models
 
+from quickscale_core.runtime import collect_capabilities
 from quickscale_modules_orgs.removal import REMOVAL_LABEL_PREFIX_ATTRIBUTE
 
 # Additional child-before-parent constraints belong here only when installed FK
@@ -29,10 +30,11 @@ _PURGE_ORDER_OVERRIDES: tuple[tuple[str, str], ...] = ()
 def _removal_label_prefixes() -> dict[str, str]:
     """Return each installed app's declared removal display prefix."""
     prefixes: dict[str, str] = {}
-    for app_config in apps.get_app_configs():
-        prefix = getattr(app_config, REMOVAL_LABEL_PREFIX_ATTRIBUTE, "")
-        if prefix:
-            prefixes[app_config.label] = str(prefix)
+
+    def _record(app_config: Any, entries: tuple[object, ...]) -> None:
+        prefixes[app_config.label] = cast(str, entries[0])
+
+    collect_capabilities(REMOVAL_LABEL_PREFIX_ATTRIBUTE, on_declared=_record)
     return prefixes
 
 

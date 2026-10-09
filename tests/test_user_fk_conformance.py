@@ -491,7 +491,7 @@ class TestAccountDeleteViewSurvivorRegression:
             password="HeliosOnly1!",
         )
         message = NotificationMessage.objects.create(
-            template_key="notifications.org_invitation",
+            template_key="quickscale_orgs.invitation",
             subject="You're invited to join Acme Labs",
             from_email="QuickScale <noreply@example.com>",
             reply_to_email="",
