@@ -12,11 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from quickscale_core.contracts.module_options import (
-    ANALYTICS_EVENT_PAGEVIEW,
     ANALYTICS_POSTHOG_DEFAULT_HOST,
-    ANALYTICS_POSTHOG_EU_HOST,
     ANALYTICS_PROVIDER_POSTHOG,
-    ANALYTICS_PROVIDERS,
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
 
@@ -129,14 +126,9 @@ class TestAnalyticsPublicConstants:
 
     def test_provider_constants_are_stable(self) -> None:
         assert ANALYTICS_PROVIDER_POSTHOG == "posthog"
-        assert ANALYTICS_PROVIDERS == ("posthog",)
 
     def test_host_constants_are_stable(self) -> None:
         assert ANALYTICS_POSTHOG_DEFAULT_HOST == "https://us.i.posthog.com"
-        assert ANALYTICS_POSTHOG_EU_HOST == "https://eu.i.posthog.com"
-
-    def test_event_name_constants_are_stable(self) -> None:
-        assert ANALYTICS_EVENT_PAGEVIEW == "$pageview"
 
     def test_core_contract_names_no_feature_events(self) -> None:
         """Feature event names belong to their sending modules (rule 22)."""

@@ -80,15 +80,19 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
     Returns the list of org-local Stage rows (existing or freshly seeded).
     """
     from quickscale_modules_orgs.current_org import (
-        get_current_org_id,
+        org_scope_restored,
         set_current_org_id,
-        _restore_current_org_id,
     )
 
-    # save and set tenant context for the duration of this call.
-    prior_org_id = get_current_org_id()
-    set_current_org_id(organization.pk)
-    try:
+    with org_scope_restored():
+        # Save and set tenant context for the duration of this call.  The
+        # priming wrapper issues SET LOCAL app.current_org_id from the
+        # ContextVar on every tenant statement, so setting it here is
+        # sufficient for both reads and writes; org_scope_restored restores
+        # the ContextVar and, inside an outer transaction, the DB-side GUC
+        # and priming memo on exit (fail-closed, no tenant-scope leak).
+        set_current_org_id(organization.pk)
+
         # --- Optimistic precheck (no lock) --------------------------------
         if _has_org_stages(organization):
             return list(Stage.all_objects.filter(organization=organization))
@@ -112,36 +116,6 @@ def ensure_org_default_stages(organization: Organization) -> list[Stage]:
             _seed_default_stages(organization)
 
         return list(Stage.all_objects.filter(organization=organization))
-    finally:
-        set_current_org_id(prior_org_id)
-        # Restore the DB-side GUC and clear the
-        # per-transaction priming memo so that subsequent no-context
-        # queries inside the same outer transaction do NOT inherit the
-        # seeded tenant scope.
-        #
-        # The execute wrapper issues SET LOCAL app.current_org_id
-        # (transaction-scoped) when the ContextVar is set.  On function
-        # exit the ContextVar is restored above, but without an explicit
-        # SET LOCAL the DB GUC still carries the seeded org UUID for the
-        # lifetime of the enclosing transaction. The wrapper skips
-        # re-priming when ContextVar is None, so the stale GUC leaks the
-        # seeded org to later no-context queries — breaking fail-closed
-        # tenant isolation (RLS sees the leaked org instead of NULL).
-        #
-        # Guard by connection.in_atomic_block because SET LOCAL requires
-        # an active transaction.  When there is no outer transaction the
-        # function's own atomic block has already ended, so the GUC was
-        # automatically cleaned up by the transaction end — no leak.
-        from django.db import connection
-
-        if connection.vendor == "postgresql" and connection.in_atomic_block:
-            _restore_current_org_id(prior_org_id)
-            # Clear per-transaction priming memo so the next tenant
-            # query in this transaction re-primes unconditionally.
-            if hasattr(connection, "_af9_primed_for_txn"):
-                del connection._af9_primed_for_txn
-            if hasattr(connection, "_af9_primed_atomic"):
-                del connection._af9_primed_atomic
 
 
 def _seed_default_stages(organization: Organization) -> Sequence[Stage]:

@@ -95,6 +95,66 @@ def test_cross_module_import_outside_public_surface_control() -> None:
     assert _violations(checker.rule_4_public_surface, module) == []
 
 
+def test_cross_module_private_name_import_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        views="from quickscale_modules_orgs.current_org import _restore_current_org_id\n",
+    )
+    assert any(
+        "imports private name '_restore_current_org_id' from orgs" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+    assert _violations(checker.rule_4_public_surface, module) == []
+
+
+def test_qualified_private_foundation_member_control() -> None:
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        views=(
+            "import quickscale_modules_orgs.current_org as org_context\n\n\n"
+            "def restore(prior):\n"
+            "    org_context._restore_current_org_id(prior)\n"
+        ),
+    )
+    assert any(
+        "reads private member org_context._restore_current_org_id of orgs" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+    raw_path = _with_files(
+        module,
+        views=(
+            "import quickscale_modules_orgs\n\n\n"
+            "def restore(prior):\n"
+            "    quickscale_modules_orgs.admin._org_db_context(prior)\n"
+        ),
+    )
+    assert any(
+        "reads private member" in violation
+        for violation in _violations(checker.rule_4_public_surface, raw_path)
+    )
+    public_member = _with_files(
+        module,
+        views=(
+            "import quickscale_modules_orgs.current_org as org_context\n\n\n"
+            "def restore(organization):\n"
+            "    with org_context.org_scope(organization):\n"
+            "        pass\n"
+        ),
+    )
+    assert _violations(checker.rule_4_public_surface, public_member) == []
+    same_module = _with_files(
+        _golden_module("orgs"),
+        views=(
+            "import quickscale_modules_orgs\n\n\n"
+            "def restore(prior):\n"
+            "    quickscale_modules_orgs.current_org._restore_current_org_id(prior)\n"
+        ),
+    )
+    assert _violations(checker.rule_4_public_surface, same_module) == []
+
+
 def test_orgs_extension_base_import_is_allowed() -> None:
     module = _golden_module()
     # The golden fixture's models.py builds on orgs' published extension base.

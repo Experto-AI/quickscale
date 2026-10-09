@@ -536,7 +536,9 @@ settings read but never declared, and every default written twice. Renames are a
 | Template folder | `templates/quickscale_<module>/` |
 | Management command | `quickscale_<module>_<action>` |
 | Cache key | `quickscale_<module>:<name>` |
+| Session key | `quickscale_<module>:<name>` |
 | Email-template key | `quickscale_<module>.<purpose>` |
+| Removal-obligation name | `quickscale_<module>:<purpose>` |
 | Constraint / index name | `quickscale_<module>_<model>_<purpose>` / `qs_<module>_<model>_<field>_idx` (rule 25) |
 | Reverse accessor on another module's model | `quickscale_<module>_<name>` (rule 14) |
 | Analytics event | `quickscale_<module>_<event>` (rule 22) |
@@ -582,7 +584,9 @@ settings read but never declared, and every default written twice. Renames are a
   `managers` (`TenantManager`), `admin` (`TenantModelAdmin`, `OrgAwareAdminMixin`,
   `make_same_org_validated_form`), `current_org`, `tenancy`, `removal`,
   `sanitization`, `public_context`, `permissions`, and `signals`. The list is part of this decision
-  and changes only by editing it.
+  and changes only by editing it. A foundation's published surface is the public names of its
+  listed files: a `_`-prefixed name stays private even there, and re-exporting another module's
+  private name is not publication.
 
 Each interaction uses the mechanism that fits it:
 
@@ -594,7 +598,8 @@ Each interaction uses the mechanism that fits it:
 | A module needs every installed module that depends on it to act | a capability declared on the dependent module's `AppConfig` and collected by one core helper (generalizing the SA213 removal obligations) |
 
 - ❌ Importing anything of another module outside its public surface (migrations referencing
-  another module's models excepted).
+  another module's models excepted), including importing a `_`-prefixed name from another module
+  or re-exporting another module's private name.
 - ❌ Reading another module's settings.
 - ✅ Capability names are a closed set: core's `CAPABILITIES` lists every name with its
   declaration shape, and `collect_capabilities` accepts only a listed name and is the only
@@ -1021,9 +1026,10 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
 **33. Shared-namespace stems.**
 - ✅ Every name a module places in a namespace shared with the project or other modules carries the
   `quickscale_<module>` stem, and rule 2's table lists the namespace: labels, URL namespaces,
-  template folders, commands, cache keys, constraints, reverse accessors on another module's
-  models (rule 14), analytics events (rule 22), throttle scopes (rule 32), database functions, and
-  advisory-lock keys. Settings and QuickScale-defined environment variables take rule 1's
+  template folders, commands, cache keys, session keys, constraints, reverse accessors on
+  another module's models (rule 14), analytics events (rule 22), throttle scopes (rule 32),
+  removal-obligation names, database functions, and advisory-lock keys. Settings and
+  QuickScale-defined environment variables take rule 1's
   upper-case form, `QUICKSCALE_<MODULE>_`. Exceptions: names another program fixes (PostHog's
   `$pageview`, the `account/` and `admin/` template folders), index names, which Django limits to
   30 characters (`qs_<module>_…`, rule 25), and names core owns (its runtime-role variables
@@ -1044,7 +1050,9 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
   (§[Multi-tenant SaaS Architecture](#multitenant-saas-architecture)), is test-owned and absent
   from shipped source; blog
   reaches storage through its `services.py` and lists `storage` in `required_modules`.
-- ❌ A higher-layer module's app label, package name, or model name in a module's source.
+- ❌ A higher-layer module's app label, package name, or model name in a module's source, or a
+  string constant, template key, or template path naming a higher- or same-layer module's concept
+  the module does not own.
 
 **35. Secrets.**
 - ✅ A secret reaches module code as a Django setting that `apply` renders in `settings/modules.py`
@@ -1082,6 +1090,16 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
   substitution cannot re-point the inventory, and `AUTHORITATIVE_MODULE_COUNT` keeps an addition
   or removal fail-hard until the shipped contract — inventory, count, and manifests — is
   deliberately updated together.
+- ✅ Core and the CLI name a module only in the exceptions listed below. The conformance harness
+  records each remaining per-module site with its reason: core's exported option-name and
+  environment constants (`contracts/module_options.py`) that its env-sync and secret-projection
+  plumbing and the CLI's operator output read; `manifest/social_manifest.py`'s social runtime,
+  pending the arch watchlist `core-holds-module-vocabulary`; `utils/_dependency_io.py`'s storage
+  cloud-extra selection, which has no generic manifest home yet; and
+  `commands/_module_embed.py`'s auth migration gate, which runs before the module is importable.
+- ✅ `module-extension.md`'s authoring checklist states each core edit a new module needs.
+- ❌ A per-module constant, default, or equality branch on a module name in core or the CLI
+  outside the listed exceptions.
 - ❌ A literal list of module names outside a module. Allowed: rule 5's layer table, rule 40's
   test-owned mapping, the theme's module surfaces (rule 31), its server-side seam producer
   (`generator/seam._SEAM_MODULE_PATHS`) included, core's declared release inventory above, and the
@@ -1109,7 +1127,8 @@ presence, undeclared and cross-module settings reads, defaults in code, import t
 `required_modules` against imports, identity names, `db_table`, retired names, URL mounts and route
 names, template and static paths, non-DRF JSON and hand-built error bodies, checks outside
 `checks.py` or swallowed, required files and tests, README headings, choice lists, unlisted core
-ports, option fields and validation, per-module option code in core or the CLI, duplicated setting names or defaults in a manifest,
+ports, option fields and validation, per-module option code, constants, and module-name branches
+in core or the CLI, duplicated setting names or defaults in a manifest,
 tenant-model base,
 `Meta` inheritance, and admin, primary keys, `related_name`, `__str__` and ordering, `gettext`,
 `__init__.py` content, receivers outside `receivers.py`, command output, `CommandError`, and
@@ -1934,7 +1953,7 @@ non-runtime privileged path** — never for a debug or impersonation feature.
 
 **Operator debug mode (VIEW-AS) contract:**
 - ✅ VIEW-AS is superuser-only, session-keyed
-  (`quickscale_modules_orgs.debug_as_org_id`), and resolved by
+  (`quickscale_orgs:debug_as_org_id`), and resolved by
   `TenantMiddleware._resolve_debug_org()` ahead of Solo/SaaS resolution
 - ✅ Every activation is audit-logged, and a debug banner renders while active
 - ❌ No BYPASSRLS — the debug session runs under the same restricted runtime role

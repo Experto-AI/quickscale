@@ -633,6 +633,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `notification_templates` capability; and a module in `required_modules` is imported directly
     and asked `is_enabled()` instead of being probed with `apps.is_installed` or a `getattr`
     default, so forms reports a skipped notification as `skipped`.
+  - **Foundations publish names, not internals; core names no module by hand.** A foundation's
+    published surface is the public names in its listed files, modules import each other only
+    through it, organization session keys are `quickscale_orgs:<name>`, and the conformance harness
+    rejects a cross-module `_`-prefixed import, a session key without the `quickscale_<module>:`
+    stem, and any other per-module constant or module-name branch in core or the CLI. The authoring
+    checklist names every core edit a new module needs, and core no longer exports the dead
+    analytics providers, EU-host, and pageview-event constants.
   - **The empty contracts inventory is removed.** `quickscale_core.contracts` no longer exports
     `MANIFEST_INVENTORY` and the per-module imperative-logic inventory helpers; module option
     handling is unchanged.

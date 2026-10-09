@@ -456,8 +456,9 @@ checklist serves are authoritative elsewhere and this document does not restate 
   [decisions.md §Module Wiring Authority](./decisions.md#module-wiring-authority).
 
 **The short version:** a module is a standard Django app that additionally declares its
-own wiring in its own `module.yml` and executes it through its own `adapter.py`. You do
-not edit `quickscale_core` or `quickscale_cli` to add a module.
+own wiring in its own `module.yml` and executes it through its own `adapter.py`. Adding a
+module edits `quickscale_core` only in the places section 4 lists; every other core or CLI
+file derives what it needs from discovery.
 
 **1. Package Structure:**
 - [ ] `quickscale_modules/<name>/pyproject.toml` — Package config (see template below)
@@ -585,17 +586,38 @@ derivation:
 
 **4. Discovery and CLI Integration (quickscale_cli):**
 
-Adding a module requires **no edit to `quickscale_core` or `quickscale_cli`.** If you find
-yourself editing either to register a module, the module's own declaration is incomplete.
+Adding a module edits `quickscale_core` in exactly these places and no others (Module
+Conventions rule 37):
 
-- [ ] `AVAILABLE_MODULES` in `module_commands.py` is discovery-derived
-      (`get_discovered_module_names()`) — no manual list edit; just ensure the module is
-      discoverable (correct `module.yml` and package layout)
+- [ ] `quickscale_core/contracts/module_catalog.py` — add the module to `MODULE_CATALOG`, and
+      `quickscale_core/contracts/module_discovery.py` — bump `AUTHORITATIVE_MODULE_COUNT`. These
+      are the declared release inventory and its count: the consistency test keeps the catalogue
+      equal to discovery, and discovery fails hard on a count mismatch until this edit lands
+      deliberately
+- [ ] `quickscale_core/apply/steps/env_sync.py` — add the module's `EnvExampleModuleSpec` when
+      the module contributes a managed `.env.example` block: its title, prose, and `_ENV_VAR`
+      option names. The block catalog is presentation data pinned by the env-example
+      conformance suite
+- [ ] `make manifest-sync` — regenerate the bundled manifests under
+      `quickscale_core/src/quickscale_core/data/manifests/` from the new module's root
+      `module.yml`; `check-manifest-sync` verifies they match
+
+Every other per-module constant or module-name branch in core or the CLI is rejected by the
+conformance harness; the recorded exceptions are each listed with their reason in
+[decisions.md § Module Conventions](decisions.md#module-conventions) (rule 37). The CLI needs
+no edit for a new module: `AVAILABLE_MODULES` is discovery-derived and every wiring decision
+comes from the module's own `module.yml` and `adapter.py`.
+
 - [ ] Confirm the module resolves end to end: `refresh_managed_adapters()` registers it,
       and its adapter returns a `ModuleWiringSpec` whose `apps` matches the manifest
 - [ ] Interactive plan-time prompts, when the module needs them, live in
       `quickscale_cli/.../commands/module_config.py`. These collect **desired
       configuration only** — they must not decide what the module wires
+
+**Host contracts.** A module depends only on the host project's documented surface. One such
+dependency exists today: auth's account-removal view redirects to the host route named `home`
+(`reverse_lazy("home")`), so a project must define a URL pattern named `home`. A module that
+needs a new project route name records it here as a host contract.
 
 > **Superseded.** Earlier revisions of this checklist instructed authors to write
 > `configure_<name>_module()` / `apply_<name>_configuration()` pairs, add the module to a

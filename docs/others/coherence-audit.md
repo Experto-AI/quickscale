@@ -1711,3 +1711,42 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   `--trigger {manual,scheduled}` and refuses only the scheduled run while off; backups'
   `--scheduled` alias is retired for `--trigger scheduled`; harness rule 17 checks the flag
   vocabulary, with controls). Item 16.
+
+### 2026-10-09 — SA265 closure (a/b/c; conventions harness 43 rules, with controls)
+
+- 2026-10-09 — `upward-name-references`: **resolved** (SA265 a `d443aba0`, b `a6b58799`,
+  c — the four-vocabulary registry in orgs is deleted: each module defines its own
+  removal-obligation names as `quickscale_<module>:<purpose>`, senders own their email-template
+  keys `quickscale_<module>.<purpose>` and bodies under `templates/quickscale_<module>/email/`
+  registered through the `notification_templates` capability, and the Stripe customer identity
+  moved off `Organization` onto billing's `BillingCustomer` table. Decision rule 2's table gains
+  the removal-obligation row, rule 34's clause now also refuses a string constant, template key,
+  or template path naming a higher- or same-layer module's concept, and the harness resolves
+  every shipped string constant by its `quickscale_<module>` stem against the layer table.
+  Limit recorded: a bare token like `billing_pricing_url` inside a sibling's own response
+  vocabulary is not separately detected). Item 8.
+- 2026-10-09 — `module-dependency-direction`: **resolved** (SA265 c — orgs publishes
+  `org_scope_restored()` in `current_org`; crm's `ensure_org_default_stages` and blog's
+  `_blog_org_scope` use it instead of importing `_restore_current_org_id`; social's admin
+  drops the private re-export block and its tests import orgs' helpers directly; harness rule 4
+  rejects importing or re-exporting another module's `_`-prefixed name, control included).
+  Item 14.
+- 2026-10-09 — `capability-collection`: **resolved** (SA265 b `a6b58799` — core's `CAPABILITIES`
+  is the closed name-and-shape vocabulary, `collect_capabilities` is the only collector, orgs'
+  and auth's `getattr` walks fold onto it, and the harness rejects a `collect_capabilities`
+  argument outside the list, controls included). Item 15.
+- 2026-10-09 — `session-and-host-names`: **resolved** (SA265 c — session keys are
+  `quickscale_orgs:active_org_id`, `:debug_as_org_id`, and `:pending_org_invitation_token`;
+  the debug banner's vestigial session lookup is removed; harness rule 33 rejects a
+  `*SESSION_KEY` constant without the `quickscale_<module>:` stem, control included; decision
+  rule 2's table gains the session-key row, and auth's dependency on the host route name `home`
+  is recorded as a host contract in module-extension.md). Item 20.
+- 2026-10-09 — `core-cli-module-knowledge`: **resolved as to the convention** (SA265 c —
+  module-extension.md now lists every core edit a new module needs (catalog entry and count,
+  `.env.example` spec entry, bundled-manifest sync) and no longer claims core and the CLI need
+  no edit; harness rule 37 rejects a per-module constant or a module-name equality branch in core
+  or the CLI outside a recorded exception list with reasons; the three dead analytics constants
+  and the dead billing display branch are deleted. Recorded exceptions: core's exported
+  option-name/environment constants (`contracts/module_options.py`), `manifest/social_manifest.py`'s
+  social runtime (arch watchlist `core-holds-module-vocabulary`), `utils/_dependency_io.py`'s
+  storage cloud-extra selection, and `commands/_module_embed.py`'s auth migration gate). Item 9.
