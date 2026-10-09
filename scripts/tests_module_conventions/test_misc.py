@@ -64,6 +64,14 @@ def test_api_exception_hierarchy_control() -> None:
 def test_second_error_root_control() -> None:
     """Every module error derives from the one ``<Module>Error`` base."""
     module = _golden_module()
+    subclass = _with_files(
+        module,
+        exceptions=(
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class DemoValidationError(DemoError):\n    pass\n"
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, subclass) == []
     broken = _with_files(
         module,
         exceptions=(
@@ -72,8 +80,34 @@ def test_second_error_root_control() -> None:
         ),
     )
     assert any(
-        "second error root" in violation
+        "does not derive from the module error base" in violation
         for violation in _violations(checker.rule_10_checks_errors, broken)
+    )
+    suffixless_root = _with_files(
+        module,
+        exceptions=(
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class PaymentRequired(Exception):\n"
+            "    status_code = 402\n"
+            "    default_code = 'payment_required'\n"
+        ),
+    )
+    assert any(
+        "does not derive from the module error base" in violation
+        for violation in _violations(checker.rule_10_checks_errors, suffixless_root)
+    )
+    nested_root = _with_files(
+        module,
+        exceptions=(
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class Errors:\n"
+            "    class OtherError(Exception):\n"
+            "        pass\n"
+        ),
+    )
+    assert any(
+        "does not derive from the module error base" in violation
+        for violation in _violations(checker.rule_10_checks_errors, nested_root)
     )
 
 
