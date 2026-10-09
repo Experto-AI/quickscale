@@ -322,6 +322,7 @@ def _validate_registry(data: dict[str, Any]) -> list[dict[str, Any]]:
             "description",
             "required_contexts",
             "bindings",
+            "make_recipe",
             "depends_on",
             "trigger_inputs",
         }
@@ -351,8 +352,9 @@ def _validate_registry(data: dict[str, Any]) -> list[dict[str, Any]]:
                 f"unknown key(s) in gate[{i}]: {', '.join(sorted(gate_unknown))}",
             )
 
-        # Missing gate keys
-        gate_missing = gate_keys - set(gate.keys())
+        # Missing gate keys.  ``make_recipe`` is optional: its absence means
+        # the gate's Make recipe stays hand-written in the Makefile.
+        gate_missing = (gate_keys - {"make_recipe"}) - set(gate.keys())
         if gate_missing:
             raise SchemaValidationError(
                 "registry",
@@ -492,6 +494,46 @@ def _validate_registry(data: dict[str, Any]) -> list[dict[str, Any]]:
                     f"ci_job {cj!r} already used by gate {seen_ci_jobs[cj]!r}",
                 )
             seen_ci_jobs[cj] = gid
+
+        # --- make_recipe (generated Make target recipe) ---
+        # Optional.  When present it is the single authored copy of the gate's
+        # Make recipe; ``sync_ci_gate_jobs.py`` renders it into the generated
+        # ``scripts/gates.mk`` include.  A gate without it keeps its recipe
+        # hand-written in the Makefile.
+        recipe = gate.get("make_recipe")
+        if recipe is not None:
+            if not isinstance(recipe, list):
+                raise SchemaValidationError(
+                    "registry",
+                    f"gates[{i}].make_recipe",
+                    f"gate[{i}] ({gid}).make_recipe must be a list of recipe-line strings",
+                )
+            if not recipe:
+                raise SchemaValidationError(
+                    "registry",
+                    f"gates[{i}].make_recipe",
+                    f"gate[{i}] ({gid}).make_recipe must be a non-empty list",
+                )
+            for ridx, recipe_line in enumerate(recipe):
+                if not isinstance(recipe_line, str) or not recipe_line:
+                    raise SchemaValidationError(
+                        "registry",
+                        f"gates[{i}].make_recipe[{ridx}]",
+                        f"gate[{i}] ({gid}).make_recipe[{ridx}] must be a non-empty string",
+                    )
+                if "\n" in recipe_line or "\r" in recipe_line or recipe_line != recipe_line.strip():
+                    raise SchemaValidationError(
+                        "registry",
+                        f"gates[{i}].make_recipe[{ridx}]",
+                        f"gate[{i}] ({gid}).make_recipe[{ridx}] must be one "
+                        f"whitespace-trimmed recipe line",
+                    )
+            if not isinstance(bindings.get("make_target"), str):
+                raise SchemaValidationError(
+                    "registry",
+                    f"gates[{i}].make_recipe",
+                    f"gate[{i}] ({gid}).make_recipe requires a string make_target binding",
+                )
 
         # --- depends_on ---
         deps = gate.get("depends_on")
