@@ -617,6 +617,49 @@ def rule_29_test_names(corpus: Corpus) -> list[str]:
     return violations
 
 
+def _is_session_receiver(node: ast.expr) -> bool:
+    """
+    Return whether *node* is a Django session object.
+
+    Only ``request.session``-shaped attributes and the bare name ``session``
+    count; a vendor object whose variable ends in ``_session`` (a Stripe
+    checkout session, for example) is a mapping of provider fields, not the
+    project's session store.
+    """
+    if isinstance(node, ast.Name):
+        return node.id == "session"
+    if isinstance(node, ast.Attribute):
+        return node.attr == "session"
+    return False
+
+
+def _session_literal_keys(tree: ast.Module) -> list[tuple[int, str]]:
+    """
+    Return literal session keys read or written through a session object.
+
+    Named keys (a constant or a variable) are the ``*SESSION_KEY`` clause's
+    business; this covers the literal forms a writer reaches for directly:
+    ``request.session['key']`` and ``session.get/pop/setdefault('key')``.
+    """
+    found: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Subscript) and _is_session_receiver(node.value):
+            key = _literal(node.slice)
+            if isinstance(key, str):
+                found.append((node.lineno, key))
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"get", "pop", "setdefault"}
+            and _is_session_receiver(node.func.value)
+            and node.args
+        ):
+            key = _literal(node.args[0])
+            if isinstance(key, str):
+                found.append((node.lineno, key))
+    return found
+
+
 def rule_33_shared_stems(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
@@ -630,11 +673,21 @@ def rule_33_shared_stems(corpus: Corpus) -> list[str]:
                     violations.append(
                         f"rule 33: {module.name}: database function {name} lacks the {stem}_ stem"
                     )
+                if name.endswith("SESSION_KEY") and not value.startswith(f"{stem}:"):
+                    violations.append(
+                        f"rule 33: {module.name}: session key {name} lacks the {stem}: stem"
+                    )
                 match = re.search(r"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+([A-Za-z0-9_]+)", value)
                 if match and not match.group(1).startswith(f"{stem}_"):
                     violations.append(
                         f"rule 33: {module.name}: database function {match.group(1)!r} "
                         f"lacks the {stem}_ stem"
+                    )
+            for lineno, key in _session_literal_keys(tree):
+                if not key.startswith(f"{stem}:"):
+                    violations.append(
+                        f"rule 33: {module.name}: {rel}:{lineno} session key {key!r} "
+                        f"lacks the {stem}: stem"
                     )
             for node in ast.walk(tree):
                 if not isinstance(node, ast.FunctionDef):
@@ -947,6 +1000,126 @@ def _template_module_literals(text: str, vocabulary: set[str]) -> list[tuple[int
     return found
 
 
+#: Rule 37's comparison operators that make a per-module branch: an equality
+#: or inequality test against one module's name.  Membership tests read the
+#: configured set, which is a reference to it, not a branch on one module.
+RULE_37_BRANCH_OPERATORS = (ast.Eq, ast.NotEq)
+
+#: Rule 37's branch operands: anything that can carry a module name in an
+#: expression -- a plain name, an attribute, a subscript (``entry['name']``),
+#: or a call (``entry.get('name')``).  A literal-to-literal comparison is
+#: data, not a module branch.
+RULE_37_BRANCH_OPERANDS = (ast.Name, ast.Attribute, ast.Subscript, ast.Call)
+
+#: Rule 37's recorded exceptions, each with the reason the rule accepts it.
+#: A branch compares against a discovered module name; a constant is declared
+#: with a module-name prefix.  Keys are (tree, relative path, module name or
+#: constant name).
+RULE_37_ALLOWED_BRANCHES: dict[tuple[str, str, str], str] = {
+    ("cli", "utils/_dependency_io.py", "storage"): (
+        "storage's cloud extra selects the module's optional boto3/django-storages "
+        "dependencies from its backend option; the manifest dependency model "
+        "carries names only, so the condition has no generic home yet"
+    ),
+    ("cli", "commands/_module_embed.py", "auth"): (
+        "auth's split-branch migration gate runs before the embedded module is "
+        "importable, so it cannot live in the module's adapter"
+    ),
+}
+
+RULE_37_ALLOWED_CONSTANTS: dict[tuple[str, str, str], str] = {
+    ("cli", "utils/_dependency_io.py", "_STORAGE_CLOUD_BACKENDS"): (
+        "storage's cloud-extra projection (see the branch exception above)"
+    ),
+    ("cli", "utils/_dependency_io.py", "_STORAGE_CLOUD_DEPENDENCIES"): (
+        "storage's cloud-extra projection (see the branch exception above)"
+    ),
+    ("cli", "utils/_dependency_io.py", "_STORAGE_CLOUD_EXTRA"): (
+        "storage's cloud-extra projection (see the branch exception above)"
+    ),
+    **{
+        ("core", "contracts/module_options.py", name): (
+            "core's exported option-name and environment constants that its generic "
+            "env-sync and secret-projection plumbing and the CLI's operator output read"
+        )
+        for name in (
+            "ANALYTICS_POSTHOG_DEFAULT_HOST",
+            "ANALYTICS_PROVIDER_POSTHOG",
+            "BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+            "BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+            "BILLING_ENV_VAR_OPTION_NAMES",
+            "NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION",
+            "NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION",
+            "SOCIAL_EMBEDS_PATH",
+            "SOCIAL_INTEGRATION_BASE_PATH",
+            "SOCIAL_INTEGRATION_EMBEDS_PATH",
+            "SOCIAL_LINK_TREE_PATH",
+            "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
+            "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+        )
+    },
+    **{
+        ("core", "manifest/social_manifest.py", name): (
+            "social's runtime and generated payload views are hosted in core pending "
+            "the arch watchlist `core-holds-module-vocabulary`"
+        )
+        for name in (
+            "_SOCIAL_PROVIDER_ALIASES",
+            "_SOCIAL_PROVIDER_BY_HOST",
+            "_SOCIAL_PROVIDER_BY_NAME",
+            "SOCIAL_LAYOUT_VARIANTS",
+            "SOCIAL_PAYLOAD_HTTP_STATUS",
+            "SOCIAL_PAYLOAD_STATUSES",
+            "SOCIAL_PROVIDER_CATALOG",
+            "SOCIAL_STATUS_DISABLED",
+            "SOCIAL_STATUS_EMPTY",
+            "SOCIAL_STATUS_ENABLED",
+            "SOCIAL_STATUS_ERROR",
+        )
+    },
+}
+
+
+def _module_name_branches(tree: ast.Module, vocabulary: set[str]) -> list[tuple[int, str, str]]:
+    """Return equality comparisons against a discovered module name."""
+    found: list[tuple[int, str, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Compare):
+            continue
+        if not any(isinstance(op, RULE_37_BRANCH_OPERATORS) for op in node.ops):
+            continue
+        parts = [node.left, *node.comparators]
+        for part in parts:
+            if not (isinstance(part, ast.Constant) and isinstance(part.value, str)):
+                continue
+            if part.value not in vocabulary:
+                continue
+            others = [candidate for candidate in parts if candidate is not part]
+            if others and all(
+                isinstance(candidate, RULE_37_BRANCH_OPERANDS) for candidate in others
+            ):
+                found.append((node.lineno, ast.unparse(node), part.value))
+    return found
+
+
+def _module_prefixed_constants(tree: ast.Module, vocabulary: set[str]) -> list[tuple[int, str]]:
+    """Return module-level constant names prefixed with a module name."""
+    found: list[tuple[int, str]] = []
+    for node in tree.body:
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        for target in targets:
+            if not isinstance(target, ast.Name):
+                continue
+            stripped = target.id.lstrip("_")
+            if any(stripped.startswith(f"{name.upper()}_") for name in vocabulary):
+                found.append((node.lineno, target.id))
+    return found
+
+
 def rule_37_module_lists(corpus: Corpus) -> list[str]:
     """Rule 37: no literal module-name list outside the modules."""
     violations: list[str] = []
@@ -982,5 +1155,22 @@ def rule_37_module_lists(corpus: Corpus) -> list[str]:
                 violations.append(
                     f"rule 37: {tree_name}/{rel}:{lineno} literal {symbol} lists "
                     f"{count} {label}: {', '.join(names)}"
+                )
+            if not is_python or tree_name not in ("core", "cli"):
+                continue
+            tree = _parse(text)
+            for lineno, expression, name in _module_name_branches(tree, vocabulary):
+                if (tree_name, rel, name) in RULE_37_ALLOWED_BRANCHES:
+                    continue
+                violations.append(
+                    f"rule 37: {tree_name}/{rel}:{lineno} branches on module "
+                    f"name {name!r}: {expression}"
+                )
+            for lineno, constant in _module_prefixed_constants(tree, vocabulary):
+                if (tree_name, rel, constant) in RULE_37_ALLOWED_CONSTANTS:
+                    continue
+                violations.append(
+                    f"rule 37: {tree_name}/{rel}:{lineno} declares "
+                    f"module-prefixed constant {constant}"
                 )
     return violations

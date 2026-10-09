@@ -622,7 +622,7 @@ Key behaviours (current):
 - **VIEW-AS debug override** → a superuser debug session org takes priority over the normal Solo/SaaS branch.
 - **Org-management path bypass** → `/orgs/...` and `/orgs/api/...` requests owned by the orgs module bypass middleware tenant resolution so the views can own access control.
 
-**Connection/RLS note**: DB-level `app.current_org_id` priming is now caller-managed (`tenant_context(...)`, `org_scope(...)`, or the execute-wrapper path where applicable). When deployment topology requires session-level `SET` instead of transaction-local `SET LOCAL`, document that explicitly in `docs/deployment/railway.md`.
+**Connection/RLS note**: DB-level `app.current_org_id` priming is now caller-managed (`tenant_context(...)`, `org_scope(...)`, `org_scope_restored()` for callers that manage their own transaction and set the ContextVar themselves, or the execute-wrapper path where applicable). When deployment topology requires session-level `SET` instead of transaction-local `SET LOCAL`, document that explicitly in `docs/deployment/railway.md`.
 
 ---
 
@@ -647,7 +647,7 @@ Supabase ships a dashboard "Impersonate User" button so operators can see the ap
 ### How It Works
 
 1. In Django Admin (`/admin/`), an operator uses the VIEW-AS entry point for an `Organization` row.
-2. The action sets the session key `quickscale_modules_orgs.debug_as_org_id` to the org's UUID and redirects to `/`.
+2. The action sets the session key `quickscale_orgs:debug_as_org_id` to the org's UUID and redirects to `/`.
 3. `TenantMiddleware` detects the session key (superusers only) and resolves the org from it instead of the normal Solo/SaaS path.
 4. A persistent debug banner renders at the top of every page:
    `⚠ DEBUG MODE — viewing as org "Acme Corp" [Exit debug mode]`

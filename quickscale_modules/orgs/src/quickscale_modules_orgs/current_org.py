@@ -187,6 +187,34 @@ def _restore_current_org_id(prior: uuid.UUID | None) -> None:
 
 
 @contextlib.contextmanager
+def org_scope_restored() -> Iterator[None]:
+    """Restore the tenant context captured on entry when the caller's scope exits.
+
+    Enter this **before** establishing a caller-managed org scope: the caller
+    sets the ContextVar (for tenant-scoped managers and the GUC priming
+    wrapper) and manages its own ``transaction.atomic()`` boundaries.  On
+    exit the prior ContextVar is restored and, on PostgreSQL inside an active
+    transaction, the prior ``app.current_org_id`` GUC and the per-transaction
+    priming memo are restored too.  ``SET LOCAL`` is transaction-scoped, so
+    without that restore the caller's org would leak to later no-context
+    queries in the same outer transaction (fail-closed contract).
+
+    This is the seam modules use for their own write scopes; it keeps the
+    GUC, priming-memo, and vendor details on the module that owns them.  For
+    a scope that also opens the transaction, use :func:`org_scope`.
+    """
+    prior = get_current_org_id()
+    try:
+        yield
+    finally:
+        set_current_org_id(prior)
+        from django.db import connection
+
+        if connection.vendor == "postgresql" and connection.in_atomic_block:
+            _restore_current_org_id(prior)
+
+
+@contextlib.contextmanager
 def _tenant_context(org_id: uuid.UUID | None) -> Iterator[None]:
     """Request-scoped activation: set ContextVar + DB ``app.current_org_id``.
 

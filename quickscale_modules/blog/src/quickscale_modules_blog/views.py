@@ -7,7 +7,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from django.conf import settings
-from django.db import IntegrityError, connection
+from django.db import IntegrityError
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
 from django.utils.html import escape
@@ -58,15 +58,11 @@ def _resolve_api_org(request: Request | HttpRequest, author: Any) -> Any:
        As a side effect this function calls
        ``set_current_org_id(org.pk)`` so that tenant-scoped managers
        and the GUC priming wrapper see the correct org for subsequent
-       ORM operations.  Callers **must** capture
-       ``get_current_org_id()`` beforehand and restore the Python
-       ContextVar with ``set_current_org_id(prior)`` afterward.  When
-       PostgreSQL is the database backend **and** the caller is inside
-       an active ``transaction.atomic()`` block, callers **must** also
-       restore the DB GUC and clear the per-transaction priming memo
-       by calling ``_restore_current_org_id(prior)`` **after**
-       ``set_current_org_id(prior)`` (Python ContextVar first, then
-       DB GUC).
+       ORM operations.  Callers **must** enter
+       ``quickscale_modules_orgs.current_org.org_scope_restored()``
+       beforehand: its exit restores the prior ContextVar and, on
+       PostgreSQL inside an active ``transaction.atomic()`` block, the
+       prior DB GUC and the per-transaction priming memo.
     """
     from quickscale_modules_orgs.current_org import set_current_org_id
 
@@ -132,26 +128,17 @@ def _blog_org_scope(request: Request | HttpRequest, author: Any) -> Iterator[Any
 
     Resolution stamps ``set_current_org_id(org.pk)`` so tenant-scoped
     managers and the GUC priming wrapper see the correct org for the
-    request's ORM operations.  On exit the Python ContextVar is always
-    restored; when PostgreSQL is the backend and the caller sits inside an
-    active ``transaction.atomic()`` block, the ``app.current_org_id`` GUC
-    and the per-transaction priming memo are restored too (Python ContextVar
-    first, then DB GUC).
+    request's ORM operations.  The scope is wrapped in orgs'
+    ``org_scope_restored()``, which restores the prior ContextVar and, when
+    PostgreSQL is the backend and the caller sits inside an active
+    ``transaction.atomic()`` block, the ``app.current_org_id`` GUC and the
+    per-transaction priming memo on exit.
     """
-    from quickscale_modules_orgs.current_org import (
-        _restore_current_org_id,
-        get_current_org_id,
-        set_current_org_id,
-    )
+    from quickscale_modules_orgs.current_org import org_scope_restored
 
-    prior = get_current_org_id()
-    organization = _resolve_api_org(request, author)
-    try:
+    with org_scope_restored():
+        organization = _resolve_api_org(request, author)
         yield organization
-    finally:
-        set_current_org_id(prior)
-        if connection.vendor == "postgresql" and connection.in_atomic_block:
-            _restore_current_org_id(prior)
 
 
 class BlogSessionAuthentication(SessionAuthentication):

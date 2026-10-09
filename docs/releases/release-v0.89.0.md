@@ -132,6 +132,15 @@ the boundary's `email_verified` keyword, as
 [module-extension.md](../technical/module-extension.md) now shows; an executor written to the old
 four-argument contract fails the deletion closed instead of running an unverified selector.
 
+**Organization session keys.** The organizations module's session keys are now
+`quickscale_orgs:active_org_id`, `quickscale_orgs:debug_as_org_id`, and
+`quickscale_orgs:pending_org_invitation_token`; the previous
+`quickscale_modules_orgs.*` spellings are no longer read and have no alias. Upgrading discards
+the active-organization, VIEW-AS debug, and pending-invitation session state carried under the
+old names, so affected users re-select an organization, re-enter VIEW-AS, and re-open a pending
+invitation link; project-owned code or tests that write a session key as a literal string must
+use the new names.
+
 ## Compatibility
 
 The validation-source changes affect repository tests only. The tenant-enrollment capability keeps

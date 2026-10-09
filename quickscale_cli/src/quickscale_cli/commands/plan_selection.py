@@ -30,11 +30,6 @@ def _get_module_choices(
 def _format_module_choice(entry: ModuleCatalogEntry) -> str:
     """Format a catalog entry for interactive display."""
     if not entry.ready:
-        if entry.name == "billing":
-            return (
-                f"{entry.name} - {entry.description} "
-                "(internal packaged Phase 1 foundation, not public-ready)"
-            )
         return f"{entry.name} - {entry.description} (not public-ready)"
     if entry.experimental:
         return f"{entry.name} - {entry.description} (experimental)"
