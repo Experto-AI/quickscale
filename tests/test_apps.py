@@ -124,15 +124,16 @@ def test_ready_raises_improperly_configured_when_retired_setting_present(
 
 
 def test_ready_refuses_every_declared_retired_setting(settings: Any) -> None:
-    """Rule 6: every declared retired blog name fails startup."""
-    from quickscale_modules_blog.checks import RETIRED_SETTINGS
+    """Rule 6: every retired name the blog manifest declares fails startup."""
+    from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
 
+    retired_settings = load_module_manifest_with_fallback("blog").retired_settings
     config = QuickscaleBlogConfig(
         "quickscale_modules_blog",
         import_module("quickscale_modules_blog"),
     )
 
-    for retired_name in RETIRED_SETTINGS:
+    for retired_name in retired_settings:
         setattr(settings, retired_name, "legacy")
         try:
             with pytest.raises(ImproperlyConfigured, match=retired_name):
