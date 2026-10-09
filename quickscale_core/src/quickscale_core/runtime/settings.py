@@ -15,6 +15,9 @@ Public API (SA206):
   :func:`secure_proxy_ssl_header` — the trusted-proxy client-IP derivation
   shared by the middleware, the canonical client-IP resolver, and DRF's
   ``NUM_PROXIES`` throttle path.
+* :func:`compose_rest_framework` — the generated project's ``REST_FRAMEWORK``
+  composition: the fail-closed defaults, the module-contributed keys, and the
+  proxy-derived ``NUM_PROXIES``.
 * :func:`require_production_secret_key` — the production SECRET_KEY guard.
 * :data:`KNOWN_PRIVILEGED_COMMANDS`, :data:`KNOWN_NON_DB_COMMANDS`, and
   :func:`resolve_runtime_database_url` — the launcher one-shot command-mode
@@ -33,6 +36,7 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import Mapping
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -46,6 +50,7 @@ __all__ = [
     "KNOWN_PRIVILEGED_COMMANDS",
     "NON_DB_FALLBACK_DATABASE_URL",
     "SHIPPED_INSECURE_DEFAULT",
+    "compose_rest_framework",
     "correlation_id_var",
     "num_proxies_for",
     "require_production_secret_key",
@@ -129,6 +134,75 @@ class ClientIdentityMiddleware:
     def __call__(self, request: object) -> object:
         normalize_client_ip_headers(request)
         return self.get_response(request)  # type: ignore[operator]
+
+
+# ── DRF composition ──────────────────────────────────────────────────
+#
+# The generated project's ``settings/base.py`` delegates its
+# ``REST_FRAMEWORK`` composition here, so the contract follows the versioned
+# ``quickscale-core`` lockstep pin instead of living in the user-owned file.
+# Module-contributed keys (rule 30's merged ``DEFAULT_THROTTLE_RATES``
+# included) win over every default below.
+
+_DEFAULT_DRF_EXCEPTION_HANDLER = "quickscale_core.runtime.conventions.exception_handler"
+_DEFAULT_DRF_PERMISSION_CLASSES = ["rest_framework.permissions.IsAuthenticated"]
+_DEFAULT_DRF_THROTTLE_CLASSES = [
+    "rest_framework.throttling.AnonRateThrottle",
+    "rest_framework.throttling.UserRateThrottle",
+    "rest_framework.throttling.ScopedRateThrottle",
+]
+# Conservative default rates an operator raises for their traffic profile:
+# above interactive use and legitimate polling, below a runaway or abusive
+# client.  A module that ships a tighter scope contributes its rate through
+# the module wiring and it merges in without losing these.
+_DEFAULT_DRF_THROTTLE_RATES: dict[str, str] = {
+    "anon": "1200/hour",
+    "user": "3000/hour",
+}
+
+
+def compose_rest_framework(
+    contributed: Mapping[str, object] | None = None,
+    *,
+    use_x_forwarded_for: bool,
+    trusted_proxy_count: int,
+) -> dict[str, object]:
+    """Compose the generated project's ``REST_FRAMEWORK`` setting.
+
+    ``contributed`` is the module-contributed value the managed wiring merged
+    into ``MODULE_SETTINGS['REST_FRAMEWORK']``; a key it sets wins.  The
+    fail-closed defaults — the one QuickScale error handler, the
+    authenticated-only permission class, the anon/user/scoped throttle classes,
+    and the conservative anon/user rates — fill in only what a module left
+    unset, so a project with no modules still fails closed.  ``NUM_PROXIES``
+    is derived from the trusted-proxy state, so DRF and the canonical
+    client-IP resolver cannot disagree.
+    """
+    rest_framework: dict[str, object] = dict(contributed or {})
+
+    rest_framework.setdefault("EXCEPTION_HANDLER", _DEFAULT_DRF_EXCEPTION_HANDLER)
+    rest_framework.setdefault(
+        "DEFAULT_PERMISSION_CLASSES", list(_DEFAULT_DRF_PERMISSION_CLASSES)
+    )
+    rest_framework.setdefault(
+        "DEFAULT_THROTTLE_CLASSES", list(_DEFAULT_DRF_THROTTLE_CLASSES)
+    )
+
+    contributed_rates = rest_framework.get("DEFAULT_THROTTLE_RATES", {})
+    if not isinstance(contributed_rates, Mapping):
+        raise TypeError(
+            "REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] must be a mapping, "
+            f"got {type(contributed_rates).__name__}"
+        )
+    rest_framework["DEFAULT_THROTTLE_RATES"] = {
+        **_DEFAULT_DRF_THROTTLE_RATES,
+        **contributed_rates,
+    }
+
+    rest_framework["NUM_PROXIES"] = num_proxies_for(
+        use_x_forwarded_for, trusted_proxy_count
+    )
+    return rest_framework
 
 
 # ── Structured logging and correlation ID support ────────────────────

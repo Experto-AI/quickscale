@@ -1748,8 +1748,9 @@ superuser ``DATABASE_URL``).
 **Decision (SA206):** `quickscale_core.runtime.settings` is the public import
 path for the executable runtime contracts shared by generated settings and
 launchers. It exports the client-identity and correlation-id middleware, the
-trusted-proxy derivation, the privileged-command/runtime-database selection,
-the production SECRET_KEY guard, and the structured-logging helpers.
+trusted-proxy derivation, the DRF composition, the
+privileged-command/runtime-database selection, the production SECRET_KEY guard,
+and the structured-logging helpers.
 
 **Why:** generated settings are user-owned and never upgraded, so an inline
 contract copy reached only freshly generated projects — SA200's proxy-trust fix
@@ -1759,7 +1760,8 @@ settings copies. One facade ships every contract fix through the existing
 
 **Rules:**
 - ✅ Generated `settings/base.py` and `settings/production.py` import the
-  facade and keep only user configuration.
+  facade and keep only user configuration: `base.py` composes `REST_FRAMEWORK`
+  through `compose_rest_framework()` instead of declaring DRF defaults inline.
 - ✅ Every generated project declares the bounded `quickscale-core` lockstep
   pin (`>=X.Y.0,<X.(Y+1).0`) in its `pyproject.toml`, including zero-module
   projects.

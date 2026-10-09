@@ -647,6 +647,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     public social pages render `window.__QUICKSCALE__.modules` and `.modulePaths` through the
     `quickscale_seam` runtime template tag registered by the generated `TEMPLATES` options, so the
     module flags and URLs follow the installed modules without editing those user-owned files again.
+  - **DRF composition ships in the runtime.** Generated `settings/base.py` composes
+    `REST_FRAMEWORK` — the fail-closed authenticated default, the shared error handler, the default
+    throttle classes and rates, and the proxy-derived `NUM_PROXIES` — through
+    `quickscale_core.runtime.settings.compose_rest_framework` instead of declaring the defaults
+    inline. Module-contributed DRF keys and throttle rates still win.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

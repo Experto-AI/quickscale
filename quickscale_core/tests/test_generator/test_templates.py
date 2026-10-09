@@ -1483,43 +1483,59 @@ class TestProductionReadyFeatures:
 
 
 class TestDrfPermissionBaseline:
-    """Verify generated base settings include the DRF authenticated-only default.
+    """Verify generated base settings compose DRF through the runtime facade.
 
-    SA11.5: emitted ``REST_FRAMEWORK`` must default to
-    ``IsAuthenticated`` so module APIs fail closed unless a view
-    explicitly opts into public access.
+    SA11.5: the composed ``REST_FRAMEWORK`` must default to
+    ``IsAuthenticated`` so module APIs fail closed unless a view explicitly
+    opts into public access.  Since SA258 slice (b) the composition contract
+    itself lives in ``quickscale_core.runtime.settings.compose_rest_framework``;
+    these tests pin the generated file's call and the facade's behavior is
+    pinned in ``test_runtime_settings_facade.py``.
     """
 
     def test_rest_framework_setting_present(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Rendered base settings must include ``REST_FRAMEWORK``."""
+        """Rendered base settings must compose ``REST_FRAMEWORK``."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
-        assert "REST_FRAMEWORK" in output
+        assert "REST_FRAMEWORK = compose_rest_framework(" in output
 
-    def test_rest_framework_default_permission_classes(
+    def test_rest_framework_defaults_are_delegated_to_the_runtime(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """The ``DEFAULT_PERMISSION_CLASSES`` must include ``IsAuthenticated``."""
+        """The moved defaults must not be re-declared in the generated file."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
 
-        assert "DEFAULT_PERMISSION_CLASSES" in output
-        assert "rest_framework.permissions.IsAuthenticated" in output
-        assert "AllowAny" not in output, (
-            "Default must not be AllowAny — explicit IsAuthenticated fail-closed"
-        )
+        assert "from quickscale_core.runtime.settings import (" in output
+        assert "compose_rest_framework" in output
+        for moved_literal in (
+            "EXCEPTION_HANDLER",
+            "DEFAULT_PERMISSION_CLASSES",
+            "DEFAULT_THROTTLE_CLASSES",
+            "_DEFAULT_DRF_THROTTLE_RATES",
+            "quickscale_core.runtime.conventions.exception_handler",
+            "rest_framework.permissions.IsAuthenticated",
+            "rest_framework.throttling.ScopedRateThrottle",
+            '"anon": "1200/hour"',
+            'REST_FRAMEWORK["NUM_PROXIES"] =',
+        ):
+            assert moved_literal not in output, (
+                f"{moved_literal!r} belongs to the runtime composition helper"
+            )
 
-    def test_exception_handler_is_installed(
+    def test_composition_reads_module_contribution_and_proxy_state(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """The composed block installs the one QuickScale error handler."""
+        """The call passes the module-contributed value and the proxy state."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
 
-        assert "EXCEPTION_HANDLER" in output
-        assert "quickscale_core.runtime.conventions.exception_handler" in output
+        call = output[output.index("REST_FRAMEWORK = compose_rest_framework(") :]
+        assert 'globals().get("REST_FRAMEWORK")' in call
+        assert "use_x_forwarded_for=USE_X_FORWARDED_FOR" in call
+        assert "trusted_proxy_count=TRUSTED_PROXY_COUNT" in call
 
     def test_exception_handler_resolves_in_executed_settings(
         self,
@@ -1598,18 +1614,36 @@ class TestDrfPermissionBaseline:
         )
 
     def test_default_throttle_classes_and_rates_declared(
-        self, jinja_env: Environment, test_context: dict[str, str]
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """The generated settings declare conservative throttle defaults."""
-        template = jinja_env.get_template("project_name/settings/base.py.j2")
-        output = template.render(test_context)
+        """Executing the generated settings yields conservative throttle defaults."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
 
-        assert "DEFAULT_THROTTLE_CLASSES" in output
-        assert "rest_framework.throttling.AnonRateThrottle" in output
-        assert "rest_framework.throttling.UserRateThrottle" in output
-        assert "rest_framework.throttling.ScopedRateThrottle" in output
-        assert '"anon": "1200/hour"' in output
-        assert '"user": "3000/hour"' in output
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=base_output,
+            target_module_name="base",
+            config_values={},
+        )
+
+        rest_framework = namespace["REST_FRAMEWORK"]
+        assert isinstance(rest_framework, dict)
+        assert rest_framework["DEFAULT_THROTTLE_CLASSES"] == [
+            "rest_framework.throttling.AnonRateThrottle",
+            "rest_framework.throttling.UserRateThrottle",
+            "rest_framework.throttling.ScopedRateThrottle",
+        ]
+        assert rest_framework["DEFAULT_THROTTLE_RATES"] == {
+            "anon": "1200/hour",
+            "user": "3000/hour",
+        }
 
     def test_module_supplied_throttle_rate_survives_composition(
         self,
@@ -1777,13 +1811,15 @@ class TestClientIpAndSharedCache:
     def test_num_proxies_in_rest_framework(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """REST_FRAMEWORK must include NUM_PROXIES derived from proxy settings."""
+        """The composition call receives the proxy state ``NUM_PROXIES`` derives from."""
         output = _render_template(
             jinja_env, "project_name/settings/base.py.j2", test_context
         )
-        assert '"NUM_PROXIES"' in output
-        assert "TRUSTED_PROXY_COUNT" in output
-        assert "USE_X_FORWARDED_FOR" in output
+        assert "use_x_forwarded_for=USE_X_FORWARDED_FOR" in output
+        assert "trusted_proxy_count=TRUSTED_PROXY_COUNT" in output
+        assert 'REST_FRAMEWORK["NUM_PROXIES"] =' not in output, (
+            "NUM_PROXIES is derived by the runtime composition helper"
+        )
 
     def test_client_ip_settings_before_rest_framework(
         self, jinja_env: Environment, test_context: dict[str, str]

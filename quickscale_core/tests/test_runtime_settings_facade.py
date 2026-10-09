@@ -31,6 +31,7 @@ class TestFacadePublicSurface:
             "KNOWN_NON_DB_COMMANDS",
             "KNOWN_PRIVILEGED_COMMANDS",
             "NON_DB_FALLBACK_DATABASE_URL",
+            "compose_rest_framework",
             "correlation_id_var",
             "num_proxies_for",
             "require_production_secret_key",
@@ -128,6 +129,101 @@ class TestProxyTrustDerivation:
         assert "HTTP_X_FORWARDED_FOR" not in short_chain.META
 
 
+class TestRestFrameworkComposition:
+    """The generated project's DRF composition ships in the facade (SA258b)."""
+
+    def test_defaults_fail_closed(self) -> None:
+        """With no module contribution the composed defaults stay fail-closed."""
+        composed = facade.compose_rest_framework(
+            use_x_forwarded_for=False, trusted_proxy_count=0
+        )
+
+        assert composed["EXCEPTION_HANDLER"] == (
+            "quickscale_core.runtime.conventions.exception_handler"
+        )
+        assert composed["DEFAULT_PERMISSION_CLASSES"] == [
+            "rest_framework.permissions.IsAuthenticated",
+        ]
+        assert composed["DEFAULT_THROTTLE_CLASSES"] == [
+            "rest_framework.throttling.AnonRateThrottle",
+            "rest_framework.throttling.UserRateThrottle",
+            "rest_framework.throttling.ScopedRateThrottle",
+        ]
+        assert composed["DEFAULT_THROTTLE_RATES"] == {
+            "anon": "1200/hour",
+            "user": "3000/hour",
+        }
+        assert composed["NUM_PROXIES"] is None
+
+    def test_module_contribution_wins_on_every_key(self) -> None:
+        """A module-contributed key wins; unset keys keep the defaults."""
+        contribution: dict[str, object] = {
+            "EXCEPTION_HANDLER": "myproject.errors.handler",
+            "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+            "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.AnonRateThrottle"],
+            "DEFAULT_THROTTLE_RATES": {"quickscale_billing_checkout": "30/hour"},
+            "PAGE_SIZE": 25,
+        }
+
+        composed = facade.compose_rest_framework(
+            contribution, use_x_forwarded_for=True, trusted_proxy_count=2
+        )
+
+        assert composed["EXCEPTION_HANDLER"] == "myproject.errors.handler"
+        assert composed["DEFAULT_PERMISSION_CLASSES"] == [
+            "rest_framework.permissions.AllowAny",
+        ]
+        assert composed["DEFAULT_THROTTLE_CLASSES"] == [
+            "rest_framework.throttling.AnonRateThrottle",
+        ]
+        assert composed["DEFAULT_THROTTLE_RATES"] == {
+            "anon": "1200/hour",
+            "user": "3000/hour",
+            "quickscale_billing_checkout": "30/hour",
+        }
+        assert composed["PAGE_SIZE"] == 25
+        assert composed["NUM_PROXIES"] == 2
+
+    def test_input_contribution_is_not_mutated(self) -> None:
+        """Composition copies the module contribution instead of editing it."""
+        contribution: dict[str, object] = {
+            "DEFAULT_THROTTLE_RATES": {"quickscale_billing_checkout": "30/hour"},
+        }
+
+        facade.compose_rest_framework(
+            contribution, use_x_forwarded_for=False, trusted_proxy_count=0
+        )
+
+        assert contribution == {
+            "DEFAULT_THROTTLE_RATES": {"quickscale_billing_checkout": "30/hour"},
+        }
+
+    def test_defaults_are_not_shared_between_calls(self) -> None:
+        """Callers cannot corrupt the shipped default lists."""
+        first = facade.compose_rest_framework(
+            use_x_forwarded_for=False, trusted_proxy_count=0
+        )
+        first_permissions = first["DEFAULT_PERMISSION_CLASSES"]
+        assert isinstance(first_permissions, list)
+        first_permissions.append("rest_framework.permissions.AllowAny")
+
+        second = facade.compose_rest_framework(
+            use_x_forwarded_for=False, trusted_proxy_count=0
+        )
+        assert second["DEFAULT_PERMISSION_CLASSES"] == [
+            "rest_framework.permissions.IsAuthenticated",
+        ]
+
+    def test_non_mapping_throttle_rates_fail_loudly(self) -> None:
+        """A malformed module contribution is refused, not silently dropped."""
+        with pytest.raises(TypeError, match="DEFAULT_THROTTLE_RATES"):
+            facade.compose_rest_framework(
+                {"DEFAULT_THROTTLE_RATES": "30/hour"},
+                use_x_forwarded_for=False,
+                trusted_proxy_count=0,
+            )
+
+
 class TestCorrelationIdContract:
     """The correlation middleware, filter, and formatter share one context var."""
 
@@ -136,10 +232,14 @@ class TestCorrelationIdContract:
         response: dict[str, str] = {}
         middleware = facade.CorrelationIdMiddleware(lambda _request: response)
 
-        assert middleware(request) is response
-        assert request.correlation_id == "trace-1"
-        assert response["X-Request-ID"] == "trace-1"
-        assert facade.correlation_id_var.get() == "trace-1"
+        token = facade.correlation_id_var.set("")
+        try:
+            assert middleware(request) is response
+            assert request.correlation_id == "trace-1"
+            assert response["X-Request-ID"] == "trace-1"
+            assert facade.correlation_id_var.get() == "trace-1"
+        finally:
+            facade.correlation_id_var.reset(token)
 
     @pytest.mark.parametrize("client_value", ["a" * 10_240, "x" * 65, "bad:id", ""])
     def test_middleware_replaces_unusable_client_values(
@@ -147,12 +247,16 @@ class TestCorrelationIdContract:
     ) -> None:
         request = types.SimpleNamespace(META={"HTTP_X_REQUEST_ID": client_value})
         response: dict[str, str] = {}
-        facade.CorrelationIdMiddleware(lambda _request: response)(request)
+        token = facade.correlation_id_var.set("")
+        try:
+            facade.CorrelationIdMiddleware(lambda _request: response)(request)
 
-        generated = request.correlation_id
-        assert generated != client_value
-        uuid.UUID(generated)
-        assert response["X-Request-ID"] == generated
+            generated = request.correlation_id
+            assert generated != client_value
+            uuid.UUID(generated)
+            assert response["X-Request-ID"] == generated
+        finally:
+            facade.correlation_id_var.reset(token)
 
     def test_filter_reads_the_shared_context_variable(self) -> None:
         token = facade.correlation_id_var.set("req-abc")
