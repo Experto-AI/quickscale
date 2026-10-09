@@ -61,12 +61,15 @@ from check_gate_parity import (
 from sync_ci_gate_jobs import (
     CHECKOUT_REF,
     DEFAULT_E2E_WORKFLOW,
+    DEFAULT_MAKE_INCLUDE,
     DEFAULT_REGISTRY,
     DEFAULT_WORKFLOW,
     E2E_PATHS_BEGIN,
     E2E_PATHS_END,
+    HAND_OWNED_MAKE_TARGETS,
     JOB_BEGIN,
     JOB_END,
+    MAKE_TARGET_COMMENTS,
     NEEDS_BEGIN,
     NEEDS_END,
     UNOWNED_JOB_IDS,
@@ -4230,14 +4233,22 @@ class TestE2eWorkflowGeneration:
             calls.append(("e2e", path))
             return False, ""
 
+        def fake_make_include(path: Path, _registry: Path) -> tuple[bool, str]:
+            calls.append(("make", path))
+            return False, ""
+
         monkeypatch.setattr(sync_ci_gate_jobs_module, "_parse_registry", fake_registry)
         monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_workflow", fake_hosted)
         monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_e2e_workflow", fake_e2e)
+        monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_make_include", fake_make_include)
         assert sync_ci_gate_jobs_module.main(["--check", "--e2e-workflow", "custom-e2e.yml"]) == 0
         assert calls == [("e2e", Path("custom-e2e.yml"))]
         calls.clear()
         assert sync_ci_gate_jobs_module.main(["--check", "--workflow", "custom-ci.yml"]) == 0
         assert calls == [("hosted", Path("custom-ci.yml"))]
+        calls.clear()
+        assert sync_ci_gate_jobs_module.main(["--check", "--make-include", "custom-gates.mk"]) == 0
+        assert calls == [("make", Path("custom-gates.mk"))]
         calls.clear()
         assert (
             sync_ci_gate_jobs_module.main(
@@ -4248,7 +4259,210 @@ class TestE2eWorkflowGeneration:
         assert calls == [("hosted", Path("custom-ci.yml")), ("e2e", Path("custom-e2e.yml"))]
         calls.clear()
         assert sync_ci_gate_jobs_module.main(["--check"]) == 0
-        assert calls == [("hosted", DEFAULT_WORKFLOW), ("e2e", DEFAULT_E2E_WORKFLOW)]
+        assert calls == [
+            ("hosted", DEFAULT_WORKFLOW),
+            ("e2e", DEFAULT_E2E_WORKFLOW),
+            ("make", DEFAULT_MAKE_INCLUDE),
+        ]
+
+
+# =========================================================================
+# SA259 — generated Makefile gate targets
+# =========================================================================
+
+
+class TestMakeIncludeGeneration:
+    """The generated Makefile include is projected from the registry."""
+
+    @staticmethod
+    def _generated_pairs() -> list[tuple[str, str, tuple[str, ...], str]]:
+        return sync_ci_gate_jobs_module._generated_make_targets(_parse_registry(DEFAULT_REGISTRY))
+
+    def test_real_include_is_current_and_complete(self) -> None:
+        """The committed include matches the renderer and names every target."""
+        drift, expected = sync_ci_gate_jobs_module.sync_make_include(
+            DEFAULT_MAKE_INCLUDE, DEFAULT_REGISTRY
+        )
+        assert drift is False
+        assert expected == DEFAULT_MAKE_INCLUDE.read_text(encoding="utf-8")
+        generated_targets = [target for _, target, _, _ in self._generated_pairs()]
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        hand_owned_targets = {
+            gate["bindings"]["make_target"]
+            for gate in registry
+            if gate["id"] in HAND_OWNED_MAKE_TARGETS
+        }
+        assert generated_targets
+        assert hand_owned_targets
+        assert not hand_owned_targets & set(generated_targets)
+        for target in generated_targets:
+            assert f"\n{target}:\n" in expected
+        for target in hand_owned_targets:
+            assert f"\n{target}:\n" not in expected
+        assert f".PHONY: {' '.join(generated_targets)}\n" in expected
+
+    def test_comment_catalog_only_names_registry_gates(self) -> None:
+        """A stale curated comment cannot survive a gate's removal."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        registry_ids = {gate["id"] for gate in registry}
+        assert set(MAKE_TARGET_COMMENTS) <= registry_ids
+
+    def test_makefile_defines_no_generated_recipe(self) -> None:
+        """The Makefile includes the fragment instead of holding the recipes."""
+        makefile_text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+        assert "include $(MAKEFILE_ROOT)scripts/gates.mk" in makefile_text
+        for _, target, _, _ in self._generated_pairs():
+            assert f"{target}:" not in makefile_text
+
+    def test_default_goal_stays_help_after_include(self) -> None:
+        """Bare make prints help; the include's first target is not the goal."""
+        result = subprocess.run(
+            ["make", "-n"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "QuickScale Development Commands" in result.stdout
+        assert "check_module_core_compatibility" not in result.stdout
+
+    def test_gate_with_target_but_no_recipe_fails_closed(self) -> None:
+        """A new gate cannot ship without a recipe or an explicit exemption."""
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["bindings"] = {"make_target": "check-unowned", "ci_job": None, "local_ci_stage": None}
+        with pytest.raises(GeneratorError, match="no make_recipe"):
+            sync_ci_gate_jobs_module._generated_make_targets([gate])
+
+    def test_hand_owned_gate_with_recipe_fails_closed(self) -> None:
+        """A hand-owned exemption and a recipe on one gate contradict each other."""
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["id"] = "check-gate-suites"
+        gate["make_recipe"] = ["@echo gate"]
+        with pytest.raises(GeneratorError, match="both a make_recipe and a hand-owned"):
+            sync_ci_gate_jobs_module._generated_make_targets([gate])
+
+    def test_stale_hand_owned_exemption_fails_closed(self) -> None:
+        """An exemption naming a removed gate is a generation error."""
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["make_recipe"] = ["@echo gate"]
+        with pytest.raises(GeneratorError, match="unknown gate"):
+            sync_ci_gate_jobs_module._generated_make_targets([gate])
+
+    def test_recipe_without_make_target_fails_closed(self) -> None:
+        """A recipe with no target to attach it to is rejected."""
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["bindings"] = {"make_target": None, "ci_job": None, "local_ci_stage": None}
+        gate["make_recipe"] = ["@echo gate"]
+        with pytest.raises(GeneratorError, match="requires a string make_target"):
+            sync_ci_gate_jobs_module._generated_make_targets([gate])
+
+    def test_schema_rejects_non_list_recipe(self) -> None:
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["make_recipe"] = "@echo gate"
+        data = dict(_MINIMAL_REGISTRY)
+        data["gates"] = [gate]
+        with pytest.raises(SchemaValidationError, match="must be a list"):
+            _validate_registry(data)
+
+    def test_schema_rejects_empty_recipe(self) -> None:
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["make_recipe"] = []
+        data = dict(_MINIMAL_REGISTRY)
+        data["gates"] = [gate]
+        with pytest.raises(SchemaValidationError, match="non-empty"):
+            _validate_registry(data)
+
+    def test_schema_rejects_non_string_recipe_line(self) -> None:
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["make_recipe"] = [42]
+        data = dict(_MINIMAL_REGISTRY)
+        data["gates"] = [gate]
+        with pytest.raises(SchemaValidationError, match="non-empty string"):
+            _validate_registry(data)
+
+    def test_schema_rejects_untrimmed_recipe_line(self) -> None:
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["make_recipe"] = [" @echo gate "]
+        data = dict(_MINIMAL_REGISTRY)
+        data["gates"] = [gate]
+        with pytest.raises(SchemaValidationError, match="whitespace-trimmed"):
+            _validate_registry(data)
+
+    def test_schema_rejects_recipe_without_make_target(self) -> None:
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["bindings"] = {"make_target": None, "ci_job": None, "local_ci_stage": None}
+        gate["make_recipe"] = ["@echo gate"]
+        data = dict(_MINIMAL_REGISTRY)
+        data["gates"] = [gate]
+        with pytest.raises(SchemaValidationError, match="requires a string make_target"):
+            _validate_registry(data)
+
+    def test_schema_accepts_missing_recipe(self) -> None:
+        """A gate without make_recipe is valid; its recipe stays hand-written."""
+        gates = _validate_registry(dict(_MINIMAL_REGISTRY))
+        assert "make_recipe" not in gates[0]
+
+    def test_cli_reports_writes_and_cleans_include_drift(self, tmp_path: Path) -> None:
+        """Drift is reported, written, and then checks clean through the CLI."""
+        expected = sync_ci_gate_jobs_module._render_make_include(_parse_registry(DEFAULT_REGISTRY))
+        include_path = tmp_path / "gates.mk"
+        include_path.write_text(
+            expected.replace("check-core-compat:", "check-core-compat-broken:", 1),
+            encoding="utf-8",
+        )
+        command = [sys.executable, str(Path(sync_ci_gate_jobs_module.__file__))]
+        args = ["--make-include", str(include_path), "--registry", str(DEFAULT_REGISTRY)]
+
+        check = subprocess.run(
+            [*command, "--check", *args], capture_output=True, text=True, timeout=30
+        )
+        assert check.returncode == 1, check.stderr
+        assert "check-core-compat-broken" in check.stdout
+
+        write = subprocess.run(
+            [*command, "--write", *args], capture_output=True, text=True, timeout=30
+        )
+        assert write.returncode == 0, write.stderr
+        assert include_path.read_text(encoding="utf-8") == expected
+
+        clean = subprocess.run(
+            [*command, "--check", *args], capture_output=True, text=True, timeout=30
+        )
+        assert clean.returncode == 0, clean.stderr
+
+    def test_write_creates_missing_include(self, tmp_path: Path) -> None:
+        """A checkout without the fragment can bootstrap it with --write."""
+        include_path = tmp_path / "new-gates.mk"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(sync_ci_gate_jobs_module.__file__)),
+                "--write",
+                "--make-include",
+                str(include_path),
+                "--registry",
+                str(DEFAULT_REGISTRY),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stderr
+        expected = sync_ci_gate_jobs_module._render_make_include(_parse_registry(DEFAULT_REGISTRY))
+        assert include_path.read_text(encoding="utf-8") == expected
+
+    def test_mandatory_check_plans_include_drift_gate(self) -> None:
+        """The make check recipe runs the direct generation gate over the include."""
+        result = subprocess.run(
+            ["make", "-n", "check"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "scripts/sync_ci_gate_jobs.py --check" in result.stdout
 
 
 # =========================================================================

@@ -61,10 +61,10 @@
 #   make legacy-status        - Show legacy symlink status
 #   make clean                - Remove build artifacts
 
-.PHONY: setup bootstrap smoke-install install \
+.PHONY: setup bootstrap install \
         test test-unit test-integration test-bypassrls test-cov test-cov-policy test-integration-worker-pool test-ci-local-parallel test-e2e test-postgres-provisioning \
-        lint lint-fix lint-frontend frontend-proof lint-agent typecheck format \
-        quality fix check ci ci-e2e release-gate retry retry-show \
+        lint lint-fix lint-frontend lint-agent typecheck format \
+        fix check ci ci-e2e release-gate retry retry-show \
         docs \
         build clean \
 		beta-migrate-fresh \
@@ -73,13 +73,9 @@
         seal-module seal-modules seal-status \
         legacy-mount legacy-unmount legacy-status \
         version-check version-update bump-version \
-        check-core-compat check-module-core-imports check-manifest-sync \
-        check-module-app-declaration check-org-context-primitives \
-         check-csrf-exempt check-commit-testimony check-project-contract-vintage check-gate-suites isolation-conformance \
-         check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture security-negative-probes refresh-action-pins \
-         check-workflow-security check-secret-scanning check-module-conventions \
-         check-split-facade-imports \
-         check-gate-parity check-ci-gate-generation \
+        check-gate-suites isolation-conformance \
+        security-negative-probes refresh-action-pins \
+        check-gate-parity check-ci-gate-generation \
         sa117-check sa117-emit sa117-lock sa117-lock-diff \
         sa117-capture sa117-verify sa117-authorize sa117-rollback \
         sa117-apply sa117-check-origin sa117-check-containers \
@@ -121,6 +117,14 @@ CHECK_GATE_TARGETS := $(strip $(CHECK_GATE_TARGETS_RAW))
 ifeq ($(strip $(CHECK_GATE_TARGETS)),)
 $(error Unable to derive local check gate targets from $(GATE_REGISTRY))
 endif
+# Registry-bound gate targets, their recipes, and their .PHONY entries are
+# generated into this include from gate_registry.json by
+# scripts/sync_ci_gate_jobs.py (`make check` fails when it is not current).
+# check-gate-suites keeps its hand-written inline recipe further below.
+# The include's first target must not steal the default goal: bare `make`
+# prints help regardless of include order.
+.DEFAULT_GOAL := help
+include $(MAKEFILE_ROOT)scripts/gates.mk
 RUFF_CACHE_DIR ?= .ruff_cache/make
 # Unit-test worker count. Use ``0`` for a true serial run, ``auto`` for pytest's
 # own CPU-count default, or an explicit integer (e.g. CI pins a fixed count).
@@ -940,16 +944,6 @@ typecheck:
 lint-frontend:
 	@poetry run scripts/lint_frontend.sh
 
-# Render showcase_react and prove the generated frontend toolchain without Docker
-frontend-proof:
-	@scripts/frontend_proof.sh
-
-# Build wheels, install into throwaway venv outside source tree, and run
-# non-mutating CLI smoke tests (SA110 installed-artifact smoke gate).
-# Must run from the repository root with Poetry and a compatible Python.
-smoke-install:
-	@scripts/smoke_install.sh
-
 # Lint .agent adapter shell scripts for syntax errors
 lint-agent:
 	@scripts/lint_agentic_flow.sh
@@ -997,127 +991,18 @@ format:
 	fi
 	@echo "✅ Formatting done!"
 
-# --- Core Compatibility Check ---
-
-# Check each module's quickscale_core imports against the current core API.
-# This verifies that every import from quickscale_core in a module's source
-# resolves to an existing symbol, and that the module's quickscale-core
-# specifier is exactly the lockstep pin derived from VERSION.
-check-core-compat:
-	@$(PYTHON) scripts/check_module_core_compatibility.py
-
-# --- Module-Core Import Linter ---
-
-# Check that module code only imports from quickscale_core.runtime
-# (not from internal subpackages like dr_engine, contracts, manifest, etc.).
-# Per-module legacy exceptions exist for billing/crm adapter seams only.
-check-module-core-imports:
-	@$(PYTHON) scripts/check_module_core_imports.py
-
-# --- Manifest Sync Gate (SA16.1) ---
-
-# Verify that every module-owned module.yml matches its core snapshot.
-# Fails CI if drift is introduced.  Run ``make manifest-sync`` to
-# resync snapshots after intentionally updating a module manifest.
-check-manifest-sync:
-	@$(PYTHON) scripts/sync_module_manifests.py
+# --- Repository gates (registry-generated recipes) ---
+#
+# The registry-bound gate targets and their command recipes are generated into
+# scripts/gates.mk (included near the top) from scripts/gate_registry.json, so
+# each recipe is authored once in the registry and a new gate needs no Makefile
+# edit.  The hand-written targets that remain here are the ones a registry
+# projection cannot express: manifest-sync (the writer paired with the
+# check-manifest-sync gate; it resyncs module-owned module.yml snapshots after
+# an intentional manifest change) and check-gate-suites below.
 
 manifest-sync:
 	@$(PYTHON) scripts/sync_module_manifests.py --sync
-
-# --- Module App Declaration Gate (SA167c) ---
-
-# Verify that evidence-bearing modules declare exactly one valid Django apps
-# wiring projection in their authoritative source manifest.
-check-module-app-declaration:
-	@$(PYTHON) scripts/check_module_app_declaration.py
-
-# --- Org-Context Primitives Gate (SA13.4) ---
-
-# Hard-fail lint gate for direct external use of the three privatized
-# org-context primitives.  Exits 1 on any violation — all SA13.2/SA13.3
-# migrations are complete.  AF9 None-path hardening deferred;
-# compatibility aliases remain but trigger the gate.
-check-org-context-primitives:
-	@$(PYTHON) scripts/check_org_context_primitives.py
-
-# --- CSRF-Exempt Gate (SA46) ---
-
-# Hard-fail AST gate that requires every csrf_exempt callsite to pair
-# with _enforce_csrf or cryptographic signature verification.
-# Exits 1 on any unprotected csrf_exempt usage.
-check-csrf-exempt:
-	@$(PYTHON) scripts/check_csrf_exempt_gate.py
-
-# --- Behavioural Commit Testimony Gate (SA166) ---
-
-# Inspect every non-merge commit in the selected base-to-head range. Changes
-# to workflows, the gate registry, or PostgreSQL provisioning stations require
-# a vNN roadmap reference in the commit message, bare (v88) or dotted
-# (v0.88.0). No ticket form or changelog entry substitutes for it.
-check-commit-testimony:
-	@$(PYTHON) scripts/check_commit_testimony.py
-
-# --- Project Contract Vintage Gate (SA207, SA211) ---
-
-# Inspect every non-merge commit in the selected base-to-head range.  A change
-# to any template the generator emits (the watched set derives from the
-# generator's emission mapping), a generator change that alters the emitted
-# file set, or a module manifest step whose text changes without a new id
-# requires a fresh adoption step id in the same commit (the project
-# declaration or the module manifest), so a generated-project contract change
-# cannot ship without its adoption steps.
-check-project-contract-vintage:
-	@$(PYTHON) scripts/check_project_contract_vintage.py
-
-# --- SA123 Security Gates ---
-
-# Public Make callers for the registry-bound scanner wrapper. Scanner
-# acquisition, invocation, and suppression adjudication remain owned by the
-# wrapper rather than being duplicated in Make recipes.
-check-dependency-vulnerabilities:
-	@$(PYTHON) scripts/check_security_gates.py dependency-vulnerabilities
-
-check-security-static-analysis:
-	@$(PYTHON) scripts/check_security_gates.py security-static-analysis
-
-# Exercise fresh-first migration behavior against isolated
-# generated fixtures without touching a real project or database.
-check-beta-migration-smoke:
-	@$(PYTHON) scripts/check_beta_migration_smoke.py
-
-# Render one fresh generated project and run Django's deployment checks in the
-# proxied and single-host forwarding cells.  A new deploy warning, or an
-# ungated SECURE_PROXY_SSL_HEADER in the single-host cell, fails the gate.
-check-generated-deploy-posture:
-	@$(PYTHON) scripts/check_generated_deploy_posture.py
-
-# --- SA202 Supply-chain gates ---
-
-# Fail on any zizmor finding at medium severity and confidence or above: an
-# unpinned third-party `uses:` ref, or a workflow with no top-level
-# `permissions:` block.
-check-workflow-security:
-	@$(PYTHON) scripts/check_workflow_security.py
-
-# Fail on any committed secret gitleaks reports after applying the reasoned
-# allowlists in scripts/gitleaks.toml.
-check-secret-scanning:
-	@$(PYTHON) scripts/check_secret_scanning.py
-
-# --- Module Conventions Conformance Gate (rule 40) ---
-
-# Run the rule 40 conformance check over every module manifest and module
-# source tree.  Every covered rule's detector has a control case under
-# scripts/tests_module_conventions/; the detectors live by rule theme under
-# scripts/module_conventions/.  Rules whose owning convention ticket has not
-# landed are recorded in the check's OPEN_RULES mapping.
-check-module-conventions:
-	@$(PYTHON) scripts/check_module_conventions.py
-
-# Reject a private module importing its own package's facade (SA234).
-check-split-facade-imports:
-	@$(PYTHON) scripts/check_split_facade_imports.py
 
 security-negative-probes:
 	@$(PYTHON) scripts/check_security_gates.py security-negative-probes
@@ -1521,11 +1406,6 @@ check:
 		echo ""; \
 		echo "🎉 All checks passed!"; \
 	fi
-
-# Full code quality analysis: dead code (vulture), complexity (radon), duplication (pylint)
-# Reports saved to .quickscale/quality_report.{json,md}
-quality:
-	@scripts/check_quality.sh
 
 # Release closeout gate (docs/technical/publish_procedure.md Part 1.2).
 #
