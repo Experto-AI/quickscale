@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.core.checks import CheckMessage, Error
 
+from quickscale_core.runtime import module_settings_are_supplied
 from quickscale_modules_analytics._settings import (
     AnalyticsRuntimeSettingsSnapshot,
 )
@@ -48,6 +49,12 @@ def check_analytics_settings(
     ``QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG``) does not need the key, because the
     configurator disables capture before it resolves one.
     """
+    if not module_settings_are_supplied("analytics"):
+        # The generic settings check names the missing declared setting;
+        # Django runs every registered check independently, so this check
+        # stays silent until the project is fully applied.
+        return []
+
     messages: list[CheckMessage] = []
     snapshot = AnalyticsRuntimeSettingsSnapshot.from_settings()
     if not snapshot.enabled:
