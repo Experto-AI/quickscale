@@ -12,10 +12,12 @@ from quickscale_core.runtime import (
     register_module_settings_check,
 )
 from quickscale_modules_orgs.removal import (
-    BLOG_PERSONAL_DATA,
     OrganizationRemovalObligation,
     RemovalAction,
 )
+
+#: Blog's own removal-obligation name (Module Conventions rule 2/33).
+BLOG_PERSONAL_DATA = "quickscale_blog:personal-data"
 
 
 class QuickscaleBlogConfig(AppConfig):
