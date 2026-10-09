@@ -13,17 +13,6 @@ from django.core.checks import CheckMessage, Error
 
 from quickscale_modules_billing.services import BillingSettingsSnapshot
 
-#: The declared settings this check reads.  Presence is the generic settings
-#: check's concern; the guard below keeps this check from raising when one is
-#: missing, so ``manage.py check`` reports the missing setting instead.
-_DECLARED_SETTINGS = (
-    "QUICKSCALE_BILLING_ENABLED",
-    "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
-    "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
-    "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
-    "QUICKSCALE_BILLING_CURRENCY",
-)
-
 #: The projected secret settings apply writes from the `_ENV_VAR` options
 #: (rule 35).  They are not manifest options, so the generic settings check
 #: does not report them; a missing one is reported here instead of raising
@@ -45,11 +34,8 @@ def check_billing_settings(
     key or webhook signing secret resolves empty.  The module's manifest
     default enables billing, so an operator who does not use Stripe switches
     billing off explicitly.  The declared options themselves are validated by
-    the generic settings check registered alongside this one.
+    the generic settings check registered first.
     """
-    if any(not hasattr(settings, name) for name in _DECLARED_SETTINGS):
-        return []
-
     messages: list[CheckMessage] = []
     snapshot = BillingSettingsSnapshot.from_settings()
     if not snapshot.enabled:
