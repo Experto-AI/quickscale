@@ -11,6 +11,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.checks import CheckMessage, Error
 
+from quickscale_core.runtime import module_settings_are_supplied
 from quickscale_modules_billing.services import BillingSettingsSnapshot
 
 #: The projected secret settings apply writes from the `_ENV_VAR` options
@@ -36,6 +37,12 @@ def check_billing_settings(
     billing off explicitly.  The declared options themselves are validated by
     the generic settings check registered first.
     """
+    if not module_settings_are_supplied("billing"):
+        # The generic settings check names the missing declared setting;
+        # Django runs every registered check independently, so this check
+        # stays silent until the project is fully applied.
+        return []
+
     messages: list[CheckMessage] = []
     snapshot = BillingSettingsSnapshot.from_settings()
     if not snapshot.enabled:

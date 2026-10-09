@@ -319,8 +319,8 @@ def _ready_scope_signature_calls(tree: ast.Module) -> tuple[bool, list[str]]:
 
     Registration must run from the AppConfig's own ``ready()`` scope; the
     same traversal follows one level of ``self.<method>`` and module-level
-    functions.  The returned call names are in traversal order, so a
-    settings check that runs after the module checks is visible.
+    functions, expanding each helper at the position its call executes so the
+    returned call names match Python's execution order.
     """
     app_config = next(
         (
@@ -356,12 +356,11 @@ def _ready_scope_signature_calls(tree: ast.Module) -> tuple[bool, list[str]]:
         if isinstance(statement, ast.FunctionDef)
     }
     seen: set[int] = set()
-    pending: list[ast.FunctionDef] = [ready]
     order: list[str] = []
-    while pending:
-        node = pending.pop(0)
+
+    def expand(node: ast.FunctionDef) -> None:
         if id(node) in seen:
-            continue
+            return
         seen.add(id(node))
         for call in _direct_calls(node):
             if isinstance(call.func, ast.Name):
@@ -369,14 +368,16 @@ def _ready_scope_signature_calls(tree: ast.Module) -> tuple[bool, list[str]]:
                 if called in {"register_module_checks", "register_module_settings_check"}:
                     order.append(called)
                 if called in module_functions:
-                    pending.append(module_functions[called])
+                    expand(module_functions[called])
             elif (
                 isinstance(call.func, ast.Attribute)
                 and isinstance(call.func.value, ast.Name)
                 and call.func.value.id == "self"
                 and call.func.attr in methods
             ):
-                pending.append(methods[call.func.attr])
+                expand(methods[call.func.attr])
+
+    expand(ready)
     return bool(order), order
 
 
@@ -395,6 +396,40 @@ def _ready_registration_order(tree: ast.Module) -> list[str]:
 def _expected_error_base(module_name: str) -> str:
     """Return the one ``<Module>Error`` base name the module must declare."""
     return f"{module_name.capitalize()}Error"
+
+
+#: Builtin exception bases a module-defined error may subclass without the
+#: ``Error`` suffix; the no-exceptions clause treats them as module errors.
+_BUILTIN_EXCEPTION_BASES = frozenset(
+    {
+        "ArithmeticError",
+        "AssertionError",
+        "AttributeError",
+        "EOFError",
+        "Exception",
+        "ImportError",
+        "IndexError",
+        "KeyError",
+        "LookupError",
+        "NameError",
+        "NotImplementedError",
+        "OSError",
+        "RuntimeError",
+        "StopIteration",
+        "TypeError",
+        "ValueError",
+    }
+)
+
+
+def _declares_module_error(node: ast.ClassDef) -> bool:
+    """Return whether a class is a module-defined error by name or base."""
+    if node.name.endswith("Error"):
+        return True
+    return any(
+        base == "Exception" or base.endswith("Error") or base in _BUILTIN_EXCEPTION_BASES
+        for base in _class_names(node)
+    )
 
 
 def rule_10_checks_errors(corpus: Corpus) -> list[str]:
@@ -446,7 +481,7 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
                 if not rel.endswith(".py"):
                     continue
                 for node in _parse(text).body:
-                    if isinstance(node, ast.ClassDef) and node.name.endswith("Error"):
+                    if isinstance(node, ast.ClassDef) and _declares_module_error(node):
                         violations.append(
                             f"rule 10: {module.name}: {rel} defines {node.name} but "
                             "the module ships no exceptions.py"

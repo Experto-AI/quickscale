@@ -481,13 +481,13 @@ def test_optional_sender_controls() -> None:
         module,
         views=(
             "import quickscale_modules_notifications.services\n\n"
-            "from quickscale_modules_notifications.services import NotificationError\n\n\n"
+            "from quickscale_modules_notifications.services import NotificationsError\n\n\n"
             "def send_now() -> None:\n"
             "    try:\n"
             "        quickscale_modules_notifications.services.send_notification(\n"
             "            template_key='x', recipients=[], context={}\n"
             "        )\n"
-            "    except NotificationError:\n"
+            "    except NotificationsError:\n"
             "        return\n"
         ),
     )
@@ -497,13 +497,13 @@ def test_optional_sender_controls() -> None:
         module,
         views=(
             "from quickscale_modules_notifications.services import (\n"
-            "    NotificationError,\n"
+            "    NotificationsError,\n"
             "    send_notification,\n"
             ")\n\n\n"
             "def send_now() -> None:\n"
             "    try:\n"
             "        send_notification(template_key='x', recipients=[], context={})\n"
-            "    except NotificationError:\n"
+            "    except NotificationsError:\n"
             "        return\n"
         ),
     )

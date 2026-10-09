@@ -874,6 +874,26 @@ class TestRegisterModuleSettingsCheck:
         with pytest.raises(ValueError, match="non-empty module name"):
             conventions.register_module_settings_check(self._app_config(), "")
 
+    def test_module_settings_are_supplied_reads_the_schema(self) -> None:
+        """The schema-driven guard never carries a hand-maintained list."""
+        from django.test import override_settings
+
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
+        ):
+            assert conventions.module_settings_are_supplied("listings") is True
+        with override_settings(MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA):
+            assert conventions.module_settings_are_supplied("listings") is False
+        with override_settings(MODULE_SETTINGS_SCHEMA=None):
+            assert conventions.module_settings_are_supplied("listings") is False
+        with override_settings(MODULE_SETTINGS_SCHEMA={"other": {}}):
+            assert conventions.module_settings_are_supplied("listings") is False
+
+    def test_control_module_settings_helper_requires_a_name(self) -> None:
+        with pytest.raises(ValueError, match="non-empty module name"):
+            conventions.module_settings_are_supplied("")
+
     def test_retired_setting_fails_startup_naming_the_replacement(
         self, system_check_registry
     ) -> None:
@@ -1193,6 +1213,27 @@ class TestExceptionHandler:
             EmptyCodeError("empty code"),
         ):
             assert handler(exc, {}) is None, type(exc).__name__
+
+    def test_declared_error_marks_the_transaction_for_rollback(
+        self, monkeypatch
+    ) -> None:
+        """A declared module error keeps DRF's ATOMIC_REQUESTS rollback."""
+        from rest_framework import views as drf_views
+
+        calls: list[bool] = []
+        monkeypatch.setattr(drf_views, "set_rollback", lambda: calls.append(True))
+        handler = self._handler()
+
+        class DeclaredError(Exception):
+            status_code = 402
+            default_code = "insufficient_credits"
+
+        assert handler(DeclaredError("no credits"), {}) is not None
+        assert calls == [True]
+
+        calls.clear()
+        assert handler(ValueError("unhandled"), {}) is None
+        assert calls == []
 
     def test_every_handled_error_has_exactly_the_one_shape(self) -> None:
         import rest_framework.exceptions as drf_exceptions

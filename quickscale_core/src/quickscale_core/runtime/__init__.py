@@ -65,6 +65,7 @@ _LAZY_CONVENTIONS_SYMBOLS: frozenset[str] = frozenset(
         "PersonalDataTreatment",
         "collect_capabilities",
         "exception_handler",
+        "module_settings_are_supplied",
         "register_module_checks",
         "register_module_settings_check",
     }
@@ -199,6 +200,7 @@ __all__ = [
     "PersonalDataTreatment",
     "collect_capabilities",
     "exception_handler",
+    "module_settings_are_supplied",
     "register_module_checks",
     "register_module_settings_check",
     # Shared admin behavior (from admin)

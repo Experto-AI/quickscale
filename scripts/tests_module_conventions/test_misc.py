@@ -95,6 +95,22 @@ def test_missing_exceptions_file_control() -> None:
         "ships no exceptions.py" in violation
         for violation in _violations(checker.rule_10_checks_errors, declares_elsewhere)
     )
+    suffixless = _with_files(
+        without_exceptions,
+        services=('"""Demo service surface."""\n\n\nclass DemoProblem(Exception):\n    pass\n'),
+    )
+    assert any(
+        "ships no exceptions.py" in violation
+        for violation in _violations(checker.rule_10_checks_errors, suffixless)
+    )
+    builtin_base = _with_files(
+        without_exceptions,
+        services=('"""Demo service surface."""\n\n\nclass DemoProblem(ValueError):\n    pass\n'),
+    )
+    assert any(
+        "ships no exceptions.py" in violation
+        for violation in _violations(checker.rule_10_checks_errors, builtin_base)
+    )
 
 
 def test_settings_check_order_control() -> None:
@@ -120,6 +136,44 @@ def test_settings_check_order_control() -> None:
     assert any(
         "before the generic settings check" in violation
         for violation in _violations(checker.rule_10_checks_errors, inverted)
+    )
+
+
+def test_settings_check_order_follows_helper_execution() -> None:
+    """A helper called before the module checks registers the settings check."""
+    module = _golden_module()
+    via_helper = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "    def ready(self) -> None:\n"
+            "        from quickscale_modules_demo.checks import check_demo\n\n"
+            "        register_module_checks(self, [check_demo])",
+            "    def _setup_settings(self) -> None:\n"
+            "        register_module_settings_check(self, 'demo')\n\n"
+            "    def ready(self) -> None:\n"
+            "        from quickscale_modules_demo.checks import check_demo\n\n"
+            "        self._setup_settings()\n"
+            "        register_module_checks(self, [check_demo])",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, via_helper) == []
+    helper_after = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "    def ready(self) -> None:\n"
+            "        from quickscale_modules_demo.checks import check_demo\n\n"
+            "        register_module_checks(self, [check_demo])",
+            "    def _setup_settings(self) -> None:\n"
+            "        register_module_settings_check(self, 'demo')\n\n"
+            "    def ready(self) -> None:\n"
+            "        from quickscale_modules_demo.checks import check_demo\n\n"
+            "        register_module_checks(self, [check_demo])\n"
+            "        self._setup_settings()",
+        ),
+    )
+    assert any(
+        "before the generic settings check" in violation
+        for violation in _violations(checker.rule_10_checks_errors, helper_after)
     )
 
 
