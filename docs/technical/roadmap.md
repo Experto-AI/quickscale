@@ -416,6 +416,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   audit `rules-held-by-parity-not-derivation`, option 1 plus option 3's budget;
   §11 `check_quality.sh:170–172` and `contracts/imperative_inventory.py`).
 
+  **Progress:** the fail-open is closed — `check_quality.sh` derives its module paths from
+  discovery alone and exits non-zero when discovery finds nothing — and the vestigial
+  `contracts/imperative_inventory.py` is deleted. Remaining: registry-generated Makefile
+  targets, `publish.yml` regions, and docs table; the parity-checker shrink; the layout-derived
+  split-facade scope; and `scripts/` under the quality gate.
+
   **Acceptance:** `gate_registry.json` is the only gate list; the Makefile gate targets, the
   `check_ci_locally.sh` stage list, the `ci.yml`/`publish.yml`/e2e regions, and the docs table are
   generated from it, and `check_gate_parity.py` shrinks to "generated files are current". The
