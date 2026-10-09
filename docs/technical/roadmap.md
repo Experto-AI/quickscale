@@ -436,9 +436,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   renders into `scripts/gates.mk` (included by the Makefile; the registry's `make_target`
   bindings name the targets), the generator fails closed when a gate has neither a recipe nor
   a declared hand-owned exemption (`check-gate-suites` keeps its hand-written inline recipe),
-  and `check_gate_parity.py` validates the new field. Decisions record the gate and rule
-  budget. Remaining: `publish.yml` regions and the docs table; the parity-checker shrink; the
-  layout-derived split-facade scope; and `scripts/` under the quality gate.
+  and `check_gate_parity.py` validates the new field. The publish workflow's gate-step region
+  is generated from the registry through the same default selector, so `make check` fails on
+  publish drift. Decisions record the gate and rule budget. Remaining: the docs table; the
+  parity-checker shrink; the layout-derived split-facade scope; and `scripts/` under the
+  quality gate.
 
   **Acceptance:** `gate_registry.json` is the only gate list; the Makefile gate targets, the
   `check_ci_locally.sh` stage list, the `ci.yml`/`publish.yml`/e2e regions, and the docs table are

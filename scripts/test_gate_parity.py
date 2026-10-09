@@ -9,6 +9,7 @@ Test matrix
 - Malformed sources (bad JSON, missing files)
 - Parser precision (serial/parallel/hosted/publish extraction)
 - Additive boundary (new gate in registry but not in any source)
+- SA259 publish gate-step generation (real file currency, marker ownership, registry projection)
 """
 
 from __future__ import annotations
@@ -62,6 +63,7 @@ from sync_ci_gate_jobs import (
     CHECKOUT_REF,
     DEFAULT_E2E_WORKFLOW,
     DEFAULT_MAKE_INCLUDE,
+    DEFAULT_PUBLISH_WORKFLOW,
     DEFAULT_REGISTRY,
     DEFAULT_WORKFLOW,
     E2E_PATHS_BEGIN,
@@ -72,6 +74,10 @@ from sync_ci_gate_jobs import (
     MAKE_TARGET_COMMENTS,
     NEEDS_BEGIN,
     NEEDS_END,
+    PUBLISH_BEGIN,
+    PUBLISH_END,
+    PUBLISH_GATE_ORDER,
+    PUBLISH_STEP_CATALOG,
     UNOWNED_JOB_IDS,
     GeneratorError,
     _atomic_write,
@@ -79,6 +85,7 @@ from sync_ci_gate_jobs import (
     _parse_registry,
     _parse_workflow,
     expected_e2e_workflow_text,
+    expected_publish_workflow_text,
     expected_workflow_text,
 )
 
@@ -1448,7 +1455,8 @@ class TestParserPrecision:
             ("test", "make check-generated-deploy-posture\n"),
             ("test", "make check-workflow-security\n"),
             ("test", "make check-secret-scanning\n"),
-            ("test", "make check-module-conventions\nmake check-split-facade-imports\n"),
+            ("test", "make check-module-conventions\n"),
+            ("test", "make check-split-facade-imports\n"),
             ("test", "make frontend-proof\n"),
             ("test", "make smoke-install\n"),
             ("test", "make lint -- --core --cli --modules --devtools\n"),
@@ -4237,10 +4245,15 @@ class TestE2eWorkflowGeneration:
             calls.append(("make", path))
             return False, ""
 
+        def fake_publish(path: Path, _registry: Path) -> tuple[bool, str]:
+            calls.append(("publish", path))
+            return False, ""
+
         monkeypatch.setattr(sync_ci_gate_jobs_module, "_parse_registry", fake_registry)
         monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_workflow", fake_hosted)
         monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_e2e_workflow", fake_e2e)
         monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_make_include", fake_make_include)
+        monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_publish_workflow", fake_publish)
         assert sync_ci_gate_jobs_module.main(["--check", "--e2e-workflow", "custom-e2e.yml"]) == 0
         assert calls == [("e2e", Path("custom-e2e.yml"))]
         calls.clear()
@@ -4249,6 +4262,12 @@ class TestE2eWorkflowGeneration:
         calls.clear()
         assert sync_ci_gate_jobs_module.main(["--check", "--make-include", "custom-gates.mk"]) == 0
         assert calls == [("make", Path("custom-gates.mk"))]
+        calls.clear()
+        assert (
+            sync_ci_gate_jobs_module.main(["--check", "--publish-workflow", "custom-publish.yml"])
+            == 0
+        )
+        assert calls == [("publish", Path("custom-publish.yml"))]
         calls.clear()
         assert (
             sync_ci_gate_jobs_module.main(
@@ -4262,6 +4281,7 @@ class TestE2eWorkflowGeneration:
         assert calls == [
             ("hosted", DEFAULT_WORKFLOW),
             ("e2e", DEFAULT_E2E_WORKFLOW),
+            ("publish", DEFAULT_PUBLISH_WORKFLOW),
             ("make", DEFAULT_MAKE_INCLUDE),
         ]
 
@@ -4463,6 +4483,222 @@ class TestMakeIncludeGeneration:
         )
         assert result.returncode == 0, result.stderr
         assert "scripts/sync_ci_gate_jobs.py --check" in result.stdout
+
+
+# =========================================================================
+# SA259 — generated publish workflow gate steps
+# =========================================================================
+
+
+class TestPublishWorkflowGeneration:
+    """The publish gate-step region is projected from the registry."""
+
+    def test_real_publish_workflow_is_current(self) -> None:
+        """The committed publish workflow matches the renderer."""
+        drift, expected = sync_ci_gate_jobs_module.sync_publish_workflow(
+            DEFAULT_PUBLISH_WORKFLOW, DEFAULT_REGISTRY
+        )
+        assert drift is False
+        assert expected == DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+
+    def test_generation_is_idempotent_and_names_every_catalog_step(self) -> None:
+        """A generated workflow is stable and carries one step per catalog gate."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        current = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+        generated = expected_publish_workflow_text(current, registry)
+        assert expected_publish_workflow_text(generated, registry) == generated
+        assert generated.count(PUBLISH_BEGIN) == 1
+        assert generated.count(PUBLISH_END) == 1
+        workflow = _parse_workflow(generated, "fixture publish.yml")
+        steps = workflow["jobs"]["test"]["steps"]
+        names = [step.get("name") for step in steps if isinstance(step, dict)]
+        for gate_id in PUBLISH_GATE_ORDER:
+            name = PUBLISH_STEP_CATALOG[gate_id].step_name
+            assert names.count(name) == 1, f"expected exactly one {name!r} step"
+
+    def test_registry_make_target_edit_projects_into_publish_region(self, tmp_path: Path) -> None:
+        """A registry target edit propagates into its owned publish step."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        gates = _parse_registry(registry_path)
+        current = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+
+        generated = expected_publish_workflow_text(current, gates)
+
+        assert "make check-core-compat-renamed\n" in generated
+        assert "make check-core-compat\n" not in generated
+        assert expected_publish_workflow_text(generated, gates) == generated
+
+    def test_markerless_publish_workflow_bootstraps_to_the_marked_file(self) -> None:
+        """A marker-less workflow is bootstrapped around the existing gate steps."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        marked = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+        markerless = marked
+        for marker in (PUBLISH_BEGIN, PUBLISH_END):
+            markerless = markerless.replace(marker + "\n", "", 1)
+        assert markerless != marked
+        assert expected_publish_workflow_text(markerless, registry) == marked
+
+    def test_unowned_publish_bytes_are_preserved(self) -> None:
+        """Generation preserves every byte outside the owned marker region."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        current = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8").replace(
+            "name: Publish to PyPI\n", "name: Publish to PyPI\n# unowned sentinel\n", 1
+        )
+        generated = expected_publish_workflow_text(current, registry)
+
+        assert (
+            generated.split(PUBLISH_BEGIN + "\n", 1)[0] == current.split(PUBLISH_BEGIN + "\n", 1)[0]
+        )
+        assert generated.split(PUBLISH_END + "\n", 1)[1] == current.split(PUBLISH_END + "\n", 1)[1]
+
+    def test_marker_region_moved_outside_test_steps_fails_closed(self) -> None:
+        """A marker pair moved into another job cannot authorize rewriting that job."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        current = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+        relocated = current.replace(PUBLISH_BEGIN + "\n", "", 1).replace(PUBLISH_END + "\n", "", 1)
+        relocated = relocated.replace(
+            "      - name: Checkout repository\n",
+            PUBLISH_BEGIN + "\n      - name: Checkout repository\n",
+            1,
+        )
+        relocated = relocated.replace(
+            "      - name: Set up Python\n",
+            PUBLISH_END + "\n      - name: Set up Python\n",
+            1,
+        )
+        with pytest.raises(GeneratorError, match="outside the test job's steps"):
+            expected_publish_workflow_text(relocated, registry)
+
+    def test_step_content_after_end_marker_fails_closed(self, tmp_path: Path) -> None:
+        """A step property after the end marker belongs to the last gate step."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        valid = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+        injected = valid.replace(
+            PUBLISH_END + "\n",
+            PUBLISH_END + "\n        continue-on-error: true\n",
+            1,
+        )
+        assert injected != valid
+        with pytest.raises(GeneratorError, match="after the end marker belongs"):
+            expected_publish_workflow_text(injected, registry)
+
+        workflow_path = tmp_path / "publish.yml"
+        workflow_path.write_text(injected, encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(Path(sync_ci_gate_jobs_module.__file__)),
+                "--check",
+                "--publish-workflow",
+                str(workflow_path),
+                "--registry",
+                str(DEFAULT_REGISTRY),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 2
+        assert not result.stdout.strip()
+
+    def test_vintage_step_derives_its_target_from_the_registry(self, tmp_path: Path) -> None:
+        """The vintage step keeps its env prefix while projecting the registry target."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        for gate in registry_data["gates"]:
+            if gate["id"] == "check-project-contract-vintage":
+                gate["bindings"]["make_target"] = "check-project-contract-vintage-renamed"
+        registry_path = tmp_path / "registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        gates = _parse_registry(registry_path)
+        current = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+
+        generated = expected_publish_workflow_text(current, gates)
+
+        assert 'PROJECT_VINTAGE_BASE_REF="$(git describe' in generated
+        assert "make check-project-contract-vintage-renamed\n" in generated
+        assert "make check-project-contract-vintage\n" not in generated
+        assert expected_publish_workflow_text(generated, gates) == generated
+
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            lambda text: text.replace(PUBLISH_BEGIN + "\n", "", 1),
+            lambda text: text.replace(
+                PUBLISH_END + "\n", PUBLISH_END + "\n" + PUBLISH_END + "\n", 1
+            ),
+            lambda text: text.replace(PUBLISH_BEGIN + "\n", PUBLISH_END + "\n", 1),
+        ],
+    )
+    def test_malformed_marker_pairs_fail_closed(self, mutation: Any) -> None:
+        """Partial, duplicate, and nested marker pairs are invalid input."""
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        valid = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+        with pytest.raises(GeneratorError, match="marker"):
+            expected_publish_workflow_text(mutation(valid), registry)
+
+    def test_registry_publish_set_mismatch_fails_closed(self, tmp_path: Path) -> None:
+        """A publish-context change the catalog cannot project fails closed."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        for gate in registry_data["gates"]:
+            if gate["id"] == "check-split-facade-imports":
+                gate["required_contexts"] = [
+                    context for context in gate["required_contexts"] if context != "publish"
+                ]
+        removed_path = tmp_path / "removed.json"
+        removed_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        current = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+        with pytest.raises(GeneratorError, match="unsupported publish gate set"):
+            expected_publish_workflow_text(current, _parse_registry(removed_path))
+
+        registry_data["gates"].append(
+            {
+                "id": "fake-publish-gate",
+                "description": "Fake publish gate",
+                "required_contexts": ["publish"],
+                "bindings": {
+                    "make_target": "check-fake-publish",
+                    "ci_job": None,
+                    "local_ci_stage": None,
+                },
+                "depends_on": [],
+                "trigger_inputs": [],
+            }
+        )
+        added_path = tmp_path / "added.json"
+        added_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        with pytest.raises(GeneratorError, match="unsupported publish gate set"):
+            expected_publish_workflow_text(current, _parse_registry(added_path))
+
+    def test_cli_check_write_and_clean_exit_contract(self, tmp_path: Path) -> None:
+        """Drift is reported, written, and then checks clean through the CLI."""
+        workflow_path = tmp_path / "publish.yml"
+        current = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+        workflow_path.write_text(
+            current.replace("make smoke-install\n", "make smoke-install-stale\n", 1),
+            encoding="utf-8",
+        )
+        command = [sys.executable, str(Path(sync_ci_gate_jobs_module.__file__))]
+        args = ["--publish-workflow", str(workflow_path), "--registry", str(DEFAULT_REGISTRY)]
+
+        check = subprocess.run(
+            [*command, "--check", *args], capture_output=True, text=True, timeout=30
+        )
+        assert check.returncode == 1, check.stderr
+        assert "smoke-install-stale" in check.stdout
+
+        write = subprocess.run(
+            [*command, "--write", *args], capture_output=True, text=True, timeout=30
+        )
+        assert write.returncode == 0, write.stderr
+        assert workflow_path.read_text(encoding="utf-8") == current
+
+        clean = subprocess.run(
+            [*command, "--check", *args], capture_output=True, text=True, timeout=30
+        )
+        assert clean.returncode == 0, clean.stderr
 
 
 # =========================================================================
