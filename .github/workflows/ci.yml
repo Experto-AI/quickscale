@@ -614,7 +614,7 @@ jobs:
       run: |
         poetry install --with dev
 
-    - name: Reject a private module importing its own package's facade
+    - name: Reject a private module importing a facade in its distribution
       run: |
         make check-split-facade-imports
   # END GENERATED: hosted-gate-jobs

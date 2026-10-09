@@ -109,7 +109,7 @@ packages.
 | Co-change (≥5 shared, degree ≥.5) | blog↔listings 35/.74 (no import; lockstep `pyproject.toml` and convention sweeps; killed) · Makefile↔scripts 53/.60 · core:dr_engine↔backups 14/.67 (declared boundary) · cli commands↔utils 37/.62 |
 | Fan-in × churn | `quickscale_core.manifest` 50 importers × 56 changes · `quickscale_core.runtime` 51 × 24 · `orgs.current_org` 25 × 24 |
 | Migration census | 10 model-bearing modules × exactly one `0001_initial`; 45 in-place rewrites in 3 months (52 in 6); private symbols referenced from migrations: 1 (`blog/migrations/0001_initial.py:95`) |
-| Packages with `_*.py` split files | 12, of which 4 are inside the split-facade gate's `SCAN_ROOTS`. Outside: orgs 22, auth 8, notifications 6, backups 5, social 2, blog 2, storage 1, forms 1 |
+| Packages with `_*.py` split files | 15, all inside the split-facade gate's layout-derived scope |
 | Ownership | one author for every seam. Bus factor is 1 by construction, not a finding at this scale |
 
 **Coverage and residual risk.**
@@ -167,7 +167,7 @@ packages.
 | Vendored module source unmodified in projects | stated in the extension contract only | **convention** | — |
 | Shipped migrations immutable | none (SA204 plans a hash-manifest gate) | **none** | — |
 | Gate present in every required context | `check_gate_parity.py` compares five hand-written contexts | gated | closed-world (registry ↔ contexts) |
-| Private split module never imports its facade | `check_split_facade_imports.py` over 4 hand-listed `SCAN_ROOTS` | gated | **open-world on scope** (8 split packages unscanned) |
+| Private split module never imports its facade | `check_split_facade_imports.py` over the layout-derived scope (every `src/` package with `_*.py` modules) | gated | **closed-world over the layout** |
 | Convention prose ↔ harness | partition test parses `decisions.md` headings; vocabularies hand-mirrored | gated | rule list only |
 | Quality thresholds | `check_quality.sh` fixed fail lines (SA243) | gated | closed per metric, **but only over package `src/`** (`:163–178`) |
 
@@ -517,16 +517,19 @@ items:
     Detectors run to 7.3k lines, with 7.7k lines of tests. `rule_44.py` alone is 1,090 lines,
     and rule 44 still "stays open-world beyond that and is a review rule"
     ([decisions.md:1151](../technical/decisions.md)).
-  - **Hand-listed gate scopes** (absorbs prior **W8**). `check_split_facade_imports.py:32–50`
-    scans four hand-listed `SCAN_ROOTS` and three `FAMILY_ROOTS`. Twelve packages carry
-    `_*.py` split files, and eight of them are outside the scope (orgs 22, auth 8,
+  - **Hand-listed gate scopes** (absorbs prior **W8**). `check_split_facade_imports.py`
+    scanned four hand-listed `SCAN_ROOTS` and three `FAMILY_ROOTS`. Twelve packages carried
+    `_*.py` split files, and eight of them sat outside the scope (orgs 22, auth 8,
     notifications 6, backups 5, and others).
     - **W8's trigger has fired:** SA231 split the backups admin into `_admin_*` siblings
       behind an `admin.py` facade (`2cd4837c`, 2026-10-02). That predates the prior pass's
       "not fired" evaluation, and there are also orgs and auth splits.
-    - **No violating import was found:** the module hits were log-channel names allowed by
-      rule 46, or names defined in the imported module itself.
-    - **The rule therefore holds in those packages by luck, not by gate.**
+    - **Resolved in SA259:** the scope is derived from the layout and the family is the
+      distribution root. The widened scan found twelve imports of re-exported names through a
+      facade (orgs `_checks_structure.py` and `_purge_plan.py`, backups `_admin_artifact.py`
+      and `_admin_restore.py`), now importing the defining modules, and a scope-derivation
+      test fails when a split package is outside the scan. The earlier "no violating import"
+      reading held only for names a module defines itself, which the gate now encodes.
   - **Copies held equal:**
     - **Bundled manifests** (`quickscale_core/data/manifests/*/module.yml`) are byte-identical
       to the module manifests. All 45 commits that touched a `module.yml` in 3 months also
@@ -563,7 +566,8 @@ items:
   - **Growth variable:** rules, gates, and gate scopes.
   - **Unit costs:** a new gate costs about 12 stations. A new convention rule costs prose, a
     detector, vocabulary entries, a control case, and a partition entry. A new split package
-    needs a hand edit to `SCAN_ROOTS`, or it goes unscanned.
+    needed a hand edit to `SCAN_ROOTS`, or it went unscanned (SA259 derives the scope from the
+    layout).
   - **Measured growth:** 13 gates in two months, 50 rules and 43 detectors in a week, and
     58k lines of `scripts/` in three months.
   - **Side effects:** the copies multiply cross-track conflicts, and the parity tooling is the
@@ -800,9 +804,10 @@ requested. Each carries this pass's trigger evaluation.
   (`middleware.py:71–99`), and only the listed exempt prefixes remain.
 - **Two DB-connection constructors** (`start.sh` and the runtime). The `start.sh` half is a
   user-owned template, which makes it a manifestation of Finding 2.
-- **Split-facade violations in unscanned packages.** None were found. The hits were rule 46
-  log channels, or orgs `_personal_data.py:226` importing a name `tenancy.py` defines itself.
-  The scope gap is Finding 3.
+- **Split-facade violations in unscanned packages.** The audit's spot check found only rule 46
+  log channels or names a module defines itself; SA259's layout-derived scan then found twelve
+  imports of re-exported names in orgs and backups, now fixed to import the defining modules.
+  The scope gap is closed; see Finding 3.
 - **`contracts/imperative_inventory.py`.** It is vestigial (163 lines, every inventory empty).
   Deleted in SA259: the module, its `contracts` re-exports, and its tests are removed.
 - **`check_quality.sh:170–172`.** It falls back silently to a hardcoded path list when
@@ -872,7 +877,7 @@ the maintainer. It records present placement, not a history ledger.
 | `clean-break-schema-no-data-path` | open, rank 1 | **open, rank 1** | Re-derived independently; the rewrite rate is back up (45 in 3 months); private-symbol pin and bare-file restore edge re-verified |
 | `generated-file-ownership-unmodeled` | closed 2026-09-24 (SA207/SA211) | **open, rank 2 — regressed** | The closure relocated the compounding into declared, gated prose steps: 0 → 30 steps since 2026-09-24, three upgrade mechanisms, honor-system adoption |
 | W7 Stripe API version literal at five stations | watchlist | **superseded** by `rules-held-by-parity-not-derivation` | Five stations re-verified; one runtime refusal guards only the billing constant |
-| W8 split-facade gate scope hand-listed | watchlist | **superseded** by `rules-held-by-parity-not-derivation` (trigger fired) | SA231's backups admin split (`2cd4837c`) and the orgs and auth splits sit outside the four `SCAN_ROOTS`; no violation found |
+| W8 split-facade gate scope hand-listed | watchlist | **superseded** by `rules-held-by-parity-not-derivation` (trigger fired); resolved in SA259 | SA231's backups admin split (`2cd4837c`) and the orgs and auth splits sat outside the four `SCAN_ROOTS`; the layout-derived scope found and fixed twelve re-exported-name imports |
 | W2 two filesystem-lock implementations | watchlist | **watchlist** `two-filesystem-lock-implementations` | Not fired |
 | W3 hand-pinned residue in CI provisioning | watchlist | **watchlist** `ci-provisioning-hand-pins` | Not fired |
 | W4 `trigger_inputs` legacy name | watchlist | **watchlist** `trigger-inputs-legacy-name` | Not fired |

@@ -23,13 +23,11 @@ from django.http import (
 from django.urls import path, reverse
 from django.utils.html import format_html
 
+from quickscale_core.runtime import BackupRestoreBlocked
 from quickscale_modules_backups.models import (
     BackupArtifact,
     BackupPolicy,
     BackupSnapshot,
-)
-from quickscale_modules_backups.services import (
-    BackupRestoreBlocked,
 )
 
 

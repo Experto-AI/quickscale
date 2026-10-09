@@ -110,7 +110,7 @@ check-secret-scanning:
 check-module-conventions:
 	@$(PYTHON) scripts/check_module_conventions.py
 
-# Reject a private module importing its own package's facade (SA234).
+# Reject a private module importing a facade in its distribution (SA234).
 check-split-facade-imports:
 	@$(PYTHON) scripts/check_split_facade_imports.py
 
