@@ -56,7 +56,7 @@ def test_api_exception_hierarchy_control() -> None:
         ),
     )
     assert any(
-        "deriving from APIException" in violation
+        "derives from Exception alone" in violation
         for violation in _violations(checker.rule_10_checks_errors, broken)
     )
 
@@ -154,7 +154,7 @@ def test_api_exception_prohibition_control() -> None:
         ),
     )
     assert any(
-        "deriving from APIException" in violation
+        "derives from Exception alone" in violation
         for violation in _violations(checker.rule_10_checks_errors, suffixless_in_exceptions)
     )
     in_other_file = _with_files(
@@ -167,7 +167,7 @@ def test_api_exception_prohibition_control() -> None:
         ),
     )
     assert any(
-        "deriving from APIException" in violation
+        "derives from Exception alone" in violation
         for violation in _violations(checker.rule_10_checks_errors, in_other_file)
     )
     aliased_import = _with_files(
@@ -178,8 +178,20 @@ def test_api_exception_prohibition_control() -> None:
         ),
     )
     assert any(
-        "deriving from APIException" in violation
+        "derives from Exception alone" in violation
         for violation in _violations(checker.rule_10_checks_errors, aliased_import)
+    )
+    indirect_drf_base = _with_files(
+        module,
+        exceptions=(
+            "from rest_framework.exceptions import NotFound\n\n\n"
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class DemoProblemError(DemoError, NotFound):\n    pass\n"
+        ),
+    )
+    assert any(
+        "derives from Exception alone" in violation
+        for violation in _violations(checker.rule_10_checks_errors, indirect_drf_base)
     )
     compound = _with_files(
         module,
@@ -194,7 +206,7 @@ def test_api_exception_prohibition_control() -> None:
         ),
     )
     assert any(
-        "deriving from APIException" in violation
+        "derives from Exception alone" in violation
         for violation in _violations(checker.rule_10_checks_errors, compound)
     )
     nested = _with_files(
@@ -207,7 +219,7 @@ def test_api_exception_prohibition_control() -> None:
         ),
     )
     assert any(
-        "deriving from APIException" in violation
+        "derives from Exception alone" in violation
         for violation in _violations(checker.rule_10_checks_errors, nested)
     )
 

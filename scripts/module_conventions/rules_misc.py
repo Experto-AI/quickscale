@@ -422,34 +422,35 @@ _BUILTIN_EXCEPTION_BASES = frozenset(
 )
 
 
-def _declares_module_error(node: ast.ClassDef) -> bool:
+def _declares_module_error(node: ast.ClassDef, imported_exceptions: set[str]) -> bool:
     """Return whether a class is a module-defined error by name or base."""
-    if node.name.endswith("Error"):
+    if node.name.endswith(("Error", "Exception")):
         return True
     return any(
-        base.endswith("Exception") or base.endswith("Error") or base in _BUILTIN_EXCEPTION_BASES
+        base.endswith(("Exception", "Error"))
+        or base in _BUILTIN_EXCEPTION_BASES
+        or base in imported_exceptions
         for base in _class_names(node)
     )
 
 
-def _api_exception_names(tree: ast.Module) -> set[str]:
+def _imported_exception_names(tree: ast.Module) -> set[str]:
     """
-    Return the local names a module resolves to DRF's ``APIException``.
+    Return the local names a module imports from any ``*exceptions`` module.
 
-    ``APIException`` itself, the attribute form ``exceptions.APIException``
-    (whose attribute name ``_class_names`` already reports), and every import
-    alias are covered, so the prohibition is checked on the class's base
-    regardless of how the module spells it.
+    Imported DRF and Django exception bases (``NotFound``, ``PermissionDenied``,
+    …) are recognized by their import source — aliases included — so the
+    closed-world base rule sees them without hard-coding a framework's
+    hierarchy.
     """
-    names = {"APIException"}
+    names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and (node.module or "").endswith("exceptions"):
             for alias in node.names:
-                if alias.name == "APIException":
-                    names.add(alias.asname or alias.name)
+                names.add(alias.asname or alias.name)
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.endswith(".APIException"):
+                if alias.name.endswith("exceptions"):
                     names.add(alias.asname or alias.name.rsplit(".", 1)[-1])
     return names
 
@@ -496,35 +497,51 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
                             violations.append(
                                 f"rule 10: {module.name}: ready() catches a registration failure"
                             )
-        # Rule 10's APIException prohibition is closed-world over every
-        # module-defined class in every package file — the hierarchy derives
-        # from Exception alone, whatever a class is named, wherever it sits,
-        # and however deeply it is nested.
+        # Rule 10's error-home and base rules are closed-world over every
+        # module-defined class in every package file: an error lives in
+        # exceptions.py when the module ships one, and every error's direct
+        # bases are Exception, a builtin exception, or a class the module
+        # itself defines — never an imported framework exception (DRF's
+        # APIException included, directly or through a DRF subclass).
+        expected_base = _expected_error_base(module.name)
+        exceptions = module.files.get("exceptions.py")
+        module_class_names = {
+            node.name
+            for rel, text in module.files.items()
+            if rel.endswith(".py")
+            for node in ast.walk(_parse(text))
+            if isinstance(node, ast.ClassDef)
+        }
+        permitted_bases = _BUILTIN_EXCEPTION_BASES | {"Exception"}
         for rel, text in sorted(module.files.items()):
             if not rel.endswith(".py"):
                 continue
             file_tree = _parse(text)
-            forbidden = _api_exception_names(file_tree)
+            imported_exceptions = _imported_exception_names(file_tree)
             for node in ast.walk(file_tree):
                 if not isinstance(node, ast.ClassDef):
                     continue
-                if any(parent in forbidden for parent in _class_names(node)):
-                    violations.append(
-                        f"rule 10: {module.name}: {rel} defines {node.name} deriving "
-                        "from APIException; the module hierarchy derives from Exception alone"
-                    )
-        expected_base = _expected_error_base(module.name)
-        exceptions = module.files.get("exceptions.py")
-        if exceptions is None:
-            for rel, text in sorted(module.files.items()):
-                if not rel.endswith(".py"):
+                if not _declares_module_error(node, imported_exceptions):
                     continue
-                for node in ast.walk(_parse(text)):
-                    if isinstance(node, ast.ClassDef) and _declares_module_error(node):
-                        violations.append(
-                            f"rule 10: {module.name}: {rel} defines {node.name} but "
-                            "the module ships no exceptions.py"
-                        )
+                if exceptions is None:
+                    violations.append(
+                        f"rule 10: {module.name}: {rel} defines {node.name} but "
+                        "the module ships no exceptions.py"
+                    )
+                elif rel != "exceptions.py":
+                    violations.append(
+                        f"rule 10: {module.name}: {rel} defines {node.name} outside "
+                        "exceptions.py; a module's own errors live there"
+                    )
+                for base in _class_names(node):
+                    if base in module_class_names or base in permitted_bases:
+                        continue
+                    violations.append(
+                        f"rule 10: {module.name}: {rel} defines {node.name} with base "
+                        f"{base!r} outside Exception and the module's own classes; "
+                        "the module hierarchy derives from Exception alone"
+                    )
+        if exceptions is None:
             continue
         classes = [node for node in _parse(exceptions).body if isinstance(node, ast.ClassDef)]
         error_classes = [node for node in classes if node.name.endswith("Error")]
