@@ -1,0 +1,7 @@
+New submission for: {{ form_title }}
+
+{% for label, value in fields %}{{ label }}: {{ value }}
+{% endfor %}
+Submitted: {{ submitted_at }}
+IP address: {{ ip_address }}
+Status: {{ status }}

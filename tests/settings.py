@@ -44,6 +44,11 @@ QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED = True
 QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE = 25
 QUICKSCALE_FORMS_RETENTION_DAYS = 365
 
+# forms requires analytics (rule 5); the capture path asks the required
+# module's is_enabled() directly, so its switch is defined here even though
+# the suite never wires analytics' app or URLs.
+QUICKSCALE_ANALYTICS_ENABLED = False
+
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"

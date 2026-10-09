@@ -274,17 +274,9 @@ class TestFormSubmitAPIView:
         django_capture_on_commit_callbacks,
     ):
         """Successful submissions emit the forms-owned event on commit."""
-
-        def analytics_is_installed(app_label: str) -> bool:
-            return app_label == "quickscale_modules_analytics"
-
         mock_get_distinct_id = Mock(return_value="session:test-visitor")
         mock_capture_event = Mock()
 
-        monkeypatch.setattr(
-            "quickscale_modules_forms.views.apps.is_installed",
-            analytics_is_installed,
-        )
         monkeypatch.setattr(
             "quickscale_modules_analytics.services.get_distinct_id",
             mock_get_distinct_id,
@@ -332,14 +324,7 @@ class TestFormSubmitAPIView:
         """Disabled analytics must not call services even when the package remains installed."""
         from quickscale_modules_orgs.current_org import org_scope
 
-        def analytics_is_installed(app_label: str) -> bool:
-            return app_label == "quickscale_modules_analytics"
-
         mock_capture = Mock()
-        monkeypatch.setattr(
-            "quickscale_modules_forms.views.apps.is_installed",
-            analytics_is_installed,
-        )
         monkeypatch.setattr(
             "quickscale_modules_analytics.services.capture_event",
             mock_capture,
@@ -362,60 +347,27 @@ class TestFormSubmitAPIView:
             assert FormSubmission.all_objects.filter(form=form).count() == 1
         mock_capture.assert_not_called()
 
-    def test_submission_succeeds_without_analytics_installed(
-        self, api_client, form, form_field, email_field, monkeypatch
+    def test_submission_skips_analytics_when_its_app_is_uninstalled(
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        monkeypatch,
     ):
-        """Prove forms submits cleanly when analytics is absent from the
-        Python path / not installed.  _capture_submission_analytics()
-        short-circuits via the apps.is_installed guard; no analytics
-        symbols are imported or resolved.
+        """A contract-violating absent analytics app registers no analytics work.
 
-        Replaces the analytics services
-        submodule in sys.modules with an import-seam sentinel.  If the
-        guard were bypassed or broken, the lazy import
-        ``from quickscale_modules_analytics.services import ...``
-        would trigger the sentinel's __getattr__, raising
-        ModuleNotFoundError OUTSIDE the except Exception boundary —
-        proving the guard correctly prevents the import under the
-        absent-analytics condition.
+        Forms declares ``analytics`` in ``required_modules`` (rule 5), so
+        ``apply`` refuses to remove or disable it; the capture path asks the
+        required module's ``is_enabled()`` instead of probing the app registry
+        (rule 43).  The patched question stands in for the unsupported state
+        and proves the form response stays successful and persists.
         """
-        import sys
-
         from quickscale_modules_orgs.current_org import org_scope
 
-        # Replace the analytics services submodule in sys.modules with
-        # a sentinel that raises ModuleNotFoundError on any attribute
-        # access.  monkeypatch.setitem restores the original module
-        # on teardown so other tests are unaffected.
-        # NOTE: Using monkeypatch.setitem (not setattr with a dotted
-        # path) avoids auto-importing the real analytics module.
-        class _ImportBlocker:
-            """Raises ModuleNotFoundError when accessed — proving the
-            lazy import seam was reached despite the guard."""
-
-            __slots__ = ()
-
-            def __getattr__(self, name):
-                raise ModuleNotFoundError(
-                    "quickscale_modules_analytics.services blocked — "
-                    "guard would have been bypassed"
-                )
-
-        monkeypatch.setitem(
-            sys.modules,
-            "quickscale_modules_analytics.services",
-            _ImportBlocker(),
-        )
-
-        # Patch is_installed to simulate analytics not being a Django
-        # app.  Use direct module-object monkeypatch (NOT dotted-path)
-        # to avoid triggering an auto-import of analytics.
-        import quickscale_modules_forms.views as _forms_views
-
         monkeypatch.setattr(
-            _forms_views.apps,
-            "is_installed",
-            lambda label: False,
+            "quickscale_modules_analytics.services.is_enabled",
+            Mock(return_value=False),
         )
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
@@ -442,16 +394,9 @@ class TestFormSubmitAPIView:
         """Analytics capture failure must not block the public success response."""
         from quickscale_modules_orgs.current_org import org_scope
 
-        def analytics_is_installed(app_label: str) -> bool:
-            return app_label == "quickscale_modules_analytics"
-
         mock_get_distinct_id = Mock(return_value="session:test-visitor")
         mock_capture_event = Mock(side_effect=RuntimeError("posthog unavailable"))
 
-        monkeypatch.setattr(
-            "quickscale_modules_forms.views.apps.is_installed",
-            analytics_is_installed,
-        )
         monkeypatch.setattr(
             "quickscale_modules_analytics.services.get_distinct_id",
             mock_get_distinct_id,
@@ -2139,15 +2084,6 @@ class TestPostCommitTransactionBoundary:
             )
             analytics_calls.append(call_info)
 
-        from django.apps import apps as django_apps
-
-        real_is_installed = django_apps.is_installed
-        monkeypatch.setattr(
-            "quickscale_modules_forms.views.apps.is_installed",
-            lambda label: (
-                label == "quickscale_modules_analytics" or real_is_installed(label)
-            ),
-        )
         monkeypatch.setattr(
             "quickscale_modules_analytics.services.is_enabled",
             Mock(return_value=True),
@@ -2177,7 +2113,7 @@ class TestPostCommitTransactionBoundary:
         assert nf["in_atomic_block"] is False, (
             "the tracked send must run outside any database transaction"
         )
-        assert nf["template_key"] == "notifications.forms_submission"
+        assert nf["template_key"] == "quickscale_forms.submission"
         fv_names = {fv["name"] for fv in nf["field_values"]}
         assert "full_name" in fv_names, (
             "Committed field_value 'full_name' must be observable "
@@ -2236,15 +2172,8 @@ class TestSubmissionRollbackEffects:
     ):
         from quickscale_modules_notifications.models import NotificationMessage
 
-        def analytics_is_installed(app_label: str) -> bool:
-            return app_label == "quickscale_modules_analytics"
-
         mock_get_distinct_id = Mock(return_value="session:test-visitor")
         mock_capture_event = Mock()
-        monkeypatch.setattr(
-            "quickscale_modules_forms.views.apps.is_installed",
-            analytics_is_installed,
-        )
         monkeypatch.setattr(
             "quickscale_modules_analytics.services.get_distinct_id",
             mock_get_distinct_id,
@@ -2312,7 +2241,7 @@ class TestLongSubjectSubmission:
 
         assert response.status_code == 201
         message = NotificationMessage.objects.get(
-            template_key="notifications.forms_submission"
+            template_key="quickscale_forms.submission"
         )
         assert len(message.subject) == 255, "the subject must fit its column"
         assert len(mail.outbox) == 1, "the tracked email must still be sent"
