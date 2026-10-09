@@ -14,24 +14,6 @@ from django.core.checks import CheckMessage, Error
 
 from quickscale_modules_notifications.services import NotificationSettingsSnapshot
 
-#: The settings the runtime snapshot reads.  The declared ones are the
-#: generic settings check's concern; the guard keeps this check from raising
-#: when one is missing, so ``manage.py check`` reports the missing setting
-#: instead.
-_RUNTIME_SETTINGS = (
-    "QUICKSCALE_NOTIFICATIONS_ENABLED",
-    "QUICKSCALE_NOTIFICATIONS_PROVIDER",
-    "QUICKSCALE_NOTIFICATIONS_SENDER_NAME",
-    "QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL",
-    "QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL",
-    "QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN",
-    "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR",
-    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR",
-    "QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS",
-    "QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS",
-    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS",
-)
-
 #: The projected secret settings apply writes from the `_ENV_VAR` options
 #: (rule 35).  They are not manifest options, so the generic settings check
 #: does not report them; a missing one is reported here instead of raising
@@ -50,12 +32,9 @@ def check_vendor_secrets(
 
     With notifications enabled the webhook endpoint is mounted, so its
     signing secret is required (rule 26).  The Resend API key is required only
-    when the active email backend is the live Resend backend.
+    when the active email backend is the live Resend backend.  The declared
+    settings are validated by the generic settings check registered first.
     """
-    if any(not hasattr(settings, name) for name in _RUNTIME_SETTINGS):
-        # The generic settings check reports the missing declared settings.
-        return []
-
     snapshot = NotificationSettingsSnapshot.from_settings()
     if not snapshot.enabled:
         return []

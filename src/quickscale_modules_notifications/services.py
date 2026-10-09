@@ -48,7 +48,7 @@ from quickscale_modules_notifications._webhooks import (
 from quickscale_modules_notifications.exceptions import (
     NotificationConfigurationError as NotificationConfigurationError,
     NotificationDisabledError as NotificationDisabledError,
-    NotificationError as NotificationError,
+    NotificationsError as NotificationsError,
     NotificationTemplateError as NotificationTemplateError,
     NotificationValidationError as NotificationValidationError,
     NotificationWebhookError as NotificationWebhookError,
@@ -63,7 +63,7 @@ __all__ = [
     "DeliveryMailer",
     "NotificationConfigurationError",
     "NotificationDisabledError",
-    "NotificationError",
+    "NotificationsError",
     "NotificationTemplateDefinition",
     "NotificationTemplateError",
     "NotificationValidationError",
@@ -190,7 +190,7 @@ def dispatch_notification_message(
         try:
             message = NotificationMessage.objects.select_for_update().get(pk=message_id)
         except NotificationMessage.DoesNotExist as exc:
-            raise NotificationError(
+            raise NotificationsError(
                 f"Notification message {message_id} does not exist."
             ) from exc
         deliveries = list(message.deliveries.select_for_update().order_by("pk"))

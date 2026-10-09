@@ -60,7 +60,7 @@ Retired option keys (`resend_api_key`, `webhook_secret`) are refused by name; us
 - `sanitize_provider_tags()` and `sanitize_provider_metadata()` restrict what reaches the
   provider.
 
-The module's own errors live in `exceptions.py` under `NotificationError`, with
+The module's own errors live in `exceptions.py` under `NotificationsError`, with
 `NotificationConfigurationError`, `NotificationDisabledError`, `NotificationTemplateError`,
 `NotificationValidationError`, `NotificationWebhookError`, and
 `NotificationWebhookSignatureError` for callers to catch.

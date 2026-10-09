@@ -33,7 +33,7 @@ from quickscale_modules_notifications.models import (
 )
 from quickscale_modules_notifications.services import (
     NotificationDisabledError,
-    NotificationError,
+    NotificationsError,
     NotificationSettingsSnapshot,
     NotificationTemplateError,
     NotificationValidationError,
@@ -836,7 +836,7 @@ def test_services_publishes_exactly_the_declared_surface() -> None:
         "DeliveryMailer",
         "NotificationConfigurationError",
         "NotificationDisabledError",
-        "NotificationError",
+        "NotificationsError",
         "NotificationTemplateDefinition",
         "NotificationTemplateError",
         "NotificationValidationError",
@@ -861,7 +861,7 @@ def test_services_publishes_exactly_the_declared_surface() -> None:
 
 
 def test_send_notification_rejects_invalid_recipients_with_module_error() -> None:
-    """Rule 23: invalid input answers through the module's NotificationError base."""
+    """Rule 23: invalid input answers through the module's NotificationsError base."""
     with pytest.raises(NotificationValidationError, match="Invalid recipient"):
         services.send_notification(
             template_key="quickscale_notifications.generic",
@@ -874,7 +874,7 @@ def test_send_notification_rejects_invalid_recipients_with_module_error() -> Non
 @pytest.mark.django_db
 def test_dispatch_notification_message_translates_missing_message() -> None:
     """Rule 23: a stale message id answers through the module's error base."""
-    with pytest.raises(NotificationError, match="does not exist"):
+    with pytest.raises(NotificationsError, match="does not exist"):
         services.dispatch_notification_message(999999)
 
 
