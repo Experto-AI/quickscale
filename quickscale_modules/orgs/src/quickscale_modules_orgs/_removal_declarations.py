@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from django.apps import AppConfig, apps
 
+from quickscale_core.runtime import collect_capabilities
 from quickscale_modules_orgs._removal_types import (
     COORDINATOR_DISCHARGE_ACTIONS,
     REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE,
@@ -172,35 +173,12 @@ def _validate_declared_obligations(
         _validate_boundary_guarded_hooks(validated, owner, app_config)
 
 
-def declared_removal_obligations(
+def _validated_declaration(
     app_config: AppConfig,
+    entries: tuple[object, ...],
 ) -> tuple[OrganizationRemovalObligation, ...]:
-    """Return one app's declared removal obligations, validating the declaration.
-
-    An app declares its obligations by exposing a ``removal_obligations``
-    tuple or method on its :class:`~django.apps.AppConfig`; apps that declare
-    none return an empty tuple.  A declaration that names an app-owned stage
-    without the matching executor hook, or that attaches provider fields to an
-    action that cannot refuse or reconcile them, is rejected.
-
-    Raises:
-        ValueError: when the declaration is unreadable, malformed, or has no
-            executor.  Callers fail closed rather than treating an unreadable
-            declaration as an app with no obligations.
-    """
-    declaration = getattr(app_config, REMOVAL_OBLIGATIONS_ATTRIBUTE, None)
-    if declaration is None:
-        return ()
-    if callable(declaration):
-        declaration = declaration()
-    try:
-        obligations = tuple(declaration)
-    except TypeError as exc:
-        raise ValueError(
-            f"{app_config.label!r} declares a non-iterable "
-            f"{REMOVAL_OBLIGATIONS_ATTRIBUTE}; expected a tuple or a method "
-            "returning OrganizationRemovalObligation entries."
-        ) from exc
+    """Validate one app's declared obligations and return them typed."""
+    obligations = cast("tuple[OrganizationRemovalObligation, ...]", entries)
     _validate_declared_obligations(obligations, app_config=app_config)
     return obligations
 
@@ -208,9 +186,10 @@ def declared_removal_obligations(
 def organization_removal_obligations() -> tuple[OrganizationRemovalObligation, ...]:
     """Aggregate the removal obligations declared by every installed app.
 
-    Declarations are collected in app-label order so the aggregate is
-    deterministic, and the discovery has no cache: a caller always sees the
-    declarations of the apps installed right now.
+    The declarations arrive through the shared core capability helper in
+    app-label order, so the discovery has no cache: a caller always sees the
+    declarations of the apps installed right now.  Each declaration is
+    validated with its declaring app config before it joins the aggregate.
 
     Raises:
         ValueError: when a declaration is malformed, or two apps declare the
@@ -218,8 +197,9 @@ def organization_removal_obligations() -> tuple[OrganizationRemovalObligation, .
     """
     discovered: list[OrganizationRemovalObligation] = []
     declared_by: dict[str, str] = {}
-    for app_config in sorted(apps.get_app_configs(), key=lambda config: config.label):
-        for obligation in declared_removal_obligations(app_config):
+
+    def _collect(app_config: AppConfig, entries: tuple[object, ...]) -> None:
+        for obligation in _validated_declaration(app_config, entries):
             owner = declared_by.get(obligation.name)
             if owner is not None:
                 raise ValueError(
@@ -228,6 +208,8 @@ def organization_removal_obligations() -> tuple[OrganizationRemovalObligation, .
                 )
             declared_by[obligation.name] = app_config.label
             discovered.append(obligation)
+
+    collect_capabilities(REMOVAL_OBLIGATIONS_ATTRIBUTE, on_declared=_collect)
     return tuple(discovered)
 
 
@@ -261,8 +243,9 @@ def declared_boundary_guards(
     """
     aggregate()
     guards: list[DeclaredBoundaryGuard] = []
-    for app_config in sorted(apps.get_app_configs(), key=lambda config: config.label):
-        for obligation in declared_removal_obligations(app_config):
+
+    def _resolve(app_config: AppConfig, entries: tuple[object, ...]) -> None:
+        for obligation in _validated_declaration(app_config, entries):
             hooks = obligation.boundary_guarded_hooks
             if hooks is None:
                 continue
@@ -283,24 +266,9 @@ def declared_boundary_guards(
                     ),
                 )
             )
+
+    collect_capabilities(REMOVAL_OBLIGATIONS_ATTRIBUTE, on_declared=_resolve)
     return tuple(guards)
-
-
-def _declared_boundary_entries(app_config: AppConfig) -> dict | None:
-    """Return one app's declared boundary-implementation mapping, validated."""
-    declaration = getattr(app_config, REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE, None)
-    if declaration is None:
-        return None
-    if callable(declaration):
-        declaration = declaration()
-    try:
-        return dict(declaration)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"{app_config.label!r} declares a non-mapping "
-            f"{REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE}; expected "
-            "RemovalBoundary-to-implementation entries."
-        ) from exc
 
 
 def _validated_boundary_implementation(
@@ -335,35 +303,30 @@ def _validated_boundary_implementation(
 def removal_boundary_implementations() -> dict[RemovalBoundary, tuple[str, str, str]]:
     """Collect the removal boundary implementations declared by installed apps.
 
-    Each boundary's owner declares where its implementation lives, so a
-    discharge check holds no other module's label, module path, or entry name.
-    A boundary declared by more than one app, a declaration that is not a
-    complete boundary-to-implementation mapping, and a shipping app that is not
+    Each boundary's owner declares where its implementation lives through the
+    shared core capability helper, so a discharge check holds no other
+    module's label, module path, or entry name.  A boundary declared by more
+    than one app, a declaration that is not a complete
+    boundary-to-implementation mapping, and a shipping app that is not
     installed all fail closed instead of being read as nothing to check.
     """
     implementations: dict[RemovalBoundary, tuple[str, str, str]] = {}
-    declared_by: dict[RemovalBoundary, str] = {}
-    for app_config in sorted(apps.get_app_configs(), key=lambda config: config.label):
-        entries = _declared_boundary_entries(app_config)
-        if entries is None:
-            continue
-        for boundary, implementation in entries.items():
+
+    def _validate(app_config: AppConfig, entries: tuple[object, ...]) -> None:
+        for entry in entries:
+            boundary, implementation = cast("tuple[object, object]", entry)
             if not isinstance(boundary, RemovalBoundary):
                 raise ValueError(
                     f"{app_config.label!r} declares an implementation for "
                     f"{boundary!r}, which is not a RemovalBoundary."
                 )
-            validated = _validated_boundary_implementation(
+            implementations[boundary] = _validated_boundary_implementation(
                 app_config, boundary, implementation
             )
-            owner = declared_by.get(boundary)
-            if owner is not None:
-                raise ValueError(
-                    f"Removal boundary {boundary.value!r} is declared by both "
-                    f"{owner!r} and {app_config.label!r}."
-                )
-            declared_by[boundary] = app_config.label
-            implementations[boundary] = validated
+
+    collect_capabilities(
+        REMOVAL_BOUNDARY_IMPLEMENTATIONS_ATTRIBUTE, on_declared=_validate
+    )
     return implementations
 
 

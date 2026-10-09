@@ -177,6 +177,10 @@ QUICKSCALE_LISTINGS_ENABLED = True
 QUICKSCALE_LISTINGS_PER_PAGE = 12
 # blog
 QUICKSCALE_BLOG_ENABLED = True
+# blog requires storage (rule 5); its seam asks the required module's
+# is_enabled() directly, so the switch is defined here even though this suite
+# never wires storage's app or URLs.
+QUICKSCALE_STORAGE_ENABLED = False
 QUICKSCALE_BLOG_RSS_ENABLED = True
 QUICKSCALE_BLOG_API_RATE_LIMIT = "5/hour"
 QUICKSCALE_BLOG_POSTS_PER_PAGE = 10

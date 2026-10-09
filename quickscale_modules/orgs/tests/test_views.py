@@ -610,7 +610,7 @@ def test_invite_view_creates_invitation_and_dispatches_notification(
     assert invitation.email == "invitee@example.com"
     assert invitation.role == OrgRole.ADMIN
     assert len(captured_calls) == 1
-    assert captured_calls[0]["template_key"] == "notifications.org_invitation"
+    assert captured_calls[0]["template_key"] == "quickscale_orgs.invitation"
     assert captured_calls[0]["recipients"] == ["invitee@example.com"]
     assert captured_calls[0]["tags"] == ["auth"]
     assert captured_calls[0]["metadata"] == {"workflow": "org-invitation"}
@@ -2074,7 +2074,7 @@ def test_org_api_invite_creates_invitation_and_dispatches_notification(
         }
     }
     assert len(captured_calls) == 1
-    assert captured_calls[0]["template_key"] == "notifications.org_invitation"
+    assert captured_calls[0]["template_key"] == "quickscale_orgs.invitation"
     assert captured_calls[0]["recipients"] == ["invitee@example.com"]
     # Rule 50: the JSON invite path links the inviter the same way.
     assert captured_calls[0]["about_users"] == [admin_user]

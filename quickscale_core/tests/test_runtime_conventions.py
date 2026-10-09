@@ -48,18 +48,22 @@ class TestCollectCapabilities:
             "apps",
             _FakeAppRegistry(
                 [
-                    _FakeAppConfig("z_provider", handlers=("z1",)),
-                    _FakeAppConfig("a_provider", handlers=("a1", "a2")),
+                    _FakeAppConfig("z_provider", anonymize_handlers=("z1",)),
+                    _FakeAppConfig("a_provider", anonymize_handlers=("a1", "a2")),
                     _FakeAppConfig("no_declaration"),
                 ]
             ),
         )
 
-        assert conventions.collect_capabilities("handlers") == ("a1", "a2", "z1")
+        assert conventions.collect_capabilities("anonymize_handlers") == (
+            "a1",
+            "a2",
+            "z1",
+        )
 
     def test_collects_declaration_method(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class Provider(_FakeAppConfig):
-            def handlers(self) -> tuple[str, ...]:
+            def anonymize_handlers(self) -> tuple[str, ...]:
                 return ("from_method",)
 
         monkeypatch.setattr(
@@ -68,13 +72,15 @@ class TestCollectCapabilities:
             _FakeAppRegistry([Provider("method_provider")]),
         )
 
-        assert conventions.collect_capabilities("handlers") == ("from_method",)
+        assert conventions.collect_capabilities("anonymize_handlers") == (
+            "from_method",
+        )
 
     def test_collects_declaration_method_returning_empty(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         class SwitchedOffProvider(_FakeAppConfig):
-            def handlers(self) -> tuple[str, ...]:
+            def anonymize_handlers(self) -> tuple[str, ...]:
                 return ()
 
         monkeypatch.setattr(
@@ -83,7 +89,7 @@ class TestCollectCapabilities:
             _FakeAppRegistry([SwitchedOffProvider("off_provider")]),
         )
 
-        assert conventions.collect_capabilities("handlers") == ()
+        assert conventions.collect_capabilities("anonymize_handlers") == ()
 
     def test_no_declarations_returns_empty_tuple(
         self, monkeypatch: pytest.MonkeyPatch
@@ -92,7 +98,136 @@ class TestCollectCapabilities:
             conventions, "apps", _FakeAppRegistry([_FakeAppConfig("quiet")])
         )
 
-        assert conventions.collect_capabilities("handlers") == ()
+        assert conventions.collect_capabilities("anonymize_handlers") == ()
+
+    def test_collects_mapping_declarations_as_key_value_pairs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            conventions,
+            "apps",
+            _FakeAppRegistry(
+                [
+                    _FakeAppConfig(
+                        "z_provider", removal_boundary_implementations={"z": "Z"}
+                    ),
+                    _FakeAppConfig(
+                        "a_provider", removal_boundary_implementations={"a": "A"}
+                    ),
+                ]
+            ),
+        )
+
+        assert conventions.collect_capabilities("removal_boundary_implementations") == (
+            ("a", "A"),
+            ("z", "Z"),
+        )
+
+    def test_control_mapping_key_declared_by_two_apps_fails_loudly(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            conventions,
+            "apps",
+            _FakeAppRegistry(
+                [
+                    _FakeAppConfig(
+                        "first", removal_boundary_implementations={"shared": "A"}
+                    ),
+                    _FakeAppConfig(
+                        "second", removal_boundary_implementations={"shared": "B"}
+                    ),
+                ]
+            ),
+        )
+
+        with pytest.raises(ValueError, match="'shared' in both 'first' and 'second'"):
+            conventions.collect_capabilities("removal_boundary_implementations")
+
+    def test_collects_string_declarations_per_app(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            conventions,
+            "apps",
+            _FakeAppRegistry(
+                [
+                    _FakeAppConfig("z_provider", removal_label_prefix="Z"),
+                    _FakeAppConfig("quiet"),
+                    _FakeAppConfig("a_provider", removal_label_prefix="A"),
+                ]
+            ),
+        )
+
+        assert conventions.collect_capabilities("removal_label_prefix") == ("A", "Z")
+
+    def test_control_empty_string_declaration_fails_loudly(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            conventions,
+            "apps",
+            _FakeAppRegistry([_FakeAppConfig("stringy", removal_label_prefix="")]),
+        )
+
+        with pytest.raises(ValueError, match="stringy.*expected a non-empty string"):
+            conventions.collect_capabilities("removal_label_prefix")
+
+    def test_control_mapping_declaration_shape_fails_loudly(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            conventions,
+            "apps",
+            _FakeAppRegistry(
+                [
+                    _FakeAppConfig(
+                        "not_mapping",
+                        removal_boundary_implementations=("not", "a", "mapping"),
+                    )
+                ]
+            ),
+        )
+
+        with pytest.raises(ValueError, match="not_mapping.*expected a mapping"):
+            conventions.collect_capabilities("removal_boundary_implementations")
+
+    def test_on_declared_observes_each_declaration_with_its_app(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        z_provider = _FakeAppConfig("z_provider", anonymize_handlers=("z1",))
+        a_provider = _FakeAppConfig("a_provider", anonymize_handlers=("a1",))
+        monkeypatch.setattr(
+            conventions,
+            "apps",
+            _FakeAppRegistry([z_provider, _FakeAppConfig("quiet"), a_provider]),
+        )
+        observed: list[tuple[object, tuple[object, ...]]] = []
+
+        result = conventions.collect_capabilities(
+            "anonymize_handlers",
+            on_declared=lambda app_config, entries: observed.append(
+                (app_config, entries)
+            ),
+        )
+
+        assert result == ("a1", "z1")
+        assert observed == [(a_provider, ("a1",)), (z_provider, ("z1",))]
+
+    def test_control_on_declared_exception_fails_the_collection(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            conventions,
+            "apps",
+            _FakeAppRegistry([_FakeAppConfig("provider", anonymize_handlers=("a1",))]),
+        )
+
+        def reject(app_config: object, entries: tuple[object, ...]) -> None:
+            raise ValueError(f"refused {app_config!r}")
+
+        with pytest.raises(ValueError, match="refused"):
+            conventions.collect_capabilities("anonymize_handlers", on_declared=reject)
 
     def test_control_string_declaration_fails_loudly(
         self, monkeypatch: pytest.MonkeyPatch
@@ -100,11 +235,13 @@ class TestCollectCapabilities:
         monkeypatch.setattr(
             conventions,
             "apps",
-            _FakeAppRegistry([_FakeAppConfig("stringy", handlers="one_handler")]),
+            _FakeAppRegistry(
+                [_FakeAppConfig("stringy", anonymize_handlers="one_handler")]
+            ),
         )
 
         with pytest.raises(ValueError, match="stringy.*as a string"):
-            conventions.collect_capabilities("handlers")
+            conventions.collect_capabilities("anonymize_handlers")
 
     def test_control_none_declaration_fails_loudly(
         self, monkeypatch: pytest.MonkeyPatch
@@ -112,11 +249,13 @@ class TestCollectCapabilities:
         monkeypatch.setattr(
             conventions,
             "apps",
-            _FakeAppRegistry([_FakeAppConfig("empty_provider", handlers=None)]),
+            _FakeAppRegistry(
+                [_FakeAppConfig("empty_provider", anonymize_handlers=None)]
+            ),
         )
 
         with pytest.raises(ValueError, match="empty_provider.*as None"):
-            conventions.collect_capabilities("handlers")
+            conventions.collect_capabilities("anonymize_handlers")
 
     def test_control_mapping_declaration_fails_loudly(
         self, monkeypatch: pytest.MonkeyPatch
@@ -124,17 +263,19 @@ class TestCollectCapabilities:
         monkeypatch.setattr(
             conventions,
             "apps",
-            _FakeAppRegistry([_FakeAppConfig("mapped", handlers={"key": "handler"})]),
+            _FakeAppRegistry(
+                [_FakeAppConfig("mapped", anonymize_handlers={"key": "handler"})]
+            ),
         )
 
         with pytest.raises(ValueError, match="mapped.*as a mapping"):
-            conventions.collect_capabilities("handlers")
+            conventions.collect_capabilities("anonymize_handlers")
 
     def test_control_one_shot_iterator_declaration_fails_loudly(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         class IteratorProvider(_FakeAppConfig):
-            def handlers(self):
+            def anonymize_handlers(self):
                 return (handler for handler in ("first", "second"))
 
         monkeypatch.setattr(
@@ -144,14 +285,14 @@ class TestCollectCapabilities:
         )
 
         with pytest.raises(ValueError, match="one_shot.*as a one-shot iterator"):
-            conventions.collect_capabilities("handlers")
+            conventions.collect_capabilities("anonymize_handlers")
 
     def test_control_broken_declaration_property_fails_loudly(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         class BrokenProvider(_FakeAppConfig):
             @property
-            def handlers(self) -> tuple[str, ...]:
+            def anonymize_handlers(self) -> tuple[str, ...]:
                 raise AttributeError("misconfigured handler")
 
         monkeypatch.setattr(
@@ -163,7 +304,7 @@ class TestCollectCapabilities:
         with pytest.raises(
             ValueError, match="broken.*reading it raised AttributeError"
         ):
-            conventions.collect_capabilities("handlers")
+            conventions.collect_capabilities("anonymize_handlers")
 
     def test_control_non_iterable_declaration_fails_loudly(
         self, monkeypatch: pytest.MonkeyPatch
@@ -171,11 +312,39 @@ class TestCollectCapabilities:
         monkeypatch.setattr(
             conventions,
             "apps",
-            _FakeAppRegistry([_FakeAppConfig("opaque", handlers=object())]),
+            _FakeAppRegistry([_FakeAppConfig("opaque", anonymize_handlers=object())]),
         )
 
         with pytest.raises(ValueError, match="opaque.*non-iterable"):
+            conventions.collect_capabilities("anonymize_handlers")
+
+    def test_control_unknown_capability_name_fails_loudly(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            conventions,
+            "apps",
+            _FakeAppRegistry([_FakeAppConfig("provider", handlers=("typo",))]),
+        )
+
+        with pytest.raises(ValueError, match="Unknown capability 'handlers'"):
             conventions.collect_capabilities("handlers")
+
+    def test_registry_lists_every_shipped_capability_name(self) -> None:
+        """The closed vocabulary names every declaration the modules ship."""
+        assert {
+            "account_deletion_handlers",
+            "anonymize_handlers",
+            "notification_templates",
+            "organization_cache_keys",
+            "organization_pricing_url_hooks",
+            "personal_data_declarations",
+            "post_login_redirect_hooks",
+            "post_signup_redirect_hooks",
+            "removal_boundary_implementations",
+            "removal_label_prefix",
+            "removal_obligations",
+        } == set(conventions.CAPABILITIES)
 
     @pytest.mark.parametrize("capability", ["", 7, None])
     def test_control_invalid_capability_name_fails_loudly(

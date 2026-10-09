@@ -15,13 +15,15 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from quickscale_modules_notifications._anonymization import anonymize_account
-from quickscale_modules_notifications._templates import (
-    NotificationTemplateDefinition,
-    _TEMPLATE_REGISTRY,
+from quickscale_modules_notifications._templates import NotificationTemplateDefinition
+from quickscale_modules_notifications.services import (
+    registered_notification_templates,
+    send_notification,
 )
-from quickscale_modules_notifications.services import send_notification
 
 pytestmark = pytest.mark.django_db
+
+REGISTERED_TEMPLATES = registered_notification_templates()
 
 
 def _renderable_context(
@@ -48,7 +50,7 @@ def _stored_snapshot(message) -> tuple[Any, ...]:
     )
 
 
-@pytest.mark.parametrize("template_key", sorted(_TEMPLATE_REGISTRY))
+@pytest.mark.parametrize("template_key", sorted(REGISTERED_TEMPLATES))
 def test_each_registered_template_links_its_person(
     template_key: str,
     notification_settings_row,
@@ -67,7 +69,7 @@ def test_each_registered_template_links_its_person(
         email="bystander-user@example.com",
         password="BystanderPass1!",
     )
-    context = _renderable_context(_TEMPLATE_REGISTRY[template_key])
+    context = _renderable_context(REGISTERED_TEMPLATES[template_key])
 
     with django_capture_on_commit_callbacks(execute=True):
         linked = send_notification(

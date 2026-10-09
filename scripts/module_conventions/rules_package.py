@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from scripts.module_conventions.core import (
+    CAPABILITY_NAMES,
     MODULE_ABSTRACT_BASES,
     ORG_PUBLIC_SURFACE,
     Corpus,
@@ -165,7 +166,7 @@ def _module_bindings(tree: ast.Module) -> set[str]:
 
 
 def rule_4_public_surface(corpus: Corpus) -> list[str]:
-    """Enforce the public-surface rule for one module using another (rule 4)."""
+    """Enforce the public-surface and capability-vocabulary rules (rule 4)."""
     violations: list[str] = []
     for module in corpus.modules:
         for rel, text in module.files.items():
@@ -190,7 +191,67 @@ def rule_4_public_surface(corpus: Corpus) -> list[str]:
                     violations.append(
                         f"rule 4: {module.name}: {rel}:{lineno} reads {owner}'s setting {attribute}"
                     )
+            for capability, lineno in _capability_arguments(tree, module):
+                if capability in CAPABILITY_NAMES:
+                    continue
+                described = repr(capability) if capability is not None else "an unresolved name"
+                violations.append(
+                    f"rule 4: {module.name}: {rel}:{lineno} collects {described}, "
+                    "which is not in CAPABILITIES"
+                )
     return violations
+
+
+def _module_string_constants(module: Module) -> dict[str, str]:
+    """Map every module-level string constant in the package to its value."""
+    constants: dict[str, str] = {}
+    for rel, text in module.files.items():
+        if not rel.endswith(".py"):
+            continue
+        tree = _parse(text)
+        for node in tree.body:
+            if (
+                isinstance(node, ast.Assign)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        constants.setdefault(target.id, node.value.value)
+            elif (
+                isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                constants.setdefault(node.target.id, node.value.value)
+    return constants
+
+
+def _capability_arguments(tree: ast.Module, module: Module) -> list[tuple[str | None, int]]:
+    """
+    Resolve every ``collect_capabilities`` call's capability argument.
+
+    A literal is its own value; a name resolves through the file's string
+    assignments, then through the package's module-level constants (the
+    vocabulary constants callers import from a sibling).  An argument that
+    resolves to neither is reported as ``None`` so a constructed name fails
+    closed instead of passing the vocabulary check.
+    """
+    constants = _string_assignments(tree)
+    package_constants = _module_string_constants(module)
+    arguments: list[tuple[str | None, int]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or _call_func_name(node) != "collect_capabilities":
+            continue
+        argument = node.args[0] if node.args else _keyword(node, "capability")
+        resolved: str | None = None
+        if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+            resolved = argument.value
+        elif isinstance(argument, ast.Name):
+            resolved = constants.get(argument.id) or package_constants.get(argument.id)
+        arguments.append((resolved, node.lineno))
+    return arguments
 
 
 def _mapping_entries(node: Any) -> list[tuple[Any, Any]]:

@@ -96,7 +96,7 @@ class TestNotifySubmission:
         assert len(mail.outbox) == 1
         assert "admin@example.com" in mail.outbox[0].recipients()
         assert NotificationMessage.objects.filter(
-            template_key="notifications.forms_submission"
+            template_key="quickscale_forms.submission"
         ).exists()
 
     def test_declares_an_explicit_empty_about_users(
@@ -186,7 +186,7 @@ class TestNotifySubmission:
             with django_capture_on_commit_callbacks(execute=True):
                 status = notify_submission(submission)
 
-        assert status == "queued"
+        assert status == "skipped"
         assert sent == []
 
     def test_enablement_question_failure_propagates(

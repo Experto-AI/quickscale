@@ -124,6 +124,54 @@ def test_cross_module_setting_read_control() -> None:
     )
 
 
+def test_unknown_capability_vocabulary_is_reported() -> None:
+    module = _golden_module()
+    unknown = _with_files(
+        module,
+        views=(
+            "from quickscale_core.runtime import collect_capabilities\n\n\n"
+            "def handlers() -> tuple[object, ...]:\n"
+            "    return collect_capabilities('handlers')\n"
+        ),
+    )
+    assert any(
+        "not in CAPABILITIES" in violation
+        for violation in _violations(checker.rule_4_public_surface, unknown)
+    )
+
+
+def test_constructed_capability_name_fails_closed() -> None:
+    module = _golden_module()
+    constructed = _with_files(
+        module,
+        views=(
+            "from quickscale_core.runtime import collect_capabilities\n\n\n"
+            "def collect(name: str) -> tuple[object, ...]:\n"
+            "    return collect_capabilities(name)\n"
+        ),
+    )
+    assert any(
+        "not in CAPABILITIES" in violation
+        for violation in _violations(checker.rule_4_public_surface, constructed)
+    )
+
+
+def test_listed_capability_name_and_constant_pass() -> None:
+    module = _golden_module()
+    listed = _with_files(
+        module,
+        views=(
+            "from quickscale_core.runtime import collect_capabilities\n\n\n"
+            "ANONYMIZE_HANDLERS_CAPABILITY = 'anonymize_handlers'\n\n\n"
+            "def handlers() -> tuple[object, ...]:\n"
+            "    return collect_capabilities('removal_obligations')\n\n\n"
+            "def constant_handlers() -> tuple[object, ...]:\n"
+            "    return collect_capabilities(ANONYMIZE_HANDLERS_CAPABILITY)\n"
+        ),
+    )
+    assert _violations(checker.rule_4_public_surface, listed) == []
+
+
 def test_migration_model_import_is_excepted() -> None:
     module = _golden_module()
     excepted = _with_files(

@@ -536,6 +536,7 @@ settings read but never declared, and every default written twice. Renames are a
 | Template folder | `templates/quickscale_<module>/` |
 | Management command | `quickscale_<module>_<action>` |
 | Cache key | `quickscale_<module>:<name>` |
+| Email-template key | `quickscale_<module>.<purpose>` |
 | Constraint / index name | `quickscale_<module>_<model>_<purpose>` / `qs_<module>_<model>_<field>_idx` (rule 25) |
 | Reverse accessor on another module's model | `quickscale_<module>_<name>` (rule 14) |
 | Analytics event | `quickscale_<module>_<event>` (rule 22) |
@@ -595,6 +596,11 @@ Each interaction uses the mechanism that fits it:
 - ❌ Importing anything of another module outside its public surface (migrations referencing
   another module's models excepted).
 - ❌ Reading another module's settings.
+- ✅ Capability names are a closed set: core's `CAPABILITIES` lists every name with its
+  declaration shape, and `collect_capabilities` accepts only a listed name and is the only
+  collector of them.
+- ❌ A capability collector other than `collect_capabilities`, or a `collect_capabilities`
+  call naming a capability outside `CAPABILITIES`.
 - This narrows the "no service registries" prohibition: `AppConfig`-declared capabilities collected
   by one helper, and the listed core ports (rule 10), are allowed; a general registry,
   lookup-by-name, or DI container stays forbidden.
@@ -648,7 +654,9 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
 - ✅ Pages are flat under `templates/quickscale_<module>/`; no page sits below that folder.
   ✅ Admin overrides follow Django's `admin/<label>/<model>/` path under the `admin/`
   exception, never a module folder.
-- ✅ Email templates under `templates/quickscale_<module>/email/`.
+- ✅ Email templates under `templates/quickscale_<module>/email/`. A sender's templates and
+  keys (`quickscale_<module>.<purpose>`) live in the sender and are registered through the
+  `notification_templates` capability; notifications ships only its generic template.
 - ✅ Static files under `static/quickscale_<module>/{css,js,img}/`.
 - ✅ Template-tag libraries are named `quickscale_<module>`, or `quickscale_<module>_<purpose>`
   for a separate one (`quickscale_orgs_debug`).
@@ -1156,10 +1164,14 @@ mapping that mirrors this section.
 - ❌ A settings snapshot defined outside `_settings.py`, named in `__all__`, or read by another
   module; a snapshot that defaults, coerces, or reads another module's settings.
 
-**43. Optional senders.**
-- ✅ A sender guards an optional module with `apps.is_installed(...)` and that module's
-  `services.is_enabled()`, and catches only that module's `<Module>Error` where its failure is
-  tolerable.
+**43. Senders guard per `required_modules`.**
+- ✅ A module in `required_modules` is imported directly and asked only that module's
+  `services.is_enabled()`.
+- ✅ A module not in `required_modules` is guarded with `apps.is_installed(...)` and that
+  module's `services.is_enabled()`.
+- ✅ A sender catches only that module's `<Module>Error` where its failure is tolerable.
+- ❌ `getattr(<module services>, <name>, <default>)`; an `apps.is_installed` guard on a module
+  the manifest requires.
 - ❌ Reading another module's settings object; `except Exception` around another module's service
   call (rule 23's listed analytics best-effort exception aside).
 

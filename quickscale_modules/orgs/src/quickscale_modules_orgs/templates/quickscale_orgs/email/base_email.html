@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}QuickScale Notification{% endblock %}</title>
+</head>
+<body style="margin:0;padding:24px;background:#f4f4f1;font-family:Georgia, 'Times New Roman', serif;color:#1f2933;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;margin:0 auto;background:#ffffff;border-collapse:collapse;">
+    <tr>
+      <td style="padding:32px;border-bottom:1px solid #e6e1d8;">
+        <p style="margin:0;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:#8a6c4a;">QuickScale</p>
+        <h1 style="margin:12px 0 0;font-size:28px;line-height:1.2;">{% block heading %}{% endblock %}</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:32px;font-size:16px;line-height:1.7;">
+        {% block content %}{% endblock %}
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

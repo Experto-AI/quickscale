@@ -18,7 +18,7 @@ def test_package_version_is_exposed() -> None:
 @pytest.mark.django_db
 def test_model_string_representations(notification_settings_row) -> None:
     message = NotificationMessage.objects.create(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         subject="Subject",
         from_email="QuickScale <noreply@example.com>",
         reply_to_email="support@example.com",
@@ -41,6 +41,6 @@ def test_model_string_representations(notification_settings_row) -> None:
     )
 
     assert "Notification settings" in str(notification_settings_row)
-    assert str(message) == "notifications.generic (queued)"
+    assert str(message) == "quickscale_notifications.generic (queued)"
     assert str(delivery) == "user@example.com (queued)"
     assert str(event) == "delivered (abc123)"

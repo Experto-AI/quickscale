@@ -4,6 +4,8 @@ Startup configuration is validated by rule 3's generic settings check,
 registered through ``quickscale_core.runtime`` from ``ready()``.
 """
 
+from typing import Any
+
 from django.apps import AppConfig
 
 from quickscale_core.runtime import (
@@ -64,6 +66,29 @@ class QuickscaleFormsConfig(AppConfig):
                 reason="Submission data about a non-user; belongs to the organization.",
             ),
         )
+
+    def notification_templates(self) -> dict[str, Any]:
+        """Declare forms' own submission template (rules 4, 8, 20).
+
+        The key is ``quickscale_forms.submission`` and the bodies live under
+        the module's own ``templates/quickscale_forms/email/``; notifications
+        collects the declaration through the shared ``notification_templates``
+        capability, so forms' key and bodies stay forms' own.
+        """
+        from quickscale_modules_notifications.services import (
+            NotificationTemplateDefinition,
+        )
+
+        return {
+            "quickscale_forms.submission": NotificationTemplateDefinition(
+                subject_template="quickscale_forms/email/submission_subject.txt",
+                text_template="quickscale_forms/email/submission_body.txt",
+                html_template="quickscale_forms/email/submission_body.html",
+                required_context=frozenset(
+                    {"form_title", "submitted_at", "fields", "ip_address", "status"}
+                ),
+            ),
+        }
 
     def ready(self) -> None:
         from quickscale_modules_forms.checks import RETIRED_SETTINGS
