@@ -124,6 +124,19 @@ def test_missing_exceptions_file_control() -> None:
         "ships no exceptions.py" in violation
         for violation in _violations(checker.rule_10_checks_errors, api_exception_base)
     )
+    nested_suffixless = _with_files(
+        without_exceptions,
+        services=(
+            '"""Demo service surface."""\n\n\n'
+            "class Errors:\n"
+            "    class DemoProblem(Exception):\n"
+            "        pass\n"
+        ),
+    )
+    assert any(
+        "ships no exceptions.py" in violation
+        for violation in _violations(checker.rule_10_checks_errors, nested_suffixless)
+    )
 
 
 def test_api_exception_prohibition_control() -> None:
@@ -167,6 +180,35 @@ def test_api_exception_prohibition_control() -> None:
     assert any(
         "deriving from APIException" in violation
         for violation in _violations(checker.rule_10_checks_errors, aliased_import)
+    )
+    compound = _with_files(
+        module,
+        services=(
+            "try:\n"
+            "    from rest_framework.exceptions import APIException\n"
+            "except ImportError:\n"
+            "    pass\n"
+            "else:\n"
+            "    class PaymentRequired(APIException):\n"
+            "        pass\n"
+        ),
+    )
+    assert any(
+        "deriving from APIException" in violation
+        for violation in _violations(checker.rule_10_checks_errors, compound)
+    )
+    nested = _with_files(
+        module,
+        services=(
+            "from rest_framework.exceptions import APIException\n\n\n"
+            "class Errors:\n"
+            "    class PaymentRequired(APIException):\n"
+            "        pass\n"
+        ),
+    )
+    assert any(
+        "deriving from APIException" in violation
+        for violation in _violations(checker.rule_10_checks_errors, nested)
     )
 
 

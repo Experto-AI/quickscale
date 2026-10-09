@@ -497,14 +497,15 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
                                 f"rule 10: {module.name}: ready() catches a registration failure"
                             )
         # Rule 10's APIException prohibition is closed-world over every
-        # module-defined class in every package file: the hierarchy derives
-        # from Exception alone, whatever a class is named and wherever it sits.
+        # module-defined class in every package file — the hierarchy derives
+        # from Exception alone, whatever a class is named, wherever it sits,
+        # and however deeply it is nested.
         for rel, text in sorted(module.files.items()):
             if not rel.endswith(".py"):
                 continue
             file_tree = _parse(text)
             forbidden = _api_exception_names(file_tree)
-            for node in file_tree.body:
+            for node in ast.walk(file_tree):
                 if not isinstance(node, ast.ClassDef):
                     continue
                 if any(parent in forbidden for parent in _class_names(node)):
@@ -518,7 +519,7 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
             for rel, text in sorted(module.files.items()):
                 if not rel.endswith(".py"):
                     continue
-                for node in _parse(text).body:
+                for node in ast.walk(_parse(text)):
                     if isinstance(node, ast.ClassDef) and _declares_module_error(node):
                         violations.append(
                             f"rule 10: {module.name}: {rel} defines {node.name} but "
