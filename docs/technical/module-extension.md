@@ -43,7 +43,7 @@ This pattern is the preferred home for project-specific backend customization wh
 
 Analytics is the current example of the narrower service-style contract:
 - QuickScale owns flat `QUICKSCALE_ANALYTICS_*` settings and analytics service APIs
-- forms integration uses a guarded direct optional import rather than generated extension-app glue
+- forms integration imports the required analytics service directly and asks `is_enabled()` rather than using generated extension-app glue
 - social click tracking is limited to QuickScale-owned generated public pages/templates
 - existing user-owned frontend files adopt additional analytics wiring manually
 
@@ -302,7 +302,7 @@ should pass the keyword the same way:
 from quickscale_modules_notifications.services import send_notification
 
 send_notification(
-    template_key="notifications.generic",
+    template_key="quickscale_notifications.generic",
     recipients=["person@example.com"],
     context={"headline": "Hello", "body": "Your update is ready."},
     about_users=[request.user],
@@ -400,7 +400,7 @@ Suggested material for that section:
 | `forms` | Keep admin/data-driven configuration and documented public/admin endpoints as the primary model; document signals/service hooks for custom submission workflows |
 | `storage` | Keep helper/service API and settings contract; do not force inheritance |
 | `backups` | Keep operational settings and commands; document service layer and explicit non-goals for subclassing |
-| `analytics` | Service-style integration module: flat settings plus helper/service APIs; no generated extension-app requirement; forms use a guarded optional import and social click tracking stays limited to QuickScale-owned generated public pages/templates |
+| `analytics` | Service-style integration module: flat settings plus helper/service APIs; no generated extension-app requirement; forms imports the required analytics service directly and asks `is_enabled()`, and social click tracking stays limited to QuickScale-owned generated public pages/templates |
 | `notifications` | Promote `send_notification`-style service contract, template override paths, and the documented webhook endpoint; document stable versus internal APIs |
 | `social` | Define the extension contract before the full runtime implementation ships |
 

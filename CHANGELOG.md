@@ -625,6 +625,14 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     billing's `BillingCustomer` table — one row per organization with a database-unique id —
     instead of a column on `Organization`, and removal-obligation names are defined by the
     declaring module as `quickscale_<module>:<purpose>`.
+  - **Capabilities are closed, templates are sender-owned, and guards follow `required_modules`.**
+    Core's `CAPABILITIES` lists every `AppConfig` capability name with its declaration shape and
+    `collect_capabilities` is the only collector (orgs' and auth's `getattr` walks fold into it);
+    every sender owns its notification template key (`quickscale_<module>.<purpose>`) and its
+    subject/text/HTML bodies under `templates/quickscale_<module>/email/`, registered through the
+    `notification_templates` capability; and a module in `required_modules` is imported directly
+    and asked `is_enabled()` instead of being probed with `apps.is_installed` or a `getattr`
+    default, so forms reports a skipped notification as `skipped`.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

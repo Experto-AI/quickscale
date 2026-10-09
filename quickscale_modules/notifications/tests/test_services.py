@@ -145,7 +145,7 @@ def test_ensure_default_settings_prevents_snapshot_drift(
 def test_render_notification_requires_declared_context_keys() -> None:
     with pytest.raises(NotificationTemplateError, match="Missing required"):
         render_notification(
-            template_key="notifications.generic",
+            template_key="quickscale_notifications.generic",
             context={"headline": "Missing body"},
         )
 
@@ -154,7 +154,7 @@ def test_render_notification_renders_org_invitation_template() -> None:
     context = _org_invitation_context()
 
     rendered = render_notification(
-        template_key="notifications.org_invitation",
+        template_key="quickscale_orgs.invitation",
         context=context,
     )
 
@@ -205,7 +205,7 @@ def test_send_notification_tracks_each_recipient_and_sanitizes_provider_metadata
 
     with django_capture_on_commit_callbacks(execute=True) as callbacks:
         message = send_notification(
-            template_key="notifications.generic",
+            template_key="quickscale_notifications.generic",
             recipients=["Alpha@example.com", "beta@example.com"],
             context={
                 "headline": "Welcome aboard",
@@ -239,7 +239,7 @@ def test_send_notification_tracks_each_recipient_and_sanitizes_provider_metadata
     assert captured_messages[0][2] == {
         "project": "client-alpha",
         "workflow": "password-reset",
-        "template": "notifications-generic",
+        "template": "quickscale-notifications-generic",
     }
 
 
@@ -253,7 +253,7 @@ def test_send_notification_supports_org_invitation_template(
 
     with django_capture_on_commit_callbacks(execute=True) as callbacks:
         message = send_notification(
-            template_key="notifications.org_invitation",
+            template_key="quickscale_orgs.invitation",
             recipients=["Invitee@Example.com"],
             context=context,
             about_users=[],
@@ -270,7 +270,7 @@ def test_send_notification_supports_org_invitation_template(
     assert message.status == NotificationMessage.Status.SENT
     assert message.tags_json == ["quickscale", "transactional", "auth"]
     assert message.metadata_json == {
-        "template": "notifications-org-invitation",
+        "template": "quickscale-orgs-invitation",
         "workflow": "org-invitation",
     }
     assert delivery.recipient_email == "invitee@example.com"
@@ -293,7 +293,7 @@ def test_send_notification_persists_partial_failures_per_recipient(
 
     with django_capture_on_commit_callbacks(execute=True) as callbacks:
         message = send_notification(
-            template_key="notifications.generic",
+            template_key="quickscale_notifications.generic",
             recipients=["ok@example.com", "broken@example.com"],
             context={"headline": "Partial send", "body": "Test body"},
             about_users=[],
@@ -335,7 +335,7 @@ def test_rolled_back_send_notification_dispatches_nothing(
     with pytest.raises(_Rollback):
         with transaction.atomic():
             send_notification(
-                template_key="notifications.generic",
+                template_key="quickscale_notifications.generic",
                 recipients=["rollback@example.com"],
                 context={"headline": "Rollback", "body": "Discard me."},
                 about_users=[],
@@ -352,7 +352,7 @@ def test_rolled_back_send_notification_dispatches_nothing(
     # negative assertion is not vacuous.
     with django_capture_on_commit_callbacks(execute=True) as callbacks:
         send_notification(
-            template_key="notifications.generic",
+            template_key="quickscale_notifications.generic",
             recipients=["rollback@example.com"],
             context={"headline": "Commit", "body": "Send me."},
             about_users=[],
@@ -372,7 +372,7 @@ def test_send_notification_rejects_tracking_when_runtime_disabled(
     with override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False):
         with pytest.raises(NotificationDisabledError, match="disabled"):
             send_notification(
-                template_key="notifications.generic",
+                template_key="quickscale_notifications.generic",
                 recipients=["disabled@example.com"],
                 context={"headline": "Disabled", "body": "Do not track this."},
                 about_users=[],
@@ -392,7 +392,7 @@ def test_send_notification_bounds_an_overlong_rendered_subject(
 
     with django_capture_on_commit_callbacks(execute=True):
         message = send_notification(
-            template_key="notifications.generic",
+            template_key="quickscale_notifications.generic",
             recipients=["long@example.com"],
             context={"headline": "H" * 300, "body": "Body"},
             about_users=[],
@@ -434,7 +434,7 @@ def test_send_notification_stores_the_person_link(
 
     with django_capture_on_commit_callbacks(execute=True):
         message = send_notification(
-            template_key="notifications.generic",
+            template_key="quickscale_notifications.generic",
             recipients=["archive@example.com"],
             context={"headline": "Linked", "body": "Body"},
             about_users=[first, second, first],
@@ -455,7 +455,7 @@ def test_send_notification_accepts_an_explicit_empty_about_users(
 
     with django_capture_on_commit_callbacks(execute=True):
         message = send_notification(
-            template_key="notifications.generic",
+            template_key="quickscale_notifications.generic",
             recipients=["archive@example.com"],
             context={"headline": "Unlinked", "body": "Body"},
             about_users=[],
@@ -476,7 +476,7 @@ def test_send_notification_rejects_an_unsaved_about_user(
 
     with pytest.raises(NotificationValidationError, match="saved user"):
         send_notification(
-            template_key="notifications.generic",
+            template_key="quickscale_notifications.generic",
             recipients=["archive@example.com"],
             context={"headline": "Hi", "body": "Body"},
             about_users=[user_model(username="unsaved-link")],
@@ -487,7 +487,7 @@ def test_send_notification_rejects_a_non_sequence_about_users() -> None:
     """Rule 50: about_users is a sequence, not a single user or None."""
     with pytest.raises(NotificationValidationError, match="sequence"):
         services.send_notification(
-            template_key="notifications.generic",
+            template_key="quickscale_notifications.generic",
             recipients=["archive@example.com"],
             context={"headline": "Hi", "body": "Body"},
             about_users=cast(Any, None),
@@ -522,7 +522,7 @@ def test_forms_notify_submission_tracks_each_recipient_through_notifications(
         notify_submission(submission)
 
     message = NotificationMessage.objects.get(
-        template_key="notifications.forms_submission"
+        template_key="quickscale_forms.submission"
     )
     deliveries = list(message.deliveries.order_by("recipient_email"))
 
@@ -534,7 +534,7 @@ def test_forms_notify_submission_tracks_each_recipient_through_notifications(
     assert message.status == NotificationMessage.Status.SENT
     assert message.tags_json == ["quickscale", "transactional", "forms"]
     assert message.metadata_json == {
-        "template": "notifications-forms-submission",
+        "template": "quickscale-forms-submission",
         "workflow": "form-submission",
     }
     # Rule 50: forms states explicitly that the message is about no user.
@@ -580,7 +580,7 @@ def test_forms_submit_keeps_saved_submission_when_tracked_delivery_fails(
 
     submission = FormSubmission.all_objects.get(form=form)
     message = NotificationMessage.objects.get(
-        template_key="notifications.forms_submission"
+        template_key="quickscale_forms.submission"
     )
     deliveries = list(message.deliveries.order_by("recipient_email"))
 
@@ -607,7 +607,7 @@ def test_render_notification_rejects_unknown_template_key() -> None:
         NotificationTemplateError, match="Unknown notification template"
     ):
         render_notification(
-            template_key="notifications.unknown",
+            template_key="quickscale_unknown.purpose",
             context={"headline": "Unknown", "body": "Body"},
         )
 
@@ -850,6 +850,7 @@ def test_services_publishes_exactly_the_declared_surface() -> None:
         "ingest_webhook_event",
         "is_enabled",
         "load_settings_snapshot",
+        "registered_notification_templates",
         "render_notification",
         "sanitize_provider_metadata",
         "sanitize_provider_tags",
@@ -863,7 +864,7 @@ def test_send_notification_rejects_invalid_recipients_with_module_error() -> Non
     """Rule 23: invalid input answers through the module's NotificationError base."""
     with pytest.raises(NotificationValidationError, match="Invalid recipient"):
         services.send_notification(
-            template_key="notifications.generic",
+            template_key="quickscale_notifications.generic",
             recipients=["not-an-email"],
             context={"headline": "Hi", "body": "Body"},
             about_users=[],

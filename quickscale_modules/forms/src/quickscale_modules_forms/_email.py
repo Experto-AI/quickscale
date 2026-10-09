@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 # Module Conventions rule 46: a private file logs on its facade's channel.
 logger = logging.getLogger("quickscale_modules_forms.views")
 
-_TRACKED_SUBMISSION_TEMPLATE_KEY = "notifications.forms_submission"
+_TRACKED_SUBMISSION_TEMPLATE_KEY = "quickscale_forms.submission"
 
 
 def notify_submission(submission: "FormSubmission") -> str:
@@ -36,21 +36,22 @@ def notify_submission(submission: "FormSubmission") -> str:
     send runs — on commit, or immediately outside a transaction — only
     notifications' own ``NotificationError`` is tolerated (rules 21 and 43),
     so a configuration or programming error stays visible.  Returns a status
-    string: "queued", "no_recipients", "skipped_spam", or "enqueue_error".
+    string: "queued", "no_recipients", "skipped_spam", "skipped", or
+    "enqueue_error"; a skipped email never reports "queued".
     """
     if submission.is_spam:
         return "skipped_spam"
 
     if not is_enabled():
-        # Rules 20/43: the optional sender asks the module before sending; a
-        # disabled module skips the email instead of relying on the catch.
-        # The question stays outside the preparation catch so a failing
-        # question is never swallowed as "enqueue_error".
+        # Rules 20/43: the sender asks the required module before sending and
+        # reports a skipped send as skipped instead of queued; the question
+        # stays outside the preparation catch so a failing question is never
+        # swallowed as "enqueue_error".
         logger.warning(
             "Notifications module is disabled — notification for submission #%s skipped",
             submission.pk,
         )
-        return "queued"
+        return "skipped"
 
     try:
         status, dispatch = _prepare_submission_notification(submission)

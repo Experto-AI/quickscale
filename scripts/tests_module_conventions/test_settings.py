@@ -523,6 +523,83 @@ def test_optional_sender_controls() -> None:
     assert _violations(checker.rule_43_optional_senders, best_effort) == []
 
 
+def test_required_module_is_installed_guard_control() -> None:
+    module = _golden_module()
+    guarded = _with_files(
+        module,
+        views=(
+            "from django.apps import apps\n\n\n"
+            "def notify() -> None:\n"
+            "    if not apps.is_installed('quickscale_modules_notifications'):\n"
+            "        return\n"
+        ),
+    )
+    # Not required: the optional-sender guard is the correct spelling.
+    assert _violations(checker.rule_43_optional_senders, guarded) == []
+
+    required_guarded = replace(
+        guarded,
+        manifest={**guarded.manifest, "required_modules": ["notifications"]},
+    )
+    assert any(
+        "guards required module notifications with apps.is_installed" in violation
+        for violation in _violations(checker.rule_43_optional_senders, required_guarded)
+    )
+
+
+def test_service_getattr_with_a_default_control() -> None:
+    module = _golden_module()
+    resolved = _with_files(
+        module,
+        views=(
+            "from importlib import import_module\n\n\n"
+            "def load_sender():\n"
+            "    services = import_module('quickscale_modules_notifications.services')\n"
+            "    return getattr(services, 'send_notification', None)\n"
+        ),
+    )
+    assert any(
+        "reads notifications's service through getattr with a default" in violation
+        for violation in _violations(checker.rule_43_optional_senders, resolved)
+    )
+
+    direct = _with_files(
+        module,
+        views=(
+            "from quickscale_modules_notifications.services import send_notification\n\n\n"
+            "def load_sender():\n"
+            "    return send_notification\n"
+        ),
+    )
+    assert _violations(checker.rule_43_optional_senders, direct) == []
+
+    aliased_module = _with_files(
+        module,
+        views=(
+            "import quickscale_modules_notifications.services as notifications_services\n\n\n"
+            "def load_sender():\n"
+            "    return getattr(notifications_services, 'send_notification', None)\n"
+        ),
+    )
+    assert any(
+        "reads notifications's service through getattr with a default" in violation
+        for violation in _violations(checker.rule_43_optional_senders, aliased_module)
+    )
+
+    from_package = _with_files(
+        module,
+        views=(
+            "from quickscale_modules_notifications import services as notifications_services\n\n\n"
+            "def load_sender():\n"
+            "    return getattr(notifications_services, 'send_notification', None)\n"
+        ),
+    )
+    assert any(
+        "reads notifications's service through getattr with a default" in violation
+        for violation in _violations(checker.rule_43_optional_senders, from_package)
+    )
+
+
 def test_malformed_manifest_is_authority_failure(tmp_path: Path) -> None:
     modules_root = tmp_path / "quickscale_modules"
     module_dir = modules_root / "demo"

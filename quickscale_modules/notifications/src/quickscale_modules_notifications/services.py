@@ -38,6 +38,7 @@ from quickscale_modules_notifications._settings import (
 from quickscale_modules_notifications._templates import (
     NotificationTemplateDefinition as NotificationTemplateDefinition,
     RenderedNotification as RenderedNotification,
+    registered_notification_templates as registered_notification_templates,
     render_notification as render_notification,
 )
 from quickscale_modules_notifications._webhooks import (
@@ -76,6 +77,7 @@ __all__ = [
     "ingest_webhook_event",
     "is_enabled",
     "load_settings_snapshot",
+    "registered_notification_templates",
     "render_notification",
     "sanitize_provider_metadata",
     "sanitize_provider_tags",

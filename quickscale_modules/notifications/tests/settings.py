@@ -50,6 +50,11 @@ QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED = True
 QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE = 25
 QUICKSCALE_FORMS_RETENTION_DAYS = 365
 
+# forms requires analytics (rule 5); the capture path asks the required
+# module's is_enabled() directly, so its switch is defined here even though
+# the suite never wires analytics' app or URLs.
+QUICKSCALE_ANALYTICS_ENABLED = False
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",

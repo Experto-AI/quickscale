@@ -61,7 +61,7 @@ def queued_message(db, notification_settings_row):
     """Return a queued notification message with two queued deliveries."""
     del notification_settings_row
     message = NotificationMessage.objects.create(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         subject="Queued message",
         from_email="QuickScale <noreply@example.com>",
         reply_to_email="support@example.com",
@@ -87,7 +87,7 @@ def delivery_for_webhook(db, notification_settings_row):
     """Return a sent delivery row ready for webhook reconciliation tests."""
     del notification_settings_row
     message = NotificationMessage.objects.create(
-        template_key="notifications.generic",
+        template_key="quickscale_notifications.generic",
         subject="Webhook message",
         from_email="QuickScale <noreply@example.com>",
         reply_to_email="support@example.com",

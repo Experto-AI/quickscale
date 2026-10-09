@@ -4,9 +4,13 @@ This module is the one implementation of the three cross-module conventions:
 
 * :func:`collect_capabilities` — Module Conventions rule 4's ``AppConfig``
   capability collector.  A module declares what it provides as an attribute
-  on its own :class:`~django.apps.AppConfig` (a tuple, or a method returning
-  one); a consumer asks this helper for every installed provider instead of
-  knowing the provider's label, setting, or internals.
+  on its own :class:`~django.apps.AppConfig` (an iterable of entries, a
+  mapping of entries, or a string, or a method returning one); a consumer
+  asks this helper for every installed provider instead of knowing the
+  provider's label, setting, or internals.  The capability names are a
+  closed vocabulary — :data:`CAPABILITIES` lists every name with its
+  declaration shape — so a misspelled name fails loudly instead of being
+  silently uncollected.
 * :func:`register_module_checks` — rule 10's startup-check runner.  A module
   passes the functions from its ``checks.py`` from ``ready()``; the helper
   runs them in every process (so a WSGI server fails too, not only
@@ -45,6 +49,7 @@ import sys
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
 
 from django.apps import AppConfig, apps
@@ -58,6 +63,9 @@ if TYPE_CHECKING:
     from rest_framework.response import Response
 
 __all__ = [
+    "CAPABILITIES",
+    "CapabilityDeclarationObserver",
+    "CapabilityShape",
     "PersonalDataExclusion",
     "PersonalDataField",
     "PersonalDataTreatment",
@@ -144,39 +152,117 @@ class PersonalDataExclusion:
         return (self.app_label, self.model_name, self.field_name)
 
 
-def collect_capabilities(capability: str) -> tuple[object, ...]:
+class CapabilityShape(enum.Enum):
+    """The declaration shape a listed capability must have (rule 4)."""
+
+    ITERABLE = "iterable"
+    MAPPING = "mapping"
+    STRING = "string"
+
+
+#: The closed capability vocabulary: every ``AppConfig`` attribute name a
+#: module may declare, and the shape its declaration must have.  A module
+#: declares what it provides under one of these names; a consumer asks for a
+#: listed name only.  Adding a capability is a decision edit plus an entry
+#: here, so a misspelled declaration or read fails loudly instead of being
+#: silently uncollected.
+CAPABILITIES: Mapping[str, CapabilityShape] = MappingProxyType(
+    {
+        "account_deletion_handlers": CapabilityShape.ITERABLE,
+        "anonymize_handlers": CapabilityShape.ITERABLE,
+        "notification_templates": CapabilityShape.MAPPING,
+        "organization_cache_keys": CapabilityShape.ITERABLE,
+        "organization_pricing_url_hooks": CapabilityShape.ITERABLE,
+        "personal_data_declarations": CapabilityShape.ITERABLE,
+        "post_login_redirect_hooks": CapabilityShape.ITERABLE,
+        "post_signup_redirect_hooks": CapabilityShape.ITERABLE,
+        "removal_boundary_implementations": CapabilityShape.MAPPING,
+        "removal_label_prefix": CapabilityShape.STRING,
+        "removal_obligations": CapabilityShape.ITERABLE,
+    }
+)
+
+#: Signature of the optional per-declaration observer.  It is called with the
+#: declaring app config and the entries it declared — in app-label order,
+#: before the entries join the flat result — so a capability's owner can
+#: validate or index a declaration with its declaring app in hand while the
+#: collection itself stays in :func:`collect_capabilities`.
+CapabilityDeclarationObserver = Callable[[AppConfig, tuple[object, ...]], None]
+
+
+def collect_capabilities(
+    capability: str,
+    *,
+    on_declared: CapabilityDeclarationObserver | None = None,
+) -> tuple[object, ...]:
     """Return every capability declared for *capability* by an installed app.
 
     An app declares a capability by exposing an attribute named *capability*
     on its :class:`~django.apps.AppConfig` — either the entries themselves or
-    a method returning them.  An app that declares nothing for the name
-    contributes nothing; a declaration that cannot be read fails loudly
-    instead of being read as an app that provides nothing.
+    a method returning them — in the shape :data:`CAPABILITIES` lists for the
+    name: an iterable of entries, a mapping of entries, or a non-empty
+    string.  An app that declares nothing for the name contributes nothing; a
+    declaration that cannot be read fails loudly instead of being read as an
+    app that provides nothing.  A name outside :data:`CAPABILITIES` is
+    refused.
 
     Entries are collected in app-label order so the result is deterministic,
     and only from the apps installed right now.  Whether a switched-off
     provider contributes is the declaring module's decision: it returns an
     empty declaration when it is off, so a consumer never needs the
-    provider's setting name.
+    provider's setting name.  An ``ITERABLE`` capability contributes its
+    entries; a ``MAPPING`` one contributes ``(key, value)`` pairs, and the
+    same key declared by two apps is refused; a ``STRING`` one contributes
+    the string per declaring app.
 
     Args:
-        capability: The attribute name a provider declares, for example
-            ``"account_deletion_handlers"``.
+        capability: The name a provider declares.  Must be listed in
+            :data:`CAPABILITIES`.
+        on_declared: Optional observer called once per declaring app with the
+            app config and that app's entries, in app-label order, before the
+            entries join the result.  Its exception fails the collection.
 
     Returns:
         The declared entries, concatenated in app-label order.
 
     Raises:
-        ValueError: when *capability* is not a non-empty string, or when an
-            installed app declares it as ``None``, a string, a mapping, a
-            one-shot iterator, or a non-iterable, or when reading a declared
-            attribute raises ``AttributeError``.
+        ValueError: when *capability* is not a listed non-empty string, when
+            an installed app declares it in the wrong shape (``None``, a
+            string or mapping where an iterable is expected, a non-mapping
+            where a mapping is expected, a non-string where a string is
+            expected, a one-shot iterator, a non-iterable), when reading a
+            declared attribute raises ``AttributeError``, or when two apps
+            declare the same mapping key.
     """
-    if not isinstance(capability, str) or not capability:
-        raise ValueError("collect_capabilities() requires a non-empty capability name.")
+    shape = CAPABILITIES.get(capability) if isinstance(capability, str) else None
+    if shape is None:
+        if not isinstance(capability, str) or not capability:
+            raise ValueError(
+                "collect_capabilities() requires a non-empty capability name."
+            )
+        raise ValueError(
+            f"Unknown capability {capability!r}; list it in "
+            "quickscale_core.runtime.CAPABILITIES with its shape."
+        )
     collected: list[object] = []
+    declared_by: dict[object, str] = {}
     for app_config in sorted(apps.get_app_configs(), key=lambda config: config.label):
-        collected.extend(_declared_capabilities(app_config, capability))
+        entries = _declared_capability(app_config, capability, shape)
+        if entries is None:
+            continue
+        if shape is CapabilityShape.MAPPING:
+            for entry in entries:
+                key = cast("tuple[object, object]", entry)[0]
+                owner = declared_by.get(key)
+                if owner is not None:
+                    raise ValueError(
+                        f"Capability {capability!r} declares {key!r} in both "
+                        f"{owner!r} and {app_config.label!r}."
+                    )
+                declared_by[key] = app_config.label
+        if on_declared is not None:
+            on_declared(app_config, entries)
+        collected.extend(entries)
     return tuple(collected)
 
 
@@ -187,15 +273,15 @@ def _declares_attribute(app_config: AppConfig, capability: str) -> bool:
     return any(capability in vars(klass) for klass in type(app_config).__mro__)
 
 
-def _declared_capabilities(
-    app_config: AppConfig, capability: str
-) -> tuple[object, ...]:
-    """Return one app's declaration, rejecting an unreadable one."""
+def _declared_capability(
+    app_config: AppConfig, capability: str, shape: CapabilityShape
+) -> tuple[object, ...] | None:
+    """Return one app's declaration, rejecting a malformed one."""
     try:
         declaration = getattr(app_config, capability)
     except AttributeError as exc:
         if not _declares_attribute(app_config, capability):
-            return ()
+            return None
         raise ValueError(
             f"{app_config.label!r} declares {capability!r} but reading it raised "
             f"AttributeError: {exc}"
@@ -204,32 +290,62 @@ def _declared_capabilities(
         declaration = declaration()
     if declaration is None:
         raise ValueError(
-            f"{app_config.label!r} declares {capability!r} as None; expected a "
-            "tuple of capability entries or a method returning one."
+            f"{app_config.label!r} declares {capability!r} as None; expected "
+            f"{_expected_declaration(shape)}."
         )
+    if shape is CapabilityShape.STRING:
+        if not isinstance(declaration, str) or not declaration:
+            raise ValueError(
+                f"{app_config.label!r} declares {capability!r} as "
+                f"{declaration!r}; expected {_expected_declaration(shape)}."
+            )
+        return (declaration,)
+    if shape is CapabilityShape.MAPPING:
+        if isinstance(declaration, (str, bytes, bytearray)) or not isinstance(
+            declaration, Mapping
+        ):
+            raise ValueError(
+                f"{app_config.label!r} declares {capability!r} as "
+                f"{declaration!r}; expected {_expected_declaration(shape)}."
+            )
+        try:
+            return tuple(dict(declaration).items())
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{app_config.label!r} declares a malformed {capability!r} "
+                f"mapping: {exc}"
+            ) from exc
     if isinstance(declaration, (str, bytes, bytearray)):
         raise ValueError(
             f"{app_config.label!r} declares {capability!r} as a string; expected "
-            "a tuple of capability entries or a method returning one."
+            f"{_expected_declaration(shape)}."
         )
     if isinstance(declaration, Mapping):
         raise ValueError(
             f"{app_config.label!r} declares {capability!r} as a mapping; expected "
-            "a tuple of capability entries or a method returning one."
+            f"{_expected_declaration(shape)}."
         )
     if isinstance(declaration, Iterator):
         raise ValueError(
             f"{app_config.label!r} declares {capability!r} as a one-shot iterator; "
-            "expected a repeatable tuple of capability entries or a method "
-            "returning one."
+            f"expected {_expected_declaration(shape)}."
         )
     try:
         return tuple(cast("Iterable[object]", declaration))
     except TypeError as exc:
         raise ValueError(
             f"{app_config.label!r} declares a non-iterable {capability!r}; expected "
-            "a tuple of capability entries or a method returning one."
+            f"{_expected_declaration(shape)}."
         ) from exc
+
+
+def _expected_declaration(shape: CapabilityShape) -> str:
+    """Return the human wording for what *shape* accepts."""
+    if shape is CapabilityShape.MAPPING:
+        return "a mapping of capability entries or a method returning one"
+    if shape is CapabilityShape.STRING:
+        return "a non-empty string attribute or a method returning one"
+    return "a tuple of capability entries or a method returning one"
 
 
 def _eager_run_is_skipped(label: str) -> bool:

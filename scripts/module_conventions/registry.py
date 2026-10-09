@@ -85,7 +85,9 @@ RULES: tuple[Rule, ...] = (
     Rule(1, "settings names and the enabled switch", rule_1_settings_names),
     Rule(2, "identity names", rule_2_identity_names),
     Rule(3, "reading settings", rule_3_settings_reads),
-    Rule(4, "how one module uses another", rule_4_public_surface),
+    Rule(
+        4, "how one module uses another (surface and capability vocabulary)", rule_4_public_surface
+    ),
     Rule(5, "dependency direction", rule_5_dependency_direction),
     Rule(6, "no legacy names", rule_6_no_legacy_names),
     Rule(7, "URL mounts and route names", rule_7_urls),
@@ -123,7 +125,7 @@ RULES: tuple[Rule, ...] = (
     Rule(38, "README content", rule_38_readme_content),
     Rule(39, "module dependencies", rule_39_module_dependencies),
     Rule(42, "settings snapshots", rule_42_settings_snapshots),
-    Rule(43, "optional senders", rule_43_optional_senders),
+    Rule(43, "senders guard per required_modules", rule_43_optional_senders),
     Rule(44, "one role check", rule_44_role_checks),
     Rule(45, "stub exemptions", rule_45_stub_exemptions),
     Rule(47, "redaction", rule_47_redaction),

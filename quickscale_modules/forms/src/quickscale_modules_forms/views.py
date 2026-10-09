@@ -13,7 +13,6 @@ import io
 import logging
 from typing import Any
 
-from django.apps import apps
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, Prefetch
@@ -92,14 +91,10 @@ def _neutralize_csv_cell(value: Any) -> str:
 def _capture_submission_analytics(submission: FormSubmission, request: Request) -> None:
     """Schedule the forms-submitted event on the write's commit (rule 21).
 
-    Analytics helpers are imported lazily inside the emission body, after the
-    ``apps.is_installed`` guard, so forms remains importable without analytics
-    on the Python path.  An absent or disabled analytics module registers no
-    callback at all.
+    Analytics is a required module (rule 43), so its services are imported
+    directly and asked ``is_enabled()``: a switched-off analytics module
+    registers no callback, and forms never probes the app registry for it.
     """
-    if not apps.is_installed("quickscale_modules_analytics"):
-        return
-
     from quickscale_modules_analytics.services import is_enabled as analytics_enabled
 
     if not analytics_enabled():
@@ -110,8 +105,8 @@ def _capture_submission_analytics(submission: FormSubmission, request: Request) 
 
 def _emit_submission_event(submission: FormSubmission, request: Request) -> None:
     """Best-effort emission of the forms-owned submission event (rule 22)."""
-    # Lazy import — analytics is assembled (confirmed by the caller's guard)
-    # so these symbols resolve at runtime, not at module load time.
+    # Lazy import — analytics is a required module, so these symbols resolve at
+    # runtime, not at module load time.
     from quickscale_modules_analytics.services import capture_event, get_distinct_id
 
     from quickscale_modules_forms.services import FORMS_SUBMITTED_EVENT

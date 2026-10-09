@@ -51,8 +51,9 @@ the handler `quickscale apply` installs in `REST_FRAMEWORK`; a manual installati
 it the same way (see Operations).
 
 Forms emits the `quickscale_forms_submitted` analytics event for each accepted submission
-through analytics' generic `capture_event`, guarded on the analytics module being installed and
-enabled. The module's public service surface (`services.py`) names that event.
+through analytics' generic `capture_event`; `analytics` is declared in `required_modules` and
+the capture path asks its `is_enabled()` directly, so a disabled analytics module registers no
+emission. The module's public service surface (`services.py`) names that event.
 
 ### Built-in form presets
 
@@ -75,10 +76,14 @@ enumeration. If either switch is off, `_hp_name` is ignored. Rate limiting
 
 Set `notify_emails` on a `Form` to receive an email on every legitimate (non-spam) submission.
 The message is dispatched through the notifications module's `send_notification` service
-(tagged `forms`, workflow `form-submission`) so delivery is tracked; the module declares
+(tagged `forms`, workflow `form-submission`) under the module-owned
+`quickscale_forms.submission` template key, declared through notifications'
+`notification_templates` capability with the bodies under
+`templates/quickscale_forms/email/`, so delivery is tracked; the module declares
 `notifications` in `required_modules` and carries no fallback sender. The send runs only after
 the submission commits, so a rolled-back submission sends nothing; delivery failures are logged
-and never block submission processing.
+and never block submission processing, and a skipped send (notifications disabled, spam, or no
+recipients) reports a non-`queued` notification status.
 
 ### Access model
 
@@ -129,8 +134,10 @@ quickscale plan --add forms
 quickscale apply
 ```
 
-A manual installation adds `rest_framework`, `django_filters`, `quickscale_modules_notifications`
-(forms requires it), and `quickscale_modules_forms` to `INSTALLED_APPS`, mounts the module's
+A manual installation adds `rest_framework`, `django_filters`, `quickscale_modules_analytics`
+and `quickscale_modules_notifications` (forms requires both), and `quickscale_modules_forms` to
+`INSTALLED_APPS`, defines their declared settings (including `QUICKSCALE_FORMS_*`,
+`QUICKSCALE_ANALYTICS_*`, and `QUICKSCALE_NOTIFICATIONS_*`), mounts the module's
 URLs, sets `REST_FRAMEWORK["EXCEPTION_HANDLER"]` to
 `quickscale_core.runtime.conventions.exception_handler`, and runs `python manage.py migrate`. A fresh
 `migrate` on a clean database creates the four built-in presets as part of the initial data
