@@ -16,11 +16,9 @@ webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)), which publishes once SA251 records a live Stripe
 test-mode checkout.
 
-The 2026-10-08 audits ([arch](../others/arch-audit.md), [tech](../others/tech-audit.md),
-[coherence](../others/coherence-audit.md)) are scheduled as SA251–SA265. Each ticket names the
-audit IDs it closes; the audits keep the evidence. Coherence tickets merge the matching proposed
-rule from coherence audit §6 into [decisions.md § Module Conventions](decisions.md#module-conventions)
-with a harness detector, and the audits' watchlists stay unscheduled.
+Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
+[coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
+tickets merge the matching coherence §6 rule into decisions with a harness detector.
 
 The scheduling table owns track, dependencies, and release requirement. Ticket bodies own
 context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves history.
@@ -31,13 +29,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA251 | Make Stripe checkout and payment outcomes complete and recoverable | 2 | — | Required |
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA259 | Generate gate wiring from the registry instead of holding copies by parity | 2 | — | Optional |
 | SA265 | Put cross-module vocabulary, capabilities, and private names in their owners | 3 | — | Optional |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA259, SA265 | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
+| SA251 | Make Stripe checkout and payment outcomes complete and recoverable | 2 | — | Required |
 | SA256 | Fix `deploy railway` environment writes and DR media streaming | 2 | — | Optional |
 | SA253 | Make the generated project's CI, image, and healthcheck pass, and execute them in a gate | 2 | SA259 | Optional |
 | SA255 | Accept Resend's real webhook signature in notifications | 2 | — | Optional |
@@ -52,8 +50,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
-               (SA191 runs slice (b) first; slice (a) waits on the maintainer)
-Track 2: SA251 ──► SA256 ──► SA259 ──► SA253 ──► SA255 ──► SA260 ──► SA263
+Track 2: SA259 ──► SA251 ──► SA256 ──► SA253 ──► SA255 ──► SA260 ──► SA263
 Track 3: SA265 ──► SA258 ──► SA264 ──► SA262 ──► SA261
      release path:  SA251 → publish 0.89.0
      critical path: SA191 → SA153, joined by SA259 (T2) and SA265 (T3) → SA204 → SA153
@@ -68,7 +65,8 @@ with a fresh context, scoped to that slice's text and named surfaces, and ends w
 handoff note (what landed, what is next, what to watch) committed with the work. A ticket closes
 when its last slice lands; slices are not scheduled.
 
-**Order.** SA251 gates the 0.89.0 publish. Every change to a shipped module `0001_initial`
+**Order.** SA259 runs first on Track 2 because SA204 waits on it; SA251 (gates the 0.89.0
+publish) runs as soon as Stripe test keys are available. Every change to a shipped module `0001_initial`
 (SA265's billing column on the tenant root) lands before SA204 freezes migration history, and SA204
 lands before SA153 slice (a), whose schema work is `0002+` from the start (arch audit §7).
 SA259 lands before the new gates it cheapens (SA204's hash gate, SA253's rendered-artifact gate).
@@ -83,7 +81,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA251 | yes | no | yes | no | no |
+| 2 | SA259 | yes | yes | yes | **yes** | yes |
 | 3 | SA265 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -175,7 +173,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   recommendation): a backup taken at vintage N restores and migrates forward under N+1 instead of
   being refused by `dr_engine/recovery.py`'s exact-vintage match, a bare file that records no
   vintage is still refused, and a restore-forward test proves it. This also retires tech watchlist
-  `dr-restore-vintage-exact-match`. The freeze lands on SA265's `0001` edits, and the new gate is added through SA259's generated wiring (two stations, not twelve).
+  `dr-restore-vintage-exact-match`. The freeze lands on SA265's `0001` edits; the gate is added through SA259's generated wiring.
 
   **Surfaces:** decisions, the new gate with its hash manifest, registry row, and gate
   documentation, `quickscale_core/tests/test_module_migration_topology.py`,
@@ -183,8 +181,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port.**
 
-  Migrate `bap-web` into a new repository at `/home/victor/code/bap-web-new`, once, without the
-  fresh-first tool: a fresh `quickscale plan` + `apply` recipient, then a coding assistant ports the
+  Migrate `bap-web` into a new repository at `/home/victor/code/bap-web-new`: a fresh `quickscale plan` + `apply` recipient, then a coding assistant ports the
   donor by following [bap-web-migration-prompt.md](../planning/bap-web-migration-prompt.md).
 
   **Context:** `bap-web` is the beta site behind the property portal, generated 2026-03-05 on
@@ -329,8 +326,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA251 — Make Stripe checkout and payment outcomes complete and recoverable.**
 
-  **Context:** return URLs, unknown-outcome reservations, and delayed payments are fixed on `v89`;
-  tech audit `billing-checkout-relative-redirect-urls` stays open until a live checkout is recorded.
+  **Context:** tech audit `billing-checkout-relative-redirect-urls` stays open until a live
+  checkout is recorded.
 
   **Acceptance:** one Stripe test-mode checkout from the API view completes at HEAD and is
   recorded in the 0.89.0 release note's Validation section, which also names the checkout fix.
