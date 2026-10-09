@@ -18,6 +18,7 @@ from django.conf import settings
 from django.core.checks import CheckMessage, Error
 from django.core.exceptions import ImproperlyConfigured
 
+from quickscale_core.runtime import module_settings_are_supplied
 from quickscale_modules_storage._helpers import select_storage_backend
 
 
@@ -34,6 +35,11 @@ def check_vendor_secrets(
     manifest options — ``apply`` writes them alongside the declared settings —
     so a missing one is reported here rather than silently skipped.
     """
+    if not module_settings_are_supplied("storage"):
+        # The generic settings check names the missing declared setting;
+        # Django runs every registered check independently, so this check
+        # stays silent until the project is fully applied.
+        return []
     if not bool(settings.QUICKSCALE_STORAGE_ENABLED):
         # Rule 1 (D3): a module switched off has no switched-on feature, so
         # its credential requirement does not apply while it is off.
