@@ -247,7 +247,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `postgres:18` container). Keep the dump outside every repository and never commit it; it holds
     real user data. Restore with `pg_restore --no-owner` into the scratch database only.
   - [ ] (b) Recipient and code port: generate the recipient, port the donor by the migration
-    prompt, re-express the `modules/forms` edits, and record upstream candidates.
+    prompt, re-express the `modules/forms` edits, and record upstream candidates. Advanced:
+    `bap-web-new` was regenerated on v89 and ported; donor pytest 52/52 (92% coverage), Vitest
+    338/338, Playwright chromium 118/118, `check` clean apart from expected personal-data
+    warnings, tenant isolation conforms after a project-owned FORCE RLS migration, the catalog
+    seeds under the runtime role, and `git diff -- modules/` is empty. Remaining before (b)
+    closes: map the React contact payload onto the forms module's `/forms/api/<slug>/submit/`
+    field schema and prove a real submission (the mocked Playwright specs pass without it). Watch:
+    the published `splits/*` branches predate this week's module merges, so repin to the sealed
+    release before cutover; the donor's custom submission email template and its
+    `notifications.py` behavior are upstream candidates. Next: that mapping, then slice (c).
   - [ ] (c) Test parity: the donor's pytest and Vitest suites, SA208's check, FORCE-RLS counts,
     and `check_tenant_isolation`.
   - [ ] (d) Live parity: Playwright e2e and screenshot diffs, with the live baselines captured and
