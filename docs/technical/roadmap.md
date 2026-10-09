@@ -11,16 +11,13 @@ once, onto the standardized names (SA191), and carries the first property portal
 project-owned extension (SA153). Capabilities are generalized only after that project proves
 their value.
 
-**Release status.** 0.88.0 is published and carries two S1 billing defects fixed on `v89` (with
-real Stripe keys, every webhook and every checkout fails); the fix ships in 0.89.0, which is not
-published yet ([publish_procedure.md](publish_procedure.md)). The webhook half and the checkout
-relative-URL code repair are fixed — checkout and portal sessions now build absolute return URLs
-(tech audit `billing-checkout-relative-redirect-urls`) — while the live Stripe test-mode checkout
-record and SA251's remaining slices are outstanding. SA252 (a live credential sent to PostHog) is
-fixed on `v89`, so 0.89.0 is not published until SA251 lands.
+**Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
+webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
+([publish_procedure.md](publish_procedure.md)), which publishes once SA251 records a live Stripe
+test-mode checkout.
 
 The 2026-10-08 audits ([arch](../others/arch-audit.md), [tech](../others/tech-audit.md),
-[coherence](../others/coherence-audit.md)) are scheduled as SA251–SA266. Each ticket names the
+[coherence](../others/coherence-audit.md)) are scheduled as SA251–SA265. Each ticket names the
 audit IDs it closes; the audits keep the evidence. Coherence tickets merge the matching proposed
 rule from coherence audit §6 into [decisions.md § Module Conventions](decisions.md#module-conventions)
 with a harness detector, and the audits' watchlists stay unscheduled.
@@ -71,9 +68,8 @@ with a fresh context, scoped to that slice's text and named surfaces, and ends w
 handoff note (what landed, what is next, what to watch) committed with the work. A ticket closes
 when its last slice lands; slices are not scheduled.
 
-**Order.** SA251 and SA252 led: they gate the 0.89.0 publish. Every change to a shipped
-module `0001_initial` (SA257's composite constraints, SA265's billing column on the tenant root)
-lands before SA204 freezes migration history, and SA204
+**Order.** SA251 gates the 0.89.0 publish. Every change to a shipped module `0001_initial`
+(SA265's billing column on the tenant root) lands before SA204 freezes migration history, and SA204
 lands before SA153 slice (a), whose schema work is `0002+` from the start (arch audit §7).
 SA259 lands before the new gates it cheapens (SA204's hash gate, SA253's rendered-artifact gate).
 SA258 lands before SA191's cutover so `bap-web-new` starts on thin includes and pays one adoption
@@ -87,7 +83,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA251 | yes | yes | yes | **yes** | no |
+| 2 | SA251 | yes | no | yes | no | no |
 | 3 | SA265 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -126,10 +122,8 @@ A track is **truly green** only when all three states are yes.
   `scripts/check_quality.sh`, `check_gate_parity.py`, `sync_ci_gate_jobs.py`, and the gate
   documentation table from Track 1, and keeps them after. For SA255, Track 2 takes the
   notifications webhook (`notifications/views.py`, `_webhooks.py`) from Track 3. For SA265,
-  Track 3 takes cross-module imports from Track 1. For SA257, Track 1 adds its check to orgs'
-  `checks.py`, and Track 3 reviews. SA253 edits `base.py.j2` (Track 3) only for the test-settings line it names.
-- **Cross-track edits.** SA191 builds its recipient by the migration playbook of the completed
-  SA214 tool; SA191 only reads it, and gate documentation (Track 1) owns the smoke-gate row's
+  Track 3 takes cross-module imports from Track 1. SA253 edits `base.py.j2` (Track 3) only for the test-settings line it names.
+- **Cross-track edits.** SA191 builds its recipient by the migration playbook; SA191 only reads it, and gate documentation (Track 1) owns the smoke-gate row's
   documentation. Both land through the serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
@@ -181,8 +175,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   recommendation): a backup taken at vintage N restores and migrates forward under N+1 instead of
   being refused by `dr_engine/recovery.py`'s exact-vintage match, a bare file that records no
   vintage is still refused, and a restore-forward test proves it. This also retires tech watchlist
-  `dr-restore-vintage-exact-match`. The freeze lands on SA257's, SA265's, and SA266's `0001`
-  edits, and the new gate is added through SA259's generated wiring (two stations, not twelve).
+  `dr-restore-vintage-exact-match`. The freeze lands on SA265's `0001` edits, and the new gate is added through SA259's generated wiring (two stations, not twelve).
 
   **Surfaces:** decisions, the new gate with its hash manifest, registry row, and gate
   documentation, `quickscale_core/tests/test_module_migration_topology.py`,
@@ -193,7 +186,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Migrate `bap-web` into a new repository at `/home/victor/code/bap-web-new`, once, without the
   fresh-first tool: a fresh `quickscale plan` + `apply` recipient, then a coding assistant ports the
   donor by following [bap-web-migration-prompt.md](../planning/bap-web-migration-prompt.md).
-  Hardening the tool is SA214.
 
   **Context:** `bap-web` is the beta site behind the property portal, generated 2026-03-05 on
   v0.62.0 with the `showcase_react` theme and `auth`, `listings`, and `forms`. It carries a
@@ -311,7 +303,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [ ] (a) Models: property fields, currency labels, and ordered gallery child tables, with
     forced RLS, boundary tests, SA208 classification, and purge coverage, as `0002+` migrations.
     Every tenant-to-tenant FK (gallery → property, inquiry → listing) carries the composite
-    organization constraint that SA257's check requires.
+    organization constraint that orgs' composite-FK check requires.
   - [ ] (b) Read API: published listings of the requested organization, with server-side keyword
     and attribute filters, and API-level isolation tests.
   - [ ] (c) React catalog and detail pages in Spanish on the app's design.
@@ -337,40 +329,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA251 — Make Stripe checkout and payment outcomes complete and recoverable.**
 
-  **Context:** the 0.89.0 billing fix (SA209) repaired webhooks only. Checkout and portal sessions
-  still pass relative `success_url`/`cancel_url`/`return_url`, which Stripe rejects, so every
-  purchase fails with real keys in 0.87.0, 0.88.0, and HEAD (tech audit
-  `billing-checkout-relative-redirect-urls`, S2). Two defects sit behind it on the same path: a
-  failed checkout create leaves a reservation with an unknown provider outcome that blocks account
-  deletion and purge forever (`billing-reservation-unknown-outcome-permanent`), and one-time
-  purchases paid by a delayed method are never credited (`billing-async-payment-never-credited`).
+  **Context:** return URLs, unknown-outcome reservations, and delayed payments are fixed on `v89`;
+  tech audit `billing-checkout-relative-redirect-urls` stays open until a live checkout is recorded.
 
-  **Acceptance:** every URL handed to Stripe is absolute, built from the request or the configured
-  site origin, and `StripeClient` refuses a relative one. One Stripe test-mode checkout from the
-  API view completes at HEAD and is recorded. An unknown-outcome reservation resolves by a
-  provider-side lookup (expire or adopt), and an operator reconciler clears rows already created;
-  deletion and purge are no longer blocked by a resolvable reservation. `checkout.session.
-  async_payment_succeeded` credits a one-time purchase exactly once and `async_payment_failed`
-  releases it, on the existing event-dedup key. 0.89.0's release notes name the checkout fix.
+  **Acceptance:** one Stripe test-mode checkout from the API view completes at HEAD and is
+  recorded in the 0.89.0 release note's Validation section, which also names the checkout fix.
+  Needs Stripe test keys and a running recipient.
 
-  **Slices:**
-  - [ ] (a) Absolute return URLs with the `StripeClient` guard and the test-mode record. The
-    request-built absolute URLs and the client guard landed with tests; the live Stripe test-mode
-    checkout record still needs test credentials and a running recipient.
-  - [x] (b) Unknown-outcome resolution and the operator reconciler. A definitive 4xx rejection
-    resolves the reservation against the provider before it is closed; a session-less reservation
-    is looked up by its stored reference and adopted, expired, or voided; and
-    `quickscale_billing_reconcile_checkouts` clears accumulated rows under the organization's
-    provider mutation mutex.
-  - [x] (c) Delayed-payment webhook events. An unpaid completed checkout binds its reservation
-    and is accepted; `checkout.session.async_payment_succeeded` credits the purchase exactly once
-    and `checkout.session.async_payment_failed` releases the reservation, on the existing
-    event-dedup key. Next: the slice-(a) live checkout record.
-
-  **Surfaces:** `billing/views.py`, `_checkout.py`, `_removal.py`, `_webhooks.py`,
-  `_stripe_client.py`, their tests, the billing README, and the tech audit.
-
-- [x] **SA252 — Stop deriving the analytics distinct ID from the session key, and guard the dashboard.**
+  **Surfaces:** the 0.89.0 release note and the tech audit.
 
 - [ ] **SA253 — Make the generated project's CI, image, and healthcheck pass, and execute them in a gate.**
 
@@ -391,8 +357,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** `ci.yml.j2`, `Dockerfile.j2`, the test-settings line of `base.py.j2`,
   `scripts/check_workflow_security.py`, the new gate, and the tech audit.
-
-- [x] **SA254 — Harden self-registration: anonymize scope, invitation throttle, VIEW-AS scope.**
 
 - [ ] **SA255 — Accept Resend's real webhook signature in notifications.**
 
@@ -422,8 +386,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** `commands/_deploy_service_config.py`, `dr_engine/_media.py`, their tests, and the
   tech audit.
 
-- [x] **SA257 — Derive cross-row tenant equality for every tenant-to-tenant FK.**
-
 - [ ] **SA258 — Move the module↔project seam from user-owned generated files into the runtime.**
 
   **Context:** module-facing contracts are emitted once into user-owned files (`urls.py`,
@@ -438,8 +400,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   URL inclusion only through managed URLconfs. User-owned files hold a one-line include each. Each
   moved piece adds its last adoption step to `project_contract.yml`. A closed-world generator test
   fails when a Django-side user-owned emitted file contains a module name or module URL name.
-  Lands before SA191's cutover; afterwards decide in decisions.md which upgrade mechanism
-  (`beta_migration`, the vintage steps) is retired.
+  Lands before SA191's cutover.
 
   **Slices:**
   - [ ] (a) `seam_module_flags` and `seam_module_paths` as a runtime template tag.
@@ -588,10 +549,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** orgs, notifications, billing, forms, crm, blog, social models and services;
   core's capability helper and `contracts/module_options.py`; `module-extension.md`; decisions;
   the harness; and the coherence audit.
-
-- [x] **SA266 — Sweep module models, templates, tests, and commands onto the written rules before the freeze.**
-
-- [x] **SA214 — Harden the fresh-first migration tool into the standard upgrade path.**
 
 ## Deferred constraints and references
 
