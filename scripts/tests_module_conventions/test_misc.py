@@ -193,6 +193,30 @@ def test_api_exception_prohibition_control() -> None:
         "derives from Exception alone" in violation
         for violation in _violations(checker.rule_10_checks_errors, indirect_drf_base)
     )
+    qualified_drf_base = _with_files(
+        module,
+        exceptions=(
+            "import rest_framework.exceptions as drf_exceptions\n\n\n"
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class PaymentRequired(drf_exceptions.NotFound):\n    pass\n"
+        ),
+    )
+    assert any(
+        "derives from Exception alone" in violation
+        for violation in _violations(checker.rule_10_checks_errors, qualified_drf_base)
+    )
+    plain_import_drf_base = _with_files(
+        module,
+        exceptions=(
+            "import rest_framework.exceptions\n\n\n"
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class PaymentRequired(rest_framework.exceptions.NotFound):\n    pass\n"
+        ),
+    )
+    assert any(
+        "derives from Exception alone" in violation
+        for violation in _violations(checker.rule_10_checks_errors, plain_import_drf_base)
+    )
     compound = _with_files(
         module,
         services=(

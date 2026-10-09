@@ -422,37 +422,94 @@ _BUILTIN_EXCEPTION_BASES = frozenset(
 )
 
 
-def _declares_module_error(node: ast.ClassDef, imported_exceptions: set[str]) -> bool:
+def _import_bindings(tree: ast.Module) -> dict[str, tuple[str, str | None, bool]]:
+    """
+    Map module-level local names to their import origin.
+
+    Each entry is ``(module, original_name, root_is_module)``: an
+    ``from M import name`` binds ``name`` (or its alias) to ``(M, name,
+    False)``; an ``import a.b`` binds ``a`` to ``(a.b, None, True)`` so the
+    chain's own components are checked against the module; an
+    ``import a.b as alias`` binds ``alias`` to ``(a.b, None, False)``.
+    """
+    bindings: dict[str, tuple[str, str | None, bool]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            module = ("." * node.level) + (node.module or "")
+            for alias in node.names:
+                bindings[alias.asname or alias.name] = (module, alias.name, False)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    bindings[alias.asname] = (alias.name, None, False)
+                else:
+                    bindings.setdefault(alias.name.split(".", 1)[0], (alias.name, None, True))
+    return bindings
+
+
+def _base_origin(
+    base: ast.expr, bindings: Mapping[str, tuple[str, str | None, bool]]
+) -> tuple[str | None, str]:
+    """
+    Resolve a class base expression to ``(source module, original name)``.
+
+    A base the module defines itself resolves to ``(None, name)``; an
+    imported base resolves through its import, aliases and qualified forms
+    included, so a framework exception class is recognized by its source
+    module even when the local spelling ends in neither ``Error`` nor
+    ``Exception``.
+    """
+    chain: list[str] = []
+    node: ast.expr = base
+    while isinstance(node, ast.Attribute):
+        chain.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None, chain[-1] if chain else ""
+    chain.append(node.id)
+    chain.reverse()
+    root, rest = chain[0], chain[1:]
+    binding = bindings.get(root)
+    if binding is None:
+        return None, chain[-1]
+    module, original, root_is_module = binding
+    if original is None:
+        if root_is_module:
+            parts = module.split(".")
+            if chain[: len(parts)] != parts:
+                return None, chain[-1]
+            rest = chain[len(parts) :]
+        if not rest:
+            return module, module.rsplit(".", 1)[-1]
+        module_path = module if len(rest) == 1 else module + "." + ".".join(rest[:-1])
+        return module_path, rest[-1]
+    if not rest:
+        return module, original
+    module_path = module + "." + ".".join([original, *rest[:-1]])
+    return module_path, rest[-1]
+
+
+def _base_is_exception(module: str | None, name: str) -> bool:
+    """Return whether a resolved base names an exception class."""
+    if name.endswith(("Exception", "Error")) or name in _BUILTIN_EXCEPTION_BASES:
+        return True
+    return module is not None and module.endswith("exceptions")
+
+
+def _base_origins(
+    node: ast.ClassDef, bindings: Mapping[str, tuple[str, str | None, bool]]
+) -> list[tuple[str | None, str]]:
+    """Return every direct base of *node* resolved to its origin."""
+    return [_base_origin(base, bindings) for base in node.bases]
+
+
+def _declares_module_error(
+    node: ast.ClassDef, bindings: Mapping[str, tuple[str, str | None, bool]]
+) -> bool:
     """Return whether a class is a module-defined error by name or base."""
     if node.name.endswith(("Error", "Exception")):
         return True
-    return any(
-        base.endswith(("Exception", "Error"))
-        or base in _BUILTIN_EXCEPTION_BASES
-        or base in imported_exceptions
-        for base in _class_names(node)
-    )
-
-
-def _imported_exception_names(tree: ast.Module) -> set[str]:
-    """
-    Return the local names a module imports from any ``*exceptions`` module.
-
-    Imported DRF and Django exception bases (``NotFound``, ``PermissionDenied``,
-    …) are recognized by their import source — aliases included — so the
-    closed-world base rule sees them without hard-coding a framework's
-    hierarchy.
-    """
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and (node.module or "").endswith("exceptions"):
-            for alias in node.names:
-                names.add(alias.asname or alias.name)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name.endswith("exceptions"):
-                    names.add(alias.asname or alias.name.rsplit(".", 1)[-1])
-    return names
+    return any(_base_is_exception(module, name) for module, name in _base_origins(node, bindings))
 
 
 def rule_10_checks_errors(corpus: Corpus) -> list[str]:
@@ -517,11 +574,11 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
             if not rel.endswith(".py"):
                 continue
             file_tree = _parse(text)
-            imported_exceptions = _imported_exception_names(file_tree)
+            bindings = _import_bindings(file_tree)
             for node in ast.walk(file_tree):
                 if not isinstance(node, ast.ClassDef):
                     continue
-                if not _declares_module_error(node, imported_exceptions):
+                if not _declares_module_error(node, bindings):
                     continue
                 if exceptions is None:
                     violations.append(
@@ -533,12 +590,14 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
                         f"rule 10: {module.name}: {rel} defines {node.name} outside "
                         "exceptions.py; a module's own errors live there"
                     )
-                for base in _class_names(node):
-                    if base in module_class_names or base in permitted_bases:
+                for module_path, name in _base_origins(node, bindings):
+                    if name in module_class_names:
+                        continue
+                    if module_path is None and name in permitted_bases:
                         continue
                     violations.append(
                         f"rule 10: {module.name}: {rel} defines {node.name} with base "
-                        f"{base!r} outside Exception and the module's own classes; "
+                        f"{name!r} outside Exception and the module's own classes; "
                         "the module hierarchy derives from Exception alone"
                     )
         if exceptions is None:
