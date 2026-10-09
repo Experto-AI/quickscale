@@ -40,8 +40,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA255 | Accept Resend's real webhook signature in notifications | 2 | — | Optional |
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
 | SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
-| SA264 | One module error base, one HTTP mapping, and one startup-check order | 3 | — | Optional |
-| SA262 | One JSON API contract: guards, 401, pagination, throttles, and DRF keys | 3 | SA264 | Optional |
+| SA262 | One JSON API contract: guards, 401, pagination, throttles, and DRF keys | 3 | — | Optional |
 | SA261 | One owner per URL prefix, and theme API bases from the seam | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -80,7 +79,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA259 | yes | yes | yes | **yes** | yes |
-| 3 | SA264 | yes | yes | yes | **yes** | no |
+| 3 | SA262 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -498,21 +497,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** the 12 adapters, `resolver.py`, `module_wiring.py`, decisions, the harness, and
   the coherence audit.
 
-- [ ] **SA264 — One module error base, one HTTP mapping, and one startup-check order.**
-
-  **Context:** five ways a module error becomes an HTTP status, with `InsufficientCreditsError`
-  answering 500 `billing_error` (coherence `module-error-http-mapping`), and five modules diverge
-  on startup checks and error names (`startup-checks-and-errors`).
-
-  **Acceptance:** coherence §6 proposal 5 is merged and enforced: `<Module>Error` uses the module
-  name, derives from `Exception`, and API-visible subclasses set `status_code`/`default_code`
-  that core's handler renders; no `APIException` in a module hierarchy; `retired_settings` lives
-  in `module.yml`; the settings check registers before module checks and module checks do not
-  re-list declared settings. Rule 10's detector checks the name and modules without
-  `exceptions.py`.
-
-  **Surfaces:** module `exceptions.py` and `checks.py`, core's exception handler, manifests,
-  decisions, the harness, and the coherence audit.
+- [x] **SA264 — One module error base, one HTTP mapping, and one startup-check order.**
 
 - [x] **SA265 — Put cross-module vocabulary, capabilities, and private names in their owners.**
 

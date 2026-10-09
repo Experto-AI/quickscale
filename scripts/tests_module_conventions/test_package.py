@@ -507,15 +507,25 @@ def test_unaliased_dotted_service_import_control() -> None:
 
 def test_legacy_name_controls() -> None:
     module = _golden_module()
-    declaration = (
-        "from collections.abc import Mapping\n\n"
-        "RETIRED_SETTINGS: Mapping[str, str] = {\n"
-        '    "QUICKSCALE_DEMO_MODE": "Use QUICKSCALE_DEMO_ENABLED instead.",\n'
-        '    "DEMO_POSTS_PER_PAGE": "Use QUICKSCALE_DEMO_POSTS_PER_PAGE instead.",\n'
-        "}\n"
-    )
-    declared = _with_files(module, checks=declaration)
+    manifest = copy.deepcopy(module.manifest)
+    manifest["retired_settings"] = {
+        "QUICKSCALE_DEMO_MODE": "Use QUICKSCALE_DEMO_ENABLED instead.",
+        "DEMO_POSTS_PER_PAGE": "Use QUICKSCALE_DEMO_POSTS_PER_PAGE instead.",
+    }
+    declared = replace(module, manifest=manifest)
     assert _violations(checker.rule_6_no_legacy_names, declared) == []
+    python_declaration = _with_files(
+        module,
+        checks=(
+            "RETIRED_SETTINGS = {\n"
+            '    "QUICKSCALE_DEMO_MODE": "Use QUICKSCALE_DEMO_ENABLED instead.",\n'
+            "}\n"
+        ),
+    )
+    assert any(
+        "declare them in module.yml" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, python_declaration)
+    )
     attribute_read = _with_files(
         declared,
         views=("from django.conf import settings\n\nMODE = settings.QUICKSCALE_DEMO_MODE\n"),

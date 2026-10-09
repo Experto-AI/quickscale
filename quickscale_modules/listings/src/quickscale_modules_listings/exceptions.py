@@ -3,15 +3,13 @@
 Every listings exception derives from :class:`ListingsError`, so the
 module's error surface has one base.  The publish API's validation error
 carries the field errors it was raised with, and the API-facing classes
-below also derive from DRF's :class:`~rest_framework.exceptions.APIException`:
-they carry the HTTP status and rule 9's stable error code, so the listings
-view raises the module's own error and the one QuickScale exception handler
-renders the response (Module Conventions rule 9).
+below declare the HTTP status and rule 9's stable error code; the classes
+derive from :class:`Exception` only — the one QuickScale exception handler
+in ``quickscale_core.runtime`` renders them (Module Conventions rules 9 and
+10).
 """
 
 from __future__ import annotations
-
-from rest_framework.exceptions import APIException
 
 __all__ = [
     "ListingPublishConflictError",
@@ -33,7 +31,7 @@ class ListingPublishValidationError(ListingsError):
         self.errors = errors
 
 
-class ListingPublishConflictError(ListingsError, APIException):
+class ListingPublishConflictError(ListingsError):
     """Conflict error for listing publish API payload.
 
     A listing with the generated slug already exists in the organization.
@@ -43,7 +41,7 @@ class ListingPublishConflictError(ListingsError, APIException):
     default_code = "listing_conflict"
 
 
-class ListingPublishError(ListingsError, APIException):
+class ListingPublishError(ListingsError):
     """Raised when a listing publish write fails unexpectedly."""
 
     status_code = 500

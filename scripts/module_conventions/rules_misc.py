@@ -313,8 +313,15 @@ def _collect_direct_calls(statements: list[ast.stmt], calls: list[ast.Call]) -> 
     return False
 
 
-def _registration_reachable(tree: ast.Module) -> bool:
-    """Registration must run from the AppConfig's own ready() scope."""
+def _ready_scope_signature_calls(tree: ast.Module) -> tuple[bool, list[str]]:
+    """
+    Return whether registration is reachable and the calls' execution order.
+
+    Registration must run from the AppConfig's own ``ready()`` scope; the
+    same traversal follows one level of ``self.<method>`` and module-level
+    functions.  The returned call names are in traversal order, so a
+    settings check that runs after the module checks is visible.
+    """
     app_config = next(
         (
             node
@@ -327,7 +334,7 @@ def _registration_reachable(tree: ast.Module) -> bool:
         None,
     )
     if app_config is None:
-        return False
+        return False, []
     ready = next(
         (
             statement
@@ -337,7 +344,7 @@ def _registration_reachable(tree: ast.Module) -> bool:
         None,
     )
     if ready is None:
-        return False
+        return False, []
     methods: dict[str, ast.FunctionDef] = {
         statement.name: statement
         for statement in app_config.body
@@ -350,8 +357,9 @@ def _registration_reachable(tree: ast.Module) -> bool:
     }
     seen: set[int] = set()
     pending: list[ast.FunctionDef] = [ready]
+    order: list[str] = []
     while pending:
-        node = pending.pop()
+        node = pending.pop(0)
         if id(node) in seen:
             continue
         seen.add(id(node))
@@ -359,7 +367,7 @@ def _registration_reachable(tree: ast.Module) -> bool:
             if isinstance(call.func, ast.Name):
                 called = call.func.id
                 if called in {"register_module_checks", "register_module_settings_check"}:
-                    return True
+                    order.append(called)
                 if called in module_functions:
                     pending.append(module_functions[called])
             elif (
@@ -369,7 +377,24 @@ def _registration_reachable(tree: ast.Module) -> bool:
                 and call.func.attr in methods
             ):
                 pending.append(methods[call.func.attr])
-    return False
+    return bool(order), order
+
+
+def _registration_reachable(tree: ast.Module) -> bool:
+    """Registration must run from the AppConfig's own ready() scope."""
+    reachable, _order = _ready_scope_signature_calls(tree)
+    return reachable
+
+
+def _ready_registration_order(tree: ast.Module) -> list[str]:
+    """Return the registration helper calls reachable from ready(), in order."""
+    _reachable, order = _ready_scope_signature_calls(tree)
+    return order
+
+
+def _expected_error_base(module_name: str) -> str:
+    """Return the one ``<Module>Error`` base name the module must declare."""
+    return f"{module_name.capitalize()}Error"
 
 
 def rule_10_checks_errors(corpus: Corpus) -> list[str]:
@@ -381,6 +406,17 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
             if not _registration_reachable(tree):
                 violations.append(
                     f"rule 10: {module.name}: checks.py exists but ready() registers nothing"
+                )
+            order = _ready_registration_order(tree)
+            if (
+                "register_module_checks" in order
+                and "register_module_settings_check" in order
+                and order.index("register_module_checks")
+                < order.index("register_module_settings_check")
+            ):
+                violations.append(
+                    f"rule 10: {module.name}: ready() registers module checks "
+                    "before the generic settings check"
                 )
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef) and node.name == "ready":
@@ -403,18 +439,51 @@ def rule_10_checks_errors(corpus: Corpus) -> list[str]:
                             violations.append(
                                 f"rule 10: {module.name}: ready() catches a registration failure"
                             )
+        expected_base = _expected_error_base(module.name)
         exceptions = module.files.get("exceptions.py")
         if exceptions is None:
+            for rel, text in sorted(module.files.items()):
+                if not rel.endswith(".py"):
+                    continue
+                for node in _parse(text).body:
+                    if isinstance(node, ast.ClassDef) and node.name.endswith("Error"):
+                        violations.append(
+                            f"rule 10: {module.name}: {rel} defines {node.name} but "
+                            "the module ships no exceptions.py"
+                        )
             continue
         classes = [node for node in _parse(exceptions).body if isinstance(node, ast.ClassDef)]
         error_classes = [node for node in classes if node.name.endswith("Error")]
         if not error_classes:
-            violations.append(f"rule 10: {module.name}: exceptions.py has no <Module>Error base")
+            violations.append(f"rule 10: {module.name}: exceptions.py has no {expected_base} base")
             continue
         error_names = {node.name for node in error_classes}
+        if expected_base not in error_names:
+            violations.append(
+                f"rule 10: {module.name}: exceptions.py has no {expected_base} base; "
+                "the base is named after the module as spelled"
+            )
         for node in error_classes:
             parents = _class_names(node)
-            if not any(parent.endswith("Error") for parent in parents):
+            if any(parent.endswith("APIException") for parent in parents):
+                violations.append(
+                    f"rule 10: {module.name}: {node.name} derives from APIException; "
+                    "the module hierarchy derives from Exception alone"
+                )
+                continue
+            if node.name == expected_base:
+                if "Exception" not in parents:
+                    violations.append(
+                        f"rule 10: {module.name}: {expected_base} does not derive from Exception"
+                    )
+                continue
+            if not parents:
+                continue
+            if all(parent == "Exception" for parent in parents):
+                violations.append(
+                    f"rule 10: {module.name}: {node.name} is a second error root, "
+                    f"not a subclass of {expected_base}"
+                )
                 continue
             if not any(parent in error_names for parent in parents):
                 violations.append(

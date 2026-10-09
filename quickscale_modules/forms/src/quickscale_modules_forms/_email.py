@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 from quickscale_modules_notifications.services import (
-    NotificationError,
+    NotificationsError,
     is_enabled,
     send_notification,
 )
@@ -34,7 +34,7 @@ def notify_submission(submission: "FormSubmission") -> str:
 
     A preparation failure never affects the form submission response; once the
     send runs — on commit, or immediately outside a transaction — only
-    notifications' own ``NotificationError`` is tolerated (rules 21 and 43),
+    notifications' own ``NotificationsError`` is tolerated (rules 21 and 43),
     so a configuration or programming error stays visible.  Returns a status
     string: "queued", "no_recipients", "skipped_spam", "skipped", or
     "enqueue_error"; a skipped email never reports "queued".
@@ -113,7 +113,7 @@ def _prepare_submission_notification(
                 tags=["forms"],
                 metadata={"workflow": "form-submission"},
             )
-        except NotificationError:
+        except NotificationsError:
             # Best-effort: a notification failure never blocks submission
             # processing, and any other error (rule 43) stays visible.
             logger.warning(

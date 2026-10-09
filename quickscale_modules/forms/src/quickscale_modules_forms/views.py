@@ -354,7 +354,7 @@ class FormSubmitAPIView(CreateAPIView):
             # CR-P3-006 / rule 21: both helpers schedule their effect on the
             # write's commit, never inline — a rolled-back submission sends no
             # email and fires no analytics event.  Their preparation is
-            # exception-safe; a send that raises beyond NotificationError
+            # exception-safe; a send that raises beyond NotificationsError
             # (rule 43) surfaces only after the write has committed.
             notification_status = notify_submission(submission)
             _capture_submission_analytics(submission, request)

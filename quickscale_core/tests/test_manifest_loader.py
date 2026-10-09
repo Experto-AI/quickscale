@@ -2867,6 +2867,84 @@ retired_options:
             load_manifest(yaml_content, "mymod")
 
 
+class TestLoadManifestRetiredSettings:
+    """Tests for the optional retired_settings section in load_manifest."""
+
+    def test_no_retired_settings_section(self) -> None:
+        """Manifests without a retired_settings section produce an empty mapping."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\n"
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.retired_settings == {}
+
+    def test_retired_settings_are_parsed_with_their_messages(self) -> None:
+        """Each retired name maps to the replacement message that must refuse it."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+retired_settings:
+  DEALS_PER_PAGE: >-
+    Legacy setting 'DEALS_PER_PAGE' is no longer supported. Use
+    'QUICKSCALE_MOD_DEALS_PER_PAGE' instead.
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.retired_settings == {
+            "DEALS_PER_PAGE": (
+                "Legacy setting 'DEALS_PER_PAGE' is no longer supported. Use "
+                "'QUICKSCALE_MOD_DEALS_PER_PAGE' instead."
+            )
+        }
+
+    def test_retired_settings_must_be_a_mapping(self) -> None:
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+retired_settings:
+  - DEALS_PER_PAGE
+"""
+        with pytest.raises(ManifestError, match="must be a mapping"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_retired_setting_name_must_be_non_empty(self) -> None:
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+retired_settings:
+  "": Legacy setting
+"""
+        with pytest.raises(ManifestError, match="non-empty setting names"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_retired_setting_message_must_be_non_empty(self) -> None:
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+retired_settings:
+  DEALS_PER_PAGE: ""
+"""
+        with pytest.raises(ManifestError, match="non-empty replacement message"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_retired_setting_cannot_also_be_live(self) -> None:
+        """A name is either a live setting or retired, never both."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    deals_per_page:
+      type: integer
+      default: 25
+      django_setting: DEALS_PER_PAGE
+      description: Deals per page
+      validation: {}
+  immutable: {}
+retired_settings:
+  DEALS_PER_PAGE: Legacy setting
+"""
+        with pytest.raises(ManifestError, match="also a declared Django setting"):
+            load_manifest(yaml_content, "mymod")
+
+
 class TestLoadProjectContractVintage:
     """Tests for the packaged generated-project contract declaration (SA207)."""
 

@@ -6,7 +6,7 @@ import ast
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from scripts.module_conventions.core import (
     CAPABILITY_NAMES,
@@ -77,9 +77,10 @@ DESTRUCTIVE_COMMAND_KEYWORDS = (
     "promote",
 )
 
-# Rule 6's refusal declaration: a module keeps a ``RETIRED_SETTINGS`` mapping
-# in ``checks.py`` and names it to the startup check; a manifest names its
-# retired option keys under ``retired_options``.
+# Rule 6's refusal declarations live in the module's manifest: retired option
+# keys under ``retired_options`` and retired setting names under
+# ``retired_settings``.  A Python ``RETIRED_SETTINGS`` mapping is the retired
+# inline home the detector refuses.
 RETIRED_SETTINGS_NAME = "RETIRED_SETTINGS"
 
 # Rule 11's required package files and tests.  The manifest is guaranteed by
@@ -388,6 +389,14 @@ def _retired_declaration_keys(tree: ast.Module) -> list[ast.Constant]:
     return keys
 
 
+def _manifest_retired_settings(module: Module) -> set[str]:
+    """Return the retired setting names the module's manifest declares."""
+    section = module.manifest.get("retired_settings")
+    if not isinstance(section, Mapping):
+        return set()
+    return {str(key) for key in section if isinstance(key, str)}
+
+
 def _all_option_keys(module: Module) -> set[str]:
     """Return every option key the module's manifest declares."""
     keys: set[str] = set()
@@ -407,17 +416,22 @@ def rule_6_no_legacy_names(corpus: Corpus) -> list[str]:
     The statically checkable clauses: no shipped manifest authors a
     ``legacy_aliases`` entry (the loader refuses authoring; the
     derivation-schema ``LegacyKeyAlias`` type stays a retained API), a retired
-    option key is not also accepted as a live option, and a module's declared
-    retired setting names are read nowhere in shipped source outside their
-    refusal declaration.
+    option key is not also accepted as a live option, retired setting names
+    live in the manifest (never a Python ``RETIRED_SETTINGS`` mapping), and a
+    module's declared retired setting names are read nowhere in shipped source
+    outside their refusal declaration.
     """
     violations: list[str] = []
     retired: set[str] = set()
     for module in corpus.modules:
+        retired.update(_manifest_retired_settings(module))
         for rel, text in module.files.items():
             if rel.endswith(".py") and RETIRED_SETTINGS_NAME in text:
-                for key in _retired_declaration_keys(_parse(text)):
-                    retired.add(cast(str, key.value))
+                if _retired_declaration_keys(_parse(text)):
+                    violations.append(
+                        f"rule 6: {module.name}: {rel} keeps retired setting names "
+                        "in Python; declare them in module.yml as retired_settings"
+                    )
         if any(
             key == "legacy_aliases" and value not in (None, [], {})
             for key, value in _mapping_entries(module.manifest)

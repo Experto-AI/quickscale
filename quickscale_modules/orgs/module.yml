@@ -56,6 +56,13 @@ middleware:
 settings:
   QUICKSCALE_ORGS_MODE: solo
 
+# Retired Django setting names are refused at startup with the message
+# declared here; the generic settings check reads this section.
+retired_settings:
+  QUICKSCALE_MODE: >-
+    Legacy setting 'QUICKSCALE_MODE' is no longer supported. Use
+    'QUICKSCALE_ORGS_MODE' instead.
+
 derivation:
   wiring_projections:
     - wiring_field: apps

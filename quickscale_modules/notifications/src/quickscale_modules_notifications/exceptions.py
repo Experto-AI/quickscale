@@ -1,25 +1,22 @@
 """Notifications module exceptions.
 
-Every notifications exception derives from :class:`NotificationError`, so a
+Every notifications exception derives from :class:`NotificationsError`, so a
 caller can catch the module's whole error surface with one name.
 ``services.py`` re-exports these classes for callers that historically
 imported them there.
 
-The webhook-facing classes below also derive from DRF's
-:class:`~rest_framework.exceptions.APIException`: they carry the HTTP status
-and rule 9's stable error code, so notification views raise the module's own
-error and the one QuickScale exception handler renders the response
-(Module Conventions rules 9 and 26).
+The webhook-facing classes below declare the HTTP status and rule 9's
+stable error code; the classes derive from :class:`Exception` only — the one
+QuickScale exception handler in ``quickscale_core.runtime`` renders them
+(Module Conventions rules 9, 10, and 26).
 """
 
 from __future__ import annotations
 
-from rest_framework.exceptions import APIException
-
 __all__ = [
     "NotificationConfigurationError",
     "NotificationDisabledError",
-    "NotificationError",
+    "NotificationsError",
     "NotificationTemplateError",
     "NotificationValidationError",
     "NotificationWebhookError",
@@ -27,25 +24,25 @@ __all__ = [
 ]
 
 
-class NotificationError(Exception):
+class NotificationsError(Exception):
     """Base error for notification operations."""
 
 
-class NotificationConfigurationError(NotificationError, APIException):
+class NotificationConfigurationError(NotificationsError):
     """Raised when runtime notification configuration is invalid."""
 
     status_code = 500
     default_code = "configuration_error"
 
 
-class NotificationDisabledError(NotificationError, APIException):
+class NotificationDisabledError(NotificationsError):
     """Raised when the notifications runtime is disabled."""
 
     status_code = 404
     default_code = "not_found"
 
 
-class NotificationValidationError(NotificationError):
+class NotificationValidationError(NotificationsError):
     """Raised when the requested notification payload is invalid."""
 
 
@@ -53,7 +50,7 @@ class NotificationTemplateError(NotificationValidationError):
     """Raised when a notification template cannot be rendered safely."""
 
 
-class NotificationWebhookError(NotificationError, APIException):
+class NotificationWebhookError(NotificationsError):
     """Raised when webhook payload ingestion fails."""
 
     status_code = 400

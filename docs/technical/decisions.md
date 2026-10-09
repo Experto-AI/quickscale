@@ -640,6 +640,10 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
 - ❌ Aliases, `LegacyKeyAlias` entries, or fallback reads for a renamed option or setting.
 - ✅ `apply` refuses a retired option key — in `quickscale.yml` and in `.quickscale/state.yml` — and
   the startup check refuses a retired setting, each naming its replacement.
+- ✅ A retired setting name lives in the module's `module.yml` as `retired_settings`, beside
+  `retired_options`, and the generic startup check reads it from the shipped manifest: a project
+  setting that still carries the name is refused before the project is re-applied, naming its
+  replacement.
 
 **7. URLs.**
 - ✅ The manifest's `url_includes` sets a module's mount (`blog/`, `accounts/` for auth, `orgs/`
@@ -701,8 +705,16 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   exemptions.
 - ✅ Invalid configuration fails startup; an unreachable vendor (PostHog, Resend, Stripe) does not —
   it is logged and handled when the module is used.
-- ✅ A module's own exceptions live in `exceptions.py` under one `<Module>Error` base;
-  `services.py` re-exports those callers catch.
+- ✅ A module's own exceptions live in `exceptions.py` under one `<Module>Error` base named after
+  the module as spelled (`NotificationsError`), deriving from `Exception`; `services.py`
+  re-exports those callers catch. A subclass API callers may see declares `status_code` and
+  `default_code` on its class, and the one handler in `quickscale_core.runtime` renders it in rule
+  9's shape, so no module error inherits DRF; the base's 500 default stays for configuration and
+  programming errors. A module that raises no errors of its own ships no `exceptions.py`.
+- ✅ The generic settings check registers from `ready()` before the module's own checks, so a
+  missing or invalid declared setting — and a retired setting name the manifest declares — is
+  reported by the generic check; a module check does not re-list the settings the generic check
+  validates.
 - ✅ **Core port:** core defines a `Protocol` for something it needs, exactly one module
   implements it and registers it from `ready()` through `quickscale_core.runtime`, and a second
   or missing registration fails hard. The allowed ports are listed here:
@@ -717,6 +729,7 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   `collectstatic` — cannot disable the checks there.
 - ❌ A hand-written `raise` or check in `ready()` outside the helper, or catching and logging a
   configuration failure (Fail-Hard Principle).
+- ❌ DRF's `APIException` anywhere in a module's exception hierarchy.
 
 **11. Package files, tests, models, docs.**
 - ✅ Every module ships `apps.py`, `adapter.py`, `services.py` with `is_enabled()`, `module.yml`,

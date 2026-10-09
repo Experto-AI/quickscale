@@ -105,15 +105,16 @@ def test_ready_raises_improperly_configured_when_retired_setting_present(
 
 
 def test_ready_refuses_every_declared_retired_setting(settings) -> None:
-    """Rule 6: every declared retired forms name fails startup."""
-    from quickscale_modules_forms.checks import RETIRED_SETTINGS
+    """Rule 6: every retired name the forms manifest declares fails startup."""
+    from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
 
+    retired_settings = load_module_manifest_with_fallback("forms").retired_settings
     config = QuickscaleFormsConfig(
         "quickscale_modules_forms",
         import_module("quickscale_modules_forms"),
     )
 
-    for retired_name in RETIRED_SETTINGS:
+    for retired_name in retired_settings:
         setattr(settings, retired_name, "legacy")
         try:
             with pytest.raises(ImproperlyConfigured, match=retired_name):

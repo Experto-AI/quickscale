@@ -205,6 +205,15 @@ class ModuleManifest:
     them on the config and state paths, so ``module.yml`` is the single home
     of a retired key's refusal."""
 
+    retired_settings: dict[str, str] = field(default_factory=dict)
+    """Retired Django setting names mapped to the message naming their replacement.
+
+    Populated when the loader encounters a top-level ``retired_settings``
+    section.  The generic startup settings check reads the map from the
+    module's shipped manifest and refuses every retired name the project's
+    settings still define, so ``module.yml`` is the single home of a retired
+    setting's refusal."""
+
     # ------------------------------------------------------------------ #
     # Contract-vintage metadata (SA10.2)
     #

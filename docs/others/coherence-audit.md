@@ -1750,3 +1750,23 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   option-name/environment constants (`contracts/module_options.py`), `manifest/social_manifest.py`'s
   social runtime (arch watchlist `core-holds-module-vocabulary`), `utils/_dependency_io.py`'s
   storage cloud-extra selection, and `commands/_module_embed.py`'s auth migration gate). Item 9.
+
+### 2026-10-09 — SA264 closure (conventions harness 43 rules, controls included)
+
+- 2026-10-09 — `module-error-http-mapping`: **resolved** (SA264 — every module exception
+  hierarchy derives from `Exception`; billing, blog, listings, and notifications drop their
+  `APIException` mix-ins and declare `status_code`/`default_code` instead, which core's one
+  handler renders in rule 9's shape; `InsufficientCreditsError` answers 402
+  `insufficient_credits` instead of inheriting 500 `billing_error`; decision rule 10 carries the
+  mapping and refuses `APIException`; harness rule 10 rejects a hierarchy that derives from
+  `APIException`, controls included). Item 5.
+- 2026-10-09 — `startup-checks-and-errors`: **resolved as to the module conventions** (SA264 —
+  every module-shipped error base is named after its module as spelled and `NotificationError`
+  is renamed `NotificationsError` with its public surface and its forms consumer; retired
+  setting names move from five modules' `checks.py` into their `module.yml` as
+  `retired_settings`, read by the generic settings check through the shipped manifest; blog's
+  `ready()` registers the generic check before its module checks; the four hand-listed
+  declared-setting guards are deleted; harness rule 10 checks the base name, second roots,
+  modules without `exceptions.py`, and the registration order; decision rules 6 and 10 carry
+  the clauses. Recorded limit: core's `BackupError` (`dr_engine.primitives`, Track 2's surface)
+  keeps its name, outside a module's `exceptions.py`). Item 7.

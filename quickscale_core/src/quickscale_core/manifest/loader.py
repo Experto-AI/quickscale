@@ -51,6 +51,7 @@ from quickscale_core.manifest.loader_options import (
     _parse_config_option,
     _parse_config_section,
     _parse_retired_options,
+    _parse_retired_settings,
     _validate_condition_mapping,
     _validate_mutable_options,
     _validate_numeric_bound,
@@ -292,6 +293,11 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         data, mutable_options, immutable_options, module_name
     )
 
+    # Parse retired-setting declarations (additive; empty when absent)
+    retired_settings = _parse_retired_settings(
+        data, mutable_options, immutable_options, module_name
+    )
+
     # Parse list fields
     required_modules = _parse_required_modules(data, module_name)
     dependencies = _validate_list_field(data, "dependencies", module_name)
@@ -323,6 +329,7 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         wiring_projections=derivation.get("wiring_projections", []),
         option_derivations=derivation.get("option_derivations", {}),
         retired_options=retired_options,
+        retired_settings=retired_settings,
         contract_vintage=contract_vintage,
     )
 
@@ -434,6 +441,7 @@ __all__ = [
     "_parse_project_contract_vintage",
     "_parse_required_modules",
     "_parse_retired_options",
+    "_parse_retired_settings",
     "_parse_yaml_content",
     "_selector_chain_yields_unhashable",
     "_validate_computed_template",

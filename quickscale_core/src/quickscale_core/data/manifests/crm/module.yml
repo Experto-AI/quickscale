@@ -59,6 +59,19 @@ retired_options:
     Legacy config key 'enable_api' is no longer supported. Use 'api_enabled'
     instead.
 
+# Retired Django setting names are refused at startup with the message
+# declared here; the generic settings check reads this section.
+retired_settings:
+  CRM_CONTACTS_PER_PAGE: >-
+    Legacy setting 'CRM_CONTACTS_PER_PAGE' is no longer supported. Use
+    'QUICKSCALE_CRM_CONTACTS_PER_PAGE' instead.
+  CRM_DEALS_PER_PAGE: >-
+    Legacy setting 'CRM_DEALS_PER_PAGE' is no longer supported. Use
+    'QUICKSCALE_CRM_DEALS_PER_PAGE' instead.
+  CRM_ENABLE_API: >-
+    Legacy setting 'CRM_ENABLE_API' is no longer supported. Use
+    'QUICKSCALE_CRM_API_ENABLED' instead.
+
 # ---------------------------------------------------------------------------
 # Manifest derivation rules
 # ---------------------------------------------------------------------------

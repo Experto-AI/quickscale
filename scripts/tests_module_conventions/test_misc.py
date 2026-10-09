@@ -27,6 +27,102 @@ def test_error_base_control() -> None:
     assert _violations(checker.rule_10_checks_errors, broken)
 
 
+def test_error_base_name_control() -> None:
+    """The base is named after the module as spelled, not any ``*Error`` name."""
+    module = _golden_module()
+    assert _violations(checker.rule_10_checks_errors, module) == []
+    renamed_base = _with_files(
+        module,
+        exceptions=(
+            "class DemoIssueError(Exception):\n    pass\n\n\n"
+            "class DemoProblemError(DemoIssueError):\n    pass\n"
+        ),
+    )
+    assert any(
+        "no DemoError base" in violation
+        for violation in _violations(checker.rule_10_checks_errors, renamed_base)
+    )
+
+
+def test_api_exception_hierarchy_control() -> None:
+    """No module error hierarchy may derive from DRF's ``APIException``."""
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        exceptions=(
+            "from rest_framework.exceptions import APIException\n\n\n"
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class DemoProblemError(DemoError, APIException):\n    pass\n"
+        ),
+    )
+    assert any(
+        "derives from APIException" in violation
+        for violation in _violations(checker.rule_10_checks_errors, broken)
+    )
+
+
+def test_second_error_root_control() -> None:
+    """Every module error derives from the one ``<Module>Error`` base."""
+    module = _golden_module()
+    broken = _with_files(
+        module,
+        exceptions=(
+            "class DemoError(Exception):\n    pass\n\n\n"
+            "class DemoOtherError(Exception):\n    pass\n"
+        ),
+    )
+    assert any(
+        "second error root" in violation
+        for violation in _violations(checker.rule_10_checks_errors, broken)
+    )
+
+
+def test_missing_exceptions_file_control() -> None:
+    """A module without exceptions.py must raise no error class of its own."""
+    module = _golden_module()
+    without_exceptions = replace(
+        module,
+        files={key: value for key, value in module.files.items() if key != "exceptions.py"},
+    )
+    assert _violations(checker.rule_10_checks_errors, without_exceptions) == []
+    declares_elsewhere = _with_files(
+        without_exceptions,
+        services=(
+            '"""Demo service surface."""\n\n\nclass DemoServiceError(Exception):\n    pass\n'
+        ),
+    )
+    assert any(
+        "ships no exceptions.py" in violation
+        for violation in _violations(checker.rule_10_checks_errors, declares_elsewhere)
+    )
+
+
+def test_settings_check_order_control() -> None:
+    """The generic settings check registers before the module's own checks."""
+    module = _golden_module()
+    both_in_order = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "register_module_checks(self, [check_demo])",
+            "register_module_settings_check(self, 'demo')\n        "
+            "register_module_checks(self, [check_demo])",
+        ),
+    )
+    assert _violations(checker.rule_10_checks_errors, both_in_order) == []
+    inverted = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "register_module_checks(self, [check_demo])",
+            "register_module_checks(self, [check_demo])\n        "
+            "register_module_settings_check(self, 'demo')",
+        ),
+    )
+    assert any(
+        "before the generic settings check" in violation
+        for violation in _violations(checker.rule_10_checks_errors, inverted)
+    )
+
+
 def test_ready_raise_control() -> None:
     module = _golden_module()
     broken = _with_files(

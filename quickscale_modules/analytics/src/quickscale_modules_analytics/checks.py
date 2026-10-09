@@ -5,10 +5,10 @@ Rule 10: these functions are run from ``AppConfig.ready()`` through
 ``runserver``, ``migrate``, and ``manage.py check`` alike.
 
 Rule 12: the declared options (presence, type, choices) are validated by the
-generic settings check registered alongside this one.  This check covers what
-options cannot express: the resolved PostHog host must be a usable absolute
-URL, and a live runtime must resolve a non-empty API key.  While a declared
-setting is absent the check stays silent — the generic check reports it.
+generic settings check registered first; this check covers what options
+cannot express: the resolved PostHog host must be a usable absolute URL, and
+a live runtime must resolve a non-empty API key.  The projected secret
+settings are not manifest options, so a missing one is still reported here.
 
 Analytics distinguishes invalid configuration from an unreachable vendor: an
 invalid host or an empty PostHog key for live analytics fails startup, while
@@ -24,20 +24,6 @@ from django.core.checks import CheckMessage, Error
 
 from quickscale_modules_analytics._settings import (
     AnalyticsRuntimeSettingsSnapshot,
-)
-
-#: The declared settings this check reads.  Presence is the generic settings
-#: check's concern; the guard below keeps this check from raising when one is
-#: missing, so ``manage.py check`` reports the missing setting instead.
-_DECLARED_SETTINGS = (
-    "QUICKSCALE_ANALYTICS_ENABLED",
-    "QUICKSCALE_ANALYTICS_PROVIDER",
-    "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-    "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-    "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
-    "QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG",
-    "QUICKSCALE_ANALYTICS_EXCLUDE_STAFF",
-    "QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT",
 )
 
 #: The projected secret settings apply writes from the `_ENV_VAR` options
@@ -62,9 +48,6 @@ def check_analytics_settings(
     ``QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG``) does not need the key, because the
     configurator disables capture before it resolves one.
     """
-    if any(not hasattr(settings, name) for name in _DECLARED_SETTINGS):
-        return []
-
     messages: list[CheckMessage] = []
     snapshot = AnalyticsRuntimeSettingsSnapshot.from_settings()
     if not snapshot.enabled:

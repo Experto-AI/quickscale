@@ -530,3 +530,62 @@ def _parse_retired_options(
             )
         retired[key] = message
     return retired
+
+
+def _parse_retired_settings(
+    data: dict[str, Any],
+    mutable_options: dict[str, ConfigOption],
+    immutable_options: dict[str, ConfigOption],
+    module_name: str | None,
+) -> dict[str, str]:
+    """Parse and validate the optional top-level ``retired_settings`` section.
+
+    Each entry maps a retired Django setting name to the message that names
+    its replacement.  A name that is still a declared option's
+    ``django_setting`` is rejected: a name is either live or retired, never
+    both.
+
+    Args:
+        data: The full parsed YAML data dictionary.
+        mutable_options: Declared mutable options (live-setting check).
+        immutable_options: Declared immutable options (live-setting check).
+        module_name: Optional module name for error messages.
+
+    Returns:
+        A mapping of retired setting names to their replacement messages.
+        Empty when the section is absent.
+
+    Raises:
+        ManifestError: If the section is malformed or names a live setting.
+    """
+    raw_section = data.get("retired_settings")
+    if raw_section is None:
+        return {}
+
+    if not isinstance(raw_section, dict):
+        raise ManifestError("'retired_settings' must be a mapping", module_name)
+
+    live_settings = {
+        option.django_setting
+        for option in (*mutable_options.values(), *immutable_options.values())
+        if option.django_setting
+    }
+    retired: dict[str, str] = {}
+    for key, message in raw_section.items():
+        if not isinstance(key, str) or not key:
+            raise ManifestError(
+                "'retired_settings' keys must be non-empty setting names",
+                module_name,
+            )
+        if not isinstance(message, str) or not message:
+            raise ManifestError(
+                f"'retired_settings.{key}' must be a non-empty replacement message",
+                module_name,
+            )
+        if key in live_settings:
+            raise ManifestError(
+                f"'retired_settings.{key}' is also a declared Django setting",
+                module_name,
+            )
+        retired[key] = message
+    return retired

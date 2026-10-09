@@ -22,10 +22,14 @@ This module is the one implementation of the three cross-module conventions:
   validates every setting declared in the project's ``MODULE_SETTINGS_SCHEMA``
   (written by ``quickscale apply``) against the manifest's type and validation
   vocabulary, without coercion, and fails startup naming the setting and the
-  fix.  Core holds no per-module names; the schema comes from the project.
+  fix.  It also refuses the retired setting names the module's own shipped
+  ``module.yml`` declares as ``retired_settings`` beside ``retired_options``
+  (rule 6).  Core holds no per-module names; the schema comes from the
+  project and the refusal names from the module's manifest.
 * :func:`exception_handler` — rule 9's single QuickScale HTTP error shape,
   installed as ``REST_FRAMEWORK["EXCEPTION_HANDLER"]`` by the generated
-  settings.
+  settings.  It also renders a module error that is not a DRF ``APIException``
+  but declares ``status_code`` and ``default_code`` (rule 10).
 
 The module also defines the records a module declares through the
 ``personal_data_declarations`` capability (Module Conventions rule 49): each
@@ -57,6 +61,7 @@ from django.conf import settings
 from django.core.checks import CheckMessage, Error, register
 from django.core.exceptions import ImproperlyConfigured
 
+from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
 from quickscale_core.manifest.settings_schema import collect_setting_issues
 
 if TYPE_CHECKING:
@@ -482,20 +487,24 @@ def register_module_settings_check(
     Every failure names the setting, the rule, and the ``quickscale apply``
     fix.
 
-    A module whose settings were renamed hands in *retired_settings* — a
-    mapping of each retired setting name to the message naming its
-    replacement.  A retired name still defined in the project's settings is
-    refused with that message (rule 6), independently of the managed schema:
-    a dead setting left in a project's configuration must fail loudly rather
-    than disappear silently.
+    A module whose settings were renamed declares the retired names in its
+    ``module.yml`` as ``retired_settings`` beside ``retired_options``; the
+    check reads them from the module's shipped manifest (source tree first,
+    bundled snapshot fallback) and refuses with the declared message every
+    retired name the project's settings still define (rule 6).  The refusal
+    works before the project is re-applied: the setting a previous release
+    wrote is exactly the one still carried.  An explicit *retired_settings*
+    mapping overrides the manifest read.
 
     Args:
         app_config: The module's app config; its label tags the registered
             system check and names the module in aggregated failures.
         module_name: The module's name — the key its schema is stored under
-            in ``MODULE_SETTINGS_SCHEMA``.
+            in ``MODULE_SETTINGS_SCHEMA``, and the manifest whose
+            ``retired_settings`` the check reads.
         retired_settings: Optional mapping of retired setting names to the
-            messages naming their replacements.
+            messages naming their replacements; when omitted, the module's
+            manifest declares them.
 
     Raises:
         ValueError: when *module_name* is not a non-empty string, or when
@@ -508,7 +517,11 @@ def register_module_settings_check(
         raise ValueError(
             "register_module_settings_check() requires a non-empty module name."
         )
-    if retired_settings is not None:
+    if retired_settings is None:
+        retired_settings = load_module_manifest_with_fallback(
+            module_name
+        ).retired_settings
+    else:
         if not isinstance(retired_settings, Mapping):
             raise ValueError(
                 "register_module_settings_check() requires retired_settings to "
@@ -654,9 +667,14 @@ def exception_handler(
     appears only for validation errors, where it maps a field name to its
     messages.  The HTTP status carries the class of error.
 
-    An exception DRF's own handler does not translate returns ``None``, so an
-    unexpected server error keeps Django's error handling instead of being
-    answered as if it were a known API error.
+    A module's own error derives from ``Exception``, not from DRF's
+    ``APIException``; when its class declares ``status_code`` and
+    ``default_code``, this handler renders it in the same shape (rule 10), so
+    an API caller sees the module's status and stable code instead of a
+    server error.  An exception DRF's own handler does not translate and that
+    declares no status returns ``None``, so an unexpected server error keeps
+    Django's error handling instead of being answered as if it were a known
+    API error.
 
     Args:
         exc: The exception DRF caught.
@@ -665,13 +683,22 @@ def exception_handler(
 
     Returns:
         A DRF response with the QuickScale error body, or ``None`` for an
-        exception outside DRF's handled classes.
+        exception outside DRF's handled classes that declares no status.
     """
     from rest_framework.views import exception_handler as drf_exception_handler
 
     response = drf_exception_handler(exc, context)
     if response is None:
-        return None
+        declared = _declared_error(exc)
+        if declared is None:
+            return None
+        status_code, code = declared
+        from rest_framework.response import Response
+
+        return Response(
+            {"error": {"code": code, "message": _declared_error_message(exc, code)}},
+            status=status_code,
+        )
     from rest_framework.exceptions import ValidationError
 
     if isinstance(exc, ValidationError):
@@ -686,6 +713,43 @@ def exception_handler(
         error = {"code": code, "message": _error_message(exc, code)}
     response.data = {"error": error}
     return response
+
+
+def _declared_error(exc: Exception) -> tuple[int, str] | None:
+    """Return the ``(status_code, default_code)`` a non-DRF error declares.
+
+    Rule 10 lets a module's error carry the status and stable code an API
+    caller sees without deriving from DRF's ``APIException``.  An exception
+    opts in by declaring both attributes on its class; anything else keeps
+    Django's own error handling.  A malformed declaration (a boolean, a
+    non-integer status, an out-of-range status, an empty code) is not
+    rendered, so a broken class cannot crash the handler itself.
+    """
+    status_code = getattr(exc, "status_code", None)
+    default_code = getattr(exc, "default_code", None)
+    if isinstance(status_code, bool) or not isinstance(status_code, int):
+        return None
+    if not isinstance(default_code, str) or not default_code:
+        return None
+    if not 100 <= status_code <= 599:
+        return None
+    return status_code, default_code
+
+
+def _declared_error_message(exc: Exception, code: str) -> str:
+    """Return the human-readable message for a declared non-DRF error.
+
+    The raised message is used when present; a class-level
+    ``default_detail`` stands in when the error was raised bare, and the
+    code-derived text is the last resort, matching the DRF path's fallback.
+    """
+    text = str(exc)
+    if text:
+        return text
+    default_detail = getattr(exc, "default_detail", None)
+    if isinstance(default_detail, str) and default_detail:
+        return default_detail
+    return f"{code.replace('_', ' ').capitalize()}."
 
 
 def _validation_fields(detail: object, prefix: str = "") -> dict[str, list[str]]:

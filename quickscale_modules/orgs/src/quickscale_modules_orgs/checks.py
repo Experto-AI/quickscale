@@ -71,7 +71,7 @@ import ast as ast
 import importlib as importlib
 import inspect as inspect
 import os
-from collections.abc import Iterator as Iterator, Mapping
+from collections.abc import Iterator as Iterator
 
 from django.apps import apps
 from django.core.checks import CheckMessage, Error, Warning, register
@@ -106,18 +106,6 @@ from quickscale_modules_orgs.tenancy import (
 # Keep it aligned with the independent fail-closed declarations in the production
 # settings validator, CLI producer, and generated start.sh launcher; none is a SSOT.
 _PRIVILEGED_COMMANDS: frozenset[str] = frozenset({"migrate", "createcachetable"})
-
-#: Retired setting names refused at startup, each naming its replacement
-#: (rule 6).  The declaration lives here, with the module's other checks,
-#: because the refusal must work before the project is re-applied: the
-#: settings a previous release wrote are exactly the ones still carrying
-#: these names.
-RETIRED_SETTINGS: Mapping[str, str] = {
-    "QUICKSCALE_MODE": (
-        "Legacy setting 'QUICKSCALE_MODE' is no longer supported. "
-        "Use 'QUICKSCALE_ORGS_MODE' instead."
-    ),
-}
 
 
 def _is_privileged_command() -> bool:

@@ -773,7 +773,9 @@ class TestRegisterModuleSettingsCheck:
         ):
             with pytest.raises(ImproperlyConfigured) as excinfo:
                 conventions.register_module_settings_check(
-                    _FakeAppConfig("quickscale_test_demo"), "demo"
+                    _FakeAppConfig("quickscale_test_demo"),
+                    "demo",
+                    retired_settings={},
                 )
 
         message = str(excinfo.value)
@@ -833,7 +835,9 @@ class TestRegisterModuleSettingsCheck:
         with override_settings(MODULE_SETTINGS_SCHEMA=schema):
             with pytest.raises(ImproperlyConfigured) as excinfo:
                 conventions.register_module_settings_check(
-                    _FakeAppConfig("quickscale_test_docs"), "docs"
+                    _FakeAppConfig("quickscale_test_docs"),
+                    "docs",
+                    retired_settings={},
                 )
 
         assert "MEDIA_URL is not set" in str(excinfo.value)
@@ -855,7 +859,9 @@ class TestRegisterModuleSettingsCheck:
         }
         with override_settings(MODULE_SETTINGS_SCHEMA=schema, MEDIA_URL="/media/"):
             conventions.register_module_settings_check(
-                _FakeAppConfig("quickscale_test_docs"), "docs"
+                _FakeAppConfig("quickscale_test_docs"),
+                "docs",
+                retired_settings={},
             )
 
         assert _registered_settings_checks(
@@ -871,15 +877,9 @@ class TestRegisterModuleSettingsCheck:
     def test_retired_setting_fails_startup_naming_the_replacement(
         self, system_check_registry
     ) -> None:
-        """Rule 6: a retired setting left in the project fails startup."""
+        """Rule 6: the manifest's retired names are read and refused."""
         from django.test import override_settings
 
-        retired = {
-            "LISTINGS_PER_PAGE": (
-                "Legacy setting 'LISTINGS_PER_PAGE' is no longer supported. "
-                "Use 'QUICKSCALE_LISTINGS_PER_PAGE' instead."
-            )
-        }
         with override_settings(
             MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
             QUICKSCALE_LISTINGS_PER_PAGE=12,
@@ -887,12 +887,23 @@ class TestRegisterModuleSettingsCheck:
         ):
             with pytest.raises(ImproperlyConfigured) as excinfo:
                 conventions.register_module_settings_check(
-                    self._app_config(), "listings", retired_settings=retired
+                    self._app_config(), "listings"
                 )
 
         message = str(excinfo.value)
         assert "Legacy setting 'LISTINGS_PER_PAGE' is no longer supported" in message
         assert "QUICKSCALE_LISTINGS_PER_PAGE" in message
+
+    def test_control_unreadable_manifest_fails_hard(
+        self, system_check_registry
+    ) -> None:
+        """A module name without a manifest fails loudly, never silently."""
+        from quickscale_core.manifest.loader_errors import ManifestError
+
+        with pytest.raises(ManifestError, match="Manifest file not found"):
+            conventions.register_module_settings_check(
+                _FakeAppConfig("quickscale_test_missing"), "missing"
+            )
 
     def test_absent_retired_setting_registers_the_check(
         self, system_check_registry
@@ -1122,6 +1133,66 @@ class TestExceptionHandler:
         handler = self._handler()
 
         assert handler(ValueError("unexpected server error"), {}) is None
+
+    def test_declared_non_drf_error_takes_the_one_shape(self) -> None:
+        """Rule 10: a declared status/code renders without inheriting DRF."""
+        handler = self._handler()
+
+        class DeclaredError(Exception):
+            status_code = 409
+            default_code = "widget_conflict"
+
+        response = handler(DeclaredError("A widget already exists."), {})
+
+        assert response is not None
+        assert response.status_code == 409
+        assert response.data == {
+            "error": {
+                "code": "widget_conflict",
+                "message": "A widget already exists.",
+            }
+        }
+
+    def test_bare_declared_error_uses_its_default_detail(self) -> None:
+        handler = self._handler()
+
+        class DeclaredError(Exception):
+            status_code = 403
+            default_code = "widget_forbidden"
+            default_detail = "Widget access is not allowed."
+
+        response = handler(DeclaredError(), {})
+
+        assert response is not None
+        assert response.status_code == 403
+        assert response.data["error"]["message"] == "Widget access is not allowed."
+
+    def test_control_malformed_declaration_is_not_rendered(self) -> None:
+        """A broken status/code declaration must not crash the handler."""
+        handler = self._handler()
+
+        class StatusLessError(Exception):
+            default_code = "widget_error"
+
+        class BooleanStatusError(Exception):
+            status_code = True
+            default_code = "widget_error"
+
+        class RangeStatusError(Exception):
+            status_code = 900
+            default_code = "widget_error"
+
+        class EmptyCodeError(Exception):
+            status_code = 400
+            default_code = ""
+
+        for exc in (
+            StatusLessError("no status"),
+            BooleanStatusError("boolean status"),
+            RangeStatusError("out of range"),
+            EmptyCodeError("empty code"),
+        ):
+            assert handler(exc, {}) is None, type(exc).__name__
 
     def test_every_handled_error_has_exactly_the_one_shape(self) -> None:
         import rest_framework.exceptions as drf_exceptions

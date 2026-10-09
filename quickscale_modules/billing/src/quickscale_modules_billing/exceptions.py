@@ -4,16 +4,14 @@ Every billing exception derives from :class:`BillingError`, so a caller can
 catch the module's whole error surface with one name.  ``services.py``
 re-exports these classes for callers that historically imported them there.
 
-Every class also derives from DRF's
-:class:`~rest_framework.exceptions.APIException`: each carries the HTTP
-status and rule 9's stable error code, so billing code raises the module's
-own error and the one QuickScale exception handler renders the response
-(Module Conventions rules 9 and 26).
+The classes derive from :class:`Exception` only — never from DRF's
+``APIException``; an exception API callers may see declares ``status_code``
+and ``default_code``, and the one QuickScale exception handler in
+``quickscale_core.runtime`` renders it in rule 9's shape (Module Conventions
+rules 9 and 10).
 """
 
 from __future__ import annotations
-
-from rest_framework.exceptions import APIException
 
 __all__ = [
     "BillingConfigurationError",
@@ -28,7 +26,7 @@ __all__ = [
 ]
 
 
-class BillingError(APIException):
+class BillingError(Exception):
     """Base error for billing runtime operations.
 
     An unexpected failure answers ``500`` with the stable ``billing_error``
@@ -40,7 +38,14 @@ class BillingError(APIException):
 
 
 class InsufficientCreditsError(BillingError):
-    """Raised when a debit exceeds the available balance."""
+    """Raised when a debit exceeds the available balance.
+
+    The debit is well formed; the organization's balance does not cover it,
+    so the answer is ``402`` with the stable ``insufficient_credits`` code.
+    """
+
+    status_code = 402
+    default_code = "insufficient_credits"
 
 
 class BillingConfigurationError(BillingError):

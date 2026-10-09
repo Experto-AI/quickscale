@@ -7,9 +7,9 @@ secret a switched-on feature needs must not be empty.
 
 Rule 12: the declared options (presence, type, choices, the cross-option
 credential rules) are validated by the generic settings check registered
-alongside this one.  This check covers the credential pair's runtime shape:
-both credentials empty may fall back to boto3's default credential chain,
-while a half-configured static pair is refused.
+first.  This check covers the credential pair's runtime shape: both
+credentials empty may fall back to boto3's default credential chain, while a
+half-configured static pair is refused.
 """
 
 from __future__ import annotations
@@ -19,19 +19,6 @@ from django.core.checks import CheckMessage, Error
 from django.core.exceptions import ImproperlyConfigured
 
 from quickscale_modules_storage._helpers import select_storage_backend
-
-#: The declared settings the backend selection reads.  While any is absent
-#: the check stays silent: the generic settings check reports the missing
-#: declared setting, and the applied settings arrive together through
-#: ``quickscale apply``.
-_DECLARED_SETTINGS = (
-    "QUICKSCALE_STORAGE_BACKEND",
-    "AWS_STORAGE_BUCKET_NAME",
-    "AWS_S3_ENDPOINT_URL",
-    "AWS_S3_REGION_NAME",
-    "AWS_DEFAULT_ACL",
-    "AWS_QUERYSTRING_AUTH",
-)
 
 
 def check_vendor_secrets(
@@ -47,15 +34,9 @@ def check_vendor_secrets(
     manifest options — ``apply`` writes them alongside the declared settings —
     so a missing one is reported here rather than silently skipped.
     """
-    if not hasattr(settings, "QUICKSCALE_STORAGE_ENABLED"):
-        # Pre-apply: the generic settings check reports the missing declared
-        # setting, and the credential pair is not evaluated yet.
-        return []
     if not bool(settings.QUICKSCALE_STORAGE_ENABLED):
         # Rule 1 (D3): a module switched off has no switched-on feature, so
         # its credential requirement does not apply while it is off.
-        return []
-    if any(not hasattr(settings, name) for name in _DECLARED_SETTINGS):
         return []
 
     try:

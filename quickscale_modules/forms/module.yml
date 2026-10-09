@@ -80,6 +80,25 @@ retired_options:
     Legacy config key 'submissions_api_enabled' is no longer supported. Use
     'api_enabled' instead.
 
+# Retired Django setting names are refused at startup with the message
+# declared here; the generic settings check reads this section.
+retired_settings:
+  FORMS_DATA_RETENTION_DAYS: >-
+    Legacy setting 'FORMS_DATA_RETENTION_DAYS' is no longer supported. Use
+    'QUICKSCALE_FORMS_RETENTION_DAYS' instead.
+  FORMS_PER_PAGE: >-
+    Legacy setting 'FORMS_PER_PAGE' is no longer supported. Use
+    'QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE' instead.
+  FORMS_RATE_LIMIT: >-
+    Legacy setting 'FORMS_RATE_LIMIT' is no longer supported. Use
+    'QUICKSCALE_FORMS_RATE_LIMIT' instead.
+  FORMS_SPAM_PROTECTION: >-
+    Legacy setting 'FORMS_SPAM_PROTECTION' is no longer supported. Use
+    'QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED' instead.
+  FORMS_SUBMISSIONS_API: >-
+    Legacy setting 'FORMS_SUBMISSIONS_API' is no longer supported. Use
+    'QUICKSCALE_FORMS_API_ENABLED' instead.
+
 # ---------------------------------------------------------------------------
 # Manifest derivation rules
 # ---------------------------------------------------------------------------

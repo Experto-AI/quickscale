@@ -2,16 +2,13 @@
 
 Every blog exception derives from :class:`BlogError`, so the module's error
 surface has one base.  The publish API's validation errors carry the field
-errors they were raised with, and the API-facing classes below also derive
-from DRF's :class:`~rest_framework.exceptions.APIException`: they carry the
-HTTP status and rule 9's stable error code, so the blog views raise the
-module's own error and the one QuickScale exception handler renders the
-response (Module Conventions rule 9).
+errors they were raised with, and the API-facing classes below declare the
+HTTP status and rule 9's stable error code; the classes derive from
+:class:`Exception` only — the one QuickScale exception handler in
+``quickscale_core.runtime`` renders them (Module Conventions rules 9 and 10).
 """
 
 from __future__ import annotations
-
-from rest_framework.exceptions import APIException
 
 __all__ = [
     "BlogError",
@@ -35,7 +32,7 @@ class BlogPublishValidationError(BlogError):
         self.errors = errors
 
 
-class BlogPublishConflictError(BlogError, APIException):
+class BlogPublishConflictError(BlogError):
     """Conflict error for blog publish API payload.
 
     A post with the generated slug already exists in the organization.
@@ -45,7 +42,7 @@ class BlogPublishConflictError(BlogError, APIException):
     default_code = "post_conflict"
 
 
-class BlogPublishError(BlogError, APIException):
+class BlogPublishError(BlogError):
     """Raised when a blog publish write fails unexpectedly."""
 
     status_code = 500
@@ -60,7 +57,7 @@ class BlogMediaUploadValidationError(BlogError):
         self.errors = errors
 
 
-class BlogMediaUploadError(BlogError, APIException):
+class BlogMediaUploadError(BlogError):
     """Raised when a blog media asset write fails unexpectedly."""
 
     status_code = 500

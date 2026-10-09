@@ -73,15 +73,16 @@ def test_ready_raises_improperly_configured_when_retired_setting_present(
 
 
 def test_ready_refuses_every_declared_retired_setting(settings) -> None:
-    """Rule 6: every declared retired CRM name fails startup."""
-    from quickscale_modules_crm.checks import RETIRED_SETTINGS
+    """Rule 6: every retired name the CRM manifest declares fails startup."""
+    from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
 
+    retired_settings = load_module_manifest_with_fallback("crm").retired_settings
     config = QuickscaleCrmConfig(
         "quickscale_modules_crm",
         import_module("quickscale_modules_crm"),
     )
 
-    for retired_name in RETIRED_SETTINGS:
+    for retired_name in retired_settings:
         setattr(settings, retired_name, "legacy")
         try:
             with pytest.raises(ImproperlyConfigured, match=retired_name):

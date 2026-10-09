@@ -261,7 +261,6 @@ class QuickscaleOrgsConfig(AppConfig):
         # to the eager runner because two of them read live database catalog
         # state and none of them may block startup.
         from quickscale_modules_orgs.checks import (
-            RETIRED_SETTINGS,
             check_provider_id_conformance,
             check_removal_obligation_discharge,
             check_rls_role,
@@ -269,9 +268,9 @@ class QuickscaleOrgsConfig(AppConfig):
         )
 
         # Rule 3 first: the declared mode is validated (presence, choices)
-        # and any retired setting name is refused before the
-        # BYPASSRLS/SUPERUSER role guard reads it.
-        register_module_settings_check(self, "orgs", retired_settings=RETIRED_SETTINGS)
+        # and any retired setting name the manifest declares is refused
+        # before the BYPASSRLS/SUPERUSER role guard reads it.
+        register_module_settings_check(self, "orgs")
         register_module_checks(
             self,
             [
