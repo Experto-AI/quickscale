@@ -30,13 +30,12 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
-| SA259 | Generate gate wiring from the registry instead of holding copies by parity | 2 | — | Optional |
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA259 | Optional |
+| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA251 | Make Stripe checkout and payment outcomes complete and recoverable | 2 | — | Required |
 | SA256 | Fix `deploy railway` environment writes and DR media streaming | 2 | — | Optional |
-| SA253 | Make the generated project's CI, image, and healthcheck pass, and execute them in a gate | 2 | SA259 | Optional |
+| SA253 | Make the generated project's CI, image, and healthcheck pass, and execute them in a gate | 2 | — | Optional |
 | SA255 | Accept Resend's real webhook signature in notifications | 2 | — | Optional |
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
 | SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
@@ -47,29 +46,25 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
-Track 2: SA259 ──► SA251 ──► SA256 ──► SA253 ──► SA255 ──► SA260 ──► SA263
-Track 3: SA258 ──► SA264 ──► SA262 ──► SA261
+Track 2: SA256 ──► SA251 ──► SA253 ──► SA255 ──► SA260 ──► SA263
+Track 3: SA262 ──► SA261
      release path:  SA251 → publish 0.89.0
-     critical path: SA191 → SA153, joined by SA259 (T2) → SA204 → SA153
+     critical path: SA191 → SA204 → SA153
 ```
 
-Arrows within a track are queue order; the table holds the actual dependency edges. Cross-track
-edges: SA204 waits on SA259 (Track 2); SA191's cutover slice (e) waits on
-SA258 (Track 3) as an ordering rule, not a table edge, so slices (a)–(d) are not blocked.
+Arrows within a track are queue order; the table holds the dependency edges. There are no
+cross-track edges.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
 with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
 handoff note (what landed, what is next, what to watch) committed with the work. A ticket closes
 when its last slice lands; slices are not scheduled.
 
-**Order.** SA259 runs first on Track 2 because SA204 waits on it; SA251 (gates the 0.89.0
-publish) runs as soon as Stripe test keys are available. Every change to a shipped module `0001_initial`
-lands before SA204 freezes migration history, and SA204
-lands before SA153 slice (a), whose schema work is `0002+` from the start (arch audit §7).
-SA259 lands before the new gates it cheapens (SA204's hash gate, SA253's rendered-artifact gate).
-SA258 lands before SA191's cutover so `bap-web-new` starts on thin includes and pays one adoption
-step instead of one per release. SA154 is an inventory, not work. SA191 runs slice (b) first;
-slice (a) takes the production dump itself, once the maintainer has logged in to Railway.
+**Order.** SA251 gates the 0.89.0 publish and jumps the Track 2 queue as soon as Stripe test
+keys are available. Every change to a shipped module `0001_initial` lands before SA204 freezes
+migration history, and SA204 lands before SA153 slice (a), whose schema work is `0002+` from the
+start. SA154 is an inventory, not work. SA191 finishes slice (b), then (c) and (d); slices (a)
+and (e) need the maintainer's Railway login.
 
 ### Track states
 
@@ -78,20 +73,21 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA259 | yes | yes | yes | **yes** | yes |
+| 2 | SA256 | yes | yes | yes | **yes** | no |
 | 3 | SA262 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
-- Track 1 owns gate documentation, `scripts/gate_registry.json`, the quality
-  thresholds (`scripts/check_quality.sh`), the generated `urls.py.j2` and the theme's social seam
+- Track 1 owns the generated `urls.py.j2` and the theme's social seam
   pages, the parity oracles, the hosted workflow triggers, the migration-history freeze gate and `decisions.md` § Clean-Break Migration History, the `bap-web`
   migration and its reseed step, the property extension, public templates, and the portal's
   extension documentation, and, for the conventions, module identities, models and their
   `0001_initial`, module READMEs, and module templates, static files, and template tags, with the
   module page templates and the generated `base.html`, and cross-module imports and settings reads,
   and the `services.py` public surface.
-- Track 2 owns `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
+- Track 2 owns the gate registry and everything generated from it (`scripts/gate_registry.json`,
+  `check_quality.sh`, `check_gate_parity.py`, `sync_ci_gate_jobs.py`, the gate documentation
+  table), `.github/workflows/`, `scripts/publish_module.py`, the `[build-system]` blocks of
   every package, `ruff.toml`, the test-settings stubs, the CLI apply/deploy/update commands and
   `contract_vintage.py`, the module manifests' `contract_vintage` blocks,
   `contracts/module_options.py` and the `.env.example` template, `quickscale_core/dr_engine/`,
@@ -113,13 +109,10 @@ A track is **truly green** only when all three states are yes.
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row, and the five `_anonymization.py`
   handlers with core's redaction helpers.
-- **Audit-ticket transfers.** For SA259, Track 2 takes `scripts/gate_registry.json`,
-  `scripts/check_quality.sh`, `check_gate_parity.py`, `sync_ci_gate_jobs.py`, and the gate
-  documentation table from Track 1, and keeps them after. For SA255, Track 2 takes the
-  notifications webhook (`notifications/views.py`, `_webhooks.py`) from Track 3. For SA265,
-  Track 3 takes cross-module imports from Track 1. SA253 edits `base.py.j2` (Track 3) only for the test-settings line it names.
-- **Cross-track edits.** SA191 builds its recipient by the migration playbook; SA191 only reads it, and gate documentation (Track 1) owns the smoke-gate row's
-  documentation. Both land through the serialized merge queue.
+- **Cross-track edits.** SA255 takes the notifications webhook (`notifications/views.py`,
+  `_webhooks.py`) from Track 3. SA253 edits `base.py.j2` (Track 3) only for its test-settings
+  line. SA204 adds its gate row to the Track 2 registry. All land through the serialized merge
+  queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md). Each track resolves the shared set at its
@@ -170,7 +163,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   recommendation): a backup taken at vintage N restores and migrates forward under N+1 instead of
   being refused by `dr_engine/recovery.py`'s exact-vintage match, a bare file that records no
   vintage is still refused, and a restore-forward test proves it. This also retires tech watchlist
-  `dr-restore-vintage-exact-match`. The freeze lands on SA265's `0001` edits; the gate is added through SA259's generated wiring.
+  `dr-restore-vintage-exact-match`.
 
   **Surfaces:** decisions, the new gate with its hash manifest, registry row, and gate
   documentation, `quickscale_core/tests/test_module_migration_topology.py`,
@@ -255,8 +248,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [ ] (d) Live parity: Playwright e2e and screenshot diffs, with the live baselines captured and
     kept.
   - [ ] (e) Cutover: reseed step under the runtime role, cutover script, and written rollback,
-    rehearsed on the scratch database. Waits on SA258 so the recipient adopts the runtime seam
-    before it goes live (arch audit §7).
+    rehearsed on the scratch database.
 
   **Surfaces:** the new `bap-web-new` repository and its reseed step; the migration prompt; the
   `forms` module only for upstreamed customizations.
@@ -358,8 +350,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   actions by SHA with a least-privilege `permissions:` block, and `check_workflow_security.py` and
   `make refresh-action-pins` cover `ci.yml.j2`. The `HEALTHCHECK` passes under production settings.
   The frontend image installs from a lockfile and fails without one. A registered gate generates a
-  project offline and executes its CI test and migrate commands and the image healthcheck; it is
-  added through SA259's generated wiring.
+  project offline and executes its CI test and migrate commands and the image healthcheck.
 
   **Surfaces:** `ci.yml.j2`, `Dockerfile.j2`, the test-settings line of `base.py.j2`,
   `scripts/check_workflow_security.py`, the new gate, and the tech audit.
@@ -392,48 +383,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** `commands/_deploy_service_config.py`, `dr_engine/_media.py`, their tests, and the
   tech audit.
 
-- [x] **SA258 — Move the module↔project seam from user-owned generated files into the runtime.**
-
-- [ ] **SA259 — Generate gate wiring from the registry instead of holding copies by parity.**
-
-  **Context:** each rule is restated by hand in about 12 places with a parity gate keeping them
-  equal; the split-facade scan covers 4 of 12 split packages; `check_quality.sh` excludes
-  `scripts/` and falls back silently to a hardcoded path list when discovery finds nothing (arch
-  audit `rules-held-by-parity-not-derivation`, option 1 plus option 3's budget;
-  §11 `check_quality.sh:170–172` and `contracts/imperative_inventory.py`).
-
-  **Progress:** the fail-open is closed — `check_quality.sh` derives its module paths from
-  discovery alone and exits non-zero when discovery finds nothing — and the vestigial
-  `contracts/imperative_inventory.py` is deleted. The Makefile gate targets are generated:
-  every command-bound registry gate carries a `make_recipe` that `sync_ci_gate_jobs.py`
-  renders into `scripts/gates.mk` (included by the Makefile; the registry's `make_target`
-  bindings name the targets), the generator fails closed when a gate has neither a recipe nor
-  a declared hand-owned exemption (`check-gate-suites` keeps its hand-written inline recipe),
-  and `check_gate_parity.py` validates the new field. The publish workflow's gate-step region
-  is generated from the registry through the same default selector, so `make check` fails on
-  publish drift. Decisions record the gate and rule budget. The split-facade gate derives its
-  scope from the package layout: every `src/` package carrying `_*.py` modules is scanned, a
-  private module fails when it imports a facade module of its distribution or a name that
-  module only re-exports, and the twelve imports the widened scope surfaced are fixed; a
-  scope-derivation test fails when a split package is outside the scan. The gate documentation
-  table in `docs/technical/validation_policy.md` is generated by `sync_ci_gate_jobs.py`, and
-  `check_gate_parity.py` shrank to the generated-files-current check over the Make include,
-  the workflow regions, and that table. Remaining: `scripts/` under the quality gate,
-  deferred — its measured debt (69 functions at CC >= 21, 9 files >= 800 lines,
-  100%-confidence vulture findings) cannot pass the fixed thresholds, and decisions admit
-  no baseline or waiver.
-
-  **Acceptance:** `gate_registry.json` is the only gate list; the Makefile gate targets, the
-  `check_ci_locally.sh` stage list, the `ci.yml`/`publish.yml`/e2e regions, and the docs table are
-  generated from it, and `check_gate_parity.py` shrinks to "generated files are current". The
-  split-facade scope is derived from layout, with a test that fails when a package with `_*.py`
-  split files is outside it. `check_quality.sh` scans `scripts/` and fails when discovery is
-  empty. The vestigial `contracts/imperative_inventory.py` is deleted. Decisions record the
-  budget: no new gate or rule without retiring one. Adding a gate costs two stations.
-
-  **Surfaces:** `scripts/gate_registry.json`, `check_gate_parity.py`, `sync_ci_gate_jobs.py`,
-  `check_split_facade_imports.py`, `check_quality.sh`, `check_ci_locally.sh` (its
-  registry-derived stage inventory), the workflows, the gate documentation, and the arch audit.
 
 - [ ] **SA260 — One off switch and a closed-world manifest surface.**
 
@@ -463,7 +412,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Acceptance:** coherence §6 proposal 16 is merged and enforced: a shared third-party URLconf is
   mounted once by the lowest-layer module that needs it, `collect_wiring` fails on two modules
-  mounting one prefix, the seam (from SA258) carries module API bases, and the harness rejects a
+  mounting one prefix, the runtime seam carries module API bases, and the harness rejects a
   `/<mount>/api` literal in the theme's TypeScript.
 
   **Surfaces:** blog and listings URLs, `module_wiring`, the theme's API clients, decisions, the
@@ -505,10 +454,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the 12 adapters, `resolver.py`, `module_wiring.py`, decisions, the harness, and
   the coherence audit.
-
-- [x] **SA264 — One module error base, one HTTP mapping, and one startup-check order.**
-
-- [x] **SA265 — Put cross-module vocabulary, capabilities, and private names in their owners.**
 
 ## Deferred constraints and references
 

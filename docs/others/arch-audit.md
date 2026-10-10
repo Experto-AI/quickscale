@@ -181,7 +181,7 @@ are the sound decisions in §8.
 | Rank | ID | Title | Horizon | Confidence | Size | Reversibility | Problem |
 |---|---|---|---|---|---|---|---|
 | 1 | `clean-break-schema-no-data-path` | Module schemas have no data upgrade path | now | High | M | one-way door | `0001_initial` is rewritten in place every release, so no database or backup crosses a release |
-| 2 | `generated-file-ownership-unmodeled` (regressed) | Module-facing contracts live in user-owned generated files | now | High | M | two-way door | The module↔project seam is emitted once into user-owned files; each change becomes a hand-applied prose step per project |
+| 2 | `generated-file-ownership-unmodeled` (regressed) | Module-facing contracts live in user-owned generated files | now | High | M | two-way door | Django side moved into the runtime (seam tag, `compose_rest_framework()`, managed URLconf); the theme's TypeScript still enumerates module surfaces, and three upgrade mechanisms remain |
 | 3 | `rules-held-by-parity-not-derivation` | Rules are kept as hand-synced copies held by parity gates | now | High | M | two-way door | Each rule is restated by hand in N places plus a gate to keep them equal; the governance layer outgrew the product |
 
 ---
@@ -205,7 +205,7 @@ items:
      depends_on: [], amplifies: [clean-break-schema-no-data-path],
      anchors: [quickscale_core/src/quickscale_core/data/project_contract.yml, quickscale_core/src/quickscale_core/generator/seam.py,
                quickscale_core/src/quickscale_core/project_state_hashes.py, quickscale_cli/src/quickscale_cli/commands/contract_vintage.py],
-     first_seen: 2026-09-16, last_verified: 2026-10-08}
+     first_seen: 2026-09-16, last_verified: 2026-10-10}
   - {id: rules-held-by-parity-not-derivation, status: open, rank: 3,
      title: "Rules are kept as hand-synced copies held by parity gates", lenses: [XV, XX, III],
      horizon: now, confidence: High, size: M, reversibility: two-way door,
@@ -339,7 +339,15 @@ items:
 
 ### Finding 2: Module-facing contracts live in user-owned generated files
 
-- **ID:** `generated-file-ownership-unmodeled` — **regressed, reopened**.
+- **ID:** `generated-file-ownership-unmodeled` — **regressed, reopened; partly fixed
+  2026-10-10.** Option 2 landed for the Django side: the seam producer renders through the
+  `quickscale_seam` runtime tag, DRF composition is `quickscale_core.runtime.settings.compose_rest_framework()`,
+  module URLs compose in the managed `urls_modules.py` (`runtime/urls.py`), the user-owned
+  `urls.py` holds one include, and a closed-world generator test fails when a user-owned
+  Django-side emitted file names a module. **Still open:** the theme's TypeScript enumerates
+  module surfaces (`useModules.ts`, literal API bases; the API-base part is SA261), and the
+  three upgrade mechanisms below are all still maintained. The evidence below is the
+  pre-fix record.
   - The prior closure on 2026-09-24 (SA207 step identities, SA211 emission-derived watch set)
     replaced hand-copied adoption prose with declared, gated adoption steps.
   - That made the compounding visible but did not remove it: the steps are still hand-applied
@@ -462,20 +470,23 @@ items:
   4. **Accept and document.** Projects are one-shot and upgrades are ports, as in SA191. Retire
      `beta_migration` and the vintage machinery to match. The revocation trigger is a second
      long-lived project or a security fix landing in a template.
-- **Recommendation:** Option 2, **before SA191's cutover**, so `bap-web-new` starts on thin
-  includes and pays one adoption step rather than one per release. Then retire whichever
-  upgrade mechanism is left unused.
+- **Recommendation:** Option 2 (Django side landed). Remaining: move the theme's module
+  enumeration and API bases onto the seam (SA261), then retire whichever upgrade mechanism is
+  left unused.
   - **Size:** M.
   - **Reversibility:** `two-way door` (library code plus include lines).
   - **Guard:** a closed-world generator test that no Django-side user-owned emitted file
     contains a module name or a module URL name (rule 37's literal-list check, applied to the
     emission mapping). The vintage declaration should trend toward zero steps per release.
-  - **First step:** move `seam_module_flags` and `seam_module_paths` from generation time to a
-    runtime template tag in `quickscale_core.runtime`.
+  - **Next step:** SA261's theme API bases from the seam.
 
 ### Finding 3: Rules are kept as hand-synced copies held by parity gates
 
 - **ID:** `rules-held-by-parity-not-derivation` (new). It supersedes prior watchlist W7 and W8.
+  **Partly fixed 2026-10-10:** option 1's gate wiring and layout-derived scopes and option 3's
+  budget landed. **Still open, no ticket:** `scripts/` outside `check_quality.sh` (its debt
+  cannot pass the fixed thresholds and decisions admit no baseline), option 1's build-time
+  manifests and single Stripe-version constant, and option 2.
 - **Rank rationale:** Medium blast radius, High likelihood, steep compounding.
   - **Blast radius:** users are not broken, but this is already the dominant cost.
   - **Likelihood:** already firing.
@@ -641,8 +652,9 @@ items:
 - **Finding 1 and personal data.** If SA153 adds personal fields to shipped modules, they land
   as `0002+` migrations *and* declaration entries, so the freeze's first migrations are born
   classified (carried from the prior pass).
-- **Finding 2 before SA191's cutover.** If `bap-web-new` is ported first and the seam moves
-  later, it pays one extra round of adoption.
+- **Finding 2 before SA191's cutover.** The Django-side seam landed first, so `bap-web-new`
+  starts on the managed URLconf and runtime seam; only the theme-side remainder can still add
+  an adoption step.
 - **Findings 1 and 2 amplify each other.** Together they make every upgrade a big-bang event:
   code by hand and data by reseed. Fixing either one halves the cost of the other.
 - **Finding 3 is independent but cheapens everything else.** Every other fix adds a guard
