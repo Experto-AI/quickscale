@@ -671,6 +671,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     authenticates through `quickscale_core.runtime`'s `QuickscaleSessionAuthentication`, generated
     settings install it as `DEFAULT_AUTHENTICATION_CLASSES`, and the CRM and forms APIs answer
     `401` where they answered `403`.
+  - **Railway deploy takes the settings module from project state, and DR media sync streams.**
+    `quickscale deploy railway` writes `DJANGO_SETTINGS_MODULE` from the project's package and
+    leaves an existing value alone, percent-encodes the runtime database password, and copies
+    media objects in bounded chunks instead of loading whole files into memory.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import secrets
 import sys
+from urllib.parse import quote
 
 import click
 
@@ -25,10 +26,12 @@ def runtime_database_url(postgres_service: str, password: str) -> str:
     Host, port and database are Railway reference variables on the PostgreSQL
     service, resolved by Railway at deploy time. The generated start.sh creates
     the role from RUNTIME_DB_ROLE and RUNTIME_DB_PASSWORD before migrating.
+    The password is percent-encoded, so an operator-set value containing URL
+    metacharacters (``@``, ``:``, ``/``, ``%``, ``#``) keeps the URL valid.
     """
     ref = postgres_service
     return (
-        f"postgresql://{_runtime_database.RUNTIME_DB_ROLE}:{password}"
+        f"postgresql://{_runtime_database.RUNTIME_DB_ROLE}:{quote(password, safe='')}"
         f"@${{{{{ref}.PGHOST}}}}:${{{{{ref}.PGPORT}}}}/${{{{{ref}.PGDATABASE}}}}"
     )
 
@@ -74,8 +77,15 @@ def _configure_env_vars_step(
     domain_name: str | None,
     postgres_service: str = "Postgres",
     existing_vars: dict[str, str] | None = None,
+    settings_package: str | None = None,
 ) -> None:
-    """Configure environment variables in batch, including the runtime DB role."""
+    """Configure environment variables in batch, including the runtime DB role.
+
+    ``settings_package`` is the project's Python package from project state.
+    An existing ``DJANGO_SETTINGS_MODULE`` is left alone, so an operator's
+    manual correction survives re-deploys; the service name is only a last
+    resort when neither is available.
+    """
     if existing_vars is None:
         raise click.ClickException(
             f"Railway variables for service '{app_service}' were not loaded."
@@ -84,14 +94,18 @@ def _configure_env_vars_step(
     click.echo(f"Setting variables for service: {app_service}")
     click.echo("💡 Setting all variables at once to minimize deployments")
 
-    # Django settings module must reference a valid Python package path.
-    django_package = app_service.replace("-", "_")
+    # DJANGO_SETTINGS_MODULE must name the project's own package; deriving it
+    # from the service name breaks projects whose package differs.
+    settings_module = existing_vars.get("DJANGO_SETTINGS_MODULE", "").strip()
+    if not settings_module:
+        package = settings_package or app_service.replace("-", "_")
+        settings_module = f"{package}.settings.production"
 
     env_vars = {
         "SECRET_KEY": existing_vars.get("SECRET_KEY")
         or _railway_project.generate_django_secret_key(),
         "DEBUG": "False",
-        "DJANGO_SETTINGS_MODULE": f"{django_package}.settings.production",
+        "DJANGO_SETTINGS_MODULE": settings_module,
     }
 
     runtime_vars = _runtime_role_variables(postgres_service, existing_vars)

@@ -5,9 +5,12 @@ import quickscale_core.dr_engine._media as _media
 import quickscale_core.dr_engine._prune as _prune
 import quickscale_core.dr_engine._policy as _policy_2
 
+import os
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from typing import IO
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -246,41 +249,341 @@ class TestMediaRuntimeAndCopy:
             str(source), "bucket", "media/photo.jpg"
         )
 
-    def test_copy_media_s3_to_local_and_s3_to_s3_cover_read_and_fileobj_paths(
-        self, tmp_path: Path
-    ) -> None:
-        source_handle = MagicMock()
-        source_handle.__enter__.return_value = source_handle
-        source_handle.read.return_value = b"remote"
-        source_storage = MagicMock()
-        source_storage.open.return_value = source_handle
-        local_target = tmp_path / "local"
-        assert _media._copy_media_item(
-            relative_path="nested/file.dump",
-            source_runtime={"use_s3_compatible": True, "storage": source_storage},
-            target_runtime={"use_s3_compatible": False, "media_root": local_target},
-        )
-        assert (local_target / "nested/file.dump").read_bytes() == b"remote"
-        source_storage.open.assert_called_once_with("nested/file.dump", mode="rb")
+    def test_copy_media_s3_to_s3_relays_through_a_bounded_spool(self) -> None:
+        """The relay never opens the spooling storage API on either side."""
+        payload = b"y" * (1024 * 1024 + 1)
+        read_sizes: list[int] = []
+        uploaded: list[bytes] = []
 
-        source_storage.open.reset_mock()
+        def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+            for offset in range(0, len(payload), 64 * 1024):
+                fileobj.write(payload[offset : offset + 64 * 1024])
+
+        def _upload_fileobj(fileobj: IO[bytes], bucket: str, key: str) -> None:
+            while chunk := fileobj.read(64 * 1024):
+                read_sizes.append(len(chunk))
+                uploaded.append(chunk)
+
+        source_client = MagicMock()
+        source_client.download_fileobj.side_effect = _download_fileobj
+        source_storage = MagicMock()
+        source_storage.location = "media"
+        source_storage.connection.meta.client = source_client
         target_client = MagicMock()
+        target_client.upload_fileobj.side_effect = _upload_fileobj
         target_storage = SimpleNamespace(
             location="prefix",
             connection=SimpleNamespace(meta=SimpleNamespace(client=target_client)),
         )
+
         assert _media._copy_media_item(
             relative_path="file.dump",
-            source_runtime={"use_s3_compatible": True, "storage": source_storage},
+            source_runtime={
+                "use_s3_compatible": True,
+                "storage": source_storage,
+                "bucket_name": "source-bucket",
+            },
             target_runtime={
                 "use_s3_compatible": True,
                 "storage": target_storage,
                 "bucket_name": "target",
             },
         )
-        target_client.upload_fileobj.assert_called_once_with(
-            source_handle, "target", "prefix/file.dump"
+
+        assert b"".join(uploaded) == payload
+        assert read_sizes and all(size <= 64 * 1024 for size in read_sizes)
+        assert source_client.download_fileobj.call_args.args[:2] == (
+            "source-bucket",
+            "media/file.dump",
         )
+        assert target_client.upload_fileobj.call_args.args[1:] == (
+            "target",
+            "prefix/file.dump",
+        )
+        source_storage.open.assert_not_called()
+
+    def test_copy_media_s3_to_s3_bypasses_real_storage_open_on_both_sides(
+        self,
+    ) -> None:
+        """Real S3Storage instances are never opened; only clients are used."""
+        from storages.backends.s3 import S3Storage
+
+        with patch(
+            "storages.backends.s3.setting",
+            side_effect=lambda name, default=None: default,
+        ):
+            source_storage = S3Storage(
+                bucket_name="source-bucket",
+                access_key="key",
+                secret_key="secret",
+                region_name="us-east-1",
+            )
+            target_storage = S3Storage(
+                bucket_name="target-bucket",
+                access_key="key",
+                secret_key="secret",
+                region_name="us-east-1",
+            )
+        payload = b"relayed-bytes"
+        uploaded: list[bytes] = []
+
+        def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+            assert (bucket, key) == ("source-bucket", "clip.mp4")
+            fileobj.write(payload)
+
+        def _upload_fileobj(fileobj: IO[bytes], bucket: str, key: str) -> None:
+            assert (bucket, key) == ("target-bucket", "clip.mp4")
+            uploaded.append(fileobj.read())
+
+        source_client = source_storage.connection.meta.client
+        target_client = target_storage.connection.meta.client
+        with (
+            patch.object(
+                source_client, "download_fileobj", side_effect=_download_fileobj
+            ),
+            patch.object(target_client, "upload_fileobj", side_effect=_upload_fileobj),
+            patch.object(
+                S3Storage, "open", side_effect=AssertionError("spooling read path")
+            ),
+        ):
+            assert _media._copy_media_item(
+                relative_path="clip.mp4",
+                source_runtime={
+                    "use_s3_compatible": True,
+                    "storage": source_storage,
+                    "bucket_name": "source-bucket",
+                },
+                target_runtime={
+                    "use_s3_compatible": True,
+                    "storage": target_storage,
+                    "bucket_name": "target-bucket",
+                },
+            )
+
+        assert uploaded == [payload]
+
+    def test_copy_media_s3_to_local_downloads_chunks_through_the_provider_client(
+        self, tmp_path: Path
+    ) -> None:
+        """The copy streams through the provider client, never storage.open()."""
+        payload = b"x" * (1024 * 1024 + 1)
+        chunk_size = 64 * 1024
+        writes: list[int] = []
+
+        def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+            for offset in range(0, len(payload), chunk_size):
+                chunk = payload[offset : offset + chunk_size]
+                fileobj.write(chunk)
+                writes.append(len(chunk))
+
+        client = MagicMock()
+        client.download_fileobj.side_effect = _download_fileobj
+        source_storage = MagicMock()
+        source_storage.location = "media"
+        source_storage.connection.meta.client = client
+        target_root = tmp_path / "target"
+
+        assert _media._copy_media_item(
+            relative_path="large/video.mp4",
+            source_runtime={
+                "use_s3_compatible": True,
+                "storage": source_storage,
+                "bucket_name": "source-bucket",
+            },
+            target_runtime={"use_s3_compatible": False, "media_root": target_root},
+        )
+
+        assert (target_root / "large/video.mp4").read_bytes() == payload
+        source_storage.open.assert_not_called()
+        args = client.download_fileobj.call_args.args
+        assert args[0] == "source-bucket"
+        assert args[1] == "media/large/video.mp4"
+        assert writes and all(size <= chunk_size for size in writes)
+        assert [
+            path.relative_to(target_root).as_posix()
+            for path in target_root.rglob("*")
+            if path.is_file()
+        ] == ["large/video.mp4"]
+
+    def test_copy_media_s3_to_local_preserves_destination_when_download_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """A failed download must not destroy the destination or its siblings."""
+        target_root = tmp_path / "target"
+        target_path = target_root / "video.mp4"
+        target_path.parent.mkdir(parents=True)
+        target_path.write_bytes(b"previous good bytes")
+        neighbor = target_root / "video.mp4.part"
+        neighbor.write_bytes(b"unrelated operator file")
+
+        def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+            fileobj.write(b"partial")
+            raise TimeoutError("download interrupted")
+
+        client = MagicMock()
+        client.download_fileobj.side_effect = _download_fileobj
+        source_storage = MagicMock()
+        source_storage.location = ""
+        source_storage.connection.meta.client = client
+
+        with pytest.raises(TimeoutError):
+            _media._copy_media_item(
+                relative_path="video.mp4",
+                source_runtime={
+                    "use_s3_compatible": True,
+                    "storage": source_storage,
+                    "bucket_name": "source-bucket",
+                },
+                target_runtime={"use_s3_compatible": False, "media_root": target_root},
+            )
+
+        assert target_path.read_bytes() == b"previous good bytes"
+        assert neighbor.read_bytes() == b"unrelated operator file"
+        assert sorted(path.name for path in target_root.iterdir()) == [
+            "video.mp4",
+            "video.mp4.part",
+        ]
+
+    def test_copy_media_s3_to_local_leaves_an_existing_sibling_part_file_alone(
+        self, tmp_path: Path
+    ) -> None:
+        """Staging files are uniquely owned; a real sibling `.part` file survives."""
+        target_root = tmp_path / "target"
+        target_root.mkdir(parents=True)
+        neighbor = target_root / "video.mp4.part"
+        neighbor.write_bytes(b"unrelated operator file")
+
+        def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+            fileobj.write(b"downloaded bytes")
+
+        client = MagicMock()
+        client.download_fileobj.side_effect = _download_fileobj
+        source_storage = MagicMock()
+        source_storage.location = ""
+        source_storage.connection.meta.client = client
+
+        assert _media._copy_media_item(
+            relative_path="video.mp4",
+            source_runtime={
+                "use_s3_compatible": True,
+                "storage": source_storage,
+                "bucket_name": "source-bucket",
+            },
+            target_runtime={"use_s3_compatible": False, "media_root": target_root},
+        )
+
+        assert (target_root / "video.mp4").read_bytes() == b"downloaded bytes"
+        assert neighbor.read_bytes() == b"unrelated operator file"
+        assert sorted(path.name for path in target_root.iterdir()) == [
+            "video.mp4",
+            "video.mp4.part",
+        ]
+
+    def test_copy_media_s3_to_local_keeps_existing_destination_permissions(
+        self, tmp_path: Path
+    ) -> None:
+        """Refreshing a media file keeps the mode other processes rely on."""
+        target_root = tmp_path / "target"
+        target_path = target_root / "video.mp4"
+        target_path.parent.mkdir(parents=True)
+        target_path.write_bytes(b"old bytes")
+        target_path.chmod(0o640)
+
+        def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+            fileobj.write(b"new bytes")
+
+        client = MagicMock()
+        client.download_fileobj.side_effect = _download_fileobj
+        source_storage = MagicMock()
+        source_storage.location = ""
+        source_storage.connection.meta.client = client
+
+        assert _media._copy_media_item(
+            relative_path="video.mp4",
+            source_runtime={
+                "use_s3_compatible": True,
+                "storage": source_storage,
+                "bucket_name": "source-bucket",
+            },
+            target_runtime={"use_s3_compatible": False, "media_root": target_root},
+        )
+
+        assert target_path.read_bytes() == b"new bytes"
+        assert stat.S_IMODE(target_path.stat().st_mode) == 0o640
+
+    def test_copy_media_s3_to_local_new_destination_gets_umask_default_permissions(
+        self, tmp_path: Path
+    ) -> None:
+        """A new media file is as readable as a plain create would be."""
+        previous_umask = os.umask(0o022)
+        try:
+            target_root = tmp_path / "target"
+
+            def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+                fileobj.write(b"new bytes")
+
+            client = MagicMock()
+            client.download_fileobj.side_effect = _download_fileobj
+            source_storage = MagicMock()
+            source_storage.location = ""
+            source_storage.connection.meta.client = client
+
+            assert _media._copy_media_item(
+                relative_path="video.mp4",
+                source_runtime={
+                    "use_s3_compatible": True,
+                    "storage": source_storage,
+                    "bucket_name": "source-bucket",
+                },
+                target_runtime={"use_s3_compatible": False, "media_root": target_root},
+            )
+        finally:
+            os.umask(previous_umask)
+
+        target_path = target_root / "video.mp4"
+        assert target_path.read_bytes() == b"new bytes"
+        assert stat.S_IMODE(target_path.stat().st_mode) == 0o644
+
+    def test_copy_media_s3_to_local_bypasses_the_real_storage_spooling_read(
+        self, tmp_path: Path
+    ) -> None:
+        """S3Storage.open() spools whole objects in memory; the copy must not call it."""
+        from storages.backends.s3 import S3Storage
+
+        with patch(
+            "storages.backends.s3.setting",
+            side_effect=lambda name, default=None: default,
+        ):
+            storage = S3Storage(
+                bucket_name="source-bucket",
+                access_key="key",
+                secret_key="secret",
+                region_name="us-east-1",
+            )
+        client = storage.connection.meta.client
+        payload = b"remote-bytes"
+        target_root = tmp_path / "target"
+
+        def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+            fileobj.write(payload)
+
+        with (
+            patch.object(client, "download_fileobj", side_effect=_download_fileobj),
+            patch.object(
+                S3Storage, "open", side_effect=AssertionError("spooling read path")
+            ),
+        ):
+            assert _media._copy_media_item(
+                relative_path="clip.mp4",
+                source_runtime={
+                    "use_s3_compatible": True,
+                    "storage": storage,
+                    "bucket_name": "source-bucket",
+                },
+                target_runtime={"use_s3_compatible": False, "media_root": target_root},
+            )
+
+        assert (target_root / "clip.mp4").read_bytes() == payload
 
 
 class TestMediaSyncOrchestration:

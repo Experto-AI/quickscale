@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
@@ -481,6 +482,63 @@ class TestRailwayCommand:
                                                 batch_vars["DJANGO_SETTINGS_MODULE"]
                                                 == "bap_web.settings.production"
                                             )
+
+    def test_railway_uses_project_package_for_settings_module(self):
+        """The settings module comes from project state, not the service name."""
+        runner = CliRunner()
+        state = SimpleNamespace(
+            project=SimpleNamespace(package="renamed_pkg"), modules=()
+        )
+
+        with (
+            mock_preflight_checks(),
+            patch(
+                "quickscale_core.project_state_manager.ProjectStateManager.load_state",
+                return_value=state,
+            ),
+            patch(
+                "quickscale_cli.commands.contract_vintage.enforce_shipped_contract_vintage"
+            ),
+            patch(
+                "quickscale_cli.utils._railway_cli.is_railway_cli_installed",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.utils._railway_cli.is_railway_authenticated",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.utils._railway_cli.is_railway_project_initialized",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.utils._railway_cli.run_railway_command",
+                return_value=Mock(
+                    returncode=0, stdout='[{"name": "Postgres"}]', stderr=""
+                ),
+            ),
+            patch(
+                "quickscale_cli.utils._railway_cli.deploy_railway_service",
+                return_value=Mock(returncode=0, stdout="Deployment started", stderr=""),
+            ),
+            patch(
+                "quickscale_cli.utils._railway_cli.set_railway_variables_batch",
+                return_value=(True, []),
+            ) as mock_batch_set,
+            patch(
+                "quickscale_cli.utils._railway_project.generate_django_secret_key",
+                return_value="test-secret-key",
+            ),
+            patch(
+                "quickscale_cli.utils._railway_project.generate_railway_domain",
+                return_value="https://myapp-production-abc123.up.railway.app",
+            ),
+        ):
+            result = runner.invoke(railway, ["--project-name", "myapp"])
+
+        assert result.exit_code == 0
+        batch_vars = mock_batch_set.call_args[0][0]
+        assert batch_vars["DJANGO_SETTINGS_MODULE"] == "renamed_pkg.settings.production"
 
     def test_railway_deployment_failure(self):
         """Test railway command when deployment fails."""
