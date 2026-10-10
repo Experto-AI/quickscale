@@ -1420,6 +1420,9 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
         "modules:\n"
         "  auth: {}\n"
         "  listings: {}\n"
+        "  notifications: {}\n"
+        "  orgs: {}\n"
+        "  storage: {}\n"
         "docker:\n"
         "  start: false\n"
     )
@@ -1436,7 +1439,7 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
         check=True,
     )
 
-    module_names = ["auth", "listings"]
+    module_names = ["auth", "listings", "notifications", "orgs", "storage"]
     manifest_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
     for module_name in module_names:
         module_dir = project_path / "modules" / module_name
@@ -1473,6 +1476,21 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
                         "prefix": "modules/listings",
                         "branch": "splits/listings-module",
                     },
+                    "notifications": {
+                        "version": _core_version,
+                        "prefix": "modules/notifications",
+                        "branch": "splits/notifications-module",
+                    },
+                    "orgs": {
+                        "version": _core_version,
+                        "prefix": "modules/orgs",
+                        "branch": "splits/orgs-module",
+                    },
+                    "storage": {
+                        "version": _core_version,
+                        "prefix": "modules/storage",
+                        "branch": "splits/storage-module",
+                    },
                 },
                 "managed_files": {},  # Signal consolidated state; skip legacy read-through.
             }
@@ -1494,18 +1512,16 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
         text=True,
     )
 
-    auth_info = Mock(
-        prefix="modules/auth",
-        branch="splits/auth-module",
-        installed_version=_core_version,
-    )
-    listings_info = Mock(
-        prefix="modules/listings",
-        branch="splits/listings-module",
-        installed_version=_core_version,
-    )
+    module_infos = {
+        name: Mock(
+            prefix=f"modules/{name}",
+            branch=f"splits/{name}-module",
+            installed_version=_core_version,
+        )
+        for name in module_names
+    }
     config = Mock(
-        modules={"auth": auth_info, "listings": listings_info},
+        modules=module_infos,
         default_remote="https://github.com/Experto-AI/quickscale.git",
     )
 
@@ -1556,7 +1572,7 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
     assert result.exit_code == 0
 
     log_result = subprocess.run(
-        ["git", "log", "--pretty=%s", "-n", "3"],
+        ["git", "log", "--pretty=%s", "-n", "6"],
         cwd=project_path,
         check=True,
         capture_output=True,
@@ -1570,7 +1586,9 @@ def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
         text=True,
     )
     commit_messages = log_result.stdout.splitlines()
-    assert "chore(modules): update auth module" in commit_messages
-    assert "chore(modules): update listings module" in commit_messages
+    for name in module_names:
+        assert f"chore(modules): update {name} module" in commit_messages
     assert "chore: regenerate managed module wiring" in commit_messages
-    assert int(final_count.stdout.strip()) == int(baseline_count.stdout.strip()) + 3
+    assert int(final_count.stdout.strip()) == int(baseline_count.stdout.strip()) + (
+        len(module_names) + 1
+    )

@@ -1093,6 +1093,9 @@ class TestFullE2EWorkflow:
                 {
                     "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
                     "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+                    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
+                        "qs-e2e-notifications-webhook-secret"
+                    ),
                 }
             ),
         )
@@ -1120,6 +1123,9 @@ class TestFullE2EWorkflow:
                 {
                     "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
                     "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+                    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
+                        "qs-e2e-notifications-webhook-secret"
+                    ),
                 }
             ),
         )
@@ -1573,25 +1579,26 @@ class TestFullE2EWorkflow:
         return branch
 
     def _embed_auth_and_orgs_via_subtree(self, project_path: Path) -> str:
-        """Copy auth + orgs module content into the generated project.
+        """Copy auth + orgs + notifications module content into the generated project.
 
-        Sources both modules from ``quickscale_modules/`` into
-        ``modules/`` so the layout matches generated-project expectations.
-        Org is embedded alongside auth because the auth manifest requires
-        ``orgs`` — the auth module's views import
-        ``quickscale_modules_orgs.models`` at import time.
+        Sources the modules from ``quickscale_modules/`` into ``modules/`` so
+        the layout matches generated-project expectations.  Orgs is embedded
+        alongside auth because the auth manifest requires ``orgs`` — the auth
+        module's views import ``quickscale_modules_orgs.models`` at import
+        time — and notifications is embedded because orgs requires it (rule
+        39), so the installed set satisfies every manifest's requirements.
 
         Returns the local repo branch name for logging continuity with callers
         that previously received a subtree branch label.
         """
-        for module_name in ("auth", "orgs"):
+        for module_name in ("auth", "orgs", "notifications"):
             _copytree_for_generated_project_smoke(
                 REPO_ROOT / "quickscale_modules" / module_name,
                 project_path / "modules" / module_name,
             )
 
-        # Sanity-check that both embeds actually landed.
-        for module_name in ("auth", "orgs"):
+        # Sanity-check that every embed actually landed.
+        for module_name in ("auth", "orgs", "notifications"):
             module_dir = project_path / "modules" / module_name
             assert (module_dir / "module.yml").exists(), (
                 f"{module_name} module manifest missing after copy"
@@ -1612,17 +1619,25 @@ class TestFullE2EWorkflow:
         theme: str,
         auth_options: dict[str, object],
         orgs_options: dict[str, object] | None = None,
+        notifications_options: dict[str, object] | None = None,
     ) -> None:
-        """Write a minimal quickscale.yml that declares auth + orgs modules.
+        """Write a minimal quickscale.yml that declares auth + orgs + notifications.
 
         Org is included because the auth manifest declares
         ``required_modules: [orgs]`` — the auth module's views import
-        ``quickscale_modules_orgs.models`` at import time.
+        ``quickscale_modules_orgs.models`` at import time — and notifications
+        because orgs requires it, so the installed set satisfies rule 39.
         """
         import yaml
 
         if orgs_options is None:
             orgs_options = {"mode": "solo"}
+        if notifications_options is None:
+            from quickscale_cli.commands.module_config import (
+                default_module_config_from_manifest,
+            )
+
+            notifications_options = default_module_config_from_manifest("notifications")
 
         config_payload = {
             "version": "1",
@@ -1635,6 +1650,7 @@ class TestFullE2EWorkflow:
             "modules": {
                 "auth": dict(auth_options),
                 "orgs": dict(orgs_options),
+                "notifications": dict(notifications_options),
             },
         }
         rendered = yaml.safe_dump(
@@ -1649,8 +1665,9 @@ class TestFullE2EWorkflow:
         project_path: Path,
         auth_options: dict[str, object],
         orgs_options: dict[str, object] | None = None,
+        notifications_options: dict[str, object] | None = None,
     ) -> None:
-        """Add embedded auth + orgs modules as Poetry path dependencies.
+        """Add embedded auth + orgs + notifications as Poetry path dependencies.
 
         Regenerating managed wiring only writes settings/URL files; it does
         not register the module with Poetry. Without this step the module's
@@ -1658,7 +1675,8 @@ class TestFullE2EWorkflow:
 
         Org is synced alongside auth because the auth manifest declares
         ``required_modules: [orgs]`` — the auth module's views import
-        ``quickscale_modules_orgs.models`` at import time.
+        ``quickscale_modules_orgs.models`` at import time — and notifications
+        because orgs requires it, so the installed set satisfies rule 39.
         """
         from quickscale_cli.utils._dependency_sync_ops import (
             sync_project_module_dependencies,
@@ -1666,12 +1684,19 @@ class TestFullE2EWorkflow:
 
         if orgs_options is None:
             orgs_options = {"mode": "solo"}
+        if notifications_options is None:
+            from quickscale_cli.commands.module_config import (
+                default_module_config_from_manifest,
+            )
+
+            notifications_options = default_module_config_from_manifest("notifications")
 
         sync_result = sync_project_module_dependencies(
             project_path,
             {
                 "auth": auth_options,
                 "orgs": orgs_options,
+                "notifications": notifications_options,
             },
         )
         assert "quickscale-module-auth" in sync_result.added_path_dependencies, (
@@ -1681,6 +1706,12 @@ class TestFullE2EWorkflow:
         assert "quickscale-module-orgs" in sync_result.added_path_dependencies, (
             "sync_project_module_dependencies did not register the orgs module "
             f"as a path dependency: {sync_result}"
+        )
+        assert (
+            "quickscale-module-notifications" in sync_result.added_path_dependencies
+        ), (
+            "sync_project_module_dependencies did not register the notifications "
+            f"module as a path dependency: {sync_result}"
         )
 
     def _regenerate_wiring(self, project_path: Path) -> None:
@@ -2208,14 +2239,24 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
         # per-call so no ambient env leakage occurs.
         self._run_migrations(
             project_path,
-            env_overrides={"QUICKSCALE_ALLOW_BYPASSRLS": "1"},
+            env_overrides={
+                "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+                "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
+                    "qs-e2e-notifications-webhook-secret"
+                ),
+            },
         )
 
         server_port = self._find_free_port()
         server_process = self._start_dev_server(
             project_path,
             port=server_port,
-            env_overrides={"QUICKSCALE_ALLOW_BYPASSRLS": "1"},
+            env_overrides={
+                "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+                "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
+                    "qs-e2e-notifications-webhook-secret"
+                ),
+            },
         )
 
         try:
