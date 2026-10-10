@@ -231,16 +231,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - No property-portal features (SA153) and no frontend stack change.
 
   **Slices:**
-  - [ ] (a) Rehearsal: restore the production dump into scratch PostgreSQL 18 and record the
-    `migrate --plan` inconsistency against a fresh recipient. The dump is not in `../bap-web`
-    (its `.env` points at a local database). Take it read-only from Railway: in `../bap-web`,
-    `railway link` to the `bap-web` project, read the Postgres service's public URL with
-    `railway variables --service Postgres` (the private `DATABASE_URL` resolves only inside
-    Railway), then run
-    `railway run --service Postgres -- sh -c 'pg_dump --format=custom --no-owner --no-acl "$DATABASE_PUBLIC_URL" > /home/victor/code/bap-web-prod.dump'`.
-    Use a `pg_dump` at least as new as the server's major version (otherwise run it from a
-    `postgres:18` container). Keep the dump outside every repository and never commit it; it holds
-    real user data. Restore with `pg_restore --no-owner` into the scratch database only.
+  - [x] (a) Rehearsal: the production dump came read-only from the Railway `bap-web` project
+    (server PostgreSQL 17.11, `pg_dump` 18.6; 166,211 bytes kept at
+    `/home/victor/code/bap-web-prod.dump`, outside every repository) and restored with
+    `pg_restore --no-owner` into scratch PostgreSQL 18 (`qs-bap-prod-scratch-pg`,
+    `127.0.0.1:33292`, database `bap_prod_scratch`) with no warnings; the restored ledger records
+    listings 0001–0003, forms 0001–0003, auth 0001–0002, properties 0001–0002, and no `orgs`.
+    The recipient's `migrate --plan` exits 1 with `InconsistentMigrationHistory: Migration
+    account.0001_initial is applied before its dependency quickscale_auth.0001_initial`: the
+    v0.62 `quickscale_modules_*` ledger cannot move forward, so the cutover rebuilds a fresh
+    database. Watch: the scratch database is the slice (e) rehearsal target, and the dump holds
+    real user data and stays out of every repository. Next: slice (e).
   - [x] (b) Recipient and code port. The contact payload posts to `/forms/api/<slug>/submit/` and the
     six service forms were reseeded to the live payload schema (`full_name`, `email`, `subject`,
     `project_context`, plus a project-owned `gdpr_consent` field); a real submission is proven end
