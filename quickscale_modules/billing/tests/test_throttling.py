@@ -89,16 +89,19 @@ def test_stripe_calling_views_declare_throttle_scopes() -> None:
 
 @pytest.fixture
 def mock_org_resolution(monkeypatch, organization):
-    """Resolve the billing organization without middleware.
+    """Resolve the billing organization for the guard and the view body.
 
     Mirrors the fixture the billing view tests use so the request reaches the
     serializer instead of stopping at the missing organization selection.
     """
+
+    def resolve(request, route_kwargs=None):
+        return organization
+
     monkeypatch.setattr(
-        billing_views,
-        "_resolve_request_organization",
-        lambda request, require_owner=False: (organization, False),
+        "quickscale_modules_orgs.permissions.resolve_request_org", resolve
     )
+    monkeypatch.setattr(billing_views, "resolve_request_org", resolve)
 
 
 @pytest.mark.django_db

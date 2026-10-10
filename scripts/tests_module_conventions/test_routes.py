@@ -796,6 +796,384 @@ def test_authorization_controls() -> None:
         views=('def index(request):\n    """redirect_to_login"""\n    return None\n'),
     )
     assert _violations(checker.rule_19_authorization, documented) == []
+    unguarded_view = _with_files(
+        module,
+        views=(
+            "from django.views.generic import TemplateView\n\n"
+            "class MountPageView(TemplateView):\n"
+            "    pass\n"
+        ),
+    )
+    assert any(
+        "declares no authorization guard" in violation
+        for violation in _violations(checker.rule_19_authorization, unguarded_view)
+    )
+    guarded_views = _with_files(
+        module,
+        views=(
+            "from django.contrib.auth.mixins import LoginRequiredMixin\n"
+            "from django.views.generic import TemplateView\n"
+            "from quickscale_modules_orgs.permissions import OrgRoleMixin\n"
+            "from rest_framework.permissions import IsAuthenticated\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class DashboardPageView(LoginRequiredMixin, TemplateView):\n"
+            "    pass\n\n\n"
+            "class SecureAPIView(APIView):\n"
+            "    permission_classes = [IsAuthenticated]\n\n\n"
+            "class OrgPageView(OrgRoleMixin, TemplateView):\n"
+            "    min_org_role = 'viewer'\n\n\n"
+            "class DynamicAPIView(APIView):\n"
+            "    def get_permissions(self):\n"
+            "        return [IsAuthenticated()]\n"
+        ),
+    )
+    assert _violations(checker.rule_19_authorization, guarded_views) == []
+    inert_role_attribute = _with_files(
+        module,
+        views=(
+            "from django.views.generic import TemplateView\n\n"
+            "class InertRolePageView(TemplateView):\n"
+            "    min_org_role = 'viewer'\n"
+        ),
+    )
+    assert any(
+        "declares no authorization guard" in violation
+        for violation in _violations(checker.rule_19_authorization, inert_role_attribute)
+    )
+    inert_page_permission_classes = _with_files(
+        module,
+        views=(
+            "from django.views.generic import TemplateView\n"
+            "from rest_framework.permissions import IsAuthenticated\n\n"
+            "class DashboardPageView(TemplateView):\n"
+            "    permission_classes = [IsAuthenticated]\n"
+        ),
+    )
+    assert any(
+        "declares no authorization guard" in violation
+        for violation in _violations(checker.rule_19_authorization, inert_page_permission_classes)
+    )
+    aliased_allow_any = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import AllowAny as PublicAccess\n"
+            "from rest_framework.views import APIView\n\n"
+            "class PublicAPIView(APIView):\n"
+            "    permission_classes = [PublicAccess]\n\n"
+            "    def get(self, request):\n"
+            "        if not request.user.is_authenticated:\n"
+            "            raise PermissionError\n"
+            "        return None\n"
+        ),
+    )
+    assert any(
+        "reads request.user.is_authenticated" in violation
+        for violation in _violations(checker.rule_19_authorization, aliased_allow_any)
+    )
+    wrapper_mixin_guard = _with_files(
+        module,
+        views=(
+            "from django.contrib.auth.mixins import LoginRequiredMixin\n"
+            "from django.views.generic import TemplateView\n\n"
+            "class SecureMixin(LoginRequiredMixin):\n"
+            "    pass\n\n"
+            "class DashboardView(SecureMixin, TemplateView):\n"
+            "    pass\n"
+        ),
+    )
+    assert _violations(checker.rule_19_authorization, wrapper_mixin_guard) == []
+    sibling_alias_isolation = _with_files(
+        _with_files(
+            module,
+            views=(
+                "from rest_framework.permissions import AllowAny as AccessPermission\n"
+                "from rest_framework.views import APIView\n\n"
+                "class PublicAPIView(APIView):\n"
+                "    permission_classes = [AccessPermission]\n\n"
+                "    def get(self, request):\n"
+                "        if not request.user.is_authenticated:\n"
+                "            raise PermissionError\n"
+                "        return None\n"
+            ),
+        ),
+        **{
+            "_private_views.py": (
+                "from rest_framework.permissions import IsAuthenticated as AccessPermission\n"
+                "from rest_framework.views import APIView\n\n"
+                "class PrivateAPIView(APIView):\n"
+                "    permission_classes = [AccessPermission]\n"
+            )
+        },
+    )
+    assert any(
+        "PublicAPIView" in violation
+        for violation in _violations(checker.rule_19_authorization, sibling_alias_isolation)
+    )
+    inherited_handler = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import AllowAny, IsAuthenticated\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class BaseAPIView(APIView):\n"
+            "    permission_classes = [IsAuthenticated]\n\n"
+            "    def get(self, request):\n"
+            "        if not request.user.is_authenticated:\n"
+            "            raise PermissionError\n"
+            "        return None\n\n\n"
+            "class PublicAPIView(BaseAPIView):\n"
+            "    permission_classes = [AllowAny]\n"
+        ),
+    )
+    assert any(
+        "PublicAPIView" in violation
+        for violation in _violations(checker.rule_19_authorization, inherited_handler)
+    )
+    sibling_helper = _with_files(
+        _with_files(
+            module,
+            views=(
+                "from rest_framework.permissions import AllowAny\n"
+                "from rest_framework.views import APIView\n\n"
+                "from ._auth import require_authenticated\n\n\n"
+                "class PublicAPIView(APIView):\n"
+                "    permission_classes = [AllowAny]\n\n"
+                "    def get(self, request):\n"
+                "        require_authenticated(request)\n"
+                "        return None\n"
+            ),
+        ),
+        **{
+            "_auth.py": (
+                "def require_authenticated(request):\n"
+                "    if not request.user.is_authenticated:\n"
+                "        raise PermissionError\n"
+            )
+        },
+    )
+    assert any(
+        "require_authenticated" in violation
+        for violation in _violations(checker.rule_19_authorization, sibling_helper)
+    )
+    inherited_local_helper = _with_files(
+        _with_files(
+            module,
+            views=(
+                "from rest_framework.permissions import AllowAny\n"
+                "from rest_framework.views import APIView\n\n"
+                "from ._base import BaseAPIView\n\n\n"
+                "class PublicAPIView(BaseAPIView):\n"
+                "    permission_classes = [AllowAny]\n"
+            ),
+        ),
+        **{
+            "_base.py": (
+                "from rest_framework.permissions import IsAuthenticated\n"
+                "from rest_framework.views import APIView\n\n\n"
+                "def _require_authenticated(request):\n"
+                "    if not request.user.is_authenticated:\n"
+                "        raise PermissionError\n\n\n"
+                "class BaseAPIView(APIView):\n"
+                "    permission_classes = [IsAuthenticated]\n\n"
+                "    def get(self, request):\n"
+                "        _require_authenticated(request)\n"
+                "        return None\n"
+            ),
+        },
+    )
+    assert any(
+        "_require_authenticated" in violation
+        for violation in _violations(checker.rule_19_authorization, inherited_local_helper)
+    )
+    inherited_imported_helper = _with_files(
+        _with_files(
+            module,
+            views=(
+                "from rest_framework.permissions import AllowAny\n"
+                "from rest_framework.views import APIView\n\n"
+                "from ._base import BaseAPIView\n\n\n"
+                "class PublicAPIView(BaseAPIView):\n"
+                "    permission_classes = [AllowAny]\n"
+            ),
+        ),
+        **{
+            "_base.py": (
+                "from rest_framework.permissions import IsAuthenticated\n"
+                "from rest_framework.views import APIView\n\n"
+                "from ._auth import require_authenticated\n\n\n"
+                "class BaseAPIView(APIView):\n"
+                "    permission_classes = [IsAuthenticated]\n\n"
+                "    def get(self, request):\n"
+                "        require_authenticated(request)\n"
+                "        return None\n"
+            ),
+            "_auth.py": (
+                "def require_authenticated(request):\n"
+                "    if not request.user.is_authenticated:\n"
+                "        raise PermissionError\n"
+            ),
+        },
+    )
+    assert any(
+        "require_authenticated" in violation
+        for violation in _violations(checker.rule_19_authorization, inherited_imported_helper)
+    )
+    dynamic_allow_any = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import AllowAny\n"
+            "from rest_framework.views import APIView\n\n"
+            "class PublicAPIView(APIView):\n"
+            "    def get_permissions(self):\n"
+            "        return [AllowAny()]\n\n"
+            "    def get(self, request):\n"
+            "        if not request.user.is_authenticated:\n"
+            "            raise PermissionError\n"
+            "        return None\n"
+        ),
+    )
+    assert any(
+        "reads request.user.is_authenticated" in violation
+        for violation in _violations(checker.rule_19_authorization, dynamic_allow_any)
+    )
+    unclassifiable_override = _with_files(
+        module,
+        views=(
+            "from rest_framework.views import APIView\n\n"
+            "class ComputedAPIView(APIView):\n"
+            "    def get_permissions(self):\n"
+            "        return [permission() for permission in self.permission_classes]\n"
+        ),
+    )
+    assert any(
+        "declares no authorization guard" in violation
+        for violation in _violations(checker.rule_19_authorization, unclassifiable_override)
+    )
+    computed_override_with_local_declaration = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import AllowAny\n"
+            "from rest_framework.views import APIView\n\n"
+            "class ComputedAPIView(APIView):\n"
+            "    permission_classes = [AllowAny]\n\n"
+            "    def get_permissions(self):\n"
+            "        return [permission() for permission in self.permission_classes]\n"
+        ),
+    )
+    assert any(
+        "declares no authorization guard" in violation
+        for violation in _violations(
+            checker.rule_19_authorization, computed_override_with_local_declaration
+        )
+    )
+    computed_override_with_inherited_declaration = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import AllowAny\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class BaseAPIView(APIView):\n"
+            "    permission_classes = [AllowAny]\n\n\n"
+            "class ChildAPIView(BaseAPIView):\n"
+            "    def get_permissions(self):\n"
+            "        return [permission() for permission in self.permission_classes]\n"
+        ),
+    )
+    assert any(
+        "ChildAPIView" in violation
+        for violation in _violations(
+            checker.rule_19_authorization, computed_override_with_inherited_declaration
+        )
+    )
+    public_read_mixin = _with_files(
+        module,
+        views=(
+            "from django.views.generic import TemplateView\n\n"
+            "class DemoPublicReadMixin:\n"
+            "    pass\n\n"
+            "class PublicPageView(DemoPublicReadMixin, TemplateView):\n"
+            "    pass\n"
+        ),
+    )
+    assert _violations(checker.rule_19_authorization, public_read_mixin) == []
+    public_catalog = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import AllowAny\n"
+            "from rest_framework.views import APIView\n\n"
+            "class CatalogAPIView(APIView):\n"
+            "    permission_classes = [AllowAny]\n\n"
+            "    def get(self, request):\n"
+            "        return None\n"
+        ),
+    )
+    assert _violations(checker.rule_19_authorization, public_catalog) == []
+    allow_any_direct_read = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import AllowAny\n"
+            "from rest_framework.views import APIView\n\n"
+            "class PublicAPIView(APIView):\n"
+            "    permission_classes = [AllowAny]\n\n"
+            "    def get(self, request):\n"
+            "        if not request.user.is_authenticated:\n"
+            "            raise PermissionError\n"
+            "        return None\n"
+        ),
+    )
+    assert any(
+        "reads request.user.is_authenticated" in violation
+        for violation in _violations(checker.rule_19_authorization, allow_any_direct_read)
+    )
+    allow_any_helper_call = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import AllowAny\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "def _require_authenticated(request):\n"
+            "    if not request.user.is_authenticated:\n"
+            "        raise PermissionError\n\n\n"
+            "class CheckoutAPIView(APIView):\n"
+            "    permission_classes = [AllowAny]\n\n"
+            "    def post(self, request):\n"
+            "        _require_authenticated(request)\n"
+            "        return None\n"
+        ),
+    )
+    assert any(
+        "_require_authenticated" in violation
+        for violation in _violations(checker.rule_19_authorization, allow_any_helper_call)
+    )
+    inherited_allow_any = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import AllowAny\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "def _require_authenticated(request):\n"
+            "    if not request.user.is_authenticated:\n"
+            "        raise PermissionError\n\n\n"
+            "class BillingAPIView(APIView):\n"
+            "    permission_classes = [AllowAny]\n\n\n"
+            "class CheckoutAPIView(BillingAPIView):\n"
+            "    def post(self, request):\n"
+            "        _require_authenticated(request)\n"
+            "        return None\n"
+        ),
+    )
+    assert any(
+        "CheckoutAPIView" in violation
+        for violation in _violations(checker.rule_19_authorization, inherited_allow_any)
+    )
+    guarded_read = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import IsAuthenticated\n"
+            "from rest_framework.views import APIView\n\n"
+            "class SecureAPIView(APIView):\n"
+            "    permission_classes = [IsAuthenticated]\n\n"
+            "    def get(self, request):\n"
+            "        return request.user.is_authenticated\n"
+        ),
+    )
+    assert _violations(checker.rule_19_authorization, guarded_read) == []
 
 
 def test_template_folder_depth_control() -> None:

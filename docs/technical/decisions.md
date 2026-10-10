@@ -896,17 +896,29 @@ public surface is `services.py` (rule 4).
   skips in module discovery and constraint validation) is gone with it.
 
 **19. Authorization.**
+- ✅ Every module page and API declares an enforced guard on the view. An API declares it with
+  DRF `permission_classes` — `IsAuthenticated` (plus orgs' `HasOrgRole(min_role)` when the data is
+  org-role scoped) for an authenticated endpoint, an explicit `AllowAny` for a public endpoint,
+  the empty lists rule 26 requires for a signature-verified webhook — or with a
+  `get_permissions()` override that returns a static permission list (an override the harness
+  cannot classify is refused), or with `min_org_role` beside its enforcing
+  base (`OrgApiBaseView` for an API view); a page declares it with `LoginRequiredMixin`, orgs'
+  `OrgRoleMixin` (which reads `min_org_role`), or a named public-read mixin
+  (`PublicSystemOrgReadMixin` or a module-owned `*PublicReadMixin` built on that pattern).
 - ✅ A view or API that manages a tenant model's data authorizes by org role through orgs'
   published `permissions` (`require_org_role`, `OrgRoleMixin`, and the DRF permission class
   `HasOrgRole(min_role)` beside them, delegating to the same `user_has_org_role` that
   `OrgApiBaseView`'s `min_org_role` uses, so rule 9's base keeps its logic and there is one role
   check). Each module fixes the minimum role per action in code and lists it in its README under
-  Public surface. This extends [organizations.md](organizations.md)'s "no tenant should ever have
-  `is_staff`" (org administration happens through org roles) to module back offices.
+  Public surface (rule 38). This extends [organizations.md](organizations.md)'s "no tenant should
+  ever have `is_staff`" (org administration happens through org roles) to module back offices.
 - ✅ "Logged in" is `LoginRequiredMixin`, `login_required`, or DRF `IsAuthenticated`.
 - ✅ `is_staff` / `is_superuser` gate only Django admin and `operator_access` paths; forms' "every
   organization" branch moves under `operator_access`. analytics' `EXCLUDE_STAFF` reads `is_staff`
   to filter traffic, not to authorize, and is a listed exception.
+- ❌ `AllowAny` on a view whose code (inherited handlers included), or a module-owned helper
+  its methods call, reads `request.user.is_authenticated` by hand.
+- ❌ A module page with no guard and no public-read declaration.
 - ❌ `is_staff`, `is_superuser`, `IsAdminUser`, or a hand-written `redirect_to_login` in a module's
   views, outside the listed operator paths.
 
@@ -1148,7 +1160,8 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
 
 **38. README content.** Rule 11's Configuration heading names every manifest option key, and its
 Management commands heading every command the module ships; the test checks both, besides the
-headings.
+headings. A module whose views authorize through orgs' role tools lists the minimum role per
+action in its README's Public surface (rule 19).
 
 **39. Module dependencies.**
 - ✅ `required_modules` lists bare module names (`[orgs]`); `plan` and `apply` select a required
@@ -1171,8 +1184,8 @@ in core or the CLI, duplicated setting names or defaults in a manifest,
 tenant-model base,
 `Meta` inheritance, and admin, primary keys, `related_name`, `__str__` and ordering, `gettext`,
 `__init__.py` content, receivers outside `receivers.py`, command output, `CommandError`, and
-`--dry-run`, `pyproject.toml` sections, a module directory without `module.yml`, `is_staff` and
-hand-written login checks in views, email sent outside notifications, per-event analytics helpers,
+`--dry-run`, `pyproject.toml` sections, a module directory without `module.yml`, `is_staff`,
+hand-written login checks, and unguarded or `AllowAny`+hand-checked views, email sent outside notifications, per-event analytics helpers,
 event names, and `session_key` reads, `services.py` `__all__` and keyword-only signatures, `py.typed`, `datetime.now`, and
 cache-key prefixes, constraint and index names and `unique_together`, webhook view bases, empty
 authentication and throttle classes, a signature-verifying service call in every such view (taking
@@ -1882,7 +1895,7 @@ alias.
 
 **Rule:** Every authed, state-changing JSON endpoint subclasses one of exactly two sanctioned bases. There is no third permanent option.
 
-- ✅ **DRF baseline** (`rest_framework.views.APIView` with core's `QuickscaleSessionAuthentication` for automated CSRF enforcement; permission class per endpoint) — the default for any new JSON endpoint that does not need organization-role scoping. `AllowAny` is used when the view performs its own auth checks (the billing-module pattern); `IsAuthenticated` is the default for endpoints where all requests require an authenticated user. Used by billing, CRM, and forms.
+- ✅ **DRF baseline** (`rest_framework.views.APIView` with core's `QuickscaleSessionAuthentication` for automated CSRF enforcement; permission class per endpoint) — the default for any new JSON endpoint that does not need organization-role scoping. `IsAuthenticated` is the default for endpoints where all requests require an authenticated user; `AllowAny` marks only an explicitly public endpoint, and a view that needs the caller authenticated (or holding an organization role) declares that in `permission_classes`, never `AllowAny` plus a hand-written check (rule 19). Used by billing, CRM, and forms.
 - ✅ **`OrgApiBaseView`** — for endpoints that need organization-role/membership scoping specifically. Chosen as a second sanctioned base rather than reimplementing org-role checks as a DRF permission class, because that logic is tenant-isolation-adjacent (see §multitenant-saas-architecture) and rewriting working, tested code for stylistic consistency alone carries regression risk for no user-visible benefit.
 - ❌ A plain-`View` + `@csrf_exempt` + manual `_enforce_csrf()` idiom is not a third sanctioned option and is not grandfathered as legacy — this project removes workarounds rather than permanently tolerating them alongside the sanctioned shape.
 - ✅ **Signature-verified webhooks** (Stripe, etc.) are a different trust class, exempt from this rule's authentication and CSRF requirements — the calling party cannot present a CSRF token. They are DRF `APIView`s without authentication, permission, or throttle classes (Module Conventions rule 26), which DRF does not CSRF-check; the signature is their authentication, rule 9's handler renders their errors, and the pairing gate (`scripts/check_csrf_exempt_gate.py`) carries no webhook helper.

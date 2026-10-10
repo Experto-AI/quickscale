@@ -73,6 +73,9 @@ org-scoped views and APIs:
 - `resolve_request_org(request, route_kwargs)`, which returns the request's organization from
   the active context or the routed `org_slug`.
 
+Per-action minimums: organization reads (the organization API detail and the dashboard) require
+the `viewer` role; member, settings, and invitation management require the `admin` role.
+
 ### Tenancy helpers
 
 `tenancy.py` publishes the migration and runtime helpers tenant modules use:
