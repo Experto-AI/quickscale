@@ -43,6 +43,7 @@ QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT = 50
 QUICKSCALE_ORGS_MODE = "saas"
 
 MIDDLEWARE = [
+    "quickscale_core.runtime.settings.ClientIdentityMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -131,13 +132,21 @@ MODULE_SETTINGS_SCHEMA = {
 }
 
 # DRF configuration mirroring the generated settings: session authentication
-# only, the one QuickScale error shape, and the blog API throttle rate the
-# module wiring contributes (Module Conventions rules 9 and 32).
+# only, the one QuickScale error shape, core's default throttle classes (the
+# view attaches its rate by scope alone, rule 32), and the blog API throttle
+# rate the module wiring contributes (Module Conventions rules 9 and 32).
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "quickscale_core.runtime.drf.QuickscaleScopedRateThrottle",
+    ],
     "DEFAULT_THROTTLE_RATES": {
+        "anon": "1200/hour",
+        "user": "3000/hour",
         "quickscale_blog_api": QUICKSCALE_BLOG_API_RATE_LIMIT,
     },
     "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",

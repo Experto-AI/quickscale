@@ -26,7 +26,7 @@ config:
       type: string
       default: "5/hour"
       django_setting: QUICKSCALE_BLOG_API_RATE_LIMIT
-      description: "Throttle rate for authenticated blog API requests (per IP). Format: '<count>/<period>'."
+      description: "Throttle rate for the blog API (per authenticated user). Format: '<count>/<period>'."
       validation:
         pattern: ^\d+/(second|minute|hour|day)$
 

@@ -37,7 +37,6 @@ from .services import (
     create_blog_media_asset_from_request,
     create_published_post_from_payload,
 )
-from .throttles import BlogApiThrottle
 
 
 logger = logging.getLogger(__name__)
@@ -148,14 +147,16 @@ class BlogApiBaseView(APIView):
     class (Module Conventions rule 9): DRF enforces CSRF on unsafe methods.
     Both endpoints write the active organization's data, so they authorize by
     org role through orgs' ``HasOrgRole`` (rule 19): any member may write
-    today's automation flow, while a viewer is refused.  Every error goes
-    through the one QuickScale exception handler the generated settings
-    install.
+    today's automation flow, while a viewer is refused.  The throttle is
+    attached by ``throttle_scope`` only, through the default scoped throttle
+    core's class provides (rule 32): its rate is the module's
+    ``api_rate_limit`` option, and the bucket follows the authenticated user.
+    Every error goes through the one QuickScale exception handler the
+    generated settings install.
     """
 
     authentication_classes = [QuickscaleSessionAuthentication]
     permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.MEMBER)]
-    throttle_classes = [BlogApiThrottle]
     throttle_scope = "quickscale_blog_api"
     http_method_names = ["post"]
 

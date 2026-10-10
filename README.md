@@ -28,7 +28,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 |--------|------|---------|----------------|-------------|
 | `enabled` | boolean | `true` | `QUICKSCALE_BLOG_ENABLED` | Mount the module's pages, API, and RSS routes. Off keeps the app, its data, and the admin Markdownx editor (behind a staff check) but serves none of the module's own public URLs. |
 | `posts_per_page` | integer | `10` | `QUICKSCALE_BLOG_POSTS_PER_PAGE` | Number of posts per page. |
-| `api_rate_limit` | string | `5/hour` | `QUICKSCALE_BLOG_API_RATE_LIMIT` | Throttle rate for authenticated blog API requests, per IP. Format: `<count>/<period>`. |
+| `api_rate_limit` | string | `5/hour` | `QUICKSCALE_BLOG_API_RATE_LIMIT` | Throttle rate for the blog API, keyed per authenticated user. Format: `<count>/<period>`. |
 | `rss_enabled` | boolean | `true` | `QUICKSCALE_BLOG_RSS_ENABLED` | Enable the RSS route at runtime. |
 | `api_upload_max_bytes` | integer | `10485760` | `QUICKSCALE_BLOG_API_UPLOAD_MAX_BYTES` | Maximum accepted media-upload size in bytes. |
 | `api_upload_max_width` | integer | `4096` | `QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH` | Maximum accepted media-upload image width in pixels. |
@@ -47,13 +47,19 @@ MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
 MARKDOWNX_UPLOAD_MAX_SIZE = 5 * 1024 * 1024
 MARKDOWNX_IMAGE_MAX_SIZE = {"size": (1920, 1080), "quality": 90}
 
-# DRF: the shared error shape and the blog API throttle scope
-REST_FRAMEWORK = {
-    "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
-    "DEFAULT_THROTTLE_RATES": {
-        "quickscale_blog_api": QUICKSCALE_BLOG_API_RATE_LIMIT,
+# DRF: the shared contract composition (error shape, core's default throttle
+# classes, proxy state) plus the blog API throttle rate
+from quickscale_core.runtime.settings import compose_rest_framework
+
+REST_FRAMEWORK = compose_rest_framework(
+    {
+        "DEFAULT_THROTTLE_RATES": {
+            "quickscale_blog_api": QUICKSCALE_BLOG_API_RATE_LIMIT,
+        },
     },
-}
+    use_x_forwarded_for=USE_X_FORWARDED_FOR,
+    trusted_proxy_count=TRUSTED_PROXY_COUNT,
+)
 ```
 
 ## Public surface
@@ -133,8 +139,10 @@ A manual installation embeds the orgs baseline first, then adds `rest_framework`
 `quickscale_modules_orgs`, and `quickscale_modules_blog` to `INSTALLED_APPS`, adds
 `quickscale_modules_orgs.middleware.TenantMiddleware` after the session and authentication
 middleware, sets the required `MEDIA_URL` (non-trivial) and `QUICKSCALE_BLOG_RSS_ENABLED` settings,
-configures Markdownx and DRF (the shared error handler and the `quickscale_blog_api` throttle
-rate shown under Configuration), mounts the module at `blog/` with the staff-guarded Markdownx
+configures Markdownx and composes DRF through
+`quickscale_core.runtime.settings.compose_rest_framework` (the shared error handler, core's
+default throttle classes, the proxy state, and the `quickscale_blog_api` throttle rate shown
+under Configuration), mounts the module at `blog/` with the staff-guarded Markdownx
 editor include, and runs `python manage.py migrate quickscale_blog` plus
 `python manage.py collectstatic`.
 
