@@ -23,12 +23,10 @@ from quickscale_modules_orgs._purge_plan import (
     _get_qs as _get_qs,
     _mapping_carries_value as _mapping_carries_value,
 )
+from quickscale_modules_orgs._removal_types import ORGANIZATION_MODEL_LABEL
+from quickscale_modules_orgs._tenancy_discovery import has_organization_id_field
 from quickscale_modules_orgs.models import Organization, OrganizationTombstone
-from quickscale_modules_orgs.removal import (
-    ORGANIZATION_MODEL_LABEL,
-    RemovalCoordinator,
-)
-from quickscale_modules_orgs.tenancy import has_organization_id_field
+from quickscale_modules_orgs.removal import RemovalCoordinator
 
 
 class _PurgeSupportMixin:
