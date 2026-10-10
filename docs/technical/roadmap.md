@@ -265,11 +265,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     WhatsApp brand link). Watch: the kept baselines are pre-cutover evidence; repin before cutover.
     Next: slice (e).
   - [x] (e) Cutover: `scripts/cutover.sh` and `CUTOVER.md` in `bap-web-new` rebuild a fresh database
-    (migrate; `quickscale_orgs_create_site_org`; runtime-role catalog reseed), verify it (counts,
-    RLS fail-closed probes, isolation 6/6), and write the rollback; rehearsed twice on a fresh
-    scratch database while the retained dump copy stayed fingerprint-identical. Watch: repin to
-    the sealed release and re-run the rehearsal (`CUTOVER.md`); the Railway execution remains the
-    maintainer's step.
+    (migrate; `quickscale_orgs_create_site_org`; runtime-role reseed of the catalog and the six
+    contact forms), verify it (counts, form schemas, a real submit, RLS fail-closed probes,
+    isolation 6/6), and write the rollback; rehearsed twice on a fresh scratch database while the
+    retained dump copy stayed fingerprint-identical. Watch: repin to the sealed release and re-run
+    the rehearsal (`CUTOVER.md`); the Railway execution remains the maintainer's step.
 
   **Surfaces:** the new `bap-web-new` repository and its reseed step; the migration prompt; the
   `forms` module only for upstreamed customizations.
