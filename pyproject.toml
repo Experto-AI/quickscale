@@ -15,6 +15,7 @@ packages = [{include = "quickscale_modules_auth", from = "src"}]
 python = ">=3.14,<3.15"
 Django = ">=6.0.7,<6.1.0"
 django-allauth = ">=65.18.0,<66.0.0"
+quickscale-core = {path = "../../quickscale_core", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 # Minimal dev dependencies for standalone testing
