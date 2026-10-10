@@ -100,12 +100,21 @@ def _create_credit_transaction(
 
 @pytest.fixture
 def mock_org_resolution(monkeypatch, organization):
-    """Patch _resolve_request_organization to return the test organization."""
+    """Resolve the test organization for the guard and the view body.
+
+    The DRF permission guard resolves through
+    ``quickscale_modules_orgs.permissions`` and the view body through
+    billing's own import, so both must see the same organization without
+    middleware.
+    """
+
+    def resolve(request, route_kwargs=None):
+        return organization
+
     monkeypatch.setattr(
-        billing_views,
-        "_resolve_request_organization",
-        lambda request, require_owner=False: (organization, False),
+        "quickscale_modules_orgs.permissions.resolve_request_org", resolve
     )
+    monkeypatch.setattr(billing_views, "resolve_request_org", resolve)
 
 
 @pytest.fixture
@@ -133,52 +142,101 @@ def test_checkout_view_returns_json_401_for_anonymous_requests() -> None:
 
     assert response.status_code == 401
     assert response.json() == {
-        "error": {"code": "not_authenticated", "message": "Authentication required"}
+        "error": {
+            "code": "not_authenticated",
+            "message": "Authentication credentials were not provided.",
+        }
     }
 
 
 @pytest.mark.django_db
-def test_checkout_view_answers_org_selection_and_forbidden_in_one_shape(
+def test_checkout_view_refuses_missing_or_unauthorized_organization(
     client: Client,
     user,
     organization,
+    django_user_model,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A missing or unauthorized organization context answers the one shape."""
-    client.force_login(user)
+    """The guard answers the shared 403 for a missing or unauthorized organization.
+
+    An authenticated caller without an organization context and a member
+    below the owner role both answer the shared ``403`` shape.
+    """
     route = reverse("quickscale_billing:purchase_checkout")
 
+    client.force_login(user)
+    response = client.post(route, data=json.dumps({}), content_type="application/json")
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {
+            "code": "permission_denied",
+            "message": "You do not have permission to perform this action.",
+        }
+    }
+
+    from quickscale_modules_orgs.models import (
+        OrgRole,
+        OrganizationMembership,
+    )
+
+    member = django_user_model.objects.create_user(
+        username="billing-member",
+        email="billing-member@example.com",
+        password="billingpass123",
+    )
+    OrganizationMembership.objects.create(
+        user=member, organization=organization, role=OrgRole.MEMBER
+    )
+    monkeypatch.setattr(
+        "quickscale_modules_orgs.permissions.resolve_request_org",
+        lambda request, route_kwargs=None: organization,
+    )
     monkeypatch.setattr(
         billing_views,
-        "_resolve_request_organization",
-        lambda request, require_owner=False: (None, False),
+        "resolve_request_org",
+        lambda request, route_kwargs=None: organization,
     )
+    client.force_login(member)
+    response = client.post(route, data=json.dumps({}), content_type="application/json")
+    assert response.status_code == 403
+    assert response.json() == {
+        "error": {
+            "code": "permission_denied",
+            "message": "You do not have permission to perform this action.",
+        }
+    }
+
+
+@pytest.mark.django_db
+def test_checkout_view_answers_org_selection_required_for_superuser_without_org(
+    client: Client,
+    django_user_model,
+) -> None:
+    """A superuser without organization context answers the module's 409.
+
+    The superuser passes the role guard without organization context, so the
+    view body raises ``OrgSelectionRequiredError``; a regular member never
+    reaches it (the guard refuses first).
+    """
+    superuser = django_user_model.objects.create_superuser(
+        username="billing-superuser",
+        email="billing-superuser@example.com",
+        password="billingpass123",
+    )
+    client.force_login(superuser)
+
     response = client.post(
-        route,
+        reverse("quickscale_billing:purchase_checkout"),
         data=json.dumps({}),
         content_type="application/json",
     )
+
     assert response.status_code == 409
     assert response.json() == {
         "error": {
             "code": "org_selection_required",
             "message": "Organization selection required.",
         }
-    }
-
-    monkeypatch.setattr(
-        billing_views,
-        "_resolve_request_organization",
-        lambda request, require_owner=False: (organization, True),
-    )
-    response = client.post(
-        route,
-        data=json.dumps({}),
-        content_type="application/json",
-    )
-    assert response.status_code == 403
-    assert response.json() == {
-        "error": {"code": "permission_denied", "message": "Forbidden"}
     }
 
 
@@ -258,7 +316,10 @@ def test_subscription_checkout_view_returns_json_401_for_anonymous_requests() ->
 
     assert response.status_code == 401
     assert response.json() == {
-        "error": {"code": "not_authenticated", "message": "Authentication required"}
+        "error": {
+            "code": "not_authenticated",
+            "message": "Authentication credentials were not provided.",
+        }
     }
 
 
@@ -290,7 +351,10 @@ def test_cancel_subscription_view_returns_json_401_for_anonymous_requests(
 
     assert response.status_code == 401
     assert response.json() == {
-        "error": {"code": "not_authenticated", "message": "Authentication required"}
+        "error": {
+            "code": "not_authenticated",
+            "message": "Authentication credentials were not provided.",
+        }
     }
     assert called is False
 
@@ -325,7 +389,10 @@ def test_billing_portal_session_view_returns_json_401_for_anonymous_requests(
 
     assert response.status_code == 401
     assert response.json() == {
-        "error": {"code": "not_authenticated", "message": "Authentication required"}
+        "error": {
+            "code": "not_authenticated",
+            "message": "Authentication credentials were not provided.",
+        }
     }
     assert called is False
 
@@ -347,7 +414,10 @@ def test_billing_read_views_return_json_401_for_anonymous_requests(
 
     assert response.status_code == 401
     assert response.json() == {
-        "error": {"code": "not_authenticated", "message": "Authentication required"}
+        "error": {
+            "code": "not_authenticated",
+            "message": "Authentication credentials were not provided.",
+        }
     }
 
 
@@ -1882,17 +1952,16 @@ class TestBillingDrfDefaultCallerParity:
             "subscription_detail",
         ],
     )
-    def test_auth_handling_views_still_return_custom_401_for_anonymous(
+    def test_auth_required_views_still_return_401_for_anonymous(
         self,
         client: Client,
         route_name: str,
     ) -> None:
-        """Views with internal auth checks must still answer 401 for anonymous.
+        """Explicit guards keep answering 401 for anonymous under a DRF default.
 
-        These views handle authentication inside the view body rather than
-        relying on DRF's global permission class.  Under the IsAuthenticated
-        default, the explicit ``AllowAny`` lets DRF pass the request through
-        so the view's own auth check can refuse the caller.
+        These views declare ``IsAuthenticated`` plus ``HasOrgRole`` on
+        themselves; the explicit guard overrides a global default and the
+        session authentication challenge renders the shared 401 shape.
         """
         response = client.get(reverse(f"quickscale_billing:{route_name}"))
 
