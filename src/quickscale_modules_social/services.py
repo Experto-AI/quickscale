@@ -236,7 +236,13 @@ def _load_embed_records(payload: object) -> tuple[SocialEmbedRecord, ...] | None
         for item in payload:
             if not isinstance(item, dict):
                 return None
-            records.append(SocialEmbedRecord(**item))
+            # A cache entry written by an older release could still carry raw
+            # resolution text; sanitize on read so a cache hit can never
+            # publish it (rule 9).
+            sanitized = dict(item)
+            if sanitized.get("resolution_error"):
+                sanitized["resolution_error"] = _PUBLIC_RESOLUTION_ERROR
+            records.append(SocialEmbedRecord(**sanitized))
     except TypeError:
         return None
 
