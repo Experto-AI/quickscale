@@ -350,6 +350,20 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** `ci.yml.j2`, `Dockerfile.j2`, the test-settings line of `base.py.j2`,
   `scripts/check_workflow_security.py`, the new gate, and the tech audit.
 
+  **Progress:** the four defects and the gate landed. `ci.yml.j2` pins every action by SHA with a
+  top-level `permissions: contents: read`, gives the test step its `DATABASE_URL`, and runs the
+  migrate and isolation steps under `settings.local`; `check_workflow_security.py
+  --generated-template` renders and scans the template, and `make refresh-action-pins` rewrites
+  its pins; the Dockerfile probes `/healthcheck/` presenting the always-admitted
+  `healthcheck.railway.app` Host and installs the frontend from an emitted
+  `frontend/pnpm-lock.yaml` with `--frozen-lockfile`; the generated sample suite plus
+  coverage/urls settings and ruff-clean imports make the rendered test and ruff steps pass; the
+  registered `check-generated-project-automation` gate executes the rendered test and migrate
+  commands and the healthcheck. Remaining: the generated frontend's `pnpm test:coverage`
+  per-file 80% thresholds are not met by the shipped theme suite (~77.7% global statements), so
+  the frontend job is still red — it needs a threshold/exclusion decision or a much larger theme
+  suite. The new gate is local-only: hosted gate jobs have no PostgreSQL lease step.
+
 - [ ] **SA255 — Accept Resend's real webhook signature in notifications.**
 
   **Context:** the notifications webhook accepts only a custom signing contract that Resend never

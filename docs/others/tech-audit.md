@@ -238,34 +238,12 @@ Silence on the skipped areas does not mean they are clean.
 schema: tech-audit/v6
 audited: 2fd8637f2d163c65a873ce74337e4f5d88b9ba99
 items:
-  - {id: generated-ci-fails-out-of-box, status: open, severity: S3, category: X,
-     title: "Generated CI workflow cannot pass on a fresh project", effort: Small, confidence: High,
-     reality: generated-app,
-     anchors: [quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2],
-     fix_files: [quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2,
-                 quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2],
-     depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: notifications-webhook-rejects-resend, status: open, severity: S3, category: IX,
      title: "Notifications webhook accepts only a custom signing contract Resend never sends",
      effort: Medium, confidence: High, reality: generated-app,
      anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/views.py,
                quickscale_modules/notifications/src/quickscale_modules_notifications/_webhooks.py],
      depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: generated-ci-mutable-action-tags, status: open, severity: S3, category: VII,
-     title: "Generated CI uses mutable third-party action tags and no permissions block",
-     effort: Small, confidence: High, reality: generated-app,
-     anchors: [quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2],
-     fix_files: [quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2,
-                 scripts/check_workflow_security.py],
-     depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: docker-healthcheck-always-unhealthy, status: open, severity: S4, category: VI, effort: Trivial,
-     confidence: High, reality: generated-app,
-     anchors: [quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: frontend-image-floating-deps, status: open, severity: S4, category: VII, effort: Small,
-     confidence: High, reality: generated-app,
-     anchors: [quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: social-payload-echoes-exception-text, status: open, severity: S4, category: VI,
      effort: Trivial, confidence: High, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/manifest/social_manifest.py],
@@ -274,6 +252,11 @@ items:
      effort: Trivial, confidence: High, reality: generated-app,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/_email.py],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
+  - {id: generated-frontend-coverage-unmet, status: open, severity: S4, category: X,
+     title: "Fresh generated frontend fails its own pnpm test:coverage thresholds", effort: Small,
+     confidence: High, reality: generated-app,
+     anchors: [quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/vitest.config.ts],
+     first_seen: 2026-10-10, last_verified: 2026-10-10}
   - {id: dr-restore-vintage-exact-match, status: watchlist, category: I, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/recovery.py],
      first_seen: 2026-09-24, last_verified: 2026-10-08}
@@ -303,44 +286,20 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 3 · S4 — 4 · total 7 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 1 · S4 — 3 · total 4 open. Watchlist: 7.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
-| `generated-ci-fails-out-of-box` | S3 | X | Generated CI workflow cannot pass on a fresh project | Small | High | new |
 | `notifications-webhook-rejects-resend` | S3 | IX | Webhook accepts only a signing contract Resend never sends | Medium | High | new |
-| `generated-ci-mutable-action-tags` | S3 | VII | Generated CI on mutable action tags, no `permissions:` | Small | High | new |
-| `docker-healthcheck-always-unhealthy` | S4 | VI | Image `HEALTHCHECK` gets 400 under production settings | Trivial | High | new |
-| `frontend-image-floating-deps` | S4 | VII | Production image resolves npm deps unpinned when no lockfile | Small | High | new |
 | `social-payload-echoes-exception-text` | S4 | VI | Public social payload returns `str(exc)` | Trivial | High | new |
 | `forms-notification-status-misreported` | S4 | VI | Submission reports `queued` when notifications are disabled | Trivial | High | new |
+| `generated-frontend-coverage-unmet` | S4 | X | Fresh generated frontend fails its own `pnpm test:coverage` thresholds | Small | High | new |
 
 ---
 
 ## 4. Findings
 
 ### S3 findings (compact)
-
-- **`generated-ci-fails-out-of-box`** · S3 (Moderate × Common) · R2 ·
-  `generator/templates/github/workflows/ci.yml.j2:104-125`, `project_name/settings/local.py.j2:137`,
-  `project_name/settings/base.py.j2:341-343`, `.gitignore.j2:60`.
-  - **Defect:**
-    - The generated "Run tests with coverage" step sets no `DATABASE_URL`. pytest uses
-      `settings.local`, which raises at import when `DATABASE_URL` is unset, and `.env` is
-      gitignored.
-    - The "Run migrations" and "tenant isolation" steps use `settings.base`. Its `LOGGING` opens
-      `logs/django.log`, a directory the generator never creates and `.gitignore` excludes. It
-      also ignores `DATABASE_URL` and reads `POSTGRES_*`, defaulting the database name to the
-      package.
-    - Every freshly generated project's CI is therefore red, and the promised CI gate never runs.
-    - **Reproduced** (empirical check 1).
-  - **Fix:** In the test and migrate steps:
-    - Set `DATABASE_URL` (plus `QUICKSCALE_ALLOW_BYPASSRLS: "1"` for the superuser test role,
-      or provision the runtime role).
-    - Point the migrate and isolation steps at `settings.local`.
-    - Drop the file handler from `base.py.j2`, or create the directory.
-    - Add a gate that executes the rendered workflow's commands against a generated project.
-  - **Effort:** Small. **Confidence:** High.
 
 - **`notifications-webhook-rejects-resend`** · S3 (Moderate × Common) · R2 ·
   `notifications/views.py:30-40`, `_webhooks.py:68-85`, `:112-135`, `services.py:236-270`,
@@ -363,30 +322,8 @@ items:
   - **Effort:** Medium. **Confidence:** High (vendor contract confirmed, §1).
   - **Age:** since `1a143fce` (v0.78.0).
 
-- **`generated-ci-mutable-action-tags`** · S3 (Critical × Unlikely: needs an upstream action
-  compromise) · R2 · `ci.yml.j2:42,45,76,83,108,134,137,142,151`.
-  - **Defect:** The generated workflow uses `actions/checkout@v6`, `snok/install-poetry@v1`,
-    `pnpm/action-setup@v5`, `codecov/codecov-action@v5`, and others on mutable tags. It has no
-    top-level `permissions:` block, so it inherits the repository default, which can be
-    read-write on older organizations.
-  - **Variant analysis:** an unfixed sibling of the resolved `pipeline-mutable-action-refs`
-    (SA202). That fix pinned and gated only the repository's own four workflows, against
-    oracle 12.
-  - **Fix:** Pin by SHA with version comments, add `permissions: contents: read`, and extend
-    `check_workflow_security.py` / `make refresh-action-pins` to the rendered template.
-  - **Effort:** Small. **Confidence:** High.
-
 ### S4 findings (one line each)
 
-- `docker-healthcheck-always-unhealthy` · `Dockerfile.j2:204-205` · The image `HEALTHCHECK` fetches
-  `http://localhost:$PORT/`. Under production settings that answers 400 (`localhost` is not in
-  `ALLOWED_HOSTS`), and `urlopen` raises on any non-2xx, so the container is always "unhealthy"
-  (reproduced). The comment's claim that "404/500 means alive" is false. · Probe `/healthcheck/`
-  with an allowed `Host` header and treat any HTTP response as alive.
-- `frontend-image-floating-deps` · `Dockerfile.j2:26` · `pnpm install --no-frozen-lockfile` over
-  caret ranges (`package.json.j2`). No lockfile is generated by `apply`, so a project deployed
-  before `quickscale up` creates one builds with whatever npm resolves that day. · Commit a
-  generated `pnpm-lock.yaml` and use `--frozen-lockfile` in the image.
 - `social-payload-echoes-exception-text` · `manifest/social_manifest.py:396-400`, `:446-456`,
   `:470-480` · The generated public social payload views return `str(exc)` (database errors carry
   host, role, and table names) to anonymous callers. This violates rules 9 and 26. · Return a
@@ -394,6 +331,13 @@ items:
 - `forms-notification-status-misreported` · `forms/_email.py:44-53` · When notifications are
   disabled, the submit response reports `"queued"` while logging "skipped". · Return a distinct
   `"disabled"` status.
+- `generated-frontend-coverage-unmet` · `themes/showcase_react/vitest.config.ts:12-26` · The
+  generated frontend's `pnpm test:coverage` enforces per-file 80% thresholds, but the shipped
+  theme suite measures ~77.7% statements globally and fails per-file on pages, hooks, and UI
+  primitives, so the generated `frontend-lint` CI job is red out of the box. Reproduced on a
+  freshly rendered project. · Decide the starter's threshold/exclusion policy or expand the
+  theme's test suite; the backend test and migrate steps and the image healthcheck pass as
+  rendered.
 
 ---
 
@@ -423,8 +367,8 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Backups admin restore | admin session | `change_backuppolicy` + `QUICKSCALE_BACKUPS_ALLOW_RESTORE` (watch) | confirmation = filename; custom-dump only | autoescape | n/a | background `Popen` | atomic claim | messages | status row |
 | `TenantMiddleware` | — | saas membership or 403; solo personal org; VIEW-AS superuser | UUID parse | n/a | n/a | n/a | n/a | 403/redirect; unmounted orgs pass through (`a621299b`) | n/a |
 | Management commands (purge/prune/anonymize/restore) | shell | reserved-org guards | args | n/a | n/a | n/a | `--dry-run` on all destructive commands | `CommandError` | tombstones/logs |
-| Generated CI workflow | n/a | `permissions:` missing: `generated-ci-mutable-action-tags` | n/a | n/a | n/a | n/a | n/a | fails: `generated-ci-fails-out-of-box` | n/a |
-| Image / launcher | n/a | runtime role NOSUPERUSER/NOBYPASSRLS + boot guard | n/a | n/a | n/a | gunicorn 60 s, 1 worker (watch) | migrate per boot (watch) | `HEALTHCHECK`: `docker-healthcheck-always-unhealthy` | stdout |
+| Generated CI workflow | n/a | SHA-pinned actions + top-level `permissions` (SA253); gate `check-workflow-security` | n/a | n/a | n/a | n/a | n/a | gate `check-generated-project-automation` | n/a |
+| Image / launcher | n/a | runtime role NOSUPERUSER/NOBYPASSRLS + boot guard | n/a | n/a | n/a | gunicorn 60 s, 1 worker (watch) | migrate per boot (watch) | `HEALTHCHECK` probes `/healthcheck/` with the always-admitted `healthcheck.railway.app` Host (SA253); gate `check-generated-project-automation` | stdout |
 | Deploy (`deploy railway`) | Railway CLI auth | n/a | n/a | secrets via stdin, never argv | n/a | per-call timeouts | reuses secrets | settings module from project state or left alone | summary masks secrets |
 | Outbound clients (Stripe, Resend, PostHog) | API keys from settings (rule 35) | n/a | n/a | n/a | n/a | SDK defaults (watch); PostHog async | Stripe idempotency keys | mapped errors | n/a |
 | Release pipeline (`publish.yml`) | OIDC trusted publishing | environment-gated jobs | tag = `VERSION` check | n/a | n/a | n/a | `skip-existing` on TestPyPI | job failure | GitHub release |
@@ -443,10 +387,16 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
    deployment that ran analytics must invalidate existing sessions and purge or re-key the PostHog
    persons after upgrading (the invalidation must follow the fix, or the old keys keep their
    value).
-3. **Generator-output batch** (one template PR, with a gate that runs the rendered artifacts):
-   `generated-ci-fails-out-of-box`, `generated-ci-mutable-action-tags`,
-   `docker-healthcheck-always-unhealthy`, `frontend-image-floating-deps`. These touch overlapping
-   templates (`ci.yml.j2`, `Dockerfile.j2`), so land them together.
+3. **Generator-output batch (landed).** `generated-ci-fails-out-of-box`,
+   `generated-ci-mutable-action-tags`, `docker-healthcheck-always-unhealthy`, and
+   `frontend-image-floating-deps` landed together on v89 (SA253): the rendered CI pins its
+   actions by SHA with top-level `permissions`, sets the test step's `DATABASE_URL`, runs the
+   migrate and isolation steps under `settings.local`, the container healthcheck probes
+   `/healthcheck/` with the always-admitted `healthcheck.railway.app` Host, the image installs
+   from the committed
+   `frontend/pnpm-lock.yaml` with `--frozen-lockfile`, and the registered
+   `check-generated-project-automation` gate executes the rendered test and migrate commands and
+   the healthcheck against a fresh offline-rendered project.
 4. **Self-registration hardening (landed).** `anonymize-matches-unverified-address`,
    `org-invitation-email-unthrottled`, and `viewas-overrides-management-org` are fixed: the
    anonymization handlers gate their address selectors on allauth verification, both invite paths
@@ -552,10 +502,12 @@ Carried from the prior passes:
   `/healthcheck/`.
 
 Added:
-- **Generated artifacts are only text-asserted.** The CI workflow, the image `HEALTHCHECK`, and
-  the deploy-time environment are grepped by tests (`e2e.yml:162-169`), never executed. Three of
-  this pass's findings live there. That points at a missing "run the generated project's own
-  automation" stage.
+- **Generated artifacts are now executed, not only text-asserted.** The rendered CI workflow,
+  the image `HEALTHCHECK`, and the deploy-time environment were previously grepped by tests
+  (`e2e.yml:162-169`), never executed; three of this pass's findings lived there. SA253 adds the
+  registered `check-generated-project-automation` gate, which renders a project offline and
+  executes the rendered CI test and migrate commands and the image healthcheck payload against a
+  provisioned PostgreSQL.
 - **Provider "unknown outcome" is a state with no exit.** Billing persists provider intent before
   non-transactional calls (correctly), but at audit time no provider-side lookup resolved it for
   one-time or subscription checkouts. One now does, and the operator reconciler clears
@@ -565,11 +517,6 @@ Added:
 
 ## 10. Tooling gaps
 
-- **Extend `check_workflow_security.py` and `make refresh-action-pins` to the rendered
-  `ci.yml.j2`.** Would have prevented `generated-ci-mutable-action-tags`.
-- **A gate that executes the rendered workflow's test and migrate commands, and the image
-  `HEALTHCHECK`, against a generated project.** Would have prevented `generated-ci-fails-out-of-box`
-  and `docker-healthcheck-always-unhealthy`.
 - **A provider-contract assertion that every URL handed to Stripe is absolute.** Either a unit
   check in `StripeClient`, or one Stripe test-mode e2e call. Would have caught
   `billing-checkout-relative-redirect-urls`; `StripeClient` now refuses a URL without a scheme
@@ -867,3 +814,25 @@ Added:
   recreation step prescribes, reproduced locally rather than by a Stripe-origin dahlia endpoint —
   and processed into a `completed` purchase reservation and a 100-credit balance, with a
   redelivery deduped. Dropped from the index and summary; the §13 checkout question is answered.
+- 2026-10-10 — `generated-ci-fails-out-of-box`, `generated-ci-mutable-action-tags`,
+  `docker-healthcheck-always-unhealthy`, `frontend-image-floating-deps`: **resolved** (SA253).
+  The rendered `ci.yml.j2` pins every action by commit SHA with version comments and declares a
+  top-level `permissions: contents: read`; the test step sets `DATABASE_URL` and the migrate and
+  isolation steps run under `<package>.settings.local`. `check_workflow_security.py
+  --generated-template` renders the template offline and scans it under the same zizmor contract,
+  and `refresh_action_pins.py` refreshes the template's pins in source and fails closed on an
+  unpinned `uses:` line. `Dockerfile.j2`'s `HEALTHCHECK` probes `/healthcheck/` presenting the
+  always-admitted `healthcheck.railway.app` Host and expects a 2xx response; the frontend
+  stage requires the committed `frontend/pnpm-lock.yaml` and installs with `--frozen-lockfile`
+  (the generator now emits the lockfile). The generated sample suite covers the URL surface and
+  application entry points, and `pyproject.toml` omits settings packages from coverage, so the
+  rendered test command passes at its 90% gate; the generated views, context-processor, and
+  managed-URLconf import blocks are ruff-clean, so the rendered ruff steps pass too. The new
+  registered
+  `check-generated-project-automation` gate executes the rendered test and migrate commands and
+  the image healthcheck payload against a fresh offline-rendered project inside the provisioned
+  PostgreSQL profile. Dropped from the index and summary; the §10 tooling gaps close with them.
+  The rendered workflow's remaining red job is recorded as the new open finding
+  `generated-frontend-coverage-unmet`, not as part of this closure: the generated frontend's
+  `pnpm test:coverage` per-file 80% thresholds are not met by the shipped theme suite (global
+  ≈77.7% statements, per-file failures across pages, hooks, and UI primitives).

@@ -687,6 +687,16 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     only the requested page, while a page past the end answers the empty list. The generated
     social payload endpoints are DRF views that answer the standard error shape without echoing
     exception text.
+  - **A generated project's automation runs as rendered.** The generated CI pins every action by
+    commit SHA under a minimal top-level `permissions` block, its test step targets the CI
+    database through the generated settings, and the migrate and tenant-isolation steps load
+    those settings; the container healthcheck probes `/healthcheck/` with the always-admitted
+    `healthcheck.railway.app` Host, the frontend image installs from the committed `frontend/pnpm-lock.yaml`
+    and fails without it, and the template's pins are covered by `make refresh-action-pins` and
+    `make check-workflow-security`, which render and scan the workflow template. A registered
+    gate renders a project offline and executes the rendered test and migrate commands and the
+    healthcheck payload, so the generated automation is proven by execution rather than by text
+    assertions.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
