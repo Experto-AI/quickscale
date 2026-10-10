@@ -624,13 +624,15 @@ class TestPlanNewProjectConfigureModules:
             # - \n: email verification default (none)
             # - \n: session cookie age default (1209600)
             # - \n: auth method default (email)
-            # Billing configurator (6 prompts, all defaults):
+            # Billing configurator (8 prompts, all defaults):
             # - \n: enable billing (default yes)
             # - \n: publishable key env var
             # - \n: secret key env var
             # - \n: webhook secret env var
             # - \n: billing currency
             # - \n: api rate limit default
+            # - \n: transactions per page default
+            # - \n: plans per page default
             # Orgs configurator (4 prompts, manifest order):
             # - \n: enable orgs (default yes)
             # - \n: orgs mode default (solo)
@@ -652,7 +654,7 @@ class TestPlanNewProjectConfigureModules:
             result = runner.invoke(
                 plan,
                 ["myapp", "--configure-modules"],
-                input=("\n\nauth,billing\nn\ny\ny\n" + "\n" * 24 + "y\n"),
+                input=("\n\nauth,billing\nn\ny\ny\n" + "\n" * 26 + "y\n"),
             )
 
             assert result.exit_code == 0

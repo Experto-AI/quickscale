@@ -31,6 +31,8 @@ _EXPECTED_DEFAULTS: dict[str, object] = {
     "webhook_secret_env_var": "QUICKSCALE_BILLING_WEBHOOK_SECRET",
     "currency": "usd",
     "api_rate_limit": "30/hour",
+    "transactions_per_page": 25,
+    "plans_per_page": 25,
 }
 
 _SUPPORTED_CURRENCIES = (
@@ -212,6 +214,8 @@ class TestBillingResolution:
             "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
             "currency": "eur",
             "api_rate_limit": "30/hour",
+            "transactions_per_page": 25,
+            "plans_per_page": 25,
         }
 
     def test_resolution_is_idempotent(self) -> None:
@@ -307,6 +311,8 @@ class TestBillingConfigurator:
             "OPS_HOOK",
             " EUR ",
             " 10/hour ",
+            25,
+            25,
         ]
 
         entry = MODULE_CONFIGURATOR_REGISTRY["billing"]
