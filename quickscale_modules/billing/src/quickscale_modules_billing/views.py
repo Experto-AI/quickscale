@@ -4,26 +4,20 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import (
-    HttpRequest,
-    HttpResponse,
-    HttpResponseBase,
-)
-from django.shortcuts import redirect, resolve_url
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import resolve_url
 from django.urls import reverse
 from django.views.generic import TemplateView
 from rest_framework.exceptions import (
-    NotAuthenticated,
     NotFound,
-    PermissionDenied,
     ValidationError,
 )
 from rest_framework.parsers import JSONParser
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -62,47 +56,28 @@ from quickscale_modules_billing.services import (
     create_subscription_checkout_session,
     handle_stripe_event,
 )
+from quickscale_modules_orgs.models import OrgRole
+from quickscale_modules_orgs.permissions import (
+    HasOrgRole,
+    OrgRoleMixin,
+    resolve_request_org,
+)
 
 
-def _resolve_request_organization(
-    request: HttpRequest,
-    *,
-    require_owner: bool = False,
-) -> tuple[Any | None, bool]:
-    organization = getattr(request, "org", None)
-    if organization is None:
-        return None, False
+def _request_organization(request: Request) -> Any:
+    """Return the request's organization, refusing a caller without one.
 
-    if require_owner:
-        from quickscale_modules_orgs.models import OrgRole
-        from quickscale_modules_orgs.permissions import user_has_org_role
-
-        if not user_has_org_role(request.user, organization, OrgRole.OWNER):
-            return organization, True
-
-    return organization, False
-
-
-def _require_authenticated(request: Request) -> None:
-    """Raise the module's 401 for a caller without a session."""
-    if not request.user.is_authenticated:
-        raise NotAuthenticated("Authentication required")
-
-
-def _require_request_organization(
-    request: Request,
-    *,
-    require_owner: bool = True,
-) -> Any:
-    """Return the request's organization, refusing a missing or unauthorized one."""
-    organization, access_denied = _resolve_request_organization(
-        request._request,
-        require_owner=require_owner,
-    )
+    The view's ``IsAuthenticated``/``HasOrgRole`` guard has authorized the
+    caller (Module Conventions rule 19), so this only resolves the
+    organization the handler attributes its work to.  A superuser passes
+    ``HasOrgRole`` without organization context, so the missing-selection
+    case still answers the module's ``org_selection_required`` error.
+    Billing's routes are flat, so there is no ``org_slug`` route kwarg; the
+    organization comes from the middleware-populated ``request.org``.
+    """
+    organization = resolve_request_org(request._request, {})
     if organization is None:
         raise OrgSelectionRequiredError()
-    if access_denied:
-        raise PermissionDenied("Forbidden")
     return organization
 
 
@@ -152,15 +127,17 @@ class _BillingAPIView(APIView):
     """Shared DRF wiring for billing's JSON endpoints.
 
     Session authentication only, through core's one session authentication
-    class (DRF enforces CSRF on unsafe methods), ``AllowAny`` because each
-    view performs its own authentication and organization checks, and
+    class (DRF enforces CSRF on unsafe methods), and billing data is
+    owner-only: the default guard is ``IsAuthenticated`` plus orgs'
+    ``HasOrgRole(OrgRole.OWNER)``, and a public endpoint states its
+    ``[AllowAny]`` guard on the view (Module Conventions rule 19).
     JSON-only parsing and rendering so an HTML-preferring client never
     receives DRF's browsable-API page instead of the one QuickScale error
     shape (Module Conventions rule 9).
     """
 
     authentication_classes = [QuickscaleSessionAuthentication]
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.OWNER)]
     parser_classes = [JSONParser]
     renderer_classes = [JSONRenderer]
 
@@ -199,6 +176,9 @@ class PlanListView(_BillingAPIView):
     """Return the public recurring billing catalog."""
 
     http_method_names = ["get"]
+    # The catalog is the module's one public JSON endpoint, so it states its
+    # own AllowAny guard instead of the base's owner-only default (rule 19).
+    permission_classes = [AllowAny]
     pagination_class = _PlanPagination
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -226,8 +206,7 @@ class CreateCheckoutSessionView(_RenderedAPIView):
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        _require_authenticated(request)
-        organization = _require_request_organization(request)
+        organization = _request_organization(request)
 
         payload = _json_object_payload(request)
         serializer = CreateCheckoutSessionSerializer(data=payload)
@@ -258,8 +237,7 @@ class CreateSubscriptionCheckoutView(_RenderedAPIView):
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        _require_authenticated(request)
-        organization = _require_request_organization(request)
+        organization = _request_organization(request)
 
         payload = _json_object_payload(request)
         serializer = CreateSubscriptionCheckoutSerializer(data=payload)
@@ -290,8 +268,7 @@ class CancelSubscriptionView(_RenderedAPIView):
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        _require_authenticated(request)
-        organization = _require_request_organization(request)
+        organization = _request_organization(request)
 
         payload = _json_object_payload(request)
         serializer = CancelSubscriptionSerializer(data=payload)
@@ -315,8 +292,7 @@ class CreateBillingPortalSessionView(_RenderedAPIView):
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        _require_authenticated(request)
-        organization = _require_request_organization(request)
+        organization = _request_organization(request)
 
         payload = _json_object_payload(request)
         serializer = CreateBillingPortalSessionSerializer(data=payload)
@@ -340,8 +316,7 @@ class CreditBalanceView(_BillingAPIView):
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        _require_authenticated(request)
-        organization = _require_request_organization(request)
+        organization = _request_organization(request)
 
         balance = CreditBalance.all_objects.filter(organization=organization).first()
         if balance is None:
@@ -358,8 +333,7 @@ class CreditTransactionListView(_BillingAPIView):
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        _require_authenticated(request)
-        organization = _require_request_organization(request)
+        organization = _request_organization(request)
 
         queryset = CreditTransaction.all_objects.filter(organization=organization)
         queryset = queryset.order_by("-created_at", "-id")
@@ -376,8 +350,7 @@ class SubscriptionDetailView(_BillingAPIView):
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        _require_authenticated(request)
-        organization = _require_request_organization(request)
+        organization = _request_organization(request)
 
         subscription = (
             Subscription.all_objects.select_related("plan")
@@ -400,39 +373,26 @@ class StripePublishableKeyView(_BillingAPIView):
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs
-        _require_authenticated(request)
-
-        organization = getattr(request._request, "org", None)
-        if organization is None:
-            raise OrgSelectionRequiredError()
+        _request_organization(request)
 
         snapshot = BillingSettingsSnapshot.from_settings()
         return Response({"publishable_key": snapshot.resolve_publishable_key()})
 
 
-class BillingDashboardView(LoginRequiredMixin, TemplateView):
-    """Module-owned billing dashboard mount page."""
+class BillingDashboardView(LoginRequiredMixin, OrgRoleMixin, TemplateView):
+    """Module-owned billing dashboard mount page.
+
+    Login is the page gate; the dashboard is owner-only, so ``OrgRoleMixin``
+    enforces the active organization's ``owner`` role (Module Conventions
+    rule 19).
+    """
 
     template_name = "quickscale_billing/dashboard.html"
+    min_org_role = OrgRole.OWNER
 
-    def dispatch(
-        self,
-        request: HttpRequest,
-        *args: Any,
-        **kwargs: Any,
-    ) -> HttpResponseBase:
-        if not request.user.is_authenticated:
-            return super().dispatch(request, *args, **kwargs)
-
-        organization, access_denied = _resolve_request_organization(
-            request,
-            require_owner=True,
-        )
-        if organization is None:
-            return redirect("quickscale_billing:pricing_page")
-        if access_denied:
-            return HttpResponse(status=403)
-        return super().dispatch(request, *args, **kwargs)
+    def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        """Require login first, then the owner org role."""
+        return cast(HttpResponse, super().dispatch(request, *args, **kwargs))
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -467,7 +427,16 @@ class BillingDashboardView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class PricingPageView(TemplateView):
+class BillingPublicReadMixin:
+    """Explicit public-read declaration for billing's unauthenticated pages.
+
+    The pricing page and the Stripe return pages are public by design; the
+    named mixin states that guard decision on each view (Module Conventions
+    rule 19), so no page carries an unstated or hand-written guard.
+    """
+
+
+class PricingPageView(BillingPublicReadMixin, TemplateView):
     """Public billing pricing mount page."""
 
     template_name = "quickscale_billing/pricing.html"
@@ -503,7 +472,7 @@ class PricingPageView(TemplateView):
         return context
 
 
-class BillingPortalReturnView(TemplateView):
+class BillingPortalReturnView(BillingPublicReadMixin, TemplateView):
     """Public return page for hosted Stripe billing portal sessions."""
 
     template_name = "quickscale_billing/portal_return.html"
@@ -516,7 +485,7 @@ class BillingPortalReturnView(TemplateView):
         return context
 
 
-class PurchaseSuccessView(TemplateView):
+class PurchaseSuccessView(BillingPublicReadMixin, TemplateView):
     """Public success landing page for hosted checkout returns."""
 
     template_name = "quickscale_billing/purchase_success.html"
@@ -529,7 +498,7 @@ class PurchaseSuccessView(TemplateView):
         return context
 
 
-class PurchaseCancelView(TemplateView):
+class PurchaseCancelView(BillingPublicReadMixin, TemplateView):
     """Public cancel landing page for hosted checkout returns."""
 
     template_name = "quickscale_billing/purchase_cancel.html"
@@ -542,7 +511,7 @@ class PurchaseCancelView(TemplateView):
         return context
 
 
-class SubscriptionSuccessView(TemplateView):
+class SubscriptionSuccessView(BillingPublicReadMixin, TemplateView):
     """Public success landing page for recurring checkout returns."""
 
     template_name = "quickscale_billing/subscription_success.html"
@@ -555,7 +524,7 @@ class SubscriptionSuccessView(TemplateView):
         return context
 
 
-class SubscriptionCancelView(TemplateView):
+class SubscriptionCancelView(BillingPublicReadMixin, TemplateView):
     """Public cancel landing page for recurring checkout returns."""
 
     template_name = "quickscale_billing/subscription_cancel.html"

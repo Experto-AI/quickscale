@@ -1299,8 +1299,8 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
     <identifier>` on commands that delete a tenant's or the database's data.
 11. **Rule 19 — guards** [Item 3]. ✅ Every module view declares its guard: permission classes
     or `min_org_role` for APIs, a mixin for pages, an explicit public declaration otherwise.
-    ✅ Every README lists minimum roles. ❌ `AllowAny` plus a hand-written user check. Edit the
-    JSON API contract to drop "the billing-module pattern".
+    ✅ Every README lists minimum roles. ❌ `AllowAny` plus a hand-written user check, or a page
+    with no guard and no public-read declaration.
 12. **Rule 29 — tests and shipped source** [Items 23, 24]. ✅ `tests/templates/` is allowed. ❌ A
     ticket id in shipped module source or `module.yml` (as in tests).
 13. **Rule 32 — throttles** [Item 12]. ✅ Attached by `throttle_scope` only, through core's
@@ -1818,3 +1818,26 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   a `pagination_class` naming a non-core paginator, and a literal `page_size`, renders the
   managed social views module and parses it under the same rule, controls included; decision
   rule 9 carries the clause). Item 11.
+
+### 2026-10-10 — SA262 stage 4 (guard declarations and README role listings)
+
+- 2026-10-10 — `tenant-authorization`: **resolved** (SA262 stage 4 — billing's JSON endpoints
+  adopt `IsAuthenticated` plus orgs' `HasOrgRole(OrgRole.OWNER)` on their shared base and its one
+  public catalog declares `[AllowAny]`; the hand-written `_require_authenticated` /
+  `_resolve_request_organization` helpers are deleted, and the dashboard runs on
+  `LoginRequiredMixin` plus `OrgRoleMixin(OWNER)`; billing's README lists the minimum role per
+  action and the JSON API contract drops "the billing-module pattern"; harness rule 19 gains two
+  closed-world clauses — every view class declares a guard (DRF permission classes or a
+  classified `get_permissions()` override on a DRF view, `min_org_role` beside its enforcing
+  base, a login/role mixin, or a named public-read mixin, own or inherited; permission import
+  aliases resolve) and an
+  `AllowAny` view must not read `request.user.is_authenticated` by hand, directly or through a
+  helper its effective (inherited) methods call, resolved across a private-sibling split — and
+  rule 38 requires an identifiable minimum-role
+  listing (a backticked `viewer`/`member`/`admin`/`owner` value or a value beside the word
+  "role", or a role-value table cell under a role header) in the Public surface of a module that
+  authorizes through orgs' role tools, both with controls; analytics' and billing's READMEs gain
+  the listing and forms' public page declares a public-read mixin. Recorded limits: the role
+  clause checks for an identifiable role listing, not the per-action prose; an unclassifiable
+  `get_permissions()` return fails closed as no declaration, and a plain Django page's
+  `permission_classes` is inert and is not a declaration). Item 3.

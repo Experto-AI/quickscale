@@ -73,6 +73,22 @@ source tree.
 
 ## Public surface
 
+### Role requirements
+
+Billing data is owner-only. Every billing JSON endpoint except the public plan catalog requires
+an authenticated session whose active organization grants the `owner` role: an anonymous caller
+answers `401`, and a caller with no organization context or below `owner` is refused (`403`).
+The dashboard page requires login and the active organization's `owner` role; the pricing page
+and the Stripe return pages are public.
+
+| Surface | Minimum role |
+|---------|--------------|
+| `billing/api/plans/` (plan catalog) | Public (no session) |
+| `billing/api/config/`, `billing/api/balance/`, `billing/api/transactions/`, `billing/api/purchase/checkout/`, `billing/api/subscription/`, `billing/api/subscription/checkout/`, `billing/api/subscription/cancel/`, `billing/api/portal/` | `owner` |
+| `billing/dashboard/` | `owner` |
+| `billing/pricing/`, `billing/purchase/success/`, `billing/purchase/cancel/`, `billing/subscription/success/`, `billing/subscription/cancel/`, `billing/portal/return/` | Public (no session) |
+| `billing/webhooks/stripe/` | Stripe signature (rule 26) |
+
 ### Credits-first domain contract
 
 - `Plan` stores QuickScale-owned display metadata plus the authoritative Stripe Price reference

@@ -38,7 +38,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
 | SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
 | SA267 | Bring `scripts/` under the quality thresholds without gating it | 2 | — | Optional |
-| SA262 | One JSON API contract: guards, 401, pagination, throttles, and DRF keys | 3 | — | Optional |
 | SA261 | One owner per URL prefix, and theme API bases from the seam | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -46,7 +45,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
 Track 2: SA253 ──► SA255 ──► SA260 ──► SA263 ──► SA267
-Track 3: SA262 ──► SA261
+Track 3: SA261
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
 ```
@@ -72,7 +71,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA253 | yes | yes | yes | **yes** | no |
-| 3 | SA262 | yes | yes | yes | **yes** | no |
+| 3 | SA261 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -416,45 +415,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** blog and listings URLs, `module_wiring`, the theme's API clients, decisions, the
   harness, and the coherence audit.
 
-- [ ] **SA262 — One JSON API contract: guards, 401, pagination, throttles, and DRF keys.**
-
-  **Progress:** the 401/session-auth half of proposal 7 landed: `quickscale_core.runtime` ships
-  `QuickscaleSessionAuthentication`, the generated settings install it as
-  `DEFAULT_AUTHENTICATION_CLASSES`, all six session APIs (billing, blog, CRM, forms, listings,
-  orgs) use it — CRM and forms answer 401 where they answered 403 — harness rule 9 rejects a
-  module-defined subclass and an `authentication_classes` value outside core's class and the
-  empty literal, and decision rule 9 carries the clause. Proposal 13's throttles and the
-  `collect_wiring` admission list landed next: `quickscale_core.runtime` ships
-  `QuickscaleScopedRateThrottle` (user-or-canonical-IP identity) as the default scoped throttle,
-  blog's and forms' module throttle classes are deleted in favor of `throttle_scope`, listings
-  gains its `api_rate_limit` option and `quickscale_listings_api` scope, orgs' invite API drops
-  its `throttle_classes` override, harness rule 32 closes `throttle_classes` to webhooks,
-  `collect_wiring` admits only `DEFAULT_THROTTLE_RATES` from a module, and decision rules 30 and
-  32 carry the clauses. `PlainListPagination` and the generated social views landed next: core
-  ships the one list paginator sized by each list's `<THING>_PER_PAGE` setting, billing gains
-  `transactions_per_page` (its literal 25 is gone) and `plans_per_page`, CRM's tags, companies,
-  stages, and notes lists gain their settings, forms' admin form list gains
-  `QUICKSCALE_FORMS_PER_PAGE`, the core-rendered social payload views are DRF views that answer
-  the one error shape without echoing exception text, harness rule 9 closes the paginator world,
-  and decision rule 9 carries the clause. Remaining: proposal 11's guards and README roles.
-
-  **Context:** coherence `tenant-authorization` (billing's `AllowAny` plus a hand-written check
-  and no README role table), `unauthenticated-status-code` (401 in four modules, 403 in two),
-  `http-api-shape` (list and body shapes; social's generated payload views are `JsonResponse`
-  functions that echo `str(exc)`, tech `social-payload-echoes-exception-text`),
-  `throttle-attachment` (two attachment styles; listings' publish API has no scope), and
-  enforcement gap 13 (any module may replace any `REST_FRAMEWORK` key).
-
-  **Acceptance:** coherence §6 proposals 7, 11, and 13 are merged and enforced: every view
-  declares its guard and every README lists minimum roles; unauthenticated calls answer 401
-  through core's one session authentication class; lists paginate through `PlainListPagination`
-  with a `<THING>_PER_PAGE` setting; throttles attach by `throttle_scope` only and every
-  vendor-calling or publishing write API has one; generated social payload views follow rule 9
-  and return no exception text; `collect_wiring` admits only `DEFAULT_THROTTLE_RATES` from
-  modules. The JSON API contract drops "the billing-module pattern".
-
-  **Surfaces:** module views and READMEs, core's DRF helpers, `social_manifest.py`'s rendered
-  views, `collect_wiring`, decisions, the harness, and the coherence audit.
+- [x] **SA262 — One JSON API contract: guards, 401, pagination, throttles, and DRF keys.**
 
 - [ ] **SA263 — Adapters validate, coerce, and default only through the manifest.**
 
