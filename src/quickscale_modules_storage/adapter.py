@@ -137,12 +137,44 @@ def _storage_post_hook(
     if backend in {"s3", "r2"}:
         settings.update(_cloud_storage_settings(resolved))
 
+    # Rule 41: storage owns the one shared Markdownx editor mount, so its
+    # global settings live here and no consumer module writes them.  The
+    # upload path is the vendor's neutral default and does not depend on
+    # which modules are installed.
+    settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
+        "markdown.extensions.fenced_code",
+        "markdown.extensions.tables",
+        "markdown.extensions.toc",
+    ]
+    settings["MARKDOWNX_MEDIA_PATH"] = "markdownx/"
+
+    if not bool(resolved["enabled"]):
+        # Rule 1 (D3): off keeps the module installed — app, migrations,
+        # admin, and settings — and mounts none of its public URLs.  The
+        # retained admin editors keep the shared staff-guarded Markdownx
+        # mount, which is storage's one URL include (rule 41).
+        editor_includes = tuple(
+            (prefix, target)
+            for prefix, target in spec.url_includes
+            if target == "quickscale_modules_storage.markdownx_urls"
+        )
+        return ModuleWiringSpec(
+            apps=spec.apps,
+            middleware=spec.middleware,
+            settings=settings,
+            pre_home_url_includes=(),
+            url_includes=editor_includes,
+            spa_routes=(),
+            managed_files=spec.managed_files,
+        )
+
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,
         settings=settings,
         pre_home_url_includes=spec.pre_home_url_includes,
         url_includes=spec.url_includes,
+        spa_routes=spec.spa_routes,
         managed_files=spec.managed_files,
     )
 
