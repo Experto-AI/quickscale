@@ -73,7 +73,7 @@ config:
       type: string
       default: "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
       django_setting: QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
-      description: "Environment-variable name containing the shared webhook signing secret."
+      description: "Environment-variable name containing the Resend Svix webhook signing secret."
       validation:
         pattern: '^(?:[A-Z][A-Z0-9_]*)?$'
 

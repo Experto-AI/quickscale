@@ -777,3 +777,166 @@ def test_webhook_pass_body_verification_control() -> None:
         "does not verify a signature" in violation
         for violation in _violations(checker.rule_26_webhooks, broken)
     )
+
+
+def test_webhook_candidate_loop_control() -> None:
+    """The vendor candidate loop is credited; masked loops are rejected."""
+    canonical = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    expected = 'expected'\n"
+        "    for candidate in signature.split(' '):\n"
+        "        version, _, encoded = candidate.partition(',')\n"
+        "        if version != 'v1':\n"
+        "            continue\n"
+        "        if hmac.compare_digest(\n"
+        "            encoded.strip().encode('utf-8'), expected.encode('utf-8')\n"
+        "        ):\n"
+        "            return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert _violations(checker.rule_26_webhooks, canonical) == []
+    bare = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    for candidate in signature.split():\n"
+        "        if hmac.compare_digest(candidate, 'expected'):\n"
+        "            return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert _violations(checker.rule_26_webhooks, bare) == []
+
+    constant_list = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    for candidate in ['v1,fixed']:\n"
+        "        if hmac.compare_digest(candidate, 'expected'):\n"
+        "            return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, constant_list)
+    )
+    foreign_source = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature, other):\n"
+        "    for candidate in other.split(' '):\n"
+        "        if hmac.compare_digest(candidate, 'expected'):\n"
+        "            return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, foreign_source)
+    )
+    constant_guard = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    for candidate in signature.split(' '):\n"
+        "        if hmac.compare_digest('fixed', 'expected'):\n"
+        "            return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, constant_guard)
+    )
+    no_rejection = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    for candidate in signature.split(' '):\n"
+        "        if hmac.compare_digest(candidate, 'expected'):\n"
+        "            return body\n"
+        "    return body\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, no_rejection)
+    )
+    masked_candidate = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    for candidate in signature.split(' '):\n"
+        "        candidate = 'fixed'\n"
+        "        if hmac.compare_digest(candidate, 'expected'):\n"
+        "            return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, masked_candidate)
+    )
+    self_compare = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    for candidate in signature.split(' '):\n"
+        "        if hmac.compare_digest(candidate, candidate):\n"
+        "            return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, self_compare)
+    )
+    or_mask = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    for candidate in signature.split(' '):\n"
+        "        if hmac.compare_digest(candidate, 'expected') or True:\n"
+        "            return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, or_mask)
+    )
+    inverted = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    for candidate in signature.split(' '):\n"
+        "        if not hmac.compare_digest(candidate, 'expected'):\n"
+        "            return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, inverted)
+    )
+    dead_branch = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    for candidate in signature.split(' '):\n"
+        "        if False:\n"
+        "            if hmac.compare_digest(candidate, 'expected'):\n"
+        "                return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, dead_branch)
+    )
+    else_return = _webhook_module(
+        "import hmac\n\n\n"
+        "def handle(*, body, signature):\n"
+        "    for candidate in signature.split(' '):\n"
+        "        if hmac.compare_digest(candidate, 'expected'):\n"
+        "            return body\n"
+        "        else:\n"
+        "            return body\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, else_return)
+    )
+    unsigned_loop = _webhook_module(
+        "def handle(*, body, signature):\n"
+        "    for candidate in signature.split(' '):\n"
+        "        body += candidate\n"
+        "    raise ValueError('bad signature')\n"
+    )
+    assert any(
+        "does not verify a signature" in violation
+        for violation in _violations(checker.rule_26_webhooks, unsigned_loop)
+    )

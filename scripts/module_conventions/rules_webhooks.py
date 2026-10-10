@@ -22,6 +22,14 @@ SIGNATURE_METHOD_DERIVATIONS = frozenset(
     {"casefold", "decode", "encode", "lower", "lstrip", "rstrip", "strip", "upper"}
 )
 
+# Rule 26: the split methods a vendor advertises one or more signatures with,
+# and the value-preserving methods a candidate passes through to reach its
+# comparison (Svix sends ``v1,<base64>`` entries in ``svix-signature``).
+CANDIDATE_SPLIT_METHODS = frozenset({"split", "rsplit"})
+CANDIDATE_SELECTION_METHODS = frozenset(
+    {"partition", "removeprefix", "removesuffix", "replace", "rsplit", "split"}
+)
+
 
 def rule_26_webhooks(corpus: Corpus) -> list[str]:
     violations: list[str] = []
@@ -490,7 +498,15 @@ def _verification_on_accepting_path(statements: list[ast.stmt], signature_names:
             if _may_return_any(statement.body) or _may_return_any(statement.orelse):
                 return False
             continue
-        if isinstance(statement, (ast.With, ast.AsyncWith, ast.For, ast.While, ast.Try, ast.Match)):
+        if isinstance(statement, ast.For):
+            if _signature_candidate_loop_verifies(statement, trusted) and (
+                pending and isinstance(pending[0], ast.Raise)
+            ):
+                return True
+            if _may_return_any([statement]):
+                return False
+            continue
+        if isinstance(statement, (ast.With, ast.AsyncWith, ast.While, ast.Try, ast.Match)):
             if _may_return_any([statement]):
                 return False
             continue
@@ -505,6 +521,116 @@ def _verification_on_accepting_path(statements: list[ast.stmt], signature_names:
                     trusted.discard(target.id)
             if _calls_construct_event(statement.value, trusted):
                 return True
+    return False
+
+
+def _signature_candidate_loop_verifies(statement: ast.For, trusted: set[str]) -> bool:
+    """
+    Return True when a loop scans signature candidates for a match.
+
+    Vendor signature headers advertise one or more candidates (Svix sends a
+    space-separated ``v1,<base64>`` list); the canonical verification loops
+    over ``signature.split(...)``, compares a candidate-derived value in
+    constant time, and returns only on a match.  Credit only loops that iterate
+    over the incoming signature, guard an accepting Return with a
+    ``compare_digest`` call on a candidate-derived value, and reach no other
+    Return; the caller requires the loop to reject afterwards with a raise.
+    """
+    if statement.orelse:
+        return False
+    target = statement.target
+    if not isinstance(target, ast.Name):
+        return False
+    iterable = statement.iter
+    if not (
+        isinstance(iterable, ast.Call)
+        and isinstance(iterable.func, ast.Attribute)
+        and iterable.func.attr in CANDIDATE_SPLIT_METHODS
+        and _evaluated_signature_value(iterable.func.value, trusted)
+    ):
+        return False
+    derived = {target.id}
+    guard = False
+    for inner in statement.body:
+        if isinstance(inner, ast.If) and _candidate_guard_returns(inner, derived):
+            guard = True
+            continue
+        if _may_return_any([inner]):
+            return False
+        _update_candidate_derivation(inner, derived)
+    return guard
+
+
+def _candidate_guard_returns(statement: ast.If, derived: set[str]) -> bool:
+    """Return True when *statement* accepts only on a candidate comparison."""
+    calls = _and_evaluated_compares(statement.test)
+    if not any(_distinct_arguments(call) and _consumes_names(call, derived) for call in calls):
+        return False
+    if _may_return_any(statement.orelse):
+        return False
+    return any(_may_return_any([inner]) for inner in statement.body)
+
+
+def _and_evaluated_compares(node: ast.expr) -> list[ast.Call]:
+    """
+    Return ``compare_digest`` calls the accepting path must pass through.
+
+    Only a bare call or a chain of ``and`` operands guarantees the call was
+    evaluated and held: an ``or`` or a conditional expression can reach the
+    guarded body without evaluating it.
+    """
+    if isinstance(node, ast.Call) and _call_func_name(node) == "compare_digest":
+        return [node]
+    if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
+        calls: list[ast.Call] = []
+        for operand in node.values:
+            calls.extend(_and_evaluated_compares(operand))
+        return calls
+    return []
+
+
+def _update_candidate_derivation(statement: ast.stmt, derived: set[str]) -> None:
+    """Track which loop-local names still derive from the looped candidate."""
+    if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
+        names = _single_target_names(statement.targets[0])
+        if names is not None:
+            if _candidate_value(statement.value, derived):
+                derived.update(names)
+            else:
+                derived.difference_update(names)
+            return
+    derived.difference_update(_overwritten_names([statement]))
+
+
+def _single_target_names(target: ast.expr) -> set[str] | None:
+    """Return the names a simple assignment target binds, else None."""
+    if isinstance(target, ast.Name):
+        return {target.id}
+    if isinstance(target, (ast.Tuple, ast.List)):
+        names: set[str] = set()
+        for element in target.elts:
+            if not isinstance(element, ast.Name):
+                return None
+            names.add(element.id)
+        return names
+    return None
+
+
+def _candidate_value(node: ast.expr, derived: set[str]) -> bool:
+    """Return True when *node* derives from the looped candidate values."""
+    if _evaluated_signature_value(node, derived):
+        return True
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in CANDIDATE_SELECTION_METHODS
+        and _candidate_value(node.func.value, derived)
+    ):
+        return True
+    if isinstance(node, ast.Subscript):
+        return _candidate_value(node.value, derived)
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return bool(node.elts) and all(_candidate_value(element, derived) for element in node.elts)
     return False
 
 

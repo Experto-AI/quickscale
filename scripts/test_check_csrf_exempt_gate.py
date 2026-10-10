@@ -750,8 +750,9 @@ class TestCsrfExemptVisitorClassLevel:
             "    def post(self, request):\n"
             "        result = ingest_webhook_event(\n"
             "            body=request.body,\n"
-            "            signature='',\n"
-            "            timestamp='',\n"
+            "            svix_id='',\n"
+            "            svix_timestamp='',\n"
+            "            svix_signature='',\n"
             "        )\n"
             "        return JsonResponse({'status': 'accepted'})\n"
         )
