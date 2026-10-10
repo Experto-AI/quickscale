@@ -34,7 +34,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA251 | Make Stripe checkout and payment outcomes complete and recoverable | 2 | — | Required |
-| SA256 | Fix `deploy railway` environment writes and DR media streaming | 2 | — | Optional |
 | SA253 | Make the generated project's CI, image, and healthcheck pass, and execute them in a gate | 2 | — | Optional |
 | SA255 | Accept Resend's real webhook signature in notifications | 2 | — | Optional |
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
@@ -47,7 +46,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
-Track 2: SA256 ──► SA251 ──► SA253 ──► SA255 ──► SA260 ──► SA263 ──► SA267
+Track 2: SA251 ──► SA253 ──► SA255 ──► SA260 ──► SA263 ──► SA267
 Track 3: SA262 ──► SA261
      release path:  SA251 → publish 0.89.0
      critical path: SA191 → SA204 → SA153
@@ -74,7 +73,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA256 | yes | yes | yes | **yes** | no |
+| 2 | SA251 | yes | yes | yes | **yes** | no |
 | 3 | SA262 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -369,21 +368,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** notifications `views.py`, `_webhooks.py`, their tests, the README, and the tech
   audit.
 
-- [ ] **SA256 — Fix `deploy railway` environment writes and DR media streaming.**
-
-  **Context:** `deploy railway` overwrites `DJANGO_SETTINGS_MODULE` with a value derived from the
-  service name (tech audit `deploy-settings-module-from-service-name`, S3) and embeds a reused
-  runtime password unquoted in a URL (`deploy-runtime-url-unquoted-password`, S4); both are in
-  `_deploy_service_config.py`. DR media sync reads whole objects into memory
-  (`dr-media-sync-whole-object-read`, S4).
-
-  **Acceptance:** deploy writes the project's settings module from project state and leaves an
-  existing value alone, and percent-encodes credentials in every URL it builds, with a test using
-  a password containing `@:/%#`. Media sync streams objects in bounded chunks.
-
-  **Surfaces:** `commands/_deploy_service_config.py`, `dr_engine/_media.py`, their tests, and the
-  tech audit.
-
+- [x] **SA256 — Fix `deploy railway` environment writes and DR media streaming.**
 
 - [ ] **SA260 — One off switch and a closed-world manifest surface.**
 

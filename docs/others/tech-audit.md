@@ -255,11 +255,6 @@ items:
      anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/views.py,
                quickscale_modules/notifications/src/quickscale_modules_notifications/_webhooks.py],
      depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: deploy-settings-module-from-service-name, status: open, severity: S3, category: VI,
-     title: "deploy railway overwrites DJANGO_SETTINGS_MODULE with one derived from the service name",
-     effort: Trivial, confidence: High, reality: cli,
-     anchors: [quickscale_cli/src/quickscale_cli/commands/_deploy_service_config.py],
-     depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: generated-ci-mutable-action-tags, status: open, severity: S3, category: VII,
      title: "Generated CI uses mutable third-party action tags and no permissions block",
      effort: Small, confidence: High, reality: generated-app,
@@ -282,14 +277,6 @@ items:
   - {id: forms-notification-status-misreported, status: open, severity: S4, category: VI,
      effort: Trivial, confidence: High, reality: generated-app,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/_email.py],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: deploy-runtime-url-unquoted-password, status: open, severity: S4, category: IX,
-     effort: Trivial, confidence: High, reality: cli,
-     anchors: [quickscale_cli/src/quickscale_cli/commands/_deploy_service_config.py],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: dr-media-sync-whole-object-read, status: open, severity: S4, category: IV,
-     effort: Trivial, confidence: High, reality: cli,
-     anchors: [quickscale_core/src/quickscale_core/dr_engine/_media.py],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: dr-restore-vintage-exact-match, status: watchlist, category: I, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/recovery.py],
@@ -320,21 +307,18 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 1 · S3 — 4 · S4 — 6 · total 11 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 1 · S3 — 3 · S4 — 4 · total 8 open. Watchlist: 7.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
 | `billing-checkout-relative-redirect-urls` | S2 | I | Checkout/portal sessions get relative return URLs that Stripe rejects | Trivial | High | new — **quick win** |
 | `generated-ci-fails-out-of-box` | S3 | X | Generated CI workflow cannot pass on a fresh project | Small | High | new |
 | `notifications-webhook-rejects-resend` | S3 | IX | Webhook accepts only a signing contract Resend never sends | Medium | High | new |
-| `deploy-settings-module-from-service-name` | S3 | VI | Deploy overwrites `DJANGO_SETTINGS_MODULE` from the service name | Trivial | High | new — **quick win** |
 | `generated-ci-mutable-action-tags` | S3 | VII | Generated CI on mutable action tags, no `permissions:` | Small | High | new |
 | `docker-healthcheck-always-unhealthy` | S4 | VI | Image `HEALTHCHECK` gets 400 under production settings | Trivial | High | new |
 | `frontend-image-floating-deps` | S4 | VII | Production image resolves npm deps unpinned when no lockfile | Small | High | new |
 | `social-payload-echoes-exception-text` | S4 | VI | Public social payload returns `str(exc)` | Trivial | High | new |
 | `forms-notification-status-misreported` | S4 | VI | Submission reports `queued` when notifications are disabled | Trivial | High | new |
-| `deploy-runtime-url-unquoted-password` | S4 | IX | Reused runtime password embedded unquoted in a URL | Trivial | High | new |
-| `dr-media-sync-whole-object-read` | S4 | IV | Media sync reads whole objects into memory | Trivial | High | new |
 
 ---
 
@@ -455,18 +439,6 @@ items:
   - **Effort:** Medium. **Confidence:** High (vendor contract confirmed, §1).
   - **Age:** since `1a143fce` (v0.78.0).
 
-- **`deploy-settings-module-from-service-name`** · S3 (High × Rare: a non-default name) · R1→R2 ·
-  `quickscale_cli/commands/_deploy_service_config.py:86-94`; `deployment_commands.py:114-116`.
-  - **Defect:** Every `quickscale deploy railway` sets
-    `DJANGO_SETTINGS_MODULE = <service name with '-'→'_'>.settings.production`. The service name is
-    `--project-name` or the current directory's name. When the project's package differs
-    (`quickscale plan <slug> --package <pkg>`, a renamed or cloned directory, or any
-    `--project-name`), the deployed container cannot import its settings and fails to boot.
-  - **Persistence:** a manual correction is overwritten on the next deploy.
-  - **Fix:** Use `state.project.package` (the state is already loaded at
-    `deployment_commands.py:100`), or stop setting the variable and rely on the image's `ENV`.
-  - **Effort:** Trivial. **Confidence:** High.
-
 - **`generated-ci-mutable-action-tags`** · S3 (Critical × Unlikely: needs an upstream action
   compromise) · R2 · `ci.yml.j2:42,45,76,83,108,134,137,142,151`.
   - **Defect:** The generated workflow uses `actions/checkout@v6`, `snok/install-poetry@v1`,
@@ -498,13 +470,6 @@ items:
 - `forms-notification-status-misreported` · `forms/_email.py:44-53` · When notifications are
   disabled, the submit response reports `"queued"` while logging "skipped". · Return a distinct
   `"disabled"` status.
-- `deploy-runtime-url-unquoted-password` · `_deploy_service_config.py:22-33`, `:62-68` · A reused,
-  operator-set `RUNTIME_DB_PASSWORD` containing `@ : / #` is embedded raw into
-  `RUNTIME_DATABASE_URL`, which breaks the URL. Generated passwords are hex and safe. · Quote with
-  `urllib.parse.quote(password, safe="")`.
-- `dr-media-sync-whole-object-read` · `dr_engine/_media.py:139-141` · An s3→local media copy reads
-  each object fully into memory, so large videos exhaust the operator process. · Stream with
-  `shutil.copyfileobj` or `download_fileobj`.
 
 ---
 
@@ -536,7 +501,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Management commands (purge/prune/anonymize/restore) | shell | reserved-org guards | args | n/a | n/a | n/a | `--dry-run` on all destructive commands | `CommandError` | tombstones/logs |
 | Generated CI workflow | n/a | `permissions:` missing: `generated-ci-mutable-action-tags` | n/a | n/a | n/a | n/a | n/a | fails: `generated-ci-fails-out-of-box` | n/a |
 | Image / launcher | n/a | runtime role NOSUPERUSER/NOBYPASSRLS + boot guard | n/a | n/a | n/a | gunicorn 60 s, 1 worker (watch) | migrate per boot (watch) | `HEALTHCHECK`: `docker-healthcheck-always-unhealthy` | stdout |
-| Deploy (`deploy railway`) | Railway CLI auth | n/a | n/a | secrets via stdin, never argv | n/a | per-call timeouts | reuses secrets | settings module: `deploy-settings-module-from-service-name` | summary masks secrets |
+| Deploy (`deploy railway`) | Railway CLI auth | n/a | n/a | secrets via stdin, never argv | n/a | per-call timeouts | reuses secrets | settings module from project state or left alone | summary masks secrets |
 | Outbound clients (Stripe, Resend, PostHog) | API keys from settings (rule 35) | n/a | n/a | n/a | n/a | SDK defaults (watch); PostHog async | Stripe idempotency keys | mapped errors | n/a |
 | Release pipeline (`publish.yml`) | OIDC trusted publishing | environment-gated jobs | tag = `VERSION` check | n/a | n/a | n/a | `skip-existing` on TestPyPI | job failure | GitHub release |
 
@@ -565,8 +530,8 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
    organization) scopes with a per-organization pending cap, and management pages resolve their
    organization from the route slug.
 5. **`notifications-webhook-rejects-resend`.** Independent.
-6. **CLI deploy:** `deploy-settings-module-from-service-name` with
-   `deploy-runtime-url-unquoted-password` (same file).
+6. **CLI deploy (landed).** `deploy-settings-module-from-service-name` and
+   `deploy-runtime-url-unquoted-password` were fixed together in `_deploy_service_config.py`.
 7. The remaining S4s, opportunistically.
 
 ---
@@ -588,8 +553,8 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | storage | clean | Manifest defaults only. |
 | backups | clean; one watch item | Admin restore and dispatch (sampled). |
 | core runtime / generator | generator-output batch above | Settings facade clean. Identifier validation clean (empirical generation). |
-| CLI | `deploy-settings-module-from-service-name`, `deploy-runtime-url-unquoted-password` | Deploy flow (full); remove, push, dependency write (sampled). |
-| DR engine | `dr-media-sync-whole-object-read` | Primitives and media (sampled). |
+| CLI | clean. Deploy writes the settings module from project state, leaves an existing value alone, and percent-encodes runtime credentials. | Deploy flow (full); remove, push, dependency write (sampled). |
+| DR engine | clean. Media sync streams objects in bounded chunks. | Primitives and media (sampled). |
 | Release pipeline | clean | `publish.yml` (full); SHA pins, OIDC, build job without restored caches. |
 | devtools, `scripts/` gates | not swept | — |
 
@@ -956,3 +921,13 @@ Added:
   back to `request.org`, so a management page under VIEW-AS acts on the organization its URL
   names; a regression test edits `/orgs/<B>/settings/` under a VIEW-AS session for A and proves B
   changes and A does not. Dropped from the index and summary.
+- 2026-10-10 — `deploy-settings-module-from-service-name`, `deploy-runtime-url-unquoted-password`,
+  `dr-media-sync-whole-object-read`: **resolved** (SA256). Deploy writes `DJANGO_SETTINGS_MODULE`
+  from the project's `state.project.package` and leaves an existing service value alone, so a
+  non-default or manually corrected package boots; `RUNTIME_DATABASE_URL` percent-encodes the
+  password (covered with `@:/%#`); and both s3-compatible media directions stream through the
+  provider clients' chunked transfers — s3→local through `download_fileobj` into an exclusively
+  created sibling file that replaces the destination only on success, preserving the destination's
+  mode, and s3→s3 through a memory-bounded relay spool of at most 64 MiB instead of the storage
+  API, whose `open()` spools whole objects in memory (`AWS_S3_MAX_MEMORY_SIZE` defaults to
+  unbounded). Dropped from the index and summary.

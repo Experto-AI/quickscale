@@ -172,6 +172,7 @@ def railway(
         domain_name,
         postgres_service,
         existing_vars,
+        settings_package=state.project.package if state is not None else None,
     )
 
     # Step 10: Deploy to app service

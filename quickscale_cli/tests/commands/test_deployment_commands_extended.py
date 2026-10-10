@@ -640,7 +640,7 @@ class TestRemainingHelpers:
     @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
     @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
     def test_configure_env_vars_hyphenated_service_name(self, mock_secret, mock_batch):
-        """Hyphenated service names should map to valid Python settings module."""
+        """Without project state, a hyphenated service name is the last resort."""
         mock_secret.return_value = "secret-key"
         mock_batch.return_value = (True, [])
 
@@ -649,6 +649,68 @@ class TestRemainingHelpers:
         batch_vars = mock_batch.call_args[0][0]
         assert batch_vars["DJANGO_SETTINGS_MODULE"] == "bap_web.settings.production"
         assert mock_batch.call_args[1]["service"] == "bap-web"
+
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
+    def test_configure_env_vars_prefers_state_package_over_service_name(
+        self, mock_secret, mock_batch
+    ):
+        """The settings module comes from project state, not the service name."""
+        mock_secret.return_value = "secret-key"
+        mock_batch.return_value = (True, [])
+
+        _configure_env_vars_step(
+            "bap-web",
+            None,
+            existing_vars={},
+            settings_package="bap_web_next",
+        )
+
+        batch_vars = mock_batch.call_args[0][0]
+        assert (
+            batch_vars["DJANGO_SETTINGS_MODULE"] == "bap_web_next.settings.production"
+        )
+
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
+    def test_configure_env_vars_preserves_existing_settings_module(
+        self, mock_secret, mock_batch
+    ):
+        """A manually corrected settings module is never overwritten."""
+        mock_secret.return_value = "secret-key"
+        mock_batch.return_value = (True, [])
+
+        _configure_env_vars_step(
+            "myapp",
+            None,
+            existing_vars={"DJANGO_SETTINGS_MODULE": "custom.settings.production"},
+            settings_package="myapp",
+        )
+
+        batch_vars = mock_batch.call_args[0][0]
+        assert batch_vars["DJANGO_SETTINGS_MODULE"] == "custom.settings.production"
+
+    @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
+    @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")
+    def test_configure_env_vars_percent_encodes_runtime_password(
+        self, mock_secret, mock_batch
+    ):
+        """An operator password with URL metacharacters keeps the URL valid."""
+        mock_secret.return_value = "secret-key"
+        mock_batch.return_value = (True, [])
+
+        _configure_env_vars_step(
+            "myapp",
+            None,
+            "Postgres",
+            {"RUNTIME_DB_PASSWORD": "p@ss:/w%rd#"},
+        )
+
+        batch_vars = mock_batch.call_args[0][0]
+        assert batch_vars["RUNTIME_DB_PASSWORD"] == "p@ss:/w%rd#"
+        url = batch_vars["RUNTIME_DATABASE_URL"]
+        assert f"postgresql://{RUNTIME_DB_ROLE}:p%40ss%3A%2Fw%25rd%23@" in url
+        assert "p@ss" not in url
 
     @patch("quickscale_cli.utils._railway_cli.set_railway_variables_batch")
     @patch("quickscale_cli.utils._railway_project.generate_django_secret_key")

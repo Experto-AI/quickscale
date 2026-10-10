@@ -12,8 +12,15 @@ import quickscale_core.dr_engine._sidecar as _sidecar
 import quickscale_core.dr_engine.primitives as _primitives
 import django.conf as _conf
 import quickscale_core.dr_engine._metadata as _metadata
+import os
 import shutil
+import tempfile
 import quickscale_core.dr_engine._types as _types
+
+
+# At most this many bytes of one relayed object stay in memory during an
+# s3-to-s3 copy; larger objects roll to an on-disk temporary file.
+_MEDIA_RELAY_SPOOL_MAX_BYTES = 64 * 1024 * 1024
 
 
 def _build_s3_storage_from_selection(selection: Any) -> Any:
@@ -137,14 +144,55 @@ def _copy_media_item(
     if not target_runtime["use_s3_compatible"]:
         target_path = Path(target_runtime["media_root"]) / relative_path
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        with source_storage.open(relative_path, mode="rb") as source_handle:
-            target_path.write_bytes(source_handle.read())
+        # The storage API's ``open()`` spools each whole object in memory
+        # (``AWS_S3_MAX_MEMORY_SIZE`` defaults to unbounded), so stream
+        # through the provider client's chunked download instead, into an
+        # exclusively created sibling file that replaces the destination
+        # only on success.
+        download_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=target_path.parent,
+                prefix=f".{target_path.name}.",
+                suffix=".part",
+                delete=False,
+            ) as download_handle:
+                download_path = Path(download_handle.name)
+                source_storage.connection.meta.client.download_fileobj(
+                    source_runtime["bucket_name"],
+                    _storage_object_key(source_storage, relative_path),
+                    download_handle,
+                )
+        except Exception:
+            if download_path is not None:
+                download_path.unlink(missing_ok=True)
+            raise
+        # The staging file was created private; publish it with the mode the
+        # destination had, or the umask default a plain create would get.
+        if target_path.exists():
+            shutil.copymode(target_path, download_path)
+        else:
+            current_umask = os.umask(0)
+            os.umask(current_umask)
+            os.chmod(download_path, 0o666 & ~current_umask)
+        download_path.replace(target_path)
         return True
 
     target_storage = target_runtime["storage"]
-    with source_storage.open(relative_path, mode="rb") as source_handle:
+    # S3Storage.open() spools whole objects in memory, so relay through the
+    # provider clients via a memory-bounded spool instead of the storage API.
+    with tempfile.SpooledTemporaryFile(
+        max_size=_MEDIA_RELAY_SPOOL_MAX_BYTES
+    ) as staging:
+        source_storage.connection.meta.client.download_fileobj(
+            source_runtime["bucket_name"],
+            _storage_object_key(source_storage, relative_path),
+            staging,
+        )
+        staging.seek(0)
         target_storage.connection.meta.client.upload_fileobj(
-            source_handle,
+            staging,
             target_runtime["bucket_name"],
             _storage_object_key(target_storage, relative_path),
         )
