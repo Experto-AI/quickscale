@@ -98,6 +98,7 @@ config:
 dependencies:
   - django-storages>=1.14.6
   - boto3>=1.43.58
+  - django-markdownx>=4.0.11
   - Pillow>=12.3.0,<13.0.0
 
 # Retired option keys are refused by name with the message declared here.
@@ -120,6 +121,13 @@ derivation:
         value:
           - quickscale_modules_storage
       description: "Storage Django app label"
+    - wiring_field: url_includes
+      derivation_type: static
+      expression:
+        value:
+          - - markdownx/
+            - quickscale_modules_storage.markdownx_urls
+      description: "The one shared staff-guarded Markdownx editor mount (rule 41)"
 
   option_derivations:
     backend:

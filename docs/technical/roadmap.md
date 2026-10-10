@@ -38,14 +38,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
 | SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
 | SA267 | Bring `scripts/` under the quality thresholds without gating it | 2 | — | Optional |
-| SA261 | One owner per URL prefix, and theme API bases from the seam | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
 Track 2: SA253 ──► SA255 ──► SA260 ──► SA263 ──► SA267
-Track 3: SA261
+Track 3: —
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
 ```
@@ -71,7 +70,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA253 | yes | yes | yes | **yes** | no |
-| 3 | SA261 | yes | yes | yes | **yes** | no |
+| 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -400,22 +399,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** the five diverging adapters, `manifest` loader, `env_sync`, module manifests and
   `pyproject.toml`s, the checklist, decisions, the harness, and the coherence audit.
 
-- [ ] **SA261 — One owner per URL prefix, and theme API bases from the seam.**
-
-  **Context:** blog and listings both mount `markdownx/`, so listings' editor uploads land under
-  `blog/markdownx/` (coherence `markdownx-shared-mount`, collision); the theme writes module API
-  paths as literals in four of five API clients (`mount-path-copies`); and the two
-  `markdownx_urls.py` files differ only in the module name (arch audit §14).
-
-  **Acceptance:** coherence §6 proposal 16 is merged and enforced: a shared third-party URLconf is
-  mounted once by the lowest-layer module that needs it, `collect_wiring` fails on two modules
-  mounting one prefix, the runtime seam carries module API bases, and the harness rejects a
-  `/<mount>/api` literal in the theme's TypeScript.
-
-  **Surfaces:** blog and listings URLs, `module_wiring`, the theme's API clients, decisions, the
-  harness, and the coherence audit.
-
-- [x] **SA262 — One JSON API contract: guards, 401, pagination, throttles, and DRF keys.**
+- [x] **SA261 — One owner per URL prefix, and theme API bases from the seam.**
 
 - [ ] **SA263 — Adapters validate, coerce, and default only through the manifest.**
 

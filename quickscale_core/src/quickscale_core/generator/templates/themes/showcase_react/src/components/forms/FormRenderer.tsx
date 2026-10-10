@@ -11,6 +11,7 @@ import { FormFieldRenderer } from '@/components/forms/FormFieldRenderer'
 import { FormSuccess } from '@/components/forms/FormSuccess'
 import { ApiError, apiRequest, getApiFieldErrors, getApiPayloadMessage } from '@/hooks/useApi'
 import { useFormSchema } from '@/hooks/useFormSchema'
+import { useProjectConfig } from '@/hooks/useModules'
 import type { FormFieldSchema } from '@/hooks/useFormSchema'
 
 interface FormRendererProps {
@@ -77,16 +78,16 @@ function buildDefaultValues(fields: FormFieldSchema[]): FormValues {
   return defaults
 }
 
-function normalizeApiBasePath(apiBasePath?: string): string {
-  const basePath = apiBasePath ?? '/forms/api/'
-  return basePath.endsWith('/') ? basePath : `${basePath}/`
+function normalizeApiBasePath(apiBasePath: string): string {
+  return apiBasePath.endsWith('/') ? apiBasePath : `${apiBasePath}/`
 }
 
 export function FormRenderer({ slug, apiBasePath }: FormRendererProps) {
-  const { data: schema, isLoading, isError, error } = useFormSchema(slug, apiBasePath)
+  const { moduleApiPaths } = useProjectConfig()
+  const formsApiBasePath = normalizeApiBasePath(apiBasePath ?? moduleApiPaths.forms)
+  const { data: schema, isLoading, isError, error } = useFormSchema(slug, formsApiBasePath)
   const [submitted, setSubmitted] = useState(false)
   const [globalError, setGlobalError] = useState<string | null>(null)
-  const formsApiBasePath = normalizeApiBasePath(apiBasePath)
 
   const zodSchema = useMemo(() => (schema ? buildZodSchema(schema.fields) : z.object({})), [schema])
 

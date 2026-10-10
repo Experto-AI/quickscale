@@ -5,9 +5,11 @@ pages report modules from the shipped module inventory, so the seam carries a
 key for every shipped module — ``true`` only while the module is installed and
 its ``QUICKSCALE_<MODULE>_ENABLED`` setting is on — and a ``modulePaths`` entry
 per path-bearing module whose named route resolves at request time, never a
-mount literal.
+mount literal.  Rule 41: the seam carries each API-bearing module's base in
+``moduleApiPaths`` the same way, cut at rule 7's ``<mount>api/`` boundary, so
+the theme's API clients never write ``/<mount>/api`` themselves.
 
-This module owns the seam's inventory, its route table, and resolution.  The
+This module owns the seam's inventory, its route tables, and resolution.  The
 ``quickscale_seam`` template-tag library that renders the resolved values into
 the templates lives in :mod:`quickscale_core.runtime.seam_tags`; the generated
 project's ``settings/base.py`` registers that library through the template
@@ -31,8 +33,11 @@ from quickscale_core.contracts.module_catalog import MODULE_CATALOG
 __all__ = [
     "SeamModule",
     "SeamRoute",
+    "render_module_api_paths",
     "render_module_flags",
     "render_module_paths",
+    "seam_api_path_names",
+    "seam_module_api_paths",
     "seam_module_flags",
     "seam_module_paths",
     "seam_modules",
@@ -154,11 +159,78 @@ def seam_module_paths(
     }
 
 
+#: The theme's API-base table (rule 41): module name -> the named route of one
+#: endpoint inside the module's ``<mount>api/`` subtree (rule 7).  The base the
+#: theme receives is the reversed path cut at that ``api/`` boundary, so no
+#: theme file writes ``/<mount>/api`` itself.  These names are the theme's own
+#: module surface, which rule 37 lists as its allowed literal-name exception;
+#: the mount a module actually uses stays in its manifest (rule 7).
+_SEAM_MODULE_API_PATHS: tuple[tuple[str, str], ...] = (
+    ("orgs", "quickscale_orgs:api_list_create"),
+    ("billing", "quickscale_billing:subscription_plans"),
+    ("crm", "quickscale_crm:api_root"),
+    ("forms", "quickscale_forms:admin_form_list"),
+)
+
+#: Rule 7's API boundary inside a module's mount.
+_API_BOUNDARY = "/api/"
+
+
+def seam_api_path_names() -> tuple[str, ...]:
+    """Return the API-bearing module surfaces, in route-table order."""
+    return tuple(name for name, _route in _SEAM_MODULE_API_PATHS)
+
+
+def _api_base_from_path(path: str, module: str) -> str:
+    """Cut a module's reversed API route at rule 7's ``/api/`` boundary."""
+    boundary = path.find(_API_BOUNDARY)
+    if boundary == -1:
+        raise ValueError(
+            f"Seam API path for module '{module}' has no '/api/' boundary: {path!r}. "
+            "A module's API lives at '<mount>api/' (rule 7)."
+        )
+    return path[: boundary + len(_API_BOUNDARY)]
+
+
+def seam_module_api_paths(
+    settings_obj: Any,
+    reverse_func: Callable[[str], str],
+) -> dict[str, str]:
+    """Resolve ``window.__QUICKSCALE__.moduleApiPaths`` against *settings_obj*.
+
+    A base resolves its module's named route only while the module is
+    installed and enabled; otherwise it resolves the project's always-present
+    ``home`` route, because the seam validator requires a non-empty string for
+    every path field even when the module is absent.
+    """
+    installed_apps = getattr(settings_obj, "INSTALLED_APPS", ())
+    resolved: dict[str, str] = {}
+    for module, route in _SEAM_MODULE_API_PATHS:
+        installed = f"quickscale_modules_{module}" in installed_apps
+        enabled = bool(
+            getattr(settings_obj, f"QUICKSCALE_{module.upper()}_ENABLED", False)
+        )
+        if installed and enabled:
+            resolved[module] = _api_base_from_path(reverse_func(route), module)
+        else:
+            resolved[module] = reverse_func("home")
+    return resolved
+
+
 def render_module_flags(flags: Mapping[str, bool], indent: str = "          ") -> str:
     """Render the ``modules`` object's JS body: one flag per shipped module."""
     return "\n".join(
         f"{indent}{name}: {'true' if enabled else 'false'},"
         for name, enabled in flags.items()
+    )
+
+
+def _render_path_object(paths: Mapping[str, str], indent: str) -> str:
+    """Render a paths object's JS body: quoted entries, last without a comma."""
+    entries = list(paths.items())
+    return "\n".join(
+        f'{indent}{name}: "{path}"{"," if index < len(entries) - 1 else ""}'
+        for index, (name, path) in enumerate(entries)
     )
 
 
@@ -168,8 +240,11 @@ def render_module_paths(paths: Mapping[str, str], indent: str = "          ") ->
     Every entry is a quoted, reversed path; the last line carries no trailing
     comma, so the object body is valid inside the surrounding braces.
     """
-    entries = list(paths.items())
-    return "\n".join(
-        f'{indent}{name}: "{path}"{"," if index < len(entries) - 1 else ""}'
-        for index, (name, path) in enumerate(entries)
-    )
+    return _render_path_object(paths, indent)
+
+
+def render_module_api_paths(
+    paths: Mapping[str, str], indent: str = "          "
+) -> str:
+    """Render the ``moduleApiPaths`` object's JS body (rule 41)."""
+    return _render_path_object(paths, indent)

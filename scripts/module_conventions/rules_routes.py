@@ -14,6 +14,7 @@ from scripts.module_conventions.core import (
     Module,
     _call_func_name,
     _declared_mounts,
+    _declared_url_mounts,
     _docstring_nodes,
     _keyword,
     _literal,
@@ -218,6 +219,8 @@ def rule_7_urls(corpus: Corpus) -> list[str]:
         if root_view_name is not None:
             violations.extend(_route_name_violations(module.name, root_view_name, "api root"))
     violations.extend(_template_mount_literal_violations(corpus))
+    violations.extend(_url_prefix_collision_violations(corpus))
+    violations.extend(_theme_api_literal_violations(corpus))
     return violations
 
 
@@ -261,6 +264,80 @@ def _template_mount_literal_violations(corpus: Corpus) -> list[str]:
                     violations.append(
                         f"rule 7: core {rel}: module '{module_name}' mount "
                         f"'{mount}' is written as a literal"
+                    )
+    return violations
+
+
+def _url_prefix_collision_violations(corpus: Corpus) -> list[str]:
+    """
+    Rule 41 over the manifests: a URL prefix belongs to one module.
+
+    The pre-home and post-home buckets render into one URLconf, so the owner
+    registry spans both.  One module may chain several targets under one
+    prefix (auth composes ``accounts/`` that way) and the identical
+    ``(prefix, target)`` pair from two modules is the equal-contribution merge
+    rule 30 sanctions; a second *module* claiming a prefix with a different
+    target fails here and in ``apply`` itself (``collect_url_wiring``).
+    """
+    owners: dict[str, tuple[str, str]] = {}
+    violations: list[str] = []
+    for module in corpus.modules:
+        for field in ("pre_home_url_includes", "url_includes"):
+            for entry in _wiring_projection(module.manifest, field):
+                if not (
+                    isinstance(entry, (list, tuple))
+                    and len(entry) == 2
+                    and all(isinstance(part, str) for part in entry)
+                ):
+                    continue
+                prefix, target = entry
+                owner = owners.get(prefix)
+                if owner is None:
+                    owners[prefix] = (module.name, target)
+                elif owner[0] != module.name and owner[1] != target:
+                    violations.append(
+                        f"rule 7: modules '{owner[0]}' and '{module.name}' both mount URL "
+                        f"prefix '{prefix}' with different targets"
+                    )
+    return violations
+
+
+#: Rule 41's theme-API-literal scan root and its test-file exemption: the
+#: theme's own Vitest files build fetch targets by hand.
+THEME_TS_ROOT = "generator/templates/themes/showcase_react/src/"
+THEME_TS_TEST_MARKER = "/test/"
+
+
+def _theme_api_literal_violations(corpus: Corpus) -> list[str]:
+    """
+    Rule 41 over the theme's TypeScript: module API bases come from the seam.
+
+    The theme reads every module API base from ``moduleApiPaths``, so any
+    quoted ``/<mount>/api`` in its TypeScript is the mount written by hand.
+    The trailing lookahead only stops a longer segment (``/orgs/apiary``)
+    from matching; a route-pattern or prose spelling of the mount counts just
+    the same.
+    """
+    violations: list[str] = []
+    for module in corpus.modules:
+        for mount in _declared_url_mounts(module):
+            if not mount:
+                continue
+            anchor = mount.rstrip("/")
+            pattern = re.compile(rf"""["'`]/{re.escape(anchor)}/api(?![A-Za-z0-9_.-])""")
+            for rel, text in corpus.core_files.items():
+                if not (
+                    rel.startswith(THEME_TS_ROOT)
+                    and rel.endswith((".ts", ".tsx"))
+                    and THEME_TS_TEST_MARKER not in rel
+                ):
+                    continue
+                for match in pattern.finditer(text):
+                    line = text.count("\n", 0, match.start()) + 1
+                    violations.append(
+                        f"rule 7: core {rel}:{line}: module '{module.name}' API path "
+                        f"{match.group(0)[1:]!r} is written as a literal; the theme reads "
+                        "moduleApiPaths from the seam"
                     )
     return violations
 
@@ -1575,11 +1652,11 @@ def rule_31_theme_seam(corpus: Corpus) -> list[str]:
 
     The statically checkable clauses of the seam's producers, the theme's
     ``index.html.j2`` and its two public social pages: each loads the
-    ``quickscale_seam`` runtime tag library and renders the discovered flags
-    and paths through its tags instead of literal module lines or mount paths,
-    and the index template carries no ``INSTALLED_APPS`` test (the runtime
-    library holds it).  A loaded core tree without the template fails; an
-    empty synthetic corpus does not.
+    ``quickscale_seam`` runtime tag library and renders the discovered flags,
+    paths, and module API bases (rule 41) through its tags instead of literal
+    module lines or mount paths, and the index template carries no
+    ``INSTALLED_APPS`` test (the runtime library holds it).  A loaded core
+    tree without the template fails; an empty synthetic corpus does not.
     """
     violations: list[str] = []
     index_template = corpus.core_files.get(THEME_SEAM_TEMPLATE)
@@ -1591,7 +1668,11 @@ def rule_31_theme_seam(corpus: Corpus) -> list[str]:
         template = corpus.core_files.get(rel)
         if template is None:
             continue
-        for tag in ("{% seam_module_flags %}", "{% seam_module_paths %}"):
+        for tag in (
+            "{% seam_module_flags %}",
+            "{% seam_module_paths %}",
+            "{% seam_module_api_paths %}",
+        ):
             if tag not in template:
                 violations.append(f"rule 31: {rel} does not render {tag}")
         if SEAM_LIBRARY_LOAD.search(template) is None:

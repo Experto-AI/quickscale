@@ -109,8 +109,9 @@ quickscale apply
 captures the module options in `quickscale.yml`.
 
 A manual installation embeds the orgs baseline first (the models need `quickscale_orgs` and
-`TenantMiddleware`), then adds `rest_framework`, `django_filters`, and
-`quickscale_modules_listings` to `INSTALLED_APPS`, mounts the module URLs under `listings/`,
+`TenantMiddleware`), then adds `rest_framework`, `django_filters`, `markdownx`, storage (the
+required module that mounts the shared staff-guarded Markdownx editor endpoints at `markdownx/`),
+and `quickscale_modules_listings` to `INSTALLED_APPS`, mounts the module URLs under `listings/`,
 composes `REST_FRAMEWORK` through the runtime helper so the shared error handler, core's default
 throttle classes, and the proxy state are installed, and runs `python manage.py migrate`.
 Pass every module-contributed key — such as this module's

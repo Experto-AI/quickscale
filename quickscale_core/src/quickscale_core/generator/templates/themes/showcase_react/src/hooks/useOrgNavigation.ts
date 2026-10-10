@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useParams } from 'react-router-dom'
-import { buildOrgPath, useCurrentOrgSlug, useOwnerMode } from '@/hooks/useModules'
+import { buildOrgPath, useCurrentOrgSlug, useOwnerMode, useProjectConfig } from '@/hooks/useModules'
 
 function stripTrailingSlash(path: string): string {
   if (path !== '/' && path.endsWith('/')) {
@@ -27,6 +27,7 @@ export function useOrgNavigation() {
   const { orgSlug: routeOrgSlug } = useParams<{ orgSlug: string }>()
   const ownerMode = useOwnerMode()
   const fallbackOrgSlug = useCurrentOrgSlug()
+  const { moduleApiPaths } = useProjectConfig()
   const currentOrgSlug = routeOrgSlug ?? fallbackOrgSlug
   const isSaas = ownerMode === 'saas'
 
@@ -59,9 +60,9 @@ export function useOrgNavigation() {
           ? withTrailingSlash(joinPath(orgBasePath, 'listings'))
           : '/listings/',
         crmDashboard: '/crm/dashboard/',
-        crmApiBase: '/crm/api/',
-        formsApiBase: '/forms/api/',
+        crmApiBase: moduleApiPaths.crm,
+        formsApiBase: moduleApiPaths.forms,
       },
     }
-  }, [currentOrgSlug, isSaas])
+  }, [currentOrgSlug, isSaas, moduleApiPaths.crm, moduleApiPaths.forms])
 }

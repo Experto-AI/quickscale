@@ -134,10 +134,11 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
 }
 
-# Markdownx settings
+# Markdownx settings (the shared mount and its globals belong to storage,
+# rule 41; the value mirrors what storage's adapter writes)
 MARKDOWNX_MARKDOWN_EXTENSIONS = [
     "markdown.extensions.fenced_code",
     "markdown.extensions.tables",
     "markdown.extensions.toc",
 ]
-MARKDOWNX_MEDIA_PATH = "listings/markdownx/"
+MARKDOWNX_MEDIA_PATH = "markdownx/"

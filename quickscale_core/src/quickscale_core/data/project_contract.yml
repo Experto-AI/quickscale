@@ -250,3 +250,10 @@ steps:
     adoption_steps:
       - 'Compare and manually adopt the managed /social/embeds payload contract: a published embed whose stored resolution failed now carries the stable message "Embed metadata could not be resolved." in `resolution_error` instead of the stored resolver error text, and the raw message stays on the embed row and in the Django admin. Project code or fixtures that asserted the raw text switch to the marker or to `resolution_status`.'
       - 'Optionally copy the current frontend/src/test/PublicSocialPages.test.tsx embeds fixture and assertion to pin the marker behavior.'
+
+  - id: sa261-seam-module-api-paths
+    minimum: "0.89.0"
+    title: "Adopt the seam's module API bases and the one shared editor mount"
+    adoption_steps:
+      - 'Compare and manually adopt the current templates/index.html and templates/social/*.html together with frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/hooks/useModules.ts, and the API-calling hooks and components (useOrgs.ts, useOrgNavigation.ts, useFormSchema.ts, forms/FormRenderer.tsx): the seam now carries `moduleApiPaths`, each API-bearing module''s base resolved from its URL names at the `<mount>api/` boundary, and the validator requires the key, so a project that adopts only one side fails at page load. Rebuild the frontend (`pnpm build`) after adopting the theme sources.'
+      - 'Re-apply the project (`quickscale apply`) or manually adopt the one shared editor mount: storage mounts the staff-guarded `markdownx/` URLconf and writes `MARKDOWNX_MARKDOWN_EXTENSIONS` and `MARKDOWNX_MEDIA_PATH = "markdownx/"`, blog and listings no longer mount or configure the endpoints, and listings requires storage, so a listings installation selects it. New editor uploads land under `markdownx/`; files already stored keep their recorded paths. This supersedes the per-module Markdownx include and the `MARKDOWNX_MEDIA_PATH = "blog/markdownx/"` guidance in the older module READMEs.'

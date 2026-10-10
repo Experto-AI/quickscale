@@ -15,13 +15,18 @@ from typing import Any
 
 from quickscale_core.contracts.module_catalog import MODULE_CATALOG
 from quickscale_core.runtime.seam import (
+    render_module_api_paths,
     render_module_flags,
     render_module_paths,
+    seam_api_path_names,
+    seam_module_api_paths,
     seam_module_flags,
     seam_module_paths,
     seam_modules,
     seam_path_names,
 )
+
+import pytest
 
 
 def _settings(**attributes: Any) -> types.SimpleNamespace:
@@ -176,6 +181,88 @@ class TestSeamResolution:
         assert seam_module_paths(neither, neither_reverse)["social"] == "/social"
 
 
+class TestSeamApiBaseResolution:
+    """Rule 41: ``moduleApiPaths`` resolves each module's base at the API boundary."""
+
+    def test_api_path_names_are_the_api_surfaces(self) -> None:
+        assert seam_api_path_names() == ("orgs", "billing", "crm", "forms")
+
+    def test_api_bases_cut_at_the_mount_api_boundary(self) -> None:
+        settings_obj = _settings(
+            INSTALLED_APPS=[
+                "quickscale_modules_orgs",
+                "quickscale_modules_billing",
+                "quickscale_modules_crm",
+                "quickscale_modules_forms",
+            ],
+            QUICKSCALE_ORGS_ENABLED=True,
+            QUICKSCALE_BILLING_ENABLED=True,
+            QUICKSCALE_CRM_ENABLED=True,
+            QUICKSCALE_FORMS_ENABLED=True,
+        )
+        reverse = _RecordingReverse(
+            {
+                "quickscale_orgs:api_list_create": "/orgs/api/",
+                "quickscale_billing:subscription_plans": "/billing/api/plans/",
+                "quickscale_crm:api_root": "/crm/api/",
+                "quickscale_forms:admin_form_list": "/forms/api/admin/forms/",
+                "home": "/",
+            }
+        )
+
+        paths = seam_module_api_paths(settings_obj, reverse)
+
+        assert paths == {
+            "orgs": "/orgs/api/",
+            "billing": "/billing/api/",
+            "crm": "/crm/api/",
+            "forms": "/forms/api/",
+        }
+        assert reverse.calls == [
+            "quickscale_orgs:api_list_create",
+            "quickscale_billing:subscription_plans",
+            "quickscale_crm:api_root",
+            "quickscale_forms:admin_form_list",
+        ]
+
+    def test_non_default_mount_still_cuts_at_the_api_boundary(self) -> None:
+        settings_obj = _settings(
+            INSTALLED_APPS=["quickscale_modules_orgs"],
+            QUICKSCALE_ORGS_ENABLED=True,
+        )
+        reverse = _RecordingReverse(
+            {"quickscale_orgs:api_list_create": "/tenant/acme/orgs/api/", "home": "/"}
+        )
+
+        paths = seam_module_api_paths(settings_obj, reverse)
+
+        assert paths["orgs"] == "/tenant/acme/orgs/api/"
+
+    def test_disabled_and_absent_api_bases_fall_back_home(self) -> None:
+        settings_obj = _settings(
+            INSTALLED_APPS=["quickscale_modules_orgs"],
+            QUICKSCALE_ORGS_ENABLED=False,
+        )
+        reverse = _RecordingReverse({"home": "/"})
+
+        paths = seam_module_api_paths(settings_obj, reverse)
+
+        assert paths == {"orgs": "/", "billing": "/", "crm": "/", "forms": "/"}
+        assert reverse.calls == ["home", "home", "home", "home"]
+
+    def test_route_without_api_boundary_fails_loud(self) -> None:
+        settings_obj = _settings(
+            INSTALLED_APPS=["quickscale_modules_orgs"],
+            QUICKSCALE_ORGS_ENABLED=True,
+        )
+        reverse = _RecordingReverse(
+            {"quickscale_orgs:api_list_create": "/orgs/", "home": "/"}
+        )
+
+        with pytest.raises(ValueError, match="api"):
+            seam_module_api_paths(settings_obj, reverse)
+
+
 class TestSeamRendering:
     """The rendered JS bodies keep the emitted template's exact shape."""
 
@@ -198,6 +285,18 @@ class TestSeamRendering:
     def test_renderers_accept_an_indent_override(self) -> None:
         assert render_module_flags({"auth": True}, indent="  ") == "  auth: true,"
         assert render_module_paths({"crm": "/crm/"}, indent="  ") == '  crm: "/crm/"'
+        assert render_module_api_paths({"orgs": "/orgs/api/"}, indent="  ") == (
+            '  orgs: "/orgs/api/"'
+        )
+
+    def test_render_module_api_paths_omits_only_the_last_comma(self) -> None:
+        rendered = render_module_api_paths(
+            {"orgs": "/orgs/api/", "billing": "/billing/api/"}
+        )
+
+        assert rendered == (
+            '          orgs: "/orgs/api/",\n          billing: "/billing/api/"'
+        )
 
 
 class TestSeamTemplateTags:
@@ -219,6 +318,34 @@ class TestSeamTemplateTags:
             path(
                 "analytics/",
                 include(([path("", _view, name="dashboard")], "quickscale_analytics")),
+            ),
+            path(
+                "orgs/",
+                include(
+                    ([path("api/", _view, name="api_list_create")], "quickscale_orgs")
+                ),
+            ),
+            path(
+                "billing/",
+                include(
+                    (
+                        [path("api/plans/", _view, name="subscription_plans")],
+                        "quickscale_billing",
+                    )
+                ),
+            ),
+            path(
+                "crm/",
+                include(([path("api/", _view, name="api_root")], "quickscale_crm")),
+            ),
+            path(
+                "forms/",
+                include(
+                    (
+                        [path("api/admin/forms/", _view, name="admin_form_list")],
+                        "quickscale_forms",
+                    )
+                ),
             ),
         ]
         return urlconf
@@ -248,6 +375,9 @@ class TestSeamTemplateTags:
                 "quickscale_modules_crm",
                 "quickscale_modules_social",
                 "quickscale_modules_analytics",
+                "quickscale_modules_orgs",
+                "quickscale_modules_billing",
+                "quickscale_modules_forms",
             ],
             raising=False,
         )
@@ -256,6 +386,9 @@ class TestSeamTemplateTags:
             "QUICKSCALE_SOCIAL_ENABLED",
             "QUICKSCALE_ANALYTICS_ENABLED",
             "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED",
+            "QUICKSCALE_ORGS_ENABLED",
+            "QUICKSCALE_BILLING_ENABLED",
+            "QUICKSCALE_FORMS_ENABLED",
         ):
             monkeypatch.setattr(django_settings, name, True, raising=False)
         monkeypatch.setattr(
@@ -268,6 +401,7 @@ class TestSeamTemplateTags:
         template = engine.from_string(
             "{% load quickscale_seam %}modules: {\n{% seam_module_flags %}\n};"
             "paths: {\n{% seam_module_paths %}\n};"
+            "apiPaths: {\n{% seam_module_api_paths %}\n};"
         )
 
         rendered = template.render(Context({}))
@@ -276,7 +410,11 @@ class TestSeamTemplateTags:
         assert "          social: true," in rendered
         assert "          analytics: true," in rendered
         # Absent from INSTALLED_APPS: the flag renders false.
-        assert "          billing: false," in rendered
+        assert "          blog: false," in rendered
         assert '          crm: "/crm",' in rendered
         assert '          social: "/social",' in rendered
         assert '          analytics: "/analytics/"' in rendered
+        assert '          orgs: "/orgs/api/",' in rendered
+        assert '          billing: "/billing/api/",' in rendered
+        assert '          crm: "/crm/api/",' in rendered
+        assert '          forms: "/forms/api/"' in rendered

@@ -1016,8 +1016,9 @@ public surface is `services.py` (rule 4).
 `throttles`, `permissions`, `templatetags/`, `management/`, `migrations/`); `templates/` and
 `static/` (rule 8); rule 4's listed
 foundation surface files; the listed extras backups' `persistence.py` (rule 10's port), orgs'
-`debug_views.py`, and blog's and listings' `markdownx_urls.py` (the staff-guarded MarkdownX
-endpoint URLconf each module mounts in place of the vendor's unguarded one); and private files
+`debug_views.py`, and storage's `markdownx_urls.py` (the one shared staff-guarded MarkdownX
+endpoint URLconf storage mounts for every module whose editor uses it, in place of the vendor's
+unguarded one); and private files
 named `_<name>.py`. Any other name needs a decision edit.
 
 **29. Test names.** Test files are `test_<subject>.py`, named for what they protect; neither the file
@@ -1039,7 +1040,8 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
 
 **31. The theme seam.**
 - ✅ The seam's producer is the versioned runtime library: the theme's `index.html.j2` and its two
-  public social pages render `window.__QUICKSCALE__.modules` and `modulePaths` through
+  public social pages render `window.__QUICKSCALE__.modules`, `modulePaths`, and — for the
+  theme's API clients — `moduleApiPaths` (rule 41) through
   `quickscale_core.runtime`'s `quickscale_seam` template tag, resolved at request time from the
   discovered module set (rule 37) and the live settings, so `modules` carries a key for every
   shipped module, as the seam validator requires. A key is `true` only when the module is installed
@@ -1152,7 +1154,8 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
   outside the listed exceptions.
 - ❌ A literal list of module names outside a module. Allowed: rule 5's layer table, rule 40's
   test-owned mapping, the theme's module surfaces (rule 31), its server-side seam producers
-  (`runtime/seam._SEAM_MODULE_PATHS` and the runtime URLconf's host route and template-URL tables,
+  (`runtime/seam._SEAM_MODULE_PATHS` and `runtime/seam._SEAM_MODULE_API_PATHS`, and the runtime
+  URLconf's host route and template-URL tables,
   `runtime/urls.py`) included, core's declared release inventory above, and the
   `.env.example` managed-block catalog (`apply/steps/env_sync.ENV_EXAMPLE_MODULE_SPECS`), whose
   per-module prose and block order are presentation data pinned by the env-example conformance
@@ -1214,15 +1217,26 @@ mapping that mirrors this section.
   `<package>/urls_modules.py` that `apply` regenerates, and the user-owned `<package>/urls.py`
   holds one `include()` line and names no module. A generated-project contract step declares the
   move for existing projects.
+- ✅ A URL prefix belongs to one module. The identical `(prefix, target)` pair from two modules
+  merges as rule 30 does for settings, one module may chain several targets under one prefix, and
+  two different targets for one prefix fail `apply`'s `collect_url_wiring`, naming both modules.
+  A shared third-party URLconf is mounted once, by the lowest-layer module that needs it —
+  `markdownx/`'s staff-guarded URLconf and its `MARKDOWNX_*` settings are storage's, the media
+  layer every editor-owning consumer depends on — and its global settings are written by that
+  module only.
 - ✅ Project-namespace route names for module pages served by the module's own URLconf are
   `quickscale_<module>:<name>` (rule 2). A host-rendered shell route carries the module stem in a
   flat project route name (`quickscale_crm_shell`): Django resolves one resolver per namespace, so
   a second include cannot share the module's `quickscale_<module>` namespace and a colon form
   cannot reverse.
+- ✅ The theme seam carries each API-bearing module's API base (`moduleApiPaths`), resolved from
+  the module's URL names at rule 7's `<mount>api/` boundary and rendered by the `quickscale_seam`
+  library like `modulePaths` (rule 31), and the theme's API clients read it.
 - ✅ `TenantMiddleware`'s orgs path guards read their prefixes from orgs' URL names rather than
   literals.
 - ❌ A module path written as a literal in generator or theme templates, or in another module's
-  code. ❌ Two routes that resolve the same path.
+  code. ❌ Two routes that resolve the same path. ❌ Two modules mounting one prefix. ❌ A
+  `/<mount>/api` literal in the theme's source, its test files excepted.
 - **Exceptions.** orgs' `/orgs*` React shell reservations stay host-rendered because the
   tenancy mode decides which side owns the path (solo mounts orgs before home, saas after);
   forms' shallow reservations (`/forms`, `/forms/<slug>/`) stay host-rendered until its module

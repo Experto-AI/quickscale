@@ -24,6 +24,8 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
 ## Releases
 
 - v0.89.0 — prepared, not published — [Development Maintenance](docs/releases/release-v0.89.0.md). Begins the post-v0.88 maintenance line with source-derived validation expectations.
+  - **The Markdown editor has one guarded mount.** Storage mounts the shared staff-guarded Markdownx endpoints and writes their settings, listings depends on storage, and new editor uploads land under `markdownx/` no matter which modules are installed; `apply` refuses two modules mounting one URL prefix with different targets.
+  - **Theme API bases come from the runtime seam.** The React theme reads each module's API base from `window.__QUICKSCALE__.moduleApiPaths` instead of hard-coded paths, and a module API path written as a literal in the theme's TypeScript fails the module-conventions gate.
   - **Account anonymization scrubs internationalized addresses.** The shared redaction matcher
     recognizes non-ASCII email addresses in any case and matches names at Unicode word boundaries,
     so `élodie@example.com` is scrubbed and `Ana` no longer rewrites `Anaïs`.

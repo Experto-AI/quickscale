@@ -81,6 +81,7 @@ It is written by `templates/index.html.j2` and carries:
 | `projectName` | Display name |
 | `modules` | Boolean flag per module: `true` only when the module is installed and its `QUICKSCALE_<MODULE>_ENABLED` is on |
 | `modulePaths` | Server-resolved base paths for `crm`, `social`, `analytics` |
+| `moduleApiPaths` | Server-resolved module API bases for `orgs`, `billing`, `crm`, `forms`; the theme's API clients read these instead of writing `/<mount>/api` (rule 41) |
 
 [decisions.md § Module Conventions](decisions.md#module-conventions) rule 31 (SA219) fixes how the
 producer fills `modules` and `modulePaths`: the `quickscale_seam` runtime template tag that ships
@@ -91,8 +92,11 @@ is absent — and every `modulePaths` entry reverses a named route (`crm` throug
 the manifest-declared `quickscale_crm_shell` route rendered in `<package>/urls_modules.py`,
 `social` through `social-link-tree`/`social-embeds`, `analytics` through
 `quickscale_analytics:dashboard`), never a
-literal. The public social producers (`templates/social/link_tree.html.j2`,
-`templates/social/embeds.html.j2`) load and call the same tag, and
+literal. `moduleApiPaths` resolves the same way (rule 41): each entry reverses a named route inside
+the module's `<mount>api/` subtree and is cut at that `api/` boundary, and a module that is absent
+or switched off resolves the always-present `home` route, so every field stays a non-empty string
+for the validator. The public social producers (`templates/social/link_tree.html.j2`,
+`templates/social/embeds.html.j2`) load and call the same tags, and
 the shared navigation applies the same installed-and-enabled
 social condition before hydrating or linking. The three-place rule below is unchanged.
 | `owner.mode` | `"solo"` or `"saas"` — see [organizations.md](organizations.md) |

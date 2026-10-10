@@ -899,8 +899,8 @@ class TestModuleWiringSpecs:
             ("analytics/", "quickscale_modules_analytics.urls"),
         )
 
-    def test_blog_and_listings_markdownx_media_path_uses_blog_value(self):
-        """`MARKDOWNX_MEDIA_PATH` should remain stable with blog and listings."""
+    def test_blog_and_listings_markdownx_media_path_comes_from_storage(self):
+        """`MARKDOWNX_MEDIA_PATH` is storage's, stable with blog and listings."""
         specs = _build_specs(
             {
                 "blog": {
@@ -909,23 +909,27 @@ class TestModuleWiringSpecs:
                     "api_rate_limit": "5/hour",
                 },
                 "listings": {"per_page": 12},
+                "storage": {},
             }
         )
         _, _, settings, _ = collect_wiring(specs)
 
-        assert settings["MARKDOWNX_MEDIA_PATH"] == "blog/markdownx/"
+        assert settings["MARKDOWNX_MEDIA_PATH"] == "markdownx/"
+        blog_spec = specs["blog"]
+        listings_spec = specs["listings"]
+        assert "MARKDOWNX_MEDIA_PATH" not in blog_spec.settings
+        assert "MARKDOWNX_MEDIA_PATH" not in listings_spec.settings
 
-    def test_listings_wiring_includes_markdownx_urls(self):
-        """Listings wiring should include markdownx URLs for admin uploads"""
+    def test_listings_wiring_defers_markdownx_urls_to_storage(self):
+        """Listings mounts only its own include; storage owns the editor mount."""
         specs = _build_specs({"listings": {"per_page": 12}})
 
         assert specs["listings"].url_includes == (
             ("listings/", "quickscale_modules_listings.urls"),
-            ("markdownx/", "quickscale_modules_listings.markdownx_urls"),
         )
 
-    def test_blog_wiring_without_rss_still_includes_markdownx_urls(self):
-        """Blog wiring should keep markdownx URLs even when RSS is disabled."""
+    def test_blog_wiring_without_rss_keeps_only_its_own_mount(self):
+        """Blog wiring drops the shared editor mount and keeps its own URLs."""
         specs = _build_specs(
             {
                 "blog": {
@@ -941,7 +945,7 @@ class TestModuleWiringSpecs:
         assert settings["QUICKSCALE_BLOG_RSS_ENABLED"] is False
         assert settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "15/minute"
         assert ("blog/", "quickscale_modules_blog.urls") in urls
-        assert ("markdownx/", "quickscale_modules_blog.markdownx_urls") in urls
+        assert ("markdownx/", "quickscale_modules_blog.markdownx_urls") not in urls
 
     def test_storage_wiring_local_keeps_filesystem_defaults(self):
         """Storage wiring should not force STORAGES override for local backend."""

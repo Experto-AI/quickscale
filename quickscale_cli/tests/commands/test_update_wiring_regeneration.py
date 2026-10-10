@@ -53,7 +53,21 @@ STALE_MODULES_PY = (
 )
 
 
-def _write_project(tmp_path: Path) -> Path:
+#: The fixture's installed set: billing and forms plus their transitive
+#: required-module closure (rule 39), in deterministic state order.
+_FIXTURE_MODULES = (
+    "analytics",
+    "auth",
+    "billing",
+    "forms",
+    "notifications",
+    "orgs",
+)
+
+
+def _write_project(
+    tmp_path: Path, module_names: tuple[str, ...] = _FIXTURE_MODULES
+) -> Path:
     """Create a minimal generated-project layout whose wiring is pre-rename."""
     (tmp_path / "myapp" / "settings").mkdir(parents=True)
     (tmp_path / "myapp" / "__init__.py").write_text("")
@@ -68,8 +82,7 @@ def _write_project(tmp_path: Path) -> Path:
                 "  package: myapp",
                 "  theme: showcase_react",
                 "modules:",
-                "  billing: {}",
-                "  forms: {}",
+                *(f"  {name}: {{}}" for name in module_names),
                 "docker:",
                 "  start: false",
             ]
@@ -92,30 +105,27 @@ def _write_project(tmp_path: Path) -> Path:
                     "project_contract": CORE_VERSION,
                 },
                 "modules": {
-                    "billing": {
-                        "name": "billing",
+                    name: {
+                        "name": name,
                         "version": "0.88.0",
-                        "prefix": "modules/billing",
-                        "branch": "splits/billing-module",
+                        "prefix": f"modules/{name}",
+                        "branch": f"splits/{name}-module",
                         "options": {},
-                    },
-                    "forms": {
-                        "name": "forms",
-                        "version": "0.88.0",
-                        "prefix": "modules/forms",
-                        "branch": "splits/forms-module",
-                        "options": {},
-                    },
+                    }
+                    for name in module_names
                 },
                 "managed_files": {},
             }
         )
     )
     (quickscale_dir / "config.yml").write_text(
-        "modules:\n  billing:\n    installed_version: 0.88.0\n"
-        "  forms:\n    installed_version: 0.88.0\n"
+        "modules:\n"
+        + "\n".join(
+            f"  {name}:\n    installed_version: 0.88.0" for name in module_names
+        )
+        + "\n"
     )
-    for module_name in ("billing", "forms"):
+    for module_name in module_names:
         module_dir = tmp_path / "modules" / module_name
         module_dir.mkdir(parents=True)
         manifest_text = (MODULE_MANIFEST_ROOT / module_name / "module.yml").read_text()
@@ -135,7 +145,7 @@ def _write_project(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _update_mocks(project_path: Path):
+def _update_mocks(project_path: Path, module_names: tuple[str, ...] = _FIXTURE_MODULES):
     """Patch the update flow's git, version, and dependency seams."""
 
     def _fake_subtree_pull(prefix: str, remote: str, branch: str, squash: bool) -> str:
@@ -156,10 +166,7 @@ def _update_mocks(project_path: Path):
         )
 
     config = Mock(
-        modules={
-            "billing": _module_info("billing"),
-            "forms": _module_info("forms"),
-        },
+        modules={name: _module_info(name) for name in module_names},
         default_remote="https://github.com/Experto-AI/quickscale.git",
     )
     return (
@@ -243,7 +250,7 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
             text=True,
         ).stdout.strip()
     )
-    assert final_count == baseline_count + 3
+    assert final_count == baseline_count + len(_FIXTURE_MODULES) + 1
 
     committed_paths = subprocess.run(
         ["git", "show", "--name-only", "--format=", "HEAD"],
@@ -264,6 +271,38 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
             project / path_str
         )
     assert ProjectStateManager(project).detect_managed_file_drift() == []
+
+
+def test_update_refuses_a_set_missing_a_requirement(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An update over a set missing a required module refuses and rolls back.
+
+    The existing project has listings without storage (the requirement this
+    release adds), so wiring regeneration would otherwise silently drop the
+    shared editor mount; the update must fail with the actionable adoption
+    step and leave the project unchanged.
+    """
+    installed = ("auth", "listings", "notifications", "orgs")
+    project = _write_project(tmp_path, installed)
+    monkeypatch.chdir(project)
+
+    load_config_patch, resolve_patch, pull_patch, confirm_patch, deps_patch = (
+        _update_mocks(project, installed)
+    )
+    with load_config_patch, resolve_patch, pull_patch, confirm_patch, deps_patch:
+        result = CliRunner().invoke(
+            update,
+            ["--no-preview", "--acknowledge-contract-vintage"],
+            catch_exceptions=False,
+        )
+
+    assert result.exit_code != 0
+    assert "'listings' requires 'storage'" in result.output
+    assert "quickscale apply" in result.output
+    state = yaml.safe_load((project / ".quickscale" / "state.yml").read_text())
+    assert "storage" not in state.get("modules", {})
+    assert "listings" in state.get("modules", {})
 
 
 def test_regeneration_failure_restores_pre_update_wiring(
@@ -677,7 +716,7 @@ def test_post_pull_state_load_failure_triggers_rollback(
     assert result.exit_code != 0
     assert "corrupt state" in result.output
     mock_rollback.assert_called_once()
-    assert mock_rollback.call_args.args[2] == ["billing", "forms"]
+    assert mock_rollback.call_args.args[2] == list(_FIXTURE_MODULES)
 
 
 def test_hash_persistence_failure_restores_wiring(

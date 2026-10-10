@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import replace
 
 from scripts import check_module_conventions as checker
@@ -84,6 +85,113 @@ def test_url_include_literal_control() -> None:
         adapter=("def build():\n    url_includes: list = []\n    return url_includes\n"),
     )
     assert _violations(checker.rule_7_urls, annotated_empty) == []
+
+
+def test_url_prefix_collision_control() -> None:
+    """Rule 41: two modules mounting one prefix with different targets fail."""
+    alpha = _with_mount(_golden_module("alpha"), "shared/")
+    beta = _with_mount(_golden_module("beta"), "shared/")
+
+    violations = checker.rule_7_urls(_corpus(alpha, beta))
+    assert any(
+        "both mount URL prefix 'shared/' with different targets" in violation
+        for violation in violations
+    )
+
+    # The identical (prefix, target) pair from two modules is the
+    # equal-contribution merge rule 30 sanctions and must stay allowed.
+    def _add_shared_include(module, own_mount):
+        manifest = copy.deepcopy(module.manifest)
+        for projection in manifest["derivation"]["wiring_projections"]:
+            if projection.get("wiring_field") == "url_includes":
+                projection["expression"]["value"] = [
+                    [own_mount, f"quickscale_modules_{module.name}.urls"],
+                    ["shared/", "quickscale_shared.urls"],
+                ]
+        return replace(module, manifest=manifest)
+
+    equal_targets = _corpus(
+        _add_shared_include(_golden_module("alpha"), "alpha/"),
+        _add_shared_include(_golden_module("beta"), "beta/"),
+    )
+    assert checker.rule_7_urls(equal_targets) == []
+    assert (
+        checker.rule_7_urls(
+            _corpus(
+                _with_mount(_golden_module("alpha"), "alpha/"),
+                _with_mount(_golden_module("beta"), "beta/"),
+            )
+        )
+        == []
+    )
+
+    # One module may chain several targets under one prefix (auth composes
+    # ``accounts/`` that way).
+    def _chain_same_prefix(module):
+        manifest = copy.deepcopy(module.manifest)
+        for projection in manifest["derivation"]["wiring_projections"]:
+            if projection.get("wiring_field") == "url_includes":
+                projection["expression"]["value"] = [
+                    ["shared/", f"quickscale_modules_{module.name}.urls"],
+                    ["shared/", "quickscale_shared.urls"],
+                ]
+        return replace(module, manifest=manifest)
+
+    assert checker.rule_7_urls(_corpus(_chain_same_prefix(_golden_module("alpha")))) == []
+
+
+def test_theme_api_literal_control() -> None:
+    """Rule 41: a /<mount>/api literal in the theme TypeScript fails."""
+    module = _golden_module()
+    theme_file = "generator/templates/themes/showcase_react/src/hooks/useDemo.ts"
+
+    literal = replace(
+        _corpus(module),
+        core_files={theme_file: "export const base = '/demo/api/'\n"},
+    )
+    assert any(
+        "module 'demo' API path '/demo/api' is written as a literal" in violation
+        for violation in checker.rule_7_urls(literal)
+    )
+
+    interpolated = replace(
+        _corpus(module),
+        core_files={theme_file: "const base = `/demo/api/${slug}`\n"},
+    )
+    assert any(
+        "written as a literal" in violation for violation in checker.rule_7_urls(interpolated)
+    )
+
+    # A route-pattern spelling of the mount is still the mount written by
+    # hand; prose and patterns both fail.
+    route_pattern = replace(
+        _corpus(module),
+        core_files={theme_file: "const help = 'through `/demo/api/:slug/` only'\n"},
+    )
+    assert any(
+        "written as a literal" in violation for violation in checker.rule_7_urls(route_pattern)
+    )
+
+    # The theme's own test files build fetch targets by hand.
+    test_file = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/themes/showcase_react/src/test/useDemo.test.ts": (
+                "const base = '/demo/api/'\n"
+            )
+        },
+    )
+    assert checker.rule_7_urls(test_file) == []
+
+    # A TS file outside the theme is not the theme's client.
+    outside_theme = replace(
+        _corpus(module),
+        core_files={
+            "generator/templates/project_name/static/app.ts": "const base = '/demo/api/'\n"
+        },
+    )
+    assert checker.rule_7_urls(outside_theme) == []
+    assert checker.rule_7_urls(_corpus(module)) == []
 
 
 def test_url_mount_template_literal_control() -> None:
@@ -465,7 +573,12 @@ def test_authentication_classes_closed_world_controls() -> None:
     assert _violations(checker.rule_9_http_apis, webhook_like) == []
 
 
-_SEAM = "{% load static quickscale_seam %}\n{% seam_module_flags %}\n{% seam_module_paths %}\n"
+_SEAM = (
+    "{% load static quickscale_seam %}\n"
+    "{% seam_module_flags %}\n"
+    "{% seam_module_paths %}\n"
+    "{% seam_module_api_paths %}\n"
+)
 
 
 def test_theme_seam_control() -> None:
@@ -473,6 +586,13 @@ def test_theme_seam_control() -> None:
     assert checker.rule_31_theme_seam(_seam_corpus(good)) == []
     missing = _seam_corpus("{% load static quickscale_seam %}\n{% seam_module_flags %}\n")
     assert any("does not render" in violation for violation in checker.rule_31_theme_seam(missing))
+    missing_api_paths = _seam_corpus(
+        "{% load static quickscale_seam %}\n{% seam_module_flags %}\n{% seam_module_paths %}\n"
+    )
+    assert any(
+        "does not render {% seam_module_api_paths %}" in violation
+        for violation in checker.rule_31_theme_seam(missing_api_paths)
+    )
     unloaded = _seam_corpus("{% seam_module_flags %}\n{% seam_module_paths %}\n")
     assert any(
         "does not load the quickscale_seam tag library" in violation

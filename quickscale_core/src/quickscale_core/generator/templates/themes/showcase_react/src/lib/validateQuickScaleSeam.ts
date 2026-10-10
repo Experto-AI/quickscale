@@ -12,6 +12,7 @@ import type { QuickScaleConfig } from '@/hooks/useModules'
  *   - projectName must be a non-empty string
  *   - modules must be an object whose 11 required keys are own boolean properties
  *   - modulePaths must be an object with crm, social, analytics as non-empty strings
+ *   - moduleApiPaths must be an object with orgs, billing, crm, forms as non-empty strings
  *   - owner must be an object with mode ('solo'|'saas') and currentOrgSlug (string|null)
  *
  * Optional fields validated when present:
@@ -80,6 +81,29 @@ export function validateQuickScaleConfig(): QuickScaleConfig {
     if (typeof value !== 'string' || (value as string).trim() === '') {
       throw new Error(
         `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.modulePaths.${field} ` +
+        `must be a non-empty string.`,
+      )
+    }
+  }
+
+  // ── moduleApiPaths (required) ───────────────────────────────────
+  if (
+    !seam.moduleApiPaths ||
+    typeof seam.moduleApiPaths !== 'object' ||
+    Array.isArray(seam.moduleApiPaths)
+  ) {
+    throw new Error(
+      'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.moduleApiPaths ' +
+      'must be an object with string values.',
+    )
+  }
+
+  const requiredModuleApiPathFields = ['orgs', 'billing', 'crm', 'forms'] as const
+  for (const field of requiredModuleApiPathFields) {
+    const value = (seam.moduleApiPaths as unknown as Record<string, unknown>)[field]
+    if (typeof value !== 'string' || (value as string).trim() === '') {
+      throw new Error(
+        `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.moduleApiPaths.${field} ` +
         `must be a non-empty string.`,
       )
     }

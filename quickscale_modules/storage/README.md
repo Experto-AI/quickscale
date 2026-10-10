@@ -100,7 +100,11 @@ those keys into final public URLs.
 
 ## URLs
 
-This module ships no URLs.
+Storage mounts the one shared Markdownx editor endpoint at `markdownx/` (`upload/` and
+`markdownify/`), each staff-guarded, for every installed module whose admin Markdown editor
+uses it (Module Conventions rule 41). The mount's global settings
+(`MARKDOWNX_MARKDOWN_EXTENSIONS` and `MARKDOWNX_MEDIA_PATH = "markdownx/"`) are storage's, so
+editor uploads land in one location no matter which modules are installed.
 
 ## Management commands
 

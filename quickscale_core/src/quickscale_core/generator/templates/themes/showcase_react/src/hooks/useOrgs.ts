@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiRequest, useApiData } from '@/hooks/useApi'
+import { useProjectConfig } from '@/hooks/useModules'
 
 export type OrgRole = 'viewer' | 'member' | 'admin' | 'owner'
 
@@ -95,14 +96,17 @@ export interface OrgSubscriptionResponse {
   current_period_end: string | null
 }
 
-function buildOrgApiPath(orgSlug: string, path = ''): string {
+function buildOrgApiPath(orgsApiBase: string, orgSlug: string, path = ''): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `/orgs/api/${orgSlug}${path ? normalizedPath : '/'}`
+  return `${orgsApiBase}${orgSlug}${path ? normalizedPath : '/'}`
 }
 
-function buildBillingApiPath(path: string): string {
+function buildBillingApiPath(billingApiBase: string, path: string): string {
+  const normalizedBase = billingApiBase.endsWith('/')
+    ? billingApiBase.slice(0, -1)
+    : billingApiBase
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `/billing/api${normalizedPath}`
+  return `${normalizedBase}${normalizedPath}`
 }
 
 function invalidateOrgQueries(queryClient: ReturnType<typeof useQueryClient>, orgSlug: string) {
@@ -122,21 +126,24 @@ export function isOrgAdminLike(actor: OrgActor | null | undefined): boolean {
 }
 
 export function useOrgs() {
-  return useApiData<OrgListResponse>('/orgs/api/', ['orgs'])
+  const { moduleApiPaths } = useProjectConfig()
+  return useApiData<OrgListResponse>(moduleApiPaths.orgs, ['orgs'])
 }
 
 export function useOrg(orgSlug: string) {
-  return useApiData<OrgDetailResponse>(buildOrgApiPath(orgSlug), ['orgs', orgSlug], {
+  const { moduleApiPaths } = useProjectConfig()
+  return useApiData<OrgDetailResponse>(buildOrgApiPath(moduleApiPaths.orgs, orgSlug), ['orgs', orgSlug], {
     enabled: Boolean(orgSlug),
   })
 }
 
 export function useCreateOrg() {
   const queryClient = useQueryClient()
+  const { moduleApiPaths } = useProjectConfig()
 
   return useMutation({
     mutationFn: (payload: { name: string }) =>
-      apiRequest<OrgCreateResponse>('/orgs/api/', {
+      apiRequest<OrgCreateResponse>(moduleApiPaths.orgs, {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
@@ -147,8 +154,9 @@ export function useCreateOrg() {
 }
 
 export function useOrgMembers(orgSlug: string) {
+  const { moduleApiPaths } = useProjectConfig()
   return useApiData<OrgMembersResponse>(
-    buildOrgApiPath(orgSlug, 'members'),
+    buildOrgApiPath(moduleApiPaths.orgs, orgSlug, 'members'),
     ['orgs', orgSlug, 'members'],
     { enabled: Boolean(orgSlug) },
   )
@@ -156,13 +164,17 @@ export function useOrgMembers(orgSlug: string) {
 
 export function useInviteOrgMember(orgSlug: string) {
   const queryClient = useQueryClient()
+  const { moduleApiPaths } = useProjectConfig()
 
   return useMutation({
     mutationFn: (payload: { email: string; role: OrgRole }) =>
-      apiRequest<{ invitation: OrgInvitation }>(buildOrgApiPath(orgSlug, 'members/invite'), {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
+      apiRequest<{ invitation: OrgInvitation }>(
+        buildOrgApiPath(moduleApiPaths.orgs, orgSlug, 'members/invite'),
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        },
+      ),
     onSuccess: async () => {
       await invalidateOrgQueries(queryClient, orgSlug)
     },
@@ -171,11 +183,12 @@ export function useInviteOrgMember(orgSlug: string) {
 
 export function useUpdateOrgMemberRole(orgSlug: string) {
   const queryClient = useQueryClient()
+  const { moduleApiPaths } = useProjectConfig()
 
   return useMutation({
     mutationFn: (payload: { membershipId: number; role: OrgRole }) =>
       apiRequest<{ member: OrgMember }>(
-        buildOrgApiPath(orgSlug, `members/${payload.membershipId}/role`),
+        buildOrgApiPath(moduleApiPaths.orgs, orgSlug, `members/${payload.membershipId}/role`),
         {
           method: 'POST',
           body: JSON.stringify({ role: payload.role }),
@@ -189,11 +202,12 @@ export function useUpdateOrgMemberRole(orgSlug: string) {
 
 export function useRemoveOrgMember(orgSlug: string) {
   const queryClient = useQueryClient()
+  const { moduleApiPaths } = useProjectConfig()
 
   return useMutation({
     mutationFn: (payload: { membershipId: number }) =>
       apiRequest<{ status: 'removed'; member_id: number }>(
-        buildOrgApiPath(orgSlug, `members/${payload.membershipId}/remove`),
+        buildOrgApiPath(moduleApiPaths.orgs, orgSlug, `members/${payload.membershipId}/remove`),
         {
           method: 'POST',
         },
@@ -206,11 +220,12 @@ export function useRemoveOrgMember(orgSlug: string) {
 
 export function useRevokeOrgInvitation(orgSlug: string) {
   const queryClient = useQueryClient()
+  const { moduleApiPaths } = useProjectConfig()
 
   return useMutation({
     mutationFn: (payload: { invitationId: string }) =>
       apiRequest<{ status: 'revoked'; invitation_id: string }>(
-        buildOrgApiPath(orgSlug, `members/invitations/${payload.invitationId}/revoke`),
+        buildOrgApiPath(moduleApiPaths.orgs, orgSlug, `members/invitations/${payload.invitationId}/revoke`),
         {
           method: 'POST',
         },
@@ -223,10 +238,11 @@ export function useRevokeOrgInvitation(orgSlug: string) {
 
 export function useUpdateOrgSettings(orgSlug: string) {
   const queryClient = useQueryClient()
+  const { moduleApiPaths } = useProjectConfig()
 
   return useMutation({
     mutationFn: (payload: { name: string; slug: string }) =>
-      apiRequest<OrgSettingsResponse>(buildOrgApiPath(orgSlug, 'settings'), {
+      apiRequest<OrgSettingsResponse>(buildOrgApiPath(moduleApiPaths.orgs, orgSlug, 'settings'), {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
@@ -238,14 +254,15 @@ export function useUpdateOrgSettings(orgSlug: string) {
 
 export function useOrgBilling(orgSlug: string, enabled = true) {
   const billingEnabled = enabled && Boolean(orgSlug)
+  const { moduleApiPaths } = useProjectConfig()
 
   const subscription = useApiData<OrgSubscriptionResponse>(
-    buildBillingApiPath('subscription/'),
+    buildBillingApiPath(moduleApiPaths.billing, 'subscription/'),
     ['orgs', orgSlug, 'billing', 'subscription'],
     { enabled: billingEnabled },
   )
   const balance = useApiData<OrgBalanceResponse>(
-    buildBillingApiPath('balance/'),
+    buildBillingApiPath(moduleApiPaths.billing, 'balance/'),
     ['orgs', orgSlug, 'billing', 'balance'],
     { enabled: billingEnabled },
   )

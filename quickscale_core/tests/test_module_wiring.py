@@ -305,6 +305,93 @@ class TestCollectUrlWiring:
         assert pre_home_urls == [("", "quickscale_modules_orgs.urls")]
         assert post_home_urls == [("accounts/", "allauth.urls")]
 
+    def test_collect_url_wiring_conflicting_prefix_fails(self) -> None:
+        """Two modules mounting one prefix with different targets fail."""
+        specs = {
+            "blog": ModuleWiringSpec(
+                url_includes=(("markdownx/", "quickscale_modules_blog.markdownx_urls"),)
+            ),
+            "listings": ModuleWiringSpec(
+                url_includes=(
+                    ("markdownx/", "quickscale_modules_listings.markdownx_urls"),
+                )
+            ),
+        }
+
+        with pytest.raises(ValueError) as exc_info:
+            collect_url_wiring(specs)
+
+        message = str(exc_info.value)
+        assert "'blog'" in message
+        assert "'listings'" in message
+        assert "markdownx/" in message
+
+    def test_collect_url_wiring_equal_pair_from_two_modules_collapses(self) -> None:
+        """The identical (prefix, target) pair from two modules mounts once."""
+        specs = {
+            "mod_a": ModuleWiringSpec(url_includes=(("api/", "mod_a.urls"),)),
+            "mod_b": ModuleWiringSpec(url_includes=(("api/", "mod_a.urls"),)),
+        }
+
+        pre_home_urls, post_home_urls = collect_url_wiring(specs)
+
+        assert pre_home_urls == []
+        assert post_home_urls == [("api/", "mod_a.urls")]
+
+    def test_collect_url_wiring_same_module_chain_allowed(self) -> None:
+        """One module may chain several targets under one prefix."""
+        specs = {
+            "auth": ModuleWiringSpec(
+                url_includes=(
+                    ("accounts/", "allauth.urls"),
+                    ("accounts/", "quickscale_modules_auth.urls"),
+                )
+            ),
+        }
+
+        _, post_home_urls = collect_url_wiring(specs)
+
+        assert post_home_urls == [
+            ("accounts/", "allauth.urls"),
+            ("accounts/", "quickscale_modules_auth.urls"),
+        ]
+
+    def test_collect_url_wiring_cross_bucket_equal_pair_mounts_once(self) -> None:
+        """An identical pair declared in both buckets still mounts once."""
+        specs = {
+            "mod_a": ModuleWiringSpec(
+                pre_home_url_includes=(("shared/", "vendor.urls"),)
+            ),
+            "mod_b": ModuleWiringSpec(url_includes=(("shared/", "vendor.urls"),)),
+        }
+
+        pre_home_urls, post_home_urls = collect_url_wiring(specs)
+        rendered = render_urls_modules_py(specs)
+
+        assert pre_home_urls == [("shared/", "vendor.urls")]
+        assert post_home_urls == []
+        assert rendered.count('path("shared/", include("vendor.urls"))') == 1
+
+    def test_collect_url_wiring_conflict_across_buckets_fails(self) -> None:
+        """A pre-home mount and a post-home mount of one prefix may not differ."""
+        specs = {
+            "mod_a": ModuleWiringSpec(pre_home_url_includes=(("orgs/", "mod_a.urls"),)),
+            "mod_b": ModuleWiringSpec(url_includes=(("orgs/", "mod_b.urls"),)),
+        }
+
+        with pytest.raises(ValueError, match="orgs/"):
+            collect_url_wiring(specs)
+
+    def test_collect_wiring_raises_on_conflicting_prefix(self) -> None:
+        """collect_wiring propagates a URL prefix conflict."""
+        specs = {
+            "mod_a": ModuleWiringSpec(url_includes=(("api/", "mod_a.urls"),)),
+            "mod_b": ModuleWiringSpec(url_includes=(("api/", "mod_b.urls"),)),
+        }
+
+        with pytest.raises(ValueError, match="api/"):
+            collect_wiring(specs)
+
 
 class TestRenderSettingsModulesPy:
     """Tests for render_settings_modules_py."""

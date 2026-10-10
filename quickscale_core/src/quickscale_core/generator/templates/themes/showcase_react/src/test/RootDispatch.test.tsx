@@ -41,6 +41,12 @@ function applyConfig(overrides?: Record<string, unknown>) {
       social: '/social',
       analytics: '/analytics/',
     },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
+    },
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -74,6 +80,12 @@ function applyPublicInjectorConfig(surface: 'link_tree' | 'embeds') {
       crm: '/crm/',
       social: surface === 'link_tree' ? '/social' : '/social/embeds',
       analytics: '/analytics/',
+    },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
     },
     owner: {
       mode: 'solo',

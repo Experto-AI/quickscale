@@ -122,10 +122,10 @@ items:
      members_diverging: [analytics, billing, notifications, backups, forms], population: modules(12),
      rule: "rule 1 (D3)", check: "none for the mechanism", closed_world: false, handoff: [tech],
      first_seen: 2026-09-26, last_verified: 2026-10-08}
-  - {id: markdownx-shared-mount, status: open, aspect: A, cost: [collision, defect],
+  - {id: markdownx-shared-mount, status: resolved, aspect: A, cost: [collision, defect],
      members_diverging: [blog, listings], population: url-mount-prefixes(14 includes / 10 modules),
-     rule: "rule 41 (two routes, one path)", check: none, closed_world: false, handoff: [tech],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
+     rule: "rule 41 (two routes, one path)", check: "harness rule 7; collect_url_wiring", closed_world: false, handoff: [tech],
+     first_seen: 2026-10-08, last_verified: 2026-10-10}
   - {id: tenant-authorization, status: open, regressed: false, aspect: E, cost: [ambiguity],
      members_diverging: [billing], population: modules-with-pages-or-apis(9),
      rule: "rule 19; JSON API Endpoint Base Contract", check: "harness rule 19 (partial)",
@@ -210,10 +210,10 @@ items:
      members_diverging: [crm, forms, orgs, notifications], population: constraint-names(31),
      rule: "rule 25 (prefix only)", check: "harness rule 25", closed_world: false, handoff: [],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: mount-path-copies, status: open, regressed: false, aspect: P, cost: [ambiguity, tax],
+  - {id: mount-path-copies, status: resolved, regressed: false, aspect: P, cost: [ambiguity, tax],
      members_diverging: [orgs, billing, forms, social], population: theme-module-api-clients(5),
-     rule: "rule 41 (no literal module path in theme templates)", check: "harness rules 7, 31, 37 (seam producer)",
-     closed_world: false, handoff: [], first_seen: 2026-10-03, last_verified: 2026-10-08}
+     rule: "rule 41 (no literal module path in theme templates)", check: "harness rule 7 (theme TypeScript)",
+     closed_world: false, handoff: [], first_seen: 2026-10-03, last_verified: 2026-10-10}
   # ---- resolved: re-verified by the harness run at 2fd8637f (43 rules pass); see §12 ----
   # write-effects-on-commit, settings-snapshot-readers, org-role-check-copies, mypy-overrides-unread,
   # split-facade-conventions, theme-module-presence, module-lists-outside-members, shared-setting-writes,
@@ -239,7 +239,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | # | ID | Aspect | Cost | Diverging / population | Status |
 |---|---|---|---|---|---|
 | 1 | `module-enabled-switch` | B | defect, ambiguity | 5 / 12 modules (+ core `env_sync`) | open (reopened) |
-| 2 | `markdownx-shared-mount` | A | collision, defect | 2 / 10 mounting modules | open (new) |
+| 2 | `markdownx-shared-mount` | A | collision, defect | 2 / 10 mounting modules | resolved (SA261) |
 | 3 | `tenant-authorization` | E | ambiguity | 1 / 9 | open (reopened) |
 | 4 | `option-schema-and-validation` | B | ambiguity, tax | 12 / 12 adapters | open (reopened) |
 | 5 | `module-error-http-mapping` | D | ambiguity, tax | 4 / 12 (5 variants) | open |
@@ -255,7 +255,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 15 | `capability-collection` | D | ambiguity, tax | 1 owner / 13 names | open |
 | 16 | `command-flag-conventions` | J | ambiguity, tax | 3 / 3 command-shipping modules | open |
 | 17 | `dependency-spec-sources` | N | ambiguity, tax | 3 / 12 | open |
-| 18 | `mount-path-copies` | P | ambiguity, tax | 4 / 5 theme API clients | open (reopened) |
+| 18 | `mount-path-copies` | P | ambiguity, tax | 4 / 5 theme API clients | resolved (SA261) |
 | 19 | `secret-env-var-names` | A | ambiguity | 1 / 5 | open (reopened) |
 | 20 | `session-and-host-names` | A | ambiguity | 2 | open |
 | 21 | `model-basics` | G | tax, ambiguity | 7 / 10 | open (reopened) |
@@ -1343,8 +1343,8 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 8. **Rule 4 is checked per file, not per name.** Private names in published files pass [Item 14].
 9. **Rule 19's README duty and its "logged in" spellings are unchecked for `AllowAny` APIs**
    [Item 3].
-10. **Rule 41's theme clause is checked only on the seam producer, not the theme's TypeScript**
-    [Item 18].
+10. **Rule 41's theme clause — resolved (SA261).** Harness rule 7 scans the theme's TypeScript
+    for quoted `/<mount>/api` literals (the theme's test files excepted) [Item 18].
 11. **Rules 3/12 "defaults in code" and "values checked only in the manifest" are checked on
     settings reads only.** Adapter `.get(key, default)` and adapter value checks pass [Item 4].
 12. **Core-rendered project code is outside the harness corpus.** social's generated payload views
@@ -1841,3 +1841,25 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   clause checks for an identifiable role listing, not the per-action prose; an unclassifiable
   `get_permissions()` return fails closed as no declaration, and a plain Django page's
   `permission_classes` is inert and is not a declaration). Item 3.
+
+### 2026-10-10 — SA261 (one owner per URL prefix and the seam's module API bases)
+
+- 2026-10-10 — `markdownx-shared-mount`: **resolved** (SA261 — the one shared, staff-guarded
+  Markdownx URLconf moves to storage, the media layer both editor-owning consumers can depend
+  on: storage mounts `markdownx/` and writes `MARKDOWNX_MARKDOWN_EXTENSIONS` and
+  `MARKDOWNX_MEDIA_PATH = "markdownx/"`, blog and listings drop the mount and the settings, and
+  listings depends on storage, so the upload path no longer depends on the installed module set;
+  `collect_url_wiring` fails two *modules* mounting one prefix with different targets, naming
+  both and preserving the equal-pair merge and one module's target chain (auth's `accounts/`),
+  and harness rule 7 scans every manifest's mounts across both include buckets with the same
+  predicate; decision rule 41 carries the clause and rule 28 moves the `markdownx_urls.py`
+  allowance to storage. Release note: new editor uploads land under `markdownx/`). Item 2.
+- 2026-10-10 — `mount-path-copies`: **resolved** (SA261 — the runtime seam gains
+  `moduleApiPaths` (orgs, billing, crm, forms), resolved from the modules' named routes at rule
+  7's `<mount>api/` boundary through `quickscale_core.runtime.seam`/`seam_tags` and rendered by
+  all three seam producers; the theme hooks (`useOrgs.ts`, `useOrgNavigation.ts`,
+  `useFormSchema.ts`, `FormRenderer.tsx`) read it and the two org help texts that spelled the
+  mount are rewritten; harness rule 7 rejects a quoted `/<mount>/api` in the theme's TypeScript
+  outside its test files, controls included; decision rule 41 carries the clause, rules 31 and
+  37 name the seam key and its server-side table, and frontend.md records the field).
+  Enforcement gap 10 resolved. Item 18.

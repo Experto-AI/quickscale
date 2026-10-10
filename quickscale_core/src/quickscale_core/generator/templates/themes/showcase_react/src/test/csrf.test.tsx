@@ -29,6 +29,33 @@ const localDependencyPath =
     : '../../node_modules/react-dom/client.js'
 const { createRoot } = await import(/* @vite-ignore */ new URL(localDependencyPath, import.meta.url).href)
 
+function setRuntimeSeam() {
+  window.__QUICKSCALE__ = {
+    projectName: 'CSRF Test',
+    modules: {
+      auth: false,
+      blog: false,
+      listings: false,
+      crm: false,
+      forms: true,
+      storage: false,
+      backups: false,
+      notifications: false,
+      analytics: false,
+      billing: false,
+      social: false,
+    },
+    modulePaths: { crm: '/crm', social: '/social', analytics: '/analytics/' },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
+    },
+    owner: { mode: 'solo', currentOrgSlug: null },
+  }
+}
+
 const cookieCases = [
   {
     name: 'uses the last exact duplicate like Django request.COOKIES',
@@ -204,6 +231,7 @@ describe('CSRF request callers', () => {
   })
 
   it('uses Django last-cookie parity for the FormRenderer POST', async () => {
+    setRuntimeSeam()
     setCookie(`csrftoken=${firstCsrfToken}; csrftoken=${secondCsrfToken}`)
     useFormSchemaMock.mockReturnValue({
       data: buildFormSchema(),
