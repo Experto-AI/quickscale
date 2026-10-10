@@ -35,8 +35,9 @@ Or, equivalently, edit `VERSION` and propagate by hand:
 - embedded `_version.py` files for core and CLI
 - each `quickscale_modules/*/module.yml` version, its package version and `__init__.py`, and the
   matching core manifest snapshot
-- each module's `quickscale-core>=X.Y.Z,<X.Y+1.0` lockstep pin in `module.yml`, and therefore its
-  core snapshot too — `make check-core-compat` re-asserts the exact specifier against `VERSION`
+- each module's `quickscale-core` dependency name stays bare in `module.yml` (rule 39); the
+  bounded lockstep pin is derived, and `make check-core-compat` asserts the exact specifier
+  owned by the module `pyproject.toml` against `VERSION`
 - `version:` fields in standalone documentation `.yml`/`.yaml` files
 
 ## What the tool does not derive

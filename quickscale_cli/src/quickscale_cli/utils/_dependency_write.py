@@ -14,7 +14,7 @@ from typing import Any, Mapping
 
 
 import quickscale_cli.utils._dependency_io as _dependency_io
-import quickscale_core.manifest.loader as _loader
+from quickscale_core.version import __version__ as CORE_VERSION
 
 
 def _extract_version_tuple(spec: str) -> tuple[int, ...] | None:
@@ -132,8 +132,7 @@ def _update_dependency_entries(
     """Replace existing dependency entries in pyproject.toml with new values.
 
     Used by the update-path repin mode to replace stale path-style or
-    out-of-range version entries with the correct bounded range from the
-    module manifest.
+    out-of-range version entries with the declared package spec.
     """
     if not updates:
         return
@@ -208,18 +207,33 @@ def _has_unresolvable_path_dependency(
     return False
 
 
-def _manifest_version_spec(manifest: Any, dep_name: str) -> str | None:
-    """Return the version constraint declared for a dependency in module.yml."""
-    for requirement in manifest.dependencies:
-        if requirement.startswith(dep_name):
-            return requirement[len(dep_name) :].strip() or None
+def _core_lockstep_release_spec(version: str) -> str:
+    """Return the bounded lockstep spec for a core release version.
+
+    The floor keeps the release's full ``major.minor.patch`` version, unlike
+    the generator's major.minor runtime pin: an embedded module's replacement
+    dependency must not admit an older patch than the release it ships with.
+    """
+    major, minor, *_ = version.split(".")
+    return f">={version},<{major}.{int(minor) + 1}.0"
+
+
+def _published_path_dependency_spec(dep_name: str) -> str | None:
+    """Return the published spec for a monorepo path dependency (rule 39).
+
+    Module manifests list dependency names only, and a path-style dependency
+    (``quickscale-core``) is unresolvable inside a generated project, so its
+    replacement spec is the bounded lockstep release spec derived from the
+    running core version.  An unknown path dependency has no published spec.
+    """
+    if dep_name == "quickscale-core":
+        return _core_lockstep_release_spec(CORE_VERSION)
     return None
 
 
 def _build_path_dependency_overrides(
     project_path: Path,
     install_path: Path,
-    manifest: Any,
     module_poetry_deps: Mapping[str, Any],
     wheelhouse: Path | None = None,
 ) -> dict[str, Any]:
@@ -240,7 +254,7 @@ def _build_path_dependency_overrides(
             overrides[dep_name] = local_wheel
             continue
 
-        spec = _manifest_version_spec(manifest, dep_name)
+        spec = _published_path_dependency_spec(dep_name)
         if spec:
             overrides[dep_name] = spec
     return overrides
@@ -279,8 +293,8 @@ def _patch_module_path_dependencies(
     When a module's pyproject.toml declares a dependency via a path (e.g.
     ``quickscale-core = {path = "../../quickscale_core", develop = true}``)
     and that path does not exist inside the generated project tree, replace
-    it with the version constraint declared in the module.yml manifest so
-    that ``poetry lock`` can resolve it from PyPI.
+    it with the dependency's published spec — the canonical ``quickscale-core``
+    lockstep pin — or a local wheel so that ``poetry lock`` can resolve it.
     """
     for module_name in sorted(module_options_by_name):
         install_path = _dependency_io.resolve_embedded_module_install_path(
@@ -297,18 +311,10 @@ def _patch_module_path_dependencies(
         if not _has_unresolvable_path_dependency(install_path, module_poetry_deps):
             continue
 
-        # Load manifest and build a version override map for path deps.
-        manifest = _loader.get_manifest_for_module(
-            project_path, module_name, strict=True
-        )
-        if manifest is None:
-            continue
-
         raw_toml = module_pyproject_path.read_text(encoding="utf-8")
         overrides = _build_path_dependency_overrides(
             project_path,
             install_path,
-            manifest,
             module_poetry_deps,
             wheelhouse,
         )

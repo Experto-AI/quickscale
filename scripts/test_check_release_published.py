@@ -26,12 +26,18 @@ sys.modules["check_release_published"] = check_release_published
 _SPEC.loader.exec_module(check_release_published)
 
 
-def _make_repo(tmp_path: Path, version: str, core_spec: str) -> Path:
+def _make_repo(tmp_path: Path, version: str) -> Path:
+    """
+    Build a synthetic repo whose single module declares core (rule 39).
+
+    The constraint is derived from ``VERSION``: floor = the release being
+    published, ceiling = the next minor.
+    """
     repo = tmp_path / "repo"
     (repo / "quickscale_modules" / "backups").mkdir(parents=True)
     (repo / "VERSION").write_text(f"{version}\n")
     (repo / "quickscale_modules" / "backups" / "module.yml").write_text(
-        f'name: backups\nversion: "{version}"\ndependencies:\n  - quickscale-core{core_spec}\n'
+        f'name: backups\nversion: "{version}"\ndependencies:\n  - quickscale-core\n'
     )
     return repo
 
@@ -77,7 +83,7 @@ class TestReleasePublishedGate:
 
     def test_fails_when_core_is_unpublished(self, tmp_path, fake_index, capsys):
         """The exact 0.87.0 regression: CLI shipped, core missing from PyPI."""
-        repo = _make_repo(tmp_path, "0.87.0", ">=0.87.0,<0.88.0")
+        repo = _make_repo(tmp_path, "0.87.0")
         fake_index(
             {
                 "quickscale-core": ["0.86.0"],
@@ -94,7 +100,7 @@ class TestReleasePublishedGate:
         assert "module 'backups' pins quickscale-core>=0.87.0,<0.88.0" in output
 
     def test_passes_when_every_distribution_is_published(self, tmp_path, fake_index, capsys):
-        repo = _make_repo(tmp_path, "0.87.0", ">=0.87.0,<0.88.0")
+        repo = _make_repo(tmp_path, "0.87.0")
         published = ["0.86.0", "0.87.0"]
         fake_index(
             {
@@ -133,7 +139,7 @@ class TestRetries:
     """Retry loop used while PyPI catches up after a publish."""
 
     def test_retries_until_the_index_catches_up(self, tmp_path, monkeypatch):
-        repo = _make_repo(tmp_path, "0.87.0", ">=0.87.0,<0.88.0")
+        repo = _make_repo(tmp_path, "0.87.0")
         attempts = {"count": 0}
 
         def _fetch(distribution: str, index_url: str) -> list[str]:
@@ -152,7 +158,7 @@ class TestRetries:
         assert status == 0
 
     def test_gives_up_after_the_final_retry(self, tmp_path, monkeypatch):
-        repo = _make_repo(tmp_path, "0.87.0", ">=0.87.0,<0.88.0")
+        repo = _make_repo(tmp_path, "0.87.0")
         monkeypatch.setattr(
             check_release_published,
             "fetch_released_versions",

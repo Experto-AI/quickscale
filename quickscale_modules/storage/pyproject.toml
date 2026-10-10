@@ -17,6 +17,7 @@ Django = ">=6.0.7,<6.1.0"
 django-storages = {version = "^1.14.6", optional = true}
 boto3 = {version = "^1.43.58", optional = true}
 Pillow = ">=12.3.0,<13.0.0"
+quickscale-core = {path = "../../quickscale_core", develop = true}
 
 [tool.poetry.extras]
 cloud = ["django-storages", "boto3"]

@@ -71,6 +71,7 @@ RULE_28_LISTED_EXTRA_FILES: dict[str, frozenset[str]] = {
     "orgs": frozenset({"debug_views.py"}),
     "blog": frozenset({"markdownx_urls.py"}),
     "listings": frozenset({"markdownx_urls.py"}),
+    "billing": frozenset({"webhook_urls.py"}),
 }
 
 RULE_28_ALLOWED_NON_PYTHON = frozenset({"py.typed"})

@@ -33,7 +33,7 @@ GOLDEN_MANIFEST: dict[str, object] = {
         },
         "immutable": {},
     },
-    "dependencies": [],
+    "dependencies": ["quickscale-core"],
     "required_modules": [],
     "derivation": {
         "wiring_projections": [
@@ -154,6 +154,10 @@ def _golden_module(name: str = "demo") -> Module:
         root_files={
             "pyproject.toml": (
                 "[project]\nname = 'quickscale-module-demo'\n"
+                "[tool.poetry.dependencies]\n"
+                "python = '>=3.14,<3.15'\n"
+                "Django = '>=6.0.7,<6.1.0'\n"
+                "quickscale-core = {path = '../../quickscale_core', develop = true}\n"
                 "[tool.pytest.ini_options]\naddopts = ''\n[tool.ruff]\n"
             ),
             "README.md": GOLDEN_README.replace("demo", name),

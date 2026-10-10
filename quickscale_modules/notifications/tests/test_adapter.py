@@ -29,7 +29,10 @@ def test_manifest_owns_the_notifications_mount() -> None:
 def test_default_delivery_is_console_safe() -> None:
     spec = _notifications_manifest_adapter({})
 
-    assert "anymail" not in spec.apps
+    # The manifest's apps projection is the sole INSTALLED_APPS
+    # authority, so anymail is installed whenever the module is; the console
+    # backend is selected at runtime until live delivery is configured.
+    assert "anymail" in spec.apps
     assert spec.settings["EMAIL_BACKEND"] == (
         "django.core.mail.backends.console.EmailBackend"
     )
@@ -40,7 +43,7 @@ def test_default_delivery_is_console_safe() -> None:
     ) in spec.url_includes
 
 
-def test_live_resend_delivery_adds_anymail_and_email_settings() -> None:
+def test_live_resend_delivery_sets_email_settings() -> None:
     spec = _notifications_manifest_adapter(
         {
             "sender_name": "Ops",
@@ -56,12 +59,17 @@ def test_live_resend_delivery_adds_anymail_and_email_settings() -> None:
     assert spec.settings["SERVER_EMAIL"] == "ops@example.com"
 
 
-def test_disabled_notifications_leave_email_backend_unmanaged() -> None:
+def test_disabled_notifications_retain_email_settings() -> None:
     spec = _notifications_manifest_adapter({"enabled": False})
 
     assert "quickscale_modules_notifications" in spec.apps
-    assert "EMAIL_BACKEND" not in spec.settings
-    assert "DEFAULT_FROM_EMAIL" not in spec.settings
+    # Rule 1 (D3): the settings surface is retained while off; delivery is
+    # refused at the runtime service boundary instead.
+    assert spec.settings["EMAIL_BACKEND"] == (
+        "django.core.mail.backends.console.EmailBackend"
+    )
+    assert spec.settings["DEFAULT_FROM_EMAIL"] == "noreply@example.com"
+    assert spec.settings["SERVER_EMAIL"] == "noreply@example.com"
 
 
 def test_adapter_projects_secret_settings_from_env_var_names() -> None:

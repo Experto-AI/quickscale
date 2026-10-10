@@ -158,28 +158,29 @@ class TestAnalyticsManifestEntryPoint:
     def test_settings_reflect_supplied_options(self) -> None:
         """Derived settings reflect the supplied option values.
 
-        Analytics keeps its app and URL suppression when disabled while still
-        projecting the manifest-owned settings baseline.
+        Analytics keeps its app while disabled and drops only its public URLs,
+        still projecting the manifest-owned settings baseline.
         """
         # Enabled case: custom api key must appear in settings.
         enabled_options = dict(self._ANALYTICS_OPTIONS)
         enabled_options["posthog_api_key_env_var"] = "MY_CUSTOM_KEY"
         enabled_options["enabled"] = True
 
-        spec = build_manifest_wiring_spec("analytics", enabled_options)
-        assert spec.settings.get("QUICKSCALE_ANALYTICS_ENABLED") is True
+        enabled_spec = build_manifest_wiring_spec("analytics", enabled_options)
+        assert enabled_spec.settings.get("QUICKSCALE_ANALYTICS_ENABLED") is True
         assert (
-            spec.settings.get("QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR")
+            enabled_spec.settings.get("QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR")
             == "MY_CUSTOM_KEY"
         )
 
-        # Disabled case: app and URL wiring are suppressed, but manifest-owned
-        # settings remain available to generated settings.
+        # Disabled case: the app stays installed and only the public URL
+        # wiring unmounts, while manifest-owned settings remain available.
         disabled_options = dict(self._ANALYTICS_OPTIONS)
         disabled_options["enabled"] = False
 
         disabled_spec = build_manifest_wiring_spec("analytics", disabled_options)
-        assert disabled_spec.apps == ()
+        assert disabled_spec.apps == enabled_spec.apps
+        assert disabled_spec.url_includes == ()
         assert disabled_spec.settings["QUICKSCALE_ANALYTICS_ENABLED"] is False
         assert "QUICKSCALE_ANALYTICS_PROVIDER" in disabled_spec.settings
 

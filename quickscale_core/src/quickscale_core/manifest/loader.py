@@ -232,6 +232,70 @@ def _validate_list_field(
     return value
 
 
+#: Every top-level key the loader parses.  The manifest surface is a closed
+#: world (§Module Wiring Authority, coherence proposal 18): a key outside this
+#: set is refused at load instead of loading silently.  ``implies`` is
+#: deliberately excluded here because ``_parse_required_modules`` refuses it
+#: with its dedicated retired-key message.
+_TOP_LEVEL_MANIFEST_KEYS = frozenset(
+    {
+        "name",
+        "version",
+        "description",
+        "config",
+        "retired_options",
+        "retired_settings",
+        "required_modules",
+        "dependencies",
+        "managed_files",
+        "derivation",
+        "contract_vintage",
+    }
+)
+
+#: Bare PEP 508 package names.  A manifest ``dependencies`` entry lists the
+#: name only; the package spec lives in the module ``pyproject.toml``.
+_DEPENDENCY_NAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$")
+
+
+def _validate_top_level_manifest_keys(
+    data: dict[str, Any], module_name: str | None
+) -> None:
+    """Refuse top-level keys the loader does not parse.
+
+    A parsed-but-unread key is a false-green; a misspelled section loads
+    silently today.  Unknown keys fail hard, mirroring the derivation
+    section's key check.
+    """
+    for key in data:
+        if key in _TOP_LEVEL_MANIFEST_KEYS or key == "implies":
+            continue
+        allowed = ", ".join(sorted(_TOP_LEVEL_MANIFEST_KEYS))
+        raise ManifestError(
+            f"manifest declares unknown top-level key '{key}' (allowed: {allowed})",
+            module_name,
+        )
+
+
+def _validate_dependency_names(
+    dependencies: list[str], module_name: str | None
+) -> list[str]:
+    """Refuse a version specifier in a manifest dependency entry.
+
+    ``dependencies`` lists bare package names; ``pyproject.toml`` carries the
+    Poetry specs (coherence proposal 18).
+    """
+    for entry in dependencies:
+        if not isinstance(entry, str) or _DEPENDENCY_NAME.match(entry) is None:
+            raise ManifestError(
+                "dependencies entries must be bare package names with no "
+                f"version specifier (got {entry!r}); declare the package spec "
+                "in the module's pyproject.toml",
+                module_name,
+            )
+    return dependencies
+
+
 def load_project_contract_vintage(
     declaration_path: Path | None = None,
 ) -> ProjectContractVintage:
@@ -274,6 +338,10 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     """
     data = _parse_yaml_content(yaml_content, module_name)
 
+    # The manifest surface is closed: refuse unknown or inert top-level keys
+    # before any section is parsed (coherence proposal 18).
+    _validate_top_level_manifest_keys(data, module_name)
+
     # Validate required fields
     name = _validate_required_string_field(data, "name", module_name)
     version = _validate_required_string_field(data, "version", module_name)
@@ -300,7 +368,9 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
 
     # Parse list fields
     required_modules = _parse_required_modules(data, module_name)
-    dependencies = _validate_list_field(data, "dependencies", module_name)
+    dependencies = _validate_dependency_names(
+        _validate_list_field(data, "dependencies", module_name), module_name
+    )
 
     # Parse managed-files declarations (additive; empty when absent)
     managed_files = _parse_managed_files(data, module_name)
@@ -423,10 +493,12 @@ __all__ = [
     "_DERIVATION_LIST_FIELDS",
     "_DERIVATION_SECTION_KEYS",
     "_DERIVATION_TYPES",
+    "_DEPENDENCY_NAME",
     "_INERT_DERIVATION_SECTION_ERRORS",
     "_NORMALIZATION_RULE_COMMON_KEYS",
     "_NORMALIZATION_RULE_KIND_KEYS",
     "_OPTION_DERIVATION_KEYS",
+    "_TOP_LEVEL_MANIFEST_KEYS",
     "_WIRING_FIELDS",
     "_assert_is_list",
     "_assert_is_mapping",
@@ -447,6 +519,7 @@ __all__ = [
     "_validate_computed_template",
     "_validate_condition_mapping",
     "_validate_declared_minimum",
+    "_validate_dependency_names",
     "_validate_derivation_entry",
     "_validate_list_field",
     "_validate_mutable_options",
@@ -455,6 +528,7 @@ __all__ = [
     "_validate_option_references",
     "_validate_required_string_field",
     "_validate_rule_owner_keys",
+    "_validate_top_level_manifest_keys",
     "_validate_validation_block",
     "_validate_wiring_contribution",
     "annotations",

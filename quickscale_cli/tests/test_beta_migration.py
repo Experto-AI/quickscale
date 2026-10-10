@@ -4622,9 +4622,10 @@ def test_patch_module_path_dependencies_replaces_path_with_version(
     tmp_path: Path,
 ) -> None:
     """SA62 regression: _patch_module_path_dependencies should replace non-existent
-    path dependencies with version constraints from the module manifest when the
-    splice produces valid TOML, exercising the validated-writer route."""
+    path dependencies with the canonical lockstep pin when the splice produces
+    valid TOML, exercising the validated-writer route."""
     from quickscale_cli.utils._dependency_write import _patch_module_path_dependencies
+    from quickscale_core.generator.runtime_pins import QUICKSCALE_CORE_PIN
 
     project = tmp_path / "project"
     project.mkdir()
@@ -4643,19 +4644,20 @@ def test_patch_module_path_dependencies_replaces_path_with_version(
         'quickscale-core = {path = "../../nonexistent", develop = true}\n'
     )
 
-    # Module manifest with a version constraint for the path dependency.
+    # The manifest lists the dependency name only (rule 39); the published
+    # spec comes from the canonical lockstep pin.
     (module_dir / "module.yml").write_text(
         'name: "quickscale-module-foo"\n'
         'version: "0.1.0"\n'
         "dependencies:\n"
-        '  - "quickscale-core>=0.86.0,<0.87.0"\n'
+        '  - "quickscale-core"\n'
     )
 
     _patch_module_path_dependencies(project, {"foo": None})
 
     updated = (module_dir / "pyproject.toml").read_text()
-    # The path-style entry must be replaced with the version constraint.
-    assert 'quickscale-core = ">=0.86.0,<0.87.0"' in updated
+    # The path-style entry must be replaced with the lockstep pin.
+    assert f'quickscale-core = "{QUICKSCALE_CORE_PIN}"' in updated
     # The original path syntax must be gone.
     assert '{path = "../../nonexistent", develop = true}' not in updated
     # The rewritten TOML must still parse as valid TOML.
@@ -4665,19 +4667,19 @@ def test_patch_module_path_dependencies_replaces_path_with_version(
 
 
 def test_patch_module_path_dependencies_rejects_invalid_splice(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """SA62 regression: _patch_module_path_dependencies must refuse to write
     TOML when the line-level splice produces invalid content, protecting
     against silent data corruption before target-file mutation.
 
-    The module.yml manifest carries a version spec with an embedded
-    double-quote character that, after line-level splice, produces
-    unparseable TOML.  _write_validated_toml catches the malformed
-    document and raises DependencySyncError before anything touches disk.
+    The patched published spec carries an embedded double-quote character
+    that, after line-level splice, produces unparseable TOML.
+    _write_validated_toml catches the malformed document and raises
+    DependencySyncError before anything touches disk.
     """
+    from quickscale_cli.utils import _dependency_write
     from quickscale_cli.utils._dependency_io import DependencySyncError
-    from quickscale_cli.utils._dependency_write import _patch_module_path_dependencies
 
     project = tmp_path / "project"
     project.mkdir()
@@ -4696,18 +4698,24 @@ def test_patch_module_path_dependencies_rejects_invalid_splice(
     pyproject_path = module_dir / "pyproject.toml"
     pyproject_path.write_text(module_pyproject)
 
-    # Module manifest with a spec that contains a double-quote character.
-    # After line-level splice: quickscale-core = "">=0.86.0,<0.87.0"
-    # which is invalid TOML (empty string followed by garbage).
     (module_dir / "module.yml").write_text(
         'name: "quickscale-module-foo"\n'
         'version: "0.1.0"\n'
         "dependencies:\n"
-        "  - 'quickscale-core\">=0.86.0,<0.87.0'\n"
+        '  - "quickscale-core"\n'
+    )
+
+    # A spec with a double-quote character spliced as
+    # ``quickscale-core = "">=0.86.0,<0.87.0"`` is invalid TOML (empty string
+    # followed by garbage); the validated writer must refuse it.
+    monkeypatch.setattr(
+        _dependency_write,
+        "_published_path_dependency_spec",
+        lambda dep_name: '">=0.86.0,<0.87.0',
     )
 
     with pytest.raises(DependencySyncError, match="invalid TOML"):
-        _patch_module_path_dependencies(project, {"foo": None})
+        _dependency_write._patch_module_path_dependencies(project, {"foo": None})
 
     # The file must not have been modified.
     assert pyproject_path.read_text() == module_pyproject

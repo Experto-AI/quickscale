@@ -8,7 +8,7 @@ config:
       type: boolean
       default: true
       django_setting: QUICKSCALE_ANALYTICS_ENABLED
-      description: "Enable the analytics runtime. When disabled, QuickScale removes managed backend analytics wiring."
+      description: "Enable the analytics runtime. Off keeps the module installed with its data intact and mounts none of its public analytics URLs."
       validation: {}
 
     provider:
@@ -72,7 +72,8 @@ required_modules:
   - orgs
 
 dependencies:
-  - posthog>=7.33.0,<8.0.0
+  - posthog
+  - quickscale-core
 
 # ---------------------------------------------------------------------------
 # Manifest derivation rules

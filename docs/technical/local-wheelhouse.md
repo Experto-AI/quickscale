@@ -4,8 +4,9 @@ QuickScale can replace the generated project's published `quickscale-core`
 dependency range with an exact local wheel during development and
 installed-wheel acceptance testing. The dependency synchronizer applies this
 seam to both the direct project dependency update and the embedded module
-`pyproject.toml` path-repair pass. Published third-party dependencies keep their
-manifest-derived values; the wheelhouse is not a replacement package index.
+`pyproject.toml` path-repair pass. Published third-party dependencies keep the specs
+declared in the module `pyproject.toml`; the wheelhouse is not a replacement package
+index.
 
 ## Wheelhouse selection
 
@@ -19,9 +20,9 @@ directory for exactly one wheel matching the normalized pattern
 When the variable is unset, an installed CLI may implicitly use
 `sys.prefix/quickscale_wheels`, the wheelhouse staged by the global-install
 workflow. If that implicit wheelhouse has no matching wheel, the synchronizer
-keeps the published manifest version range; this preserves the normal fallback
-for locally installed builds whose wheelhouse is incomplete. An unset variable
-with no staged wheelhouse also keeps the manifest version range.
+keeps the canonical published `quickscale-core` lockstep pin; this preserves the
+normal fallback for locally installed builds whose wheelhouse is incomplete. An
+unset variable with no staged wheelhouse also keeps the canonical lockstep pin.
 
 ## Failure modes
 
@@ -35,7 +36,8 @@ with no staged wheelhouse also keeps the manifest version range.
 - More than one matching wheel raises `DependencySyncError` because the local
   artifact is ambiguous.
 - With no explicit wheelhouse, no staged wheelhouse, or an unmatched implicit
-  wheelhouse, the manifest version specification remains authoritative.
+  wheelhouse, the canonical published `quickscale-core` lockstep pin remains
+  authoritative.
 
 To use local resolution, build or copy one matching `.whl` into the explicit
 directory and rerun the command. To use the published dependency range, unset

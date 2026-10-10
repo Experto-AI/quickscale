@@ -7,17 +7,18 @@ For each module in ``quickscale_modules/*/`` that declares a
 
 **Phase 1 — Static analysis (fast path):**
 
-1. Parses the minimum claimed core version from the dependency spec.
+1. Confirms the module manifest declares the bare
+   ``quickscale-core`` dependency name (rule 39).
 2. Collects all ``from quickscale_core`` / ``import quickscale_core``
    statements from the module's Python source tree using ``ast``.
 3. Resolves each imported symbol against the on-disk core source to
    confirm the referenced module path exists and, when a named symbol
    is imported, that the symbol is actually defined in the target file.
-4. Asserts the module's ``quickscale-core`` specifier is exactly the
-   lockstep pin derived from ``VERSION`` — floor = the release being
-   published, ceiling = the next minor. The pin is stamped by
-   ``scripts/version_tool.sh``; this is the gate that keeps a stale or
-   hand-edited one from reaching publish.
+4. Asserts the specifier owned by the module ``pyproject.toml`` is the
+   monorepo path dependency or exactly the lockstep pin derived from
+   ``VERSION`` — floor = the release being published, ceiling = the next
+   minor.  The manifest entry itself stays bare; this is the gate that
+   keeps a stale or hand-edited pin from reaching publish.
 
 **Phase 2 — Install / import probe (runtime check):**
 
@@ -176,9 +177,10 @@ def _parse_module_yml(module_yml: Path) -> dict:
 
 def _get_core_dep_spec(data: dict) -> str | None:
     """
-    Return the ``quickscale-core`` dependency spec from a parsed module.yml.
+    Return the ``quickscale-core`` dependency entry from a parsed module.yml.
 
-    Returns ``None`` if the module doesn't depend on core.
+    Returns ``None`` if the module doesn't depend on core.  Rule 39 makes the
+    entry a bare name; a version suffix here is refused by the caller.
     """
     deps = data.get("dependencies", [])
     if not isinstance(deps, list):
@@ -186,10 +188,29 @@ def _get_core_dep_spec(data: dict) -> str | None:
     for dep in deps:
         if not isinstance(dep, str):
             continue
-        # Match both "quickscale-core>=0.86.0" and "quickscale-core >= 0.86.0"
+        # Match both "quickscale-core" and a legacy "quickscale-core>=..." form
         if dep.startswith(CORE_DEP_NAME) or dep.startswith(f"{CORE_DEP_NAME} "):
             return dep
     return None
+
+
+def _get_pyproject_core_dep(mod_dir: Path) -> object | None:
+    """
+    Return the module pyproject's ``quickscale-core`` dependency value.
+
+    The value is the monorepo path table or a version string; ``None`` when
+    the file or the dependency is absent.  A malformed ``pyproject.toml``
+    raises :class:`tomllib.TOMLDecodeError` for the caller to report.
+    """
+    pyproject = mod_dir / "pyproject.toml"
+    if not pyproject.is_file():
+        return None
+    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    poetry = data.get("tool", {}).get("poetry", {})
+    deps = poetry.get("dependencies", {}) if isinstance(poetry, dict) else {}
+    if not isinstance(deps, dict):
+        return None
+    return deps.get(CORE_DEP_NAME)
 
 
 # ---------------------------------------------------------------------------
@@ -1105,35 +1126,88 @@ def main(argv: list[str] | None = None) -> int:
             overall_exit = 1
             continue
 
-        dep_spec = _get_core_dep_spec(data)
-        if dep_spec is None:
+        dep_entry = _get_core_dep_spec(data)
+        if dep_entry is None:
             print(f"[{mod_name}] No quickscale-core dependency declared — skipping.")
             continue
 
         modules_with_core_dep += 1
-        print(f"[{mod_name}] quickscale-core dependency: {dep_spec}")
+        print(f"[{mod_name}] quickscale-core dependency: {dep_entry}")
 
-        # The lockstep pin is derived from VERSION by version_tool.sh; assert
-        # the exact shape so a stale or hand-edited pin fails the gate rather
-        # than passing on a floor comparison alone.
-        declared_spec = _declared_core_spec(dep_spec).replace(" ", "")
         expected_spec = _expected_core_spec(current_version_str)
-        if declared_spec != expected_spec:
+
+        # Rule 39: the manifest lists the bare dependency name; the spec lives
+        # in the module pyproject.toml.
+        if dep_entry.strip() != CORE_DEP_NAME:
             print(
-                f"  FAIL: lockstep pin is {declared_spec or '(empty)'}; expected "
-                f"{expected_spec} for core {current_version_str}. "
-                f"Run `make version-update` to restamp it."
+                f"  FAIL: manifest entry must be the bare name {CORE_DEP_NAME!r} "
+                f"with the spec in pyproject.toml (rule 39); got {dep_entry!r}."
             )
             overall_exit = 1
 
-        # Parse the floor for the Phase 2 install probe. Comparing it against
-        # VERSION would only restate the lockstep assertion above, which has
-        # already rejected every floor that is not the current release.
-        min_ver_str = _extract_min_core_version(dep_spec)
+        # The module pyproject owns the spec: the monorepo path dependency, or
+        # exactly the lockstep pin derived from VERSION, so a stale or
+        # hand-edited pin fails the gate rather than passing on a floor
+        # comparison alone.
+        try:
+            pyproject_core = _get_pyproject_core_dep(mod_dir)
+        except tomllib.TOMLDecodeError as exc:
+            print(f"  ERROR: Malformed module pyproject.toml ({mod_dir / 'pyproject.toml'}): {exc}")
+            overall_exit = 1
+            continue
+        if pyproject_core is None:
+            print("  FAIL: pyproject.toml does not declare quickscale-core.")
+            overall_exit = 1
+        elif isinstance(pyproject_core, str):
+            declared_spec = pyproject_core.replace(" ", "")
+            if declared_spec != expected_spec:
+                print(
+                    f"  FAIL: lockstep pin is {declared_spec or '(empty)'}; expected "
+                    f"{expected_spec} for core {current_version_str}."
+                )
+                overall_exit = 1
+        elif isinstance(pyproject_core, dict):
+            if "version" in pyproject_core:
+                # A declared version wins for consumers, exactly as the CLI
+                # resolver selects it; it must be a non-blank lockstep pin,
+                # even when a path is also declared.
+                table_version = pyproject_core["version"]
+                if not isinstance(table_version, str) or not table_version.strip():
+                    print(
+                        "  FAIL: pyproject.toml quickscale-core version spec is "
+                        "blank or not a string."
+                    )
+                    overall_exit = 1
+                else:
+                    declared_spec = table_version.replace(" ", "")
+                    if declared_spec != expected_spec:
+                        print(
+                            f"  FAIL: lockstep pin is {declared_spec or '(empty)'}; "
+                            f"expected {expected_spec} for core {current_version_str}."
+                        )
+                        overall_exit = 1
+            elif isinstance(pyproject_core.get("path"), str) and pyproject_core["path"].strip():
+                pass  # Monorepo path dependency: no published spec to stamp.
+            else:
+                print(
+                    "  FAIL: pyproject.toml quickscale-core entry declares no usable "
+                    "source (path or version)."
+                )
+                overall_exit = 1
+        else:
+            print(
+                "  FAIL: pyproject.toml quickscale-core entry declares no usable "
+                "source (path or version)."
+            )
+            overall_exit = 1
+
+        # Phase 2 probes the floor of the derived lockstep spec: the oldest
+        # released core the generated project's pin admits.
+        min_ver_str = _extract_min_core_version(expected_spec)
         if min_ver_str is None:
             print(
                 f"  WARNING: Could not extract minimum version from spec "
-                f"({dep_spec}). Cannot verify version baseline."
+                f"({expected_spec}). Cannot verify version baseline."
             )
 
         # Collect quickscale_core imports from module source

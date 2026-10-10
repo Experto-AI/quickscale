@@ -197,7 +197,6 @@ ENV_EXAMPLE_MODULE_SPECS: tuple[EnvExampleModuleSpec, ...] = (
         prose=_analytics_prose,
         tail_lines=("VITE_POSTHOG_KEY=", "VITE_POSTHOG_HOST="),
         remove_when_absent=True,
-        respects_enabled_flag=True,
     ),
     EnvExampleModuleSpec(
         module="billing",

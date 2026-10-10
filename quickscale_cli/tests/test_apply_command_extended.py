@@ -3539,10 +3539,11 @@ class TestAnalyticsEnvExampleSync:
         assert "VITE_POSTHOG_KEY=" in updated
         assert "VITE_POSTHOG_HOST=" in updated
 
-    def test_sync_analytics_env_example_removes_managed_block_when_disabled(
+    def test_sync_analytics_env_example_keeps_managed_block_when_disabled(
         self,
         tmp_path,
     ):
+        """SA260: a switched-off module keeps its `.env.example` block (rule 1)."""
         env_example = tmp_path / ".env.example"
         env_example.write_text(
             "SECRET_KEY=test\n"
@@ -3559,8 +3560,8 @@ class TestAnalyticsEnvExampleSync:
 
         assert result is True
         updated = env_example.read_text()
-        assert "# QuickScale Analytics (managed)" not in updated
-        assert "POSTHOG_API_KEY=" not in updated
+        assert "# QuickScale Analytics (managed)" in updated
+        assert "POSTHOG_API_KEY=" in updated
         assert "KEEP_ME=1" in updated
 
 

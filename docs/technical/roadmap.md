@@ -32,8 +32,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
-| SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
+| SA263 | Adapters validate, coerce, and default only through the manifest | 2 | — | Optional |
 | SA267 | Bring `scripts/` under the quality thresholds without gating it | 2 | — | Optional |
 | SA261 | One owner per URL prefix, and theme API bases from the seam | 3 | — | Optional |
 
@@ -41,7 +40,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 (cutover) ∥ SA204 ──► SA153 ──► SA154 (inventory)
-Track 2: SA260 ──► SA263 ──► SA267
+Track 2: SA263 ──► SA267
 Track 3: SA261
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
@@ -67,7 +66,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA260 | yes | yes | yes | **yes** | no |
+| 2 | SA263 | yes | yes | yes | **yes** | no |
 | 3 | SA261 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -308,24 +307,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA255 — Accept Resend's real webhook signature in notifications.**
 
-- [ ] **SA260 — One off switch and a closed-world manifest surface.**
-
-  **Context:** five mechanisms say "installed but off"; switching analytics off removes its app,
-  so a template following the README's `{% load quickscale_analytics %}` raises
-  `TemplateSyntaxError` (coherence `module-enabled-switch`, defect). The manifest loader ignores
-  unknown keys, so orgs' `middleware:`/`settings:` load silently, and `apps`/`middleware` literals
-  in adapters are unchecked (`manifest-declared-surface`). Dependency specs come from two files in
-  two dialects (`dependency-spec-sources`).
-
-  **Acceptance:** coherence §6 proposals 1 and 18 are merged into decisions and enforced: off
-  keeps apps, middleware, settings, admin, and template tags and drops only public `url_includes`
-  and `spa_routes`; scheduled commands refuse only `--trigger scheduled`; `.env.example` blocks
-  are kept. `load_manifest` rejects unknown top-level keys; `apps` and `middleware` come only from
-  `wiring_projections`; `required_modules` and `dependencies` are always present, `dependencies`
-  lists names with specs in `pyproject.toml`, and every module declares `quickscale-core`.
-
-  **Surfaces:** the five diverging adapters, `manifest` loader, `env_sync`, module manifests and
-  `pyproject.toml`s, the checklist, decisions, the harness, and the coherence audit.
+- [x] **SA260 — One off switch and a closed-world manifest surface.**
 
 - [ ] **SA261 — One owner per URL prefix, and theme API bases from the seam.**
 

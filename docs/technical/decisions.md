@@ -356,7 +356,7 @@ Engine boundary: §[DR Engine Boundary Contract](#disaster-recovery-engine-bound
 **Constraints:**
 - ✅ Every module MUST have `module.yml` at package root
 - ✅ `module.yml` `version` is the canonical installed-version source after embed
-- ✅ `module.yml` dependency names MUST match the non-baseline runtime package names declared in the module `pyproject.toml`; `module.yml` defines the required package set and `pyproject.toml` carries the Poetry specs
+- ✅ `module.yml` `dependencies` names MUST match the non-baseline runtime package names declared in the module `pyproject.toml`, listing the bare name only; `module.yml` defines the required package set and `pyproject.toml` carries the Poetry specs. Every module declares `quickscale-core`
 - ✅ Mutable options MUST specify `django_setting` key
 - ✅ Immutable options MUST NOT have `django_setting`
 - ✅ Package `pyproject.toml` version metadata and exported `__version__` values MUST match `module.yml` when present
@@ -435,6 +435,10 @@ ordinary Django.
 - ✅ Every module MUST declare the Django apps it contributes **exactly once**, in the
   `derivation.wiring_projections` entry with `wiring_field: apps` in **its own**
   `module.yml`. That block is the sole authority for `INSTALLED_APPS` membership
+- ✅ Every module MUST declare the middleware it contributes **exactly once**, in the
+  `derivation.wiring_projections` entry with `wiring_field: middleware` in **its own**
+  `module.yml`. That block is the sole authority for `MIDDLEWARE` membership; an adapter never
+  writes a middleware literal
 - ✅ A module that ships models or a migration MUST declare at least one Django app.
   This is enforced by a conformance gate, not by review
 - ✅ Adapters SHOULD route through `build_generic_manifest_spec()` so `apps` is read
@@ -453,7 +457,9 @@ ordinary Django.
   are inventory metadata, never a second wiring authority
 - ❌ **No parsed-but-unread declarative surface.** A key accepted by the manifest
   loader MUST be projected into wiring by a live code path, or MUST be removed from
-  the schema. A key that looks authoritative and is inert is a false-green
+  the schema. A key that looks authoritative and is inert is a false-green. The
+  loader's top-level key set is closed: a key outside the parsed set is refused at load, so a
+  stray or misspelled top-level section fails hard instead of loading silently
 
 **Tie-breaker:** When two places state which apps a module contributes, the module's
 own `module.yml` wins and the other copy is deleted, not reconciled.
@@ -520,9 +526,15 @@ settings read but never declared, and every default written twice. Renames are a
 
   Booleans that describe behavior rather than switch a feature keep a descriptive name
   (`QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG`).
-- ✅ Every module has `QUICKSCALE_<MODULE>_ENABLED`. Off means installed, data untouched, public
-  surfaces (URLs, pages, API, scheduled jobs) disabled; admin stays. `apply` refuses to switch a
-  module off while an installed module lists it in `required_modules`.
+- ✅ Every module has `QUICKSCALE_<MODULE>_ENABLED`. Off keeps the module's apps, middleware,
+  settings, admin, and template tags installed; the adapter drops only its public `url_includes`
+  and `spa_routes`, and a webhook endpoint stays mounted and answers 404 (rule 26). The module's
+  `.env.example` block is kept while off. A scheduled command refuses only a run marked
+  `--trigger scheduled`, and no command defaults to the scheduled trigger. `apply` refuses to
+  switch a module off while an installed module lists it in `required_modules`.
+- ❌ An adapter off branch that returns fewer `apps` or `middleware` than its on branch — the
+  parity check in `quickscale_core/tests/test_module_off_switch_parity.py` calls each shipped
+  adapter off and on, with a control case proving it rejects a dropping adapter.
 - ✅ Vendor credentials default to the vendor's variable name (`STRIPE_SECRET_KEY`,
   `RESEND_API_KEY`, `AWS_ACCESS_KEY_ID`); secrets QuickScale itself defines use
   `QUICKSCALE_<MODULE>_<NAME>`.
@@ -1016,8 +1028,10 @@ public surface is `services.py` (rule 4).
 `throttles`, `permissions`, `templatetags/`, `management/`, `migrations/`); `templates/` and
 `static/` (rule 8); rule 4's listed
 foundation surface files; the listed extras backups' `persistence.py` (rule 10's port), orgs'
-`debug_views.py`, and blog's and listings' `markdownx_urls.py` (the staff-guarded MarkdownX
-endpoint URLconf each module mounts in place of the vendor's unguarded one); and private files
+`debug_views.py`, blog's and listings' `markdownx_urls.py` (the staff-guarded MarkdownX
+endpoint URLconf each module mounts in place of the vendor's unguarded one), and billing's
+`webhook_urls.py` (the webhook-only URLconf a switched-off billing module keeps mounted while
+its public pages and APIs unmount, rule 1); and private files
 named `_<name>.py`. Any other name needs a decision edit.
 
 **29. Test names.** Test files are `test_<subject>.py`, named for what they protect; neither the file
@@ -1164,11 +1178,15 @@ headings. A module whose views authorize through orgs' role tools lists the mini
 action in its README's Public surface (rule 19).
 
 **39. Module dependencies.**
-- ✅ `required_modules` lists bare module names (`[orgs]`); `plan` and `apply` select a required
+- ✅ `required_modules` and `dependencies` are always present; an empty list declares none.
+  `required_modules` lists bare module names (`[orgs]`); `plan` and `apply` select a required
   module together with its dependant. Lockstep versions
   (§[Module Version Lockstep](#module-version-lockstep)) make version floors meaningless.
-- ❌ A version specifier on a first-party module; the `implies` key (orgs' `implies: notifications`
-  is a requirement under rule 20).
+- ✅ `dependencies` lists bare package names only — one per runtime package of the module's
+  `pyproject.toml`, which carries the Poetry specs — and every module declares `quickscale-core`.
+- ❌ A version specifier in `required_modules` or `dependencies`; the `implies` key (orgs'
+  `implies: notifications` is a requirement under rule 20); a declared dependency name with no
+  package spec in the module `pyproject.toml`.
 
 **40. Enforcement.** A conformance test over every `module.yml`, every module's source, and core's
 and the CLI's option handling fails on each of rules 1–39, 42–48, and 50 (rule 21 stays a review rule

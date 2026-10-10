@@ -95,6 +95,26 @@ def _billing_post_hook(
         },
     }
 
+    # Rule 1 (D3): off keeps the module installed — app, middleware,
+    # settings, and admin — and unmounts its public pages and APIs.  The
+    # Stripe webhook stays mounted through its own URLconf and answers the
+    # module's 404 refusal (rule 26), so provider retries get a clean answer.
+    if not bool(resolved["enabled"]):
+        webhook_includes = tuple(
+            (prefix, "quickscale_modules_billing.webhook_urls")
+            for prefix, target in spec.url_includes
+            if target == "quickscale_modules_billing.urls"
+        )
+        return ModuleWiringSpec(
+            apps=spec.apps,
+            middleware=spec.middleware,
+            settings=settings,
+            pre_home_url_includes=(),
+            url_includes=webhook_includes,
+            spa_routes=(),
+            managed_files=spec.managed_files,
+        )
+
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,

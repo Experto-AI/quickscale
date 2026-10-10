@@ -212,9 +212,9 @@ def test_generated_context_processor_billing_url_follows_routes_and_enabled(
 
     Anonymous visitors get billing's pricing page and authenticated users its
     dashboard, in either deployment mode and at whatever prefix the project
-    mounts.  Billing keeps its URL patterns mounted while switched off but
-    answers as disabled (rule 1), so the projected enabled setting yields
-    ``None``, as it does while billing is absent and no namespace resolves.
+    mounts.  A switched-off billing module unmounts its public URL includes
+    (rule 1), so the projected enabled setting yields ``None``, as it does
+    while billing is absent and no namespace resolves.
     """
     if not django_settings.configured:
         django_settings.configure(

@@ -20,7 +20,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
-| `enabled` | boolean | `true` | `QUICKSCALE_ANALYTICS_ENABLED` | Enable the analytics runtime. When disabled, QuickScale removes managed backend analytics wiring. |
+| `enabled` | boolean | `true` | `QUICKSCALE_ANALYTICS_ENABLED` | Enable the analytics runtime. Off keeps the module installed with its data intact and mounts none of its public analytics URLs. |
 | `provider` | string | `posthog` | `QUICKSCALE_ANALYTICS_PROVIDER` | Approved analytics provider; PostHog is the only supported option. |
 | `posthog_api_key_env_var` | string | `POSTHOG_API_KEY` | `QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR` | Environment-variable name containing the PostHog project API key. |
 | `posthog_host_env_var` | string | `POSTHOG_HOST` | `QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR` | Optional environment-variable name containing the PostHog ingestion host override. |

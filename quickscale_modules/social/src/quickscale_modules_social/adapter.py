@@ -178,7 +178,7 @@ def _social_manifest_adapter(
         resolved=resolved,
         derived_settings=settings,
         apps=apps,
-        middleware=(),
+        middleware=manifest_spec.middleware,
         url_includes=url_includes,
         pre_home_url_includes=(),
         managed_files=managed_file_declarations,

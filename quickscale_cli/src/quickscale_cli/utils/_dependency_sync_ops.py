@@ -23,15 +23,15 @@ def _resolve_declared_dependency_value(
     *,
     module_name: str,
     dependency_name: str,
-    requirement: str,
     module_poetry_dependencies: Mapping[str, Any],
 ) -> Any:
-    """Return the Poetry dependency value declared for a manifest requirement.
+    """Return the Poetry dependency value declared for a manifest dependency.
 
-    When pyproject.toml declares a non-string (e.g. path/table) dependency,
-    fall back to the version spec from the module.yml manifest requirement so
-    generated projects receive a proper bounded version range instead of a
-    developer-only path entry.
+    The manifest lists names only (rule 39).  A string pyproject value is the
+    package spec; a table-form entry contributes its own ``version`` field;
+    and a path-only entry (``quickscale-core``) falls back to the dependency's
+    published spec, so generated projects receive a proper bounded version
+    range instead of a developer-only path entry.
     """
     if dependency_name not in module_poetry_dependencies:
         raise _dependency_io.DependencySyncError(
@@ -39,10 +39,41 @@ def _resolve_declared_dependency_value(
             f"version for {module_name}.{dependency_name}"
         )
     dependency_value = module_poetry_dependencies[dependency_name]
-    if not isinstance(dependency_value, str):
-        spec = requirement[len(dependency_name) :].strip()
-        dependency_value = spec if spec else dependency_value
-    return dependency_value
+    if isinstance(dependency_value, str):
+        resolved_spec = dependency_value.strip()
+    elif isinstance(dependency_value, dict) and "version" in dependency_value:
+        # A declared version wins for consumers, exactly as the compatibility
+        # gate reads it; a blank or non-string one is refused, path or not.
+        version_value = dependency_value["version"]
+        if not isinstance(version_value, str):
+            raise _dependency_io.DependencySyncError(
+                "Embedded module pyproject.toml declares a non-string version "
+                f"spec for {module_name}.{dependency_name}"
+            )
+        resolved_spec = version_value.strip()
+    elif (
+        isinstance(dependency_value, dict)
+        and isinstance(dependency_value.get("path"), str)
+        and dependency_value["path"].strip()
+    ):
+        spec = _dependency_write._published_path_dependency_spec(dependency_name)
+        if spec is None:
+            raise _dependency_io.DependencySyncError(
+                "Embedded module pyproject.toml declares a path dependency "
+                f"with no published spec for {module_name}.{dependency_name}"
+            )
+        resolved_spec = spec
+    else:
+        raise _dependency_io.DependencySyncError(
+            "Embedded module pyproject.toml declares a dependency without a "
+            f"usable spec for {module_name}.{dependency_name}"
+        )
+    if not resolved_spec:
+        raise _dependency_io.DependencySyncError(
+            "Embedded module pyproject.toml declares a blank version spec for "
+            f"{module_name}.{dependency_name}"
+        )
+    return resolved_spec
 
 
 def _merge_preferred_dependency(
@@ -70,7 +101,6 @@ def _record_repin_update(
     *,
     module_name: str,
     dependency_name: str,
-    requirement: str,
     module_poetry_dependencies: Mapping[str, Any],
 ) -> None:
     """Queue a repin-mode replacement for an existing project dependency.
@@ -81,7 +111,6 @@ def _record_repin_update(
     desired_value = _resolve_declared_dependency_value(
         module_name=module_name,
         dependency_name=dependency_name,
-        requirement=requirement,
         module_poetry_dependencies=module_poetry_dependencies,
     )
     _merge_preferred_dependency(pending_package_updates, dependency_name, desired_value)
@@ -215,7 +244,7 @@ def sync_project_module_dependencies(
     dependency values always win and only truly missing entries are appended.
 
     In repin mode (``repin_existing=True``), existing project dependency
-    entries are compared against the manifest-derived bounded range, and any
+    entries are compared against the declared package spec, and any
     that differ are replaced inline.  This is used by the update path to
     repin pre-SA9.1 path-style or out-of-range entries to the correct
     compatible version range.
@@ -307,13 +336,12 @@ def sync_project_module_dependencies(
                     pending_package_updates[dependency_name] = local_wheel
                     continue
                 # Repin mode: replace existing entries that differ from the
-                # manifest-derived bounded range.
+                # declared package spec.
                 if repin_existing:
                     _record_repin_update(
                         pending_package_updates,
                         module_name=module_name,
                         dependency_name=dependency_name,
-                        requirement=requirement,
                         module_poetry_dependencies=module_poetry_dependencies,
                     )
                 continue
@@ -321,7 +349,6 @@ def sync_project_module_dependencies(
             dependency_value = _resolve_declared_dependency_value(
                 module_name=module_name,
                 dependency_name=dependency_name,
-                requirement=requirement,
                 module_poetry_dependencies=module_poetry_dependencies,
             )
             if local_wheel is not None:
@@ -351,11 +378,11 @@ def sync_project_module_dependencies(
     _dependency_write._append_dependency_entries(pyproject_path, entries_to_add)
 
     # Patch module pyproject.toml files: replace path-style dependencies
-    # that point to non-existent locations with version constraints from
-    # the module.yml manifest.  This prevents poetry lock from failing
-    # when a module's pyproject.toml references a monorepo-local path
-    # (e.g. quickscale-core = {path = "../../quickscale_core"}) that
-    # doesn't exist in the generated project's isolated tree.
+    # that point to non-existent locations with the dependency's published
+    # spec (the canonical quickscale-core lockstep pin).  This prevents
+    # poetry lock from failing when a module's pyproject.toml references a
+    # monorepo-local path (e.g. quickscale-core = {path = "../../quickscale_core"})
+    # that doesn't exist in the generated project's isolated tree.
     _dependency_write._patch_module_path_dependencies(
         project_path, module_options_by_name, wheelhouse
     )

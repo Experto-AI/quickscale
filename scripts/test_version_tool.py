@@ -59,12 +59,6 @@ INIT_VERSION_PATTERN: Final[str] = r'__version__\s*=\s*"([^"]+)"'
 _INIT_VERSION_RE: Final[re.Pattern[str]] = re.compile(INIT_VERSION_PATTERN)
 
 
-def _next_minor(version: str) -> str:
-    """``'0.86.0'`` → ``'0.87.0'`` — the lockstep pin's ceiling."""
-    major, minor, *_ = version.split(".")
-    return f"{major}.{int(minor) + 1}.0"
-
-
 # Expected exit codes
 EXIT_OK: Final[int] = 0
 EXIT_MISMATCH: Final[int] = 1
@@ -524,13 +518,13 @@ class TestUpdateWithTempRepo:
             mod_dir = root / "quickscale_modules" / mod_name
             mod_dir.mkdir(parents=True)
 
-            # module.yml — carries the quickscale-core lockstep pin, which
-            # update must restamp from VERSION alongside the version field.
+            # module.yml — lists the bare quickscale-core name (rule 39); the
+            # lockstep pin is derived from VERSION at apply time, not stamped
+            # here.
             mod_dir.joinpath("module.yml").write_text(
                 f'name: {mod_name}\nversion: "{self.VERSION_BEFORE}"\ndescription: "test"\n'
                 f"dependencies:\n"
-                f"  - quickscale-core>={self.VERSION_BEFORE},"
-                f"<{_next_minor(self.VERSION_BEFORE)}\n"
+                f"  - quickscale-core\n"
             )
 
             # pyproject.toml
@@ -705,13 +699,16 @@ class TestUpdateWithTempRepo:
             )
 
         # The quickscale-core lockstep pin is derived, not hand-maintained:
-        # update must restamp both floor and ceiling from VERSION.
-        expected_pin = f"quickscale-core>={expected},<{_next_minor(expected)}"
+        # update leaves the manifest's bare dependency name alone, and
+        # check-core-compat asserts the derived pin shape.
         for mod_name in EXPECTED_MODULE_NAMES:
             rel_path = f"quickscale_modules/{mod_name}/module.yml"
             content = (repo / rel_path).read_text()
-            assert expected_pin in content, (
-                f"Core pin {expected_pin} not found in {rel_path}\nContent: {content[:200]}"
+            assert "  - quickscale-core\n" in content, (
+                f"Bare core name not found in {rel_path}\nContent: {content[:200]}"
+            )
+            assert "quickscale-core>=" not in content, (
+                f"Stamped core pin unexpectedly present in {rel_path}\nContent: {content[:200]}"
             )
 
         # Verify Markdown files do NOT contain the new version
