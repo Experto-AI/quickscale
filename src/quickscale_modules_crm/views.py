@@ -11,7 +11,6 @@ from django.urls import reverse
 from django.views.generic import TemplateView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
-from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.pagination import PageNumberPagination
@@ -21,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.routers import APIRootView
 from rest_framework.views import APIView
 
+from quickscale_core.runtime import QuickscaleSessionAuthentication
 from quickscale_modules_orgs.models import OrgRole
 from quickscale_modules_orgs.permissions import HasOrgRole, OrgRoleMixin
 
@@ -244,7 +244,7 @@ class CRMModelViewSet(CRMApiEnabledMixin, viewsets.ModelViewSet):
     ``OrgScopedReadMixin``.
     """
 
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = [QuickscaleSessionAuthentication]
 
     def get_permissions(self) -> list[Any]:
         """Require viewer for safe methods and member for writes (rule 19)."""
@@ -288,7 +288,7 @@ class OrgScopedReadMixin(CRMModelViewSet):
 class CRMApiRootView(CRMApiEnabledMixin, APIRootView):
     """Org-role API root for the CRM router."""
 
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = [QuickscaleSessionAuthentication]
     permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.VIEWER)]
 
 
