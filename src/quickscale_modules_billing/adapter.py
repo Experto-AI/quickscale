@@ -21,11 +21,12 @@ from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spe
 def _billing_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Apply billing-specific bool/string coercions and DRF throttle scopes.
+    """Apply billing-specific bool/int/string coercions and DRF throttle scopes.
 
     Reproduces the legacy coercion behaviour that the declarative resolver
-    cannot express: ``QUICKSCALE_BILLING_ENABLED`` is forced to ``bool``
-    and env-var name settings are forced to ``str``.  It also contributes
+    cannot express: ``QUICKSCALE_BILLING_ENABLED`` is forced to ``bool``,
+    the per-page list settings are forced to ``int``, and env-var name
+    settings are forced to ``str``.  It also contributes
     the stemmed billing throttle scopes at the module's ``api_rate_limit``
     option value, which the generated settings merge over their own
     ``user``/``anon`` defaults.
@@ -37,6 +38,16 @@ def _billing_post_hook(
     settings["QUICKSCALE_BILLING_ENABLED"] = bool(
         settings["QUICKSCALE_BILLING_ENABLED"]
     )
+
+    # Legacy int coercions on the list page sizes (rule 9).  Like the string
+    # coercions below, an absent key is skipped: the generated settings always
+    # carry it, and the startup check refuses a missing declared setting.
+    for int_key in (
+        "QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE",
+        "QUICKSCALE_BILLING_PLANS_PER_PAGE",
+    ):
+        if int_key in settings:
+            settings[int_key] = int(settings[int_key])
 
     # Legacy str() coercion on string fields.
     for str_key in (

@@ -399,6 +399,36 @@ def test_plan_list_view_is_public_and_returns_only_active_recurring_plans(
     ]
 
 
+@pytest.mark.django_db
+@override_settings(QUICKSCALE_BILLING_PLANS_PER_PAGE=1)
+def test_plan_list_view_reads_plans_per_page_setting(client: Client) -> None:
+    """PlanListView pages by QUICKSCALE_BILLING_PLANS_PER_PAGE (rule 9)."""
+    _create_recurring_plan(
+        slug="starter-monthly",
+        price_id="price_starter_monthly",
+        name="Starter Monthly",
+    )
+    _create_recurring_plan(
+        slug="starter-yearly",
+        price_id="price_starter_yearly",
+        price_cents=19000,
+        credits=1200,
+        interval=Plan.BillingInterval.YEARLY,
+        name="Starter Yearly",
+    )
+
+    first_page_response = client.get(reverse("quickscale_billing:subscription_plans"))
+    second_page_response = client.get(
+        reverse("quickscale_billing:subscription_plans"),
+        {"page": 2},
+    )
+
+    assert first_page_response.status_code == 200
+    assert second_page_response.status_code == 200
+    assert [item["slug"] for item in first_page_response.json()] == ["starter-monthly"]
+    assert [item["slug"] for item in second_page_response.json()] == ["starter-yearly"]
+
+
 def test_billing_dashboard_view_redirects_anonymous_users_to_login(
     client: Client,
 ) -> None:
@@ -1036,6 +1066,38 @@ def test_credit_transactions_view_uses_fixed_page_size_without_client_override(
     assert len(first_page_response.json()) == 25
     assert second_page_response.status_code == 200
     assert len(second_page_response.json()) == 5
+
+
+@pytest.mark.django_db
+@override_settings(QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE=2)
+def test_credit_transactions_view_reads_transactions_per_page_setting(
+    client: Client,
+    user,
+    organization,
+    org_context,
+    mock_org_resolution,
+) -> None:
+    """The ledger list pages by QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE."""
+    for index in range(5):
+        _create_credit_transaction(
+            user=user,
+            organization=organization,
+            amount=index + 1,
+            balance_after=index + 1,
+            description=f"Purchase {index + 1}",
+        )
+    client.force_login(user)
+
+    first_page_response = client.get(reverse("quickscale_billing:credit_transactions"))
+    second_page_response = client.get(
+        reverse("quickscale_billing:credit_transactions"),
+        {"page": 2},
+    )
+
+    assert first_page_response.status_code == 200
+    assert len(first_page_response.json()) == 2
+    assert second_page_response.status_code == 200
+    assert len(second_page_response.json()) == 2
 
 
 @pytest.mark.django_db
