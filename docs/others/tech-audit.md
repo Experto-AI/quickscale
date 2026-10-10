@@ -248,11 +248,6 @@ items:
      effort: Trivial, confidence: High, reality: generated-app,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/_email.py],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: generated-frontend-coverage-unmet, status: open, severity: S4, category: X,
-     title: "Fresh generated frontend fails its own pnpm test:coverage thresholds", effort: Small,
-     confidence: High, reality: generated-app,
-     anchors: [quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/vitest.config.ts],
-     first_seen: 2026-10-10, last_verified: 2026-10-10}
   - {id: dr-restore-vintage-exact-match, status: watchlist, category: I, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/recovery.py],
      first_seen: 2026-09-24, last_verified: 2026-10-08}
@@ -282,13 +277,12 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 1 · S4 — 2 · total 3 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 1 · S4 — 1 · total 2 open. Watchlist: 7.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
 | `notifications-webhook-rejects-resend` | S3 | IX | Webhook accepts only a signing contract Resend never sends | Medium | High | new |
 | `forms-notification-status-misreported` | S4 | VI | Submission reports `queued` when notifications are disabled | Trivial | High | new |
-| `generated-frontend-coverage-unmet` | S4 | X | Fresh generated frontend fails its own `pnpm test:coverage` thresholds | Small | High | new |
 
 ---
 
@@ -322,13 +316,6 @@ items:
 - `forms-notification-status-misreported` · `forms/_email.py:44-53` · When notifications are
   disabled, the submit response reports `"queued"` while logging "skipped". · Return a distinct
   `"disabled"` status.
-- `generated-frontend-coverage-unmet` · `themes/showcase_react/vitest.config.ts:12-26` · The
-  generated frontend's `pnpm test:coverage` enforces per-file 80% thresholds, but the shipped
-  theme suite measures ~77.7% statements globally and fails per-file on pages, hooks, and UI
-  primitives, so the generated `frontend-lint` CI job is red out of the box. Reproduced on a
-  freshly rendered project. · Decide the starter's threshold/exclusion policy or expand the
-  theme's test suite; the backend test and migrate steps and the image healthcheck pass as
-  rendered.
 
 ---
 
@@ -829,3 +816,8 @@ Added:
 - 2026-10-10 — `social-payload-echoes-exception-text`: **resolved** (SA262). The core-rendered
   social payload views are DRF views that answer the one error shape and never echo exception
   text. Dropped from the index and summary.
+- 2026-10-10 — `generated-frontend-coverage-unmet`: **resolved** (SA253). The shipped
+  `showcase_react` suite now exercises the starter's pages, hooks, stores, components, UI
+  primitives, and the analytics wiring, so a freshly rendered project's frontend
+  `pnpm test:coverage` passes its existing per-file thresholds with the thresholds and coverage
+  include set unchanged. Dropped from the index and summary.

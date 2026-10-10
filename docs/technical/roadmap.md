@@ -32,7 +32,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA253 | Make the generated project's CI, image, and healthcheck pass, and execute them in a gate | 2 | — | Optional |
 | SA255 | Accept Resend's real webhook signature in notifications | 2 | — | Optional |
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
 | SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
@@ -43,7 +42,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 (cutover) ∥ SA204 ──► SA153 ──► SA154 (inventory)
-Track 2: SA253 ──► SA255 ──► SA260 ──► SA263 ──► SA267
+Track 2: SA255 ──► SA260 ──► SA263 ──► SA267
 Track 3: SA261
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
@@ -69,7 +68,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA253 | yes | yes | yes | **yes** | no |
+| 2 | SA255 | yes | yes | yes | **yes** | no |
 | 3 | SA261 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -106,9 +105,8 @@ A track is **truly green** only when all three states are yes.
   re-exports, and the conformance harness with its registry row, and the five `_anonymization.py`
   handlers with core's redaction helpers.
 - **Cross-track edits.** SA255 takes the notifications webhook (`notifications/views.py`,
-  `_webhooks.py`) from Track 3. SA253 edits `base.py.j2` (Track 3) only for its test-settings
-  line. SA204 adds its gate row to the Track 2 registry. All land through the serialized merge
-  queue.
+  `_webhooks.py`) from Track 3. SA204 adds its gate row to the Track 2 registry. All land through
+  the serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md). Each track resolves the shared set at its
@@ -308,24 +306,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [ ] **SA253 — Make the generated project's CI, image, and healthcheck pass, and execute them in a gate.**
-
-  **Context:** the pinned workflow, healthcheck, lockfile install, and the
-  `check-generated-project-automation` gate have landed. The rendered CI is still red on one job:
-  the generated frontend's `pnpm test:coverage` enforces 80% per file, and the shipped
-  `showcase_react` suite reaches about 77.7% of statements globally (tech audit
-  `generated-frontend-coverage-unmet`).
-
-  **Acceptance:** the shipped theme suite brings every covered file to the existing per-file 80%
-  thresholds in `themes/showcase_react/vitest.config.ts`. Thresholds and the coverage include set
-  stay unchanged, with no new exclusions. The tests exercise behavior, not snapshots. A fresh
-  generated project's frontend CI job then passes as rendered. The gate stays local-only, because
-  hosted gate jobs have no PostgreSQL lease step.
-
-  **Slices:** one per theme area, lowest per-file coverage first; each lands green on its own.
-
-  **Surfaces:** `themes/showcase_react/` tests (the API clients' tests coordinate with Track 3),
-  and the tech audit.
+- [x] **SA253 — Make the generated project's CI, image, and healthcheck pass, and execute them in a gate.**
 
 - [ ] **SA255 — Accept Resend's real webhook signature in notifications.**
 

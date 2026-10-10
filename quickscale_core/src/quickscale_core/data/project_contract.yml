@@ -260,3 +260,10 @@ steps:
       - "Generate and commit the missing `frontend/pnpm-lock.yaml` with `pnpm install --lockfile-only` (or `pnpm install`), then rebuild the image so the frozen install runs against it."
       - "Compare and manually adopt the current coverage and test files: `pyproject.toml` omits `*/settings/*` from coverage, `urls.py` marks its dev-only DEBUG branch no-cover, `tests/test_example.py` covers the healthcheck, shell route, entry points, and error handlers, and `frontend/vitest.config.ts` collects only src test files so the Playwright specs under `frontend/e2e/` stay with Playwright."
       - "Compare and manually adopt the current `<package>/views.py`, `<package>/context_processors.py`, and `<package>/urls_modules.py` import blocks (the generated project's Ruff configuration groups `quickscale_core` with third-party imports), so the rendered CI's `ruff format --check` and `ruff check` steps pass on a fresh checkout."
+
+  - id: sa253-frontend-coverage
+    minimum: "0.89.0"
+    title: "Adopt the starter frontend test suite that meets the coverage gate"
+    adoption_steps:
+      - 'Compare and optionally copy the current frontend/src/test additions (AppRoutes.test.tsx, analytics.test.ts, formFields.test.tsx, layoutComponents.test.tsx, orgComponents.test.tsx, orgListPage.test.tsx, settingsPage.test.tsx, socialLinkTreeStates.test.tsx, themeStore.test.ts, uiPrimitives.test.tsx, useModules.test.tsx, useOrgNavigation.test.tsx, useOrgs.test.tsx) so the project''s own `pnpm test:coverage` meets its existing per-file thresholds; the suite is project-owned after generation.'
+      - 'If project code copied the starter frontend/src/lib/analytics.ts, adopt its `import.meta.env` read in the literal-token form so test-environment stubs apply; runtime behavior is unchanged.'
