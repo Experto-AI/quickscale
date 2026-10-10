@@ -16,7 +16,6 @@ from django.http import HttpRequest
 from django.utils.html import escape
 from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
-from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
@@ -25,6 +24,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from quickscale_core.runtime import QuickscaleSessionAuthentication
 from quickscale_modules_orgs.models import OrgRole
 from quickscale_modules_orgs.permissions import HasOrgRole
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
@@ -42,33 +42,20 @@ from .services import create_published_listing_from_payload
 logger = logging.getLogger(__name__)
 
 
-class ListingsSessionAuthentication(SessionAuthentication):
-    """Session authentication that keeps a 401 challenge for anonymous callers.
-
-    DRF answers an unauthenticated request 403 when the authentication scheme
-    declares no challenge header; the listings publish API has always
-    answered 401, so the scheme names its challenge.
-    """
-
-    def authenticate_header(self, request: Request) -> str:
-        del request
-        return "Session"
-
-
 class ListingPublishAPIView(APIView):
     """Create and publish a listing from a JSON payload.
 
-    Session authentication only (Module Conventions rule 9): DRF's
-    ``SessionAuthentication`` enforces CSRF on unsafe methods.  The endpoint
-    writes the active organization's data, so it authorizes by org role
-    through orgs' ``HasOrgRole`` (rule 19): any member may write, while a
-    viewer is refused.  Every error goes through the one QuickScale exception
-    handler the generated settings install.  The JSON renderer is the only
-    one, so an HTML-preferring client never receives DRF's browsable-API page
-    instead of the one error shape.
+    Session authentication only, through core's one session authentication
+    class (Module Conventions rule 9): DRF enforces CSRF on unsafe methods.
+    The endpoint writes the active organization's data, so it authorizes by
+    org role through orgs' ``HasOrgRole`` (rule 19): any member may write,
+    while a viewer is refused.  Every error goes through the one QuickScale
+    exception handler the generated settings install.  The JSON renderer is
+    the only one, so an HTML-preferring client never receives DRF's
+    browsable-API page instead of the one error shape.
     """
 
-    authentication_classes = [ListingsSessionAuthentication]
+    authentication_classes = [QuickscaleSessionAuthentication]
     permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.MEMBER)]
     parser_classes = [JSONParser]
     renderer_classes = [JSONRenderer]
