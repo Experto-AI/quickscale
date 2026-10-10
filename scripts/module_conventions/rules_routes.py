@@ -89,6 +89,30 @@ TRAFFIC_FILTER_TOKENS: dict[tuple[str, str], frozenset[str]] = {
     ("analytics", "services.py"): frozenset({"is_staff"}),
 }
 
+# Rule 19's sanctioned page-guard mixins and the named public-read
+# declarations: a page declares its guard with a login or role mixin, and a
+# public page declares that with a mixin whose name carries the public-read
+# promise (``PublicSystemOrgReadMixin`` or a ``*PublicReadMixin``).
+GUARD_MIXIN_NAMES: frozenset[str] = frozenset({"LoginRequiredMixin", "OrgRoleMixin"})
+PUBLIC_READ_MIXIN_NAMES: frozenset[str] = frozenset({"PublicSystemOrgReadMixin"})
+PUBLIC_READ_MIXIN_SUFFIX = "PublicReadMixin"
+
+#: Rule 19's enforcers of a ``min_org_role`` attribute: the attribute is a
+#: guard only beside a base that reads it.
+ROLE_ENFORCING_BASE_NAMES: frozenset[str] = frozenset({"OrgApiBaseView", "OrgRoleMixin"})
+
+#: Rule 19's view frameworks: DRF permissions are enforced only on DRF views,
+#: so a ``permission_classes`` attribute on a plain Django page declares nothing.
+DRF_VIEW_MODULE_PREFIXES: tuple[str, ...] = (
+    "rest_framework.views",
+    "rest_framework.generics",
+    "rest_framework.viewsets",
+)
+DJANGO_VIEW_MODULE_PREFIXES: tuple[str, ...] = (
+    "django.views",
+    "django.contrib.auth.views",
+)
+
 RATE_LITERAL = re.compile(r"\d+/(?:second|minute|hour|day)")
 
 #: Rule 9's one session authentication class (SA262), shipped in the
@@ -930,19 +954,541 @@ def _defines_view_code(tree: ast.Module) -> bool:
     )
 
 
+def _base_name(node: ast.expr) -> str | None:
+    """Return the class name a base expression names, directly or qualified."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _is_sanctioned_guard_name(name: str) -> bool:
+    """Return whether a base-class name is a sanctioned guard declaration."""
+    return (
+        name in GUARD_MIXIN_NAMES
+        or name in PUBLIC_READ_MIXIN_NAMES
+        or name.endswith(PUBLIC_READ_MIXIN_SUFFIX)
+    )
+
+
+def _base_view_target(
+    node: ast.expr,
+    names: set[str],
+    namespaces: dict[str, str],
+) -> str | None:
+    """Resolve a base expression to its dotted view target, when it is one."""
+    if isinstance(node, ast.Name):
+        return namespaces.get(node.id) if node.id in names else None
+    dotted = _dotted_name(node)
+    if dotted is None:
+        return None
+    root, _, rest = dotted.partition(".")
+    if not rest:
+        return namespaces.get(dotted) if dotted in names else None
+    return f"{namespaces.get(root, root)}.{rest}"
+
+
+def _view_framework(
+    name: str,
+    classes: dict[str, tuple[ast.ClassDef, str]],
+    bindings: dict[str, tuple[set[str], dict[str, str]]],
+    seen: set[str],
+) -> str | None:
+    """Return whether a view class's ancestry is ``"drf"`` or ``"django"``."""
+    entry = classes.get(name)
+    if entry is None:
+        return None
+    node, rel = entry
+    names, namespaces = bindings[rel]
+    for base in node.bases:
+        target = _base_view_target(base, names, namespaces)
+        if target is not None:
+            if target.startswith(DRF_VIEW_MODULE_PREFIXES):
+                return "drf"
+            if target.startswith(DJANGO_VIEW_MODULE_PREFIXES):
+                return "django"
+        base_id = _base_name(base)
+        if base_id is not None and base_id in classes and base_id not in seen:
+            seen.add(base_id)
+            found = _view_framework(base_id, classes, bindings, seen)
+            if found is not None:
+                return found
+    return None
+
+
+def _view_class_index(
+    module: Module,
+) -> tuple[
+    dict[str, tuple[ast.ClassDef, str]],
+    set[str],
+    dict[str, tuple[set[str], dict[str, str]]],
+    dict[str, dict[str, str]],
+]:
+    """
+    Index a module's classes and resolve which of them are view classes.
+
+    Returns the name-to-(class, file) map, the view class names, the per-file
+    view bindings, and each file's permission import aliases (``AllowAny as
+    X`` resolves to ``AllowAny`` only inside its declaring file).  A class is
+    a view class when a base resolves to a Django or DRF view module or to
+    another view class the same module defines, wherever a rule 28 split
+    files it (rule 46's discovery).
+    """
+    classes: dict[str, tuple[ast.ClassDef, str]] = {}
+    parsed: dict[str, ast.Module] = {}
+    aliases_by_rel: dict[str, dict[str, str]] = {}
+    for rel, text in module.files.items():
+        if not rel.endswith(".py") or rel.startswith("migrations/"):
+            continue
+        tree = _parse(text)
+        parsed[rel] = tree
+        file_aliases: dict[str, str] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                classes.setdefault(node.name, (node, rel))
+            if isinstance(node, ast.ImportFrom) and node.module == "rest_framework.permissions":
+                for alias in node.names:
+                    if alias.asname:
+                        file_aliases[alias.asname] = alias.name
+        if file_aliases:
+            aliases_by_rel[rel] = file_aliases
+    bindings = {rel: _view_bindings(tree) for rel, tree in parsed.items()}
+    view_names: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for name, (node, rel) in classes.items():
+            if name in view_names:
+                continue
+            names, namespaces = bindings[rel]
+            for base in node.bases:
+                base_id = _base_name(base)
+                if _is_view_base(base, names, namespaces) or (
+                    base_id is not None and base_id in classes and base_id in view_names
+                ):
+                    view_names.add(name)
+                    changed = True
+                    break
+    return classes, view_names, bindings, aliases_by_rel
+
+
+def _permission_expression_name(node: ast.expr) -> str | None:
+    """Return the permission name an expression contributes, call form included."""
+    if isinstance(node, ast.Call):
+        node = node.func
+    return _base_name(node)
+
+
+def _get_permissions_binding(
+    node: ast.ClassDef,
+    aliases: dict[str, str],
+) -> tuple[bool, set[str] | None]:
+    """
+    Return whether a class overrides ``get_permissions()`` and what it returns.
+
+    The second element is the returned permission names with import aliases
+    resolved, or ``None`` when the override exists but returns no literal
+    list/tuple the harness can read; clause A then treats the override as no
+    declaration (fail closed).
+    """
+    override = next(
+        (
+            statement
+            for statement in node.body
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and statement.name == "get_permissions"
+        ),
+        None,
+    )
+    if override is None:
+        return False, None
+    names: set[str] = set()
+    recognized = False
+    for child in ast.walk(override):
+        if not isinstance(child, ast.Return) or child.value is None:
+            continue
+        if isinstance(child.value, (ast.List, ast.Tuple)):
+            recognized = True
+            for element in child.value.elts:
+                found = _permission_expression_name(element)
+                if found is not None:
+                    names.add(aliases.get(found, found))
+    return True, names if recognized else None
+
+
+def _declares_permission_classes(node: ast.ClassDef) -> bool:
+    """Return whether a class body assigns ``permission_classes``."""
+    for statement in node.body:
+        if isinstance(statement, ast.Assign):
+            names = {target.id for target in statement.targets if isinstance(target, ast.Name)}
+        elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+            names = {statement.target.id}
+        else:
+            continue
+        if "permission_classes" in names:
+            return True
+    return False
+
+
+def _declares_min_org_role(node: ast.ClassDef) -> bool:
+    """Return whether a class body declares a ``min_org_role`` attribute."""
+    for statement in node.body:
+        if isinstance(statement, ast.Assign):
+            names = {target.id for target in statement.targets if isinstance(target, ast.Name)}
+        elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
+            names = {statement.target.id}
+        else:
+            continue
+        if "min_org_role" in names:
+            return True
+    return False
+
+
+def _inherits_role_enforcement(
+    name: str,
+    classes: dict[str, tuple[ast.ClassDef, str]],
+    seen: set[str],
+) -> bool:
+    """Return whether a class's bases reach an enforcer of ``min_org_role``."""
+    entry = classes.get(name)
+    if entry is None:
+        return False
+    for base in entry[0].bases:
+        base_id = _base_name(base)
+        if base_id is None:
+            continue
+        if base_id in ROLE_ENFORCING_BASE_NAMES:
+            return True
+        if base_id in classes and base_id not in seen:
+            seen.add(base_id)
+            if _inherits_role_enforcement(base_id, classes, seen):
+                return True
+    return False
+
+
+def _class_declares_guard(
+    name: str,
+    classes: dict[str, tuple[ast.ClassDef, str]],
+    bindings: dict[str, tuple[set[str], dict[str, str]]],
+    aliases_by_rel: dict[str, dict[str, str]],
+    memo: dict[tuple[str, bool], bool],
+    in_progress: set[str],
+    allow_drf_permissions: bool,
+) -> bool:
+    """
+    Return whether a class declares a guard itself or inherits one.
+
+    DRF permission declarations count while ``allow_drf_permissions`` holds —
+    a plain Django page enforces none of them, so they are not counted on it
+    or through its ancestry; sanctioned login/role/public-read ancestry
+    (wrapper mixins included) always counts.  A Django page may inherit a
+    guard through another view or through a mixin, but a mixin's DRF
+    permission attributes remain inert there.  Import aliases resolve in the
+    declaring class's file.
+    """
+    key = (name, allow_drf_permissions)
+    if key in memo:
+        return memo[key]
+    if _is_sanctioned_guard_name(name):
+        memo[key] = True
+        return True
+    entry = classes.get(name)
+    if entry is None:
+        memo[key] = False
+        return False
+    node, rel = entry
+    file_aliases = aliases_by_rel.get(rel, {})
+    if allow_drf_permissions:
+        has_override, returned = _get_permissions_binding(node, file_aliases)
+        if has_override:
+            # A get_permissions() override decides the view's permissions at
+            # runtime, so it also blocks an inherited declaration; an
+            # override the harness cannot classify fails closed.
+            memo[key] = returned is not None
+            return memo[key]
+        if _declares_permission_classes(node):
+            memo[key] = True
+            return True
+    if _declares_min_org_role(node) and _inherits_role_enforcement(name, classes, {name}):
+        memo[key] = True
+        return True
+    if name in in_progress:
+        return False
+    in_progress.add(name)
+    declared = False
+    for base in node.bases:
+        base_id = _base_name(base)
+        if base_id is None:
+            continue
+        if _is_sanctioned_guard_name(base_id):
+            declared = True
+            break
+        if base_id not in classes:
+            continue
+        base_framework = _view_framework(base_id, classes, bindings, {base_id})
+        if base_framework == "drf":
+            child_allows_drf = True
+        elif base_framework == "django":
+            child_allows_drf = False
+        else:
+            child_allows_drf = allow_drf_permissions
+        if _class_declares_guard(
+            base_id,
+            classes,
+            bindings,
+            aliases_by_rel,
+            memo,
+            in_progress,
+            child_allows_drf,
+        ):
+            declared = True
+            break
+    in_progress.discard(name)
+    memo[key] = declared
+    return declared
+
+
+def _effective_permission_names(
+    name: str,
+    classes: dict[str, tuple[ast.ClassDef, str]],
+    aliases_by_rel: dict[str, dict[str, str]],
+    memo: dict[str, set[str]],
+    in_progress: set[str],
+) -> set[str]:
+    """Resolve a class's effective permissions, its file's aliases included."""
+    if name in memo:
+        return memo[name]
+    entry = classes.get(name)
+    if entry is None:
+        memo[name] = set()
+        return memo[name]
+    if name in in_progress:
+        return set()
+    in_progress.add(name)
+    node, rel = entry
+    file_aliases = aliases_by_rel.get(rel, {})
+    result: set[str] = set()
+    has_override, returned = _get_permissions_binding(node, file_aliases)
+    if has_override:
+        result = returned if returned is not None else set()
+    else:
+        own: ast.expr | None = None
+        for statement in node.body:
+            if isinstance(statement, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "permission_classes"
+                for target in statement.targets
+            ):
+                own = statement.value
+                break
+            if (
+                isinstance(statement, ast.AnnAssign)
+                and isinstance(statement.target, ast.Name)
+                and statement.target.id == "permission_classes"
+            ):
+                own = statement.value
+                break
+        if own is not None:
+            if isinstance(own, (ast.List, ast.Tuple)):
+                result = {
+                    file_aliases.get(found, found)
+                    for element in own.elts
+                    if (found := _permission_expression_name(element)) is not None
+                }
+            else:
+                aliased = _base_name(own)
+                if aliased is not None and aliased in classes:
+                    result = _effective_permission_names(
+                        aliased, classes, aliases_by_rel, memo, in_progress
+                    )
+        else:
+            for base in node.bases:
+                base_id = _base_name(base)
+                if base_id is not None:
+                    result |= _effective_permission_names(
+                        base_id, classes, aliases_by_rel, memo, in_progress
+                    )
+    in_progress.discard(name)
+    memo[name] = result
+    return result
+
+
+def _reads_user_is_authenticated(node: ast.AST) -> bool:
+    """Return whether a body reads ``X.user.is_authenticated`` directly."""
+    for child in ast.walk(node):
+        owner = child.value if isinstance(child, ast.Attribute) else None
+        if (
+            isinstance(child, ast.Attribute)
+            and child.attr == "is_authenticated"
+            and isinstance(owner, ast.Attribute)
+            and owner.attr == "user"
+        ):
+            return True
+    return False
+
+
+def _sibling_rel(node: ast.ImportFrom, module_name: str) -> str | None:
+    """Resolve a same-module import to the sibling file it reads from."""
+    package = f"quickscale_modules_{module_name}"
+    if node.level == 1:
+        return f"{node.module.replace('.', '/')}.py" if node.module else "__init__.py"
+    if node.level != 0 or not node.module:
+        return None
+    parts = node.module.split(".")
+    if parts[:1] == [package] and len(parts) > 1:
+        return f"{'/'.join(parts[1:])}.py"
+    if parts[:2] == ["quickscale_modules", module_name] and len(parts) > 2:
+        return f"{'/'.join(parts[2:])}.py"
+    return None
+
+
+def _module_helper_index(
+    module: Module,
+) -> tuple[dict[str, set[str]], dict[str, dict[str, tuple[str, str]]]]:
+    """
+    Index a module's authentication-reading helpers and its sibling imports.
+
+    Returns, per file, the names of module-level functions whose bodies read
+    ``user.is_authenticated``, and the file's imports of same-module siblings
+    as local name -> (target file, original name), so a view's helper call
+    resolves to the helper's defining file across a rule 28 split.
+    """
+    readers_by_rel: dict[str, set[str]] = {}
+    imports_by_rel: dict[str, dict[str, tuple[str, str]]] = {}
+    for rel, text in module.files.items():
+        if not rel.endswith(".py") or rel.startswith("migrations/"):
+            continue
+        tree = _parse(text)
+        readers_by_rel[rel] = {
+            node.name
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and _reads_user_is_authenticated(node)
+        }
+        imports: dict[str, tuple[str, str]] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            target = _sibling_rel(node, module.name)
+            if target is None:
+                continue
+            for alias in node.names:
+                imports[alias.asname or alias.name] = (target, alias.name)
+        imports_by_rel[rel] = imports
+    return readers_by_rel, imports_by_rel
+
+
+def _effective_methods(
+    name: str,
+    classes: dict[str, tuple[ast.ClassDef, str]],
+) -> dict[str, tuple[ast.FunctionDef | ast.AsyncFunctionDef, str]]:
+    """Return a class's methods with their defining file, nearest definition first."""
+    methods: dict[str, tuple[ast.FunctionDef | ast.AsyncFunctionDef, str]] = {}
+    seen: set[str] = set()
+
+    def walk(class_name: str) -> None:
+        if class_name in seen:
+            return
+        seen.add(class_name)
+        entry = classes.get(class_name)
+        if entry is None:
+            return
+        node, rel = entry
+        for statement in node.body:
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                methods.setdefault(statement.name, (statement, rel))
+        for base in node.bases:
+            base_id = _base_name(base)
+            if base_id is not None:
+                walk(base_id)
+
+    walk(name)
+    return methods
+
+
+def _allow_any_hand_check_violations(
+    module_name: str,
+    rel: str,
+    node: ast.ClassDef,
+    classes: dict[str, tuple[ast.ClassDef, str]],
+    readers_by_rel: dict[str, set[str]],
+    imports_by_rel: dict[str, dict[str, tuple[str, str]]],
+) -> list[str]:
+    """
+    Return rule 19's violations for an ``AllowAny`` view that hand-checks auth.
+
+    A public view states its public guard and must not read
+    ``request.user.is_authenticated`` by hand, directly or through a helper
+    its effective methods call; authentication is the guard's decision, not
+    the view body's.  The scan follows the view's effective methods —
+    inherited handlers and helpers resolved to their nearest definition —
+    and resolves each method's helper calls through that method's defining
+    file, matching Python function globals, private-sibling splits included.
+    """
+    violations: list[str] = []
+    methods = _effective_methods(node.name, classes)
+    if any(_reads_user_is_authenticated(method) for method, _ in methods.values()):
+        violations.append(
+            f"rule 19: {module_name}: {rel}: view class {node.name} declares AllowAny "
+            "and reads request.user.is_authenticated by hand"
+        )
+    helper_names: set[str] = set()
+    for method, method_rel in methods.values():
+        imported_readers: set[str] = set()
+        for local_name, (target_rel, original) in imports_by_rel.get(method_rel, {}).items():
+            if original in readers_by_rel.get(target_rel, set()):
+                imported_readers.add(local_name)
+        local_readers = readers_by_rel.get(method_rel, set()) | imported_readers
+        for child in ast.walk(method):
+            if not isinstance(child, ast.Call):
+                continue
+            func = child.func
+            if isinstance(func, ast.Name) and func.id in local_readers:
+                helper_names.add(func.id)
+            elif (
+                isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "self"
+                and func.attr in methods
+                and _reads_user_is_authenticated(methods[func.attr][0])
+            ):
+                helper_names.add(f"self.{func.attr}")
+    for helper in sorted(helper_names):
+        violations.append(
+            f"rule 19: {module_name}: {rel}: view class {node.name} declares AllowAny "
+            f"and calls {helper}(), which checks request.user by hand"
+        )
+    return violations
+
+
 def rule_19_authorization(corpus: Corpus) -> list[str]:
     """
-    Rule 19: module views authorize by org role, not site-wide staff flags.
+    Rule 19: module views declare and keep their authorization guard.
 
-    The statically checkable clause: ``is_staff``, ``is_superuser``,
+    Three closed-world clauses.  First, ``is_staff``, ``is_superuser``,
     ``IsAdminUser``, and hand-written ``redirect_to_login`` — imported or
     aliased, read as an attribute, or passed as a string — appear only in the
-    listed operator paths.  Rule 46 finds the view code to scan by content
-    rather than by file name: every file that defines a Django or DRF view
-    subclass or a function taking ``request``, wherever a rule 28 split files
-    it.  The "logged in is one of the three idioms" and "README lists the
-    minimum role" clauses stay review rules: rule 9 sanctions ``AllowAny`` plus
-    a view's own authentication, and the README prose is not a code property.
+    listed operator paths.  Second, every view class declares a guard: on a
+    DRF view, a ``permission_classes`` literal (including the empty lists a
+    signature-verified webhook declares) or a ``get_permissions()`` override
+    that returns a literal permission list (an override the harness cannot
+    classify fails closed); on any view, ``min_org_role`` beside its
+    enforcing base (``OrgApiBaseView`` or ``OrgRoleMixin``),
+    ``LoginRequiredMixin``/``OrgRoleMixin``, a named public-read mixin
+    (``PublicSystemOrgReadMixin`` or a ``*PublicReadMixin``), or inheritance
+    of one of those from a class in the same module.  DRF permission
+    declarations count only where they enforce — on a DRF view or through
+    its ancestry, never on a plain Django page — and permission import
+    aliases resolve in the declaring class's file.  Third, an ``AllowAny``
+    view must not read ``request.user.is_authenticated`` by hand, directly
+    or through a helper its effective methods call; the scan follows
+    inherited handlers and resolves a module-owned helper to its defining
+    file, and an ``AllowAny`` a ``get_permissions`` override returns is that
+    view's guard too.  Rule 46
+    finds the view code to scan by content rather than by file name: every
+    file that defines a Django or DRF view subclass or a function taking
+    ``request``, wherever a rule 28 split files it.  The README role listing
+    is rule 38's clause.
     """
     violations: list[str] = []
     for module in corpus.modules:
@@ -980,6 +1526,46 @@ def rule_19_authorization(corpus: Corpus) -> list[str]:
                             f"rule 19: {module.name}: {rel}:{node.lineno} imports {name} "
                             "outside the listed operator paths"
                         )
+    for module in corpus.modules:
+        classes, view_names, bindings, aliases_by_rel = _view_class_index(module)
+        readers_by_rel, imports_by_rel = _module_helper_index(module)
+        guard_memo: dict[tuple[str, bool], bool] = {}
+        permission_memo: dict[str, set[str]] = {}
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            tree = _parse(text)
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ClassDef) or node.name not in view_names:
+                    continue
+                framework = _view_framework(node.name, classes, bindings, {node.name})
+                if not _class_declares_guard(
+                    node.name,
+                    classes,
+                    bindings,
+                    aliases_by_rel,
+                    guard_memo,
+                    set(),
+                    framework == "drf",
+                ):
+                    violations.append(
+                        f"rule 19: {module.name}: {rel}: view class {node.name} "
+                        "declares no authorization guard"
+                    )
+                permission_names = _effective_permission_names(
+                    node.name, classes, aliases_by_rel, permission_memo, set()
+                )
+                if "AllowAny" in permission_names:
+                    violations.extend(
+                        _allow_any_hand_check_violations(
+                            module.name,
+                            rel,
+                            node,
+                            classes,
+                            readers_by_rel,
+                            imports_by_rel,
+                        )
+                    )
     return violations
 
 

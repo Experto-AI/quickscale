@@ -625,8 +625,16 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
         return response
 
 
-class FormPageView(TemplateView):
-    """Optional server-side entry point — renders a React mount point div"""
+class FormPagePublicReadMixin:
+    """Explicit public-read declaration for the public form page (rule 19)."""
+
+
+class FormPageView(FormPagePublicReadMixin, TemplateView):
+    """Optional server-side entry point — renders a React mount point div.
+
+    The page is public by design: it only renders the React mount point for
+    the published form, so it declares the public-read mixin (rule 19).
+    """
 
     template_name = "quickscale_forms/form_page.html"
 

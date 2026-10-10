@@ -244,10 +244,6 @@ items:
      anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/views.py,
                quickscale_modules/notifications/src/quickscale_modules_notifications/_webhooks.py],
      depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: social-payload-echoes-exception-text, status: open, severity: S4, category: VI,
-     effort: Trivial, confidence: High, reality: generated-app,
-     anchors: [quickscale_core/src/quickscale_core/manifest/social_manifest.py],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: forms-notification-status-misreported, status: open, severity: S4, category: VI,
      effort: Trivial, confidence: High, reality: generated-app,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/_email.py],
@@ -286,12 +282,11 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 1 · S4 — 3 · total 4 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 1 · S4 — 2 · total 3 open. Watchlist: 7.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
 | `notifications-webhook-rejects-resend` | S3 | IX | Webhook accepts only a signing contract Resend never sends | Medium | High | new |
-| `social-payload-echoes-exception-text` | S4 | VI | Public social payload returns `str(exc)` | Trivial | High | new |
 | `forms-notification-status-misreported` | S4 | VI | Submission reports `queued` when notifications are disabled | Trivial | High | new |
 | `generated-frontend-coverage-unmet` | S4 | X | Fresh generated frontend fails its own `pnpm test:coverage` thresholds | Small | High | new |
 
@@ -324,10 +319,6 @@ items:
 
 ### S4 findings (one line each)
 
-- `social-payload-echoes-exception-text` · `manifest/social_manifest.py:396-400`, `:446-456`,
-  `:470-480` · The generated public social payload views return `str(exc)` (database errors carry
-  host, role, and table names) to anonymous callers. This violates rules 9 and 26. · Return a
-  fixed message and log the exception.
 - `forms-notification-status-misreported` · `forms/_email.py:44-53` · When notifications are
   disabled, the submit response reports `"queued"` while logging "skipped". · Return a distinct
   `"disabled"` status.
@@ -349,7 +340,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Entry point | AuthN | AuthZ | Input validation | Output encoding | Rate limit | Timeout | Idempotency | Error shape | Audit |
 |---|---|---|---|---|---|---|---|---|---|
 | `StripeWebhookView` | Stripe SDK signature over raw body | n/a | named-release gate | JSON | none by rule 26 | SDK default (watch `single-sync-worker-vendor-calls`) | advisory mutex + unique `WebhookEvent` | rule 9 | `WebhookEvent` row |
-| Billing JSON views | session (CSRF) | owner via `_require_request_organization` | DRF serializers | JSON | `quickscale_billing_*` scopes | SDK default | Stripe idempotency keys; unknown-outcome reservations reconcile against the provider | rule 9 | reservation rows; return URLs built from the request |
+| Billing JSON views | session (CSRF) | owner via orgs' `HasOrgRole(OrgRole.OWNER)` | DRF serializers | JSON | `quickscale_billing_*` scopes | SDK default | Stripe idempotency keys; unknown-outcome reservations reconcile against the provider | rule 9 | reservation rows; return URLs built from the request |
 | `NotificationWebhookView` | custom HMAC: `notifications-webhook-rejects-resend` | n/a | required fields | JSON | none by rule 26 | n/a | idempotency key | rule 9 | delivery event row |
 | Orgs JSON API | session (CSRF) | `min_org_role` on the org it acts on | `JSONParser` + forms | JSON | invite sends: `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization), both charged only after the role gate and the form's locked eligibility checks pass; other endpoints: DRF `user` default | n/a | n/a | rule 9 | n/a |
 | Orgs HTML views | `LoginRequiredMixin` | `SaasModeRequiredMixin` + `OrgRoleMixin`; the route slug wins over VIEW-AS | Django forms | autoescape | invite sends: `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization), both charged only after the role gate and the form's locked eligibility checks pass; pending cap per organization | n/a | n/a | Django | n/a |
@@ -360,7 +351,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Forms admin API + CSV | session (CSRF) | `HasOrgRole`; superuser via `operator_access` | DRF | CSV formula cells neutralized | DRF defaults | n/a | n/a | rule 9 | `operator_access` log |
 | Blog/listings automation APIs | session (CSRF) | `HasOrgRole(MEMBER)` | Pillow format/size/pixels; extension from format | JSON | blog `quickscale_blog_api` and listings `quickscale_listings_api` scopes (core scoped throttle) | n/a | slug 409 | rule 9 | n/a |
 | Blog/listings public reads | none | System org or active org via `org_scope` | slug | markdown over escaped text + href scheme filter | none | n/a | n/a | Django | n/a |
-| Social payload endpoints (generated) | none | System or active org; org-partitioned cache | n/a | `JsonResponse` | none | n/a | n/a | `social-payload-echoes-exception-text` | n/a |
+| Social payload endpoints (generated) | `AllowAny` (declared) | System or active org; org-partitioned cache | n/a | DRF | none | n/a | n/a | rule 9 | n/a |
 | Analytics page | session (login required) | active organization's `viewer` role | n/a | autoescape | none | n/a | n/a | Django | n/a |
 | `AccountDeleteView` → anonymize boundary | login | self; last-owner check under locks | form | autoescape | allauth N/A | provider I/O outside atomics | compensating resume | messages | skip log; address-based selectors require a verified address |
 | auth (allauth) | allauth | n/a | allauth forms | autoescape | allauth `ACCOUNT_RATE_LIMITS` defaults | n/a | n/a | allauth | n/a; address-based anonymization selectors require allauth verification |
@@ -423,7 +414,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | listings | clean | Publish API and service (full). |
 | crm | clean | Serializers and viewset permissions (sampled). |
 | auth | clean. The anonymize boundary captures allauth verification before the hooks run, and address-based selectors require it. | Delete view and adapters. |
-| social | `social-payload-echoes-exception-text` (generated views) | Cache keys clean. |
+| social | clean. The generated payload views answer DRF's error shape with no exception text. | Cache keys clean. |
 | storage | clean | Manifest defaults only. |
 | backups | clean; one watch item | Admin restore and dispatch (sampled). |
 | core runtime / generator | generator-output batch above | Settings facade clean. Identifier validation clean (empirical generation). |
@@ -569,8 +560,7 @@ Added:
   `quickscale_listings_api` scope from the new `api_rate_limit` option, attached by
   `throttle_scope` through core's one scoped throttle class. Blog's sibling moved to the same
   core class and keeps its `api_rate_limit` option.
-- The generated social payload views are plain `JsonResponse` function views, against rule 9's
-  DRF base. The exception-text leak is reported here as `social-payload-echoes-exception-text`.
+- The generated social payload views are DRF views on rule 9's base and return no exception text.
 - `analytics` was the only module whose page had no auth or role guard; it now requires login and
   the viewer role (SA252). Rule 19's shape divergence for billing belongs to coherence; the info
   leak was the S4 above.
@@ -836,3 +826,6 @@ Added:
   `generated-frontend-coverage-unmet`, not as part of this closure: the generated frontend's
   `pnpm test:coverage` per-file 80% thresholds are not met by the shipped theme suite (global
   ≈77.7% statements, per-file failures across pages, hooks, and UI primitives).
+- 2026-10-10 — `social-payload-echoes-exception-text`: **resolved** (SA262). The core-rendered
+  social payload views are DRF views that answer the one error shape and never echo exception
+  text. Dropped from the index and summary.

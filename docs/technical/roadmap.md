@@ -13,8 +13,7 @@ their value.
 
 **Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
-([publish_procedure.md](publish_procedure.md)); the live Stripe test-mode checkout record SA251
-owed is complete, so 0.89.0 is publish-ready.
+([publish_procedure.md](publish_procedure.md)); 0.89.0 is publish-ready.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -38,15 +37,14 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
 | SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
 | SA267 | Bring `scripts/` under the quality thresholds without gating it | 2 | — | Optional |
-| SA262 | One JSON API contract: guards, 401, pagination, throttles, and DRF keys | 3 | — | Optional |
 | SA261 | One owner per URL prefix, and theme API bases from the seam | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
+Track 1: SA191 (cutover) ∥ SA204 ──► SA153 ──► SA154 (inventory)
 Track 2: SA253 ──► SA255 ──► SA260 ──► SA263 ──► SA267
-Track 3: SA262 ──► SA261
+Track 3: SA261
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
 ```
@@ -61,8 +59,8 @@ when its last slice lands; slices are not scheduled.
 
 **Order.** Every change to a shipped module `0001_initial` lands before SA204 freezes
 migration history, and SA204 lands before SA153 slice (a), whose schema work is `0002+` from the
-start. SA154 is an inventory, not work. SA191 finishes slice (b), then (c) and (d); slices (a)
-and (e) need the maintainer's Railway login.
+start. SA154 is an inventory, not work. SA191's agent work is done and it closes at the
+maintainer's cutover, so SA204 proceeds alongside it.
 
 ### Track states
 
@@ -72,7 +70,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA253 | yes | yes | yes | **yes** | no |
-| 3 | SA262 | yes | yes | yes | **yes** | no |
+| 3 | SA261 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -137,9 +135,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   change reaches that project. It is a one-way door (arch audit
   `clean-break-schema-no-data-path`, option 1).
 
-  **Acceptance:** decisions record that rule 1 of the clean-break decision is lifted from 0.89.0
-  onward, the release the freeze lands in. Upgrades from earlier vintages, including 0.88.0,
-  stay fresh-database-only. From 0.89.0 on, a schema change to a model-bearing module ships as a
+  **Acceptance:** decisions record that rule 1 of the clean-break decision is lifted from the
+  release the freeze lands in. Upgrades from earlier vintages stay fresh-database-only. From that
+  release on, a schema change to a model-bearing module ships as a
   new incremental migration under the existing migration-quality gates. A registered gate fails
   when an existing migration file of a model-bearing module changes or disappears, with controls
   proving that it rejects an in-place `0001` edit and accepts a new `0002`.
@@ -187,9 +185,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Data.** It cannot move by backup and restore. The production database records `listings`
   0001–0003, `forms` 0001–0003, and `auth` 0001–0002 as applied and has no `orgs`, while current
   `listings` and `forms` ship a rewritten `0001_initial` that depends on `orgs` and a NOT NULL
-  organization FK. Rehearse first: restore a production dump into a scratch PostgreSQL 18 and
-  confirm the history inconsistency with `migrate --plan` against the recipient. The cutover
-  rebuilds a fresh database. The `quickscale_orgs_create_site_org` command creates the site's
+  organization FK (`migrate --plan` on a restored dump fails with `InconsistentMigrationHistory`),
+  so the cutover rebuilds a fresh database. The `quickscale_orgs_create_site_org` command creates the site's
   organization in the same deploy step as `migrate`. The catalog is
   then reseeded through `bap-web`'s own seed command, tenant-scoped to that organization under the
   restricted runtime role — never under BYPASSRLS. Users are
@@ -230,42 +227,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     and the written rollback restores the previous deploy *and* that database.
   - No property-portal features (SA153) and no frontend stack change.
 
-  **Slices:**
-  - [x] (a) Rehearsal: the production dump came read-only from the Railway `bap-web` project
-    (server PostgreSQL 17.11, `pg_dump` 18.6; 166,211 bytes kept at
-    `/home/victor/code/bap-web-prod.dump`, outside every repository) and restored with
-    `pg_restore --no-owner` into scratch PostgreSQL 18 (`qs-bap-prod-scratch-pg`,
-    `127.0.0.1:33292`, database `bap_prod_scratch`) with no warnings; the restored ledger records
-    listings 0001–0003, forms 0001–0003, auth 0001–0002, properties 0001–0002, and no `orgs`.
-    The recipient's `migrate --plan` exits 1 with `InconsistentMigrationHistory: Migration
-    account.0001_initial is applied before its dependency quickscale_auth.0001_initial`: the
-    v0.62 `quickscale_modules_*` ledger cannot move forward, so the cutover rebuilds a fresh
-    database. Watch: the scratch database is the slice (e) rehearsal target, and the dump holds
-    real user data and stays out of every repository. Next: slice (e).
-  - [x] (b) Recipient and code port. The contact payload posts to `/forms/api/<slug>/submit/` and the
-    six service forms were reseeded to the live payload schema (`full_name`, `email`, `subject`,
-    `project_context`, plus a project-owned `gdpr_consent` field); a real submission is proven end
-    to end and the mocked suites mock the module URL. Watch: repin to the sealed release before
-    cutover, and the recorded upstream candidates stay in `bap-web-new`'s migration ledger. Next:
-    slice (c).
-  - [x] (c) Test parity: donor suites pass in the recipient (pytest 56 passed at 94.5% coverage
-    with the donor's per-file 80% gate restored, and Vitest 338 passed; every donor test file
-    and fixture carried, the adapted ones with recorded reasons, none excluded),
-    `manage.py check` passes including SA208's provider-ID check, and `check_tenant_isolation`
-    passes 6/6 with 6 FORCE-RLS tables / 12 policies = a fresh same-modules baseline's 5 / 10
-    plus the `properties` table's canonical pair. Watch: repin before cutover — the embedded
-    `orgs` predates the `--json` flag, and the generated `check-tenant-isolation` target needs
-    operator env on its migrate line. Next: slice (d).
-  - [x] (d) Live parity and design-system consistency: write-safety mocks on both submit endpoint
-    contracts; read-only specs green against the live site (26 passed, 4 property journeys skipped
-    by the flag-off surface) and the full suite green against the recipient (254 passed, 7
-    chromium-only skips); home/contact diffs pixel-identical with no masks, live baselines kept in
-    `bap-web-new`; recipient-only catalog specs over the 12 seeded listings; catalog/detail
-    design-system check green with kept recipient baselines and one recorded exception (contact's
-    WhatsApp brand link). Watch: the kept baselines are pre-cutover evidence; repin before cutover.
-    Next: slice (e).
-  - [ ] (e) Cutover: reseed step under the runtime role, cutover script, and written rollback,
-    rehearsed on the scratch database.
+  **Remaining:** agent work (slices a–e) is done; `scripts/cutover.sh` and `CUTOVER.md` in
+  `bap-web-new` rebuild, verify, and roll back, rehearsed on scratch. After 0.89.0 is published:
+  repin `bap-web-new` to it and re-run the rehearsal (agent), then the maintainer runs the Railway
+  cutover, carries media, re-invites users, and archives the old repository. The production dump
+  at `/home/victor/code/bap-web-prod.dump` holds real user data and stays out of every repository.
 
   **Surfaces:** the new `bap-web-new` repository and its reseed step; the migration prompt; the
   `forms` module only for upstreamed customizations.
@@ -342,8 +308,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [x] **SA251 — Make Stripe checkout and payment outcomes complete and recoverable.**
-
 - [ ] **SA253 — Make the generated project's CI, image, and healthcheck pass, and execute them in a gate.**
 
   **Context:** generated automation is only text-asserted, never run, and four defects live there
@@ -390,8 +354,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Surfaces:** notifications `views.py`, `_webhooks.py`, their tests, the README, and the tech
   audit.
 
-- [x] **SA256 — Fix `deploy railway` environment writes and DR media streaming.**
-
 - [ ] **SA260 — One off switch and a closed-world manifest surface.**
 
   **Context:** five mechanisms say "installed but off"; switching analytics off removes its app,
@@ -425,46 +387,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** blog and listings URLs, `module_wiring`, the theme's API clients, decisions, the
   harness, and the coherence audit.
-
-- [ ] **SA262 — One JSON API contract: guards, 401, pagination, throttles, and DRF keys.**
-
-  **Progress:** the 401/session-auth half of proposal 7 landed: `quickscale_core.runtime` ships
-  `QuickscaleSessionAuthentication`, the generated settings install it as
-  `DEFAULT_AUTHENTICATION_CLASSES`, all six session APIs (billing, blog, CRM, forms, listings,
-  orgs) use it — CRM and forms answer 401 where they answered 403 — harness rule 9 rejects a
-  module-defined subclass and an `authentication_classes` value outside core's class and the
-  empty literal, and decision rule 9 carries the clause. Proposal 13's throttles and the
-  `collect_wiring` admission list landed next: `quickscale_core.runtime` ships
-  `QuickscaleScopedRateThrottle` (user-or-canonical-IP identity) as the default scoped throttle,
-  blog's and forms' module throttle classes are deleted in favor of `throttle_scope`, listings
-  gains its `api_rate_limit` option and `quickscale_listings_api` scope, orgs' invite API drops
-  its `throttle_classes` override, harness rule 32 closes `throttle_classes` to webhooks,
-  `collect_wiring` admits only `DEFAULT_THROTTLE_RATES` from a module, and decision rules 30 and
-  32 carry the clauses. `PlainListPagination` and the generated social views landed next: core
-  ships the one list paginator sized by each list's `<THING>_PER_PAGE` setting, billing gains
-  `transactions_per_page` (its literal 25 is gone) and `plans_per_page`, CRM's tags, companies,
-  stages, and notes lists gain their settings, forms' admin form list gains
-  `QUICKSCALE_FORMS_PER_PAGE`, the core-rendered social payload views are DRF views that answer
-  the one error shape without echoing exception text, harness rule 9 closes the paginator world,
-  and decision rule 9 carries the clause. Remaining: proposal 11's guards and README roles.
-
-  **Context:** coherence `tenant-authorization` (billing's `AllowAny` plus a hand-written check
-  and no README role table), `unauthenticated-status-code` (401 in four modules, 403 in two),
-  `http-api-shape` (list and body shapes; social's generated payload views are `JsonResponse`
-  functions that echo `str(exc)`, tech `social-payload-echoes-exception-text`),
-  `throttle-attachment` (two attachment styles; listings' publish API has no scope), and
-  enforcement gap 13 (any module may replace any `REST_FRAMEWORK` key).
-
-  **Acceptance:** coherence §6 proposals 7, 11, and 13 are merged and enforced: every view
-  declares its guard and every README lists minimum roles; unauthenticated calls answer 401
-  through core's one session authentication class; lists paginate through `PlainListPagination`
-  with a `<THING>_PER_PAGE` setting; throttles attach by `throttle_scope` only and every
-  vendor-calling or publishing write API has one; generated social payload views follow rule 9
-  and return no exception text; `collect_wiring` admits only `DEFAULT_THROTTLE_RATES` from
-  modules. The JSON API contract drops "the billing-module pattern".
-
-  **Surfaces:** module views and READMEs, core's DRF helpers, `social_manifest.py`'s rendered
-  views, `collect_wiring`, decisions, the harness, and the coherence audit.
 
 - [ ] **SA263 — Adapters validate, coerce, and default only through the manifest.**
 
