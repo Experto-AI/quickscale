@@ -210,12 +210,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
     The "old" side of every comparison is the live site, `https://buenosairesproperties.com` on
     Railway; the donor is not deployed locally. The donor's Playwright e2e suite passes against
     the live site and the local recipient, but only its read-only specs run against production;
-    specs that submit forms or write data run only against the recipient. Screenshot diffs of home,
-    catalog, detail, and contact differ by under 1% of pixels at desktop and mobile widths, with
-    animations off. The recipient is seeded to show the same listings as the live catalog, and
-    regions that show content the two sites don't share are masked, with each mask recorded. The
-    live baseline screenshots are captured and kept before cutover, because the cutover replaces
-    that site.
+    specs that submit forms or write data run only against the recipient, and every form mock
+    intercepts both the recipient's `/forms/api/*` and the donor's `/api/forms/*` submit
+    endpoints, so no spec can submit into production. The live site keeps public listings hidden
+    on purpose (maintainer decision, 2026-10-10): home and contact are screenshot-diffed
+    recipient-vs-live at desktop and mobile widths with animations off, under 1% of pixels, the
+    recipient rendered flag-off and every mask recorded; the live baselines are captured and kept
+    in `bap-web-new` before cutover, because the cutover replaces that site. The recipient ships
+    with public listings enabled, proven by recipient-only specs over the 12 seeded listings
+    (`/api/properties/`, `/properties`, `/properties/:slug`, and the home property actions and
+    featured section); catalog and detail use the design system of home and contact — shell,
+    typography, color, spacing, and components — with kept recipient screenshots and an
+    automated computed-style check.
   - The carried `properties` models pass SA208's provider-ID system check. The FORCE-RLS table and
     policy counts equal a fresh project's with the same modules, and `check_tenant_isolation` passes.
   - `bap-web-new` becomes a new repository and redeploys through `deploy railway`; the old
@@ -224,16 +230,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - No property-portal features (SA153) and no frontend stack change.
 
   **Slices:**
-  - [ ] (a) Rehearsal: restore the production dump into scratch PostgreSQL 18 and record the
-    `migrate --plan` inconsistency against a fresh recipient. The dump is not in `../bap-web`
-    (its `.env` points at a local database). Take it read-only from Railway: in `../bap-web`,
-    `railway link` to the `bap-web` project, read the Postgres service's public URL with
-    `railway variables --service Postgres` (the private `DATABASE_URL` resolves only inside
-    Railway), then run
-    `railway run --service Postgres -- sh -c 'pg_dump --format=custom --no-owner --no-acl "$DATABASE_PUBLIC_URL" > /home/victor/code/bap-web-prod.dump'`.
-    Use a `pg_dump` at least as new as the server's major version (otherwise run it from a
-    `postgres:18` container). Keep the dump outside every repository and never commit it; it holds
-    real user data. Restore with `pg_restore --no-owner` into the scratch database only.
+  - [x] (a) Rehearsal: the production dump came read-only from the Railway `bap-web` project
+    (server PostgreSQL 17.11, `pg_dump` 18.6; 166,211 bytes kept at
+    `/home/victor/code/bap-web-prod.dump`, outside every repository) and restored with
+    `pg_restore --no-owner` into scratch PostgreSQL 18 (`qs-bap-prod-scratch-pg`,
+    `127.0.0.1:33292`, database `bap_prod_scratch`) with no warnings; the restored ledger records
+    listings 0001–0003, forms 0001–0003, auth 0001–0002, properties 0001–0002, and no `orgs`.
+    The recipient's `migrate --plan` exits 1 with `InconsistentMigrationHistory: Migration
+    account.0001_initial is applied before its dependency quickscale_auth.0001_initial`: the
+    v0.62 `quickscale_modules_*` ledger cannot move forward, so the cutover rebuilds a fresh
+    database. Watch: the scratch database is the slice (e) rehearsal target, and the dump holds
+    real user data and stays out of every repository. Next: slice (e).
   - [x] (b) Recipient and code port. The contact payload posts to `/forms/api/<slug>/submit/` and the
     six service forms were reseeded to the live payload schema (`full_name`, `email`, `subject`,
     `project_context`, plus a project-owned `gdpr_consent` field); a real submission is proven end
@@ -248,8 +255,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
     plus the `properties` table's canonical pair. Watch: repin before cutover — the embedded
     `orgs` predates the `--json` flag, and the generated `check-tenant-isolation` target needs
     operator env on its migrate line. Next: slice (d).
-  - [ ] (d) Live parity: Playwright e2e and screenshot diffs, with the live baselines captured and
-    kept.
+  - [x] (d) Live parity and design-system consistency: write-safety mocks on both submit endpoint
+    contracts; read-only specs green against the live site (26 passed, 4 property journeys skipped
+    by the flag-off surface) and the full suite green against the recipient (254 passed, 7
+    chromium-only skips); home/contact diffs pixel-identical with no masks, live baselines kept in
+    `bap-web-new`; recipient-only catalog specs over the 12 seeded listings; catalog/detail
+    design-system check green with kept recipient baselines and one recorded exception (contact's
+    WhatsApp brand link). Watch: the kept baselines are pre-cutover evidence; repin before cutover.
+    Next: slice (e).
   - [ ] (e) Cutover: reseed step under the runtime role, cutover script, and written rollback,
     rehearsed on the scratch database.
 
