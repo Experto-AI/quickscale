@@ -39,6 +39,7 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA255 | Accept Resend's real webhook signature in notifications | 2 | — | Optional |
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
 | SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
+| SA267 | Bring `scripts/` under the quality thresholds without gating it | 2 | — | Optional |
 | SA262 | One JSON API contract: guards, 401, pagination, throttles, and DRF keys | 3 | — | Optional |
 | SA261 | One owner per URL prefix, and theme API bases from the seam | 3 | — | Optional |
 
@@ -46,7 +47,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
-Track 2: SA256 ──► SA251 ──► SA253 ──► SA255 ──► SA260 ──► SA263
+Track 2: SA256 ──► SA251 ──► SA253 ──► SA255 ──► SA260 ──► SA263 ──► SA267
 Track 3: SA262 ──► SA261
      release path:  SA251 → publish 0.89.0
      critical path: SA191 → SA204 → SA153
@@ -463,6 +464,20 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** the 12 adapters, `resolver.py`, `module_wiring.py`, decisions, the harness, and
   the coherence audit.
+- [ ] **SA267 — Bring `scripts/` under the quality thresholds without gating it.**
+
+  **Context:** `check_quality.sh` scans only packages, and `scripts/` misses its fixed lines:
+  about 65 functions at CC >= 21, 9 non-test files >= 800 lines, and 8 vulture 100%-confidence
+  findings (arch audit `rules-held-by-parity-not-derivation`).
+
+  **Acceptance:** `scripts/` has no finding on the gate's fail lines: radon CC >= 21, files
+  >= 800 lines, and vulture at 100% confidence. Prefer deleting dead or redundant governance
+  code over splitting it. Behavior of every gate is unchanged, and their tests pass. `make
+  quality` and `check_quality.sh` discovery are not changed.
+
+  **Slices:** one per script family, largest debt first; each lands green on its own.
+
+  **Surfaces:** `scripts/` and their tests, and the arch audit.
 
 ## Deferred constraints and references
 
