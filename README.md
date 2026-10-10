@@ -9,7 +9,7 @@ Transactional email foundation for QuickScale projects.
 - App-owned template rendering with context validation.
 - Recipient-granular delivery tracking, including per-delivery event history.
 - Django email delivery compatible with the Anymail Resend backend.
-- Signed, replay-safe webhook ingestion for delivery events.
+- Resend Svix-signature-verified, replay-safe webhook ingestion for delivery events.
 - A declarative `module.yml` manifest with a flat `QUICKSCALE_NOTIFICATIONS_*` settings surface.
 
 The authoritative configuration surfaces remain generated Django settings and environment
@@ -29,7 +29,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 | `reply_to_email` | string | `""` | `QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL` | Optional reply-to email address for transactional messages. |
 | `resend_domain` | string | `""` | `QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN` | Verified Resend sending domain for operational visibility. |
 | `resend_api_key_env_var` | string | `RESEND_API_KEY` | `QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR` | Environment-variable name containing the Resend API key. |
-| `webhook_secret_env_var` | string | `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET` | `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR` | Environment-variable name containing the shared webhook signing secret. |
+| `webhook_secret_env_var` | string | `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET` | `QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR` | Environment-variable name containing the Resend Svix webhook signing secret. |
 | `default_tags` | list | `["quickscale", "transactional"]` | `QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS` | Provider-visible default tags from the approved non-sensitive allowlist. |
 | `allowed_tags` | list | `["quickscale", "transactional", "notifications", "auth", "forms", "ops", "testing"]` | `QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS` | Non-sensitive allowlist for provider-visible tags. |
 | `webhook_ttl_seconds` | integer | `300` | `QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS` | Maximum accepted webhook timestamp skew in seconds. |
@@ -55,8 +55,9 @@ Retired option keys (`resend_api_key`, `webhook_secret`) are refused by name; us
 - `render_notification()` renders a named template definition with a validated context.
 - `load_settings_snapshot()` and `ensure_default_settings()` expose the operational settings
   snapshot.
-- `build_webhook_signature_headers()` and `ingest_webhook_event()` implement signature
-  verification and replay-safe event ingestion.
+- `build_webhook_signature_headers()` signs Svix-style requests for tests, and
+  `ingest_webhook_event()` verifies Resend's Svix signature and ingests delivery events
+  replay-safely.
 - `sanitize_provider_tags()` and `sanitize_provider_metadata()` restrict what reaches the
   provider.
 
@@ -100,10 +101,12 @@ This module ships no management commands.
   `quickscale apply` renders each one from the environment variable its `resend_api_key_env_var`
   or `webhook_secret_env_var` option names (rule 35), so set the real values in the deployment
   environment, never in `quickscale.yml`.
-- **Webhook endpoint:** point the Resend webhook at `notifications/webhooks/resend/` and use
-  the same signing secret the `webhook_secret_env_var` names. Events outside
-  `webhook_ttl_seconds` of clock skew are refused, and events are deduplicated for replay
-  safety.
+- **Webhook endpoint:** point the Resend webhook at `notifications/webhooks/resend/` and set the
+  environment variable `webhook_secret_env_var` names to Resend's signing secret (the `whsec_…`
+  value from the webhook settings). Resend signs each attempt with the Svix `svix-id`,
+  `svix-timestamp`, and `svix-signature` headers; the endpoint accepts any advertised `v1`
+  signature, refuses events outside `webhook_ttl_seconds` of clock skew, and deduplicates
+  retries by `svix-id`.
 - **Provider tags:** only tags in `allowed_tags` reach the provider; `default_tags` must be a
   subset of that allowlist.
 - **Delivery observability:** message and delivery rows, with their event history, are the

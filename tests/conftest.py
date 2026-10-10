@@ -26,7 +26,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.settings")
 os.environ.setdefault("RESEND_API_KEY", "test-resend-api-key")
 os.environ.setdefault(
     "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
-    "test-webhook-secret",
+    "whsec_dGVzdC13ZWJob29rLXNlY3JldA==",
 )
 django.setup()
 

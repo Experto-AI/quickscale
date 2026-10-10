@@ -17,16 +17,43 @@ from quickscale_modules_notifications.models import (
 )
 from quickscale_modules_notifications.services import build_webhook_signature_headers
 
+_WEBHOOK_URL_NAME = "quickscale_notifications:resend_webhook"
+
+
+def _resend_delivered_payload(*, email_id: str, recipient: str) -> dict[str, object]:
+    """Return a Resend-shaped delivery event payload for one delivery."""
+    return {
+        "type": "email.delivered",
+        "created_at": "2026-02-22T23:41:12.126Z",
+        "data": {"email_id": email_id, "to": [recipient]},
+    }
+
+
+def _signed_browser_headers(body: bytes, *, svix_id: str) -> dict[str, str]:
+    """Return Django test-client header kwargs signed for *body*."""
+    headers = build_webhook_signature_headers(
+        body,
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
+        svix_id=svix_id,
+        timestamp=int(time.time()),
+    )
+    return {
+        "HTTP_SVIX_ID": headers["svix-id"],
+        "HTTP_SVIX_TIMESTAMP": headers["svix-timestamp"],
+        "HTTP_SVIX_SIGNATURE": headers["svix-signature"],
+    }
+
 
 @pytest.mark.django_db
 def test_webhook_view_rejects_unsigned_invalid_json_payload(client: Client) -> None:
     """The signature is verified before the body is parsed."""
     response = client.post(
-        reverse("quickscale_notifications:resend_webhook"),
+        reverse(_WEBHOOK_URL_NAME),
         data="{bad-json",
         content_type="application/json",
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE="sha256=invalid",
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=str(int(time.time())),
+        HTTP_SVIX_ID="msg_unsigned",
+        HTTP_SVIX_TIMESTAMP=str(int(time.time())),
+        HTTP_SVIX_SIGNATURE="v1,invalid",
     )
 
     assert response.status_code == 400
@@ -41,22 +68,12 @@ def test_webhook_view_rejects_unsigned_invalid_json_payload(client: Client) -> N
 @pytest.mark.django_db
 def test_webhook_view_rejects_signed_invalid_json_payload(client: Client) -> None:
     body = b"{bad-json"
-    headers = build_webhook_signature_headers(
-        body,
-        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
-        timestamp=int(time.time()),
-    )
 
     response = client.post(
-        reverse("quickscale_notifications:resend_webhook"),
+        reverse(_WEBHOOK_URL_NAME),
         data=body,
         content_type="application/json",
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE=headers[
-            "X-QuickScale-Notifications-Signature"
-        ],
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=headers[
-            "X-QuickScale-Notifications-Timestamp"
-        ],
+        **_signed_browser_headers(body, svix_id="msg_signed_bad_json"),
     )
 
     assert response.status_code == 400
@@ -70,29 +87,16 @@ def test_webhook_view_rejects_signed_invalid_json_payload(client: Client) -> Non
 
 @pytest.mark.django_db
 def test_webhook_view_rejects_invalid_recipient_email(client: Client) -> None:
-    payload = {
-        "id": "evt-invalid-recipient",
-        "type": "email.delivered",
-        "provider_message_id": "pm-invalid-recipient",
-        "recipient": "not-an-email",
-    }
-    body = json.dumps(payload).encode("utf-8")
-    headers = build_webhook_signature_headers(
-        body,
-        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
-        timestamp=int(time.time()),
+    payload = _resend_delivered_payload(
+        email_id="pm-invalid-recipient", recipient="not-an-email"
     )
+    body = json.dumps(payload).encode("utf-8")
 
     response = client.post(
-        reverse("quickscale_notifications:resend_webhook"),
+        reverse(_WEBHOOK_URL_NAME),
         data=body,
         content_type="application/json",
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE=headers[
-            "X-QuickScale-Notifications-Signature"
-        ],
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=headers[
-            "X-QuickScale-Notifications-Timestamp"
-        ],
+        **_signed_browser_headers(body, svix_id="msg_invalid_recipient"),
     )
 
     assert response.status_code == 400
@@ -109,19 +113,18 @@ def test_webhook_view_rejects_invalid_signature(
     client: Client,
     delivery_for_webhook,
 ) -> None:
-    payload = {
-        "id": "evt-invalid",
-        "type": "email.delivered",
-        "provider_message_id": delivery_for_webhook.provider_message_id,
-        "recipient": delivery_for_webhook.recipient_email,
-    }
+    payload = _resend_delivered_payload(
+        email_id=delivery_for_webhook.provider_message_id,
+        recipient=delivery_for_webhook.recipient_email,
+    )
 
     response = client.post(
-        reverse("quickscale_notifications:resend_webhook"),
+        reverse(_WEBHOOK_URL_NAME),
         data=json.dumps(payload),
         content_type="application/json",
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE="sha256=invalid",
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=str(int(time.time())),
+        HTTP_SVIX_ID="msg_invalid_signature",
+        HTTP_SVIX_TIMESTAMP=str(int(time.time())),
+        HTTP_SVIX_SIGNATURE="v1,invalid",
     )
 
     assert response.status_code == 400
@@ -138,19 +141,18 @@ def test_webhook_view_rejects_non_ascii_signature(
     client: Client,
     delivery_for_webhook,
 ) -> None:
-    payload = {
-        "id": "evt-non-ascii-signature",
-        "type": "email.delivered",
-        "provider_message_id": delivery_for_webhook.provider_message_id,
-        "recipient": delivery_for_webhook.recipient_email,
-    }
+    payload = _resend_delivered_payload(
+        email_id=delivery_for_webhook.provider_message_id,
+        recipient=delivery_for_webhook.recipient_email,
+    )
 
     response = client.post(
-        reverse("quickscale_notifications:resend_webhook"),
+        reverse(_WEBHOOK_URL_NAME),
         data=json.dumps(payload),
         content_type="application/json",
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE="sha256=inválid",
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=str(int(time.time())),
+        HTTP_SVIX_ID="msg_non_ascii_signature",
+        HTTP_SVIX_TIMESTAMP=str(int(time.time())),
+        HTTP_SVIX_SIGNATURE="v1,inválid",
     )
 
     assert response.status_code == 400
@@ -167,30 +169,18 @@ def test_webhook_view_rejects_when_runtime_disabled(
     client: Client,
     delivery_for_webhook,
 ) -> None:
-    payload = {
-        "id": "evt-disabled-view",
-        "type": "email.delivered",
-        "provider_message_id": delivery_for_webhook.provider_message_id,
-        "recipient": delivery_for_webhook.recipient_email,
-    }
-    body = json.dumps(payload).encode("utf-8")
-    headers = build_webhook_signature_headers(
-        body,
-        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
-        timestamp=int(time.time()),
+    payload = _resend_delivered_payload(
+        email_id=delivery_for_webhook.provider_message_id,
+        recipient=delivery_for_webhook.recipient_email,
     )
+    body = json.dumps(payload).encode("utf-8")
 
     with override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False):
         response = client.post(
-            reverse("quickscale_notifications:resend_webhook"),
+            reverse(_WEBHOOK_URL_NAME),
             data=body,
             content_type="application/json",
-            HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE=headers[
-                "X-QuickScale-Notifications-Signature"
-            ],
-            HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=headers[
-                "X-QuickScale-Notifications-Timestamp"
-            ],
+            **_signed_browser_headers(body, svix_id="msg_disabled_view"),
         )
 
     assert response.status_code == 404
@@ -211,29 +201,17 @@ def test_webhook_view_accepts_valid_signed_event(
     client: Client,
     delivery_for_webhook,
 ) -> None:
-    payload = {
-        "id": "evt-view-accepted",
-        "type": "email.delivered",
-        "provider_message_id": delivery_for_webhook.provider_message_id,
-        "recipient": delivery_for_webhook.recipient_email,
-    }
-    body = json.dumps(payload).encode("utf-8")
-    headers = build_webhook_signature_headers(
-        body,
-        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
-        timestamp=int(time.time()),
+    payload = _resend_delivered_payload(
+        email_id=delivery_for_webhook.provider_message_id,
+        recipient=delivery_for_webhook.recipient_email,
     )
+    body = json.dumps(payload).encode("utf-8")
 
     response = client.post(
-        reverse("quickscale_notifications:resend_webhook"),
+        reverse(_WEBHOOK_URL_NAME),
         data=body,
         content_type="application/json",
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_SIGNATURE=headers[
-            "X-QuickScale-Notifications-Signature"
-        ],
-        HTTP_X_QUICKSCALE_NOTIFICATIONS_TIMESTAMP=headers[
-            "X-QuickScale-Notifications-Timestamp"
-        ],
+        **_signed_browser_headers(body, svix_id="msg_view_accepted"),
     )
 
     delivery_for_webhook.refresh_from_db()

@@ -8,6 +8,8 @@ delivery reconciliation it delegates to (rule 28).
 
 from __future__ import annotations
 
+from base64 import b64decode, b64encode
+import binascii
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -24,26 +26,26 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from quickscale_modules_notifications._delivery import _refresh_message_status
-from quickscale_modules_notifications.exceptions import NotificationWebhookError
+from quickscale_modules_notifications.exceptions import (
+    NotificationWebhookError,
+    NotificationWebhookSignatureError,
+)
 from quickscale_modules_notifications.models import (
     NotificationDelivery,
     NotificationDeliveryEvent,
 )
 
 _EVENT_STATUS_MAP = {
-    "sent": NotificationDelivery.Status.SENT,
     "email.sent": NotificationDelivery.Status.SENT,
-    "delivered": NotificationDelivery.Status.DELIVERED,
     "email.delivered": NotificationDelivery.Status.DELIVERED,
-    "delivery.delivered": NotificationDelivery.Status.DELIVERED,
-    "failed": NotificationDelivery.Status.FAILED,
-    "delivery.failed": NotificationDelivery.Status.FAILED,
-    "rejected": NotificationDelivery.Status.FAILED,
-    "bounced": NotificationDelivery.Status.BOUNCED,
     "email.bounced": NotificationDelivery.Status.BOUNCED,
-    "complained": NotificationDelivery.Status.COMPLAINED,
     "email.complained": NotificationDelivery.Status.COMPLAINED,
+    "email.failed": NotificationDelivery.Status.FAILED,
 }
+
+#: Svix advertises each candidate signature as ``<version>,<base64 digest>``.
+_SVIX_SIGNATURE_VERSION = "v1"
+_WH_SEC_PREFIX = "whsec_"
 
 
 @dataclass(frozen=True)
@@ -65,23 +67,60 @@ class _WebhookEventFields:
     recipient_email: str
 
 
+def _decode_svix_secret(secret: str) -> bytes:
+    """Decode the base64 key of a Svix signing secret (with its ``whsec_`` prefix).
+
+    A secret that decodes to an empty key (an incomplete ``whsec_`` value) is
+    refused: an empty HMAC key is public, so accepting it would let anyone
+    forge webhook events.
+    """
+    encoded = secret.removeprefix(_WH_SEC_PREFIX)
+    try:
+        key = b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise NotificationWebhookSignatureError(
+            "Webhook secret is not a valid Svix signing secret."
+        ) from exc
+    if not key:
+        raise NotificationWebhookSignatureError(
+            "Webhook secret is not a valid Svix signing secret."
+        )
+    return key
+
+
+def _build_svix_signature(
+    secret: str,
+    *,
+    svix_id: str,
+    timestamp: str | int,
+    body: bytes,
+) -> str:
+    """Return the base64 ``v1`` signature Resend sends over ``{id}.{timestamp}.{body}``."""
+    signed_content = f"{svix_id}.{timestamp}.".encode("utf-8") + body
+    return b64encode(
+        hmac.new(_decode_svix_secret(secret), signed_content, hashlib.sha256).digest()
+    ).decode("ascii")
+
+
 def build_webhook_signature_headers(
     body: bytes,
     *,
     secret: str,
+    svix_id: str,
     timestamp: int | None = None,
 ) -> dict[str, str]:
-    """Build signed webhook headers using the module's shared-secret HMAC contract."""
-    resolved_timestamp = timestamp or int(time.time())
-    payload = f"{resolved_timestamp}.".encode("utf-8") + body
-    digest = hmac.new(
-        secret.encode("utf-8"),
-        payload,
-        hashlib.sha256,
-    ).hexdigest()
+    """Build the Svix signature headers Resend sends, for tests that sign requests."""
+    resolved_timestamp = str(timestamp if timestamp is not None else int(time.time()))
+    signature = _build_svix_signature(
+        secret,
+        svix_id=svix_id,
+        timestamp=resolved_timestamp,
+        body=body,
+    )
     return {
-        "X-QuickScale-Notifications-Timestamp": str(resolved_timestamp),
-        "X-QuickScale-Notifications-Signature": f"sha256={digest}",
+        "svix-id": svix_id,
+        "svix-timestamp": resolved_timestamp,
+        "svix-signature": f"{_SVIX_SIGNATURE_VERSION},{signature}",
     }
 
 
@@ -109,18 +148,32 @@ def _first_payload_string(payload: Mapping[str, Any], keys: Sequence[str]) -> st
     return ""
 
 
-def _extract_webhook_event_fields(payload: Mapping[str, Any]) -> _WebhookEventFields:
-    """Extract and validate the provider fields one signed payload must carry."""
+def _first_recipient_email(data: Mapping[str, Any]) -> str:
+    """Return Resend's first ``data.to`` recipient address, lowercased."""
+    recipients = data.get("to")
+    entries = recipients if isinstance(recipients, (list, tuple)) else (recipients,)
+    for entry in entries:
+        if entry:
+            return str(entry).strip().lower()
+    return ""
+
+
+def _extract_webhook_event_fields(
+    payload: Mapping[str, Any],
+    *,
+    provider_event_id: str,
+) -> _WebhookEventFields:
+    """Extract and validate the Resend fields one signed payload must carry."""
+    data_value = payload.get("data")
+    data: Mapping[str, Any] = data_value if isinstance(data_value, Mapping) else {}
     fields = _WebhookEventFields(
-        event_type=_first_payload_string(payload, ("event_type", "type")),
-        provider_event_id=_first_payload_string(payload, ("event_id", "id")),
-        provider_message_id=_first_payload_string(
-            payload, ("provider_message_id", "message_id", "email_id")
-        ),
-        recipient_email=_first_payload_string(payload, ("recipient", "email")).lower(),
+        event_type=_first_payload_string(payload, ("type",)),
+        provider_event_id=provider_event_id.strip(),
+        provider_message_id=_first_payload_string(data, ("email_id",)),
+        recipient_email=_first_recipient_email(data),
     )
     if not fields.event_type:
-        raise NotificationWebhookError("Webhook payload is missing event_type.")
+        raise NotificationWebhookError("Webhook payload is missing type.")
     if not fields.provider_message_id:
         raise NotificationWebhookError(
             "Webhook payload is missing provider_message_id."
