@@ -349,7 +349,10 @@ def test_partial_failure_rolls_back_modules_committed_before_it(
     """
     project = _write_project(tmp_path)
     monkeypatch.chdir(project)
-    baseline_manifest = (project / "modules" / "billing" / "module.yml").read_text()
+    # The fixture order decides which module the mock pulls first; the
+    # restoration assertions must target that module, not a later one.
+    first_module = _FIXTURE_MODULES[0]
+    baseline_manifest = (project / "modules" / first_module / "module.yml").read_text()
 
     load_config_patch, _resolve_patch, pull_patch, confirm_patch, deps_patch = (
         _update_mocks(project)
@@ -371,9 +374,9 @@ def test_partial_failure_rolls_back_modules_committed_before_it(
     # The module updated before the failure is restored to its pre-update code,
     # including removal of the files its pull added.
     assert (
-        project / "modules" / "billing" / "module.yml"
+        project / "modules" / first_module / "module.yml"
     ).read_text() == baseline_manifest
-    assert not (project / "modules" / "billing" / "new_pull_file.py").exists()
+    assert not (project / "modules" / first_module / "new_pull_file.py").exists()
     # The wiring was never regenerated, so it stays consistent with that code.
     assert (project / "myapp" / "settings" / "modules.py").read_text() == (
         STALE_MODULES_PY

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
@@ -18,6 +18,33 @@ import {
 const fetchMock = vi.fn()
 
 vi.stubGlobal('fetch', fetchMock)
+
+beforeEach(() => {
+  window.__QUICKSCALE__ = {
+    projectName: 'useOrgs Test',
+    modules: {
+      auth: false,
+      blog: false,
+      listings: false,
+      crm: false,
+      forms: false,
+      storage: false,
+      backups: false,
+      notifications: false,
+      analytics: false,
+      billing: true,
+      social: false,
+    },
+    modulePaths: { crm: '/crm', social: '/social', analytics: '/analytics/' },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
+    },
+    owner: { mode: 'solo', currentOrgSlug: null },
+  }
+})
 
 function jsonResponse(status: number, payload: unknown): Response {
   return {

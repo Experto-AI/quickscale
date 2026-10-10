@@ -274,3 +274,8 @@ steps:
     adoption_steps:
       - 'Compare and manually adopt the current templates/index.html and templates/social/*.html together with frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/hooks/useModules.ts, and the API-calling hooks and components (useOrgs.ts, useOrgNavigation.ts, useFormSchema.ts, forms/FormRenderer.tsx): the seam now carries `moduleApiPaths`, each API-bearing module''s base resolved from its URL names at the `<mount>api/` boundary, and the validator requires the key, so a project that adopts only one side fails at page load. Rebuild the frontend (`pnpm build`) after adopting the theme sources.'
       - 'Re-apply the project (`quickscale apply`) or manually adopt the one shared editor mount: storage mounts the staff-guarded `markdownx/` URLconf and writes `MARKDOWNX_MARKDOWN_EXTENSIONS` and `MARKDOWNX_MEDIA_PATH = "markdownx/"`, blog and listings no longer mount or configure the endpoints, and listings requires storage, so a listings installation selects it. New editor uploads land under `markdownx/`; files already stored keep their recorded paths. This supersedes the per-module Markdownx include and the `MARKDOWNX_MEDIA_PATH = "blog/markdownx/"` guidance in the older module READMEs.'
+  - id: sa261-theme-seam-test-fixtures
+    minimum: "0.89.0"
+    title: "Adopt the theme test suite's seam fixtures"
+    adoption_steps:
+      - 'The theme''s own Vitest fixtures construct `window.__QUICKSCALE__` with the `moduleApiPaths` key the seam validator requires (the orgs, billing, crm, and forms bases), so a project that copies the starter tests runs them against the same seam contract. Test-only: no project file changes beyond the `sa261-seam-module-api-paths` step.'

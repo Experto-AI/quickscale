@@ -49,7 +49,7 @@
       "v88-dockerfile-start-sh": "Regenerated 2026-09-14 \u2014 Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa261": "Regenerated 2026-10-10 \u2014 SA261 moves the theme's module API bases into the runtime seam's moduleApiPaths (rule 41), the seam producers render the new key, the org help copy that spelled the API mount is rewritten, and the theme's tests pin the key. 17 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useOrgs.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, frontend/src/test/App.test.tsx, frontend/src/test/FormRenderer.test.tsx, frontend/src/test/PublicSocialPages.test.tsx, frontend/src/test/RootDispatch.test.tsx, frontend/src/test/csrf.test.tsx, frontend/src/test/validateQuickScaleSeam.test.ts, templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative."
+      "sa261": "Regenerated 2026-10-10 \u2014 SA261 moves the theme's module API bases into the runtime seam's moduleApiPaths (rule 41), the seam producers render the new key, the org help copy that spelled the API mount is rewritten, and the theme's tests pin the key. 27 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useOrgs.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, frontend/src/test/App.test.tsx, frontend/src/test/AppRoutes.test.tsx, frontend/src/test/FormRenderer.test.tsx, frontend/src/test/PublicSocialPages.test.tsx, frontend/src/test/RootDispatch.test.tsx, frontend/src/test/csrf.test.tsx, frontend/src/test/formFields.test.tsx, frontend/src/test/layoutComponents.test.tsx, frontend/src/test/orgComponents.test.tsx, frontend/src/test/orgListPage.test.tsx, frontend/src/test/settingsPage.test.tsx, frontend/src/test/socialLinkTreeStates.test.tsx, frontend/src/test/useModules.test.tsx, frontend/src/test/useOrgNavigation.test.tsx, frontend/src/test/useOrgs.test.tsx, frontend/src/test/validateQuickScaleSeam.test.ts, templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -417,7 +417,7 @@
     },
     "frontend/src/test/AppRoutes.test.tsx": {
       "mode": "644",
-      "sha256": "be2a3825b6786ab1e164d5919dd460d3ac5c83ea87093ab1ad176c1738e5baea"
+      "sha256": "21292402b816a3d2e08888f939590761b09a2457b5e2aaabec9ef7f53c79f9bc"
     },
     "frontend/src/test/FormRenderer.test.tsx": {
       "mode": "644",
@@ -441,23 +441,23 @@
     },
     "frontend/src/test/formFields.test.tsx": {
       "mode": "644",
-      "sha256": "e8aea61208c3a207d0a1b6d697996d5f953c977412abbedcc5691b9ceee7842a"
+      "sha256": "fc9a5c16306fcc47dc972515f69425e1c081d278e0057a6c15ab016d126ddf3e"
     },
     "frontend/src/test/layoutComponents.test.tsx": {
       "mode": "644",
-      "sha256": "5eb4ccbce8ae9079dcdbdf46d9e24b53b35737dbce38b453d0ae2018509ec319"
+      "sha256": "d9a20c5d51a9d8471cdb8571d5a84837607897d3e06508e6cf8515c29d96544b"
     },
     "frontend/src/test/orgComponents.test.tsx": {
       "mode": "644",
-      "sha256": "99aa189a112dc0c1439cd8954a72d28f6ddb3821261292d4a6c5138dfe9270bf"
+      "sha256": "c7a63209bca0f5eaebb6e39d3172b898d3a0a662ca3025de78d5cee18058dd22"
     },
     "frontend/src/test/orgListPage.test.tsx": {
       "mode": "644",
-      "sha256": "62d98d8d0e4323812398580c03bc14ced8f0c9db75790b73257c3d886ed605a2"
+      "sha256": "4c571629a6ce0f70fd24725c33560325581bc331c30ded972f90423a9868bba4"
     },
     "frontend/src/test/settingsPage.test.tsx": {
       "mode": "644",
-      "sha256": "62304efaf4a2f569d95794ee241f8adfbd7ce03ae945ba2393b78729f9e1d171"
+      "sha256": "7b7aaff88cb018358368227aaa7641bbd0512752c381e04b759dd434632c2a03"
     },
     "frontend/src/test/setup.ts": {
       "mode": "644",
@@ -465,7 +465,7 @@
     },
     "frontend/src/test/socialLinkTreeStates.test.tsx": {
       "mode": "644",
-      "sha256": "b1758551c112f7d5e25a95263a829a9533cff464c24b729fc9032bea26b750c5"
+      "sha256": "f04df79fe3f0856a686fd03918c012db4a7e6b3561da965cfce26df492cd2cbe"
     },
     "frontend/src/test/themeStore.test.ts": {
       "mode": "644",
@@ -481,15 +481,15 @@
     },
     "frontend/src/test/useModules.test.tsx": {
       "mode": "644",
-      "sha256": "e9d21c06149fd1d50834df3af67d56b439e4797fcd08f6f7c6dea1ac36d02685"
+      "sha256": "df047cc76a3b3c4fe8c874cb49aa37072ccfc057ae31e990406f342705d8463e"
     },
     "frontend/src/test/useOrgNavigation.test.tsx": {
       "mode": "644",
-      "sha256": "3bb8017342645d769c35089438346741abf2198b78fbeaab037d513a9a106f07"
+      "sha256": "a6341d1d490065ca48ad76e0b41b702bfd8509f9d4e1abf228e8a033f50d928e"
     },
     "frontend/src/test/useOrgs.test.tsx": {
       "mode": "644",
-      "sha256": "b99c729c4b98a9036ad80ffd46f404fa1ad32d2b15b9f573bc118a6701b69306"
+      "sha256": "ff1c22fffc8804674d710f8793348e24930fe0a01ecc0ff4ac6637ae17c32b2c"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "644",
@@ -967,7 +967,7 @@
     },
     "frontend/src/test/AppRoutes.test.tsx": {
       "mode": "644",
-      "sha256": "be2a3825b6786ab1e164d5919dd460d3ac5c83ea87093ab1ad176c1738e5baea"
+      "sha256": "21292402b816a3d2e08888f939590761b09a2457b5e2aaabec9ef7f53c79f9bc"
     },
     "frontend/src/test/FormRenderer.test.tsx": {
       "mode": "644",
@@ -991,23 +991,23 @@
     },
     "frontend/src/test/formFields.test.tsx": {
       "mode": "644",
-      "sha256": "e8aea61208c3a207d0a1b6d697996d5f953c977412abbedcc5691b9ceee7842a"
+      "sha256": "fc9a5c16306fcc47dc972515f69425e1c081d278e0057a6c15ab016d126ddf3e"
     },
     "frontend/src/test/layoutComponents.test.tsx": {
       "mode": "644",
-      "sha256": "5eb4ccbce8ae9079dcdbdf46d9e24b53b35737dbce38b453d0ae2018509ec319"
+      "sha256": "d9a20c5d51a9d8471cdb8571d5a84837607897d3e06508e6cf8515c29d96544b"
     },
     "frontend/src/test/orgComponents.test.tsx": {
       "mode": "644",
-      "sha256": "99aa189a112dc0c1439cd8954a72d28f6ddb3821261292d4a6c5138dfe9270bf"
+      "sha256": "c7a63209bca0f5eaebb6e39d3172b898d3a0a662ca3025de78d5cee18058dd22"
     },
     "frontend/src/test/orgListPage.test.tsx": {
       "mode": "644",
-      "sha256": "62d98d8d0e4323812398580c03bc14ced8f0c9db75790b73257c3d886ed605a2"
+      "sha256": "4c571629a6ce0f70fd24725c33560325581bc331c30ded972f90423a9868bba4"
     },
     "frontend/src/test/settingsPage.test.tsx": {
       "mode": "644",
-      "sha256": "62304efaf4a2f569d95794ee241f8adfbd7ce03ae945ba2393b78729f9e1d171"
+      "sha256": "7b7aaff88cb018358368227aaa7641bbd0512752c381e04b759dd434632c2a03"
     },
     "frontend/src/test/setup.ts": {
       "mode": "644",
@@ -1015,7 +1015,7 @@
     },
     "frontend/src/test/socialLinkTreeStates.test.tsx": {
       "mode": "644",
-      "sha256": "b1758551c112f7d5e25a95263a829a9533cff464c24b729fc9032bea26b750c5"
+      "sha256": "f04df79fe3f0856a686fd03918c012db4a7e6b3561da965cfce26df492cd2cbe"
     },
     "frontend/src/test/themeStore.test.ts": {
       "mode": "644",
@@ -1031,15 +1031,15 @@
     },
     "frontend/src/test/useModules.test.tsx": {
       "mode": "644",
-      "sha256": "e9d21c06149fd1d50834df3af67d56b439e4797fcd08f6f7c6dea1ac36d02685"
+      "sha256": "df047cc76a3b3c4fe8c874cb49aa37072ccfc057ae31e990406f342705d8463e"
     },
     "frontend/src/test/useOrgNavigation.test.tsx": {
       "mode": "644",
-      "sha256": "3bb8017342645d769c35089438346741abf2198b78fbeaab037d513a9a106f07"
+      "sha256": "a6341d1d490065ca48ad76e0b41b702bfd8509f9d4e1abf228e8a033f50d928e"
     },
     "frontend/src/test/useOrgs.test.tsx": {
       "mode": "644",
-      "sha256": "b99c729c4b98a9036ad80ffd46f404fa1ad32d2b15b9f573bc118a6701b69306"
+      "sha256": "ff1c22fffc8804674d710f8793348e24930fe0a01ecc0ff4ac6637ae17c32b2c"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "644",
@@ -1517,7 +1517,7 @@
     },
     "frontend/src/test/AppRoutes.test.tsx": {
       "mode": "644",
-      "sha256": "be2a3825b6786ab1e164d5919dd460d3ac5c83ea87093ab1ad176c1738e5baea"
+      "sha256": "21292402b816a3d2e08888f939590761b09a2457b5e2aaabec9ef7f53c79f9bc"
     },
     "frontend/src/test/FormRenderer.test.tsx": {
       "mode": "644",
@@ -1541,23 +1541,23 @@
     },
     "frontend/src/test/formFields.test.tsx": {
       "mode": "644",
-      "sha256": "e8aea61208c3a207d0a1b6d697996d5f953c977412abbedcc5691b9ceee7842a"
+      "sha256": "fc9a5c16306fcc47dc972515f69425e1c081d278e0057a6c15ab016d126ddf3e"
     },
     "frontend/src/test/layoutComponents.test.tsx": {
       "mode": "644",
-      "sha256": "5eb4ccbce8ae9079dcdbdf46d9e24b53b35737dbce38b453d0ae2018509ec319"
+      "sha256": "d9a20c5d51a9d8471cdb8571d5a84837607897d3e06508e6cf8515c29d96544b"
     },
     "frontend/src/test/orgComponents.test.tsx": {
       "mode": "644",
-      "sha256": "99aa189a112dc0c1439cd8954a72d28f6ddb3821261292d4a6c5138dfe9270bf"
+      "sha256": "c7a63209bca0f5eaebb6e39d3172b898d3a0a662ca3025de78d5cee18058dd22"
     },
     "frontend/src/test/orgListPage.test.tsx": {
       "mode": "644",
-      "sha256": "62d98d8d0e4323812398580c03bc14ced8f0c9db75790b73257c3d886ed605a2"
+      "sha256": "4c571629a6ce0f70fd24725c33560325581bc331c30ded972f90423a9868bba4"
     },
     "frontend/src/test/settingsPage.test.tsx": {
       "mode": "644",
-      "sha256": "62304efaf4a2f569d95794ee241f8adfbd7ce03ae945ba2393b78729f9e1d171"
+      "sha256": "7b7aaff88cb018358368227aaa7641bbd0512752c381e04b759dd434632c2a03"
     },
     "frontend/src/test/setup.ts": {
       "mode": "644",
@@ -1565,7 +1565,7 @@
     },
     "frontend/src/test/socialLinkTreeStates.test.tsx": {
       "mode": "644",
-      "sha256": "b1758551c112f7d5e25a95263a829a9533cff464c24b729fc9032bea26b750c5"
+      "sha256": "f04df79fe3f0856a686fd03918c012db4a7e6b3561da965cfce26df492cd2cbe"
     },
     "frontend/src/test/themeStore.test.ts": {
       "mode": "644",
@@ -1581,15 +1581,15 @@
     },
     "frontend/src/test/useModules.test.tsx": {
       "mode": "644",
-      "sha256": "e9d21c06149fd1d50834df3af67d56b439e4797fcd08f6f7c6dea1ac36d02685"
+      "sha256": "df047cc76a3b3c4fe8c874cb49aa37072ccfc057ae31e990406f342705d8463e"
     },
     "frontend/src/test/useOrgNavigation.test.tsx": {
       "mode": "644",
-      "sha256": "3bb8017342645d769c35089438346741abf2198b78fbeaab037d513a9a106f07"
+      "sha256": "a6341d1d490065ca48ad76e0b41b702bfd8509f9d4e1abf228e8a033f50d928e"
     },
     "frontend/src/test/useOrgs.test.tsx": {
       "mode": "644",
-      "sha256": "b99c729c4b98a9036ad80ffd46f404fa1ad32d2b15b9f573bc118a6701b69306"
+      "sha256": "ff1c22fffc8804674d710f8793348e24930fe0a01ecc0ff4ac6637ae17c32b2c"
     },
     "frontend/src/test/validateQuickScaleSeam.test.ts": {
       "mode": "644",
