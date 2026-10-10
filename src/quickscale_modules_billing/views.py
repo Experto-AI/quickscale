@@ -16,7 +16,6 @@ from django.http import (
 from django.shortcuts import redirect, resolve_url
 from django.urls import reverse
 from django.views.generic import TemplateView
-from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import (
     NotAuthenticated,
     NotFound,
@@ -31,6 +30,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from quickscale_core.runtime import QuickscaleSessionAuthentication
 from quickscale_modules_billing.exceptions import (
     BillingError,
     BillingWebhookError,
@@ -144,30 +144,18 @@ class _TransactionPagination(PageNumberPagination):
         return Response(data)
 
 
-class BillingSessionAuthentication(SessionAuthentication):
-    """Session authentication that keeps a 401 challenge for anonymous callers.
-
-    DRF answers an unauthenticated request 403 when the authentication scheme
-    declares no challenge header; the billing API has always answered 401, so
-    the scheme names its challenge.
-    """
-
-    def authenticate_header(self, request: Request) -> str:
-        del request
-        return "Session"
-
-
 class _BillingAPIView(APIView):
     """Shared DRF wiring for billing's JSON endpoints.
 
-    Session authentication only (DRF enforces CSRF on unsafe methods),
-    ``AllowAny`` because each view performs its own authentication and
-    organization checks, and JSON-only parsing and rendering so an
-    HTML-preferring client never receives DRF's browsable-API page instead
-    of the one QuickScale error shape (Module Conventions rule 9).
+    Session authentication only, through core's one session authentication
+    class (DRF enforces CSRF on unsafe methods), ``AllowAny`` because each
+    view performs its own authentication and organization checks, and
+    JSON-only parsing and rendering so an HTML-preferring client never
+    receives DRF's browsable-API page instead of the one QuickScale error
+    shape (Module Conventions rule 9).
     """
 
-    authentication_classes = [BillingSessionAuthentication]
+    authentication_classes = [QuickscaleSessionAuthentication]
     permission_classes = [AllowAny]
     parser_classes = [JSONParser]
     renderer_classes = [JSONRenderer]
