@@ -33,7 +33,6 @@ from django.views.generic import (
     ListView as ListView,
     TemplateView as TemplateView,
 )
-from rest_framework.authentication import SessionAuthentication as SessionAuthentication
 from rest_framework.exceptions import (
     NotAuthenticated as NotAuthenticated,
     NotFound as NotFound,
@@ -59,7 +58,6 @@ from quickscale_modules_orgs._api_views import (
     OrgApiMembersView as OrgApiMembersView,
     OrgApiRevokeInvitationView as OrgApiRevokeInvitationView,
     OrgApiSettingsView as OrgApiSettingsView,
-    OrgsSessionAuthentication as OrgsSessionAuthentication,
 )
 from quickscale_modules_orgs._view_context import (
     OrganizationContextMixin as OrganizationContextMixin,
