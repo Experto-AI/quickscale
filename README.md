@@ -62,6 +62,9 @@ modules:
   `analytics_public_config` returns the resolved runtime config dictionary for the current
   request, and `analytics_public_config_json` returns the same payload as JSON for inline
   script or bootstrap patterns.
+- The module-owned dashboard page at `analytics/` requires login and the active organization's
+  `viewer` role (rule 19); anonymous visitors are redirected to login, and a caller below the
+  role is refused (`403`).
 
 ## URLs
 
@@ -70,9 +73,6 @@ modules:
 | URL name | Path | View |
 |----------|------|------|
 | `quickscale_analytics:dashboard` | `analytics/` | Module-owned analytics overview page. |
-
-The dashboard requires login and the active organization's `viewer` role (rule 19); anonymous
-visitors are redirected to login, and a caller below the role is refused (`403`).
 
 ## Management commands
 
