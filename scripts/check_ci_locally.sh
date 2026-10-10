@@ -509,6 +509,11 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ Registered scripts test suites passed"
             LOCAL_GATE_FAILURE_LABEL="Registered Script Test Suites"
             ;;
+        check-generated-project-automation)
+            LOCAL_GATE_DESCRIPTION="Running generated-project automation gate..."
+            LOCAL_GATE_SUCCESS="✓ Generated-project CI test, migrate, and healthcheck executed cleanly"
+            LOCAL_GATE_FAILURE_LABEL="Generated-Project Automation Gate"
+            ;;
         check-workflow-security)
             LOCAL_GATE_DESCRIPTION="Running workflow security gate..."
             LOCAL_GATE_SUCCESS="✓ Workflow actions are pinned and permissions are declared"

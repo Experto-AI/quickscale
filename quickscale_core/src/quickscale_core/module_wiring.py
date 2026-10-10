@@ -348,8 +348,9 @@ def render_urls_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
     return (
         header
         + imports
-        + "\n\n"
+        + "\n"
         + "from quickscale_core.runtime.urls import compose_managed_urlpatterns\n"
+        + "\n"
         + "from .views import orgs_react_shell_view, react_shell_view\n\n"
         + "ManagedURLPattern = URLPattern | URLResolver\n\n"
         + _bucket("PRE_HOME_MODULE_URLPATTERNS", _pattern_lines(pre_home_urls))
