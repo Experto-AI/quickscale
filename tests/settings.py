@@ -102,6 +102,7 @@ LOGGING: dict[str, object] = {}
 # Listings module settings
 QUICKSCALE_LISTINGS_ENABLED = True
 QUICKSCALE_LISTINGS_PER_PAGE = 12
+QUICKSCALE_LISTINGS_API_RATE_LIMIT = "5/hour"
 
 # Rule 3: the compiled option schema the generic startup check reads.  The
 # test settings generate it from the module's own manifest, the form rule 3
@@ -113,11 +114,23 @@ MODULE_SETTINGS_SCHEMA = {
 }
 
 # DRF configuration mirroring the generated settings: session authentication
-# only and the one QuickScale error shape (Module Conventions rule 9).
+# only, the one QuickScale error shape, core's default throttle classes (the
+# publish view attaches its rate by scope alone, rule 32), and the publish
+# scope rate the module wiring contributes (Module Conventions rules 9 and 32).
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "quickscale_core.runtime.drf.QuickscaleScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "1200/hour",
+        "user": "3000/hour",
+        "quickscale_listings_api": "5/hour",
+    },
     "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
 }
 

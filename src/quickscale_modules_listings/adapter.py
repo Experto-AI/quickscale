@@ -15,6 +15,12 @@ def _listings_post_hook(
     settings["QUICKSCALE_LISTINGS_PER_PAGE"] = int(
         settings["QUICKSCALE_LISTINGS_PER_PAGE"]
     )
+    # Rule 32 — the publish scope carries the module stem and its rate is the
+    # api_rate_limit option, contributed here for rule 30's merge.
+    api_rate_limit = str(settings["QUICKSCALE_LISTINGS_API_RATE_LIMIT"]).strip()
+    settings["REST_FRAMEWORK"] = {
+        "DEFAULT_THROTTLE_RATES": {"quickscale_listings_api": api_rate_limit},
+    }
     settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
         "markdown.extensions.fenced_code",
         "markdown.extensions.tables",
