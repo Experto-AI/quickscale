@@ -35,18 +35,11 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 | `api_upload_max_height` | integer | `4096` | `QUICKSCALE_BLOG_API_UPLOAD_MAX_HEIGHT` | Maximum accepted media-upload image height in pixels. |
 | `api_allowed_image_formats` | list | `["PNG", "JPEG", "WEBP", "GIF"]` | `QUICKSCALE_BLOG_API_ALLOWED_IMAGE_FORMATS` | Image formats accepted by the media-upload API. |
 
-Additional Django settings configure the editor and the shared error shape:
+Additional Django settings configure the editor and the shared error shape. The staff-guarded
+Markdownx editor mount and its `MARKDOWNX_*` globals belong to the storage module (the one shared
+mount, Module Conventions rule 41), so a blog installation declares none of them:
 
 ```python
-MARKDOWNX_MARKDOWN_EXTENSIONS = [
-    "markdown.extensions.fenced_code",
-    "markdown.extensions.tables",
-    "markdown.extensions.toc",
-]
-MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
-MARKDOWNX_UPLOAD_MAX_SIZE = 5 * 1024 * 1024
-MARKDOWNX_IMAGE_MAX_SIZE = {"size": (1920, 1080), "quality": 90}
-
 # DRF: the shared contract composition (error shape, core's default throttle
 # classes, proxy state) plus the blog API throttle rate
 from quickscale_core.runtime.settings import compose_rest_framework
@@ -136,20 +129,19 @@ quickscale apply
 captures the module options in `quickscale.yml`.
 
 A manual installation embeds the orgs baseline first, then adds `rest_framework`, `markdownx`,
-`quickscale_modules_orgs`, and `quickscale_modules_blog` to `INSTALLED_APPS`, adds
+`quickscale_modules_orgs`, `quickscale_modules_storage`, and `quickscale_modules_blog` to
+`INSTALLED_APPS`, adds
 `quickscale_modules_orgs.middleware.TenantMiddleware` after the session and authentication
 middleware, sets the required `MEDIA_URL` (non-trivial) and `QUICKSCALE_BLOG_RSS_ENABLED` settings,
-configures Markdownx and composes DRF through
+relies on storage's shared staff-guarded Markdownx editor mount, and composes DRF through
 `quickscale_core.runtime.settings.compose_rest_framework` (the shared error handler, core's
 default throttle classes, the proxy state, and the `quickscale_blog_api` throttle rate shown
-under Configuration), mounts the module at `blog/` with the staff-guarded Markdownx
-editor include, and runs `python manage.py migrate quickscale_blog` plus
-`python manage.py collectstatic`.
+under Configuration), mounts the module at `blog/`, and runs `python manage.py migrate
+quickscale_blog` plus `python manage.py collectstatic`.
 
 ```python
 urlpatterns = [
     path("blog/", include("quickscale_modules_blog.urls")),
-    path("markdownx/", include("quickscale_modules_blog.markdownx_urls")),
 ]
 ```
 
