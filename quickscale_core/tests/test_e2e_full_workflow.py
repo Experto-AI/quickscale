@@ -1335,7 +1335,10 @@ class TestFullE2EWorkflow:
         )
         assert "pg_dump --version" in ci_content
         assert "pg_restore --version" in ci_content
-        assert "uses: codecov/codecov-action@v5" in ci_content
+        assert (
+            "uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5"
+            in ci_content
+        )
         assert "files: ./coverage.xml" in ci_content
         assert "file: ./coverage.xml" not in ci_content
         assert "version: 11.0.9" in ci_content
@@ -1346,6 +1349,9 @@ class TestFullE2EWorkflow:
         assert "3.13" not in ci_content
         assert "10.28.2" not in ci_content
         assert "codecov/codecov-action@v4" not in ci_content
+        assert "codecov/codecov-action@v5" not in ci_content
+        assert "permissions:" in ci_content
+        assert "DATABASE_URL: postgres://postgres@localhost/postgres" in ci_content
         assert "gpg --dearmor" not in ci_content
         assert "gnupg" not in ci_content
 

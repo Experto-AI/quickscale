@@ -7,11 +7,14 @@ FROM node:24-slim as frontend-builder
 WORKDIR /app/frontend
 RUN corepack enable
 # Copy dependency files
-COPY frontend/package.json frontend/pnpm-lock.yaml* frontend/pnpm-workspace.yaml* ./
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 # Install dependencies with retry logic for network resilience.
 # Retry up to 3 times to handle transient registry.npmjs.org slowness/timeouts,
 # mirroring the Python dependency step below. pnpm's own fetch timeout/retries
 # are also raised so a single slow download does not fail the whole build.
+# ``--frozen-lockfile`` requires the committed lockfile to exist and match
+# package.json, so the image never resolves versions the project did not pin;
+# the COPY above fails the build when the lockfile is missing.
 #
 # Each attempt is wrapped in `timeout` so a STALLED install (dead socket / hung
 # connection that never returns) is killed and retried, instead of hanging the
@@ -23,7 +26,7 @@ COPY frontend/package.json frontend/pnpm-lock.yaml* frontend/pnpm-workspace.yaml
 RUN echo "📦 Installing frontend dependencies..." && \
     for attempt in 1 2 3; do \
         echo "  Attempt $attempt of 3 (started $(date -u +%H:%M:%SZ))..." && \
-        timeout 600 pnpm install --config.strict-dep-builds=false --no-frozen-lockfile \
+        timeout 600 pnpm install --config.strict-dep-builds=false --frozen-lockfile \
             --reporter=append-only \
             --config.fetch-retries=5 && break; \
         rc=$?; \
@@ -200,9 +203,15 @@ RUN echo "📦 Collecting static files..." && \
 # Expose port
 EXPOSE ${PORT}
 
-# Health check - verify gunicorn is responding (any response including 404/500 means it's alive)
+# Health check - verify the app answers on the healthcheck route.
+# The probe connects over loopback but presents the Host
+# ``healthcheck.railway.app``, which the generated production settings always
+# admit, so it stays valid no matter what ALLOWED_HOSTS a deployment sets.
+# ``urlopen`` raises on error responses and on a refused or stalled
+# connection -- exactly the unhealthy cases -- and the healthcheck route never
+# touches the database.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\", \"8000\")}/', timeout=5)"
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:%s/healthcheck/' % os.environ.get('PORT', '8000'), headers={'Host': 'healthcheck.railway.app'}), timeout=5)"
 
 # Run start.sh: it creates the restricted runtime database role, runs
 # migrations, then execs gunicorn. It is the CMD rather than only the

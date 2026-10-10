@@ -653,6 +653,7 @@ class TestMakefileGateTargetDerivation:
         "check-security-static-analysis",
         "check-beta-migration-smoke",
         "check-generated-deploy-posture",
+        "check-generated-project-automation",
         "check-workflow-security",
         "check-secret-scanning",
         "check-module-conventions",

@@ -1,7 +1,12 @@
 """Example tests demonstrating pytest patterns for {{ project_name }}"""
 
+import importlib
+
 import pytest
 from django.contrib.auth import get_user_model
+from django.test import RequestFactory
+
+from {{ package_name }} import views
 
 User = get_user_model()
 
@@ -49,3 +54,37 @@ class TestAuthentication:
         """Test that login fails with wrong password"""
         response = client.login(username=user.username, password="wrongpassword")
         assert response is False
+
+
+@pytest.mark.django_db
+class TestProjectSurface:
+    """Tests for the generated URL surface and application entry points."""
+
+    def test_healthcheck_returns_ok(self, client):
+        """The healthcheck endpoint answers monitoring services with a plain-text OK."""
+        response = client.get("/healthcheck/")
+        assert response.status_code == 200
+        assert response.content == b"OK"
+
+    def test_home_shell_renders(self, client):
+        """The root route serves the React shell template."""
+        response = client.get("/")
+        assert response.status_code == 200
+
+    def test_application_entry_points_import(self):
+        """The WSGI and ASGI entry points import cleanly."""
+        importlib.import_module("{{ package_name }}.asgi")
+        importlib.import_module("{{ package_name }}.wsgi")
+
+    def test_error_handlers_render(self, user):
+        """The custom error handlers render their templates."""
+        request = RequestFactory().get("/missing")
+        request.user = user
+        assert views.custom_404_view(request).status_code == 404
+        assert views.custom_500_view(request).status_code == 500
+
+    def test_orgs_shell_view_renders_for_signed_in_user(self, user):
+        """The org shell view renders for a signed-in user."""
+        request = RequestFactory().get("/orgs")
+        request.user = user
+        assert views.orgs_react_shell_view(request).status_code == 200

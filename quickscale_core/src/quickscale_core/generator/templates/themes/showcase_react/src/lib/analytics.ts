@@ -17,7 +17,7 @@ interface SocialLinkClickEvent {
   targetUrl: string
 }
 
-const env = (import.meta as ImportMeta & { env?: AnalyticsImportMetaEnv }).env ?? {}
+const env: AnalyticsImportMetaEnv = import.meta.env ?? {}
 
 function resolvePosthogApiKey(): string | null {
   const candidate = env.VITE_POSTHOG_KEY?.trim() ?? ''

@@ -94,13 +94,16 @@ reconciles only its generated project-name docstrings.
 ### Category U6 — Frontend build settings (user-owned after generation)
 ``frontend/vite.config.ts``, ``frontend/tsconfig.json``,
 ``frontend/eslint.config.js``, ``frontend/postcss.config.js``,
-``frontend/pnpm-workspace.yaml``,
+``frontend/pnpm-workspace.yaml``, ``frontend/pnpm-lock.yaml``,
 ``frontend/.prettierignore``, ``frontend/.prettierrc``,
 ``frontend/vitest.config.ts``, ``frontend/playwright.config.ts``,
 ``frontend/components.json``, ``frontend/tailwind.config.js``,
 ``frontend/index.html``.
 Rationale: Generated once, user-editable, and not migration targets — the
-workflow keeps the recipient's copies exactly as generated. ``frontend/package.json``
+workflow keeps the recipient's copies exactly as generated. The generated
+``frontend/pnpm-lock.yaml`` pins the image build's frontend dependencies; the
+project refreshes it with its own ``pnpm install`` and the image fails closed
+without it. ``frontend/package.json``
 is not in this category: it is part of the fresh-first identity seam and is
 classified through ``FRESH_FIRST_IDENTITY_ROOT_FILES`` instead.
 
@@ -110,15 +113,28 @@ classified through ``FRESH_FIRST_IDENTITY_ROOT_FILES`` instead.
  ``frontend/src/vite-env.d.ts``, ``frontend/src/posthog-js.d.ts``,
  ``frontend/src/lib/utils.ts``, ``frontend/src/lib/analytics.ts``,
  ``frontend/src/lib/csrf.ts``, ``frontend/src/lib/validateQuickScaleSeam.ts``,
- ``frontend/src/test/setup.ts``,
- ``frontend/src/test/App.test.tsx``,
- ``frontend/src/test/csrf.test.tsx``,
- ``frontend/src/test/FormRenderer.test.tsx``,
- ``frontend/src/test/RootDispatch.test.tsx``,
- ``frontend/src/test/PublicSocialPages.test.tsx``,
- ``frontend/src/test/useApiErrors.test.ts``,
- ``frontend/src/test/validateQuickScaleSeam.test.ts``,
- ``frontend/src/test/viteAssetRouting.test.ts``,
+  ``frontend/src/test/setup.ts``,
+  ``frontend/src/test/App.test.tsx``,
+  ``frontend/src/test/AppRoutes.test.tsx``,
+  ``frontend/src/test/analytics.test.ts``,
+  ``frontend/src/test/csrf.test.tsx``,
+  ``frontend/src/test/FormRenderer.test.tsx``,
+  ``frontend/src/test/formFields.test.tsx``,
+  ``frontend/src/test/layoutComponents.test.tsx``,
+  ``frontend/src/test/orgComponents.test.tsx``,
+  ``frontend/src/test/orgListPage.test.tsx``,
+  ``frontend/src/test/RootDispatch.test.tsx``,
+  ``frontend/src/test/PublicSocialPages.test.tsx``,
+  ``frontend/src/test/settingsPage.test.tsx``,
+  ``frontend/src/test/socialLinkTreeStates.test.tsx``,
+  ``frontend/src/test/themeStore.test.ts``,
+  ``frontend/src/test/uiPrimitives.test.tsx``,
+  ``frontend/src/test/useApiErrors.test.ts``,
+  ``frontend/src/test/useModules.test.tsx``,
+  ``frontend/src/test/useOrgNavigation.test.tsx``,
+  ``frontend/src/test/useOrgs.test.tsx``,
+  ``frontend/src/test/validateQuickScaleSeam.test.ts``,
+  ``frontend/src/test/viteAssetRouting.test.ts``,
  ``frontend/e2e/home.spec.ts``.
  Rationale: User-editable application source, styles, type declarations,
  utility helpers, and test files. They are not structural migration targets;

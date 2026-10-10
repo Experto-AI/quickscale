@@ -9,11 +9,17 @@ Catalog-owned pins — the action refs the generated hosted jobs carry — are
 moved by rewriting the constants in ``scripts/sync_ci_gate_jobs.py`` and letting
 ``--write`` regenerate the marked region; the tool never edits that region
 itself.  Every other pin in ``.github/workflows/`` is rewritten in place,
-keeping the trailing version comment in step with the resolved tag.
+keeping the trailing version comment in step with the resolved tag, and the
+generator's ``ci.yml.j2`` template is refreshed the same way (SA253): the
+template carries plain-text ``uses:`` lines, so the tool rewrites them in
+source and fails closed on any ``uses:`` line that is not a single-line
+``action@<40-hex-sha>`` pin.
 
-The ``--workflows``, ``--generator``, and ``--registry`` overrides exist for
-fixture testing; the release procedure runs the defaults, which stay in
-lockstep with each other.
+The ``--workflows``, ``--generator``, ``--registry``, and ``--template``
+overrides exist for fixture testing; the release procedure runs the defaults,
+which stay in lockstep with each other.  An explicit ``--workflows`` override
+disables template coverage unless ``--template`` names one, so fixture runs
+never touch the repository's template.
 
 Usage:
     poetry run python scripts/refresh_action_pins.py [--check]
@@ -51,6 +57,19 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WORKFLOWS = ROOT / ".github" / "workflows"
 DEFAULT_GENERATOR = ROOT / "scripts" / "sync_ci_gate_jobs.py"
 DEFAULT_REGISTRY = ROOT / "scripts" / "gate_registry.json"
+# The generated-project CI template; its uses: lines are plain text, so the
+# same in-place rewrite that serves a workflow file applies to its source.
+DEFAULT_TEMPLATE = (
+    ROOT
+    / "quickscale_core"
+    / "src"
+    / "quickscale_core"
+    / "generator"
+    / "templates"
+    / "github"
+    / "workflows"
+    / "ci.yml.j2"
+)
 GENERATED_WORKFLOW_NAME = "ci.yml"
 # The generated hosted jobs' action refs, as ``(ref constant, comment constant)``
 # in scripts/sync_ci_gate_jobs.py.  The tool edits only these values.
@@ -205,6 +224,48 @@ def discover_pins(workflows_dir: Path) -> list[Pin]:
             )
         _assert_all_pinned_uses_discovered(path, text, file_pins)
         pins.extend(file_pins)
+    return pins
+
+
+def discover_template_pins(template_path: Path) -> list[Pin]:
+    """
+    Return every SHA-pinned action reference in the generated CI template.
+
+    The template is not valid YAML (it carries Jinja conditionals), so the
+    composed-document check used for workflow files does not apply; the
+    equivalent fail-closed rule is that every ``uses:`` line in the template
+    must be a single-line ``action@<40-hex-sha>`` pin this tool can rewrite.
+    An unpinned ``uses:`` line names itself in the error instead of being
+    silently skipped.
+    """
+    if not template_path.is_file():
+        raise RefreshError(f"generated CI template not found: {template_path}")
+    try:
+        text = template_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RefreshError(f"cannot read {template_path}: {exc}") from exc
+    pins: list[Pin] = []
+    for index, line in enumerate(text.splitlines(), start=1):
+        match = _PIN_RE.match(line)
+        if match is None:
+            if re.match(r"^\s*(-\s+)?uses:", line) is not None:
+                raise RefreshError(
+                    f"{template_path}:{index}: unsupported uses line in the generated "
+                    f"template; pin it to a single-line action@<40-hex-sha> form first: "
+                    f"{line.strip()}"
+                )
+            continue
+        action = match["action"]
+        pins.append(
+            Pin(
+                path=template_path,
+                line_number=index,
+                action=action,
+                repository=_repository(action),
+                sha=match["sha"],
+                comment=match["comment"],
+            )
+        )
     return pins
 
 
@@ -458,6 +519,7 @@ def refresh(
     workflows_dir: Path,
     generator_path: Path,
     registry_path: Path,
+    template_path: Path | None = None,
     *,
     check: bool,
     fetch: Callable[[str], Any] = _fetch_json,
@@ -465,8 +527,13 @@ def refresh(
     """Report stale pins, or refresh them and certify the generated workflow."""
     module = _load_generator(generator_path)
     pins = discover_pins(workflows_dir)
+    if template_path is not None:
+        pins += discover_template_pins(template_path)
     if not pins:
-        raise RefreshError(f"no SHA-pinned actions found under {workflows_dir}")
+        targets = str(workflows_dir)
+        if template_path is not None:
+            targets = f"{targets} or {template_path}"
+        raise RefreshError(f"no SHA-pinned actions found under {targets}")
     plan = plan_releases(pins, fetch)
     if check:
         stale = [pin for pin in pins if not _pin_is_current(pin, plan[pin.repository])]
@@ -495,16 +562,15 @@ def refresh(
         raise
     region = _generated_region(module, generated_workflow)
     direct_changes = _rewrite_direct_pins(
-        discover_pins(workflows_dir),
+        pins,
         plan,
         generated_workflow=generated_workflow,
         region=region,
     )
-    remaining = [
-        pin
-        for pin in discover_pins(workflows_dir)
-        if not _pin_is_current(pin, plan[pin.repository])
-    ]
+    refreshed_pins = discover_pins(workflows_dir)
+    if template_path is not None:
+        refreshed_pins += discover_template_pins(template_path)
+    remaining = [pin for pin in refreshed_pins if not _pin_is_current(pin, plan[pin.repository])]
     if remaining:
         stale = ", ".join(f"{pin.path}:{pin.line_number}" for pin in remaining)
         raise RefreshError(f"pins still stale after refresh: {stale}")
@@ -523,15 +589,37 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="report stale pins without writing anything",
     )
-    parser.add_argument("--workflows", type=Path, default=DEFAULT_WORKFLOWS)
+    parser.add_argument(
+        "--workflows",
+        type=Path,
+        default=None,
+        help=(
+            "workflow directory to refresh (default: the repository's .github/workflows; "
+            "an explicit override disables generated-template coverage unless --template is given)"
+        ),
+    )
     parser.add_argument("--generator", type=Path, default=DEFAULT_GENERATOR)
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY)
+    parser.add_argument(
+        "--template",
+        type=Path,
+        default=None,
+        help=(
+            "generated CI template to refresh alongside the workflows "
+            "(default: the repository's ci.yml.j2 when --workflows is not overridden)"
+        ),
+    )
     args = parser.parse_args(argv)
+    workflows = args.workflows if args.workflows is not None else DEFAULT_WORKFLOWS
+    template = args.template
+    if template is None and args.workflows is None:
+        template = DEFAULT_TEMPLATE
     try:
         return refresh(
-            args.workflows,
+            workflows,
             args.generator,
             args.registry,
+            template,
             check=args.check,
             fetch=_fetch_json,
         )

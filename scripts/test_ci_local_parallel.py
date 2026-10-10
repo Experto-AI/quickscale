@@ -406,6 +406,7 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
         "check-security-static-analysis": "Running security static-analysis",
         "check-beta-migration-smoke": "Running check-beta-migration-smoke",
         "check-generated-deploy-posture": "Running check-generated-deploy-posture",
+        "check-generated-project-automation": "Running generated-project automation gate",
         "check-workflow-security": "Running workflow security gate",
         "check-secret-scanning": "Running secret scanning gate",
         "check-module-conventions": "Running module conventions conformance check",

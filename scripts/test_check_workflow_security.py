@@ -62,6 +62,45 @@ def _fake_zizmor(tmp_path: Path, payload: str, exit_code: int) -> Path:
     return bin_dir
 
 
+def _recording_zizmor(tmp_path: Path, record_dir: Path, *, finding: bool) -> Path:
+    """
+    Install a fake ``zizmor`` that records its targets and copies the scanned ci.yml.
+
+    With ``finding=True`` it emits one finding for the rendered-template target
+    only (any target under the gate's render temporary directory), so the
+    repository-workflows half stays clean and the finding is attributable.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    script = bin_dir / "zizmor"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json\n"
+        "import shutil\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        f"record_dir = Path({str(record_dir)!r})\n"
+        "target = Path(sys.argv[-1])\n"
+        "record_dir.mkdir(parents=True, exist_ok=True)\n"
+        "with (record_dir / 'targets.txt').open('a', encoding='utf-8') as handle:\n"
+        "    handle.write(str(target) + '\\n')\n"
+        "workflow = target if target.is_file() else target / 'ci.yml'\n"
+        "if workflow.is_file():\n"
+        "    shutil.copy2(workflow, record_dir / 'seen-ci.yml')\n"
+        f"if {finding!r} and 'quickscale-workflow-security-' in str(target):\n"
+        "    finding = [{'ident': 'unpinned-uses', 'desc': 'unpinned action reference',"
+        " 'locations': [{'symbolic': {'key': {'Local': {'verbatim_path': str(workflow)}}},"
+        " 'concrete': {'location': {'start_point': {'row': 3, 'column': 9}}}}]}]\n"
+        "    sys.stdout.write(json.dumps(finding))\n"
+        "    sys.exit(14)\n"
+        "sys.stdout.write('[]')\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    return bin_dir
+
+
 def _workflow(tmp_path: Path, body: str) -> Path:
     """Write one fixture workflow and return its path."""
     directory = tmp_path / ".github" / "workflows"
@@ -226,6 +265,46 @@ def test_missing_directory_exits_two(tmp_path: Path) -> None:
     completed = _run([str(tmp_path / "absent")], str(bin_dir))
     assert completed.returncode == 2
     assert "not found" in completed.stderr
+
+
+def test_generated_template_flag_scans_the_rendered_workflow(tmp_path: Path) -> None:
+    """SA253: the flag renders ci.yml.j2 offline and scans the rendered workflow."""
+    record_dir = tmp_path / "record"
+    bin_dir = _recording_zizmor(tmp_path, record_dir, finding=False)
+    completed = _run(["--generated-template"], str(bin_dir))
+    assert completed.returncode == 0, completed.stderr
+    targets = (record_dir / "targets.txt").read_text(encoding="utf-8").splitlines()
+    assert str(WORKFLOWS) in targets
+    assert any(
+        target.endswith(f"{workflow_gate.GENERATED_PROBE_SLUG}/.github/workflows")
+        for target in targets
+    ), targets
+    rendered = (record_dir / "seen-ci.yml").read_text(encoding="utf-8")
+    assert "permissions:" in rendered
+    assert workflow_gate.GENERATED_PROBE_SLUG in rendered
+    assert PINNED_CHECKOUT in rendered
+
+
+def test_default_scan_does_not_render_the_template(tmp_path: Path) -> None:
+    """Without the flag the gate scans only the repository's workflows."""
+    record_dir = tmp_path / "record"
+    bin_dir = _recording_zizmor(tmp_path, record_dir, finding=False)
+    completed = _run([], str(bin_dir))
+    assert completed.returncode == 0, completed.stderr
+    targets = (record_dir / "targets.txt").read_text(encoding="utf-8").splitlines()
+    assert targets == [str(WORKFLOWS)]
+    rendered = (record_dir / "seen-ci.yml").read_text(encoding="utf-8")
+    assert workflow_gate.GENERATED_PROBE_SLUG not in rendered
+
+
+def test_generated_template_findings_fail_the_gate(tmp_path: Path) -> None:
+    """SA253: findings in the rendered template fail the gate with their location."""
+    record_dir = tmp_path / "record"
+    bin_dir = _recording_zizmor(tmp_path, record_dir, finding=True)
+    completed = _run(["--generated-template"], str(bin_dir))
+    assert completed.returncode == 1
+    assert "unpinned-uses" in completed.stderr
+    assert "workflow security findings: 1" in completed.stderr
 
 
 @pytest.mark.skipif(REAL_ZIZMOR is None, reason="zizmor is not installed")

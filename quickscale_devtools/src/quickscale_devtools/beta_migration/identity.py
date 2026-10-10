@@ -175,6 +175,11 @@ _IDENTITY_LINE_RULES: dict[
     ),
     "tests/test_example.py": (
         (re.compile(r"Example tests demonstrating pytest patterns for\s"), ("slug",)),
+        # The runtime-surface tests import the generated package by name
+        # (``from <package> import views`` and ``import_module("<package>.asgi")``),
+        # so those lines carry package identity rather than the slug docstring.
+        (re.compile(r"^from\s+\S+\s+import\s+views\b"), ("package",)),
+        (re.compile(r"import_module\("), ("package",)),
     ),
     "frontend/package.json": ((re.compile(r'^\s*"name"\s*:'), ("package",)),),
     "frontend/e2e/home.spec.ts": (

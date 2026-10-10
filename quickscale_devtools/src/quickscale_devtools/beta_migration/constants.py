@@ -291,6 +291,7 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "frontend/eslint.config.js",
     "frontend/postcss.config.js",
     "frontend/pnpm-workspace.yaml",
+    "frontend/pnpm-lock.yaml",
     "frontend/.prettierignore",
     "frontend/.prettierrc",
     "frontend/vitest.config.ts",

@@ -2,7 +2,7 @@
 # Do not edit by hand; `make check` fails when this file is not current.
 # Refresh with `poetry run python scripts/sync_ci_gate_jobs.py --write`.
 
-.PHONY: check-core-compat check-module-core-imports check-manifest-sync check-module-app-declaration check-org-context-primitives check-csrf-exempt check-commit-testimony check-project-contract-vintage frontend-proof smoke-install check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture check-workflow-security check-secret-scanning check-module-conventions check-split-facade-imports quality
+.PHONY: check-core-compat check-module-core-imports check-manifest-sync check-module-app-declaration check-org-context-primitives check-csrf-exempt check-commit-testimony check-project-contract-vintage frontend-proof smoke-install check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture check-generated-project-automation check-workflow-security check-secret-scanning check-module-conventions check-split-facade-imports quality
 
 # Check each module's quickscale_core imports against the current core API.
 # This verifies that every import from quickscale_core in a module's source
@@ -91,11 +91,15 @@ check-beta-migration-smoke:
 check-generated-deploy-posture:
 	@$(PYTHON) scripts/check_generated_deploy_posture.py
 
+# Execute a freshly generated project's rendered CI test and migrate commands and image healthcheck inside the provisioned PostgreSQL profile
+check-generated-project-automation:
+	@if [ -n "$${QUICKSCALE_POSTGRES_LEASE:-}" ]; then scripts/provision_ci_postgres.sh run --profile restricted -- $(PYTHON) scripts/check_generated_project_automation.py; else QS_PROVISION_SCOPE= scripts/provision_ci_postgres.sh run --profile restricted -- $(PYTHON) scripts/check_generated_project_automation.py; fi
+
 # Fail on any zizmor finding at medium severity and confidence or above: an
 # unpinned third-party `uses:` ref, or a workflow with no top-level
 # `permissions:` block.
 check-workflow-security:
-	@$(PYTHON) scripts/check_workflow_security.py
+	@$(PYTHON) scripts/check_workflow_security.py --generated-template
 
 # Fail on any committed secret gitleaks reports after applying the reasoned
 # allowlists in scripts/gitleaks.toml.

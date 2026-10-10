@@ -13,8 +13,7 @@ their value.
 
 **Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
-([publish_procedure.md](publish_procedure.md)); the live Stripe test-mode checkout record SA251
-owed is complete, so 0.89.0 is publish-ready.
+([publish_procedure.md](publish_procedure.md)); 0.89.0 is publish-ready.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -33,7 +32,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA253 | Make the generated project's CI, image, and healthcheck pass, and execute them in a gate | 2 | — | Optional |
 | SA255 | Accept Resend's real webhook signature in notifications | 2 | — | Optional |
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
 | SA263 | Adapters validate, coerce, and default only through the manifest | 2 | SA260 | Optional |
@@ -42,8 +40,8 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
-Track 2: SA253 ──► SA255 ──► SA260 ──► SA263 ──► SA267
+Track 1: SA191 (cutover) ∥ SA204 ──► SA153 ──► SA154 (inventory)
+Track 2: SA255 ──► SA260 ──► SA263 ──► SA267
 Track 3: —
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
@@ -59,8 +57,8 @@ when its last slice lands; slices are not scheduled.
 
 **Order.** Every change to a shipped module `0001_initial` lands before SA204 freezes
 migration history, and SA204 lands before SA153 slice (a), whose schema work is `0002+` from the
-start. SA154 is an inventory, not work. SA191 finishes slice (b), then (c) and (d); slices (a)
-and (e) need the maintainer's Railway login.
+start. SA154 is an inventory, not work. SA191's agent work is done and it closes at the
+maintainer's cutover, so SA204 proceeds alongside it.
 
 ### Track states
 
@@ -69,7 +67,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA253 | yes | yes | yes | **yes** | no |
+| 2 | SA255 | yes | yes | yes | **yes** | no |
 | 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -106,9 +104,8 @@ A track is **truly green** only when all three states are yes.
   re-exports, and the conformance harness with its registry row, and the five `_anonymization.py`
   handlers with core's redaction helpers.
 - **Cross-track edits.** SA255 takes the notifications webhook (`notifications/views.py`,
-  `_webhooks.py`) from Track 3. SA253 edits `base.py.j2` (Track 3) only for its test-settings
-  line. SA204 adds its gate row to the Track 2 registry. All land through the serialized merge
-  queue.
+  `_webhooks.py`) from Track 3. SA204 adds its gate row to the Track 2 registry. All land through
+  the serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md). Each track resolves the shared set at its
@@ -135,9 +132,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   change reaches that project. It is a one-way door (arch audit
   `clean-break-schema-no-data-path`, option 1).
 
-  **Acceptance:** decisions record that rule 1 of the clean-break decision is lifted from 0.89.0
-  onward, the release the freeze lands in. Upgrades from earlier vintages, including 0.88.0,
-  stay fresh-database-only. From 0.89.0 on, a schema change to a model-bearing module ships as a
+  **Acceptance:** decisions record that rule 1 of the clean-break decision is lifted from the
+  release the freeze lands in. Upgrades from earlier vintages stay fresh-database-only. From that
+  release on, a schema change to a model-bearing module ships as a
   new incremental migration under the existing migration-quality gates. A registered gate fails
   when an existing migration file of a model-bearing module changes or disappears, with controls
   proving that it rejects an in-place `0001` edit and accepts a new `0002`.
@@ -185,9 +182,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Data.** It cannot move by backup and restore. The production database records `listings`
   0001–0003, `forms` 0001–0003, and `auth` 0001–0002 as applied and has no `orgs`, while current
   `listings` and `forms` ship a rewritten `0001_initial` that depends on `orgs` and a NOT NULL
-  organization FK. Rehearse first: restore a production dump into a scratch PostgreSQL 18 and
-  confirm the history inconsistency with `migrate --plan` against the recipient. The cutover
-  rebuilds a fresh database. The `quickscale_orgs_create_site_org` command creates the site's
+  organization FK (`migrate --plan` on a restored dump fails with `InconsistentMigrationHistory`),
+  so the cutover rebuilds a fresh database. The `quickscale_orgs_create_site_org` command creates the site's
   organization in the same deploy step as `migrate`. The catalog is
   then reseeded through `bap-web`'s own seed command, tenant-scoped to that organization under the
   restricted runtime role — never under BYPASSRLS. Users are
@@ -228,46 +224,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     and the written rollback restores the previous deploy *and* that database.
   - No property-portal features (SA153) and no frontend stack change.
 
-  **Slices:**
-  - [x] (a) Rehearsal: the production dump came read-only from the Railway `bap-web` project
-    (server PostgreSQL 17.11, `pg_dump` 18.6; 166,211 bytes kept at
-    `/home/victor/code/bap-web-prod.dump`, outside every repository) and restored with
-    `pg_restore --no-owner` into scratch PostgreSQL 18 (`qs-bap-prod-scratch-pg`,
-    `127.0.0.1:33292`, database `bap_prod_scratch`) with no warnings; the restored ledger records
-    listings 0001–0003, forms 0001–0003, auth 0001–0002, properties 0001–0002, and no `orgs`.
-    The recipient's `migrate --plan` exits 1 with `InconsistentMigrationHistory: Migration
-    account.0001_initial is applied before its dependency quickscale_auth.0001_initial`: the
-    v0.62 `quickscale_modules_*` ledger cannot move forward, so the cutover rebuilds a fresh
-    database. Watch: the scratch database is the slice (e) rehearsal target, and the dump holds
-    real user data and stays out of every repository. Next: slice (e).
-  - [x] (b) Recipient and code port. The contact payload posts to `/forms/api/<slug>/submit/` and the
-    six service forms were reseeded to the live payload schema (`full_name`, `email`, `subject`,
-    `project_context`, plus a project-owned `gdpr_consent` field); a real submission is proven end
-    to end and the mocked suites mock the module URL. Watch: repin to the sealed release before
-    cutover, and the recorded upstream candidates stay in `bap-web-new`'s migration ledger. Next:
-    slice (c).
-  - [x] (c) Test parity: donor suites pass in the recipient (pytest 56 passed at 94.5% coverage
-    with the donor's per-file 80% gate restored, and Vitest 338 passed; every donor test file
-    and fixture carried, the adapted ones with recorded reasons, none excluded),
-    `manage.py check` passes including SA208's provider-ID check, and `check_tenant_isolation`
-    passes 6/6 with 6 FORCE-RLS tables / 12 policies = a fresh same-modules baseline's 5 / 10
-    plus the `properties` table's canonical pair. Watch: repin before cutover — the embedded
-    `orgs` predates the `--json` flag, and the generated `check-tenant-isolation` target needs
-    operator env on its migrate line. Next: slice (d).
-  - [x] (d) Live parity and design-system consistency: write-safety mocks on both submit endpoint
-    contracts; read-only specs green against the live site (26 passed, 4 property journeys skipped
-    by the flag-off surface) and the full suite green against the recipient (254 passed, 7
-    chromium-only skips); home/contact diffs pixel-identical with no masks, live baselines kept in
-    `bap-web-new`; recipient-only catalog specs over the 12 seeded listings; catalog/detail
-    design-system check green with kept recipient baselines and one recorded exception (contact's
-    WhatsApp brand link). Watch: the kept baselines are pre-cutover evidence; repin before cutover.
-    Next: slice (e).
-  - [x] (e) Cutover: `scripts/cutover.sh` and `CUTOVER.md` in `bap-web-new` rebuild a fresh database
-    (migrate; `quickscale_orgs_create_site_org`; runtime-role reseed of the catalog and the six
-    contact forms), verify it (counts, form schemas, a real submit, RLS fail-closed probes,
-    isolation 6/6), and write the rollback; rehearsed twice on a fresh scratch database while the
-    retained dump copy stayed fingerprint-identical. Watch: repin to the sealed release and re-run
-    the rehearsal (`CUTOVER.md`); the Railway execution remains the maintainer's step.
+  **Remaining:** agent work (slices a–e) is done; `scripts/cutover.sh` and `CUTOVER.md` in
+  `bap-web-new` rebuild, verify, and roll back, rehearsed on scratch. After 0.89.0 is published:
+  repin `bap-web-new` to it and re-run the rehearsal (agent), then the maintainer runs the Railway
+  cutover, carries media, re-invites users, and archives the old repository. The production dump
+  at `/home/victor/code/bap-web-prod.dump` holds real user data and stays out of every repository.
 
   **Surfaces:** the new `bap-web-new` repository and its reseed step; the migration prompt; the
   `forms` module only for upstreamed customizations.
@@ -344,26 +305,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [x] **SA251 — Make Stripe checkout and payment outcomes complete and recoverable.**
-
-- [ ] **SA253 — Make the generated project's CI, image, and healthcheck pass, and execute them in a gate.**
-
-  **Context:** generated automation is only text-asserted, never run, and four defects live there
-  (tech audit §9): the rendered CI cannot pass on a fresh project (`generated-ci-fails-out-of-box`),
-  it uses mutable third-party action tags and no `permissions:` block
-  (`generated-ci-mutable-action-tags`), the image `HEALTHCHECK` gets 400 under production settings
-  (`docker-healthcheck-always-unhealthy`), and the frontend stage resolves npm dependencies
-  unpinned when no lockfile exists (`frontend-image-floating-deps`). They share `ci.yml.j2` and
-  `Dockerfile.j2`, so they land together.
-
-  **Acceptance:** a fresh generated project's CI passes as rendered. The rendered workflow pins
-  actions by SHA with a least-privilege `permissions:` block, and `check_workflow_security.py` and
-  `make refresh-action-pins` cover `ci.yml.j2`. The `HEALTHCHECK` passes under production settings.
-  The frontend image installs from a lockfile and fails without one. A registered gate generates a
-  project offline and executes its CI test and migrate commands and the image healthcheck.
-
-  **Surfaces:** `ci.yml.j2`, `Dockerfile.j2`, the test-settings line of `base.py.j2`,
-  `scripts/check_workflow_security.py`, the new gate, and the tech audit.
+- [x] **SA253 — Make the generated project's CI, image, and healthcheck pass, and execute them in a gate.**
 
 - [ ] **SA255 — Accept Resend's real webhook signature in notifications.**
 
@@ -377,8 +319,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** notifications `views.py`, `_webhooks.py`, their tests, the README, and the tech
   audit.
-
-- [x] **SA256 — Fix `deploy railway` environment writes and DR media streaming.**
 
 - [ ] **SA260 — One off switch and a closed-world manifest surface.**
 

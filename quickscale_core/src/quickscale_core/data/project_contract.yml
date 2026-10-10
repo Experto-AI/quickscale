@@ -251,6 +251,23 @@ steps:
       - 'Compare and manually adopt the managed /social/embeds payload contract: a published embed whose stored resolution failed now carries the stable message "Embed metadata could not be resolved." in `resolution_error` instead of the stored resolver error text, and the raw message stays on the embed row and in the Django admin. Project code or fixtures that asserted the raw text switch to the marker or to `resolution_status`.'
       - 'Optionally copy the current frontend/src/test/PublicSocialPages.test.tsx embeds fixture and assertion to pin the marker behavior.'
 
+  - id: sa253-generated-automation
+    minimum: "0.89.0"
+    title: "Adopt the generated automation that passes as rendered"
+    adoption_steps:
+      - "Compare and manually adopt the current .github/workflows/ci.yml: every action is pinned by commit SHA with its version comment, the workflow declares a top-level `permissions: contents: read`, the test step sets `DATABASE_URL` for the CI service database, and the migrate and tenant-isolation steps run under `<package>.settings.local`."
+      - "Compare and manually adopt the current Dockerfile: the `HEALTHCHECK` probes `/healthcheck/` over loopback while presenting the always-admitted `healthcheck.railway.app` Host and counts only a 2xx answer as healthy, and the frontend stage requires the committed `frontend/pnpm-lock.yaml` and installs with `--frozen-lockfile`."
+      - "Generate and commit the missing `frontend/pnpm-lock.yaml` with `pnpm install --lockfile-only` (or `pnpm install`), then rebuild the image so the frozen install runs against it."
+      - "Compare and manually adopt the current coverage and test files: `pyproject.toml` omits `*/settings/*` from coverage, `urls.py` marks its dev-only DEBUG branch no-cover, `tests/test_example.py` covers the healthcheck, shell route, entry points, and error handlers, and `frontend/vitest.config.ts` collects only src test files so the Playwright specs under `frontend/e2e/` stay with Playwright."
+      - "Compare and manually adopt the current `<package>/views.py`, `<package>/context_processors.py`, and `<package>/urls_modules.py` import blocks (the generated project's Ruff configuration groups `quickscale_core` with third-party imports), so the rendered CI's `ruff format --check` and `ruff check` steps pass on a fresh checkout."
+
+  - id: sa253-frontend-coverage
+    minimum: "0.89.0"
+    title: "Adopt the starter frontend test suite that meets the coverage gate"
+    adoption_steps:
+      - 'Compare and optionally copy the current frontend/src/test additions (AppRoutes.test.tsx, analytics.test.ts, formFields.test.tsx, layoutComponents.test.tsx, orgComponents.test.tsx, orgListPage.test.tsx, settingsPage.test.tsx, socialLinkTreeStates.test.tsx, themeStore.test.ts, uiPrimitives.test.tsx, useModules.test.tsx, useOrgNavigation.test.tsx, useOrgs.test.tsx) so the project''s own `pnpm test:coverage` meets its existing per-file thresholds; the suite is project-owned after generation.'
+      - 'If project code copied the starter frontend/src/lib/analytics.ts, adopt its `import.meta.env` read in the literal-token form so test-environment stubs apply; runtime behavior is unchanged.'
+
   - id: sa261-seam-module-api-paths
     minimum: "0.89.0"
     title: "Adopt the seam's module API bases and the one shared editor mount"

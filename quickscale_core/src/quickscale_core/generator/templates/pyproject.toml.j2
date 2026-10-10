@@ -42,6 +42,13 @@ addopts = "--strict-markers --cov={{ package_name }} --cov-report=term-missing -
 fail_under = 90
 # Per-file minimum target: 80% (enforced via code review)
 
+[tool.coverage.run]
+# Settings modules are configuration, executed at import by the environment
+# that loads them (production settings need deployment-only variables), so a
+# fresh project's test suite cannot measure them the way it measures views and
+# URLs. The application code stays under the coverage gate.
+omit = ["*/settings/*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py{{ python_version | replace('.', '') }}"
