@@ -70,7 +70,8 @@ When both the global `QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED` setting and a fo
 flag are true, the public schema includes a honeypot field (`_hp_name`) and submission
 handling treats a populated value as spam while still returning success — preventing bot
 enumeration. If either switch is off, `_hp_name` is ignored. Rate limiting
-(`ScopedRateThrottle` with `QUICKSCALE_FORMS_RATE_LIMIT`) adds a second layer of protection.
+(the scoped throttle with `QUICKSCALE_FORMS_RATE_LIMIT`, keyed by client IP)
+adds a second layer of protection.
 
 ### Email notifications
 
@@ -138,8 +139,11 @@ A manual installation adds `rest_framework`, `django_filters`, `quickscale_modul
 and `quickscale_modules_notifications` (forms requires both), and `quickscale_modules_forms` to
 `INSTALLED_APPS`, defines their declared settings (including `QUICKSCALE_FORMS_*`,
 `QUICKSCALE_ANALYTICS_*`, and `QUICKSCALE_NOTIFICATIONS_*`), mounts the module's
-URLs, sets `REST_FRAMEWORK["EXCEPTION_HANDLER"]` to
-`quickscale_core.runtime.conventions.exception_handler`, and runs `python manage.py migrate`. A fresh
+URLs, composes `REST_FRAMEWORK` through
+`quickscale_core.runtime.settings.compose_rest_framework` (the shared error handler and core's
+default throttle classes) with the `quickscale_forms_submit` rate from
+`QUICKSCALE_FORMS_RATE_LIMIT` contributed under `DEFAULT_THROTTLE_RATES`, and runs
+`python manage.py migrate`. A fresh
 `migrate` on a clean database creates the four built-in presets as part of the initial data
 migration — no separate seed step is needed on first install. Run
 `python manage.py quickscale_forms_seed_presets` to re-create a preset that was manually

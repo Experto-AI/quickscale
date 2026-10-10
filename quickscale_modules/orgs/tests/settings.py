@@ -175,6 +175,7 @@ QUICKSCALE_FORMS_RETENTION_DAYS = 365
 # listings
 QUICKSCALE_LISTINGS_ENABLED = True
 QUICKSCALE_LISTINGS_PER_PAGE = 12
+QUICKSCALE_LISTINGS_API_RATE_LIMIT = "5/hour"
 # blog
 QUICKSCALE_BLOG_ENABLED = True
 # blog requires storage (rule 5); its seam asks the required module's

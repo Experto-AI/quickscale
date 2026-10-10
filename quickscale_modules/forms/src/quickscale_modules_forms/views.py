@@ -48,7 +48,6 @@ from quickscale_modules_forms.serializers import (
     FormSubmissionAdminSerializer,
     FormSubmissionCreateSerializer,
 )
-from quickscale_modules_forms.throttles import FormSubmitThrottle
 from quickscale_modules_orgs.current_org import (
     get_client_ip,
     get_current_org_id,
@@ -277,7 +276,9 @@ class FormSubmitAPIView(CreateAPIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [FormSubmitThrottle]
+    # Rule 32: the throttle is attached by scope only, through the default
+    # scoped throttle core's class provides; its rate is the module's
+    # ``rate_limit`` option and the public endpoint's bucket is the client IP.
     throttle_scope = "quickscale_forms_submit"
 
     def get_serializer(

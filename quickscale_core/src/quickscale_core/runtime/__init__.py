@@ -17,9 +17,9 @@ adapters.  It re-exports all symbols from its sub-modules:
   collection, startup checks, the one DRF error shape).  Loaded only when one
   of its symbols is requested, so a process without Django never imports it.
 * ``runtime.drf`` — the shared Django REST Framework helper classes (the one
-  session authentication class, Module Conventions rule 9).  Loaded only when
-  one of its symbols is requested, so a process that never serves a JSON API
-  never imports Django REST Framework.
+  session authentication class, rule 9, and the one scoped throttle class,
+  rule 32).  Loaded only when one of its symbols is requested, so a process
+  that never serves a JSON API never imports Django REST Framework.
 * ``runtime.admin`` — the shared Django-admin mixin module admins reuse
   (read-only operational surfaces).  Loaded only when its symbol is requested,
   so a process without Django never imports it.
@@ -82,7 +82,9 @@ _LAZY_ADMIN_SYMBOLS: frozenset[str] = frozenset({"ReadOnlyAdminMixin"})
 #: Symbols served lazily by ``runtime.drf``.  The DRF helper classes drag in
 #: Django REST Framework, so processes that never serve a JSON API never
 #: import it.
-_LAZY_DRF_SYMBOLS: frozenset[str] = frozenset({"QuickscaleSessionAuthentication"})
+_LAZY_DRF_SYMBOLS: frozenset[str] = frozenset(
+    {"QuickscaleScopedRateThrottle", "QuickscaleSessionAuthentication"}
+)
 
 #: Symbols served lazily by ``runtime.redaction`` (SA245).  A process that
 #: never scrubs stored identity never imports the redaction matchers.
@@ -215,6 +217,7 @@ __all__ = [
     # Shared admin behavior (from admin)
     "ReadOnlyAdminMixin",
     # Shared DRF helpers (from drf)
+    "QuickscaleScopedRateThrottle",
     "QuickscaleSessionAuthentication",
     # Anonymization redaction helpers and sentinels (from redaction)
     "DELETED_ADDRESS",

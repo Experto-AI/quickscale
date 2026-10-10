@@ -6,9 +6,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.db import IntegrityError
 from django.test import Client
 from django.urls import reverse
+
+from quickscale_core.runtime import QuickscaleScopedRateThrottle
 
 from quickscale_modules_listings.models import Listing
 from quickscale_modules_orgs.models import Organization
@@ -446,6 +449,43 @@ class TestPublishListingApi:
         error = _error(response)
         assert error["code"] == "publish_failed"
         assert error["message"] == "Unable to publish listing"
+
+    # ------------------------------------------------------------------
+    # Throttling (Module Conventions rule 32)
+    # ------------------------------------------------------------------
+
+    def test_publish_listing_api_attaches_its_throttle_by_scope_only(self):
+        """Rule 32: the publishing write attaches by scope, not by a class."""
+        from quickscale_modules_listings.views import ListingPublishAPIView
+
+        assert ListingPublishAPIView.throttle_scope == "quickscale_listings_api"
+        assert "throttle_classes" not in vars(ListingPublishAPIView)
+
+    def test_publish_listing_api_rate_limit_returns_429(self, client, staff_user):
+        """Posting past the configured scope rate returns 429."""
+        cache.clear()
+        _login_with_org(client, staff_user)
+        url = reverse("quickscale_listings:api_publish_listing")
+        scope_rates = {"quickscale_listings_api": "2/minute"}
+
+        # The generated settings install core's scoped throttle class and DRF
+        # binds rates at import time, so the test applies the binding itself.
+        with patch.object(QuickscaleScopedRateThrottle, "THROTTLE_RATES", scope_rates):
+            responses = [
+                client.post(
+                    url,
+                    data=json.dumps(
+                        {"title": f"Rate Listing {index}", "description": "Body"}
+                    ),
+                    content_type="application/json",
+                )
+                for index in range(3)
+            ]
+        cache.clear()
+
+        assert [response.status_code for response in responses[:2]] == [201, 201]
+        assert responses[2].status_code == 429
+        assert _error(responses[2])["code"] == "throttled"
 
     def test_publish_listing_api_conflict_detected_after_race_returns_409(
         self,

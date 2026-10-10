@@ -14,11 +14,11 @@ from django.test import Client, override_settings
 from django.urls import reverse
 from PIL import Image
 from rest_framework.test import APIRequestFactory, force_authenticate
-from rest_framework.throttling import ScopedRateThrottle
 
+from quickscale_core.runtime import QuickscaleScopedRateThrottle
 from quickscale_modules_blog.models import BlogMediaAsset, Category, Post, Tag
-from quickscale_modules_blog.throttles import BlogApiThrottle
 from quickscale_modules_blog.views import (
+    BlogApiBaseView,
     MediaUploadAPIView,
     PostPublishAPIView,
     _build_media_response_url,
@@ -141,7 +141,7 @@ def _rest_framework(rate: str) -> dict[str, object]:
 def blog_api_rate(rate: str):
     """Apply *rate* as the blog API throttle rate for one test block.
 
-    DRF binds ``DEFAULT_THROTTLE_RATES`` onto the throttle class at import
+    DRF binds ``DEFAULT_THROTTLE_RATES`` onto the throttle classes at import
     time, so the test applies both bindings, as the sibling DRF module's
     suite does.
     """
@@ -149,7 +149,7 @@ def blog_api_rate(rate: str):
     rates = {BLOG_API_SCOPE: rate}
     with (
         override_settings(REST_FRAMEWORK=_rest_framework(rate)),
-        patch.object(ScopedRateThrottle, "THROTTLE_RATES", rates),
+        patch.object(QuickscaleScopedRateThrottle, "THROTTLE_RATES", rates),
     ):
         yield
     cache.clear()
@@ -807,9 +807,11 @@ class TestPublishPostApi:
     # Throttling (Module Conventions rule 32)
     # ------------------------------------------------------------------
 
-    def test_blog_api_throttle_scope_carries_the_module_stem(self):
-        """The scope is the stemmed DRF scope rule 32 requires."""
-        assert BlogApiThrottle.scope == BLOG_API_SCOPE
+    def test_blog_api_attaches_its_throttle_by_scope_only(self):
+        """Rule 32: a view attaches a throttle through its scope, not a class."""
+        assert BlogApiBaseView.throttle_scope == BLOG_API_SCOPE
+        assert "throttle_classes" not in vars(BlogApiBaseView)
+        assert MediaUploadAPIView.throttle_scope == BLOG_API_SCOPE
 
     def test_blog_api_rate_limit_comes_from_the_setting(
         self,
@@ -837,14 +839,14 @@ class TestPublishPostApi:
         assert error["code"] == "throttled"
         assert int(second_response["Retry-After"]) > 0
 
-    def test_blog_api_throttle_uses_remote_addr_by_default(
+    def test_blog_api_throttle_bucket_follows_the_authenticated_user(
         self,
         client,
         staff_user,
         staff_org,
         blog_org_scope,
     ):
-        """A spoofed X-Forwarded-For cannot split the throttle bucket by default."""
+        """A spoofed X-Forwarded-For cannot split the authenticated user's bucket."""
         _login_with_org(client, staff_user)
 
         with blog_api_rate("1/hour"):
@@ -868,47 +870,41 @@ class TestPublishPostApi:
         with blog_org_scope(staff_org):
             assert Post.objects.filter(slug="rate-post-two").count() == 0
 
-    def test_blog_api_throttle_uses_xff_when_configured(
+    def test_blog_api_throttle_buckets_are_per_user(
         self,
         client,
         staff_user,
+        member_user,
     ):
-        """Configured proxy trust gives each forwarded client its own bucket."""
+        """Every authenticated user gets an independent throttle bucket."""
         _login_with_org(client, staff_user)
 
         with blog_api_rate("1/hour"):
-            with override_settings(
-                USE_X_FORWARDED_FOR=True,
-                TRUSTED_PROXY_COUNT=1,
-            ):
-                first_response = client.post(
-                    reverse("quickscale_blog:api_publish_post"),
-                    data=json.dumps({"title": "Xff Post One", "content": "Body"}),
-                    content_type="application/json",
-                    HTTP_X_FORWARDED_FOR="198.51.100.10",
-                    REMOTE_ADDR="10.0.0.8",
-                )
-                second_response = client.post(
-                    reverse("quickscale_blog:api_publish_post"),
-                    data=json.dumps({"title": "Xff Post Two", "content": "Body"}),
-                    content_type="application/json",
-                    HTTP_X_FORWARDED_FOR="198.51.100.11",
-                    REMOTE_ADDR="10.0.0.9",
-                )
-                third_response = client.post(
-                    reverse("quickscale_blog:api_publish_post"),
-                    data=json.dumps({"title": "Xff Post Three", "content": "Body"}),
-                    content_type="application/json",
-                    HTTP_X_FORWARDED_FOR="198.51.100.10",
-                    REMOTE_ADDR="10.0.0.8",
-                )
+            first_response = client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "User Bucket One", "content": "Body"}),
+                content_type="application/json",
+            )
+            _login_with_org(client, member_user)
+            second_response = client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "User Bucket Two", "content": "Body"}),
+                content_type="application/json",
+            )
+            _login_with_org(client, staff_user)
+            third_response = client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "User Bucket Three", "content": "Body"}),
+                content_type="application/json",
+            )
 
         assert first_response.status_code == 201
         assert second_response.status_code == 201, (
-            "Different X-Forwarded-For values should get independent buckets "
-            "when USE_X_FORWARDED_FOR is enabled"
+            "A second authenticated user must get an independent bucket"
         )
-        assert third_response.status_code == 429
+        assert third_response.status_code == 429, (
+            "The first user's bucket must already be exhausted"
+        )
 
     @pytest.mark.parametrize("use_xff,proxy_count,xff", BLOG_CLIENT_IP_CASES)
     def test_blog_throttle_ident_matches_direct_resolver(
@@ -928,7 +924,9 @@ class TestPublishPostApi:
             USE_X_FORWARDED_FOR=use_xff,
             TRUSTED_PROXY_COUNT=proxy_count,
         ):
-            assert BlogApiThrottle().get_ident(request) == get_client_ip(request)
+            assert QuickscaleScopedRateThrottle().get_ident(request) == get_client_ip(
+                request
+            )
 
     @pytest.mark.parametrize("setting_name,setting_value", BLOG_INVALID_PROXY_SETTINGS)
     def test_publish_post_api_invalid_proxy_settings_fail_loud_without_mutation(
@@ -941,7 +939,15 @@ class TestPublishPostApi:
         setting_name: str,
         setting_value: object,
     ) -> None:
-        """Invalid proxy trust settings raise before any post is written."""
+        """Invalid proxy trust settings raise before any post is written.
+
+        The generated project's first-position ``ClientIdentityMiddleware``
+        validates the trusted-proxy configuration before any view runs (the
+        suite installs it), so the refusal is the project boundary's.  An
+        authenticated caller's scoped bucket is the user's pk, which derives
+        no IP; the canonical-IP branch's fail-loud behavior is covered by the
+        core and forms throttle tests.
+        """
         _login_with_org(client, staff_user)
         settings_values: dict[str, object] = {
             "USE_X_FORWARDED_FOR": False,

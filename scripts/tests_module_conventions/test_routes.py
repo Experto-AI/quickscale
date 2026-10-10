@@ -10,6 +10,7 @@ from scripts.tests_module_conventions._support import (
     _golden_module,
     _seam_corpus,
     _violations,
+    _webhook_module,
     _with_files,
     _with_mount,
 )
@@ -218,6 +219,89 @@ def test_throttle_scope_control() -> None:
     violations = _violations(checker.rule_32_throttles, broken)
     assert any("scope" in violation for violation in violations)
     assert any("rate" in violation for violation in violations)
+
+
+def test_throttle_classes_closed_world_controls() -> None:
+    """Rule 32: throttle_classes appears only empty, and only on a webhook."""
+    module = _golden_module()
+    assert _violations(checker.rule_32_throttles, module) == []
+
+    class_registration = _with_files(
+        module,
+        views=(
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    throttle_classes = [DemoThrottle]\n"
+            "    throttle_scope = 'quickscale_demo_api'\n"
+        ),
+    )
+    assert any(
+        "a throttle attaches through throttle_scope only" in violation
+        for violation in _violations(checker.rule_32_throttles, class_registration)
+    )
+
+    empty_non_webhook = _with_files(
+        module,
+        views=(
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    throttle_classes = []\n"
+        ),
+    )
+    assert any(
+        "a throttle attaches through throttle_scope only" in violation
+        for violation in _violations(checker.rule_32_throttles, empty_non_webhook)
+    )
+
+    module_level = _with_files(
+        module,
+        views="throttle_classes = []\n",
+    )
+    assert any(
+        "outside a view class" in violation
+        for violation in _violations(checker.rule_32_throttles, module_level)
+    )
+
+    webhook = _webhook_module("def handle(body, signature):\n    return None\n")
+    assert not any(
+        "throttle_classes" in violation
+        for violation in _violations(checker.rule_32_throttles, webhook)
+    )
+
+    webhook_with_class = _with_files(
+        webhook,
+        views=webhook.files["views.py"].replace(
+            "throttle_classes = []", "throttle_classes = [DemoThrottle]"
+        ),
+    )
+    assert any(
+        "declares a non-empty throttle_classes" in violation
+        for violation in _violations(checker.rule_32_throttles, webhook_with_class)
+    )
+
+    as_view_override = _with_files(
+        module,
+        urls=module.files["urls.py"].replace(
+            "views.IndexView.as_view()",
+            "views.IndexView.as_view(throttle_classes=[])",
+        ),
+    )
+    assert any(
+        "as_view() supplies throttle_classes" in violation
+        for violation in _violations(checker.rule_32_throttles, as_view_override)
+    )
+
+    webhook_as_view = _with_files(
+        webhook,
+        urls=webhook.files["urls.py"].replace(
+            "views.IndexView.as_view()",
+            "views.IndexView.as_view(throttle_classes=[])",
+        ),
+    )
+    assert not any(
+        "throttle_classes" in violation
+        for violation in _violations(checker.rule_32_throttles, webhook_as_view)
+    )
 
 
 def test_template_assets_checked_without_pages() -> None:

@@ -154,7 +154,7 @@ _DEFAULT_DRF_PERMISSION_CLASSES = ["rest_framework.permissions.IsAuthenticated"]
 _DEFAULT_DRF_THROTTLE_CLASSES = [
     "rest_framework.throttling.AnonRateThrottle",
     "rest_framework.throttling.UserRateThrottle",
-    "rest_framework.throttling.ScopedRateThrottle",
+    "quickscale_core.runtime.drf.QuickscaleScopedRateThrottle",
 ]
 # Conservative default rates an operator raises for their traffic profile:
 # above interactive use and legitimate polling, below a runaway or abusive
@@ -174,13 +174,17 @@ def compose_rest_framework(
 ) -> dict[str, object]:
     """Compose the generated project's ``REST_FRAMEWORK`` setting.
 
-    ``contributed`` is the module-contributed value the managed wiring merged
-    into ``MODULE_SETTINGS['REST_FRAMEWORK']``; a key it sets wins.  The
+    ``contributed`` is the value the managed wiring merged into
+    ``MODULE_SETTINGS['REST_FRAMEWORK']``; a key it sets wins.  Module wiring
+    reaches this helper only after ``collect_wiring`` admits
+    ``DEFAULT_THROTTLE_RATES`` (rule 30), so in a generated project the only
+    module-contributed key is a rate; a directly adopted project that passes
+    other keys still wins.  The
     fail-closed defaults — the one QuickScale error handler, the one session
     authentication class, the authenticated-only permission class, the
-    anon/user/scoped throttle classes, and the conservative anon/user rates —
-    fill in only what a module left unset, so a project with no modules still
-    fails closed.  ``NUM_PROXIES`` is derived from the trusted-proxy state, so
+    anon/user classes and core's one scoped throttle class, and the
+    conservative anon/user rates — fill in only what a module left unset, so
+    a project with no modules still fails closed.  ``NUM_PROXIES`` is derived from the trusted-proxy state, so
     DRF and the canonical client-IP resolver cannot disagree.
     """
     rest_framework: dict[str, object] = dict(contributed or {})

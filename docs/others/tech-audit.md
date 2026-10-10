@@ -523,9 +523,9 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Invitation accept | login | token + normalized email match | UUID | autoescape | n/a | n/a | `select_for_update` | Django | n/a |
 | VIEW-AS | login | superuser, POST only | slug | n/a | n/a | n/a | n/a | 404 | INFO log |
 | CRM API | session (CSRF) | `HasOrgRole` viewer/member | serializers reject foreign-org FKs; composite FKs | DRF | DRF defaults | n/a | n/a | rule 9 | n/a |
-| Forms public schema/submit | none (`AllowAny`) | System or active org | serializer | DRF | `FormSubmitThrottle` | Resend on commit | n/a | rule 9; status: `forms-notification-status-misreported` | submission row; analytics distinct ID is the stable non-secret or random anonymous ID |
+| Forms public schema/submit | none (`AllowAny`) | System or active org | serializer | DRF | `quickscale_forms_submit` scope (core scoped throttle) | Resend on commit | n/a | rule 9; status: `forms-notification-status-misreported` | submission row; analytics distinct ID is the stable non-secret or random anonymous ID |
 | Forms admin API + CSV | session (CSRF) | `HasOrgRole`; superuser via `operator_access` | DRF | CSV formula cells neutralized | DRF defaults | n/a | n/a | rule 9 | `operator_access` log |
-| Blog/listings automation APIs | session (CSRF) | `HasOrgRole(MEMBER)` | Pillow format/size/pixels; extension from format | JSON | blog scope; listings DRF defaults (hand-off) | n/a | slug 409 | rule 9 | n/a |
+| Blog/listings automation APIs | session (CSRF) | `HasOrgRole(MEMBER)` | Pillow format/size/pixels; extension from format | JSON | blog `quickscale_blog_api` and listings `quickscale_listings_api` scopes (core scoped throttle) | n/a | slug 409 | rule 9 | n/a |
 | Blog/listings public reads | none | System org or active org via `org_scope` | slug | markdown over escaped text + href scheme filter | none | n/a | n/a | Django | n/a |
 | Social payload endpoints (generated) | none | System or active org; org-partitioned cache | n/a | `JsonResponse` | none | n/a | n/a | `social-payload-echoes-exception-text` | n/a |
 | Analytics page | session (login required) | active organization's `viewer` role | n/a | autoescape | none | n/a | n/a | Django | n/a |
@@ -727,8 +727,10 @@ Added:
 
 ## 12. Coherence hand-offs
 
-- Listings' publish API declares no module throttle scope, while blog's sibling uses
-  `BlogApiThrottle` and a `_RATE_LIMIT` option.
+- Listings' publish API now declares its module throttle scope (SA262): the
+  `quickscale_listings_api` scope from the new `api_rate_limit` option, attached by
+  `throttle_scope` through core's one scoped throttle class. Blog's sibling moved to the same
+  core class and keeps its `api_rate_limit` option.
 - The generated social payload views are plain `JsonResponse` function views, against rule 9's
   DRF base. The exception-text leak is reported here as `social-payload-echoes-exception-text`.
 - `analytics` was the only module whose page had no auth or role guard; it now requires login and

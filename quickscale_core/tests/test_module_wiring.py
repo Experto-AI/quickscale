@@ -151,19 +151,31 @@ class TestCollectWiring:
         assert "'orgs'" in message
         assert "ACCOUNT_ADAPTER" in message
 
-    def test_collect_wiring_rest_framework_merges_top_level_keys(self) -> None:
-        """Different top-level REST_FRAMEWORK keys from two modules both survive."""
+    def test_collect_wiring_rest_framework_rejects_unadmitted_sub_key(self) -> None:
+        """Module wiring admits only DEFAULT_THROTTLE_RATES (rule 30)."""
         specs = {
             "billing": ModuleWiringSpec(
                 settings={"REST_FRAMEWORK": {"DEFAULT_THROTTLE_RATES": {"a": "1/hour"}}}
             ),
             "crm": ModuleWiringSpec(settings={"REST_FRAMEWORK": {"PAGE_SIZE": 25}}),
         }
-        _, _, settings, _ = collect_wiring(specs)
-        assert settings["REST_FRAMEWORK"] == {
-            "DEFAULT_THROTTLE_RATES": {"a": "1/hour"},
-            "PAGE_SIZE": 25,
+        with pytest.raises(ValueError) as exc_info:
+            collect_wiring(specs)
+        message = str(exc_info.value)
+        assert "'crm'" in message
+        assert "PAGE_SIZE" in message
+        assert "DEFAULT_THROTTLE_RATES" in message
+
+    def test_collect_wiring_rest_framework_non_mapping_is_rejected(self) -> None:
+        """A module's REST_FRAMEWORK value must be the admitted mapping."""
+        specs = {
+            "crm": ModuleWiringSpec(settings={"REST_FRAMEWORK": ["not-a-mapping"]}),
         }
+        with pytest.raises(ValueError) as exc_info:
+            collect_wiring(specs)
+        message = str(exc_info.value)
+        assert "'crm'" in message
+        assert "REST_FRAMEWORK" in message
 
     def test_collect_wiring_rest_framework_merges_nested_dicts(self) -> None:
         """REST_FRAMEWORK sub-dicts merge key by key across modules."""

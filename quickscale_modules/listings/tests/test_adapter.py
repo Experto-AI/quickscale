@@ -26,10 +26,18 @@ def test_missing_per_page_setting_raises_key_error() -> None:
 
 def test_post_hook_coerces_and_adds_static_settings() -> None:
     result = _listings_post_hook(
-        ModuleWiringSpec(settings={"QUICKSCALE_LISTINGS_PER_PAGE": "24"}),
+        ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_LISTINGS_PER_PAGE": "24",
+                "QUICKSCALE_LISTINGS_API_RATE_LIMIT": " 7/hour ",
+            }
+        ),
         {"enabled": True},
     )
     assert result.settings["QUICKSCALE_LISTINGS_PER_PAGE"] == 24
+    assert result.settings["REST_FRAMEWORK"] == {
+        "DEFAULT_THROTTLE_RATES": {"quickscale_listings_api": "7/hour"},
+    }
     assert result.settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] == [
         "markdown.extensions.fenced_code",
         "markdown.extensions.tables",
@@ -47,7 +55,10 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
                 "markdownx",
                 "quickscale_modules_listings",
             ),
-            settings={"QUICKSCALE_LISTINGS_PER_PAGE": 24},
+            settings={
+                "QUICKSCALE_LISTINGS_PER_PAGE": 24,
+                "QUICKSCALE_LISTINGS_API_RATE_LIMIT": "5/hour",
+            },
             pre_home_url_includes=(),
             url_includes=(
                 ("listings/", "quickscale_modules_listings.urls"),
@@ -71,6 +82,9 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
         "quickscale_modules_listings",
     )
     assert result.settings["QUICKSCALE_LISTINGS_PER_PAGE"] == 24
+    assert result.settings["REST_FRAMEWORK"] == {
+        "DEFAULT_THROTTLE_RATES": {"quickscale_listings_api": "5/hour"},
+    }
 
 
 @patch("quickscale_modules_listings.adapter.build_generic_manifest_spec")

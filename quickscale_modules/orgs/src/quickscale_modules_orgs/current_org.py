@@ -356,7 +356,7 @@ def org_scope(organization: Any) -> Iterator[None]:
 # shared canonical client-IP resolver for module/runtime code
 # ---------------------------------------------------------------------------
 # Provides the importable live runtime resolver ``get_client_ip(request)`` for
-# forms, blog, and other module callers.  Generated settings supply
+# forms and other module callers.  Generated settings supply
 # ``USE_X_FORWARDED_FOR``/``TRUSTED_PROXY_COUNT`` for this resolver and DRF
 # ``NUM_PROXIES``. Fresh projects normalize XFF in project middleware before
 # both paths; this resolver consumes the uppercase proxy settings dynamically

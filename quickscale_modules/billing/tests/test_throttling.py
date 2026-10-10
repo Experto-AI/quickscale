@@ -16,7 +16,8 @@ import pytest
 from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
-from rest_framework.throttling import ScopedRateThrottle
+
+from quickscale_core.runtime import QuickscaleScopedRateThrottle
 
 import quickscale_modules_billing.views as billing_views
 from quickscale_core.module_wiring import ModuleWiringSpec
@@ -121,13 +122,13 @@ def test_billing_views_return_429_past_their_scope_rate(
     url = reverse(url_name)
     payload = json.dumps({"plan_slug": "not-a-plan"})
 
-    # The generated settings install ScopedRateThrottle as the default DRF
-    # throttle class and ship the scope rates; DRF binds both at import time,
-    # so this test applies the same bindings to the view and the throttle.
+    # The generated settings install core's scoped throttle as the default
+    # DRF throttle class and ship the scope rates; DRF binds both at import
+    # time, so this test applies the same bindings to the view and the throttle.
     with (
         override_settings(REST_FRAMEWORK={"DEFAULT_THROTTLE_RATES": THROTTLE_RATES}),
-        patch.object(view_class, "throttle_classes", [ScopedRateThrottle]),
-        patch.object(ScopedRateThrottle, "THROTTLE_RATES", THROTTLE_RATES),
+        patch.object(view_class, "throttle_classes", [QuickscaleScopedRateThrottle]),
+        patch.object(QuickscaleScopedRateThrottle, "THROTTLE_RATES", THROTTLE_RATES),
     ):
         responses = [
             client.post(url, data=payload, content_type="application/json")
@@ -160,9 +161,13 @@ def test_billing_checkout_refuses_the_thirty_first_request_in_an_hour(
             REST_FRAMEWORK={"DEFAULT_THROTTLE_RATES": BILLING_SCOPE_RATES}
         ),
         patch.object(
-            CreateCheckoutSessionView, "throttle_classes", [ScopedRateThrottle]
+            CreateCheckoutSessionView,
+            "throttle_classes",
+            [QuickscaleScopedRateThrottle],
         ),
-        patch.object(ScopedRateThrottle, "THROTTLE_RATES", BILLING_SCOPE_RATES),
+        patch.object(
+            QuickscaleScopedRateThrottle, "THROTTLE_RATES", BILLING_SCOPE_RATES
+        ),
     ):
         responses = [
             client.post(url, data=payload, content_type="application/json")

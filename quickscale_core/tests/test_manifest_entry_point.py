@@ -2206,7 +2206,12 @@ class TestListingsPostHookFailHard:
 
     def test_listings_setting_present_passes(self) -> None:
         """A valid QUICKSCALE_LISTINGS_PER_PAGE passes through without error."""
-        spec = ModuleWiringSpec(settings={"QUICKSCALE_LISTINGS_PER_PAGE": 24})
+        spec = ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_LISTINGS_PER_PAGE": 24,
+                "QUICKSCALE_LISTINGS_API_RATE_LIMIT": "5/hour",
+            }
+        )
         resolved: dict[str, Any] = {"enabled": True}
         result = _listings_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)

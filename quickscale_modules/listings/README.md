@@ -18,13 +18,14 @@ django-markdownx >= 4.0.11, and Pillow >= 12.3.0,<13.0.0.
 
 ## Configuration
 
-The module declares the option below in `module.yml`; `quickscale plan` and `quickscale apply`
-write it to the generated settings, and `quickscale.yml` carries the desired value.
+The module declares the options below in `module.yml`; `quickscale plan` and `quickscale apply`
+write them to the generated settings, and `quickscale.yml` carries the desired values.
 
 | Option | Type | Default | Django setting | Description |
 |--------|------|---------|----------------|-------------|
 | `enabled` | boolean | `true` | `QUICKSCALE_LISTINGS_ENABLED` | Mount the module's pages and API. Off keeps the app, its data, and the admin Markdownx editor (behind a staff check) but serves none of the module's own public URLs. |
 | `per_page` | integer | `12` | `QUICKSCALE_LISTINGS_PER_PAGE` | Number of listings per page. |
+| `api_rate_limit` | string | `5/hour` | `QUICKSCALE_LISTINGS_API_RATE_LIMIT` | Throttle rate for the listing publish API, keyed per authenticated user. Format: `<count>/<period>`. |
 
 ## Public surface
 
@@ -54,7 +55,9 @@ Module-to-module use goes through `services.py` (Module Conventions rule 4):
 `POST listings/api/publish/` creates and publishes a listing from a JSON payload for
 authenticated organization members (minimum role: `member`; a `viewer` is refused). It is a DRF
 `APIView` with session authentication only (CSRF is
-enforced) and the JSON renderer alone. Every error the view answers takes the shared QuickScale
+enforced) and the JSON renderer alone. The publishing write is throttled by its
+`quickscale_listings_api` scope at the `api_rate_limit` rate, keyed per authenticated user
+(rule 32). Every error the view answers takes the shared QuickScale
 shape `{"error": {"code", "message", "fields"}}`, produced by
 `quickscale_core.runtime.conventions.exception_handler` — the handler `quickscale apply`
 installs in `REST_FRAMEWORK` (a manual installation must install it the same way; see
@@ -108,16 +111,23 @@ captures the module options in `quickscale.yml`.
 A manual installation embeds the orgs baseline first (the models need `quickscale_orgs` and
 `TenantMiddleware`), then adds `rest_framework`, `django_filters`, and
 `quickscale_modules_listings` to `INSTALLED_APPS`, mounts the module URLs under `listings/`,
-installs the shared error handler so module APIs answer the one QuickScale shape, and runs
-`python manage.py migrate`. Compose the handler into whatever `REST_FRAMEWORK` configuration
-the project already has — other modules contribute keys such as their throttle rates, and
-replacing the dict drops them:
+composes `REST_FRAMEWORK` through the runtime helper so the shared error handler, core's default
+throttle classes, and the proxy state are installed, and runs `python manage.py migrate`.
+Pass every module-contributed key — such as this module's
+`quickscale_listings_api` throttle rate from `QUICKSCALE_LISTINGS_API_RATE_LIMIT` — as the
+helper's contribution; replacing the dict drops them:
 
 ```python
-REST_FRAMEWORK = dict(globals().get("REST_FRAMEWORK", {}))
-REST_FRAMEWORK.setdefault(
-    "EXCEPTION_HANDLER",
-    "quickscale_core.runtime.conventions.exception_handler",
+from quickscale_core.runtime.settings import compose_rest_framework
+
+REST_FRAMEWORK = compose_rest_framework(
+    {
+        "DEFAULT_THROTTLE_RATES": {
+            "quickscale_listings_api": QUICKSCALE_LISTINGS_API_RATE_LIMIT,
+        },
+    },
+    use_x_forwarded_for=USE_X_FORWARDED_FOR,
+    trusted_proxy_count=TRUSTED_PROXY_COUNT,
 )
 ```
 

@@ -263,9 +263,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     under Management commands.
   - **Blog automation API is a DRF surface.** The blog publish and media endpoints are DRF views
     with session authentication, answer the shared `{"error": {"code", "message", "fields"}}`
-    shape, and throttle by client IP under the `quickscale_blog_api` scope at the module's
-    `api_rate_limit` option; `BLOG_API_TOKENS` bearer access and the blog throttle counter table
-    are removed.
+    shape, and throttle per authenticated user under the `quickscale_blog_api` scope at the
+    module's `api_rate_limit` option; `BLOG_API_TOKENS` bearer access and the blog throttle
+    counter table are removed.
   - **Module templates and assets share one layout.** Every module page extends one flat
     `templates/quickscale_<module>/base.html` that extends the project shell and owns that module's
     `<module>_content` block; module emails live under `email/`, static files under
@@ -651,7 +651,8 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `REST_FRAMEWORK` — the fail-closed authenticated default, the shared error handler, the default
     throttle classes and rates, and the proxy-derived `NUM_PROXIES` — through
     `quickscale_core.runtime.settings.compose_rest_framework` instead of declaring the defaults
-    inline. Module-contributed DRF keys and throttle rates still win.
+    inline. Module-contributed throttle rates still merge in, and the wiring admits no other
+    `REST_FRAMEWORK` sub-key.
   - **Module URL wiring ships in the runtime.** Generated `<package>/urls.py` includes the managed
     `<package>/urls_modules.py` URLconf with one line and names no module; that managed file composes
     the theme shell routes, each installed and enabled module's URL includes, and the
@@ -671,6 +672,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     authenticates through `quickscale_core.runtime`'s `QuickscaleSessionAuthentication`, generated
     settings install it as `DEFAULT_AUTHENTICATION_CLASSES`, and the CRM and forms APIs answer
     `401` where they answered `403`.
+  - **Throttles attach by scope through one core class.** A view attaches its rate with
+    `throttle_scope` alone; core's `QuickscaleScopedRateThrottle` keys per authenticated user and
+    otherwise by the validated client IP, listings' publish API declares the new `api_rate_limit`
+    rate, and module wiring contributes only `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -346,6 +346,10 @@ with this release:
 - Module session APIs authenticate through one class: generated settings install
   `QuickscaleSessionAuthentication` as `DEFAULT_AUTHENTICATION_CLASSES`, so an unauthenticated
   call answers `401` uniformly — the CRM and forms APIs answer `401` where they answered `403`.
+- Module throttles attach by scope through one class: generated settings install
+  `QuickscaleScopedRateThrottle` as the default scoped throttle, a view declares only its
+  `throttle_scope`, module wiring contributes only `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`, and
+  listings' publish API gains an `api_rate_limit` option.
 
 ## Delivery provenance
 

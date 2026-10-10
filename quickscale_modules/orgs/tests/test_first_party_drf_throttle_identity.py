@@ -316,14 +316,6 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
     )
     assert throttle_classes == [
         (
-            "quickscale_modules/blog/src/quickscale_modules_blog/throttles.py",
-            "BlogApiThrottle",
-        ),
-        (
-            "quickscale_modules/forms/src/quickscale_modules_forms/throttles.py",
-            "FormSubmitThrottle",
-        ),
-        (
             "quickscale_modules/orgs/src/quickscale_modules_orgs/throttles.py",
             "OrgInviteOrganizationThrottle",
         ),
@@ -333,32 +325,9 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
         ),
     ], f"Unexpected first-party throttle inventory: {throttle_classes!r}"
 
-    blog_throttle = next(
-        record for record in classes if record.name == "BlogApiThrottle"
-    )
-    assert blog_throttle.bases == ("ClientIPThrottleMixin", "ScopedRateThrottle")
-    assert [
-        node.name
-        for node in blog_throttle.node.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    ] == ["get_cache_key"]
-
-    form_throttle = next(
-        record for record in classes if record.name == "FormSubmitThrottle"
-    )
-    assert form_throttle.bases == ("ClientIPThrottleMixin", "ScopedRateThrottle")
-    assert [
-        node.name
-        for node in form_throttle.node.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    ] == ["get_cache_key"]
-
-    relative_blog_views = "quickscale_modules/blog/src/quickscale_modules_blog/views.py"
-    relative_forms_views = (
-        "quickscale_modules/forms/src/quickscale_modules_forms/views.py"
-    )
-    # Rule 26 webhooks register no throttle classes; the closed-world list
-    # still records each empty registration.
+    # Rule 32: module views attach their rate by ``throttle_scope`` through
+    # core's one scoped throttle class; the only registrations left are rule
+    # 26 webhooks declaring an empty closed-world literal.
     assert [
         (
             str(record.path.relative_to(REPO_ROOT)),
@@ -372,16 +341,9 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
             "StripeWebhookView",
             (),
         ),
-        (relative_blog_views, "BlogApiBaseView", ("BlogApiThrottle",)),
-        (relative_forms_views, "FormSubmitAPIView", ("FormSubmitThrottle",)),
         (
             "quickscale_modules/notifications/src/quickscale_modules_notifications/views.py",
             "NotificationWebhookView",
-            (),
-        ),
-        (
-            "quickscale_modules/orgs/src/quickscale_modules_orgs/views.py",
-            "OrgApiInviteView",
             (),
         ),
     ]
@@ -393,12 +355,12 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
             (
                 "quickscale_modules/forms/src/quickscale_modules_forms/views.py",
                 "FormSubmitAPIView.create",
-                322,
+                323,
             ),
             (
                 "quickscale_modules/forms/src/quickscale_modules_forms/views.py",
                 "FormSubmitAPIView.create",
-                348,
+                349,
             ),
         ]
     )
@@ -440,5 +402,5 @@ def test_first_party_drf_throttle_inventory_is_closed_and_compliant() -> None:
     ] == [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
-        "rest_framework.throttling.ScopedRateThrottle",
-    ], "DRF throttle defaults must stay on stock DRF throttle classes"
+        "quickscale_core.runtime.drf.QuickscaleScopedRateThrottle",
+    ], "The default scoped throttle must be core's one rule 32 class"

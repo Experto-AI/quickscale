@@ -1782,3 +1782,22 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   module-defined `SessionAuthentication` subclass and an `authentication_classes` value outside
   core's class and the empty literal, controls included; decision rule 9 carries the clause and
   the release note records the status change). Item 6.
+
+### 2026-10-10 — SA262 stage 2 (one throttle attachment and a closed admission list)
+
+- 2026-10-10 — `throttle-attachment`: **resolved** (SA262 stage 2 — `quickscale_core.runtime`
+  ships one scoped throttle class (`QuickscaleScopedRateThrottle`, keyed by the authenticated
+  user's pk and otherwise by the canonical trusted-proxy client IP), installed as the generated
+  settings' default scoped throttle through `compose_rest_framework`; blog's and forms'
+  module-defined throttle classes are deleted and their views attach by `throttle_scope` alone;
+  listings' publish API gains the `api_rate_limit` option and the `quickscale_listings_api`
+  scope; orgs' invite API drops its `throttle_classes = ()` override and keeps its manual
+  per-sender/per-organization buckets, recorded as the listed rule 32 exception (charged after
+  the locked eligibility checks, the default anon/user rates still applying on top); harness
+  rule 32 rejects any `throttle_classes` literal outside the rule 26 webhook exemption, controls
+  included; decision rule 32 carries the clause and the exception).
+  Item 12.
+- 2026-10-10 — `collect_wiring` admission (enforcement gap 13): **resolved** (SA262 stage 2 —
+  `collect_wiring` admits only `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]` from a module; any
+  other `REST_FRAMEWORK` contribution fails the merge naming the module and sub-key, with unit
+  controls; decision rule 30 carries the clause).

@@ -156,6 +156,7 @@ class TestRuntimeAllExport:
             "PersistedBackupArtifact",
             "PersistedBackupPolicy",
             "PersistedBackupSnapshot",
+            "QuickscaleScopedRateThrottle",
             "QuickscaleSessionAuthentication",
             "REDACTED",
             "PersonalDataExclusion",
@@ -855,6 +856,15 @@ class TestCallerParityPassEagerSurface:
     # ------------------------------------------------------------------
 
     def test_getattr_public_symbols_via_runtime(self) -> None:
+        from django.conf import settings as django_settings
+
+        if not django_settings.configured:
+            django_settings.configure(
+                DEBUG=False,
+                SECRET_KEY="quickscale-test-key",
+                USE_I18N=False,
+                USE_TZ=False,
+            )
         for name in runtime.__all__:
             assert hasattr(runtime, name), f"runtime has no attribute {name}"
             obj = getattr(runtime, name)

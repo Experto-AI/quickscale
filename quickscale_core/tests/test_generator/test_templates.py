@@ -1518,6 +1518,7 @@ class TestDrfPermissionBaseline:
             "quickscale_core.runtime.conventions.exception_handler",
             "rest_framework.permissions.IsAuthenticated",
             "rest_framework.throttling.ScopedRateThrottle",
+            "quickscale_core.runtime.drf.QuickscaleScopedRateThrottle",
             '"anon": "1200/hour"',
             'REST_FRAMEWORK["NUM_PROXIES"] =',
         ):
@@ -1638,7 +1639,7 @@ class TestDrfPermissionBaseline:
         assert rest_framework["DEFAULT_THROTTLE_CLASSES"] == [
             "rest_framework.throttling.AnonRateThrottle",
             "rest_framework.throttling.UserRateThrottle",
-            "rest_framework.throttling.ScopedRateThrottle",
+            "quickscale_core.runtime.drf.QuickscaleScopedRateThrottle",
         ]
         assert rest_framework["DEFAULT_THROTTLE_RATES"] == {
             "anon": "1200/hour",

@@ -26,6 +26,13 @@ _QS_ENV_PREFIX: str = "__QS_ENV__:"
 #: sub-keys; the same sub-key with a different value fails the merge.
 _DEEP_MERGED_SETTINGS: frozenset[str] = frozenset({"REST_FRAMEWORK"})
 
+#: The only ``REST_FRAMEWORK`` sub-key module wiring may contribute (Module
+#: Conventions rule 30).  Throttle rates merge across modules; every other DRF
+#: key stays owned by the generated project's composition helper, so no module
+#: can replace the project-wide handler, permission, authentication, or
+#: throttle classes by wiring.
+_ADMITTED_REST_FRAMEWORK_KEYS: frozenset[str] = frozenset({"DEFAULT_THROTTLE_RATES"})
+
 
 T = TypeVar("T")
 
@@ -86,6 +93,30 @@ def _setting_conflict(
     )
 
 
+def _rest_framework_admission_error(module: str, value: object) -> ValueError | None:
+    """Return the error for a ``REST_FRAMEWORK`` contribution module wiring rejects."""
+    if not isinstance(value, Mapping):
+        return ValueError(
+            f"Module wiring conflict: module '{module}' writes setting "
+            "REST_FRAMEWORK with a non-mapping value. A module contributes only "
+            "REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']."
+        )
+    rejected = sorted(
+        str(sub_key)
+        for sub_key in value
+        if sub_key not in _ADMITTED_REST_FRAMEWORK_KEYS
+    )
+    if not rejected:
+        return None
+    keys = ", ".join(repr(key) for key in rejected)
+    return ValueError(
+        f"Module wiring conflict: module '{module}' writes REST_FRAMEWORK "
+        f"sub-key {keys}, which module wiring does not admit. Only "
+        "REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] may be contributed; the "
+        "composed defaults own every other key."
+    )
+
+
 def _record_path_owners(
     writers: dict[tuple[str, ...], str],
     path: tuple[str, ...],
@@ -137,7 +168,9 @@ def collect_wiring(
     Two modules may write the same setting only with an equal value; a
     differing value fails the merge, naming both modules and the setting.
     Settings listed in ``_DEEP_MERGED_SETTINGS`` merge their mapping values
-    key by key instead of replacing the whole value.
+    key by key instead of replacing the whole value, and a ``REST_FRAMEWORK``
+    contribution admits only the sub-keys in ``_ADMITTED_REST_FRAMEWORK_KEYS``
+    (rule 30): any other sub-key fails the merge instead of merging.
     """
     apps: list[str] = []
     middleware: list[str] = []
@@ -150,6 +183,10 @@ def collect_wiring(
         _merge_unique(middleware, spec.middleware)
 
         for key, value in spec.settings.items():
+            if key == "REST_FRAMEWORK":
+                admission_error = _rest_framework_admission_error(module_name, value)
+                if admission_error is not None:
+                    raise admission_error
             path = (key,)
             if key not in settings:
                 settings[key] = value

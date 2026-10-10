@@ -22,6 +22,14 @@ config:
       validation:
         min: 1
 
+    api_rate_limit:
+      type: string
+      default: "5/hour"
+      django_setting: QUICKSCALE_LISTINGS_API_RATE_LIMIT
+      description: "Throttle rate for the listing publish API, keyed per authenticated user. Format: '<count>/<period>'."
+      validation:
+        pattern: ^\d+/(second|minute|hour|day)$
+
   immutable: {}
 
 required_modules:
@@ -85,3 +93,9 @@ derivation:
           target_key: per_page
           rule_type: strip
           description: "Strip whitespace from per_page"
+    api_rate_limit:
+      normalization_rules:
+        - source_key: api_rate_limit
+          target_key: api_rate_limit
+          rule_type: strip
+          description: "Strip whitespace from api_rate_limit"

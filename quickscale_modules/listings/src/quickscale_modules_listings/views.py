@@ -49,16 +49,20 @@ class ListingPublishAPIView(APIView):
     class (Module Conventions rule 9): DRF enforces CSRF on unsafe methods.
     The endpoint writes the active organization's data, so it authorizes by
     org role through orgs' ``HasOrgRole`` (rule 19): any member may write,
-    while a viewer is refused.  Every error goes through the one QuickScale
-    exception handler the generated settings install.  The JSON renderer is
-    the only one, so an HTML-preferring client never receives DRF's
-    browsable-API page instead of the one error shape.
+    while a viewer is refused.  The publishing write attaches its throttle by
+    ``throttle_scope`` only, through the default scoped throttle core's class
+    provides (rule 32): its rate is the module's ``api_rate_limit`` option
+    and the bucket follows the authenticated user.  Every error goes through
+    the one QuickScale exception handler the generated settings install.  The
+    JSON renderer is the only one, so an HTML-preferring client never receives
+    DRF's browsable-API page instead of the one error shape.
     """
 
     authentication_classes = [QuickscaleSessionAuthentication]
     permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.MEMBER)]
     parser_classes = [JSONParser]
     renderer_classes = [JSONRenderer]
+    throttle_scope = "quickscale_listings_api"
     http_method_names = ["post"]
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:

@@ -426,9 +426,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `DEFAULT_AUTHENTICATION_CLASSES`, all six session APIs (billing, blog, CRM, forms, listings,
   orgs) use it — CRM and forms answer 401 where they answered 403 — harness rule 9 rejects a
   module-defined subclass and an `authentication_classes` value outside core's class and the
-  empty literal, and decision rule 9 carries the clause. Remaining: proposal 11's guards and
-  README roles, proposal 7's `PlainListPagination` and the generated social views, proposal 13's
-  throttles, and the `collect_wiring` admission list.
+  empty literal, and decision rule 9 carries the clause. Proposal 13's throttles and the
+  `collect_wiring` admission list landed next: `quickscale_core.runtime` ships
+  `QuickscaleScopedRateThrottle` (user-or-canonical-IP identity) as the default scoped throttle,
+  blog's and forms' module throttle classes are deleted in favor of `throttle_scope`, listings
+  gains its `api_rate_limit` option and `quickscale_listings_api` scope, orgs' invite API drops
+  its `throttle_classes` override, harness rule 32 closes `throttle_classes` to webhooks,
+  `collect_wiring` admits only `DEFAULT_THROTTLE_RATES` from a module, and decision rules 30 and
+  32 carry the clauses. Remaining: proposal 11's guards and README roles, and proposal 7's
+  `PlainListPagination` and the generated social views.
 
   **Context:** coherence `tenant-authorization` (billing's `AllowAny` plus a hand-written check
   and no README role table), `unauthenticated-status-code` (401 in four modules, 403 in two),

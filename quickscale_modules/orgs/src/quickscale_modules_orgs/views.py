@@ -381,9 +381,10 @@ class OrgApiInviteView(
     min_org_role = OrgRole.ADMIN
     # Both buckets are charged manually after the form's locked eligibility
     # checks (below), exactly like the HTML path, so an attempt the role gate,
-    # the pending cap, or the duplicate guard refuses never spends a budget;
-    # DRF's own throttle pass is therefore disabled for this view.
-    throttle_classes = ()
+    # the pending cap, or the duplicate guard refuses never spends a budget.
+    # The view declares no throttle class or scope of its own (rule 32): the
+    # generated settings' default throttle classes still apply their
+    # conservative anon/user rates on top of the manual buckets.
 
     def post(
         self,

@@ -150,7 +150,7 @@ class TestRestFrameworkComposition:
         assert composed["DEFAULT_THROTTLE_CLASSES"] == [
             "rest_framework.throttling.AnonRateThrottle",
             "rest_framework.throttling.UserRateThrottle",
-            "rest_framework.throttling.ScopedRateThrottle",
+            "quickscale_core.runtime.drf.QuickscaleScopedRateThrottle",
         ]
         assert composed["DEFAULT_THROTTLE_RATES"] == {
             "anon": "1200/hour",

@@ -1014,7 +1014,10 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
   third-party settings it needs. Two modules may write the same key only with an equal value;
   `apply` fails otherwise, naming both modules and the key. `REST_FRAMEWORK` is merged key by key
   (its `DEFAULT_THROTTLE_RATES` too), and two modules setting one sub-key differently also fail.
-  Core's `collect_wiring` enforces this and names no module.
+  Core's `collect_wiring` enforces this and names no module, and it admits only
+  `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]` from a module: any other `REST_FRAMEWORK` sub-key
+  fails the merge, so no module can replace the project-wide handler, permission, authentication,
+  or throttle classes by wiring.
 - ❌ A setting whose value depends on the order of module names.
 
 **31. The theme seam.**
@@ -1040,8 +1043,18 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
 - ✅ A DRF throttle scope is `quickscale_<module>_<purpose>` (rule 2); its rate is the module's
   `_RATE_LIMIT` option (rule 1), contributed to `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`
   through rule 30's merge.
-- ❌ A rate written in code or `adapter.py`; a table created by `RunSQL` (blog's throttle-counter
-  table goes with its hand-written limiter, rule 9).
+- ✅ A view attaches its DRF throttle by `throttle_scope` only, through core's one scoped throttle
+  class (`QuickscaleScopedRateThrottle` in `quickscale_core.runtime`, the generated settings'
+  default scoped throttle class): the bucket identity is the authenticated user's pk, else the
+  canonical client IP (the trusted-proxy derivation, never a request's own headers). Every
+  vendor-calling or publishing write API declares a scope.
+- ✅ Orgs' invitation sends are the listed exception: both paths keep their two manual
+  per-sender and per-organization buckets, charged after the form's locked eligibility checks so
+  a refused attempt spends no budget, and the JSON API's default DRF classes still apply their
+  conservative rates on top.
+- ❌ `throttle_classes` on a non-webhook view (a webhook keeps the empty literal rule 26
+  requires); a rate written in code or `adapter.py`; a table created by `RunSQL` (blog's
+  throttle-counter table goes with its hand-written limiter, rule 9).
 
 **33. Shared-namespace stems.**
 - ✅ Every name a module places in a namespace shared with the project or other modules carries the

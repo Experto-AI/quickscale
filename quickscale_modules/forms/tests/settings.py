@@ -111,7 +111,16 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
     ],
+    # Mirror the generated settings: core's default throttle classes (the
+    # submit view attaches its rate by scope alone, rule 32).
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "quickscale_core.runtime.drf.QuickscaleScopedRateThrottle",
+    ],
     "DEFAULT_THROTTLE_RATES": {
+        "anon": "1200/hour",
+        "user": "3000/hour",
         "quickscale_forms_submit": "5/hour",
     },
 }
