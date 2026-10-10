@@ -121,10 +121,12 @@ contract_vintage:
   manual_adoption_steps:
     - "PostgreSQL 18 backups contract requires updated Docker image packages and CI runner tooling. Existing generated projects must manually update Dockerfile, docker-compose.yml, and CI workflow files. See `docs/technical/implementation_contract.md` and `docs/technical/decisions.md` §Backups-Contract for the tooling specification."
 
+required_modules: []
+
 dependencies:
-  - django-storages>=1.14.6
-  - boto3>=1.43.58
-  - quickscale-core>=0.89.0,<0.90.0
+  - django-storages
+  - boto3
+  - quickscale-core
 
 # Retired option keys are refused by name with the message declared here.
 retired_options:
