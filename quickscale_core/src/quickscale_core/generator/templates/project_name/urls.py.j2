@@ -52,7 +52,7 @@ handler404 = "{{ package_name }}.views.custom_404_view"
 handler500 = "{{ package_name }}.views.custom_500_view"
 
 # Serve media files in development
-if settings.DEBUG:
+if settings.DEBUG:  # pragma: no cover - dev-only media/debug-toolbar branch
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
     # Django Debug Toolbar (if installed)

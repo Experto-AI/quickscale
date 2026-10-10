@@ -176,7 +176,10 @@ def _validate_docker_healthcheck_payload(
             allowed = call_name == "print"
         elif isinstance(node.func, ast.Attribute):
             call_name = node.func.attr
-            allowed = call_name in {"get", "urlopen"}
+            # ``Request`` is the read-only construction of the loopback probe;
+            # it lets the generated HEALTHCHECK present the always-admitted
+            # Host header without opening any capability beyond ``urlopen``.
+            allowed = call_name in {"get", "urlopen", "Request"}
         else:
             call_name = ast.dump(node.func, include_attributes=False)
             allowed = False

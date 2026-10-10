@@ -466,3 +466,75 @@ def test_refresh_requires_a_generated_workflow(
         )
         == 2
     )
+
+
+def test_generated_template_pins_are_refreshed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SA253: a stale pin in the generated ci.yml.j2 source is refreshed in place."""
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    shutil.copy2(CI_WORKFLOW, workflows / "ci.yml")
+    template = _workflow_fixture(tmp_path, "ci.yml.j2", SIMPLE_STEP.format(sha=CACHE_SHA))
+    generator = _copy_generator(tmp_path)
+    monkeypatch.setattr(refresh, "_fetch_json", _fake_fetch)
+
+    exit_code = refresh.main(
+        [
+            "--workflows",
+            str(workflows),
+            "--template",
+            str(template),
+            "--generator",
+            str(generator),
+            "--registry",
+            str(REGISTRY),
+        ]
+    )
+
+    assert exit_code == 0
+    release = _release_for("actions/cache")
+    text = template.read_text(encoding="utf-8")
+    assert f"uses: actions/cache@{release.sha} # {release.tag}" in text
+    assert CACHE_SHA not in text
+
+
+def test_template_unpinned_uses_line_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unpinned uses: line in the template is named, never silently skipped."""
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    _workflow_fixture(workflows, "nightly.yml", SIMPLE_STEP.format(sha=CACHE_SHA))
+    template = _workflow_fixture(tmp_path, "ci.yml.j2", "    - uses: actions/checkout@v6\n")
+    monkeypatch.setattr(refresh, "_fetch_json", _fake_fetch)
+
+    assert (
+        refresh.main(["--check", "--workflows", str(workflows), "--template", str(template)]) == 2
+    )
+    assert "pin it to a single-line" in capsys.readouterr().err
+
+
+def test_check_reports_stale_template_pins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--check`` names a stale template pin with its path and line."""
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    cache = _release_for("actions/cache")
+    _workflow_fixture(
+        workflows,
+        "nightly.yml",
+        SIMPLE_STEP.format(sha=cache.sha).replace("# v5.1.0", f"# {cache.tag}"),
+    )
+    template = _workflow_fixture(
+        tmp_path, "ci.yml.j2", "      - uses: actions/setup-node@" + "b" * 40 + " # v0.0.1\n"
+    )
+    monkeypatch.setattr(refresh, "_fetch_json", _fake_fetch)
+
+    assert (
+        refresh.main(["--check", "--workflows", str(workflows), "--template", str(template)]) == 1
+    )
+    output = capsys.readouterr().out
+    assert str(template) in output
+    assert "actions/setup-node@" in output

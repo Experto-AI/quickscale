@@ -15,6 +15,13 @@ SA202 contract:
   ``permissions:`` declaration in every workflow it scans: the SA202 contract is
   a workflow-level block, not merely a bounded one somewhere in the file.
 
+With ``--generated-template`` (SA253) the gate additionally renders the
+generator's ``ci.yml.j2`` template offline into a scratch project and scans the
+rendered workflow under the same contract, so the template cannot drift back
+onto mutable action tags or lose its top-level ``permissions:`` block.  The
+gate registry's ``make check-workflow-security`` recipe passes the flag; an
+explicit workflow-directory argument scans only that directory.
+
 ``--no-ignores`` disables zizmor's ignore mechanism -- inline
 ``# zizmor: ignore[...]`` comments and any ``zizmor.yml`` ignore rules -- so the
 pinning and permissions contract cannot be suppressed from inside the
@@ -43,12 +50,15 @@ flagged as an advisory warning, since it may not be the pinned version.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 import sysconfig
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -67,6 +77,10 @@ FLOOR_ARGS = ("--min-severity", "medium", "--min-confidence", "medium")
 # Inline `# zizmor: ignore[...]` comments must not be able to suppress the
 # pinning or permissions contract.
 IGNORE_ARGS = ("--no-ignores",)
+# Scan the generator's rendered CI template in addition to the workflows
+# directory (SA253).  The gate registry's recipe passes this flag.
+GENERATED_TEMPLATE_FLAG = "--generated-template"
+GENERATED_PROBE_SLUG = "generated_ci_probe"
 COMMAND_TIMEOUT = 180.0
 EXIT_FINDINGS = 1
 EXIT_INFRASTRUCTURE = 2
@@ -223,12 +237,59 @@ def _run_zizmor(executable: str, workflows: Path) -> tuple[int, str, str]:
     return completed.returncode, completed.stdout, completed.stderr
 
 
+def _parse_zizmor_report(stdout: str, stderr: str) -> list[dict[str, Any]]:
+    """Parse one zizmor JSON report, failing closed on a malformed shape."""
+    try:
+        findings = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        detail = stderr.strip() or stdout.strip()[:200]
+        raise GateError(f"unparseable {EXECUTABLE} report: {exc}; output: {detail}") from exc
+    if not isinstance(findings, list):
+        raise GateError(f"unexpected {EXECUTABLE} report shape: {type(findings).__name__}")
+    for finding in findings:
+        if not isinstance(finding, dict):
+            raise GateError(f"unexpected {EXECUTABLE} finding shape")
+    return findings
+
+
+def _render_generated_workflows(destination: Path) -> Path:
+    """
+    Render a generated project offline and return its workflow directory.
+
+    The direct generator API with ``QS_SKIP_POETRY_LOCK=1`` is the same
+    offline render path the other generated-project gates use; the rendered
+    ``.github/workflows`` directory is what the workflow-security contract
+    scans for SA253.
+    """
+    from quickscale_core.generator import ProjectGenerator
+
+    previous = os.environ.get("QS_SKIP_POETRY_LOCK")
+    os.environ["QS_SKIP_POETRY_LOCK"] = "1"
+    try:
+        project = destination / GENERATED_PROBE_SLUG
+        ProjectGenerator(theme="showcase_react").generate(GENERATED_PROBE_SLUG, project)
+    except Exception as exc:
+        raise GateError(f"could not render the generated CI template: {exc}") from exc
+    finally:
+        if previous is None:
+            os.environ.pop("QS_SKIP_POETRY_LOCK", None)
+        else:
+            os.environ["QS_SKIP_POETRY_LOCK"] = previous
+    workflows = project / ".github" / "workflows"
+    if not workflows.is_dir():
+        raise GateError("the generated project emitted no workflow directory")
+    return workflows
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the workflow-security gate and return its process exit code."""
     args = sys.argv[1:] if argv is None else argv
     preflight_only = "--preflight" in args
     if preflight_only:
         args = [arg for arg in args if arg != "--preflight"]
+    scan_generated = GENERATED_TEMPLATE_FLAG in args
+    if scan_generated:
+        args = [arg for arg in args if arg != GENERATED_TEMPLATE_FLAG]
     executable = _resolve_zizmor()
     pinned_version = _pinned_version()
     if executable is None:
@@ -247,37 +308,42 @@ def main(argv: list[str] | None = None) -> int:
     if not workflows.exists():
         raise GateError(f"workflow target not found: {workflows}")
     _warn_if_outside_project_environment(executable, pinned_version)
-    returncode, stdout, stderr = _run_zizmor(executable, workflows)
-    try:
-        findings = json.loads(stdout)
-    except json.JSONDecodeError as exc:
-        detail = stderr.strip() or stdout.strip()[:200]
-        raise GateError(f"unparseable {EXECUTABLE} report: {exc}; output: {detail}") from exc
-    if not isinstance(findings, list):
-        raise GateError(f"unexpected {EXECUTABLE} report shape: {type(findings).__name__}")
-    if findings:
-        for finding in findings:
-            if not isinstance(finding, dict):
-                raise GateError(f"unexpected {EXECUTABLE} finding shape")
-            ident = finding.get("ident", "<unknown>")
-            desc = str(finding.get("desc", "")).strip()
-            location = f"{_finding_path(finding)}:{_finding_position(finding)}"
-            print(f"{location}: {ident}: {desc}", file=sys.stderr)
-        print(f"workflow security findings: {len(findings)}", file=sys.stderr)
-        return EXIT_FINDINGS
-    if returncode != 0:
-        raise GateError(f"{EXECUTABLE} exited {returncode} with an empty report")
-    missing = _missing_top_level_permissions(workflows)
-    if missing:
-        for path in missing:
-            print(
-                f"{path}: missing-top-level-permissions: no workflow-level permissions block",
-                file=sys.stderr,
+    with contextlib.ExitStack() as stack:
+        targets = [workflows]
+        if scan_generated:
+            temporary = stack.enter_context(
+                tempfile.TemporaryDirectory(prefix="quickscale-workflow-security-")
             )
-        print(f"workflow security findings: {len(missing)}", file=sys.stderr)
-        return EXIT_FINDINGS
-    print(f"workflow security gate clean: {workflows}")
-    return 0
+            targets.append(_render_generated_workflows(Path(temporary)))
+        findings_total = 0
+        for target in targets:
+            returncode, stdout, stderr = _run_zizmor(executable, target)
+            findings = _parse_zizmor_report(stdout, stderr)
+            for finding in findings:
+                ident = finding.get("ident", "<unknown>")
+                desc = str(finding.get("desc", "")).strip()
+                location = f"{_finding_path(finding)}:{_finding_position(finding)}"
+                print(f"{location}: {ident}: {desc}", file=sys.stderr)
+            findings_total += len(findings)
+            if not findings and returncode != 0:
+                raise GateError(f"{EXECUTABLE} exited {returncode} with an empty report")
+        if findings_total:
+            print(f"workflow security findings: {findings_total}", file=sys.stderr)
+            return EXIT_FINDINGS
+        missing: list[Path] = []
+        for target in targets:
+            missing.extend(_missing_top_level_permissions(target))
+        if missing:
+            for path in missing:
+                print(
+                    f"{path}: missing-top-level-permissions: no workflow-level permissions block",
+                    file=sys.stderr,
+                )
+            print(f"workflow security findings: {len(missing)}", file=sys.stderr)
+            return EXIT_FINDINGS
+        scanned = ", ".join(str(target) for target in targets)
+        print(f"workflow security gate clean: {scanned}")
+        return 0
 
 
 if __name__ == "__main__":

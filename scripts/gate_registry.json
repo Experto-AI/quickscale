@@ -359,6 +359,24 @@
             "trigger_inputs": []
         },
         {
+            "id": "check-generated-project-automation",
+            "description": "Execute a freshly generated project's rendered CI test and migrate commands and image healthcheck inside the provisioned PostgreSQL profile",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel"
+            ],
+            "bindings": {
+                "make_target": "check-generated-project-automation",
+                "ci_job": null,
+                "local_ci_stage": 7
+            },
+            "make_recipe": [
+                "@if [ -n \"$${QUICKSCALE_POSTGRES_LEASE:-}\" ]; then scripts/provision_ci_postgres.sh run --profile restricted -- $(PYTHON) scripts/check_generated_project_automation.py; else QS_PROVISION_SCOPE= scripts/provision_ci_postgres.sh run --profile restricted -- $(PYTHON) scripts/check_generated_project_automation.py; fi"
+            ],
+            "depends_on": [],
+            "trigger_inputs": []
+        },
+        {
             "id": "check-workflow-security",
             "description": "Blocking zizmor scan: every workflow action is pinned to a commit SHA and every workflow declares top-level permissions",
             "required_contexts": [
@@ -373,7 +391,7 @@
                 "local_ci_stage": 7
             },
             "make_recipe": [
-                "@$(PYTHON) scripts/check_workflow_security.py"
+                "@$(PYTHON) scripts/check_workflow_security.py --generated-template"
             ],
             "depends_on": [],
             "trigger_inputs": []

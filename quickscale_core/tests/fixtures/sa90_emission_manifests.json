@@ -39,14 +39,15 @@
       "sa225-skip-guard": "Regenerated 2026-09-28 \u2014 docker-compose.yml clears QUICKSCALE_SKIP_MODULE_CHECKS in the backend environment so a build-skip value in the loaded .env can never reach a serving process. 1 fixture hash updated per variant: docker-compose.yml. All unrelated paths, hashes, and modes remain authoritative.",
       "sa235": "Regenerated 2026-10-03 - module UI paths move to manifest-declared spa_routes rendered after the module includes (SA235, rule 41): the React shell view moves to testproject/views.py, testproject/urls.py renders the manifest-declared routes from SPA_MODULE_URLPATTERNS after POST_HOME_MODULE_URLPATTERNS instead of reserving blog/listings/forms/crm literals, testproject/urls_modules.py gains the SPA list, and the public social pages render the shared seam with named social routes. The CRM seam path becomes `quickscale_crm_shell`, so templates/index.html changed with it. All changed fixture hashes updated per variant; all unrelated paths, hashes, and modes remain authoritative.",
       "sa235-context-processor-billing-urls": "Regenerated 2026-10-03 \u2014 the generated context processor resolves billing's template URL from the module's named routes (quickscale_billing:pricing_page and quickscale_billing:dashboard) instead of repeating /billing/... path strings, the retired organization-scoped /orgs/<slug>/billing/pricing/ value is gone, and the projected QUICKSCALE_BILLING_ENABLED setting gates the value so an absent or switched-off billing yields None (SA235, rule 41). 1 fixture hash updated per variant: testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa253": "Regenerated 2026-10-10 \u2014 the generated project's backend automation passes as rendered (SA253): .github/workflows/ci.yml pins every action by SHA with a top-level permissions block, sets the CI test step's DATABASE_URL, and runs the migrate and isolation steps under settings.local; Dockerfile probes /healthcheck/ presenting the always-admitted healthcheck.railway.app Host and requires frontend/pnpm-lock.yaml with --frozen-lockfile; pyproject.toml omits settings packages from coverage; testproject/urls.py marks its dev-only DEBUG branch no-cover; tests/test_example.py covers the generated URL surface and application entry points; frontend/vitest.config.ts collects only src test files; and the testproject/views.py, testproject/context_processors.py, and testproject/urls_modules.py import blocks are ruff-clean for the rendered ruff steps. New emitted path: frontend/pnpm-lock.yaml. Changed per variant: .github/workflows/ci.yml, Dockerfile, pyproject.toml, testproject/urls.py, testproject/views.py, testproject/context_processors.py, testproject/urls_modules.py, tests/test_example.py, frontend/vitest.config.ts. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa258-managed-urlconf": "Regenerated 2026-10-09 \u2014 the user-owned generated URL files hold one managed include (SA258 slice c): testproject/urls.py includes <package>.urls_modules with one path() and names no module, testproject/urls_modules.py is the managed URLconf that composes the theme shell routes and the module includes through quickscale_core.runtime.urls.compose_managed_urlpatterns, and testproject/context_processors.py delegates its module context to quickscale_core.runtime.urls.installed_module_context. 3 fixture hashes updated per variant: testproject/urls.py, testproject/urls_modules.py, and testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa258-runtime-drf-composition": "Regenerated 2026-10-09 \u2014 the generated settings/base.py delegates its REST_FRAMEWORK composition to quickscale_core.runtime.settings.compose_rest_framework (SA258 slice b), so the file carries one call instead of the inline DRF defaults. 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa258-runtime-seam-tag": "Regenerated 2026-10-09 \u2014 the React seam's module flags and paths render at request time through the quickscale_seam runtime template tag (SA258 slice a): templates/index.html and templates/social/{embeds,link_tree}.html load the library and call its tags, and testproject/settings/base.py registers the library through TEMPLATES options. 4 fixture hashes updated per variant: templates/index.html, templates/social/embeds.html, templates/social/link_tree.html, and testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa262-social-marker": "Regenerated 2026-10-10 \u2014 the theme's public social embeds fixture and assertion pin the stable public resolution marker (Embed metadata could not be resolved.) that a published embed now carries instead of stored resolver text. 1 fixture hash updated per variant: frontend/src/test/PublicSocialPages.test.tsx. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa266": "Regenerated 2026-10-08 \u2014 the generated Makefile check-tenant-isolation target and .github/workflows/ci.yml isolation step now pass --json to quickscale_orgs_check_tenant_isolation, whose machine-output flag is --json; --format json is retired. Only these two generated paths changed in react_default; react_empty and react_selected do not render the tenant-isolation step. All unrelated paths, hashes, and modes remain authoritative.",
       "v88-dockerfile-start-sh": "Regenerated 2026-09-14 \u2014 Dockerfile CMD now runs ./start.sh instead of gunicorn directly, because Railway did not apply railway.json startCommand to a newly created service and the app booted without creating the runtime role or migrating. Only Dockerfile changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
-      "sa266": "Regenerated 2026-10-08 \u2014 the generated Makefile check-tenant-isolation target and .github/workflows/ci.yml isolation step now pass --json to quickscale_orgs_check_tenant_isolation, whose machine-output flag is --json; --format json is retired. Only these two generated paths changed in react_default; react_empty and react_selected do not render the tenant-isolation step. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa258-runtime-seam-tag": "Regenerated 2026-10-09 \u2014 the React seam's module flags and paths render at request time through the quickscale_seam runtime template tag (SA258 slice a): templates/index.html and templates/social/{embeds,link_tree}.html load the library and call its tags, and testproject/settings/base.py registers the library through TEMPLATES options. 4 fixture hashes updated per variant: templates/index.html, templates/social/embeds.html, templates/social/link_tree.html, and testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa258-runtime-drf-composition": "Regenerated 2026-10-09 \u2014 the generated settings/base.py delegates its REST_FRAMEWORK composition to quickscale_core.runtime.settings.compose_rest_framework (SA258 slice b), so the file carries one call instead of the inline DRF defaults. 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa258-managed-urlconf": "Regenerated 2026-10-09 \u2014 the user-owned generated URL files hold one managed include (SA258 slice c): testproject/urls.py includes <package>.urls_modules with one path() and names no module, testproject/urls_modules.py is the managed URLconf that composes the theme shell routes and the module includes through quickscale_core.runtime.urls.compose_managed_urlpatterns, and testproject/context_processors.py delegates its module context to quickscale_core.runtime.urls.installed_module_context. 3 fixture hashes updated per variant: testproject/urls.py, testproject/urls_modules.py, and testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa262-social-marker": "Regenerated 2026-10-10 \u2014 the theme's public social embeds fixture and assertion pin the stable public resolution marker (Embed metadata could not be resolved.) that a published embed now carries instead of stored resolver text. 1 fixture hash updated per variant: frontend/src/test/PublicSocialPages.test.tsx. All unrelated paths, hashes, and modes remain authoritative."
+      "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -98,7 +99,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "7c6d6790013bc6a98eb4a8f37924b22b8d18f40e5326c9e75f573a8cd935a6a0"
+      "sha256": "63f70d4c72548042a218aa5cd6f9887e7efa875960a66591732372cfc1b0af9f"
     },
     ".gitignore": {
       "mode": "644",
@@ -110,7 +111,7 @@
     },
     "Dockerfile": {
       "mode": "644",
-      "sha256": "a530103ab235e4af984a8853baeee3cc0837e0731220fcfa4d4f6d6eec9541af"
+      "sha256": "cc4ec3b997c7a0f48a097b5d51432f65891332b6d3095fc49bd68b5582b27f9c"
     },
     "Makefile": {
       "mode": "644",
@@ -180,6 +181,10 @@
       "mode": "644",
       "sha256": "e4ea488a715227fe27a6096aa156900c50f9297bfff9558f1b5ecc6178246fea"
     },
+    "frontend/pnpm-lock.yaml": {
+      "mode": "644",
+      "sha256": "e826e3a6e64a12c440586e081f27491aed27738f8f8ee214ec0fbcdf6b2404b0"
+    },
     "frontend/pnpm-workspace.yaml": {
       "mode": "644",
       "sha256": "01b5d3ea42061dc46513d5c5a905fcce9c489b635a917ce22f15a468f8bf1d14"
@@ -458,7 +463,7 @@
     },
     "frontend/vitest.config.ts": {
       "mode": "644",
-      "sha256": "810118c8359a3f6b16f09e89c1d813d8460f098356397c062f09d83b7123018a"
+      "sha256": "a10886e6750c6a7beb80f63cd84f47b5342a48975685685e94131d83e26e10c5"
     },
     "manage.py": {
       "mode": "755",
@@ -466,7 +471,7 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "afd1d32ea1692126dc08e311dfb80e4dd05d763047ad5874e610389d874c459c"
+      "sha256": "cc499b780a5c7618ed15b9058cc530811f72df818b660202015e3d9b287b79a6"
     },
     "railway.json": {
       "mode": "644",
@@ -522,7 +527,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "644",
-      "sha256": "830570c270729559618cec536badcff683e694f0491b838d9dcb118951970908"
+      "sha256": "fd5f2b70dd0a638516d658b57f80b0a9987baf4e52e57ac6dc1e63db95e8c116"
     },
     "testproject/settings/__init__.py": {
       "mode": "644",
@@ -546,15 +551,15 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "dd367d75fc7f3b170c0aadcf9e127e29fbeb96efab4195c1d93f33c7a73c2863"
+      "sha256": "1ec00c01c603f699602113ea71fafade52f0b0f20782d94b1a466fd1d169218f"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
-      "sha256": "e62a9aa30493376c8632c024f7e27dd38d1eef6e79c325a8a6b807608a81e30b"
+      "sha256": "9ce8fe16438d15fd428e498f6177685b1a71d4a87bed88fce7bb3c1a1d3b3365"
     },
     "testproject/views.py": {
       "mode": "644",
-      "sha256": "8ebb9100cc322abea690f66ec419f80de7d8499578e89e681d51a44889290e5c"
+      "sha256": "23c1f5811eeb0ed5d03f0c059b201559561cee518f69bed3fb4b7f49a1440e9b"
     },
     "testproject/wsgi.py": {
       "mode": "644",
@@ -570,7 +575,7 @@
     },
     "tests/test_example.py": {
       "mode": "644",
-      "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
+      "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
     }
   },
   "react_empty": {
@@ -592,7 +597,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "f25f72b4e15557882dd69429dc4555496a4c1c0f89cb9b39ad96c28f09004e73"
+      "sha256": "63b4e11a4b830c484581deef69b588ea65a18aa6b1eb17ee2994be96c9c1a112"
     },
     ".gitignore": {
       "mode": "644",
@@ -604,7 +609,7 @@
     },
     "Dockerfile": {
       "mode": "644",
-      "sha256": "a530103ab235e4af984a8853baeee3cc0837e0731220fcfa4d4f6d6eec9541af"
+      "sha256": "cc4ec3b997c7a0f48a097b5d51432f65891332b6d3095fc49bd68b5582b27f9c"
     },
     "Makefile": {
       "mode": "644",
@@ -673,6 +678,10 @@
     "frontend/playwright.config.ts": {
       "mode": "644",
       "sha256": "e4ea488a715227fe27a6096aa156900c50f9297bfff9558f1b5ecc6178246fea"
+    },
+    "frontend/pnpm-lock.yaml": {
+      "mode": "644",
+      "sha256": "e826e3a6e64a12c440586e081f27491aed27738f8f8ee214ec0fbcdf6b2404b0"
     },
     "frontend/pnpm-workspace.yaml": {
       "mode": "644",
@@ -952,7 +961,7 @@
     },
     "frontend/vitest.config.ts": {
       "mode": "644",
-      "sha256": "810118c8359a3f6b16f09e89c1d813d8460f098356397c062f09d83b7123018a"
+      "sha256": "a10886e6750c6a7beb80f63cd84f47b5342a48975685685e94131d83e26e10c5"
     },
     "manage.py": {
       "mode": "755",
@@ -960,7 +969,7 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "afd1d32ea1692126dc08e311dfb80e4dd05d763047ad5874e610389d874c459c"
+      "sha256": "cc499b780a5c7618ed15b9058cc530811f72df818b660202015e3d9b287b79a6"
     },
     "railway.json": {
       "mode": "644",
@@ -1016,7 +1025,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "644",
-      "sha256": "830570c270729559618cec536badcff683e694f0491b838d9dcb118951970908"
+      "sha256": "fd5f2b70dd0a638516d658b57f80b0a9987baf4e52e57ac6dc1e63db95e8c116"
     },
     "testproject/settings/__init__.py": {
       "mode": "644",
@@ -1040,15 +1049,15 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "dd367d75fc7f3b170c0aadcf9e127e29fbeb96efab4195c1d93f33c7a73c2863"
+      "sha256": "1ec00c01c603f699602113ea71fafade52f0b0f20782d94b1a466fd1d169218f"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
-      "sha256": "e62a9aa30493376c8632c024f7e27dd38d1eef6e79c325a8a6b807608a81e30b"
+      "sha256": "9ce8fe16438d15fd428e498f6177685b1a71d4a87bed88fce7bb3c1a1d3b3365"
     },
     "testproject/views.py": {
       "mode": "644",
-      "sha256": "8ebb9100cc322abea690f66ec419f80de7d8499578e89e681d51a44889290e5c"
+      "sha256": "23c1f5811eeb0ed5d03f0c059b201559561cee518f69bed3fb4b7f49a1440e9b"
     },
     "testproject/wsgi.py": {
       "mode": "644",
@@ -1064,7 +1073,7 @@
     },
     "tests/test_example.py": {
       "mode": "644",
-      "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
+      "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
     }
   },
   "react_selected": {
@@ -1086,7 +1095,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "f25f72b4e15557882dd69429dc4555496a4c1c0f89cb9b39ad96c28f09004e73"
+      "sha256": "63b4e11a4b830c484581deef69b588ea65a18aa6b1eb17ee2994be96c9c1a112"
     },
     ".gitignore": {
       "mode": "644",
@@ -1098,7 +1107,7 @@
     },
     "Dockerfile": {
       "mode": "644",
-      "sha256": "a530103ab235e4af984a8853baeee3cc0837e0731220fcfa4d4f6d6eec9541af"
+      "sha256": "cc4ec3b997c7a0f48a097b5d51432f65891332b6d3095fc49bd68b5582b27f9c"
     },
     "Makefile": {
       "mode": "644",
@@ -1167,6 +1176,10 @@
     "frontend/playwright.config.ts": {
       "mode": "644",
       "sha256": "e4ea488a715227fe27a6096aa156900c50f9297bfff9558f1b5ecc6178246fea"
+    },
+    "frontend/pnpm-lock.yaml": {
+      "mode": "644",
+      "sha256": "e826e3a6e64a12c440586e081f27491aed27738f8f8ee214ec0fbcdf6b2404b0"
     },
     "frontend/pnpm-workspace.yaml": {
       "mode": "644",
@@ -1446,7 +1459,7 @@
     },
     "frontend/vitest.config.ts": {
       "mode": "644",
-      "sha256": "810118c8359a3f6b16f09e89c1d813d8460f098356397c062f09d83b7123018a"
+      "sha256": "a10886e6750c6a7beb80f63cd84f47b5342a48975685685e94131d83e26e10c5"
     },
     "manage.py": {
       "mode": "755",
@@ -1454,7 +1467,7 @@
     },
     "pyproject.toml": {
       "mode": "644",
-      "sha256": "afd1d32ea1692126dc08e311dfb80e4dd05d763047ad5874e610389d874c459c"
+      "sha256": "cc499b780a5c7618ed15b9058cc530811f72df818b660202015e3d9b287b79a6"
     },
     "railway.json": {
       "mode": "644",
@@ -1510,7 +1523,7 @@
     },
     "testproject/context_processors.py": {
       "mode": "644",
-      "sha256": "830570c270729559618cec536badcff683e694f0491b838d9dcb118951970908"
+      "sha256": "fd5f2b70dd0a638516d658b57f80b0a9987baf4e52e57ac6dc1e63db95e8c116"
     },
     "testproject/settings/__init__.py": {
       "mode": "644",
@@ -1534,15 +1547,15 @@
     },
     "testproject/urls.py": {
       "mode": "644",
-      "sha256": "dd367d75fc7f3b170c0aadcf9e127e29fbeb96efab4195c1d93f33c7a73c2863"
+      "sha256": "1ec00c01c603f699602113ea71fafade52f0b0f20782d94b1a466fd1d169218f"
     },
     "testproject/urls_modules.py": {
       "mode": "644",
-      "sha256": "e62a9aa30493376c8632c024f7e27dd38d1eef6e79c325a8a6b807608a81e30b"
+      "sha256": "9ce8fe16438d15fd428e498f6177685b1a71d4a87bed88fce7bb3c1a1d3b3365"
     },
     "testproject/views.py": {
       "mode": "644",
-      "sha256": "8ebb9100cc322abea690f66ec419f80de7d8499578e89e681d51a44889290e5c"
+      "sha256": "23c1f5811eeb0ed5d03f0c059b201559561cee518f69bed3fb4b7f49a1440e9b"
     },
     "testproject/wsgi.py": {
       "mode": "644",
@@ -1558,7 +1571,7 @@
     },
     "tests/test_example.py": {
       "mode": "644",
-      "sha256": "e911da278de5aa5ecefb5e7561d879626fd7199faeec64d4dfebebbd09c0aa6e"
+      "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
     }
   }
 }

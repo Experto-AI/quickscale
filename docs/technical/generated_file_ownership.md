@@ -94,13 +94,16 @@ reconciles only its generated project-name docstrings.
 ### Category U6 — Frontend build settings (user-owned after generation)
 ``frontend/vite.config.ts``, ``frontend/tsconfig.json``,
 ``frontend/eslint.config.js``, ``frontend/postcss.config.js``,
-``frontend/pnpm-workspace.yaml``,
+``frontend/pnpm-workspace.yaml``, ``frontend/pnpm-lock.yaml``,
 ``frontend/.prettierignore``, ``frontend/.prettierrc``,
 ``frontend/vitest.config.ts``, ``frontend/playwright.config.ts``,
 ``frontend/components.json``, ``frontend/tailwind.config.js``,
 ``frontend/index.html``.
 Rationale: Generated once, user-editable, and not migration targets — the
-workflow keeps the recipient's copies exactly as generated. ``frontend/package.json``
+workflow keeps the recipient's copies exactly as generated. The generated
+``frontend/pnpm-lock.yaml`` pins the image build's frontend dependencies; the
+project refreshes it with its own ``pnpm install`` and the image fails closed
+without it. ``frontend/package.json``
 is not in this category: it is part of the fresh-first identity seam and is
 classified through ``FRESH_FIRST_IDENTITY_ROOT_FILES`` instead.
 
