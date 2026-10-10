@@ -484,8 +484,8 @@ items:
 
 - **ID:** `rules-held-by-parity-not-derivation` (new). It supersedes prior watchlist W7 and W8.
   **Partly fixed 2026-10-10:** option 1's gate wiring and layout-derived scopes and option 3's
-  budget landed. **Still open, no ticket:** `scripts/` outside `check_quality.sh` (its debt
-  cannot pass the fixed thresholds and decisions admit no baseline), option 1's build-time
+  budget landed. **Still open:** `scripts/`' debt against the fixed thresholds (SA267 pays it down;
+  `scripts/` stays outside `check_quality.sh`), and, with no ticket, option 1's build-time
   manifests and single Stripe-version constant, and option 2.
 - **Rank rationale:** Medium blast radius, High likelihood, steep compounding.
   - **Blast radius:** users are not broken, but this is already the dominant cost.
