@@ -243,8 +243,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
     to end and the mocked suites mock the module URL. Watch: repin to the sealed release before
     cutover, and the recorded upstream candidates stay in `bap-web-new`'s migration ledger. Next:
     slice (c).
-  - [ ] (c) Test parity: the donor's pytest and Vitest suites, SA208's check, FORCE-RLS counts,
-    and `check_tenant_isolation`.
+  - [x] (c) Test parity: donor suites pass in the recipient (pytest 56 passed at 94.5% coverage
+    with the donor's per-file 80% gate restored, and Vitest 338 passed; every donor test file
+    and fixture carried, the adapted ones with recorded reasons, none excluded),
+    `manage.py check` passes including SA208's provider-ID check, and `check_tenant_isolation`
+    passes 6/6 with 6 FORCE-RLS tables / 12 policies = a fresh same-modules baseline's 5 / 10
+    plus the `properties` table's canonical pair. Watch: repin before cutover — the embedded
+    `orgs` predates the `--json` flag, and the generated `check-tenant-isolation` target needs
+    operator env on its migrate line. Next: slice (d).
   - [ ] (d) Live parity: Playwright e2e and screenshot diffs, with the live baselines captured and
     kept.
   - [ ] (e) Cutover: reseed step under the runtime role, cutover script, and written rollback,
