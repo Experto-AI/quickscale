@@ -34,10 +34,38 @@ def _analytics_post_hook(
         if str_key in settings:
             settings[str_key] = str(settings[str_key]).strip()
 
-    # Analytics remains disabled in the app and URL wiring when requested, but
-    # its manifest-owned settings still need to reach generated settings.
+    # Rule 35: each secret reaches module code as a setting that renders the
+    # environment variable its `_ENV_VAR` option names (core's `__QS_ENV__`
+    # mechanism), so module code never calls os.getenv itself.  The projections
+    # are computed for both switch positions so the settings surface does not
+    # change with the switch; a blank option name projects an empty value,
+    # never a dangling marker.
+    for env_var_option, secret_setting in (
+        (
+            "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
+            "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY",
+        ),
+        (
+            "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
+            "QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE",
+        ),
+    ):
+        env_var_name = str(settings.get(env_var_option, "") or "").strip()
+        settings[secret_setting] = "__QS_ENV__:" + env_var_name if env_var_name else ""
+
+    # Rule 1 (D3): off keeps the module installed — app, middleware, settings,
+    # and admin — and mounts none of its public URLs.  The template tag
+    # library stays registered because the app stays.
     if not bool(resolved["enabled"]):
-        return ModuleWiringSpec(settings=settings)
+        return ModuleWiringSpec(
+            apps=spec.apps,
+            middleware=spec.middleware,
+            settings=settings,
+            pre_home_url_includes=(),
+            url_includes=(),
+            spa_routes=(),
+            managed_files=spec.managed_files,
+        )
 
     required_nonempty = (
         "QUICKSCALE_ANALYTICS_PROVIDER",
@@ -54,16 +82,6 @@ def _analytics_post_hook(
             f"{', '.join(sorted(empty_keys))}. "
             "The manifest derivation produced an invalid result."
         )
-
-    # Rule 35: each secret reaches module code as a setting that renders the
-    # environment variable its `_ENV_VAR` option names (core's `__QS_ENV__`
-    # projection), so module code never calls os.getenv itself.
-    settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"] = "__QS_ENV__:" + str(
-        settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR"]
-    )
-    settings["QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE"] = "__QS_ENV__:" + str(
-        settings["QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR"]
-    )
 
     return ModuleWiringSpec(
         apps=spec.apps,

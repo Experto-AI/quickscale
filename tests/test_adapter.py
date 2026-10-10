@@ -49,16 +49,37 @@ def test_empty_required_setting_raises_manifest_error(key: str) -> None:
         )
 
 
-def test_disabled_analytics_suppresses_apps_but_retains_settings() -> None:
+def test_disabled_analytics_keeps_apps_and_drops_public_urls() -> None:
+    """Rule 1 (D3): off keeps apps/middleware/settings, drops URLs."""
     settings = _settings(
         QUICKSCALE_ANALYTICS_ENABLED=False,
         QUICKSCALE_ANALYTICS_PROVIDER="",
     )
     result = _analytics_post_hook(
-        ModuleWiringSpec(apps=("analytics",), settings=settings),
+        ModuleWiringSpec(
+            apps=("quickscale_modules_analytics",),
+            middleware=("x.middleware.TrackMiddleware",),
+            url_includes=(("analytics/", "quickscale_modules_analytics.urls"),),
+            settings=settings,
+        ),
         {"enabled": False},
     )
-    assert result == ModuleWiringSpec(settings=settings)
+    assert result.apps == ("quickscale_modules_analytics",)
+    assert result.middleware == ("x.middleware.TrackMiddleware",)
+    assert result.url_includes == ()
+    assert result.pre_home_url_includes == ()
+    assert result.spa_routes == ()
+    # The settings surface is retained, including the secret projections.
+    for key in settings:
+        assert key in result.settings
+    assert (
+        result.settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"]
+        == "__QS_ENV__:POSTHOG_API_KEY"
+    )
+    assert (
+        result.settings["QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE"]
+        == "__QS_ENV__:POSTHOG_HOST"
+    )
 
 
 def test_enabled_post_hook_projects_secret_settings_from_env_var_names() -> None:
