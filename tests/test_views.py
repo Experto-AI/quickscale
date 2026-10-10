@@ -534,17 +534,17 @@ class TestAdminFormListAPIView:
     * Viewer or above with active org: scoped to that org via RLS.
     * No org context: the permission refuses the request (403);
       session-pipeline tests assert 302 redirect to /orgs/ before view executes.
-    * Anonymous: denied (403).
+    * Anonymous: denied (401).
 
     /forms/api/admin/forms/ is NON-EXEMPT from
     TenantMiddleware (does not match any EXEMPT_PATH_PREFIX).
     """
 
-    def test_returns_403_for_anonymous(self, api_client, form):
+    def test_returns_401_for_anonymous(self, api_client, form):
         """Anonymous user cannot access admin form list"""
         url = reverse("quickscale_forms:admin_form_list")
         response = api_client.get(url)
-        assert response.status_code in (401, 403)
+        assert response.status_code == 401
 
     def test_superuser_sees_all_forms(self, superuser_client, form):
         """Superuser can access admin form list and sees all forms."""
@@ -1250,13 +1250,13 @@ class TestAdminSubmissionExportView:
         response = staff_client.get(url)
         assert response.status_code == 403
 
-    def test_returns_403_for_anonymous(self, api_client, form):
+    def test_returns_401_for_anonymous(self, api_client, form):
         """Anonymous user cannot export submissions"""
         url = reverse(
             "quickscale_forms:admin_submission_export", kwargs={"pk": form.pk}
         )
         response = api_client.get(url)
-        assert response.status_code == 403
+        assert response.status_code == 401
 
     def test_superuser_gets_404_for_missing_form(self, superuser_client):
         """Export view returns 404 when form pk does not exist."""

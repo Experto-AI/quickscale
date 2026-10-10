@@ -370,10 +370,10 @@ class TestContactFormE2EWorkflow:
     def test_anonymous_user_cannot_list_submissions(
         self, api_client, seeded_contact_form
     ):
-        """Unauthenticated requests to admin submission list return 403."""
+        """Unauthenticated requests to admin submission list return 401."""
         url = reverse(
             "quickscale_forms:admin_submission_list",
             kwargs={"pk": seeded_contact_form.pk},
         )
         response = api_client.get(url)
-        assert response.status_code == 403
+        assert response.status_code == 401
