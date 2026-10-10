@@ -10,7 +10,7 @@ DRF helper never imports Django REST Framework.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -75,6 +75,35 @@ class PlainListPagination(PageNumberPagination):
     def get_paginated_response(self, data: list[Any]) -> Response:
         """Return the page as the bare list, preserving the list response shape."""
         return Response(data)
+
+    def paginate_queryset(
+        self,
+        queryset: Any,
+        request: Request,
+        view: Any = None,
+    ) -> list[Any] | None:
+        """Return the page, answering the empty list past the last page.
+
+        The response is the bare list, so a client that follows pages has no
+        count to stop on: a page past the end answers the empty list instead
+        of DRF's 404, and following pages until an empty one terminates any
+        list.  A malformed or below-range page number still fails as DRF
+        answers it.
+        """
+        page_size = self.get_page_size(request)
+        if not page_size:
+            return None
+        paginator = self.django_paginator_class(queryset, page_size)
+        page_number = self.get_page_number(request, paginator)
+        try:
+            requested_page = int(page_number)
+        except TypeError, ValueError:
+            requested_page = None
+        if requested_page is not None and requested_page > paginator.num_pages:
+            self.request = request
+            return []
+        page = super().paginate_queryset(queryset, request, view=view)
+        return cast("list[Any] | None", page)
 
 
 class QuickscaleSessionAuthentication(SessionAuthentication):

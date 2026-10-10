@@ -1807,7 +1807,7 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 - 2026-10-10 — `http-api-shape`: **resolved** (SA262 stage 3 —
   `quickscale_core.runtime` ships one list paginator (`PlainListPagination`: the page size is the
   `<THING>_PER_PAGE` setting named by each subclass's `page_size_setting`, client overrides stay
-  ignored, and the response stays the bare list); billing's ledger drops its literal `25` for
+  ignored, the response stays the bare list, and a page past the end answers the empty list); billing's ledger drops its literal `25` for
   `transactions_per_page` and its public plan catalog gains `plans_per_page`; CRM's tags,
   companies, stages, contact-note, and deal-note lists (the two note actions included) gain their
   `<THING>_PER_PAGE` settings and page through core's paginator, and CRM's, forms', and billing's

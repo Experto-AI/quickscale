@@ -353,10 +353,10 @@ with this release:
 - Module JSON lists page through one core paginator: each list is sized by its `<THING>_PER_PAGE`
   setting and returns only the requested page — billing's ledger (`transactions_per_page`, was a
   fixed `25`) and plan catalog (`plans_per_page`), CRM's tags, companies, stages, and note lists,
-  and forms' admin form list (`QUICKSCALE_FORMS_PER_PAGE`) — and the generated social payload
-  endpoints are DRF views that answer the standard error shape without echoing exception text.
-  Lists that previously returned every row now return their first page unless the client asks for
-  another.
+  and forms' admin form list (`QUICKSCALE_FORMS_PER_PAGE`) — a page past the end answers the empty
+  list, and the generated social payload endpoints are DRF views that answer the standard error
+  shape without echoing exception text. Lists that previously returned every row now return their
+  first page unless the client asks for another.
 
 ## Delivery provenance
 

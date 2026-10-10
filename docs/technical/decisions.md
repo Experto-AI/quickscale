@@ -695,7 +695,8 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
 - ✅ JSON lists page through core's one list paginator (`PlainListPagination` in
   `quickscale_core.runtime`): a module paginator subclasses it and names its `<THING>_PER_PAGE`
   setting in `page_size_setting`, so every list has one page-size source and the response stays
-  the bare list. Generated project code that serves JSON follows this rule like module code.
+  the bare list; a page past the end answers the empty list, so following pages terminates any
+  list. Generated project code that serves JSON follows this rule like module code.
   Throttles are DRF throttles fed by the module's `_RATE_LIMIT` setting (rule 32).
 - ❌ `JsonResponse` APIs, error bodies built in module code, a third-party error-format library, hand-written rate
   parsers, per-module token schemes (blog's `BLOG_API_TOKENS` is removed; a shared token scheme is

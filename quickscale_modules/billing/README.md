@@ -124,7 +124,8 @@ All billing API routes are flat (`billing/api/...`) and used in both Solo and Sa
 organization is resolved from the session / `request.org` contract established by middleware,
 not from a URL slug. Every error answers the shared
 `{"error": {"code", "message", "fields"}}` shape (`fields` only for validation errors), and a
-disabled billing runtime answers `404`.
+disabled billing runtime answers `404`. List endpoints page by `page`; a page past the end
+answers the empty list, so a client can follow pages until one is empty.
 
 | Route | Method | Auth | Request | Success contract | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -280,17 +281,17 @@ export function fetchBalance() {
   return billingFetch<BillingBalance>("/billing/api/balance/");
 }
 
-export function fetchRecurringPlans() {
-  // The catalog is paged (plans_per_page, default 25). Follow pages until an
-  // empty one, so the caller receives the whole catalog without knowing the
-  // configured size.
+export async function fetchRecurringPlans() {
+  // The catalog is paged (plans_per_page, default 25). A page past the last
+  // one answers an empty list, so following pages until an empty batch
+  // collects the whole catalog without knowing the configured size.
   const plans: BillingPlan[] = [];
   for (let page = 1; ; page += 1) {
     const batch = await billingFetch<BillingPlan[]>(
       `/billing/api/plans/?page=${page}`,
     );
-    plans.push(...batch);
     if (batch.length === 0) break;
+    plans.push(...batch);
   }
   return plans;
 }
@@ -432,7 +433,8 @@ Component patterns and the recommended shadcn/ui surfaces:
 - **Pricing page**: `Tabs`, `Card`, `Badge`, and `Button`; fetch recurring plans from
   `billing/api/plans/` and optionally merge project-owned one-time pack metadata on the same
   screen. The catalog is paged by `plans_per_page` (default `25`); the `fetchRecurringPlans`
-  helper follows pages until an empty response, so the UI shows the whole catalog.
+  helper follows pages until an empty response (a page past the end answers the empty list), so
+  the UI shows the whole catalog.
 - **Purchase button**: a `Button` with spinner state; it only needs a `planSlug` because the
   backend owns both redirect URLs.
 - **Subscription status**: `Card`, `Badge`, `Alert`, and `Button`; render `null` when there is

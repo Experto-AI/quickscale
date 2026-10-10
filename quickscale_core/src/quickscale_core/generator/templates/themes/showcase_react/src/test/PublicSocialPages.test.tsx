@@ -232,8 +232,7 @@ describe('public social pages', () => {
           source_url: 'https://vm.tiktok.com/ZM1234567/',
           display_order: 20,
           resolution_status: 'error',
-          resolution_error:
-            'QuickScale needs a canonical TikTok video URL before it can resolve inline preview metadata.',
+          resolution_error: 'Embed metadata could not be resolved.',
           embed_url: null,
           thumbnail_url: null,
           embed_width: null,
@@ -255,7 +254,7 @@ describe('public social pages', () => {
       'src',
       'https://www.youtube.com/embed/alpha123?rel=0',
     )
-    expect(screen.getByText(/canonical TikTok video URL/i)).toBeInTheDocument()
+    expect(screen.getByText(/Embed metadata could not be resolved/i)).toBeInTheDocument()
   })
 
   it('renders the contract error state for embeds from mocked payloads', async () => {

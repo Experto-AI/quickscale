@@ -277,3 +277,33 @@ class TestPlainListPagination:
         from quickscale_core.runtime import PlainListPagination
 
         assert PlainListPagination.page_size_query_param is None
+
+    @override_settings(QUICKSCALE_DEMO_PER_PAGE=2)
+    def test_page_past_the_end_answers_the_empty_list(self) -> None:
+        """Following pages terminates on an empty page, not a 404."""
+        paginator = _demo_pagination_class()()
+        request = cast(Request, SimpleNamespace(query_params={"page": "3"}))
+        assert paginator.paginate_queryset([1, 2, 3], request) == []
+
+    @override_settings(QUICKSCALE_DEMO_PER_PAGE=2)
+    def test_pages_within_range_page_normally(self) -> None:
+        first_page = _demo_pagination_class()().paginate_queryset(
+            [1, 2, 3],
+            cast(Request, SimpleNamespace(query_params={})),
+        )
+        last_page = _demo_pagination_class()().paginate_queryset(
+            [1, 2, 3],
+            cast(Request, SimpleNamespace(query_params={"page": "2"})),
+        )
+        assert first_page == [1, 2]
+        assert last_page == [3]
+
+    @override_settings(QUICKSCALE_DEMO_PER_PAGE=2)
+    def test_below_range_page_still_fails_as_drf_answers_it(self) -> None:
+        from rest_framework.exceptions import NotFound
+
+        with pytest.raises(NotFound):
+            _demo_pagination_class()().paginate_queryset(
+                [1, 2, 3],
+                cast(Request, SimpleNamespace(query_params={"page": "0"})),
+            )
