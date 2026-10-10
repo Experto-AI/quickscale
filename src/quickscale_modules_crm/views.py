@@ -13,14 +13,16 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated, SAFE_METHODS
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.routers import APIRootView
 from rest_framework.views import APIView
 
-from quickscale_core.runtime import QuickscaleSessionAuthentication
+from quickscale_core.runtime import (
+    PlainListPagination,
+    QuickscaleSessionAuthentication,
+)
 from quickscale_modules_orgs.models import OrgRole
 from quickscale_modules_orgs.permissions import HasOrgRole, OrgRoleMixin
 
@@ -207,33 +209,46 @@ class CRMApiEnabledMixin:
         APIView.initial(self, request, *args, **kwargs)
 
 
-class _PlainListPagination(PageNumberPagination):
-    """Paginate list endpoints without changing the list response shape."""
-
-    page_size_query_param = None
-
-    def get_paginated_response(self, data: list[Any]) -> Response:
-        return Response(data)
-
-
-class ContactPagination(_PlainListPagination):
+class ContactPagination(PlainListPagination):
     """Contact page size driven by QUICKSCALE_CRM_CONTACTS_PER_PAGE."""
 
-    def get_page_size(self, request: Request) -> int:
-        del request
-        # Rule 3: read the declared setting directly; the startup check has
-        # already refused a missing or invalid value.
-        return settings.QUICKSCALE_CRM_CONTACTS_PER_PAGE
+    page_size_setting = "QUICKSCALE_CRM_CONTACTS_PER_PAGE"
 
 
-class DealPagination(_PlainListPagination):
+class DealPagination(PlainListPagination):
     """Deal page size driven by QUICKSCALE_CRM_DEALS_PER_PAGE."""
 
-    def get_page_size(self, request: Request) -> int:
-        del request
-        # Rule 3: read the declared setting directly; the startup check has
-        # already refused a missing or invalid value.
-        return settings.QUICKSCALE_CRM_DEALS_PER_PAGE
+    page_size_setting = "QUICKSCALE_CRM_DEALS_PER_PAGE"
+
+
+class TagPagination(PlainListPagination):
+    """Tag page size driven by QUICKSCALE_CRM_TAGS_PER_PAGE."""
+
+    page_size_setting = "QUICKSCALE_CRM_TAGS_PER_PAGE"
+
+
+class CompanyPagination(PlainListPagination):
+    """Company page size driven by QUICKSCALE_CRM_COMPANIES_PER_PAGE."""
+
+    page_size_setting = "QUICKSCALE_CRM_COMPANIES_PER_PAGE"
+
+
+class StagePagination(PlainListPagination):
+    """Stage page size driven by QUICKSCALE_CRM_STAGES_PER_PAGE."""
+
+    page_size_setting = "QUICKSCALE_CRM_STAGES_PER_PAGE"
+
+
+class ContactNotePagination(PlainListPagination):
+    """Contact note page size driven by QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE."""
+
+    page_size_setting = "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE"
+
+
+class DealNotePagination(PlainListPagination):
+    """Deal note page size driven by QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE."""
+
+    page_size_setting = "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE"
 
 
 class CRMModelViewSet(CRMApiEnabledMixin, viewsets.ModelViewSet):
@@ -297,6 +312,7 @@ class TagViewSet(OrgScopedReadMixin):
 
     queryset = Tag.all_objects.all()
     serializer_class = TagSerializer
+    pagination_class = TagPagination
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ["name"]
     ordering_fields = ["name", "created_at"]
@@ -308,6 +324,7 @@ class CompanyViewSet(OrgScopedReadMixin):
 
     queryset = Company.all_objects.all()
     serializer_class = CompanySerializer
+    pagination_class = CompanyPagination
     filter_backends = [SearchFilter, DjangoFilterBackend, OrderingFilter]
     search_fields = ["name", "industry"]
     filterset_fields = ["industry"]
@@ -339,8 +356,10 @@ class ContactViewSet(OrgScopedReadMixin):
 
         if request.method in SAFE_METHODS:
             notes = contact.notes.all()
-            serializer = ContactNoteSerializer(notes, many=True)
-            return Response(serializer.data)
+            paginator = ContactNotePagination()
+            page = paginator.paginate_queryset(notes, request, view=self)
+            serializer = ContactNoteSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
 
         # POST - create note
         serializer = ContactNoteSerializer(
@@ -357,6 +376,7 @@ class StageViewSet(OrgScopedReadMixin):
 
     queryset = Stage.all_objects.all()
     serializer_class = StageSerializer
+    pagination_class = StagePagination
     filter_backends = [OrderingFilter]
     ordering_fields = ["order", "name"]
     ordering = ["order"]
@@ -397,8 +417,10 @@ class DealViewSet(OrgScopedReadMixin):
 
         if request.method in SAFE_METHODS:
             notes = deal.notes.all()
-            serializer = DealNoteSerializer(notes, many=True)
-            return Response(serializer.data)
+            paginator = DealNotePagination()
+            page = paginator.paginate_queryset(notes, request, view=self)
+            serializer = DealNoteSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
 
         # POST - create note
         serializer = DealNoteSerializer(
@@ -487,6 +509,7 @@ class ContactNoteViewSet(OrgScopedReadMixin):
 
     queryset = ContactNote.objects.select_related("contact", "created_by")
     serializer_class = ContactNoteSerializer
+    pagination_class = ContactNotePagination
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ["contact"]
     ordering_fields = ["created_at"]
@@ -500,6 +523,7 @@ class DealNoteViewSet(OrgScopedReadMixin):
 
     queryset = DealNote.objects.select_related("deal", "created_by")
     serializer_class = DealNoteSerializer
+    pagination_class = DealNotePagination
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ["deal"]
     ordering_fields = ["created_at"]
