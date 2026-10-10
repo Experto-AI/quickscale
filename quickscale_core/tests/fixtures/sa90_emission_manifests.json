@@ -45,7 +45,8 @@
       "sa266": "Regenerated 2026-10-08 \u2014 the generated Makefile check-tenant-isolation target and .github/workflows/ci.yml isolation step now pass --json to quickscale_orgs_check_tenant_isolation, whose machine-output flag is --json; --format json is retired. Only these two generated paths changed in react_default; react_empty and react_selected do not render the tenant-isolation step. All unrelated paths, hashes, and modes remain authoritative.",
       "sa258-runtime-seam-tag": "Regenerated 2026-10-09 \u2014 the React seam's module flags and paths render at request time through the quickscale_seam runtime template tag (SA258 slice a): templates/index.html and templates/social/{embeds,link_tree}.html load the library and call its tags, and testproject/settings/base.py registers the library through TEMPLATES options. 4 fixture hashes updated per variant: templates/index.html, templates/social/embeds.html, templates/social/link_tree.html, and testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
       "sa258-runtime-drf-composition": "Regenerated 2026-10-09 \u2014 the generated settings/base.py delegates its REST_FRAMEWORK composition to quickscale_core.runtime.settings.compose_rest_framework (SA258 slice b), so the file carries one call instead of the inline DRF defaults. 1 fixture hash updated per variant: testproject/settings/base.py. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa258-managed-urlconf": "Regenerated 2026-10-09 \u2014 the user-owned generated URL files hold one managed include (SA258 slice c): testproject/urls.py includes <package>.urls_modules with one path() and names no module, testproject/urls_modules.py is the managed URLconf that composes the theme shell routes and the module includes through quickscale_core.runtime.urls.compose_managed_urlpatterns, and testproject/context_processors.py delegates its module context to quickscale_core.runtime.urls.installed_module_context. 3 fixture hashes updated per variant: testproject/urls.py, testproject/urls_modules.py, and testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative."
+      "sa258-managed-urlconf": "Regenerated 2026-10-09 \u2014 the user-owned generated URL files hold one managed include (SA258 slice c): testproject/urls.py includes <package>.urls_modules with one path() and names no module, testproject/urls_modules.py is the managed URLconf that composes the theme shell routes and the module includes through quickscale_core.runtime.urls.compose_managed_urlpatterns, and testproject/context_processors.py delegates its module context to quickscale_core.runtime.urls.installed_module_context. 3 fixture hashes updated per variant: testproject/urls.py, testproject/urls_modules.py, and testproject/context_processors.py. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa262-social-marker": "Regenerated 2026-10-10 \u2014 the theme's public social embeds fixture and assertion pin the stable public resolution marker (Embed metadata could not be resolved.) that a published embed now carries instead of stored resolver text. 1 fixture hash updated per variant: frontend/src/test/PublicSocialPages.test.tsx. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -413,7 +414,7 @@
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "644",
-      "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
+      "sha256": "9e569ee54341dbdbcd658a27bd103337d496df4f257719b53e8edd7c73f2747d"
     },
     "frontend/src/test/RootDispatch.test.tsx": {
       "mode": "644",
@@ -907,7 +908,7 @@
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "644",
-      "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
+      "sha256": "9e569ee54341dbdbcd658a27bd103337d496df4f257719b53e8edd7c73f2747d"
     },
     "frontend/src/test/RootDispatch.test.tsx": {
       "mode": "644",
@@ -1401,7 +1402,7 @@
     },
     "frontend/src/test/PublicSocialPages.test.tsx": {
       "mode": "644",
-      "sha256": "62db3fecbf50ece4b60c28a2d679d2a13c9e4bc336540e14d0381c464925debd"
+      "sha256": "9e569ee54341dbdbcd658a27bd103337d496df4f257719b53e8edd7c73f2747d"
     },
     "frontend/src/test/RootDispatch.test.tsx": {
       "mode": "644",
