@@ -13,7 +13,6 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.http import Http404
 from django.shortcuts import get_object_or_404
-from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import (
     NotAuthenticated,
     NotFound,
@@ -27,6 +26,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from quickscale_core.runtime import QuickscaleSessionAuthentication
 from quickscale_modules_orgs._view_context import (
     OrganizationContextMixin,
     _is_saas_mode,
@@ -46,19 +46,6 @@ from quickscale_modules_orgs.models import (
     OrgRole,
 )
 from quickscale_modules_orgs.permissions import user_has_org_role
-
-
-class OrgsSessionAuthentication(SessionAuthentication):
-    """Session authentication that keeps a 401 challenge for anonymous callers.
-
-    DRF answers an unauthenticated request 403 when the authentication scheme
-    declares no challenge header; the organization API has always answered
-    401, so the scheme names its challenge.
-    """
-
-    def authenticate_header(self, request: Request) -> str:
-        del request
-        return "Session"
 
 
 class OrgApiBaseView(OrganizationContextMixin, APIView):
@@ -81,7 +68,7 @@ class OrgApiBaseView(OrganizationContextMixin, APIView):
     the view handles all orgs the user belongs to without scoping.
     """
 
-    authentication_classes = [OrgsSessionAuthentication]
+    authentication_classes = [QuickscaleSessionAuthentication]
     parser_classes = [JSONParser]
     permission_classes = [AllowAny]
     renderer_classes = [JSONRenderer]

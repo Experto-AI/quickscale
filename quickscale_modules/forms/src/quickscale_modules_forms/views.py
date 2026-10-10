@@ -19,7 +19,6 @@ from django.db.models import Count, Prefetch
 from django.http import Http404, HttpResponse
 from django.views.generic import TemplateView
 from rest_framework import status
-from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import (
     CreateAPIView,
@@ -33,6 +32,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from quickscale_core.runtime import QuickscaleSessionAuthentication
 from quickscale_modules_forms._email import notify_submission
 from quickscale_modules_forms.models import (
     Form,
@@ -147,7 +147,7 @@ def _emit_submission_event(submission: FormSubmission, request: Request) -> None
 class FormsAdminApiMixin:
     """Explicit org-role auth and enablement guard for forms admin API endpoints."""
 
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = [QuickscaleSessionAuthentication]
     # Set by APIView.dispatch on every concrete view that mixes this in.
     request: Request
 

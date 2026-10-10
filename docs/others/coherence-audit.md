@@ -1770,3 +1770,15 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   modules without `exceptions.py`, and the registration order; decision rules 6 and 10 carry
   the clauses. Recorded limit: core's `BackupError` (`dr_engine.primitives`, Track 2's surface)
   keeps its name, outside a module's `exceptions.py`). Item 7.
+
+### 2026-10-10 — SA262 stage 1 (one session authentication class)
+
+- 2026-10-10 — `unauthenticated-status-code`: **resolved** (SA262 stage 1 —
+  `quickscale_core.runtime` ships one session authentication class
+  (`QuickscaleSessionAuthentication`, 401 challenge through `authenticate_header`); the generated
+  settings install it as `DEFAULT_AUTHENTICATION_CLASSES` through `compose_rest_framework`; the
+  four per-module subclasses and CRM's and forms' direct `SessionAuthentication` references are
+  replaced by it, so CRM and forms answer 401 where they answered 403; harness rule 9 rejects a
+  module-defined `SessionAuthentication` subclass and an `authentication_classes` value outside
+  core's class and the empty literal, controls included; decision rule 9 carries the clause and
+  the release note records the status change). Item 6.

@@ -16,6 +16,10 @@ adapters.  It re-exports all symbols from its sub-modules:
 * ``runtime.conventions`` — the shared module-convention helpers (capability
   collection, startup checks, the one DRF error shape).  Loaded only when one
   of its symbols is requested, so a process without Django never imports it.
+* ``runtime.drf`` — the shared Django REST Framework helper classes (the one
+  session authentication class, Module Conventions rule 9).  Loaded only when
+  one of its symbols is requested, so a process that never serves a JSON API
+  never imports Django REST Framework.
 * ``runtime.admin`` — the shared Django-admin mixin module admins reuse
   (read-only operational surfaces).  Loaded only when its symbol is requested,
   so a process without Django never imports it.
@@ -74,6 +78,11 @@ _LAZY_CONVENTIONS_SYMBOLS: frozenset[str] = frozenset(
 #: Symbols served lazily by ``runtime.admin``.  Admin mixins drag in the
 #: Django admin stack, so processes that never touch it never import it.
 _LAZY_ADMIN_SYMBOLS: frozenset[str] = frozenset({"ReadOnlyAdminMixin"})
+
+#: Symbols served lazily by ``runtime.drf``.  The DRF helper classes drag in
+#: Django REST Framework, so processes that never serve a JSON API never
+#: import it.
+_LAZY_DRF_SYMBOLS: frozenset[str] = frozenset({"QuickscaleSessionAuthentication"})
 
 #: Symbols served lazily by ``runtime.redaction`` (SA245).  A process that
 #: never scrubs stored identity never imports the redaction matchers.
@@ -205,6 +214,8 @@ __all__ = [
     "register_module_settings_check",
     # Shared admin behavior (from admin)
     "ReadOnlyAdminMixin",
+    # Shared DRF helpers (from drf)
+    "QuickscaleSessionAuthentication",
     # Anonymization redaction helpers and sentinels (from redaction)
     "DELETED_ADDRESS",
     "REDACTED",
@@ -226,6 +237,11 @@ def _load_conventions() -> typing.Any:
 def _load_admin() -> typing.Any:
     """Load and return the shared admin helpers on first admin access."""
     return importlib.import_module("quickscale_core.runtime.admin")
+
+
+def _load_drf() -> typing.Any:
+    """Load and return the shared DRF helper classes on first DRF access."""
+    return importlib.import_module("quickscale_core.runtime.drf")
 
 
 def _load_redaction() -> typing.Any:
@@ -250,6 +266,8 @@ def __getattr__(name: str) -> typing.Any:
         return getattr(_load_conventions(), name)
     if name in _LAZY_ADMIN_SYMBOLS:
         return getattr(_load_admin(), name)
+    if name in _LAZY_DRF_SYMBOLS:
+        return getattr(_load_drf(), name)
     if name == "redaction":
         return _load_redaction()
     if name in _LAZY_REDACTION_SYMBOLS:

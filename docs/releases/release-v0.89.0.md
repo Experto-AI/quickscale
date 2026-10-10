@@ -343,6 +343,9 @@ with this release:
   `quickscale_forms_anonymize_submissions` takes `--trigger {manual,scheduled}`, defaults to
   `manual`, and refuses only a scheduled run while the module is switched off, so an existing
   cron job names `--trigger scheduled`.
+- Module session APIs authenticate through one class: generated settings install
+  `QuickscaleSessionAuthentication` as `DEFAULT_AUTHENTICATION_CLASSES`, so an unauthenticated
+  call answers `401` uniformly — the CRM and forms APIs answer `401` where they answered `403`.
 
 ## Delivery provenance
 

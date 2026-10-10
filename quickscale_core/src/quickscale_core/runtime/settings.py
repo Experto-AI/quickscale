@@ -16,7 +16,9 @@ Public API (SA206):
   shared by the middleware, the canonical client-IP resolver, and DRF's
   ``NUM_PROXIES`` throttle path.
 * :func:`compose_rest_framework` — the generated project's ``REST_FRAMEWORK``
-  composition: the fail-closed defaults, the module-contributed keys, and the
+  composition: the fail-closed defaults (the one QuickScale error handler, the
+  one session authentication class, the authenticated-only permission class,
+  and the throttle classes and rates), the module-contributed keys, and the
   proxy-derived ``NUM_PROXIES``.
 * :func:`require_production_secret_key` — the production SECRET_KEY guard.
 * :data:`KNOWN_PRIVILEGED_COMMANDS`, :data:`KNOWN_NON_DB_COMMANDS`, and
@@ -145,6 +147,9 @@ class ClientIdentityMiddleware:
 # included) win over every default below.
 
 _DEFAULT_DRF_EXCEPTION_HANDLER = "quickscale_core.runtime.conventions.exception_handler"
+_DEFAULT_DRF_AUTHENTICATION_CLASSES = [
+    "quickscale_core.runtime.drf.QuickscaleSessionAuthentication",
+]
 _DEFAULT_DRF_PERMISSION_CLASSES = ["rest_framework.permissions.IsAuthenticated"]
 _DEFAULT_DRF_THROTTLE_CLASSES = [
     "rest_framework.throttling.AnonRateThrottle",
@@ -171,16 +176,19 @@ def compose_rest_framework(
 
     ``contributed`` is the module-contributed value the managed wiring merged
     into ``MODULE_SETTINGS['REST_FRAMEWORK']``; a key it sets wins.  The
-    fail-closed defaults — the one QuickScale error handler, the
-    authenticated-only permission class, the anon/user/scoped throttle classes,
-    and the conservative anon/user rates — fill in only what a module left
-    unset, so a project with no modules still fails closed.  ``NUM_PROXIES``
-    is derived from the trusted-proxy state, so DRF and the canonical
-    client-IP resolver cannot disagree.
+    fail-closed defaults — the one QuickScale error handler, the one session
+    authentication class, the authenticated-only permission class, the
+    anon/user/scoped throttle classes, and the conservative anon/user rates —
+    fill in only what a module left unset, so a project with no modules still
+    fails closed.  ``NUM_PROXIES`` is derived from the trusted-proxy state, so
+    DRF and the canonical client-IP resolver cannot disagree.
     """
     rest_framework: dict[str, object] = dict(contributed or {})
 
     rest_framework.setdefault("EXCEPTION_HANDLER", _DEFAULT_DRF_EXCEPTION_HANDLER)
+    rest_framework.setdefault(
+        "DEFAULT_AUTHENTICATION_CLASSES", list(_DEFAULT_DRF_AUTHENTICATION_CLASSES)
+    )
     rest_framework.setdefault(
         "DEFAULT_PERMISSION_CLASSES", list(_DEFAULT_DRF_PERMISSION_CLASSES)
     )

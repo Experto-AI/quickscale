@@ -64,12 +64,9 @@ def _assert_org_role_route(
     expected_status,
     data=None,
 ):
-    """Assert a route refuses anonymous and orgless callers and admits a role holder."""
+    """Assert a route refuses anonymous (401) and orgless (403) callers and admits a role holder."""
     anonymous_response = _perform_api_request(api_client, method, url, data)
-    assert anonymous_response.status_code in (
-        status.HTTP_401_UNAUTHORIZED,
-        status.HTTP_403_FORBIDDEN,
-    )
+    assert anonymous_response.status_code == status.HTTP_401_UNAUTHORIZED
 
     orgless_response = _perform_api_request(
         orgless_authenticated_client, method, url, data
@@ -732,10 +729,7 @@ class TestContactViewSet:
         """Explicit module auth should not depend on host DRF defaults."""
         response = api_client.get(reverse("quickscale_crm:contact_list"))
 
-        assert response.status_code in (
-            status.HTTP_401_UNAUTHORIZED,
-            status.HTTP_403_FORBIDDEN,
-        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @override_settings(REST_FRAMEWORK={})
     def test_contact_list_returns_403_for_orgless_user_without_host_defaults(

@@ -90,6 +90,11 @@ TRAFFIC_FILTER_TOKENS: dict[tuple[str, str], frozenset[str]] = {
 
 RATE_LITERAL = re.compile(r"\d+/(?:second|minute|hour|day)")
 
+#: Rule 9's one session authentication class (SA262), shipped in the
+#: ``quickscale_core.runtime`` facade.  A module-defined subclass or a direct
+#: DRF spelling fails the closed world.
+CORE_SESSION_AUTHENTICATION = "QuickscaleSessionAuthentication"
+
 
 def _declares_literal_url_includes(value: ast.expr) -> bool:
     """
@@ -350,6 +355,7 @@ def rule_9_http_apis(corpus: Corpus) -> list[str]:
             tree = _parse(text)
             if _uses_name(tree, "JsonResponse"):
                 violations.append(f"rule 9: {module.name}: {rel} uses JsonResponse")
+            violations.extend(_session_authentication_violations(module.name, rel, tree))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call) and _call_func_name(node) == "HttpResponse":
                     content_type = _literal(_keyword(node, "content_type"))
@@ -370,6 +376,143 @@ def rule_9_http_apis(corpus: Corpus) -> list[str]:
                         violations.append(
                             f"rule 9: {module.name}: {rel} builds an error body in module code"
                         )
+    return violations
+
+
+def _session_authentication_bindings(
+    tree: ast.Module,
+) -> tuple[set[str], set[str], dict[str, str]]:
+    """
+    Resolve a module's DRF and core session-authentication bindings.
+
+    Returns the names bound to DRF's ``SessionAuthentication``, the names
+    bound to core's one session authentication class, and the namespace
+    aliases bound to ``rest_framework.authentication``, so ``from
+    rest_framework.authentication import SessionAuthentication``,
+    ``from rest_framework import authentication``, and the fully qualified
+    ``rest_framework.authentication.SessionAuthentication`` all resolve.
+    """
+    drf_names: set[str] = set()
+    core_names: set[str] = set()
+    namespaces: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                binding = alias.asname or alias.name
+                if (
+                    node.module == "rest_framework.authentication"
+                    and alias.name == "SessionAuthentication"
+                ):
+                    drf_names.add(binding)
+                elif (
+                    node.module == "quickscale_core.runtime"
+                    or node.module.startswith("quickscale_core.runtime.")
+                ) and alias.name == CORE_SESSION_AUTHENTICATION:
+                    core_names.add(binding)
+                elif node.module == "rest_framework" and alias.name == "authentication":
+                    namespaces[binding] = "rest_framework.authentication"
+                elif node.module == "quickscale_core" and alias.name == "runtime":
+                    namespaces[binding] = "quickscale_core.runtime"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in {
+                    "rest_framework",
+                    "rest_framework.authentication",
+                    "quickscale_core",
+                    "quickscale_core.runtime",
+                }:
+                    root = alias.asname or alias.name.split(".")[0]
+                    namespaces[root] = alias.name if alias.asname else root
+    return drf_names, core_names, namespaces
+
+
+def _resolves_to_drf_session_authentication(
+    node: ast.expr, drf_names: set[str], namespaces: dict[str, str]
+) -> bool:
+    """Return whether a base or value resolves to DRF's SessionAuthentication."""
+    if isinstance(node, ast.Name):
+        return node.id in drf_names
+    dotted = _dotted_name(node)
+    if dotted is None:
+        return False
+    root, _, rest = dotted.partition(".")
+    if not rest:
+        return dotted in drf_names
+    resolved = f"{namespaces.get(root, root)}.{rest}"
+    return resolved == "rest_framework.authentication.SessionAuthentication"
+
+
+def _resolves_to_core_session_authentication(
+    node: ast.expr, core_names: set[str], namespaces: dict[str, str]
+) -> bool:
+    """Return whether a value resolves to core's one session authentication class."""
+    if isinstance(node, ast.Name):
+        return node.id in core_names
+    dotted = _dotted_name(node)
+    if dotted is None:
+        return False
+    root, _, rest = dotted.partition(".")
+    if not rest:
+        return dotted in core_names
+    return f"{namespaces.get(root, root)}.{rest}" in {
+        "quickscale_core.runtime.QuickscaleSessionAuthentication",
+        "quickscale_core.runtime.drf.QuickscaleSessionAuthentication",
+    }
+
+
+def _session_authentication_violations(module_name: str, rel: str, tree: ast.Module) -> list[str]:
+    """
+    Return rule 9's session-authentication violations for one module file.
+
+    Closed world: a module defines no ``SessionAuthentication`` subclass, and
+    an ``authentication_classes`` literal names core's one session
+    authentication class or is empty (the webhook and public-read case).
+    """
+    violations: list[str] = []
+    drf_names, core_names, namespaces = _session_authentication_bindings(tree)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if any(
+            _resolves_to_drf_session_authentication(base, drf_names, namespaces)
+            for base in node.bases
+        ):
+            violations.append(
+                f"rule 9: {module_name}: {rel} defines a SessionAuthentication subclass"
+            )
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+            value = node.value
+        else:
+            continue
+        if not any(
+            isinstance(target, ast.Name) and target.id == "authentication_classes"
+            for target in targets
+        ):
+            continue
+        if isinstance(value, (ast.List, ast.Tuple)):
+            elements = value.elts
+        else:
+            violations.append(
+                f"rule 9: {module_name}: {rel} sets authentication_classes to a non-literal value"
+            )
+            continue
+        for element in elements:
+            if _resolves_to_core_session_authentication(element, core_names, namespaces):
+                continue
+            if _resolves_to_drf_session_authentication(element, drf_names, namespaces):
+                violations.append(
+                    f"rule 9: {module_name}: {rel} names DRF's SessionAuthentication directly"
+                )
+            else:
+                violations.append(
+                    f"rule 9: {module_name}: {rel} authentication_classes entry is "
+                    "not core's session authentication class"
+                )
     return violations
 
 

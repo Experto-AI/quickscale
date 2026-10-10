@@ -13,7 +13,6 @@ from django.shortcuts import get_object_or_404
 from django.utils.html import escape
 from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
-from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -21,6 +20,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from quickscale_core.runtime import QuickscaleSessionAuthentication
 from quickscale_modules_orgs.models import OrgRole
 from quickscale_modules_orgs.permissions import HasOrgRole
 from quickscale_modules_orgs.public_context import PublicSystemOrgReadMixin
@@ -141,31 +141,19 @@ def _blog_org_scope(request: Request | HttpRequest, author: Any) -> Iterator[Any
         yield organization
 
 
-class BlogSessionAuthentication(SessionAuthentication):
-    """Session authentication that keeps a 401 challenge for anonymous callers.
-
-    DRF answers an unauthenticated request 403 when the authentication scheme
-    declares no challenge header; the blog API has always answered 401, so the
-    scheme names its challenge.
-    """
-
-    def authenticate_header(self, request: Request) -> str:
-        del request
-        return "Session"
-
-
 class BlogApiBaseView(APIView):
     """Shared contract for the blog module's DRF automation API views.
 
-    Session authentication only (Module Conventions rule 9): DRF's
-    ``SessionAuthentication`` enforces CSRF on unsafe methods.  Both
-    endpoints write the active organization's data, so they authorize by org
-    role through orgs' ``HasOrgRole`` (rule 19): any member may write today's
-    automation flow, while a viewer is refused.  Every error goes through the
-    one QuickScale exception handler the generated settings install.
+    Session authentication only, through core's one session authentication
+    class (Module Conventions rule 9): DRF enforces CSRF on unsafe methods.
+    Both endpoints write the active organization's data, so they authorize by
+    org role through orgs' ``HasOrgRole`` (rule 19): any member may write
+    today's automation flow, while a viewer is refused.  Every error goes
+    through the one QuickScale exception handler the generated settings
+    install.
     """
 
-    authentication_classes = [BlogSessionAuthentication]
+    authentication_classes = [QuickscaleSessionAuthentication]
     permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.MEMBER)]
     throttle_classes = [BlogApiThrottle]
     throttle_scope = "quickscale_blog_api"

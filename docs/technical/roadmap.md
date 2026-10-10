@@ -476,6 +476,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA262 — One JSON API contract: guards, 401, pagination, throttles, and DRF keys.**
 
+  **Progress:** the 401/session-auth half of proposal 7 landed: `quickscale_core.runtime` ships
+  `QuickscaleSessionAuthentication`, the generated settings install it as
+  `DEFAULT_AUTHENTICATION_CLASSES`, all six session APIs (billing, blog, CRM, forms, listings,
+  orgs) use it — CRM and forms answer 401 where they answered 403 — harness rule 9 rejects a
+  module-defined subclass and an `authentication_classes` value outside core's class and the
+  empty literal, and decision rule 9 carries the clause. Remaining: proposal 11's guards and
+  README roles, proposal 7's `PlainListPagination` and the generated social views, proposal 13's
+  throttles, and the `collect_wiring` admission list.
+
   **Context:** coherence `tenant-authorization` (billing's `AllowAny` plus a hand-written check
   and no README role table), `unauthenticated-status-code` (401 in four modules, 403 in two),
   `http-api-shape` (list and body shapes; social's generated payload views are `JsonResponse`

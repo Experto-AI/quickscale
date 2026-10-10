@@ -688,11 +688,16 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   sets it as `REST_FRAMEWORK["EXCEPTION_HANDLER"]` in the existing composed `REST_FRAMEWORK`
   block. Module code raises DRF exceptions (or its `<Module>Error`, mapped by rule 10's
   `exceptions.py`) and builds no error body itself; the theme's API client parses the one shape.
+- ✅ Session APIs authenticate through core's one session authentication class
+  (`QuickscaleSessionAuthentication` in `quickscale_core.runtime`), so an unauthenticated call
+  answers 401; the generated `settings/base.py` installs it as
+  `DEFAULT_AUTHENTICATION_CLASSES` through `compose_rest_framework`.
 - ✅ Lists page with `PageNumberPagination` sized by the module's `<THING>_PER_PAGE`; throttles are
   DRF throttles fed by the module's `_RATE_LIMIT` setting (rule 32).
 - ❌ `JsonResponse` APIs, error bodies built in module code, a third-party error-format library, hand-written rate
   parsers, per-module token schemes (blog's `BLOG_API_TOKENS` is removed; a shared token scheme is
-  SA154 inventory).
+  SA154 inventory), a module-defined `SessionAuthentication` subclass, or
+  `authentication_classes` naming DRF's class directly on a non-webhook view.
 
 **10. Startup checks, errors, core ports.**
 - ✅ A module's configuration and invariant checks are functions in its `checks.py`. From
@@ -1859,7 +1864,7 @@ alias.
 
 **Rule:** Every authed, state-changing JSON endpoint subclasses one of exactly two sanctioned bases. There is no third permanent option.
 
-- ✅ **DRF baseline** (`rest_framework.views.APIView` with `SessionAuthentication` for automated CSRF enforcement; permission class per endpoint) — the default for any new JSON endpoint that does not need organization-role scoping. `AllowAny` is used when the view performs its own auth checks (the billing-module pattern); `IsAuthenticated` is the default for endpoints where all requests require an authenticated user. Used by billing, CRM, and forms.
+- ✅ **DRF baseline** (`rest_framework.views.APIView` with core's `QuickscaleSessionAuthentication` for automated CSRF enforcement; permission class per endpoint) — the default for any new JSON endpoint that does not need organization-role scoping. `AllowAny` is used when the view performs its own auth checks (the billing-module pattern); `IsAuthenticated` is the default for endpoints where all requests require an authenticated user. Used by billing, CRM, and forms.
 - ✅ **`OrgApiBaseView`** — for endpoints that need organization-role/membership scoping specifically. Chosen as a second sanctioned base rather than reimplementing org-role checks as a DRF permission class, because that logic is tenant-isolation-adjacent (see §multitenant-saas-architecture) and rewriting working, tested code for stylistic consistency alone carries regression risk for no user-visible benefit.
 - ❌ A plain-`View` + `@csrf_exempt` + manual `_enforce_csrf()` idiom is not a third sanctioned option and is not grandfathered as legacy — this project removes workarounds rather than permanently tolerating them alongside the sanctioned shape.
 - ✅ **Signature-verified webhooks** (Stripe, etc.) are a different trust class, exempt from this rule's authentication and CSRF requirements — the calling party cannot present a CSRF token. They are DRF `APIView`s without authentication, permission, or throttle classes (Module Conventions rule 26), which DRF does not CSRF-check; the signature is their authentication, rule 9's handler renders their errors, and the pairing gate (`scripts/check_csrf_exempt_gate.py`) carries no webhook helper.

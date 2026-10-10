@@ -141,6 +141,9 @@ class TestRestFrameworkComposition:
         assert composed["EXCEPTION_HANDLER"] == (
             "quickscale_core.runtime.conventions.exception_handler"
         )
+        assert composed["DEFAULT_AUTHENTICATION_CLASSES"] == [
+            "quickscale_core.runtime.drf.QuickscaleSessionAuthentication",
+        ]
         assert composed["DEFAULT_PERMISSION_CLASSES"] == [
             "rest_framework.permissions.IsAuthenticated",
         ]

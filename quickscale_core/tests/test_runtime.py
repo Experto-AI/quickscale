@@ -156,6 +156,7 @@ class TestRuntimeAllExport:
             "PersistedBackupArtifact",
             "PersistedBackupPolicy",
             "PersistedBackupSnapshot",
+            "QuickscaleSessionAuthentication",
             "REDACTED",
             "PersonalDataExclusion",
             "PersonalDataField",

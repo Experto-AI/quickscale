@@ -289,6 +289,98 @@ def test_error_body_with_nonliteral_key_control() -> None:
     )
 
 
+def test_session_authentication_subclass_control() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_9_http_apis, module) == []
+    broken = _with_files(
+        module,
+        views=(
+            "from rest_framework.authentication import SessionAuthentication\n\n\n"
+            "class DemoSessionAuthentication(SessionAuthentication):\n"
+            "    def authenticate_header(self, request):\n"
+            "        return 'Session'\n"
+        ),
+    )
+    assert any(
+        "SessionAuthentication subclass" in violation
+        for violation in _violations(checker.rule_9_http_apis, broken)
+    )
+
+
+def test_authentication_classes_closed_world_controls() -> None:
+    """Rule 9 admits core's class and the empty literal only."""
+    module = _golden_module()
+    drf_class = _with_files(
+        module,
+        views=(
+            "from rest_framework.authentication import SessionAuthentication\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    authentication_classes = [SessionAuthentication]\n"
+        ),
+    )
+    assert any(
+        "names DRF's SessionAuthentication directly" in violation
+        for violation in _violations(checker.rule_9_http_apis, drf_class)
+    )
+    qualified_drf_class = _with_files(
+        module,
+        views=(
+            "import rest_framework.authentication\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    authentication_classes = "
+            "[rest_framework.authentication.SessionAuthentication]\n"
+        ),
+    )
+    assert any(
+        "names DRF's SessionAuthentication directly" in violation
+        for violation in _violations(checker.rule_9_http_apis, qualified_drf_class)
+    )
+    other_class = _with_files(
+        module,
+        views=(
+            "from rest_framework.permissions import AllowAny\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    authentication_classes = [AllowAny]\n"
+        ),
+    )
+    assert any(
+        "not core's session authentication class" in violation
+        for violation in _violations(checker.rule_9_http_apis, other_class)
+    )
+    core_class = _with_files(
+        module,
+        views=(
+            "from quickscale_core.runtime import QuickscaleSessionAuthentication\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    authentication_classes = [QuickscaleSessionAuthentication]\n"
+        ),
+    )
+    assert _violations(checker.rule_9_http_apis, core_class) == []
+    aliased_core_namespace = _with_files(
+        module,
+        views=(
+            "import quickscale_core.runtime as runtime\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    authentication_classes = [runtime.QuickscaleSessionAuthentication]\n"
+        ),
+    )
+    assert _violations(checker.rule_9_http_apis, aliased_core_namespace) == []
+    webhook_like = _with_files(
+        module,
+        views=(
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    authentication_classes = []\n"
+        ),
+    )
+    assert _violations(checker.rule_9_http_apis, webhook_like) == []
+
+
 _SEAM = "{% load static quickscale_seam %}\n{% seam_module_flags %}\n{% seam_module_paths %}\n"
 
 
