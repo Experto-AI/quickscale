@@ -36,7 +36,7 @@ class TestBillingPostHook:
                 "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
             },
         )
-        result = _billing_post_hook(spec, {})
+        result = _billing_post_hook(spec, {"enabled": True})
         assert result.settings["QUICKSCALE_BILLING_ENABLED"] is True
 
     def test_coerces_bool_enabled_from_falsy_int(self) -> None:
@@ -47,7 +47,7 @@ class TestBillingPostHook:
                 "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
             },
         )
-        result = _billing_post_hook(spec, {})
+        result = _billing_post_hook(spec, {"enabled": True})
         assert result.settings["QUICKSCALE_BILLING_ENABLED"] is False
 
     def test_coerces_str_keys(self) -> None:
@@ -62,7 +62,7 @@ class TestBillingPostHook:
                 "QUICKSCALE_BILLING_API_RATE_LIMIT": 3030,
             },
         )
-        result = _billing_post_hook(spec, {})
+        result = _billing_post_hook(spec, {"enabled": True})
         assert result.settings["QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR"] == "123"
         assert result.settings["QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR"] == "456"
         assert result.settings["QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR"] == "789"
@@ -79,7 +79,7 @@ class TestBillingPostHook:
                 "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
             },
         )
-        result = _billing_post_hook(spec, {})
+        result = _billing_post_hook(spec, {"enabled": True})
         assert result.apps == ("quickscale_modules_billing",)
         assert result.middleware == ("some.middleware",)
 
@@ -91,7 +91,7 @@ class TestBillingPostHook:
                 "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
             },
         )
-        result = _billing_post_hook(spec, {})
+        result = _billing_post_hook(spec, {"enabled": True})
         assert result.settings["QUICKSCALE_BILLING_ENABLED"] is True
 
     def test_coerces_per_page_settings_to_int(self) -> None:
@@ -104,7 +104,7 @@ class TestBillingPostHook:
                 "QUICKSCALE_BILLING_PLANS_PER_PAGE": "20",
             },
         )
-        result = _billing_post_hook(spec, {})
+        result = _billing_post_hook(spec, {"enabled": True})
         assert result.settings["QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE"] == 10
         assert isinstance(
             result.settings["QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE"], int
@@ -163,7 +163,7 @@ class TestBillingSecretProjection:
                     "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
                 },
             ),
-            {},
+            {"enabled": True},
         )
 
         assert spec.settings["QUICKSCALE_BILLING_PUBLISHABLE_KEY"] == ""
