@@ -310,36 +310,22 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA253 — Make the generated project's CI, image, and healthcheck pass, and execute them in a gate.**
 
-  **Context:** generated automation is only text-asserted, never run, and four defects live there
-  (tech audit §9): the rendered CI cannot pass on a fresh project (`generated-ci-fails-out-of-box`),
-  it uses mutable third-party action tags and no `permissions:` block
-  (`generated-ci-mutable-action-tags`), the image `HEALTHCHECK` gets 400 under production settings
-  (`docker-healthcheck-always-unhealthy`), and the frontend stage resolves npm dependencies
-  unpinned when no lockfile exists (`frontend-image-floating-deps`). They share `ci.yml.j2` and
-  `Dockerfile.j2`, so they land together.
+  **Context:** the pinned workflow, healthcheck, lockfile install, and the
+  `check-generated-project-automation` gate have landed. The rendered CI is still red on one job:
+  the generated frontend's `pnpm test:coverage` enforces 80% per file, and the shipped
+  `showcase_react` suite reaches about 77.7% of statements globally (tech audit
+  `generated-frontend-coverage-unmet`).
 
-  **Acceptance:** a fresh generated project's CI passes as rendered. The rendered workflow pins
-  actions by SHA with a least-privilege `permissions:` block, and `check_workflow_security.py` and
-  `make refresh-action-pins` cover `ci.yml.j2`. The `HEALTHCHECK` passes under production settings.
-  The frontend image installs from a lockfile and fails without one. A registered gate generates a
-  project offline and executes its CI test and migrate commands and the image healthcheck.
+  **Acceptance:** the shipped theme suite brings every covered file to the existing per-file 80%
+  thresholds in `themes/showcase_react/vitest.config.ts`. Thresholds and the coverage include set
+  stay unchanged, with no new exclusions. The tests exercise behavior, not snapshots. A fresh
+  generated project's frontend CI job then passes as rendered. The gate stays local-only, because
+  hosted gate jobs have no PostgreSQL lease step.
 
-  **Surfaces:** `ci.yml.j2`, `Dockerfile.j2`, the test-settings line of `base.py.j2`,
-  `scripts/check_workflow_security.py`, the new gate, and the tech audit.
+  **Slices:** one per theme area, lowest per-file coverage first; each lands green on its own.
 
-  **Progress:** the four defects and the gate landed. `ci.yml.j2` pins every action by SHA with a
-  top-level `permissions: contents: read`, gives the test step its `DATABASE_URL`, and runs the
-  migrate and isolation steps under `settings.local`; `check_workflow_security.py
-  --generated-template` renders and scans the template, and `make refresh-action-pins` rewrites
-  its pins; the Dockerfile probes `/healthcheck/` presenting the always-admitted
-  `healthcheck.railway.app` Host and installs the frontend from an emitted
-  `frontend/pnpm-lock.yaml` with `--frozen-lockfile`; the generated sample suite plus
-  coverage/urls settings and ruff-clean imports make the rendered test and ruff steps pass; the
-  registered `check-generated-project-automation` gate executes the rendered test and migrate
-  commands and the healthcheck. Remaining: the generated frontend's `pnpm test:coverage`
-  per-file 80% thresholds are not met by the shipped theme suite (~77.7% global statements), so
-  the frontend job is still red — it needs a threshold/exclusion decision or a much larger theme
-  suite. The new gate is local-only: hosted gate jobs have no PostgreSQL lease step.
+  **Surfaces:** `themes/showcase_react/` tests (the API clients' tests coordinate with Track 3),
+  and the tech audit.
 
 - [ ] **SA255 — Accept Resend's real webhook signature in notifications.**
 
