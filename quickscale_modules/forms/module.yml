@@ -25,6 +25,14 @@ config:
       validation:
         min: 1
 
+    per_page:
+      type: integer
+      default: 25
+      django_setting: QUICKSCALE_FORMS_PER_PAGE
+      description: "Number of forms per page in the admin form list API."
+      validation:
+        min: 1
+
     spam_protection_enabled:
       type: boolean
       default: true

@@ -2225,6 +2225,7 @@ class TestFormsPostHookFailHard:
         """A missing QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
+                "QUICKSCALE_FORMS_PER_PAGE": 25,
                 "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
                 "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
                 "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
@@ -2235,11 +2236,27 @@ class TestFormsPostHookFailHard:
         with pytest.raises(KeyError, match="QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"):
             _forms_post_hook(spec, resolved)
 
+    def test_missing_list_forms_per_page_raises_key_error(self) -> None:
+        """A missing QUICKSCALE_FORMS_PER_PAGE raises KeyError."""
+        spec = ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
+                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
+                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
+                "QUICKSCALE_FORMS_API_ENABLED": True,
+            }
+        )
+        resolved: dict[str, Any] = {}
+        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_PER_PAGE"):
+            _forms_post_hook(spec, resolved)
+
     def test_missing_spam_protection_raises_key_error(self) -> None:
         """A missing QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED raises KeyError."""
         spec = ModuleWiringSpec(
             settings={
                 "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_PER_PAGE": 25,
                 "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
                 "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
                 "QUICKSCALE_FORMS_API_ENABLED": True,
@@ -2254,6 +2271,7 @@ class TestFormsPostHookFailHard:
         spec = ModuleWiringSpec(
             settings={
                 "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_PER_PAGE": 25,
                 "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
                 "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
                 "QUICKSCALE_FORMS_API_ENABLED": True,
@@ -2268,6 +2286,7 @@ class TestFormsPostHookFailHard:
         spec = ModuleWiringSpec(
             settings={
                 "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_PER_PAGE": 25,
                 "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
                 "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
                 "QUICKSCALE_FORMS_API_ENABLED": True,
@@ -2282,6 +2301,7 @@ class TestFormsPostHookFailHard:
         spec = ModuleWiringSpec(
             settings={
                 "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_PER_PAGE": 25,
                 "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
                 "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
                 "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
@@ -2296,6 +2316,7 @@ class TestFormsPostHookFailHard:
         spec = ModuleWiringSpec(
             settings={
                 "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_PER_PAGE": 25,
                 "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
                 "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
                 "QUICKSCALE_FORMS_RETENTION_DAYS": 365,

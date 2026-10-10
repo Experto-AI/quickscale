@@ -10,13 +10,71 @@ DRF helper never imports Django REST Framework.
 
 from __future__ import annotations
 
+from typing import Any
+
+from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework.authentication import SessionAuthentication
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
 from quickscale_core.runtime.settings import validated_proxy_settings
 
-__all__ = ["QuickscaleScopedRateThrottle", "QuickscaleSessionAuthentication"]
+__all__ = [
+    "PlainListPagination",
+    "QuickscaleScopedRateThrottle",
+    "QuickscaleSessionAuthentication",
+]
+
+
+class PlainListPagination(PageNumberPagination):
+    """Page one list without wrapping it in a pagination envelope.
+
+    This is core's one list paginator (Module Conventions rule 9).  A module
+    list view declares ``pagination_class`` on a subclass that sets
+    ``page_size_setting`` — the name of the Django setting that sizes that
+    list, a ``<THING>_PER_PAGE`` setting (rule 2) whose startup check has
+    already refused a missing or out-of-range value.  The page size can never
+    be overridden by a client (``page_size_query_param`` is ``None``), and
+    the response stays the bare list: the page *is* the list, so existing
+    clients keep the list response shape they already parse.
+    """
+
+    page_size_query_param = None
+    #: Name of the ``<THING>_PER_PAGE`` Django setting that sizes this list.
+    #: A module subclass must set it; the base class fails closed without one.
+    page_size_setting: str | None = None
+
+    def get_page_size(self, request: Request) -> int:
+        """Return the page size from the declared ``<THING>_PER_PAGE`` setting.
+
+        Fails loud (never silently unpaginated or coerced) when the subclass
+        declares no setting, when the setting is missing, or when its value is
+        not an integer of at least one — the startup check refuses these
+        first, so reaching any branch means a wiring defect, not a user error.
+        """
+        del request
+        if not self.page_size_setting:
+            raise ImproperlyConfigured(
+                "PlainListPagination subclass must declare page_size_setting."
+            )
+        try:
+            value = getattr(settings, self.page_size_setting)
+        except AttributeError as error:
+            raise ImproperlyConfigured(
+                f"{self.page_size_setting} is required to paginate this list."
+            ) from error
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ImproperlyConfigured(f"{self.page_size_setting} must be an integer.")
+        if value < 1:
+            raise ImproperlyConfigured(f"{self.page_size_setting} must be at least 1.")
+        return value
+
+    def get_paginated_response(self, data: list[Any]) -> Response:
+        """Return the page as the bare list, preserving the list response shape."""
+        return Response(data)
 
 
 class QuickscaleSessionAuthentication(SessionAuthentication):

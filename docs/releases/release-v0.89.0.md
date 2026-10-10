@@ -350,6 +350,13 @@ with this release:
   `QuickscaleScopedRateThrottle` as the default scoped throttle, a view declares only its
   `throttle_scope`, module wiring contributes only `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`, and
   listings' publish API gains an `api_rate_limit` option.
+- Module JSON lists page through one core paginator: each list is sized by its `<THING>_PER_PAGE`
+  setting and returns only the requested page — billing's ledger (`transactions_per_page`, was a
+  fixed `25`) and plan catalog (`plans_per_page`), CRM's tags, companies, stages, and note lists,
+  and forms' admin form list (`QUICKSCALE_FORMS_PER_PAGE`) — and the generated social payload
+  endpoints are DRF views that answer the standard error shape without echoing exception text.
+  Lists that previously returned every row now return their first page unless the client asks for
+  another.
 
 ## Delivery provenance
 

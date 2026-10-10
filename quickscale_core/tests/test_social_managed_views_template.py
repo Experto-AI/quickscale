@@ -7,9 +7,20 @@ code must:
 - Resolve System org for anonymous/public requests per D2
 - Preserve prior ambient context and restore it in a try/finally block,
   exception-safe (CR-T1-9-003)
+
+SA262 stage 3: the generated views are DRF views (Module Conventions rule 9)
+— they declare their public guard, answer one error shape on failure, and
+never echo exception text.
 """
 
 from __future__ import annotations
+
+import contextlib
+import sys
+import types
+
+import pytest
+from django.conf import settings as django_settings
 
 from quickscale_core.manifest.social_manifest import (
     render_social_managed_views_module,
@@ -159,3 +170,89 @@ def test_generated_views_no_explicit_transaction_or_tenant_context() -> None:
         "org_scope() handles DB SET LOCAL internally; "
         "manual set_db_current_org_id is no longer needed."
     )
+
+
+# ---------------------------------------------------------------------------
+# SA262 stage 3 — the rendered views follow rule 9
+# ---------------------------------------------------------------------------
+
+
+def test_generated_views_are_drf_views() -> None:
+    """The managed payload views are DRF APIViews, not JsonResponse functions."""
+    content = _render()
+    assert "class SocialLinkTreePayloadView(_SocialPayloadView)" in content
+    assert "class SocialEmbedsPayloadView(_SocialPayloadView)" in content
+    assert "APIView" in content
+    assert "JsonResponse" not in content
+    assert "from django.http import" not in content
+
+
+def test_generated_views_declare_their_public_guard() -> None:
+    """A public read API declares its guard explicitly (rule 19)."""
+    content = _render()
+    assert "permission_classes = [AllowAny]" in content
+    assert "authentication_classes: list[Any] = []" in content
+
+
+def test_generated_views_never_echo_exception_text() -> None:
+    """A failed payload build answers rule 9's shape, never the exception text."""
+    content = _render()
+    assert "SocialPayloadUnavailable" in content
+    assert "APIException" in content
+    assert "str(exc)" not in content
+    assert "_error_message" not in content
+    assert '"error"' not in content
+    assert "PAYLOAD_STATUS_HTTP" not in content
+
+
+def test_generated_views_import_and_dispatch_the_error_shape() -> None:
+    """The rendered module imports cleanly and answers 503 without exception text."""
+    if not django_settings.configured:
+        django_settings.configure(
+            DEBUG=False,
+            SECRET_KEY="quickscale-test-key",
+            REST_FRAMEWORK={},
+            USE_I18N=False,
+            USE_TZ=False,
+        )
+
+    orgs_package = types.ModuleType("quickscale_modules_orgs")
+    orgs_current = types.ModuleType("quickscale_modules_orgs.current_org")
+    orgs_current.get_current_org = lambda request: None  # type: ignore[attr-defined]
+    orgs_current.org_scope = contextlib.nullcontext  # type: ignore[attr-defined]
+    orgs_package.current_org = orgs_current  # type: ignore[attr-defined]
+    previous_package = sys.modules.get("quickscale_modules_orgs")
+    previous_current = sys.modules.get("quickscale_modules_orgs.current_org")
+    sys.modules["quickscale_modules_orgs"] = orgs_package
+    sys.modules["quickscale_modules_orgs.current_org"] = orgs_current
+    try:
+        namespace: dict[str, object] = {}
+        exec(compile(_render(), "social_views.py", "exec"), namespace)  # noqa: S102
+
+        from rest_framework.exceptions import APIException
+
+        view_class = namespace["SocialLinkTreePayloadView"]
+        view = view_class()
+        assert [cls.__name__ for cls in view.permission_classes] == ["AllowAny"]
+
+        view.build_payload = lambda request: {"surface": "link_tree"}  # type: ignore[method-assign]
+        assert view.get(None).data == {"surface": "link_tree"}  # type: ignore[arg-type]
+
+        def _fail(_request: object) -> dict[str, object]:
+            raise ValueError("sentinel-exception-text")
+
+        view.build_payload = _fail  # type: ignore[method-assign]
+        with pytest.raises(APIException) as excinfo:
+            view.get(None)  # type: ignore[arg-type]
+        assert excinfo.value.status_code == 503
+        assert excinfo.value.get_codes() == "service_unavailable"
+        assert "sentinel-exception-text" not in str(excinfo.value.detail)
+    finally:
+        if previous_package is None:
+            sys.modules.pop("quickscale_modules_orgs", None)
+        else:
+            sys.modules["quickscale_modules_orgs"] = previous_package
+        if previous_current is None:
+            sys.modules.pop("quickscale_modules_orgs.current_org", None)
+        else:
+            sys.modules["quickscale_modules_orgs.current_org"] = previous_current

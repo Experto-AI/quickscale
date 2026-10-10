@@ -94,6 +94,24 @@ class TestBillingPostHook:
         result = _billing_post_hook(spec, {})
         assert result.settings["QUICKSCALE_BILLING_ENABLED"] is True
 
+    def test_coerces_per_page_settings_to_int(self) -> None:
+        """The list page sizes (rule 9) are forced to int."""
+        spec = ModuleWiringSpec(
+            settings={
+                "QUICKSCALE_BILLING_ENABLED": True,
+                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
+                "QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE": "10",
+                "QUICKSCALE_BILLING_PLANS_PER_PAGE": "20",
+            },
+        )
+        result = _billing_post_hook(spec, {})
+        assert result.settings["QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE"] == 10
+        assert isinstance(
+            result.settings["QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE"], int
+        )
+        assert result.settings["QUICKSCALE_BILLING_PLANS_PER_PAGE"] == 20
+        assert isinstance(result.settings["QUICKSCALE_BILLING_PLANS_PER_PAGE"], int)
+
 
 class TestBillingSecretProjection:
     """Rule 35: the adapter projects each Stripe secret through `__QS_ENV__`."""

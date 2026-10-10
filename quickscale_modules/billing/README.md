@@ -50,6 +50,8 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 | `webhook_secret_env_var` | string | `QUICKSCALE_BILLING_WEBHOOK_SECRET` | `QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR` | Environment-variable name containing the Stripe webhook signing secret. |
 | `currency` | string | `usd` | `QUICKSCALE_BILLING_CURRENCY` | ISO 4217 billing currency code used for plan metadata and Checkout validation. |
 | `api_rate_limit` | string | `30/hour` | `QUICKSCALE_BILLING_API_RATE_LIMIT` | Throttle rate per client for billing's Stripe-calling checkout and portal endpoints. Format: `<count>/<period>`. |
+| `transactions_per_page` | integer | `25` | `QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE` | Number of credit transactions per page in the ledger list API. |
+| `plans_per_page` | integer | `25` | `QUICKSCALE_BILLING_PLANS_PER_PAGE` | Number of plans per page in the public plan catalog API. |
 
 Backend environment variables:
 
@@ -127,9 +129,9 @@ disabled billing runtime answers `404`.
 | Route | Method | Auth | Request | Success contract | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `billing/api/config/` | `GET` | Session auth | None | `{"publishable_key": "pk_test_..."}` | Returns only the publishable key. Returns `500` with `{"error": {"code": "configuration_error", "message": "Stripe publishable key is not configured in the runtime settings."}}` when missing. |
-| `billing/api/plans/` | `GET` | Public | None | `[{"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}]` | Returns active recurring plans only. One-time plans stay out of this catalog. |
+| `billing/api/plans/` | `GET` | Public | `page` query param only | `[{"name": "Starter Monthly", "slug": "starter-monthly", "credits_per_period": 100, "price_cents": 1900, "currency": "usd", "billing_interval": "monthly"}]` | Returns active recurring plans only. One-time plans stay out of this catalog. Pages by `QUICKSCALE_BILLING_PLANS_PER_PAGE`; client `page_size` overrides are ignored. |
 | `billing/api/balance/` | `GET` | Session auth | None | `{"balance": 0, "updated_at": null}` | A missing balance is returned as a read-only zero snapshot without creating a row. Persisted balances include their `updated_at` timestamp. |
-| `billing/api/transactions/?page=2` | `GET` | Session auth | `page` query param only | `[{"id": 42, "amount": 125, "transaction_type": "purchase", "description": "Current user purchase", "balance_after": 125, "created_at": "2026-05-16T12:00:00Z"}]` | Ordered newest-first. Fixed page size of `25`; client `page_size` overrides are ignored. |
+| `billing/api/transactions/?page=2` | `GET` | Session auth | `page` query param only | `[{"id": 42, "amount": 125, "transaction_type": "purchase", "description": "Current user purchase", "balance_after": 125, "created_at": "2026-05-16T12:00:00Z"}]` | Ordered newest-first. Page size from `QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE` (default `25`); client `page_size` overrides are ignored. |
 | `billing/api/purchase/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "credits-pack"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. |
 | `billing/api/subscription/` | `GET` | Session auth | None | `{"plan": {...}, "status": "active", "checkout_expires_at": null, "current_period_start": "...", "current_period_end": "..."}` | Returns `404` with `{"error": {"code": "not_found", "message": "Current subscription not found."}}` when no current recurring row exists. |
 | `billing/api/subscription/checkout/` | `POST` | Session auth + CSRF | `{"plan_slug": "starter-monthly"}` | `{"checkout_url": "https://checkout.stripe.com/..."}` | Rejects caller-supplied `success_url` and `cancel_url`. Blocks if a current recurring subscription already exists. |
@@ -164,8 +166,11 @@ Integration assumptions:
   checkout creation and an empty JSON body for cancel and portal creation.
 - Keep one-time purchase catalog data project-owned for now. The shipped `plans` endpoint only
   exposes active recurring plans.
-- Treat transaction pagination as fixed-size, page-number based pagination. The API always uses
-  25 rows per page and ignores client-supplied `page_size` values.
+- Treat transaction pagination as page-number based pagination sized by
+  `QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE`; the API ignores client-supplied `page_size` values.
+  Expose that value to Vite as `VITE_QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE` (the
+  TransactionHistory example reads it, defaulting to `25`) so pager end detection matches the
+  backend.
 
 Start with one typed fetch wrapper, one CSRF helper, and one runtime Stripe bootstrap.
 
@@ -276,7 +281,18 @@ export function fetchBalance() {
 }
 
 export function fetchRecurringPlans() {
-  return billingFetch<BillingPlan[]>("/billing/api/plans/");
+  // The catalog is paged (plans_per_page, default 25). Follow pages until an
+  // empty one, so the caller receives the whole catalog without knowing the
+  // configured size.
+  const plans: BillingPlan[] = [];
+  for (let page = 1; ; page += 1) {
+    const batch = await billingFetch<BillingPlan[]>(
+      `/billing/api/plans/?page=${page}`,
+    );
+    plans.push(...batch);
+    if (batch.length === 0) break;
+  }
+  return plans;
 }
 
 export function fetchTransactions(page = 1) {
@@ -415,7 +431,8 @@ Component patterns and the recommended shadcn/ui surfaces:
   webhook-driven credit changes can happen outside the current tab.
 - **Pricing page**: `Tabs`, `Card`, `Badge`, and `Button`; fetch recurring plans from
   `billing/api/plans/` and optionally merge project-owned one-time pack metadata on the same
-  screen.
+  screen. The catalog is paged by `plans_per_page` (default `25`); the `fetchRecurringPlans`
+  helper follows pages until an empty response, so the UI shows the whole catalog.
 - **Purchase button**: a `Button` with spinner state; it only needs a `planSlug` because the
   backend owns both redirect URLs.
 - **Subscription status**: `Card`, `Badge`, `Alert`, and `Button`; render `null` when there is
@@ -423,7 +440,7 @@ Component patterns and the recommended shadcn/ui surfaces:
   `billing/api/subscription/cancel/` to schedule period-end cancellation.
 - **Transaction history**: `Table`, `ScrollArea`, and `Button`; the API returns a plain list
   without total-count metadata, so use page-number state and infer whether another page exists
-  from the fixed page size.
+  from the configured page size (`QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE`).
 
 Examples:
 
@@ -628,7 +645,7 @@ export function SubscriptionStatusCard() {
 
 #### 5. TransactionHistory
 
-Use shadcn/ui `Table`, `ScrollArea`, and `Button`. Because the API returns a plain list without total-count metadata, use page-number state and infer whether another page exists from the fixed page size.
+Use shadcn/ui `Table`, `ScrollArea`, and `Button`. Because the API returns a plain list without total-count metadata, use page-number state and infer whether another page exists from the configured page size (`QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE`).
 
 ```tsx
 import { useState } from "react";
@@ -643,7 +660,11 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 
-const TRANSACTION_PAGE_SIZE = 25;
+// Keep in step with the deployment's transactions_per_page by exposing the
+// same value to Vite as VITE_QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE.
+const TRANSACTION_PAGE_SIZE = Number(
+	import.meta.env.VITE_QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE ?? 25,
+);
 
 export function TransactionHistory() {
 	const [page, setPage] = useState(1);

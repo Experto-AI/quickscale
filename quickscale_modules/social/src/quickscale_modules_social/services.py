@@ -37,6 +37,11 @@ from quickscale_modules_social.models import SocialEmbed, SocialLink
 
 _CACHE_MISS = object()
 
+#: The stable message a published embed record carries when its stored
+#: resolution failed.  The raw exception text stays on the model (and the
+#: admin); the public payload never echoes it (rule 9).
+_PUBLIC_RESOLUTION_ERROR = "Embed metadata could not be resolved."
+
 
 def _social_cache_key(base_key: str) -> str:
     """Return an org-aware cache key when a tenant context is active.
@@ -148,7 +153,13 @@ class SocialEmbedRecord:
 
     @classmethod
     def from_model(cls, embed: SocialEmbed) -> SocialEmbedRecord:
-        """Build a runtime record from a stored social embed row."""
+        """Build a runtime record from a stored social embed row.
+
+        ``resolution_error`` carries the stable public marker, never the
+        stored exception text (rule 9: a public payload returns no exception
+        text).  The raw message stays operator-visible on the model and in
+        the admin.
+        """
         metadata = get_social_provider_metadata(embed.provider_name)
         return cls(
             id=embed.pk,
@@ -162,7 +173,9 @@ class SocialEmbedRecord:
             source_url=embed.url,
             display_order=embed.display_order,
             resolution_status=embed.resolution_status or SocialEmbedResolution.PENDING,
-            resolution_error=embed.resolution_error or None,
+            resolution_error=(
+                _PUBLIC_RESOLUTION_ERROR if embed.resolution_error else None
+            ),
             embed_url=embed.resolved_embed_url or None,
             thumbnail_url=embed.resolved_thumbnail_url or None,
             embed_width=embed.resolved_width,

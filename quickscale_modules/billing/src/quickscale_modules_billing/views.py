@@ -22,7 +22,6 @@ from rest_framework.exceptions import (
     PermissionDenied,
     ValidationError,
 )
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer
@@ -30,7 +29,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from quickscale_core.runtime import QuickscaleSessionAuthentication
+from quickscale_core.runtime import (
+    PlainListPagination,
+    QuickscaleSessionAuthentication,
+)
 from quickscale_modules_billing.exceptions import (
     BillingError,
     BillingWebhookError,
@@ -134,14 +136,16 @@ def _format_price_cents(cents: int, currency: str) -> str:
     return f"{normalized_currency.upper()} {formatted_amount}"
 
 
-class _TransactionPagination(PageNumberPagination):
-    """Paginate transactions without wrapping the response payload."""
+class _TransactionPagination(PlainListPagination):
+    """Transactions page size driven by QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE."""
 
-    page_size = 25
-    page_size_query_param = None
+    page_size_setting = "QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE"
 
-    def get_paginated_response(self, data: list[Any]) -> Response:
-        return Response(data)
+
+class _PlanPagination(PlainListPagination):
+    """Plan catalog page size driven by QUICKSCALE_BILLING_PLANS_PER_PAGE."""
+
+    page_size_setting = "QUICKSCALE_BILLING_PLANS_PER_PAGE"
 
 
 class _BillingAPIView(APIView):
@@ -195,9 +199,10 @@ class PlanListView(_BillingAPIView):
     """Return the public recurring billing catalog."""
 
     http_method_names = ["get"]
+    pagination_class = _PlanPagination
 
     def get(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        del request, args, kwargs
+        del args, kwargs
         queryset = Plan.objects.filter(
             is_active=True,
             billing_interval__in=[
@@ -205,8 +210,10 @@ class PlanListView(_BillingAPIView):
                 Plan.BillingInterval.YEARLY,
             ],
         ).order_by("name", "pk")
-        serializer = PlanSerializer(queryset, many=True)
-        return Response(serializer.data)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        serializer = PlanSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 class CreateCheckoutSessionView(_RenderedAPIView):

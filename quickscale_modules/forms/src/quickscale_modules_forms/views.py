@@ -26,13 +26,15 @@ from rest_framework.generics import (
     RetrieveAPIView,
     RetrieveUpdateAPIView,
 )
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated, SAFE_METHODS
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from quickscale_core.runtime import QuickscaleSessionAuthentication
+from quickscale_core.runtime import (
+    PlainListPagination,
+    QuickscaleSessionAuthentication,
+)
 from quickscale_modules_forms._email import notify_submission
 from quickscale_modules_forms.models import (
     Form,
@@ -222,19 +224,16 @@ class FormsAdminApiMixin:
                 return view_method(*args, **kwargs)
 
 
-class FormsSubmissionPagination(PageNumberPagination):
+class FormsSubmissionPagination(PlainListPagination):
     """Paginate admin submission lists without changing their list response shape."""
 
-    page_size_query_param = None
+    page_size_setting = "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"
 
-    def get_page_size(self, request: Request) -> int:
-        del request
-        # Rule 3: read the declared setting directly; the startup check has
-        # already refused a missing or invalid value.
-        return settings.QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE
 
-    def get_paginated_response(self, data: list[Any]) -> Response:
-        return Response(data)
+class FormListPagination(PlainListPagination):
+    """Paginate the admin form list without changing its list response shape."""
+
+    page_size_setting = "QUICKSCALE_FORMS_PER_PAGE"
 
 
 class FormSchemaAPIView(RetrieveAPIView):
@@ -396,6 +395,7 @@ class AdminFormListAPIView(FormsAdminApiMixin, ListAPIView):
     """
 
     serializer_class = AdminFormListSerializer
+    pagination_class = FormListPagination
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self._with_superuser_operator_access(

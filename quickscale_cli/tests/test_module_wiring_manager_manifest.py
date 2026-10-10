@@ -489,7 +489,7 @@ class TestRegenerateManagedWiringManifestPath:
         assert isinstance(options, dict)
         assert isinstance(expected_settings, dict)
         assert len(names) == 12
-        assert sum(len(settings) for settings in expected_settings.values()) == 86
+        assert sum(len(settings) for settings in expected_settings.values()) == 94
 
         _write_minimal_project(
             project,

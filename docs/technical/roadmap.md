@@ -418,8 +418,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   gains its `api_rate_limit` option and `quickscale_listings_api` scope, orgs' invite API drops
   its `throttle_classes` override, harness rule 32 closes `throttle_classes` to webhooks,
   `collect_wiring` admits only `DEFAULT_THROTTLE_RATES` from a module, and decision rules 30 and
-  32 carry the clauses. Remaining: proposal 11's guards and README roles, and proposal 7's
-  `PlainListPagination` and the generated social views.
+  32 carry the clauses. `PlainListPagination` and the generated social views landed next: core
+  ships the one list paginator sized by each list's `<THING>_PER_PAGE` setting, billing gains
+  `transactions_per_page` (its literal 25 is gone) and `plans_per_page`, CRM's tags, companies,
+  stages, and notes lists gain their settings, forms' admin form list gains
+  `QUICKSCALE_FORMS_PER_PAGE`, the core-rendered social payload views are DRF views that answer
+  the one error shape without echoing exception text, harness rule 9 closes the paginator world,
+  and decision rule 9 carries the clause. Remaining: proposal 11's guards and README roles.
 
   **Context:** coherence `tenant-authorization` (billing's `AllowAny` plus a hand-written check
   and no README role table), `unauthenticated-status-code` (401 in four modules, 403 in two),

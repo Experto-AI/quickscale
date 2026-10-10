@@ -138,6 +138,10 @@ Embed payload additions:
 }
 ```
 
+`resolution_error` carries a stable public message (`Embed metadata could not be resolved.`)
+when a stored embed's resolution failed; the raw resolver error stays operator-visible on the
+model and in the admin, and the public payload never echoes it.
+
 Supported providers:
 
 - Link tree: the default allowlist is `facebook`, `instagram`, `linkedin`, `tiktok`, `x`, and

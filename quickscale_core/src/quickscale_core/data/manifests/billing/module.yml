@@ -76,6 +76,22 @@ config:
       validation:
         pattern: ^\d+/(second|minute|hour|day)$
 
+    transactions_per_page:
+      type: integer
+      default: 25
+      django_setting: QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE
+      description: "Number of credit transactions per page in the ledger list API."
+      validation:
+        min: 1
+
+    plans_per_page:
+      type: integer
+      default: 25
+      django_setting: QUICKSCALE_BILLING_PLANS_PER_PAGE
+      description: "Number of plans per page in the public plan catalog API."
+      validation:
+        min: 1
+
   immutable: {}
 
 required_modules:

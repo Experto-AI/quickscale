@@ -25,6 +25,11 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 | `api_enabled` | boolean | `true` | `QUICKSCALE_CRM_API_ENABLED` | Enable REST API endpoints at `crm/api/`. |
 | `deals_per_page` | integer | `25` | `QUICKSCALE_CRM_DEALS_PER_PAGE` | Number of deals per page in list views. |
 | `contacts_per_page` | integer | `50` | `QUICKSCALE_CRM_CONTACTS_PER_PAGE` | Number of contacts per page in list views. |
+| `tags_per_page` | integer | `50` | `QUICKSCALE_CRM_TAGS_PER_PAGE` | Number of tags per page in the tag list API. |
+| `companies_per_page` | integer | `50` | `QUICKSCALE_CRM_COMPANIES_PER_PAGE` | Number of companies per page in the company list API. |
+| `stages_per_page` | integer | `50` | `QUICKSCALE_CRM_STAGES_PER_PAGE` | Number of pipeline stages per page in the stage list API. |
+| `contact_notes_per_page` | integer | `50` | `QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE` | Number of contact notes per page in the contact note list APIs. |
+| `deal_notes_per_page` | integer | `50` | `QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE` | Number of deal notes per page in the deal note list APIs. |
 
 ## Public surface
 

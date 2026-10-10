@@ -23,6 +23,7 @@ write them to the generated settings, and `quickscale.yml` carries the desired v
 |--------|------|---------|----------------|-------------|
 | `enabled` | boolean | `true` | `QUICKSCALE_FORMS_ENABLED` | Mount the module's pages and APIs. Off keeps the app and its data installed, serves none of its URLs, and stops the scheduled retention command. |
 | `submissions_per_page` | integer | `25` | `QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE` | Number of submissions shown per page in the admin submissions API. |
+| `per_page` | integer | `25` | `QUICKSCALE_FORMS_PER_PAGE` | Number of forms per page in the admin form list API. |
 | `spam_protection_enabled` | boolean | `true` | `QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED` | Enable honeypot spam protection globally for forms that also keep their per-form flag enabled. |
 | `rate_limit` | string | `5/hour` | `QUICKSCALE_FORMS_RATE_LIMIT` | Throttle rate for form submissions, per IP. Format: `<count>/<period>`. |
 | `retention_days` | integer | `365` | `QUICKSCALE_FORMS_RETENTION_DAYS` | Default days assigned to newly created forms before anonymization (`0` = keep forever); existing forms keep their stored value. |

@@ -1097,6 +1097,83 @@ class TestCRMPageSizeReadsDeclaredSetting:
 
         assert DealPagination().get_page_size(None) == 44
 
+    @override_settings(QUICKSCALE_CRM_TAGS_PER_PAGE=11)
+    def test_tag_page_size_reads_the_setting(self) -> None:
+        from quickscale_modules_crm.views import TagPagination
+
+        assert TagPagination().get_page_size(None) == 11
+
+    @override_settings(QUICKSCALE_CRM_COMPANIES_PER_PAGE=12)
+    def test_company_page_size_reads_the_setting(self) -> None:
+        from quickscale_modules_crm.views import CompanyPagination
+
+        assert CompanyPagination().get_page_size(None) == 12
+
+    @override_settings(QUICKSCALE_CRM_STAGES_PER_PAGE=13)
+    def test_stage_page_size_reads_the_setting(self) -> None:
+        from quickscale_modules_crm.views import StagePagination
+
+        assert StagePagination().get_page_size(None) == 13
+
+    @override_settings(QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE=14)
+    def test_contact_note_page_size_reads_the_setting(self) -> None:
+        from quickscale_modules_crm.views import ContactNotePagination
+
+        assert ContactNotePagination().get_page_size(None) == 14
+
+    @override_settings(QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE=15)
+    def test_deal_note_page_size_reads_the_setting(self) -> None:
+        from quickscale_modules_crm.views import DealNotePagination
+
+        assert DealNotePagination().get_page_size(None) == 15
+
+
+@pytest.mark.django_db
+class TestCRMSecondaryListPagination:
+    """Every CRM list pages through core's paginator (rule 9)."""
+
+    @override_settings(QUICKSCALE_CRM_TAGS_PER_PAGE=1)
+    def test_tag_list_respects_tags_per_page_setting(
+        self, authenticated_client, staff_personal_org
+    ):
+        from quickscale_modules_crm.models import Tag
+
+        with org_scope(staff_personal_org):
+            Tag.objects.create(name="First", organization=staff_personal_org)
+            Tag.objects.create(name="Second", organization=staff_personal_org)
+
+        response = authenticated_client.get(reverse("quickscale_crm:tag_list"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+
+    @override_settings(QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE=1)
+    def test_contact_notes_action_respects_contact_notes_per_page_setting(
+        self, authenticated_client, contact, staff_user, staff_personal_org
+    ):
+        from quickscale_modules_crm.models import ContactNote
+
+        with org_scope(staff_personal_org):
+            ContactNote.objects.create(
+                contact=contact,
+                created_by=staff_user,
+                text="First note",
+                organization=staff_personal_org,
+            )
+            ContactNote.objects.create(
+                contact=contact,
+                created_by=staff_user,
+                text="Second note",
+                organization=staff_personal_org,
+            )
+
+        response = authenticated_client.get(
+            reverse("quickscale_crm:contact_notes", kwargs={"pk": contact.pk})
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+
 
 @pytest.mark.django_db
 class TestFlatRouteCreateStamping:

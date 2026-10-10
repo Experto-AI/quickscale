@@ -239,8 +239,9 @@ def test_list_published_social_embeds_honors_runtime_toggle_and_filtering(
         ]
         assert initial_records[0].resolution_status == SocialEmbedResolution.ERROR
         assert initial_records[0].embed_url is None
-        assert "canonical TikTok video URL" in (
-            initial_records[0].resolution_error or ""
+        assert (
+            initial_records[0].resolution_error
+            == "Embed metadata could not be resolved."
         )
         assert initial_records[1].resolution_status == SocialEmbedResolution.RESOLVED
         assert (

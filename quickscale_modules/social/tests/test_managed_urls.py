@@ -24,16 +24,31 @@ from quickscale_modules_social.adapter import _social_manifest_adapter
 MOUNT = "_quickscale/social/"
 _PROJECT_PACKAGE = "testproject"
 _IMPORT_LINE = (
-    "from .social_views import social_embeds_payload, social_link_tree_payload"
+    "from .social_views import SocialEmbedsPayloadView, SocialLinkTreePayloadView"
 )
 
 
-def _stub_link_tree(request: HttpRequest) -> JsonResponse:
-    return JsonResponse({"surface": "link_tree"})
+def _stub_payload_view(surface: str) -> Any:
+    def view(request: HttpRequest) -> JsonResponse:
+        return JsonResponse({"surface": surface})
+
+    return view
 
 
-def _stub_embeds(request: HttpRequest) -> JsonResponse:
-    return JsonResponse({"surface": "embeds"})
+_stub_link_tree = _stub_payload_view("link_tree")
+_stub_embeds = _stub_payload_view("embeds")
+
+
+class _StubLinkTreePayloadView:
+    @staticmethod
+    def as_view() -> Any:
+        return _stub_link_tree
+
+
+class _StubEmbedsPayloadView:
+    @staticmethod
+    def as_view() -> Any:
+        return _stub_embeds
 
 
 def _rendered_namespace() -> dict[str, Any]:
@@ -41,8 +56,8 @@ def _rendered_namespace() -> dict[str, Any]:
     content = render_social_managed_urls_module()
     assert _IMPORT_LINE in content, "managed URLconf import line changed"
     namespace: dict[str, Any] = {
-        "social_link_tree_payload": _stub_link_tree,
-        "social_embeds_payload": _stub_embeds,
+        "SocialLinkTreePayloadView": _StubLinkTreePayloadView,
+        "SocialEmbedsPayloadView": _StubEmbedsPayloadView,
     }
     exec(  # noqa: S102 - executing the generated artifact under test
         content.replace(_IMPORT_LINE, "# payload views provided by the namespace"),
@@ -117,8 +132,19 @@ def test_emitted_wiring_resolves_and_reverses_the_payload_endpoints() -> None:
     spec = _social_manifest_adapter({}, project_package=_PROJECT_PACKAGE)
     emitted = render_urls_modules_py({"social": spec})
     installed = _install_managed_urlconf(_rendered_namespace())
+    views_module_name = f"{_PROJECT_PACKAGE}.views"
     try:
-        wiring: dict[str, Any] = {}
+        # The emitted wiring is a package-relative module (``from .views
+        # import ...``), so executing it needs the package context a real
+        # generated project provides.
+        views_module = ModuleType(views_module_name)
+        views_module.react_shell_view = _stub_payload_view("react_shell")  # type: ignore[attr-defined]
+        views_module.orgs_react_shell_view = _stub_payload_view("orgs_shell")  # type: ignore[attr-defined]
+        sys.modules[views_module_name] = views_module
+        wiring: dict[str, Any] = {
+            "__name__": f"{_PROJECT_PACKAGE}.urls_modules",
+            "__package__": _PROJECT_PACKAGE,
+        }
         exec(emitted, wiring)  # noqa: S102 - executing the generated artifact
         urlconf = ModuleType("emitted_social_urls_modules")
         urlconf.urlpatterns = wiring["POST_HOME_MODULE_URLPATTERNS"]  # type: ignore[attr-defined]
@@ -136,5 +162,5 @@ def test_emitted_wiring_resolves_and_reverses_the_payload_endpoints() -> None:
             "/_quickscale/social/embeds/"
         )
     finally:
-        for name in installed:
+        for name in [*installed, views_module_name]:
             sys.modules.pop(name, None)

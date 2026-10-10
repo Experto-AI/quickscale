@@ -40,6 +40,46 @@ config:
       validation:
         min: 1
 
+    tags_per_page:
+      type: integer
+      default: 50
+      django_setting: QUICKSCALE_CRM_TAGS_PER_PAGE
+      description: "Number of tags per page in the tag list API"
+      validation:
+        min: 1
+
+    companies_per_page:
+      type: integer
+      default: 50
+      django_setting: QUICKSCALE_CRM_COMPANIES_PER_PAGE
+      description: "Number of companies per page in the company list API"
+      validation:
+        min: 1
+
+    stages_per_page:
+      type: integer
+      default: 50
+      django_setting: QUICKSCALE_CRM_STAGES_PER_PAGE
+      description: "Number of pipeline stages per page in the stage list API"
+      validation:
+        min: 1
+
+    contact_notes_per_page:
+      type: integer
+      default: 50
+      django_setting: QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE
+      description: "Number of contact notes per page in the contact note list APIs"
+      validation:
+        min: 1
+
+    deal_notes_per_page:
+      type: integer
+      default: 50
+      django_setting: QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE
+      description: "Number of deal notes per page in the deal note list APIs"
+      validation:
+        min: 1
+
   immutable: {}
 
 required_modules:
