@@ -1522,10 +1522,12 @@ class TestFormSubmissionClientIpParity:
         honeypot: bool,
     ) -> None:
         """The throttle rejects invalid identity settings before either branch writes."""
+        from types import SimpleNamespace
+
         from django.core.exceptions import ImproperlyConfigured
 
+        from quickscale_core.runtime import QuickscaleScopedRateThrottle
         from quickscale_modules_forms.models import FormSubmission
-        from quickscale_modules_forms.throttles import FormSubmitThrottle
         from quickscale_modules_orgs.current_org import get_client_ip, org_scope
 
         url = reverse("quickscale_forms:form_submit", kwargs={"slug": "test-contact"})
@@ -1556,26 +1558,38 @@ class TestFormSubmissionClientIpParity:
             with pytest.raises(ImproperlyConfigured) as direct_error:
                 get_client_ip(direct_request)
 
-            throttle_cache = FormSubmitThrottle().cache
+            # The scoped throttle itself must fail before touching its bucket.
+            # The endpoint's default anon/user throttles run ahead of it and
+            # keep their own buckets, so the no-write proof is scoped to the
+            # throttle that owns the identity failure.
+            throttle = QuickscaleScopedRateThrottle()
             with (
-                patch.object(throttle_cache, "add") as cache_add,
-                patch.object(throttle_cache, "incr") as cache_incr,
-                patch.object(throttle_cache, "set") as cache_set,
+                patch.object(throttle.cache, "add") as cache_add,
+                patch.object(throttle.cache, "incr") as cache_incr,
+                patch.object(throttle.cache, "set") as cache_set,
             ):
-                with pytest.raises(ImproperlyConfigured) as endpoint_error:
-                    api_client.post(
-                        url,
-                        data=payload,
-                        format="json",
-                        **request_kwargs,
+                with pytest.raises(ImproperlyConfigured) as throttle_error:
+                    throttle.allow_request(
+                        SimpleNamespace(META=direct_request.META, user=None),
+                        SimpleNamespace(throttle_scope="quickscale_forms_submit"),
                     )
+                cache_add.assert_not_called()
+                cache_incr.assert_not_called()
+                cache_set.assert_not_called()
 
+            with pytest.raises(ImproperlyConfigured) as endpoint_error:
+                api_client.post(
+                    url,
+                    data=payload,
+                    format="json",
+                    **request_kwargs,
+                )
+
+            assert type(throttle_error.value) is type(direct_error.value)
+            assert str(throttle_error.value) == str(direct_error.value)
             assert type(endpoint_error.value) is type(direct_error.value)
             assert str(endpoint_error.value) == str(direct_error.value)
             assert setting_name in str(endpoint_error.value)
-            cache_add.assert_not_called()
-            cache_incr.assert_not_called()
-            cache_set.assert_not_called()
 
         with org_scope(form.organization):
             assert FormSubmission.all_objects.filter(form=form).count() == initial_count
