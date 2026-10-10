@@ -51,7 +51,7 @@ def test_billing_wiring_contributes_tighter_throttle_scopes() -> None:
                 "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
             }
         ),
-        {},
+        {"enabled": True},
     )
 
     rest_framework = spec.settings["REST_FRAMEWORK"]
@@ -67,7 +67,7 @@ def test_billing_wiring_carries_the_configured_rate() -> None:
                 "QUICKSCALE_BILLING_API_RATE_LIMIT": " 7/hour ",
             }
         ),
-        {},
+        {"enabled": True},
     )
 
     rest_framework = spec.settings["REST_FRAMEWORK"]
