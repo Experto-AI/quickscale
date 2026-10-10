@@ -220,8 +220,10 @@ findings.
 
 **Residual risk.**
 - No PostgreSQL instance was used, so RLS and lock semantics were reasoned from code.
-- No live Stripe, Resend, or PostHog calls were made. `billing-checkout-relative-redirect-urls`
-  and `notifications-webhook-rejects-resend` rest on published vendor contracts (see §13).
+- No live Stripe, Resend, or PostHog calls were made in this pass.
+  `notifications-webhook-rejects-resend` rests on the published Resend/Svix contract (see §13);
+  `billing-checkout-relative-redirect-urls` was later resolved with a live Stripe test-mode
+  checkout (§15).
 - Out-of-repo controls were not visible: Railway edge, PostHog project ACLs, Stripe
   payment-method settings, and GitHub org token defaults.
 - devtools and the gate scripts were not swept for defects.
@@ -236,12 +238,6 @@ Silence on the skipped areas does not mean they are clean.
 schema: tech-audit/v6
 audited: 2fd8637f2d163c65a873ce74337e4f5d88b9ba99
 items:
-  - {id: billing-checkout-relative-redirect-urls, status: open, severity: S2, category: I,
-     title: "Checkout and portal sessions are created with relative return URLs that Stripe rejects",
-     effort: Trivial, confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/views.py],
-     depends_on: [], chain: [],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: generated-ci-fails-out-of-box, status: open, severity: S3, category: X,
      title: "Generated CI workflow cannot pass on a fresh project", effort: Small, confidence: High,
      reality: generated-app,
@@ -307,11 +303,10 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 1 · S3 — 3 · S4 — 4 · total 8 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 3 · S4 — 4 · total 7 open. Watchlist: 7.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
-| `billing-checkout-relative-redirect-urls` | S2 | I | Checkout/portal sessions get relative return URLs that Stripe rejects | Trivial | High | new — **quick win** |
 | `generated-ci-fails-out-of-box` | S3 | X | Generated CI workflow cannot pass on a fresh project | Small | High | new |
 | `notifications-webhook-rejects-resend` | S3 | IX | Webhook accepts only a signing contract Resend never sends | Medium | High | new |
 | `generated-ci-mutable-action-tags` | S3 | VII | Generated CI on mutable action tags, no `permissions:` | Small | High | new |
@@ -323,77 +318,6 @@ items:
 ---
 
 ## 4. Findings
-
-### Finding 1: Checkout and portal sessions are created with relative return URLs that Stripe rejects
-
-- **ID:** `billing-checkout-relative-redirect-urls`
-- **Severity:** S2.
-  - **Rubric cell:** High impact × Direct reach. Every authorized checkout or portal request is a
-    main billing path, so the table gives S1.
-  - **Deviation:** one step down to S2. The failure is loud: a 500 at the first attempt, before
-    any money moves, with nothing corrupted.
-  - **Reality:** R2.
-  - **Flipping assumption:** that Stripe refuses a path-only `success_url`, `cancel_url`, or
-    `return_url`. This is Stripe's documented contract (Q1 in §13 settles it in one test-mode
-    call).
-- **Category:** I (correctness). It is a regression.
-- **Confidence:** High. The code path was read end to end, the serializers forbid a client-supplied
-  URL, and a test pins the relative value.
-- **Location:** `quickscale_modules/billing/src/quickscale_modules_billing/views.py:245-246`
-  (`CreateCheckoutSessionView.post`), `:273-274` (`CreateSubscriptionCheckoutView.post`), and
-  `:325` (`CreateBillingPortalSessionView.post`).
-- **Defect:** The three views pass `reverse("quickscale_billing:…")` (for example
-  `/billing/purchase/success/`) straight through `create_checkout_session` /
-  `create_subscription_checkout_session` / `create_billing_portal_session` to the Stripe SDK. No
-  layer makes them absolute.
-- **Failure scenario:**
-  1. An org owner sends `POST /billing/api/purchase/checkout/` with `{"plan_slug": "<one-time plan>"}`.
-  2. The service gets or creates the Stripe customer and persists a `PREPARING` reservation.
-  3. It calls `stripe.checkout.Session.create(success_url="/billing/purchase/success/", …)`.
-  4. Stripe answers `400 url_invalid`.
-  5. `create_checkout_session` maps the SDK error to `BillingError` → HTTP 500 "Stripe checkout
-     session creation failed."
-
-  The subscription checkout and the portal fail the same way. No billing purchase,
-  subscription, or portal session can be created.
-  - **Chain:** at audit time each failed attempt left a `PREPARING` row with an unknown provider
-    outcome, turning every purchase attempt into a permanent account-deletion and purge blocker;
-    that reservation now resolves by provider lookup (SA251, slice b).
-- **Evidence:**
-  - `views.py:245` — `success_url=reverse("quickscale_billing:purchase_success"),`.
-  - `_checkout.py:98-101` only strips the value.
-  - `_stripe_client.py:115-116` forwards it (and `:147` for subscriptions).
-  - `test_views.py:1123-1124` asserts `captured_call["success_url"] == "/billing/purchase/success/"`.
-  - The service-level tests (`test_purchase.py:259` and others) all pass absolute URLs, so no test
-    exercises the view-to-SDK contract.
-- **Refutation:**
-  - *Counter-argument:* a client could supply absolute URLs. It fails: the serializers reject
-    `success_url` ("This field is not allowed", `test_views.py:816-830`).
-  - *Counter-argument:* some layer absolutizes the value. It fails: searched the views, services,
-    client wrapper, and middleware, and found none.
-  - *Blessing check:* the T1.10 commit message does not mention the change. The pinning test
-    encodes the wrong assumption rather than a decision.
-- **Fix:** Build each URL with `request.build_absolute_uri(reverse(...))`, as the code did before
-  `c7320b02`. Add a service-boundary guard that refuses a URL without scheme and host. Update
-  `test_views.py:1123-1124` and its siblings to expect absolute URLs.
-  - **Effort:** Trivial.
-- **Fix files:** `views.py`, `_checkout.py`, `_subscription_checkout.py`, `tests/test_views.py`.
-  **Depends on:** none.
-- **Verification:**
-  - A view test asserting `urlsplit(captured["success_url"]).scheme in {"http","https"}` for all
-    three endpoints.
-  - One manual Stripe test-mode checkout from the API view.
-- **Fix risk:** Under a proxy, `build_absolute_uri` takes the scheme from `SECURE_PROXY_SSL_HEADER`.
-  That is already gated on `USE_X_FORWARDED_FOR` (SA200), so production builds `https` URLs.
-- **Detection signal:** `BillingError` "Stripe checkout session creation failed." on every
-  checkout. Stripe dashboard request logs show `url_invalid`. Rising `PurchaseCheckout` rows in
-  `preparing`.
-- **Deliberate?** None found.
-  - **Age:** regression from `c7320b02` (T1.10, 2026-06-24), which deleted the
-    `request.build_absolute_uri(...)` helpers.
-  - **Releases affected:** shipped in tags `0.87.0`, `0.88.0`, and `0.89.0`.
-  - The architectural audit's red flag (§14 below) expects publishing 0.89.0 to repair checkout.
-    This defect is still present at that tag.
 
 ### S3 findings (compact)
 
@@ -481,7 +405,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Entry point | AuthN | AuthZ | Input validation | Output encoding | Rate limit | Timeout | Idempotency | Error shape | Audit |
 |---|---|---|---|---|---|---|---|---|---|
 | `StripeWebhookView` | Stripe SDK signature over raw body | n/a | named-release gate | JSON | none by rule 26 | SDK default (watch `single-sync-worker-vendor-calls`) | advisory mutex + unique `WebhookEvent` | rule 9 | `WebhookEvent` row |
-| Billing JSON views | session (CSRF) | owner via `_require_request_organization` | DRF serializers | JSON | `quickscale_billing_*` scopes | SDK default | Stripe idempotency keys; unknown-outcome reservations reconcile against the provider | rule 9 | reservation rows; return URLs: `billing-checkout-relative-redirect-urls` |
+| Billing JSON views | session (CSRF) | owner via `_require_request_organization` | DRF serializers | JSON | `quickscale_billing_*` scopes | SDK default | Stripe idempotency keys; unknown-outcome reservations reconcile against the provider | rule 9 | reservation rows; return URLs built from the request |
 | `NotificationWebhookView` | custom HMAC: `notifications-webhook-rejects-resend` | n/a | required fields | JSON | none by rule 26 | n/a | idempotency key | rule 9 | delivery event row |
 | Orgs JSON API | session (CSRF) | `min_org_role` on the org it acts on | `JSONParser` + forms | JSON | invite sends: `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization), both charged only after the role gate and the form's locked eligibility checks pass; other endpoints: DRF `user` default | n/a | n/a | rule 9 | n/a |
 | Orgs HTML views | `LoginRequiredMixin` | `SaasModeRequiredMixin` + `OrgRoleMixin`; the route slug wins over VIEW-AS | Django forms | autoescape | invite sends: `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization), both charged only after the role gate and the form's locked eligibility checks pass; pending cap per organization | n/a | n/a | Django | n/a |
@@ -509,10 +433,10 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 
 ## 6. Fix order and batching
 
-1. **Billing batch.**
-   - `billing-checkout-relative-redirect-urls` first. It is Trivial and unblocks every purchase.
-   - **Release note:** do not publish 0.89.0 as a fix for the arch-audit red flag until the first
-     item lands.
+1. **Billing batch (landed).** `billing-checkout-relative-redirect-urls`, the unknown-outcome
+   reservation repair, and delayed-payment crediting are fixed, and one Stripe test-mode checkout
+   completed from the API view. **Release note:** 0.89.0 may publish as the arch-audit red-flag
+   fix.
 2. **Analytics batch (landed).** `analytics-distinct-id-is-session-key` and
    `analytics-dashboard-unauthenticated` are fixed: the distinct ID is the stable non-secret ID or
    a random anonymous ID, and the overview page requires login and the viewer org role. Each
@@ -541,7 +465,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 | Subsystem | Verdict | What was read |
 |---|---|---|
 | orgs | clean. Management pages resolve the route slug over VIEW-AS; invitation sends are throttled per sender and per organization with a per-organization pending cap; invitation scrubs gate on a verified address. | Middleware, priming, scopes, permissions, views, API, invitations, anonymization (full). Tenant isolation layers verified. |
-| billing | `billing-checkout-relative-redirect-urls` | Views, webhooks, credits, checkout, client, removal (full). Signature, dedupe, and ledger locking verified. |
+| billing | clean. Checkout, subscription, and portal sessions build absolute return URLs from the request, the client refuses a relative one, and one Stripe test-mode checkout completed from the API view. | Views, webhooks, credits, checkout, client, removal (full). Signature, dedupe, and ledger locking verified. |
 | notifications | `notifications-webhook-rejects-resend` | Webhook path and anonymization (full). |
 | analytics | clean. The distinct ID no longer derives from the session key, and the overview page requires login and the viewer role. | Full. |
 | forms | `forms-notification-status-misreported` | Views and notification helper (full). Public-path scoping, throttle, and CSV neutralization verified. |
@@ -633,8 +557,9 @@ Added:
   this pass's findings live there. That points at a missing "run the generated project's own
   automation" stage.
 - **Provider "unknown outcome" is a state with no exit.** Billing persists provider intent before
-  non-transactional calls (correctly), but there is no provider-side lookup that resolves it. The
-  same shape exists for one-time and subscription checkouts.
+  non-transactional calls (correctly), but at audit time no provider-side lookup resolved it for
+  one-time or subscription checkouts. One now does, and the operator reconciler clears
+  accumulated rows (SA251, slice b).
 
 ---
 
@@ -647,7 +572,8 @@ Added:
   and `docker-healthcheck-always-unhealthy`.
 - **A provider-contract assertion that every URL handed to Stripe is absolute.** Either a unit
   check in `StripeClient`, or one Stripe test-mode e2e call. Would have caught
-  `billing-checkout-relative-redirect-urls`.
+  `billing-checkout-relative-redirect-urls`; `StripeClient` now refuses a URL without a scheme
+  and host, with contract tests pinning it.
 - **A Resend/Svix contract test built from the vendor's documented payload and signature.** Would
   have caught `notifications-webhook-rejects-resend`.
 - **A conformance rule rejecting `session_key` in any value passed to an outbound client or
@@ -706,9 +632,7 @@ Added:
 
 ## 13. Questions that would change severity
 
-1. Has one Stripe **test-mode** checkout been completed from the API view at HEAD? If Stripe
-   accepted the relative URL, `billing-checkout-relative-redirect-urls` dies.
-2. Is the notifications webhook meant to receive Resend directly, or through a relay that
+1. Is the notifications webhook meant to receive Resend directly, or through a relay that
    re-signs? A relay downgrades `notifications-webhook-rejects-resend` to a documentation fix.
 
 
@@ -719,8 +643,8 @@ Added:
 - **Arch-audit red flag** (`arch-audit.md` §13): "0.88.0 on PyPI ships billing that fails every
   Stripe webhook and every checkout with real keys. The fix is on v89."
   - Evaluated as a lead. The webhook part is fixed on v89 (SA209, re-verified).
-  - The checkout part is **not**: `billing-checkout-relative-redirect-urls` is present in 0.87.0,
-    0.88.0, the `0.89.0` tag, and HEAD.
+  - The checkout part is fixed on v89 and verified with a live test-mode checkout (SA251), so
+    0.89.0 repairs it.
 - **Coherence-audit hand-offs to this audit** (`coherence-audit.md` §9): only
   `billing-anonymize-name-substring`, which was resolved (SA245) and is re-verified in §8.
 
@@ -931,3 +855,15 @@ Added:
   mode, and s3→s3 through a memory-bounded relay spool of at most 64 MiB instead of the storage
   API, whose `open()` spools whole objects in memory (`AWS_S3_MAX_MEMORY_SIZE` defaults to
   unbounded). Dropped from the index and summary.
+- 2026-10-10 — `billing-checkout-relative-redirect-urls`: **resolved** (SA251). One Stripe
+  test-mode checkout completed from the billing API view at HEAD (billing embedded from its v89
+  tree): the purchase view built its success and cancel URLs from the request with
+  `request.build_absolute_uri`, and Stripe accepted the session
+  (`cs_test_a1DNFnZGrbMnE2NjZM8uvMRiujLwIVgYjsx6nrQLDu8txIGZpwjdMpu0Os`, `status=complete`,
+  `payment_status=paid`, 1900 usd). The endpoint-version contract was exercised in both
+  directions: `stripe listen`'s real delivery (pinned `2025-03-31.basil`) was refused with a
+  retryable 500, and the same real event was then delivered with its `api_version` set to the
+  required `2026-06-24.dahlia` release and a valid endpoint signature — the resend the endpoint
+  recreation step prescribes, reproduced locally rather than by a Stripe-origin dahlia endpoint —
+  and processed into a `completed` purchase reservation and a 100-credit balance, with a
+  redelivery deduped. Dropped from the index and summary; the §13 checkout question is answered.
