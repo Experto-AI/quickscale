@@ -126,7 +126,7 @@ items:
      members_diverging: [blog, listings], population: url-mount-prefixes(14 includes / 10 modules),
      rule: "rule 41 (two routes, one path)", check: none, closed_world: false, handoff: [tech],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: tenant-authorization, status: open, regressed: false, aspect: E, cost: [ambiguity],
+  - {id: tenant-authorization, status: resolved, regressed: false, aspect: E, cost: [ambiguity],
      members_diverging: [billing], population: modules-with-pages-or-apis(9),
      rule: "rule 19; JSON API Endpoint Base Contract", check: "harness rule 19 (partial)",
      closed_world: false, handoff: [tech], first_seen: 2026-09-26, last_verified: 2026-10-08}
@@ -134,7 +134,7 @@ items:
      members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage],
      population: adapters(12), rule: "rules 3, 12; Module Derivation Schema", check: "harness rules 3, 12 (settings reads only)",
      closed_world: false, handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-08}
-  - {id: unauthenticated-status-code, status: open, aspect: H, cost: [ambiguity, tax],
+  - {id: unauthenticated-status-code, status: resolved, aspect: H, cost: [ambiguity, tax],
      members_diverging: [crm, forms], population: session-authenticated-apis(6), rule: none,
      check: none, closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: module-error-http-mapping, status: open, aspect: D, cost: [ambiguity, tax],
@@ -158,11 +158,11 @@ items:
      rule: "Module Wiring Authority (no parsed-but-unread key; apps never a literal)",
      check: "app-declaration gate (apps projection); harness rule 7 (url_includes literals only)",
      closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: http-api-shape, status: open, regressed: false, aspect: H, cost: [ambiguity, tax],
+  - {id: http-api-shape, status: resolved, regressed: false, aspect: H, cost: [ambiguity, tax],
      members_diverging: [billing, social], population: json-api-modules(7), rule: "rule 9",
      check: "harness rule 9 (module source only)", closed_world: false, handoff: [tech],
      first_seen: 2026-09-26, last_verified: 2026-10-08}
-  - {id: throttle-attachment, status: open, aspect: H, cost: [ambiguity, tax],
+  - {id: throttle-attachment, status: resolved, aspect: H, cost: [ambiguity, tax],
      members_diverging: [billing, blog, forms, listings], population: json-api-modules(6),
      rule: "rule 32 (names and rates only)", check: none, closed_world: false, handoff: [],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
@@ -240,16 +240,16 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 |---|---|---|---|---|---|
 | 1 | `module-enabled-switch` | B | defect, ambiguity | 5 / 12 modules (+ core `env_sync`) | open (reopened) |
 | 2 | `markdownx-shared-mount` | A | collision, defect | 2 / 10 mounting modules | open (new) |
-| 3 | `tenant-authorization` | E | ambiguity | 1 / 9 | open (reopened) |
+| 3 | `tenant-authorization` | E | ambiguity | 1 / 9 | resolved (SA262) |
 | 4 | `option-schema-and-validation` | B | ambiguity, tax | 12 / 12 adapters | open (reopened) |
 | 5 | `module-error-http-mapping` | D | ambiguity, tax | 4 / 12 (5 variants) | open |
-| 6 | `unauthenticated-status-code` | H | ambiguity, tax | 2 / 6 (4 duplicated classes on the other side) | open |
+| 6 | `unauthenticated-status-code` | H | ambiguity, tax | 2 / 6 (4 duplicated classes on the other side) | resolved (SA262) |
 | 7 | `startup-checks-and-errors` | B | ambiguity, tax | 5 / 12 | open (reopened) |
 | 8 | `upward-name-references` | C | ambiguity, tax | 2 owners / 4 vocabularies | open (reopened, regressed) |
 | 9 | `core-cli-module-knowledge` | C | ambiguity, tax | 6 / 12 named in core or CLI | open |
 | 10 | `manifest-declared-surface` | B | ambiguity, tax | 3 / 12 (+4 key-presence) | open |
-| 11 | `http-api-shape` | H | ambiguity, tax | 2 / 7 | open (reopened) |
-| 12 | `throttle-attachment` | H | ambiguity, tax | 4 / 6 | open |
+| 11 | `http-api-shape` | H | ambiguity, tax | 2 / 7 | resolved (SA262) |
+| 12 | `throttle-attachment` | H | ambiguity, tax | 4 / 6 | resolved (SA262) |
 | 13 | `optional-sender-guard` | C | ambiguity, tax | 2 / 4 call edges | open (reopened) |
 | 14 | `module-dependency-direction` | C | ambiguity, tax | 3 / 8 | open (reopened) |
 | 15 | `capability-collection` | D | ambiguity, tax | 1 owner / 13 names | open |
@@ -1341,20 +1341,16 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
    with no `exceptions.py` are skipped [Item 7].
 7. **Rule 14's `<event>_at` and `verbose_name` clauses are unchecked** [Item 21].
 8. **Rule 4 is checked per file, not per name.** Private names in published files pass [Item 14].
-9. **Rule 19's README duty and its "logged in" spellings are unchecked for `AllowAny` APIs**
-   [Item 3].
+9. **Rule 19's README duty and "logged in" spellings — resolved (SA262).** Harness rules 19 and
+   38 check them [Item 3].
 10. **Rule 41's theme clause is checked only on the seam producer, not the theme's TypeScript**
     [Item 18].
 11. **Rules 3/12 "defaults in code" and "values checked only in the manifest" are checked on
     settings reads only.** Adapter `.get(key, default)` and adapter value checks pass [Item 4].
-12. **Core-rendered project code is outside the harness corpus.** social's generated payload views
-    are `JsonResponse` functions [Item 11].
-13. **Permissive allowed set.** Rule 30's merge lets any module write any `REST_FRAMEWORK` key,
-    and the generated `base.py` uses `setdefault` so "a module-contributed handler … wins". A
-    module could replace `EXCEPTION_HANDLER` or `DEFAULT_PERMISSION_CLASSES` for every
-    installation. The prior pass accepted this for throttle rates only (gap 5 below). Recommended:
-    a closed list of module-writable `REST_FRAMEWORK` sub-keys (`DEFAULT_THROTTLE_RATES`) enforced
-    in `collect_wiring`.
+12. **Core-rendered project code outside the harness corpus — resolved (SA262).** Harness rule 9
+    renders and parses the managed social views [Item 11].
+13. **Permissive allowed set — resolved (SA262).** `collect_wiring` admits only
+    `DEFAULT_THROTTLE_RATES` from a module.
 14. **Dead validation path.** Core's resolver step 5 (`resolver.py:278`) validates against
     derivation rule lists the loader refuses, so it looks like validation and checks nothing
     [Item 4].
