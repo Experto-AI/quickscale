@@ -15,6 +15,7 @@ def _forms_post_hook(
     settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] = int(
         settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"]
     )
+    settings["QUICKSCALE_FORMS_PER_PAGE"] = int(settings["QUICKSCALE_FORMS_PER_PAGE"])
     settings["QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED"] = bool(
         settings["QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED"]
     )

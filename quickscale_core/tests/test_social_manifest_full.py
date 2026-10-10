@@ -382,10 +382,15 @@ class TestSocialManagedFileRenderers:
 
     def test_render_social_managed_urls_module(self) -> None:
         content = render_social_managed_urls_module()
-        assert "social_embeds_payload" in content
-        assert "social_link_tree_payload" in content
+        assert "SocialEmbedsPayloadView" in content
+        assert "SocialLinkTreePayloadView" in content
         assert "urlpatterns" in content
-        assert 'path("", social_link_tree_payload, name="link_tree")' in content
-        assert 'path("embeds/", social_embeds_payload, name="embeds")' in content
+        assert (
+            'path("", SocialLinkTreePayloadView.as_view(), name="link_tree")' in content
+        )
+        assert (
+            'path("embeds/", SocialEmbedsPayloadView.as_view(), name="embeds")'
+            in content
+        )
         assert "quickscale-social" not in content
         assert "app_name = " in content

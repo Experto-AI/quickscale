@@ -350,6 +350,13 @@ with this release:
   `QuickscaleScopedRateThrottle` as the default scoped throttle, a view declares only its
   `throttle_scope`, module wiring contributes only `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`, and
   listings' publish API gains an `api_rate_limit` option.
+- Module JSON lists page through one core paginator: each list is sized by its `<THING>_PER_PAGE`
+  setting and returns only the requested page — billing's ledger (`transactions_per_page`, was a
+  fixed `25`) and plan catalog (`plans_per_page`), CRM's tags, companies, stages, and note lists,
+  and forms' admin form list (`QUICKSCALE_FORMS_PER_PAGE`) — a page past the end answers the empty
+  list, and the generated social payload endpoints are DRF views that answer the standard error
+  shape without echoing exception text. Lists that previously returned every row now return their
+  first page unless the client asks for another.
 
 ## Delivery provenance
 
@@ -405,5 +412,18 @@ make release-gate
 ```
 
 This task-tier gate includes the registered beta-migration generated-project smoke check, its CLI
-regression suite, and repository gate-parity checks. This note does not claim release-tier
-validation, publication, or a v0.89.0 tag.
+regression suite, and repository gate-parity checks.
+
+One Stripe test-mode checkout completed from the billing API view at this prepared line: the
+purchase checkout built its success and cancel URLs from the request as absolute URLs, Stripe
+accepted the session (`cs_test_a1DNFnZGrbMnE2NjZM8uvMRiujLwIVgYjsx6nrQLDu8txIGZpwjdMpu0Os`,
+`status=complete`, `payment_status=paid`, 1900 usd), and the recipient processed the
+completed-checkout event into a completed purchase reservation and a 100-credit balance. That
+last step ran on a locally resubmitted copy of the event: its `api_version` was set locally to
+the endpoint's required `2026-06-24.dahlia` release and the replay was signed locally with the
+endpoint secret, not delivered by a Stripe-origin endpoint pinned at that version. The checkout
+fix this note records is the absolute-return-URL repair: checkout, subscription, and portal
+sessions no longer hand Stripe the relative URLs it rejects, and the client refuses one before
+any provider call.
+
+This note does not claim release-tier validation, publication, or a v0.89.0 tag.

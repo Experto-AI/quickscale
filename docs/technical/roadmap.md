@@ -13,8 +13,8 @@ their value.
 
 **Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
-([publish_procedure.md](publish_procedure.md)), which publishes once SA251 records a live Stripe
-test-mode checkout.
+([publish_procedure.md](publish_procedure.md)); the live Stripe test-mode checkout record SA251
+owed is complete, so 0.89.0 is publish-ready.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -33,7 +33,6 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA251 | Make Stripe checkout and payment outcomes complete and recoverable | 2 | — | Required |
 | SA253 | Make the generated project's CI, image, and healthcheck pass, and execute them in a gate | 2 | — | Optional |
 | SA255 | Accept Resend's real webhook signature in notifications | 2 | — | Optional |
 | SA260 | One off switch and a closed-world manifest surface | 2 | — | Optional |
@@ -46,9 +45,9 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 ──► SA204 ──► SA153 ──► SA154 (inventory)
-Track 2: SA251 ──► SA253 ──► SA255 ──► SA260 ──► SA263 ──► SA267
+Track 2: SA253 ──► SA255 ──► SA260 ──► SA263 ──► SA267
 Track 3: SA262 ──► SA261
-     release path:  SA251 → publish 0.89.0
+     release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
 ```
 
@@ -60,8 +59,7 @@ with a fresh context, scoped to that slice's text and named surfaces, and ends w
 handoff note (what landed, what is next, what to watch) committed with the work. A ticket closes
 when its last slice lands; slices are not scheduled.
 
-**Order.** SA251 gates the 0.89.0 publish and jumps the Track 2 queue as soon as Stripe test
-keys are available. Every change to a shipped module `0001_initial` lands before SA204 freezes
+**Order.** Every change to a shipped module `0001_initial` lands before SA204 freezes
 migration history, and SA204 lands before SA153 slice (a), whose schema work is `0002+` from the
 start. SA154 is an inventory, not work. SA191 finishes slice (b), then (c) and (d); slices (a)
 and (e) need the maintainer's Railway login.
@@ -73,7 +71,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA251 | yes | yes | yes | **yes** | no |
+| 2 | SA253 | yes | yes | yes | **yes** | no |
 | 3 | SA262 | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -343,16 +341,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [ ] **SA251 — Make Stripe checkout and payment outcomes complete and recoverable.**
-
-  **Context:** tech audit `billing-checkout-relative-redirect-urls` stays open until a live
-  checkout is recorded.
-
-  **Acceptance:** one Stripe test-mode checkout from the API view completes at HEAD and is
-  recorded in the 0.89.0 release note's Validation section, which also names the checkout fix.
-  Needs Stripe test keys and a running recipient.
-
-  **Surfaces:** the 0.89.0 release note and the tech audit.
+- [x] **SA251 — Make Stripe checkout and payment outcomes complete and recoverable.**
 
 - [ ] **SA253 — Make the generated project's CI, image, and healthcheck pass, and execute them in a gate.**
 
@@ -436,8 +425,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   gains its `api_rate_limit` option and `quickscale_listings_api` scope, orgs' invite API drops
   its `throttle_classes` override, harness rule 32 closes `throttle_classes` to webhooks,
   `collect_wiring` admits only `DEFAULT_THROTTLE_RATES` from a module, and decision rules 30 and
-  32 carry the clauses. Remaining: proposal 11's guards and README roles, and proposal 7's
-  `PlainListPagination` and the generated social views.
+  32 carry the clauses. `PlainListPagination` and the generated social views landed next: core
+  ships the one list paginator sized by each list's `<THING>_PER_PAGE` setting, billing gains
+  `transactions_per_page` (its literal 25 is gone) and `plans_per_page`, CRM's tags, companies,
+  stages, and notes lists gain their settings, forms' admin form list gains
+  `QUICKSCALE_FORMS_PER_PAGE`, the core-rendered social payload views are DRF views that answer
+  the one error shape without echoing exception text, harness rule 9 closes the paginator world,
+  and decision rule 9 carries the clause. Remaining: proposal 11's guards and README roles.
 
   **Context:** coherence `tenant-authorization` (billing's `AllowAny` plus a hand-written check
   and no README role table), `unauthenticated-status-code` (401 in four modules, 403 in two),

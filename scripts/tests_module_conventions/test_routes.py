@@ -841,3 +841,148 @@ def test_admin_override_path_control() -> None:
     assert any(
         "admin override" in violation for violation in _violations(checker.rule_8_templates, bare)
     )
+
+
+def test_pagination_closed_world_controls() -> None:
+    """Rule 9 admits subclasses of core's one list paginator only."""
+    module = _golden_module()
+    assert _violations(checker.rule_9_http_apis, module) == []
+
+    drf_subclass = _with_files(
+        module,
+        views=(
+            "from rest_framework.pagination import PageNumberPagination\n\n\n"
+            "class DemoPagination(PageNumberPagination):\n"
+            "    page_size_query_param = None\n"
+        ),
+    )
+    assert any(
+        "outside core" in violation
+        for violation in _violations(checker.rule_9_http_apis, drf_subclass)
+    )
+
+    core_subclass = _with_files(
+        module,
+        views=(
+            "from quickscale_core.runtime import PlainListPagination\n\n\n"
+            "class DemoPagination(PlainListPagination):\n"
+            "    page_size_setting = 'QUICKSCALE_DEMO_PER_PAGE'\n"
+        ),
+    )
+    assert _violations(checker.rule_9_http_apis, core_subclass) == []
+
+    missing_setting = _with_files(
+        module,
+        views=(
+            "from quickscale_core.runtime import PlainListPagination\n\n\n"
+            "class DemoPagination(PlainListPagination):\n"
+            "    page_size_query_param = None\n"
+        ),
+    )
+    assert any(
+        "must declare page_size_setting" in violation
+        for violation in _violations(checker.rule_9_http_apis, missing_setting)
+    )
+
+    literal_page_size = _with_files(
+        module,
+        views=(
+            "from quickscale_core.runtime import PlainListPagination\n\n\n"
+            "class DemoPagination(PlainListPagination):\n"
+            "    page_size = 25\n"
+            "    page_size_setting = 'QUICKSCALE_DEMO_PER_PAGE'\n"
+        ),
+    )
+    assert any(
+        "literal page_size" in violation
+        for violation in _violations(checker.rule_9_http_apis, literal_page_size)
+    )
+
+    names_a_drf_class = _with_files(
+        module,
+        views=(
+            "from rest_framework.pagination import PageNumberPagination\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    pagination_class = PageNumberPagination\n"
+        ),
+    )
+    assert any(
+        "pagination_class must name a subclass" in violation
+        for violation in _violations(checker.rule_9_http_apis, names_a_drf_class)
+    )
+
+    names_a_local_core_subclass = _with_files(
+        module,
+        views=(
+            "from quickscale_core.runtime import PlainListPagination\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class DemoPagination(PlainListPagination):\n"
+            "    page_size_setting = 'QUICKSCALE_DEMO_PER_PAGE'\n\n\n"
+            "class IndexView(APIView):\n"
+            "    pagination_class = DemoPagination\n"
+        ),
+    )
+    assert _violations(checker.rule_9_http_apis, names_a_local_core_subclass) == []
+
+
+def test_rendered_managed_json_control(monkeypatch) -> None:
+    """Rule 9 covers core-rendered managed views (render once, then parse)."""
+    module = _golden_module()
+    assert _violations(checker.rule_9_http_apis, module) == []
+
+    from quickscale_core.manifest import social_manifest
+
+    def _legacy_render(**_kwargs: object) -> str:
+        return (
+            "from django.http import JsonResponse\n\n\n"
+            "def social_link_tree_payload(request):\n"
+            "    return JsonResponse({'error': {'code': 'x'}})\n"
+        )
+
+    monkeypatch.setattr(social_manifest, "render_social_managed_views_module", _legacy_render)
+    violations = _violations(checker.rule_9_http_apis, module)
+    assert any("JsonResponse" in violation for violation in violations)
+    assert any("error body" in violation for violation in violations)
+
+
+def test_pagination_sibling_import_controls() -> None:
+    """A paginator imported from a private sibling file resolves (rule 28)."""
+    module = _golden_module()
+    sibling_core = _with_files(
+        module,
+        **{
+            "_pagination.py": (
+                "from quickscale_core.runtime import PlainListPagination\n\n\n"
+                "class DemoPagination(PlainListPagination):\n"
+                "    page_size_setting = 'QUICKSCALE_DEMO_PER_PAGE'\n"
+            ),
+            "views.py": (
+                "from rest_framework.views import APIView\n\n"
+                "from ._pagination import DemoPagination\n\n\n"
+                "class IndexView(APIView):\n"
+                "    pagination_class = DemoPagination\n"
+            ),
+        },
+    )
+    assert _violations(checker.rule_9_http_apis, sibling_core) == []
+
+    sibling_drf = _with_files(
+        module,
+        **{
+            "_pagination.py": (
+                "from rest_framework.pagination import PageNumberPagination\n\n\n"
+                "class DemoPagination(PageNumberPagination):\n"
+                "    page_size_query_param = None\n"
+            ),
+            "views.py": (
+                "from rest_framework.views import APIView\n\n"
+                "from ._pagination import DemoPagination\n\n\n"
+                "class IndexView(APIView):\n"
+                "    pagination_class = DemoPagination\n"
+            ),
+        },
+    )
+    violations = _violations(checker.rule_9_http_apis, sibling_drf)
+    assert any("pagination_class must name a subclass" in violation for violation in violations)
+    assert any("outside core" in violation for violation in violations)

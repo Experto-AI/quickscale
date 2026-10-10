@@ -24,11 +24,27 @@ def test_missing_required_setting_raises_key_error() -> None:
         _forms_post_hook(ModuleWiringSpec(), {})
 
 
+def test_missing_list_page_size_raises_key_error() -> None:
+    """The admin form list page size is required, like the other settings."""
+    spec = ModuleWiringSpec(
+        settings={
+            "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+            "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
+            "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
+            "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
+            "QUICKSCALE_FORMS_API_ENABLED": True,
+        }
+    )
+    with pytest.raises(KeyError, match="QUICKSCALE_FORMS_PER_PAGE"):
+        _forms_post_hook(spec, {"enabled": True})
+
+
 def test_post_hook_coerces_all_settings() -> None:
     result = _forms_post_hook(
         ModuleWiringSpec(
             settings={
                 "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": "25",
+                "QUICKSCALE_FORMS_PER_PAGE": "30",
                 "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": 1,
                 "QUICKSCALE_FORMS_RATE_LIMIT": 5,
                 "QUICKSCALE_FORMS_RETENTION_DAYS": "365",
@@ -39,6 +55,7 @@ def test_post_hook_coerces_all_settings() -> None:
     )
     assert result.settings == {
         "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+        "QUICKSCALE_FORMS_PER_PAGE": 30,
         "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
         "QUICKSCALE_FORMS_RATE_LIMIT": "5",
         "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
@@ -56,6 +73,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
             apps=("rest_framework", "django_filters", "quickscale_modules_forms"),
             settings={
                 "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+                "QUICKSCALE_FORMS_PER_PAGE": 25,
                 "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
                 "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
                 "QUICKSCALE_FORMS_RETENTION_DAYS": 365,

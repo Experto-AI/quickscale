@@ -1209,8 +1209,8 @@ class TestModuleWiringSpecs:
         assert "quickscale_modules_social.services" in managed_social_views
         assert "build_social_link_tree_payload" in managed_social_views
         assert "build_social_embeds_payload" in managed_social_views
-        assert "PAYLOAD_STATUS_HTTP" in managed_social_views
-        assert "_error_payload" in managed_social_views
+        assert "SocialLinkTreePayloadView" in managed_social_views
+        assert "JsonResponse" not in managed_social_views
 
     def test_social_wiring_requires_project_package(self):
         """Social managed transport wiring should require the generated package name."""
@@ -1256,13 +1256,14 @@ class TestFormsModuleConfig:
     @patch("quickscale_cli.commands.module_config.click.confirm")
     def test_configure_forms_interactive(self, mock_confirm, mock_prompt):
         mock_confirm.side_effect = [False, False, False]
-        mock_prompt.side_effect = [40, "10/minute", 30]
+        mock_prompt.side_effect = [40, 25, "10/minute", 30]
 
         config = MODULE_CONFIGURATOR_REGISTRY["forms"].configure(non_interactive=False)
 
         assert config == {
             "enabled": False,
             "submissions_per_page": 40,
+            "per_page": 25,
             "spam_protection_enabled": False,
             "rate_limit": "10/minute",
             "retention_days": 30,
@@ -1439,6 +1440,8 @@ class TestBillingModuleConfig:
             "  OPS_BILLING_WEBHOOK_SECRET ",
             " EUR ",
             " 10/hour ",
+            25,
+            25,
         ]
 
         config = MODULE_CONFIGURATOR_REGISTRY["billing"].configure(
@@ -1452,6 +1455,8 @@ class TestBillingModuleConfig:
             "webhook_secret_env_var": "OPS_BILLING_WEBHOOK_SECRET",
             "currency": "eur",
             "api_rate_limit": "10/hour",
+            "transactions_per_page": 25,
+            "plans_per_page": 25,
         }
 
 
@@ -1875,12 +1880,17 @@ class TestCRMModuleConfig:
     def test_configure_crm_interactive(self, mock_confirm, mock_prompt):
         """Test interactive CRM configuration"""
         mock_confirm.return_value = False
-        mock_prompt.side_effect = [30, 100]
+        mock_prompt.side_effect = [30, 100, 50, 50, 50, 50, 50]
 
         config = MODULE_CONFIGURATOR_REGISTRY["crm"].configure(non_interactive=False)
         assert config["api_enabled"] is False
         assert config["deals_per_page"] == 30
         assert config["contacts_per_page"] == 100
+        assert config["tags_per_page"] == 50
+        assert config["companies_per_page"] == 50
+        assert config["stages_per_page"] == 50
+        assert config["contact_notes_per_page"] == 50
+        assert config["deal_notes_per_page"] == 50
 
     def test_crm_in_module_configurators(self):
         """Test CRM is registered in MODULE_CONFIGURATOR_REGISTRY"""

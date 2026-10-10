@@ -26,6 +26,7 @@ from quickscale_core.schema.config_schema import ConfigValidationError, validate
 _EXPECTED_DEFAULTS: dict[str, object] = {
     "enabled": True,
     "submissions_per_page": 25,
+    "per_page": 25,
     "spam_protection_enabled": True,
     "rate_limit": "5/hour",
     "retention_days": 365,
@@ -92,6 +93,7 @@ class TestFormsManifestContract:
     def test_manifest_declares_the_option_types(self) -> None:
         manifest = _manifest()
         assert manifest.get_option("submissions_per_page").option_type == "integer"
+        assert manifest.get_option("per_page").option_type == "integer"
         assert manifest.get_option("spam_protection_enabled").option_type == "boolean"
         assert manifest.get_option("rate_limit").option_type == "string"
         assert manifest.get_option("retention_days").option_type == "integer"
@@ -227,6 +229,7 @@ class TestFormsProjection:
         assert build_generic_manifest_spec("forms", None).settings == {
             "QUICKSCALE_FORMS_ENABLED": True,
             "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
+            "QUICKSCALE_FORMS_PER_PAGE": 25,
             "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
             "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
             "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
@@ -238,6 +241,7 @@ class TestFormsProjection:
             "forms",
             {
                 "submissions_per_page": 50,
+                "per_page": 30,
                 "spam_protection_enabled": False,
                 "rate_limit": "10/minute",
                 "retention_days": 90,
@@ -246,6 +250,7 @@ class TestFormsProjection:
         ).settings == {
             "QUICKSCALE_FORMS_ENABLED": True,
             "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 50,
+            "QUICKSCALE_FORMS_PER_PAGE": 30,
             "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": False,
             "QUICKSCALE_FORMS_RATE_LIMIT": "10/minute",
             "QUICKSCALE_FORMS_RETENTION_DAYS": 90,
@@ -293,7 +298,7 @@ class TestFormsConfigurator:
         self, mock_confirm, mock_prompt
     ) -> None:
         mock_confirm.side_effect = [False, False, False]
-        mock_prompt.side_effect = [40, "  10/minute  ", 30]
+        mock_prompt.side_effect = [40, 25, "  10/minute  ", 30]
 
         entry = MODULE_CONFIGURATOR_REGISTRY["forms"]
         config = entry.configure(non_interactive=False)
@@ -301,6 +306,7 @@ class TestFormsConfigurator:
         assert config == {
             "enabled": False,
             "submissions_per_page": 40,
+            "per_page": 25,
             "spam_protection_enabled": False,
             "rate_limit": "10/minute",
             "retention_days": 30,
@@ -314,7 +320,7 @@ class TestFormsConfigurator:
     ) -> None:
         """The planner's own output carries the canonical rate limit."""
         mock_confirm.side_effect = [True, True, True]
-        mock_prompt.side_effect = [40, "  10/minute  ", 30]
+        mock_prompt.side_effect = [40, 25, "  10/minute  ", 30]
 
         configured = _configure_selected_modules(
             ["forms"],

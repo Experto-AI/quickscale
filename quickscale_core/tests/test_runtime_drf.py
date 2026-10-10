@@ -4,8 +4,10 @@ The one session authentication class keeps a 401 challenge for anonymous
 callers, so every module session API and the generated settings share the
 same scheme instead of a per-module copy.  The one scoped throttle class is
 the single attachment point for a view's ``throttle_scope``, keyed by the
-authenticated user's pk or the canonical client IP.  The combined facade
-serves both lazily; these tests hold that surface in place.
+authenticated user's pk or the canonical client IP.  The one list paginator
+reads its size from the ``<THING>_PER_PAGE`` setting a subclass declares and
+returns the bare list.  The combined facade serves all three lazily; these
+tests hold that surface in place.
 
 The throttle contract imports Django REST Framework's throttling module,
 which reads ``api_settings`` at import, so these tests configure minimal
@@ -20,6 +22,8 @@ from unittest.mock import patch
 
 import pytest
 from django.conf import settings as django_settings
+from django.core.exceptions import ImproperlyConfigured
+from django.test import override_settings
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.request import Request
 
@@ -209,3 +213,97 @@ class TestQuickscaleScopedRateThrottle:
         cache_add.assert_not_called()
         cache_incr.assert_not_called()
         cache_set.assert_not_called()
+
+
+def _demo_pagination_class() -> type:
+    """Return a module-style paginator subclass (imported after configuration)."""
+    from quickscale_core.runtime import PlainListPagination
+
+    class _DemoPagination(PlainListPagination):
+        page_size_setting = "QUICKSCALE_DEMO_PER_PAGE"
+
+    return _DemoPagination
+
+
+class TestPlainListPagination:
+    """The core paginator reads its size from the declared setting (rule 9)."""
+
+    def test_is_a_page_number_pagination_subclass(self) -> None:
+        from rest_framework.pagination import PageNumberPagination
+
+        from quickscale_core.runtime import PlainListPagination
+
+        assert issubclass(PlainListPagination, PageNumberPagination)
+
+    def test_facade_serves_the_submodule_symbol(self) -> None:
+        from quickscale_core.runtime import PlainListPagination
+        from quickscale_core.runtime import drf as drf_helpers
+
+        assert PlainListPagination is drf_helpers.PlainListPagination
+
+    @override_settings(QUICKSCALE_DEMO_PER_PAGE=7)
+    def test_page_size_comes_from_the_declared_setting(self) -> None:
+        paginator = _demo_pagination_class()()
+        assert paginator.get_page_size(cast(Request, None)) == 7
+
+    def test_no_declared_setting_fails_loud(self) -> None:
+        from quickscale_core.runtime import PlainListPagination
+
+        with pytest.raises(ImproperlyConfigured, match="page_size_setting"):
+            PlainListPagination().get_page_size(cast(Request, None))
+
+    def test_missing_setting_fails_loud(self) -> None:
+        from quickscale_core.runtime import PlainListPagination
+
+        class _Missing(PlainListPagination):
+            page_size_setting = "QUICKSCALE_DEMO_MISSING_PER_PAGE"
+
+        with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_DEMO_MISSING"):
+            _Missing().get_page_size(cast(Request, None))
+
+    @pytest.mark.parametrize("invalid", [0, -3, 2.9, True, "many", "25", None])
+    def test_invalid_setting_values_fail_loud(self, invalid: object) -> None:
+        paginator = _demo_pagination_class()()
+        with override_settings(QUICKSCALE_DEMO_PER_PAGE=invalid):
+            with pytest.raises(ImproperlyConfigured, match="QUICKSCALE_DEMO"):
+                paginator.get_page_size(cast(Request, None))
+
+    def test_response_keeps_the_bare_list_shape(self) -> None:
+        paginator = _demo_pagination_class()()
+        response = paginator.get_paginated_response([{"id": 1}, {"id": 2}])
+        assert response.data == [{"id": 1}, {"id": 2}]
+
+    def test_client_cannot_override_the_page_size(self) -> None:
+        from quickscale_core.runtime import PlainListPagination
+
+        assert PlainListPagination.page_size_query_param is None
+
+    @override_settings(QUICKSCALE_DEMO_PER_PAGE=2)
+    def test_page_past_the_end_answers_the_empty_list(self) -> None:
+        """Following pages terminates on an empty page, not a 404."""
+        paginator = _demo_pagination_class()()
+        request = cast(Request, SimpleNamespace(query_params={"page": "3"}))
+        assert paginator.paginate_queryset([1, 2, 3], request) == []
+
+    @override_settings(QUICKSCALE_DEMO_PER_PAGE=2)
+    def test_pages_within_range_page_normally(self) -> None:
+        first_page = _demo_pagination_class()().paginate_queryset(
+            [1, 2, 3],
+            cast(Request, SimpleNamespace(query_params={})),
+        )
+        last_page = _demo_pagination_class()().paginate_queryset(
+            [1, 2, 3],
+            cast(Request, SimpleNamespace(query_params={"page": "2"})),
+        )
+        assert first_page == [1, 2]
+        assert last_page == [3]
+
+    @override_settings(QUICKSCALE_DEMO_PER_PAGE=2)
+    def test_below_range_page_still_fails_as_drf_answers_it(self) -> None:
+        from rest_framework.exceptions import NotFound
+
+        with pytest.raises(NotFound):
+            _demo_pagination_class()().paginate_queryset(
+                [1, 2, 3],
+                cast(Request, SimpleNamespace(query_params={"page": "0"})),
+            )

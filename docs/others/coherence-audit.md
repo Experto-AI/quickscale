@@ -1801,3 +1801,20 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   `collect_wiring` admits only `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]` from a module; any
   other `REST_FRAMEWORK` contribution fails the merge naming the module and sub-key, with unit
   controls; decision rule 30 carries the clause).
+
+### 2026-10-10 — SA262 stage 3 (one list paginator and DRF social payload views)
+
+- 2026-10-10 — `http-api-shape`: **resolved** (SA262 stage 3 —
+  `quickscale_core.runtime` ships one list paginator (`PlainListPagination`: the page size is the
+  `<THING>_PER_PAGE` setting named by each subclass's `page_size_setting`, client overrides stay
+  ignored, the response stays the bare list, and a page past the end answers the empty list); billing's ledger drops its literal `25` for
+  `transactions_per_page` and its public plan catalog gains `plans_per_page`; CRM's tags,
+  companies, stages, contact-note, and deal-note lists (the two note actions included) gain their
+  `<THING>_PER_PAGE` settings and page through core's paginator, and CRM's, forms', and billing's
+  local paginator copies are deleted; forms' admin form list gains `QUICKSCALE_FORMS_PER_PAGE`;
+  the core-rendered social payload views are DRF views that declare their public guard and answer
+  DRF's 503 through the one error shape, never echoing exception text; harness rule 9 rejects a
+  `PageNumberPagination` subclass outside core, a paginator subclass without `page_size_setting`,
+  a `pagination_class` naming a non-core paginator, and a literal `page_size`, renders the
+  managed social views module and parses it under the same rule, controls included; decision
+  rule 9 carries the clause). Item 11.

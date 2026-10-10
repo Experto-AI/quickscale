@@ -554,6 +554,27 @@ class TestAdminFormListAPIView:
         assert len(response.data) >= 1
         assert "submission_count" in response.data[0]
 
+    @override_settings(QUICKSCALE_FORMS_PER_PAGE=1)
+    def test_admin_form_list_respects_forms_per_page_setting(
+        self, superuser_client, form
+    ):
+        """The admin form list pages by QUICKSCALE_FORMS_PER_PAGE (rule 9)."""
+        from quickscale_modules_forms.models import Form
+        from quickscale_modules_orgs.current_org import org_scope
+
+        with org_scope(form.organization):
+            Form.all_objects.create(
+                slug="second-form",
+                title="Second Form",
+                organization=form.organization,
+            )
+
+        url = reverse("quickscale_forms:admin_form_list")
+        response = superuser_client.get(url)
+
+        assert response.status_code == 200
+        assert len(response.data) == 1
+
     def test_staff_without_org_is_refused(self, staff_client, form):
         """View-unit defense-in-depth: force-auth staff without org is refused.
 

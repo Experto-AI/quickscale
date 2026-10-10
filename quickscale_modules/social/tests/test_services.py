@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
 from typing import TypeVar, cast
 
 import pytest
@@ -239,8 +240,9 @@ def test_list_published_social_embeds_honors_runtime_toggle_and_filtering(
         ]
         assert initial_records[0].resolution_status == SocialEmbedResolution.ERROR
         assert initial_records[0].embed_url is None
-        assert "canonical TikTok video URL" in (
-            initial_records[0].resolution_error or ""
+        assert (
+            initial_records[0].resolution_error
+            == "Embed metadata could not be resolved."
         )
         assert initial_records[1].resolution_status == SocialEmbedResolution.RESOLVED
         assert (
@@ -303,6 +305,37 @@ def test_list_published_social_embeds_recovers_from_non_list_cache_payload(
         )
     finally:
         _reset_org_context()
+
+
+@django_db
+def test_list_published_social_embeds_sanitizes_cached_resolution_text(org) -> None:
+    """A cache hit carrying stored exception text still answers the marker."""
+    _activate_org_context(org.id)
+    try:
+        SocialEmbed.objects.create(
+            title="QuickScale on YouTube",
+            provider_name="",
+            url="https://www.youtube.com/shorts/alpha123",
+            display_order=10,
+            organization=org,
+        )
+        records = list_published_social_embeds()
+    finally:
+        _reset_org_context()
+
+    org_cache_key = f"{SOCIAL_EMBEDS_CACHE_KEY}:org:{org.id}"
+    cached_records = [asdict(record) for record in records]
+    cached_records[0]["resolution_error"] = "sentinel-stored-error"
+    cache.set(org_cache_key, cached_records, timeout=300)
+
+    _activate_org_context(org.id)
+    try:
+        cached_hit = list_published_social_embeds()
+    finally:
+        _reset_org_context()
+
+    assert cached_hit[0].resolution_error == "Embed metadata could not be resolved."
+    assert cached_hit[0].resolution_error != "sentinel-stored-error"
 
 
 @django_db

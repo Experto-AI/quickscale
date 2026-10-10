@@ -34,6 +34,11 @@ class TestCrmPostHook:
             settings={
                 "QUICKSCALE_CRM_DEALS_PER_PAGE": "25",
                 "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "50",
+                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
+                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
                 "QUICKSCALE_CRM_API_ENABLED": 1,
             },
         )
@@ -47,6 +52,11 @@ class TestCrmPostHook:
             settings={
                 "QUICKSCALE_CRM_DEALS_PER_PAGE": "10",
                 "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "20",
+                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
+                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
                 "QUICKSCALE_CRM_API_ENABLED": 0,
             },
         )
@@ -60,6 +70,11 @@ class TestCrmPostHook:
             settings={
                 "QUICKSCALE_CRM_DEALS_PER_PAGE": "10",
                 "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "10",
+                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
+                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
                 "QUICKSCALE_CRM_API_ENABLED": 1,
             },
         )
@@ -72,6 +87,11 @@ class TestCrmPostHook:
             settings={
                 "QUICKSCALE_CRM_DEALS_PER_PAGE": "5",
                 "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "5",
+                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
+                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
                 "QUICKSCALE_CRM_API_ENABLED": 0,
             },
         )
@@ -86,6 +106,11 @@ class TestCrmPostHook:
             settings={
                 "QUICKSCALE_CRM_DEALS_PER_PAGE": "10",
                 "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "20",
+                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
+                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
                 "QUICKSCALE_CRM_API_ENABLED": True,
             },
         )
@@ -100,6 +125,11 @@ class TestCrmPostHook:
             settings={
                 "QUICKSCALE_CRM_DEALS_PER_PAGE": 25,
                 "QUICKSCALE_CRM_CONTACTS_PER_PAGE": 50,
+                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
+                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
+                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
                 "QUICKSCALE_CRM_API_ENABLED": True,
             },
             pre_home_url_includes=(),

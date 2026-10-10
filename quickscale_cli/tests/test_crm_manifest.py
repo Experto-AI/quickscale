@@ -27,6 +27,11 @@ _EXPECTED_DEFAULTS: dict[str, object] = {
     "api_enabled": True,
     "deals_per_page": 25,
     "contacts_per_page": 50,
+    "tags_per_page": 50,
+    "companies_per_page": 50,
+    "stages_per_page": 50,
+    "contact_notes_per_page": 50,
+    "deal_notes_per_page": 50,
 }
 
 _RETIRED_MESSAGE = (
@@ -77,6 +82,11 @@ class TestCrmManifestContract:
         assert manifest.get_option("api_enabled").option_type == "boolean"
         assert manifest.get_option("deals_per_page").option_type == "integer"
         assert manifest.get_option("contacts_per_page").option_type == "integer"
+        assert manifest.get_option("tags_per_page").option_type == "integer"
+        assert manifest.get_option("companies_per_page").option_type == "integer"
+        assert manifest.get_option("stages_per_page").option_type == "integer"
+        assert manifest.get_option("contact_notes_per_page").option_type == "integer"
+        assert manifest.get_option("deal_notes_per_page").option_type == "integer"
 
 
 # ===========================================================================
@@ -269,7 +279,7 @@ class TestCrmConfigurator:
         self, mock_confirm, mock_prompt
     ) -> None:
         mock_confirm.return_value = False
-        mock_prompt.side_effect = [30, 100]
+        mock_prompt.side_effect = [30, 100, 50, 50, 50, 50, 50]
 
         entry = MODULE_CONFIGURATOR_REGISTRY["crm"]
         config = entry.configure(non_interactive=False)
@@ -279,4 +289,9 @@ class TestCrmConfigurator:
             "api_enabled": False,
             "deals_per_page": 30,
             "contacts_per_page": 100,
+            "tags_per_page": 50,
+            "companies_per_page": 50,
+            "stages_per_page": 50,
+            "contact_notes_per_page": 50,
+            "deal_notes_per_page": 50,
         }

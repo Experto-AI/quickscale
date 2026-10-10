@@ -41,6 +41,21 @@ def _crm_post_hook(
     settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"] = int(
         settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"]
     )
+    settings["QUICKSCALE_CRM_TAGS_PER_PAGE"] = int(
+        settings["QUICKSCALE_CRM_TAGS_PER_PAGE"]
+    )
+    settings["QUICKSCALE_CRM_COMPANIES_PER_PAGE"] = int(
+        settings["QUICKSCALE_CRM_COMPANIES_PER_PAGE"]
+    )
+    settings["QUICKSCALE_CRM_STAGES_PER_PAGE"] = int(
+        settings["QUICKSCALE_CRM_STAGES_PER_PAGE"]
+    )
+    settings["QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE"] = int(
+        settings["QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE"]
+    )
+    settings["QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE"] = int(
+        settings["QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE"]
+    )
     settings["QUICKSCALE_CRM_API_ENABLED"] = bool(
         settings["QUICKSCALE_CRM_API_ENABLED"]
     )

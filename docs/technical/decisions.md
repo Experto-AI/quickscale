@@ -692,12 +692,17 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   (`QuickscaleSessionAuthentication` in `quickscale_core.runtime`), so an unauthenticated call
   answers 401; the generated `settings/base.py` installs it as
   `DEFAULT_AUTHENTICATION_CLASSES` through `compose_rest_framework`.
-- ✅ Lists page with `PageNumberPagination` sized by the module's `<THING>_PER_PAGE`; throttles are
-  DRF throttles fed by the module's `_RATE_LIMIT` setting (rule 32).
+- ✅ JSON lists page through core's one list paginator (`PlainListPagination` in
+  `quickscale_core.runtime`): a module paginator subclasses it and names its `<THING>_PER_PAGE`
+  setting in `page_size_setting`, so every list has one page-size source and the response stays
+  the bare list; a page past the end answers the empty list, so following pages terminates any
+  list. Generated project code that serves JSON follows this rule like module code.
+  Throttles are DRF throttles fed by the module's `_RATE_LIMIT` setting (rule 32).
 - ❌ `JsonResponse` APIs, error bodies built in module code, a third-party error-format library, hand-written rate
   parsers, per-module token schemes (blog's `BLOG_API_TOKENS` is removed; a shared token scheme is
-  SA154 inventory), a module-defined `SessionAuthentication` subclass, or
-  `authentication_classes` naming DRF's class directly on a non-webhook view.
+  SA154 inventory), a module-defined `SessionAuthentication` subclass,
+  `authentication_classes` naming DRF's class directly on a non-webhook view, a
+  `PageNumberPagination` subclass outside core, or a literal `page_size`.
 
 **10. Startup checks, errors, core ports.**
 - ✅ A module's configuration and invariant checks are functions in its `checks.py`. From
