@@ -4,91 +4,31 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.runtime import (
-    ManifestError,
-    ModuleWiringSpec,
-    build_generic_manifest_spec,
-)
+from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec
 
 
 def _analytics_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Apply analytics-specific type coercions and fallback defaults."""
-    settings = dict(spec.settings)
-    for bool_key in (
-        "QUICKSCALE_ANALYTICS_ENABLED",
-        "QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG",
-        "QUICKSCALE_ANALYTICS_EXCLUDE_STAFF",
-        "QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT",
-    ):
-        if bool_key in settings:
-            settings[bool_key] = bool(settings[bool_key])
+    """Apply analytics' off-switch transformation.
 
-    for str_key in (
-        "QUICKSCALE_ANALYTICS_PROVIDER",
-        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
-    ):
-        if str_key in settings:
-            settings[str_key] = str(settings[str_key]).strip()
-
-    # Rule 35: each secret reaches module code as a setting that renders the
-    # environment variable its `_ENV_VAR` option names (core's `__QS_ENV__`
-    # mechanism), so module code never calls os.getenv itself.  The projections
-    # are computed for both switch positions so the settings surface does not
-    # change with the switch; a blank option name projects an empty value,
-    # never a dangling marker.
-    for env_var_option, secret_setting in (
-        (
-            "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-            "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY",
-        ),
-        (
-            "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-            "QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE",
-        ),
-    ):
-        env_var_name = str(settings.get(env_var_option, "") or "").strip()
-        settings[secret_setting] = "__QS_ENV__:" + env_var_name if env_var_name else ""
-
-    # Rule 1 (D3): off keeps the module installed — app, middleware, settings,
-    # and admin — and mounts none of its public URLs.  The template tag
-    # library stays registered because the app stays.
-    if not bool(resolved["enabled"]):
-        return ModuleWiringSpec(
-            apps=spec.apps,
-            middleware=spec.middleware,
-            settings=settings,
-            pre_home_url_includes=(),
-            url_includes=(),
-            spa_routes=(),
-            managed_files=spec.managed_files,
-        )
-
-    required_nonempty = (
-        "QUICKSCALE_ANALYTICS_PROVIDER",
-        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
-    )
-    empty_keys = [
-        key for key in required_nonempty if key in settings and not settings[key]
-    ]
-    if empty_keys:
-        raise ManifestError(
-            "Analytics manifest settings resolved to empty values: "
-            f"{', '.join(sorted(empty_keys))}. "
-            "The manifest derivation produced an invalid result."
-        )
-
+    Rule 1 (D3): off keeps the module installed — app, middleware, and
+    settings — and mounts none of its public URLs.  The template tag library
+    stays registered because the app stays.  The manifest boundary already
+    owns every option default, normalization rule, and check, and projects
+    the complete settings surface (environment-variable references included)
+    before this hook runs, so the settings surface does not change with the
+    switch.
+    """
+    if resolved["enabled"]:
+        return spec
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
+        settings=spec.settings,
+        pre_home_url_includes=(),
+        url_includes=(),
+        spa_routes=(),
         managed_files=spec.managed_files,
     )
 
@@ -99,6 +39,7 @@ def _analytics_manifest_adapter(
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for analytics via its manifest."""
+    del project_package
     return build_generic_manifest_spec(
         "analytics",
         options,
