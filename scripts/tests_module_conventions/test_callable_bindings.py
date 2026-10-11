@@ -214,3 +214,46 @@ def test_definition_identity_never_collides_with_builtin_policy(definition) -> N
         else ["rule 12: demo: adapter.py:7 coerces an option container read with bool()"]
     )
     assert _check(source) == expected
+
+
+def test_hook_default_bool_binds_through_the_implicit_seed() -> None:
+    source = (
+        "from quickscale_core.runtime import build_generic_manifest_spec as assemble\n"
+        "def adapter(options):\n"
+        "    def hook(spec, values, check=bool):\n"
+        '        check(values["enabled"])\n'
+        "        return spec\n"
+        '    return assemble("demo", options, post_hook=hook)\n'
+    )
+    assert _check(source) == [
+        "rule 12: demo: adapter.py:4 coerces an option container read with bool()"
+    ]
+
+
+def test_hook_default_imported_validator_binds_through_the_implicit_seed() -> None:
+    source = (
+        "from quickscale_core.runtime import build_generic_manifest_spec as assemble\n"
+        "from vendor import validate_backend\n"
+        "def adapter(options):\n"
+        "    def hook(spec, values, check=validate_backend):\n"
+        '        check(values["backend"])\n'
+        "        return spec\n"
+        '    return assemble("demo", options, post_hook=hook)\n'
+    )
+    assert _check(source) == [
+        "rule 12: demo: adapter.py:5 re-validates an option container read "
+        "through validate_backend()"
+    ]
+
+
+def test_hook_identity_default_stays_legal() -> None:
+    source = (
+        "from quickscale_core.runtime import build_generic_manifest_spec as assemble\n"
+        "def identity(value):\n    return value\n"
+        "def adapter(options):\n"
+        "    def hook(spec, values, check=identity):\n"
+        '        check(values["enabled"])\n'
+        "        return spec\n"
+        '    return assemble("demo", options, post_hook=hook)\n'
+    )
+    assert _check(source) == []

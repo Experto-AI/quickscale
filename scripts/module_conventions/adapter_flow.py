@@ -32,6 +32,25 @@ def _arguments(function: Function) -> list[str]:
     ]
 
 
+def _defaults(function: Function) -> dict[str, ast.expr]:
+    """Return every declared parameter default, positional or keyword-only."""
+    positional = [*function.args.posonlyargs, *function.args.args]
+    defaults = dict(
+        zip(
+            [argument.arg for argument in positional[-len(function.args.defaults) :]],
+            function.args.defaults,
+        )
+    )
+    defaults.update(
+        {
+            argument.arg: value
+            for argument, value in zip(function.args.kwonlyargs, function.args.kw_defaults)
+            if value is not None
+        }
+    )
+    return defaults
+
+
 def _aliases(nodes: list[ast.AST]) -> dict[str, ast.expr]:
     aliases: dict[str, ast.expr] = {}
     for node in nodes:
@@ -336,19 +355,7 @@ class AdapterFlow:
         positional = [*function.args.posonlyargs, *function.args.args]
         actuals = {arg.arg: value for arg, value in zip(positional, node.args)}
         actuals.update({kw.arg: kw.value for kw in node.keywords if kw.arg is not None})
-        defaults = dict(
-            zip(
-                [arg.arg for arg in positional[-len(function.args.defaults) :]],
-                function.args.defaults,
-            )
-        )
-        defaults.update(
-            {
-                arg.arg: value
-                for arg, value in zip(function.args.kwonlyargs, function.args.kw_defaults)
-                if value is not None
-            }
-        )
+        defaults = _defaults(function)
         bindings: dict[str, str] = {}
         for name in _arguments(function):
             if name in actuals:
@@ -592,6 +599,7 @@ class AdapterFlow:
                     )
                     if hook_name in self.functions:
                         self.add_context(hook_name, ["spec", "options"])
+                        self._seed_defaults(hook_name, supplied=2)
             if bindings or name in self.queries:
                 self.contexts.add(
                     (name, tuple(bindings.get(arg, "") for arg in _arguments(function)))
@@ -635,6 +643,33 @@ class AdapterFlow:
         self.contexts.add(context)
         return context
 
+    def _seed_defaults(self, name: str, supplied: int) -> None:
+        """
+        Bind a seeded callable's omitted parameter defaults (SA263).
+
+        The implicit post-hook seeds supply the first *supplied* parameters
+        with the boundary's spec/options kinds, so later parameters are
+        omitted.  Their default expressions resolve in the callable's defining
+        frame through its captured environment, exactly as
+        ``_call_environment`` resolves an ordinary call's omitted defaults.
+        """
+        function = self.functions[name]
+        captured = dict(self.environments.get(name, {}))
+        bindings = dict(captured.get(id(function), {}))
+        defaults = _defaults(function)
+        parent = self.scope_parents.get(id(function))
+        for argument in _arguments(function)[supplied:]:
+            if argument in defaults and argument not in bindings:
+                bindings[argument] = self.reference(
+                    defaults[argument],
+                    self.tables.get(parent, {}),
+                    scope=parent,
+                    environment=captured,
+                )
+        if bindings != captured.get(id(function), {}) and any(bindings.values()):
+            captured[id(function)] = bindings
+            self.environments[name] = captured
+
     def call(self, node: ast.Call, tracker: Any) -> str:
         called = self.reference(
             node.func,
@@ -651,6 +686,7 @@ class AdapterFlow:
                 )
                 if hook_name in self.functions:
                     self.add_context(hook_name, ["spec", "options"])
+                    self._seed_defaults(hook_name, supplied=2)
             return "spec"
         if called in self.normalizers:
             return "query_options" if tracker.query_context else "options"
