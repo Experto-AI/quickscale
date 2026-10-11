@@ -13,8 +13,8 @@ their value.
 
 **Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
-([publish_procedure.md](publish_procedure.md)); 0.89.0 is publish-ready.
-0.89.0 publishes from `ea41844e` (pre-SA263) unless the release gate passes on `v89` after this merge.
+([publish_procedure.md](publish_procedure.md)); 0.89.0 publishes from `ea41844e` (pre-SA263)
+unless `make release-gate` passes on `v89`.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -65,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 | yes | no | yes | no | yes |
+| 1 | SA191 ∥ SA204 (a) | yes | no | yes | no | yes |
 | 2 | SA263 | yes | no | yes | no | no |
 | 3 | — | yes | yes | yes | **yes** | no |
 
@@ -156,80 +156,24 @@ suite, and merge only the reviewed delivery through the serialized queue.
   vintage is still refused, and a restore-forward test proves it. This also retires tech watchlist
   `dr-restore-vintage-exact-match`.
 
-  **Surfaces:** decisions, the new gate with its hash manifest, registry row, and gate
-  documentation, `quickscale_core/tests/test_module_migration_topology.py`,
-  `dr_engine/recovery.py` (Track 2 reviews), and the arch audit.
+  **Slices** (in order; (c) is Tier 3: plan review required — the freeze is a one-way door):
+  - [ ] (a) Promote or replace `blog`'s `_BlogMediaAssetImageField` (Tier 1).
+  - [ ] (b) Restore-forward in `dr_engine/recovery.py`, with its test (Tier 2; Track 2 reviews).
+  - [ ] (c) Decision, hash-manifest gate with registry row and controls, topology test, and the
+    restored-`bap-web` proof.
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port.**
 
-  Migrate `bap-web` into a new repository at `/home/victor/code/bap-web-new`: a fresh `quickscale plan` + `apply` recipient, then a coding assistant ports the
-  donor by following [bap-web-migration-prompt.md](../planning/bap-web-migration-prompt.md).
+  `bap-web-new` (at `/home/victor/code/bap-web-new`) is the ported recipient; the agent slices
+  (a–e) are done and `scripts/cutover.sh` with `CUTOVER.md` rebuild, verify, and roll back,
+  rehearsed on scratch. The cutover rebuilds a fresh database and reseeds the catalog under the
+  restricted runtime role; billing stays disabled.
 
-  **Context:** `bap-web` is the beta site behind the property portal, generated 2026-03-05 on
-  v0.62.0 with the `showcase_react` theme and `auth`, `listings`, and `forms`. It carries a
-  project-owned `properties` app (models on `AbstractListing`, a catalog seed command, a public
-  `/api/properties/` endpoint), a heavily customized React design, and in-place edits under the
-  vendored `modules/forms`.
-
-  **Recipient.** Built as the playbook's "Running a migration iteration" section describes: before
-  the release, from the unreleased checkout with modules embedded by
-  `quickscale apply --split-refs-from-branches`; it repins to the sealed release before cutover.
-  The donor stays read-only; every in-place `modules/forms` customization is re-expressed as
-  project-owned configuration or extension, or reported as an upstream candidate.
-
-  **Data.** It cannot move by backup and restore. The production database records `listings`
-  0001–0003, `forms` 0001–0003, and `auth` 0001–0002 as applied and has no `orgs`, while current
-  `listings` and `forms` ship a rewritten `0001_initial` that depends on `orgs` and a NOT NULL
-  organization FK (`migrate --plan` on a restored dump fails with `InconsistentMigrationHistory`),
-  so the cutover rebuilds a fresh database. The `quickscale_orgs_create_site_org` command creates the site's
-  organization in the same deploy step as `migrate`. The catalog is
-  then reseeded through `bap-web`'s own seed command, tenant-scoped to that organization under the
-  restricted runtime role — never under BYPASSRLS. Users are
-  re-invited; form submissions and other transactional rows are not carried. Media is carried over
-  separately and verified.
-
-  **Dependencies and ownership:** Billing stays disabled. An agent delivers everything up to a
-  deploy-ready recipient and a rehearsed cutover script, and takes the production dump read-only
-  by slice (a)'s steps. The maintainer logs in to Railway, creates and archives the repositories, runs the Railway cutover, carries media, and
-  re-invites users.
-
-  **Acceptance:**
-  - The prompt's done criteria pass and its report is recorded, including every adapted or
-    excluded donor test with its reason and every upstream candidate.
-  - `bap-web-new` records the current QuickScale version in `quickscale.yml` and its lock, imports
-    the SA206 facade, hand-patches no QuickScale-owned contract, and has no edits under `modules/`.
-    `.git`, `media/`, `.env`, and `poetry.lock` are not copied between trees.
-  - Automated parity, no manual QA: the donor's pytest and Vitest suites pass in the recipient.
-    The "old" side of every comparison is the live site, `https://buenosairesproperties.com` on
-    Railway; the donor is not deployed locally. The donor's Playwright e2e suite passes against
-    the live site and the local recipient, but only its read-only specs run against production;
-    specs that submit forms or write data run only against the recipient, and every form mock
-    intercepts both the recipient's `/forms/api/*` and the donor's `/api/forms/*` submit
-    endpoints, so no spec can submit into production. The live site keeps public listings hidden
-    on purpose (maintainer decision, 2026-10-10): home and contact are screenshot-diffed
-    recipient-vs-live at desktop and mobile widths with animations off, under 1% of pixels, the
-    recipient rendered flag-off and every mask recorded; the live baselines are captured and kept
-    in `bap-web-new` before cutover, because the cutover replaces that site. The recipient ships
-    with public listings enabled, proven by recipient-only specs over the 12 seeded listings
-    (`/api/properties/`, `/properties`, `/properties/:slug`, and the home property actions and
-    featured section); catalog and detail use the design system of home and contact — shell,
-    typography, color, spacing, and components — with kept recipient screenshots and an
-    automated computed-style check.
-  - The carried `properties` models pass SA208's provider-ID system check. The FORCE-RLS table and
-    policy counts equal a fresh project's with the same modules, and `check_tenant_isolation` passes.
-  - `bap-web-new` becomes a new repository and redeploys through `deploy railway`; the old
-    repository is archived. The pre-cutover database is retained until the reseeded site is verified,
-    and the written rollback restores the previous deploy *and* that database.
-  - No property-portal features (SA153) and no frontend stack change.
-
-  **Remaining:** agent work (slices a–e) is done; `scripts/cutover.sh` and `CUTOVER.md` in
-  `bap-web-new` rebuild, verify, and roll back, rehearsed on scratch. After 0.89.0 is published:
-  repin `bap-web-new` to it and re-run the rehearsal (agent), then the maintainer runs the Railway
-  cutover, carries media, re-invites users, and archives the old repository. The production dump
-  at `/home/victor/code/bap-web-prod.dump` holds real user data and stays out of every repository.
-
-  **Surfaces:** the new `bap-web-new` repository and its reseed step; the migration prompt; the
-  `forms` module only for upstreamed customizations.
+  **Remaining:** after 0.89.0 is published, repin `bap-web-new` to it and re-run the rehearsal
+  (agent); then the maintainer runs the Railway cutover, carries media, re-invites users, and
+  archives the old repository. The pre-cutover database is retained until the reseeded site is
+  verified. The production dump at `/home/victor/code/bap-web-prod.dump` holds real user data and
+  stays out of every repository.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -303,14 +247,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [x] **SA253 — Make the generated project's CI, image, and healthcheck pass, and execute them in a gate.**
-
-- [x] **SA255 — Accept Resend's real webhook signature in notifications.**
-
-- [x] **SA260 — One off switch and a closed-world manifest surface.**
-
-- [x] **SA261 — One owner per URL prefix, and theme API bases from the seam.**
-
 - [ ] **SA263 — Adapters validate, coerce, and default only through the manifest.**
 
   **Context:** all 12 adapters validate, coerce, and default options differently
@@ -318,12 +254,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   the loader refuses (gap 14); a blank `__QS_ENV__:` marker renders as a literal string (gap 15);
   backups' remote credentials break rule 1's naming (`secret-env-var-names`).
 
-  - **Done and verified:** generic manifest validation, typing, and `_ENV_VAR` projection (blank → `""`); all 12 adapters migrated off duplicate option handling; the dead resolver step removed; a blank secret marker renders `""`; storage aliases manifest-owned with its path-or-absolute `MEDIA_URL` preserved; harness enforcement, including omitted callable defaults on implicitly invoked post-hooks (`0859fb2e`).
-    Evidence: serial `make ci`, core/CLI units, blog/listings/storage integration, and manifest sync passed; all blocking review findings closed.
-  - **Pending:** the serial release gate failed once on `TestDevelopmentCommandsE2E.test_full_development_workflow` (HTTP 500 on `/`, no traceback captured); one focused retry of that test passed. It is not attributed yet.
-    To close: A/B that test 5× on pre-SA263 `ea41844e` versus post-merge `v89`, keeping server logs; fix it here if only SA263 fails, otherwise move it to the tech-audit watchlist;
-    then one clean `make release-gate`.
-  - **Other acceptance:** backups' private-remote credential-name exception is already listed in `decisions.md` rule 1; no other unmet original acceptance item identified.
+  **Done:** manifest-owned validation, typing, defaults, and `_ENV_VAR` projection across all 12
+  adapters, with harness enforcement; the coherence findings are closed.
+
+  **Remaining (Tier 1):** attribute the one `make release-gate` failure
+  (`TestDevelopmentCommandsE2E.test_full_development_workflow`, HTTP 500 on `/`). Run it 5× on
+  `ea41844e` and on `v89` with server logs kept; fix it here if only `v89` fails, otherwise move it
+  to the tech-audit watchlist. Close on one clean `make release-gate`.
 
 - [ ] **SA267 — Bring `scripts/` under the quality thresholds without gating it.**
 

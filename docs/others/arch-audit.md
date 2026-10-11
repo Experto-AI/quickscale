@@ -344,9 +344,9 @@ items:
   `quickscale_seam` runtime tag, DRF composition is `quickscale_core.runtime.settings.compose_rest_framework()`,
   module URLs compose in the managed `urls_modules.py` (`runtime/urls.py`), the user-owned
   `urls.py` holds one include, and a closed-world generator test fails when a user-owned
-  Django-side emitted file names a module. **Still open:** the theme's TypeScript enumerates
-  module surfaces (`useModules.ts`, literal API bases; the API-base part is SA261), and the
-  three upgrade mechanisms below are all still maintained. The evidence below is the
+  Django-side emitted file names a module. The theme's module API bases now come from the seam's
+  `moduleApiPaths`. **Still open:** `useModules.ts` still hard-codes the module set, and the
+  three upgrade mechanisms below are all still maintained (no ticket). The evidence below is the
   pre-fix record.
   - The prior closure on 2026-09-24 (SA207 step identities, SA211 emission-derived watch set)
     replaced hand-copied adoption prose with declared, gated adoption steps.
@@ -471,14 +471,14 @@ items:
      `beta_migration` and the vintage machinery to match. The revocation trigger is a second
      long-lived project or a security fix landing in a template.
 - **Recommendation:** Option 2 (Django side landed). Remaining: move the theme's module
-  enumeration and API bases onto the seam (SA261), then retire whichever upgrade mechanism is
+  enumeration onto the seam, then retire whichever upgrade mechanism is
   left unused.
   - **Size:** M.
   - **Reversibility:** `two-way door` (library code plus include lines).
   - **Guard:** a closed-world generator test that no Django-side user-owned emitted file
     contains a module name or a module URL name (rule 37's literal-list check, applied to the
     emission mapping). The vintage declaration should trend toward zero steps per release.
-  - **Next step:** SA261's theme API bases from the seam.
+  - **Next step:** derive `useModules.ts`' module set from the seam (unticketed).
 
 ### Finding 3: Rules are kept as hand-synced copies held by parity gates
 
