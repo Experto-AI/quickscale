@@ -105,50 +105,32 @@ def notifications_runtime_email_backend(options: dict[str, Any] | None) -> str |
 # ---------------------------------------------------------------------------
 
 
-def _notifications_derived_settings(resolved: dict[str, Any]) -> dict[str, Any]:
-    """Project notifications settings with required reads and coercions.
+def _notifications_post_hook(
+    spec: ModuleWiringSpec, resolved: dict[str, Any]
+) -> ModuleWiringSpec:
+    """Select the runtime email backend for the resolved options.
 
-    A null string option reads as blank rather than the literal ``"None"``, so
-    a state entry written as ``reply_to_email: null`` still wires an empty
-    value.
-
-    Rule 35: each secret is projected as a setting that renders the environment
-    variable its ``_ENV_VAR`` option names (core's ``__QS_ENV__`` mechanism),
-    so module code reads the setting instead of calling ``os.getenv``.
+    The manifest owns every option default, normalization rule, check, and
+    projection: the ``QUICKSCALE_NOTIFICATIONS_*`` settings (each secret
+    included, through the generic ``_ENV_VAR`` boundary) and the
+    ``DEFAULT_FROM_EMAIL``/``SERVER_EMAIL`` aliases arrive already projected,
+    so this hook only contributes the runtime-selected backend.  Rule 1 (D3):
+    the email settings stay in place while the module is off, so the settings
+    surface does not change with the switch; delivery is refused at the
+    runtime service boundary instead.
     """
-    enabled = bool(resolved["enabled"])
-    resend_api_key_env_var = str(resolved["resend_api_key_env_var"] or "").strip()
-    webhook_secret_env_var = str(resolved["webhook_secret_env_var"] or "").strip()
-    settings: dict[str, Any] = {
-        "QUICKSCALE_NOTIFICATIONS_ENABLED": enabled,
-        "QUICKSCALE_NOTIFICATIONS_SENDER_NAME": str(
-            resolved["sender_name"] or ""
-        ).strip(),
-        "QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL": str(
-            resolved["sender_email"] or ""
-        ).strip(),
-        "QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL": str(
-            resolved["reply_to_email"] or ""
-        ).strip(),
-        "QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN": str(
-            resolved["resend_domain"] or ""
-        ).strip(),
-        "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR": resend_api_key_env_var,
-        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR": webhook_secret_env_var,
-        "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY": (
-            f"__QS_ENV__:{resend_api_key_env_var}" if resend_api_key_env_var else ""
-        ),
-        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
-            f"__QS_ENV__:{webhook_secret_env_var}" if webhook_secret_env_var else ""
-        ),
-        "QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS": list(resolved["default_tags"]),
-        "QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS": list(resolved["allowed_tags"]),
-        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS": int(
-            resolved["webhook_ttl_seconds"]
-        ),
-        "QUICKSCALE_NOTIFICATIONS_PROVIDER": str(resolved["provider"]).strip(),
-    }
-    return settings
+    settings = dict(spec.settings)
+    settings["EMAIL_BACKEND"] = (
+        _runtime_email_backend(resolved) or NOTIFICATIONS_CONSOLE_EMAIL_BACKEND
+    )
+    return ModuleWiringSpec(
+        apps=spec.apps,
+        middleware=spec.middleware,
+        settings=settings,
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
+        managed_files=spec.managed_files,
+    )
 
 
 def _notifications_manifest_adapter(
@@ -158,39 +140,10 @@ def _notifications_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for notifications from its manifest contract."""
     del project_package
-
-    resolved = resolve_manifest_module_options("notifications", options)
-    runtime_email_backend = _runtime_email_backend(resolved)
-    manifest_spec = build_generic_manifest_spec("notifications", options)
-    settings = dict(manifest_spec.settings)
-    settings.update(_notifications_derived_settings(resolved))
-    spec = ModuleWiringSpec(
-        apps=manifest_spec.apps,
-        middleware=manifest_spec.middleware,
-        settings=settings,
-        pre_home_url_includes=manifest_spec.pre_home_url_includes,
-        url_includes=manifest_spec.url_includes,
-        managed_files=manifest_spec.managed_files,
-    )
-
-    settings = dict(spec.settings)
-    # Rule 1 (D3): the email settings stay in place while the module is off,
-    # so the settings surface does not change with the switch; delivery is
-    # refused at the runtime service boundary instead.
-    settings["EMAIL_BACKEND"] = (
-        runtime_email_backend or NOTIFICATIONS_CONSOLE_EMAIL_BACKEND
-    )
-    sender_email = settings.get("QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL", "")
-    settings["DEFAULT_FROM_EMAIL"] = sender_email
-    settings["SERVER_EMAIL"] = sender_email
-
-    return ModuleWiringSpec(
-        apps=spec.apps,
-        middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
-        managed_files=spec.managed_files,
+    return build_generic_manifest_spec(
+        "notifications",
+        options,
+        post_hook=_notifications_post_hook,
     )
 
 
