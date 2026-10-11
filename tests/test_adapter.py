@@ -1,9 +1,10 @@
 """Focused tests for the listings manifest adapter.
 
 The generic manifest boundary owns listings' option defaults, normalization,
-checks, and static markdownx settings; these tests pin the adapter's
-remaining contract — the throttle scope, the off-switch transformation, and
-the sentinel.
+checks, and settings surface; these tests pin the adapter's remaining
+contract — the throttle scope and the off-switch transformation.  The one
+shared staff-guarded Markdownx editor mount and its global settings are
+storage's (rule 41).
 """
 
 from __future__ import annotations
@@ -48,13 +49,10 @@ def test_manifest_projects_settings_and_throttle_scope() -> None:
     assert result.settings["REST_FRAMEWORK"] == {
         "DEFAULT_THROTTLE_RATES": {"quickscale_listings_api": "7/hour"},
     }
-    # The static editor extensions are declared by the manifest and applied
-    # before the hook runs.
-    assert result.settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] == [
-        "markdown.extensions.fenced_code",
-        "markdown.extensions.tables",
-        "markdown.extensions.toc",
-    ]
+    # Rule 41: the shared Markdownx mount and its global settings are
+    # storage's; listings writes none of them.
+    assert "MARKDOWNX_MEDIA_PATH" not in result.settings
+    assert "MARKDOWNX_MARKDOWN_EXTENSIONS" not in result.settings
 
 
 def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
@@ -76,11 +74,9 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
         ),
         {"enabled": False},
     )
-    # The retained admin editor keeps its staff-guarded endpoint mount; the
-    # module's own public mount is gone.
-    assert result.url_includes == (
-        ("markdownx/", "quickscale_modules_listings.markdownx_urls"),
-    )
+    # The module's public mount is gone; the shared staff-guarded Markdownx
+    # editor mount belongs to storage (rule 41).
+    assert result.url_includes == ()
     assert ("markdownx/", "markdownx.urls") not in result.url_includes
     assert ("listings/", "quickscale_modules_listings.urls") not in result.url_includes
     assert result.pre_home_url_includes == ()
