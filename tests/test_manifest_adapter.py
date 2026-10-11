@@ -97,7 +97,9 @@ class TestStorageManifestAdapter:
         assert spec.apps == ("quickscale_modules_storage",)
         assert spec.middleware == ()
         assert spec.pre_home_url_includes == ()
-        assert spec.url_includes == ()
+        assert spec.url_includes == (
+            ("markdownx/", "quickscale_modules_storage.markdownx_urls"),
+        )
         assert spec.settings == {
             "QUICKSCALE_STORAGE_ENABLED": True,
             "QUICKSCALE_STORAGE_BACKEND": "local",
@@ -115,6 +117,12 @@ class TestStorageManifestAdapter:
                 "__QS_ENV__:AWS_SECRET_ACCESS_KEY"
             ),
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": False,
+            "MARKDOWNX_MARKDOWN_EXTENSIONS": [
+                "markdown.extensions.fenced_code",
+                "markdown.extensions.tables",
+                "markdown.extensions.toc",
+            ],
+            "MARKDOWNX_MEDIA_PATH": "markdownx/",
         }
         assert list(spec.settings) == [
             "QUICKSCALE_STORAGE_ENABLED",
@@ -131,10 +139,24 @@ class TestStorageManifestAdapter:
             "QUICKSCALE_STORAGE_ACCESS_KEY_ID",
             "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY",
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED",
+            "MARKDOWNX_MARKDOWN_EXTENSIONS",
+            "MARKDOWNX_MEDIA_PATH",
         ]
         assert "STORAGES" not in spec.settings
         assert "AWS_ACCESS_KEY_ID" not in spec.settings
         assert "AWS_SECRET_ACCESS_KEY" not in spec.settings
+
+    def test_disabled_keeps_the_shared_markdownx_mount_only(self) -> None:
+        """Rule 1 (D3): off drops public URLs but keeps the shared editor mount."""
+        spec = _storage_manifest_adapter({"enabled": False})
+
+        assert spec.apps == ("quickscale_modules_storage",)
+        assert spec.url_includes == (
+            ("markdownx/", "quickscale_modules_storage.markdownx_urls"),
+        )
+        assert spec.pre_home_url_includes == ()
+        assert spec.spa_routes == ()
+        assert spec.settings["MARKDOWNX_MEDIA_PATH"] == "markdownx/"
 
     @pytest.mark.parametrize(
         ("backend", "extra_options"),
@@ -188,6 +210,8 @@ class TestStorageManifestAdapter:
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
             "STORAGES",
+            "MARKDOWNX_MARKDOWN_EXTENSIONS",
+            "MARKDOWNX_MEDIA_PATH",
         ]
         assert list(spec.settings["STORAGES"]["default"]["OPTIONS"]) == [
             "querystring_auth",
@@ -342,6 +366,12 @@ class TestStorageManifestAdapter:
                 "__QS_ENV__:AWS_SECRET_ACCESS_KEY"
             ),
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": False,
+            "MARKDOWNX_MARKDOWN_EXTENSIONS": [
+                "markdown.extensions.fenced_code",
+                "markdown.extensions.tables",
+                "markdown.extensions.toc",
+            ],
+            "MARKDOWNX_MEDIA_PATH": "markdownx/",
         }
         assert r2.settings["QUICKSCALE_STORAGE_BACKEND"] == "r2"
         assert r2.settings["AWS_STORAGE_BUCKET_NAME"] == "r2-bucket"
