@@ -142,7 +142,11 @@ QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR = (
     "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
 )
 QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY = "test-resend-api-key"
-QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET = "whsec_dGVzdC13ZWJob29rLXNlY3JldA=="
+# Synthetic, non-secret fixture for the Svix-shaped webhook signing secret:
+# base64 of sixteen literal "a" bytes. The human-readable variant previously
+# here (base64 of "test-webhook-secret") tripped the gate's generic-api-key
+# entropy rule as a false positive.
+QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET = "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
 QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS = ["quickscale", "transactional"]
 QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS = [
     "quickscale",
