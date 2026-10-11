@@ -1,4 +1,9 @@
-"""Focused tests for the forms manifest adapter."""
+"""Focused tests for the forms manifest adapter.
+
+The generic manifest boundary owns forms' option defaults, normalization,
+checks, and projections; these tests pin the adapter's remaining contract —
+the throttle scope, the off-switch transformation, and the sentinel.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from quickscale_core.manifest import ManifestError
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_forms.adapter import (
@@ -19,50 +25,33 @@ def test_get_manifest_adapter_returns_callable() -> None:
     assert callable(get_manifest_adapter())
 
 
-def test_missing_required_setting_raises_key_error() -> None:
-    with pytest.raises(KeyError, match="QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"):
-        _forms_post_hook(ModuleWiringSpec(), {})
+@pytest.mark.parametrize(
+    ("option_name", "value"),
+    [
+        ("submissions_per_page", "25"),
+        ("per_page", True),
+        ("spam_protection_enabled", 1),
+        ("rate_limit", "no-rate"),
+        ("retention_days", -1),
+    ],
+)
+def test_wrong_shaped_values_are_refused(option_name: str, value: object) -> None:
+    """A raw value of the wrong shape (or range/pattern) is refused."""
+    with pytest.raises(ManifestError, match="modules.forms."):
+        _forms_manifest_adapter({option_name: value})
 
 
-def test_missing_list_page_size_raises_key_error() -> None:
-    """The admin form list page size is required, like the other settings."""
-    spec = ModuleWiringSpec(
-        settings={
-            "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
-            "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
-            "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
-            "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
-            "QUICKSCALE_FORMS_API_ENABLED": True,
-        }
-    )
-    with pytest.raises(KeyError, match="QUICKSCALE_FORMS_PER_PAGE"):
-        _forms_post_hook(spec, {"enabled": True})
+def test_manifest_projects_settings_and_throttle_scope() -> None:
+    result = _forms_manifest_adapter({"rate_limit": " 10/minute "})
 
-
-def test_post_hook_coerces_all_settings() -> None:
-    result = _forms_post_hook(
-        ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": "25",
-                "QUICKSCALE_FORMS_PER_PAGE": "30",
-                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": 1,
-                "QUICKSCALE_FORMS_RATE_LIMIT": 5,
-                "QUICKSCALE_FORMS_RETENTION_DAYS": "365",
-                "QUICKSCALE_FORMS_API_ENABLED": 0,
-            }
-        ),
-        {"enabled": True},
-    )
-    assert result.settings == {
-        "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
-        "QUICKSCALE_FORMS_PER_PAGE": 30,
-        "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
-        "QUICKSCALE_FORMS_RATE_LIMIT": "5",
-        "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
-        "QUICKSCALE_FORMS_API_ENABLED": False,
-        "REST_FRAMEWORK": {
-            "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "5"},
-        },
+    assert result.settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] == 25
+    assert result.settings["QUICKSCALE_FORMS_PER_PAGE"] == 25
+    assert result.settings["QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED"] is True
+    assert result.settings["QUICKSCALE_FORMS_RATE_LIMIT"] == "10/minute"
+    assert result.settings["QUICKSCALE_FORMS_RETENTION_DAYS"] == 365
+    assert result.settings["QUICKSCALE_FORMS_API_ENABLED"] is True
+    assert result.settings["REST_FRAMEWORK"] == {
+        "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "10/minute"},
     }
 
 
@@ -71,14 +60,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
     result = _forms_post_hook(
         ModuleWiringSpec(
             apps=("rest_framework", "django_filters", "quickscale_modules_forms"),
-            settings={
-                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
-                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
-                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
-                "QUICKSCALE_FORMS_API_ENABLED": True,
-            },
+            settings={"QUICKSCALE_FORMS_RATE_LIMIT": "5/hour"},
             pre_home_url_includes=(),
             url_includes=(("forms/", "quickscale_modules_forms.urls"),),
         ),
@@ -91,7 +73,9 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
         "django_filters",
         "quickscale_modules_forms",
     )
-    assert result.settings["QUICKSCALE_FORMS_API_ENABLED"] is True
+    assert result.settings["REST_FRAMEWORK"] == {
+        "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "5/hour"},
+    }
 
 
 @patch("quickscale_modules_forms.adapter.build_generic_manifest_spec")
