@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import copy
+import re
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from scripts import check_module_conventions as checker
+from scripts.check_module_conventions import Module
 from scripts.tests_module_conventions._support import (
     _golden_module,
     _violations,
@@ -15,6 +18,49 @@ from scripts.tests_module_conventions._support import (
     _with_option,
     _without_option,
 )
+
+_GOLDEN_EXTRA_SETTINGS = (
+    "QUICKSCALE_DEMO_BACKEND = 'local'\n"
+    "QUICKSCALE_DEMO_CDN_URL = '/demo/'\n"
+    "QUICKSCALE_DEMO_MARKETING_HOST = ''\n"
+)
+
+
+def _adapter(body: str) -> str:
+    """Wrap adapter lines in a wiring path whose signature exposes both containers."""
+    return (
+        '"""Demo adapter."""\n\n'
+        "from typing import Any\n\n"
+        "from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec\n\n\n"
+        "def _demo_post_hook(spec: ModuleWiringSpec, resolved: dict[str, Any])"
+        " -> ModuleWiringSpec:\n"
+        f"{body}\n\n\n"
+        "def _demo_manifest_adapter(\n"
+        "    options: dict[str, Any], *, project_package: str | None = None\n"
+        ") -> ModuleWiringSpec:\n"
+        "    del project_package\n"
+        '    return build_generic_manifest_spec("demo", options, post_hook=_demo_post_hook)\n'
+    )
+
+
+def _with_adapter(module: Module, body: str) -> Module:
+    """Return *module* with its adapter running *body* inside the post-hook."""
+    return _with_files(module, adapter=_adapter(body))
+
+
+def _credential_module() -> Module:
+    """Return the golden module plus a credential option the golden corpus lacks."""
+    return _with_option(
+        _golden_module(),
+        "api_key_env_var",
+        {
+            "type": "string",
+            "default": "QUICKSCALE_DEMO_API_KEY",
+            "django_setting": "QUICKSCALE_DEMO_API_KEY_ENV_VAR",
+            "description": "Environment variable name holding the demo API key.",
+            "validation": {"pattern": "^(?:[A-Z][A-Z0-9_]*)?$"},
+        },
+    )
 
 
 def test_settings_names_control() -> None:
@@ -156,7 +202,7 @@ def test_settings_reads_control() -> None:
             "settings.py": (
                 "SECRET_KEY = 'test'\n"
                 "# QUICKSCALE_DEMO_ENABLED = True\n"
-                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
+                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n" + _GOLDEN_EXTRA_SETTINGS
             ),
         },
     )
@@ -171,7 +217,7 @@ def test_settings_reads_control() -> None:
             "settings.py": (
                 "SECRET_KEY = 'test'\n"
                 "QUICKSCALE_DEMO_ENABLED: bool\n"
-                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
+                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n" + _GOLDEN_EXTRA_SETTINGS
             ),
         },
     )
@@ -186,7 +232,7 @@ def test_settings_reads_control() -> None:
             "settings.py": (
                 "SECRET_KEY = 'test'\n"
                 "QUICKSCALE_DEMO_ENABLED: bool = True\n"
-                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
+                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n" + _GOLDEN_EXTRA_SETTINGS
             ),
         },
     )
@@ -198,11 +244,150 @@ def test_settings_reads_control() -> None:
             "settings.py": (
                 "SECRET_KEY = 'test'\n"
                 "QUICKSCALE_DEMO_ENABLED, = (True,)\n"
-                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
+                "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n" + _GOLDEN_EXTRA_SETTINGS
             ),
         },
     )
     assert _violations(checker.rule_3_settings_reads, unpacked_setting) == []
+
+
+def test_derived_setting_read_control() -> None:
+    """SA263: a read of a manifest-declared derived setting is declared surface."""
+    module = _golden_module()
+    derived = copy.deepcopy(module.manifest)
+    derivation = derived["derivation"]
+    option_derivations = derivation.setdefault("option_derivations", {})  # type: ignore[union-attr]
+    option_derivations["backend"] = {
+        "derived_settings": [
+            {
+                "setting_key": "QUICKSCALE_DEMO_BACKEND_ALIAS",
+                "derivation_type": "direct",
+                "expression": {"option": "backend"},
+                "description": "Backend alias.",
+            },
+        ],
+    }
+    declared = _with_files(
+        replace(module, manifest=derived),
+        services=(
+            "from django.conf import settings\n\nKEY = settings.QUICKSCALE_DEMO_BACKEND_ALIAS\n"
+        ),
+    )
+    assert _violations(checker.rule_3_settings_reads, declared) == []
+    undeclared = _with_files(
+        module,
+        services=(
+            "from django.conf import settings\n\nKEY = settings.QUICKSCALE_DEMO_BACKEND_ALIAS\n"
+        ),
+    )
+    assert any(
+        "reads undeclared QUICKSCALE_DEMO_BACKEND_ALIAS" in violation
+        for violation in _violations(checker.rule_3_settings_reads, undeclared)
+    )
+
+
+def test_env_var_default_vendor_vocabulary_controls() -> None:
+    """SA263: a credential reference keeps a vendor's name or the module's stem."""
+    module = _credential_module()
+    assert _violations(checker.rule_1_settings_names, module) == []
+    unlisted = _with_option(
+        module,
+        "api_key_env_var",
+        {
+            **module.manifest["config"]["mutable"]["api_key_env_var"],  # type: ignore[index]
+            "default": "UNLISTED_DEMO_KEY",
+        },
+    )
+    assert any(
+        "default UNLISTED_DEMO_KEY is not in the controlled vocabulary" in violation
+        for violation in _violations(checker.rule_1_settings_names, unlisted)
+    )
+    non_name = _with_option(
+        module,
+        "api_key_env_var",
+        {
+            **module.manifest["config"]["mutable"]["api_key_env_var"],  # type: ignore[index]
+            "default": "sk_live_1234",
+        },
+    )
+    assert any(
+        "default 'sk_live_1234' is not an environment-variable name" in violation
+        for violation in _violations(checker.rule_1_settings_names, non_name)
+    )
+    # A controlled-vocabulary name is approved surface, never a cross-module ban:
+    # the vocabulary fixes the vendor name each reference spells, and a module
+    # that grows a vendor dependency adds that vendor's name by decision edit.
+    listed_vendor = _with_option(
+        module,
+        "api_key_env_var",
+        {
+            **module.manifest["config"]["mutable"]["api_key_env_var"],  # type: ignore[index]
+            "default": "STRIPE_SECRET_KEY",
+        },
+    )
+    assert _violations(checker.rule_1_settings_names, listed_vendor) == []
+    # The shipped default carries the module stem; an operator still supplies
+    # their own value at apply time, which this manifest-level clause never bans.
+    operator_stem = _with_option(
+        module,
+        "api_key_env_var",
+        {
+            **module.manifest["config"]["mutable"]["api_key_env_var"],  # type: ignore[index]
+            "default": "QUICKSCALE_DEMO_OPERATOR_KEY",
+        },
+    )
+    assert _violations(checker.rule_1_settings_names, operator_stem) == []
+
+
+def test_quickscale_credential_default_exception_controls() -> None:
+    """SA263: a QuickScale-defined credential default is approved per option."""
+    module = _with_option(
+        _golden_module(),
+        "webhook_secret_env_var",
+        {
+            "type": "string",
+            "default": "QUICKSCALE_OTHER_WEBHOOK_SECRET",
+            "django_setting": "QUICKSCALE_DEMO_WEBHOOK_SECRET_ENV_VAR",
+            "description": "Environment variable name holding the demo webhook secret.",
+            "validation": {"pattern": "^(?:[A-Z][A-Z0-9_]*)?$"},
+        },
+    )
+    assert any(
+        "lacks the QUICKSCALE_DEMO_ stem" in violation
+        for violation in _violations(checker.rule_1_settings_names, module)
+    )
+    checker.QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS.setdefault("demo", {})[
+        "webhook_secret_env_var"
+    ] = {
+        "default": "QUICKSCALE_OTHER_WEBHOOK_SECRET",
+        "why": "control fixture: the demo module's own shared namespace",
+    }
+    try:
+        assert _violations(checker.rule_1_settings_names, module) == []
+        drifted = _with_option(
+            module,
+            "webhook_secret_env_var",
+            {
+                **module.manifest["config"]["mutable"]["webhook_secret_env_var"],  # type: ignore[index]
+                "default": "QUICKSCALE_DRIFTED_WEBHOOK_SECRET",
+            },
+        )
+        assert any(
+            "is authorized as QUICKSCALE_OTHER_WEBHOOK_SECRET" in violation
+            for violation in _violations(checker.rule_1_settings_names, drifted)
+        )
+    finally:
+        del checker.QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS["demo"]
+
+
+def test_recorded_credential_exceptions_are_reasoned() -> None:
+    """SA263: every recorded QuickScale exception states its reason."""
+    for module_name, options in checker.QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS.items():
+        for option_key, entry in options.items():
+            assert entry["why"].strip(), f"{module_name}.{option_key} needs a reason"
+            assert entry["default"].startswith("QUICKSCALE_"), (
+                f"{module_name}.{option_key} records a non-QuickScale default"
+            )
 
 
 def test_manifest_schema_control() -> None:
@@ -607,3 +792,181 @@ def test_malformed_manifest_is_authority_failure(tmp_path: Path) -> None:
     (module_dir / "module.yml").write_text("name: [unterminated\n", encoding="utf-8")
     with pytest.raises(checker.AuthorityError):
         checker.load_corpus(tmp_path)
+
+
+def test_adapter_duplicate_option_logic_controls() -> None:
+    """SA263: a wiring path consumes canonical values or fails the rule."""
+    module = _golden_module()
+    assert _violations(checker.rule_12_adapter_duplicate_logic, module) == []
+
+    permitted = _with_adapter(
+        module,
+        "    settings = dict(spec.settings)\n"
+        '    settings["QUICKSCALE_DEMO_BACKEND"] = resolved["backend"]\n'
+        '    if resolved["backend"] == "remote":\n'
+        "        return spec\n"
+        "    return spec\n",
+    )
+    assert _violations(checker.rule_12_adapter_duplicate_logic, permitted) == []
+
+    defaulted = _with_adapter(
+        module,
+        '    backend = resolved.get("backend", "local")\n    return spec\n',
+    )
+    violations = _violations(checker.rule_12_adapter_duplicate_logic, defaulted)
+    assert any("calls get() on an option container" in violation for violation in violations)
+
+    coerced = _with_adapter(
+        module,
+        '    enabled = bool(resolved["enabled"])\n    return spec\n',
+    )
+    violations = _violations(checker.rule_12_adapter_duplicate_logic, coerced)
+    assert any(
+        "coerces an option container read with bool()" in violation for violation in violations
+    )
+
+    rewritten = _with_adapter(
+        module,
+        '    backend = resolved["backend"].lower()\n    return spec\n',
+    )
+    violations = _violations(checker.rule_12_adapter_duplicate_logic, rewritten)
+    assert any("calls lower() on an option container" in violation for violation in violations)
+
+    fallback_or = _with_adapter(
+        module,
+        '    backend = resolved["backend"] or "local"\n    return spec\n',
+    )
+    violations = _violations(checker.rule_12_adapter_duplicate_logic, fallback_or)
+    assert any(
+        "provides an option-container fallback with or" in violation for violation in violations
+    )
+
+    rejected = _with_adapter(
+        module,
+        '    if not resolved["backend"]:\n'
+        '        raise ValueError("backend is required")\n'
+        "    return spec\n",
+    )
+    violations = _violations(checker.rule_12_adapter_duplicate_logic, rejected)
+    assert any("re-checks an option value with not" in violation for violation in violations)
+
+    revalidated = _with_adapter(
+        module,
+        '    if _is_valid_backend(resolved["backend"]):\n'
+        "        return spec\n"
+        "    return spec\n\n\n"
+        "def _is_valid_backend(value: str) -> bool:\n"
+        '    return value in {"local", "remote"}\n',
+    )
+    violations = _violations(checker.rule_12_adapter_duplicate_logic, revalidated)
+    assert any(
+        "re-validates an option container read through _is_valid_backend()" in violation
+        for violation in violations
+    )
+
+    imported = _with_adapter(
+        module,
+        "    from scripts.tests_module_conventions._support import validate_backend\n\n"
+        '    if validate_backend(resolved["backend"]):\n'
+        "        return spec\n"
+        "    return spec\n",
+    )
+    violations = _violations(checker.rule_12_adapter_duplicate_logic, imported)
+    assert any("validate_backend()" in violation for violation in violations)
+
+
+def test_adapter_predicate_reads_stay_legal() -> None:
+    """SA263: a readiness predicate asserts canonical values without re-deriving them."""
+    module = _golden_module()
+    predicate = _with_adapter(
+        module,
+        "    if _backend_ready(resolved):\n"
+        "        return spec\n"
+        "    return spec\n\n\n"
+        "def _backend_ready(values: dict[str, Any]) -> bool:\n"
+        '    return bool(values.get("enabled", False)) and str(\n'
+        '        values.get("backend", "")\n'
+        '    ).strip() in {"local", "remote"}\n\n'
+        "def public_ready(options):\n"
+        '    return _backend_ready(resolve_manifest_module_options("demo", options))\n',
+    )
+    predicate = _with_files(
+        predicate,
+        adapter=predicate.files["adapter.py"].replace(
+            "from typing import Any",
+            "from typing import Any\n"
+            "from quickscale_core.runtime.manifest import resolve_manifest_module_options",
+        ),
+    )
+    assert _violations(checker.rule_12_adapter_duplicate_logic, predicate) == []
+
+
+def test_url_option_normalization_controls() -> None:
+    """SA263: a URL-family option declares its normalizer, never a wrong kind."""
+    module = _golden_module()
+    assert _violations(checker.rule_12_manifest_options, module) == []
+
+    missing = copy.deepcopy(module.manifest)
+    del missing["derivation"]["option_derivations"]["cdn_url"]  # type: ignore[index]
+    violations = _violations(checker.rule_12_manifest_options, replace(module, manifest=missing))
+    assert any("declares no url-family normalization rule" in violation for violation in violations)
+
+    conflicts = copy.deepcopy(module.manifest)
+    conflicts["derivation"]["option_derivations"]["cdn_url"]["normalization_rules"].append(  # type: ignore[index]
+        {
+            "source_key": "cdn_url",
+            "target_key": "cdn_url",
+            "rule_type": "url",
+            "description": "Conflicting absolute-URL kind.",
+        },
+    )
+    violations = _violations(checker.rule_12_manifest_options, replace(module, manifest=conflicts))
+    assert any("conflicting normalization kinds" in violation for violation in violations)
+
+    env_var_named_url = _with_option(
+        module,
+        "endpoint_url_env_var",
+        {
+            "type": "string",
+            "default": "DEMO_ENDPOINT_URL",
+            "django_setting": "QUICKSCALE_DEMO_ENDPOINT_URL_ENV_VAR",
+            "description": "Environment variable name holding the demo endpoint URL.",
+            "validation": {"pattern": "^(?:[A-Z][A-Z0-9_]*)?$"},
+        },
+    )
+    assert _violations(checker.rule_12_manifest_options, env_var_named_url) == []
+
+    blank_pattern = copy.deepcopy(module.manifest)
+    blank_pattern["config"]["mutable"]["cdn_url"]["validation"] = {"pattern": "   "}  # type: ignore[index]
+    violations = _violations(
+        checker.rule_12_manifest_options, replace(module, manifest=blank_pattern)
+    )
+    assert any("declares a blank validation pattern" in violation for violation in violations)
+
+
+def test_media_path_pattern_admits_historical_outputs() -> None:
+    """SA263: a path_or_absolute_url pattern never constrains media to an absolute host."""
+    module = _golden_module()
+    media = copy.deepcopy(module.manifest)
+    media["config"]["mutable"]["cdn_url"]["validation"] = {  # type: ignore[index]
+        "pattern": r"^(?s:.*)$"
+    }
+    assert _violations(checker.rule_12_manifest_options, replace(module, manifest=media)) == []
+
+    # The rule itself checks the kind and a nonblank pattern; the frozen media
+    # matrix is the oracle for admission.  An absolute-host pattern admits none
+    # of the historical canonical outputs, which is the regression this control
+    # records without executing the normalization engine.
+    host_constrained = re.compile(r"^https?://[^\s]+/$")
+    historical_outputs = (
+        "/media/",
+        "//uploads//",
+        "uploadish/",
+        "httpish/",
+        "/HTTP://cdn.example/media/",
+        "/media/?v=1#frag",
+        "/media/\n",
+    )
+    assert not any(host_constrained.fullmatch(value) for value in historical_outputs)
+    permissive = re.compile(r"^(?s:.*\S.*)$")
+    assert all(permissive.fullmatch(value) for value in historical_outputs)

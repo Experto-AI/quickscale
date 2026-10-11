@@ -21,6 +21,42 @@ from typing import Any, TypeVar
 #: ``modules.py`` never stores credential material at rest.
 _QS_ENV_PREFIX: str = "__QS_ENV__:"
 
+#: Matches a rendered ``__QS_ENV__`` marker string literal.  The captured name
+#: may be blank; a blank marker renders as the literal empty string rather
+#: than as ``os.environ.get("", "")``.
+_ENV_MARKER_LITERAL_RE = re.compile(re.escape(f"'{_QS_ENV_PREFIX}") + r"([^']*)'")
+
+
+def _contains_env_reference(value: Any) -> bool:
+    """Return whether *value* carries a nonblank ``__QS_ENV__`` marker.
+
+    Descends into mappings and sequences so the rendered module imports ``os``
+    whenever the substitution below can emit an ``os.environ.get`` call.
+    """
+    if isinstance(value, str):
+        return bool(
+            value.startswith(_QS_ENV_PREFIX) and value[len(_QS_ENV_PREFIX) :].strip()
+        )
+    if isinstance(value, Mapping):
+        return any(_contains_env_reference(item) for item in value.values())
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return any(_contains_env_reference(item) for item in value)
+    return False
+
+
+def _render_env_marker(match: re.Match[str]) -> str:
+    """Render one ``__QS_ENV__`` marker as generated Python source.
+
+    A marker with a blank name renders as the literal empty string: resolving
+    it through ``os.environ.get("", "")`` would read an empty environment name
+    instead of honoring the blank value the wiring carries.
+    """
+    name = match.group(1)
+    if not name.strip():
+        return "''"
+    return f'os.environ.get("{name}", "")'
+
+
 #: Settings whose mapping values merge key by key across modules instead of
 #: being replaced whole (Module Conventions rule 30).  A second module may add
 #: sub-keys; the same sub-key with a different value fails the merge.
@@ -318,8 +354,10 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
 
     Setting values starting with ``__QS_ENV__:`` are rendered as
     ``os.environ.get("VAR_NAME", "")`` calls so the generated file never
-    contains credential material at rest.  An ``import os`` is added to
-    the module preamble when any such reference is present.
+    contains credential material at rest.  A marker with a blank name is
+    rendered as the literal empty string, never as a read of an empty
+    environment-variable name.  An ``import os`` is added to the module
+    preamble when any nonblank reference is present.
 
     Each module's compiled option schema (rule 3) is rendered as
     ``MODULE_SETTINGS_SCHEMA``, the block the generic startup check reads.
@@ -327,22 +365,16 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
     apps, middleware, settings, _ = collect_wiring(module_specs)
     schema = collect_settings_schema(module_specs)
 
-    has_env_ref = any(
-        isinstance(v, str) and v.startswith(_QS_ENV_PREFIX) for v in settings.values()
-    )
+    has_env_ref = _contains_env_reference(settings)
 
     apps_text = pformat(apps, sort_dicts=True, width=88)
     middleware_text = pformat(middleware, sort_dicts=True, width=88)
     settings_text = pformat(settings, sort_dicts=True, width=88)
     schema_text = pformat(schema, sort_dicts=True, width=88)
 
-    if has_env_ref:
-        # Replace '__QS_ENV__:VAR_NAME' with os.environ.get('VAR_NAME', '')
-        settings_text = re.sub(
-            re.escape(f"'{_QS_ENV_PREFIX}") + r"([^']+)'",
-            r'os.environ.get("\1", "")',
-            settings_text,
-        )
+    # Replace '__QS_ENV__:VAR_NAME' with os.environ.get("VAR_NAME", "") and a
+    # blank '__QS_ENV__:' marker with the literal empty string.
+    settings_text = _ENV_MARKER_LITERAL_RE.sub(_render_env_marker, settings_text)
 
     header = (
         '"""QuickScale managed module settings wiring.\n\n'

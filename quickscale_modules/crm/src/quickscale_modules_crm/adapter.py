@@ -21,65 +21,22 @@ from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spe
 def _crm_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Apply CRM-specific int/bool coercions.
+    """Apply CRM's off-switch transformation.
 
-    Reproduces the legacy coercion behaviour that the declarative resolver
-    cannot express: per-page counts are forced to ``int`` and the API
-    enabled flag is forced to ``bool``.
-
-    no default fallbacks: all three settings must be present in
-    the resolved configuration (``module.yml`` derivation provides them;
-    ``AppConfig.ready()`` enforces presence at Django startup).
+    Rule 1 (D3): off keeps the module installed — app, migrations, admin, and
+    settings — and mounts none of its public URLs.  The manifest boundary owns
+    every option default, normalization rule, check, and projection; the
+    per-page counts and the API flag are canonical before this hook runs.
     """
-    settings = dict(spec.settings)
-
-    # Legacy int/bool coercions on required settings.
-    # The keys must already be present (AppConfig.ready() enforces it).
-    settings["QUICKSCALE_CRM_DEALS_PER_PAGE"] = int(
-        settings["QUICKSCALE_CRM_DEALS_PER_PAGE"]
-    )
-    settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"] = int(
-        settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"]
-    )
-    settings["QUICKSCALE_CRM_TAGS_PER_PAGE"] = int(
-        settings["QUICKSCALE_CRM_TAGS_PER_PAGE"]
-    )
-    settings["QUICKSCALE_CRM_COMPANIES_PER_PAGE"] = int(
-        settings["QUICKSCALE_CRM_COMPANIES_PER_PAGE"]
-    )
-    settings["QUICKSCALE_CRM_STAGES_PER_PAGE"] = int(
-        settings["QUICKSCALE_CRM_STAGES_PER_PAGE"]
-    )
-    settings["QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE"] = int(
-        settings["QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE"]
-    )
-    settings["QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE"] = int(
-        settings["QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE"]
-    )
-    settings["QUICKSCALE_CRM_API_ENABLED"] = bool(
-        settings["QUICKSCALE_CRM_API_ENABLED"]
-    )
-
-    if not bool(resolved["enabled"]):
-        # Rule 1 (D3): off keeps the module installed — app, migrations,
-        # admin, and settings — and mounts none of its public URLs.
-        return ModuleWiringSpec(
-            apps=spec.apps,
-            middleware=spec.middleware,
-            settings=settings,
-            pre_home_url_includes=(),
-            url_includes=(),
-            spa_routes=(),
-            managed_files=spec.managed_files,
-        )
-
+    if resolved["enabled"]:
+        return spec
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
-        spa_routes=spec.spa_routes,
+        settings=spec.settings,
+        pre_home_url_includes=(),
+        url_includes=(),
+        spa_routes=(),
         managed_files=spec.managed_files,
     )
 
@@ -91,9 +48,10 @@ def _crm_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the CRM module via the manifest path.
 
-    Uses the generic manifest-driven path that reads derivation rules from the
-    CRM ``module.yml`` manifest, then applies module-specific int/bool
-    coercions via the post-resolution hook.
+    Uses the generic manifest-driven path that reads every declared default,
+    normalization rule, check, and projection from the CRM ``module.yml``
+    manifest, then applies the off-switch transformation via the
+    post-resolution hook.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).
@@ -103,6 +61,7 @@ def _crm_manifest_adapter(
     Returns:
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for CRM.
     """
+    del project_package
     return build_generic_manifest_spec(
         "crm",
         options,

@@ -48,11 +48,41 @@ def test_private_remote_projects_the_declared_settings() -> None:
     )
 
 
-def test_integer_and_boolean_settings_are_coerced() -> None:
+def test_integer_and_boolean_settings_are_canonical() -> None:
     spec = _backups_manifest_adapter({"retention_days": 7, "automation_enabled": True})
 
     assert spec.settings["QUICKSCALE_BACKUPS_RETENTION_DAYS"] == 7
     assert spec.settings["QUICKSCALE_BACKUPS_AUTOMATION_ENABLED"] is True
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"retention_days": "7"},
+        {"automation_enabled": 1},
+        {"remote_bucket_name": ["bucket"]},
+    ],
+)
+def test_wrong_shaped_values_are_refused(options: dict[str, object]) -> None:
+    """A raw value of the wrong shape is refused, never silently converted."""
+    with pytest.raises(ManifestError, match="modules.backups."):
+        _backups_manifest_adapter(dict(options))
+
+
+def test_remote_endpoint_url_is_canonicalized() -> None:
+    """The declared url rule owns the optional endpoint's canonical form."""
+    spec = _backups_manifest_adapter(
+        {
+            "target_mode": "private_remote",
+            "remote_bucket_name": "private-bucket",
+            "remote_region_name": "eu-west-1",
+            "remote_endpoint_url": "s3.example.com/",
+        }
+    )
+
+    assert spec.settings["QUICKSCALE_BACKUPS_REMOTE_ENDPOINT_URL"] == (
+        "https://s3.example.com"
+    )
 
 
 @pytest.mark.parametrize("target_mode", ["unsupported", "remote", "", None])

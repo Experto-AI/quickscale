@@ -52,10 +52,6 @@ from quickscale_core.manifest.resolver_normalization import (
     _normalize_value,
     _slugify,
 )
-from quickscale_core.manifest.resolver_validation import (
-    _check_validation_rule,
-    _validate_value,
-)
 from quickscale_core.manifest.resolver_wiring import (
     _WIRING_ALL_FIELDS,
     _WIRING_LIST_FIELDS,
@@ -76,9 +72,11 @@ class ResolverResult:
         defaults: Default values for every option declared in the manifest.
         resolved: Merged and normalized option values after applying
             overrides on top of defaults.
-        validation_issues: Human-readable descriptions of any validation
-            constraints that the resolved values violate.  An empty list
-            means all validation rules passed.
+        validation_issues: Human-readable descriptions of any resolution
+            issue — a direct URL projection whose resolved value cannot form
+            its ``[route, include]`` pairs.  An empty list means the
+            resolution can be assembled.  Manifest-declared option checks run
+            before resolution through the option-validation engine, not here.
         derived_settings: Projected Django settings computed from the
             resolved option values via the derivation schema's
             ``DerivedSetting`` declarations.
@@ -142,7 +140,8 @@ def normalize_module_option_values(
         manifest_name=manifest.name,
         option_derivations=manifest.option_derivations,
     )
-    resolved: dict[str, Any] = manifest.get_defaults()
+    declared_defaults = manifest.get_defaults()
+    resolved: dict[str, Any] = dict(declared_defaults)
     if overrides:
         for key, value in overrides.items():
             if key in resolved:
@@ -154,6 +153,7 @@ def normalize_module_option_values(
             option_key,
             option_derivation,
             schema.shared_normalization_rules,
+            option_default=declared_defaults.get(option_key),
         )
     return resolved
 
@@ -235,12 +235,15 @@ def resolve_module_config(
     1. Extract default values from the manifest.
     2. Apply legacy key alias migrations to the overrides.
     3. Merge overrides on top of defaults.
-    4. Normalize each resolved value using shared and per-option rules.
-    5. Validate each resolved value against shared and per-option rules.
-    6. Project derived Django settings from the resolved values.
+    4. Normalize each resolved value using shared and per-option rules,
+       resolving a blank value through the owning option's declared default.
+    5. Project derived Django settings from the resolved values.
+    6. Project wiring contributions and record any direct URL projection whose
+       resolved value cannot form its ``[route, include]`` pairs.
 
     The manifest engine is the only path: the per-module contract-file logic
-    it replaced is gone.
+    it replaced is gone.  Manifest-declared option checks run before resolution
+    through the option-validation engine.
 
     Args:
         manifest: The loaded module manifest.
@@ -273,29 +276,18 @@ def resolve_module_config(
             option_key,
             option_derivation,
             derivation_schema.shared_normalization_rules,
+            option_default=defaults.get(option_key),
         )
 
-    # Step 5: Validate each resolved value
-    validation_issues: list[str] = []
-    for option_key in sorted(resolved.keys()):
-        option_derivation = derivation_schema.get_option_derivation(option_key)
-        issues = _validate_value(
-            resolved[option_key],
-            option_key,
-            option_derivation,
-            derivation_schema.shared_validation_rules,
-        )
-        validation_issues.extend(issues)
-
-    # Step 6: Project derived Django settings
+    # Step 5: Project derived Django settings
     derived_settings = _project_all_derived_settings(
         manifest, derivation_schema, resolved
     )
 
-    # Step 7: Project wiring contributions (apps, middleware, url_includes,
+    # Step 6: Project wiring contributions (apps, middleware, url_includes,
     # pre_home_url_includes) from the derivation schema's wiring projections.
     wiring = _project_all_wiring(derivation_schema, resolved)
-    validation_issues.extend(_url_projection_issues(derivation_schema, resolved))
+    validation_issues = _url_projection_issues(derivation_schema, resolved)
 
     def _to_str_tuple(items: list[Any]) -> tuple[str, ...]:
         return tuple(str(x) for x in items)
@@ -338,7 +330,6 @@ __all__ = [
     "_apply_list_rule",
     "_apply_normalization_rule",
     "_canonical_url",
-    "_check_validation_rule",
     "_coerce_contribution",
     "_coerce_list_items",
     "_is_empty_container",
@@ -352,7 +343,6 @@ __all__ = [
     "_project_wiring_contribution",
     "_slugify",
     "_url_projection_issues",
-    "_validate_value",
     "annotations",
     "build_schema_from_manifest",
     "dataclass",

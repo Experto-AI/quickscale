@@ -14,6 +14,7 @@ their value.
 **Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); 0.89.0 is publish-ready.
+0.89.0 publishes from `ea41844e` (pre-SA263) unless the release gate passes on `v89` after this merge.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -65,7 +66,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA263 | yes | yes | yes | **yes** | no |
+| 2 | SA263 | yes | no | yes | no | no |
 | 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -317,15 +318,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   the loader refuses (gap 14); a blank `__QS_ENV__:` marker renders as a literal string (gap 15);
   backups' remote credentials break rule 1's naming (`secret-env-var-names`).
 
-  **Acceptance:** coherence §6 proposals 2 and 8 are merged and enforced: the generic path
-  validates, types, and projects `_ENV_VAR` options (blank → `""`), post-hooks compute only
-  settings no single option maps to, and the harness rejects re-validation, coercion,
-  `.get(<option>, <default>)`, and value checks in `adapter.py`. The dead resolver step is
-  removed, a blank secret marker renders `""`, and backups' private-remote credentials are a
-  listed rule 1 exception.
+  - **Done and verified:** generic manifest validation, typing, and `_ENV_VAR` projection (blank → `""`); all 12 adapters migrated off duplicate option handling; the dead resolver step removed; a blank secret marker renders `""`; storage aliases manifest-owned with its path-or-absolute `MEDIA_URL` preserved; harness enforcement, including omitted callable defaults on implicitly invoked post-hooks (`0859fb2e`).
+    Evidence: serial `make ci`, core/CLI units, blog/listings/storage integration, and manifest sync passed; all blocking review findings closed.
+  - **Pending:** the serial release gate failed once on `TestDevelopmentCommandsE2E.test_full_development_workflow` (HTTP 500 on `/`, no traceback captured); one focused retry of that test passed. It is not attributed yet.
+    To close: A/B that test 5× on pre-SA263 `ea41844e` versus post-merge `v89`, keeping server logs; fix it here if only SA263 fails, otherwise move it to the tech-audit watchlist;
+    then one clean `make release-gate`.
+  - **Other acceptance:** backups' private-remote credential-name exception is already listed in `decisions.md` rule 1; no other unmet original acceptance item identified.
 
-  **Surfaces:** the 12 adapters, `resolver.py`, `module_wiring.py`, decisions, the harness, and
-  the coherence audit.
 - [ ] **SA267 — Bring `scripts/` under the quality thresholds without gating it.**
 
   **Context:** `check_quality.sh` scans only packages, and `scripts/` misses its fixed lines:

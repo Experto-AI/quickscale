@@ -1,6 +1,8 @@
 """Tests for module_wiring.py - deterministic wiring renderer."""
 
+import os
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -473,6 +475,146 @@ class TestRenderSettingsModulesPy:
         }
         content = render_settings_modules_py(specs)
         compile(content, "<string>", "exec")  # should not raise
+
+
+def _exec_rendered_modules(content: str) -> dict[str, object]:
+    """Execute rendered settings content in an isolated module namespace."""
+    namespace: dict[str, object] = {}
+    exec(compile(content, "<rendered-modules>", "exec"), namespace)
+    return namespace
+
+
+class TestRenderSettingsModulesPyEnvMarkers:
+    """The ``__QS_ENV__`` marker contract for generated ``modules.py``.
+
+    A nonblank marker becomes a runtime ``os.environ.get("NAME", "")`` read;
+    a blank marker becomes the literal empty string and is never resolved
+    through an empty environment-variable name.  No credential material is
+    read, embedded, or persisted while rendering.
+    """
+
+    def test_blank_marker_renders_literal_empty_string(self) -> None:
+        """A blank marker is the literal empty string, not an empty-name read."""
+        specs = {
+            "storage": ModuleWiringSpec(settings={"AWS_ACCESS_KEY_ID": "__QS_ENV__:"})
+        }
+
+        content = render_settings_modules_py(specs)
+
+        assert "'AWS_ACCESS_KEY_ID': ''" in content
+        assert "__QS_ENV__" not in content
+        assert 'os.environ.get("", "")' not in content
+        assert "import os" not in content
+
+    def test_blank_marker_survives_an_empty_name_environment_entry(self) -> None:
+        """Even an empty-name environment entry is never read for a blank marker."""
+        reads: list[tuple[str, object]] = []
+
+        class _ProbeEnviron(dict):
+            def get(self, key: str, default: object = None) -> object:
+                reads.append((key, default))
+                return "read-from-environment"
+
+        probe = ModuleType("os")
+        probe.environ = _ProbeEnviron({"": "should-never-be-read"})
+
+        specs = {
+            "storage": ModuleWiringSpec(settings={"AWS_ACCESS_KEY_ID": "__QS_ENV__:"})
+        }
+        content = render_settings_modules_py(specs)
+
+        namespace: dict[str, object] = {"os": probe}
+        exec(compile(content, "<rendered-modules>", "exec"), namespace)
+
+        assert namespace["MODULE_SETTINGS"] == {"AWS_ACCESS_KEY_ID": ""}
+        assert reads == []
+
+    def test_nonblank_marker_resolves_in_isolated_generated_python(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The generated file resolves the name at runtime, never at render time."""
+        monkeypatch.setenv("FIXTURE_ACCESS_KEY", "resolved-value")
+        specs = {
+            "storage": ModuleWiringSpec(
+                settings={
+                    "AWS_ACCESS_KEY_ID": "__QS_ENV__:FIXTURE_ACCESS_KEY",
+                    "AWS_SECRET_ACCESS_KEY": "__QS_ENV__:FIXTURE_ABSENT_KEY",
+                }
+            )
+        }
+
+        content = render_settings_modules_py(specs)
+
+        assert "import os" in content
+        assert 'os.environ.get("FIXTURE_ACCESS_KEY", "")' in content
+        assert 'os.environ.get("FIXTURE_ABSENT_KEY", "")' in content
+        assert "__QS_ENV__" not in content
+
+        namespace = _exec_rendered_modules(content)
+        assert namespace["MODULE_SETTINGS"] == {
+            "AWS_ACCESS_KEY_ID": "resolved-value",
+            "AWS_SECRET_ACCESS_KEY": "",
+        }
+
+    def test_ordinary_literals_survive(self) -> None:
+        """Literal values are rendered unchanged and never treated as markers."""
+        specs = {
+            "auth": ModuleWiringSpec(
+                settings={
+                    "LOGIN_URL": "/login/",
+                    "FEATURE_ENABLED": False,
+                    "MAX_ATTEMPTS": 3,
+                    "PREFIXED_TEXT": "x__QS_ENV__:NOT_A_MARKER",
+                }
+            )
+        }
+
+        content = render_settings_modules_py(specs)
+
+        assert "'LOGIN_URL': '/login/'" in content
+        assert "'FEATURE_ENABLED': False" in content
+        assert "'MAX_ATTEMPTS': 3" in content
+        assert "'PREFIXED_TEXT': 'x__QS_ENV__:NOT_A_MARKER'" in content
+        assert "import os" not in content
+
+    def test_rendering_never_reads_the_environment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Rendering emits the environment read; it never performs one."""
+
+        class _RaisingEnviron(dict):
+            def get(self, key: str, default: object = None) -> object:
+                raise AssertionError(f"renderer read environment key {key!r}")
+
+        monkeypatch.setattr(os, "environ", _RaisingEnviron())
+        specs = {
+            "storage": ModuleWiringSpec(
+                settings={"AWS_SECRET_ACCESS_KEY": "__QS_ENV__:FIXTURE_SECRET"}
+            )
+        }
+
+        content = render_settings_modules_py(specs)
+
+        assert 'os.environ.get("FIXTURE_SECRET", "")' in content
+
+    def test_written_file_never_carries_the_secret_value(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The persisted managed file holds the name, never the secret value."""
+        monkeypatch.setenv("FIXTURE_SECRET", "super-secret-value")
+        package_dir = tmp_path / "myapp"
+        package_dir.mkdir()
+
+        specs = {
+            "storage": ModuleWiringSpec(
+                settings={"AWS_SECRET_ACCESS_KEY": "__QS_ENV__:FIXTURE_SECRET"}
+            )
+        }
+        write_managed_wiring(package_dir, specs)
+
+        written = (package_dir / "settings" / "modules.py").read_text()
+        assert "super-secret-value" not in written
+        assert 'os.environ.get("FIXTURE_SECRET", "")' in written
 
 
 class TestRenderUrlsModulesPy:

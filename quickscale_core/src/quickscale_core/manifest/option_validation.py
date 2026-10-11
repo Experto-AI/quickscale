@@ -26,13 +26,19 @@ The complete vocabulary, as Module Conventions rule 12 records it:
   single-entry literal/list conditions keep their meaning;
 * declared normalization kinds, applied to supplied values before the
   value-level checks — ``identity``, ``strip``, ``lowercase``, ``url``,
-  ``choice_map``, ``coerce_int``, ``coerce_bool``, ``slug``, and ``list``.
+  ``path_or_absolute_url``, ``choice_map``, ``coerce_int``, ``coerce_bool``,
+  ``slug``, and ``list``.
   ``slug`` lowercases, maps ``_`` and whitespace to ``-``, drops characters
   outside ``[a-z0-9-]``, collapses repeated dashes, trims leading/trailing
   dashes, takes an optional ``max_length``, and applies an optional ``replace``
   mapping first.  ``list`` comma-splits a string or wraps a scalar, applies its
   nested ``item_rules`` to each item, drops empties, and dedupes preserving
   order; a provider alias table is a ``choice_map`` item rule.
+  ``path_or_absolute_url`` is the relative-or-absolute path kind: it strips
+  whitespace, resolves a blank value through the owning option's declared
+  default, prepends ``/`` to a value that neither starts with ``/`` nor
+  literally with ``http``, appends ``/`` when absent, and preserves every
+  other byte.
 
 A check this vocabulary cannot express needs a decision edit before it is
 added.  A runtime predicate that decides module behavior from resolved options

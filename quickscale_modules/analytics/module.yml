@@ -114,6 +114,16 @@ derivation:
         - source_key: posthog_host_env_var
           target_key: posthog_host_env_var
           rule_type: strip
+      # The runtime reads the host override under this name rather than the
+      # generic suffix-stripped form (which the direct posthog_host mapping
+      # claims), so the module declares the alias itself as a deferred
+      # environment reference.
+      derived_settings:
+        - setting_key: QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE
+          derivation_type: computed
+          expression:
+            template: "__QS_ENV__:{posthog_host_env_var}"
+          description: "Deferred PostHog host override reference"
     posthog_host:
       normalization_rules:
         - source_key: posthog_host

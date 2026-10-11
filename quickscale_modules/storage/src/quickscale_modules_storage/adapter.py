@@ -5,38 +5,29 @@ from __future__ import annotations
 from typing import Any
 
 from quickscale_core.runtime.manifest import (
-    ManifestError,
     ModuleWiringSpec,
-    STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION,
-    STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
     build_generic_manifest_spec,
-    load_module_manifest,
-    validate_module_options,
 )
 
 
-def _canonical_media_url(media_url: str) -> str:
-    """Return *media_url* in the canonical leading/trailing-slash form."""
-    normalized = (media_url or "/media/").strip()
-    if not normalized.startswith("/") and not normalized.startswith("http"):
-        normalized = "/" + normalized
-    if not normalized.endswith("/"):
-        normalized += "/"
-    return normalized
-
-
 def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
-    """Project the ordered S3-compatible settings for cloud backends."""
-    querystring_auth = bool(resolved["querystring_auth"])
+    """Project the ordered S3-compatible settings for cloud backends.
+
+    Every value arrives canonical from the manifest boundary: optional
+    provider entries are omitted while blank. Credential aliases are already
+    projected by the manifest and are not manufactured by this composite. The
+    hook neither re-coerces nor re-reads a raw option.
+    """
+    querystring_auth = resolved["querystring_auth"]
     optional_options = {
-        option_name: value
+        option_name: resolved[option_name]
         for option_name in (
             "bucket_name",
             "endpoint_url",
             "region_name",
             "default_acl",
         )
-        if (value := str(resolved[option_name]).strip())
+        if resolved[option_name]
     }
     storage_options: dict[str, Any] = {
         "querystring_auth": querystring_auth,
@@ -66,75 +57,23 @@ def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
         }
     )
 
-    credential_env_vars = (
-        (
-            "AWS_ACCESS_KEY_ID",
-            str(resolved[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION]).strip(),
-        ),
-        (
-            "AWS_SECRET_ACCESS_KEY",
-            str(resolved[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]).strip(),
-        ),
-    )
-    settings.update(
-        {
-            setting_name: f"__QS_ENV__:{env_var_name}"
-            for setting_name, env_var_name in credential_env_vars
-            if env_var_name
-        }
-    )
-
-    default_acl = optional_options.get("default_acl")
-    if default_acl:
-        settings["AWS_DEFAULT_ACL"] = default_acl
     return settings
 
 
 def _storage_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Project storage's settings from the resolved options.
+    """Project storage's cloud-backend settings from canonical values.
 
-    The manifest declares every option's default, normalization rule, and
-    validation block; this hook validates the resolved values through the
-    same engine ``plan`` and ``apply`` use, then applies the coercions and
-    canonical forms the declarative resolver cannot express (the media URL's
-    canonical slashes and the ordered cloud-backend settings block).
+    The manifest declares every option's default, normalization rule, check,
+    projection, and derived setting — MEDIA_URL included, through the
+    ``path_or_absolute_url`` kind whose blank handling resolves through the
+    option's own declared default.  This hook contributes only what the
+    declarative resolver cannot express: the ordered ``STORAGES`` composite
+    and provider filtering. The manifest owns cloud-only scalar aliases.
     """
-    issues = validate_module_options(load_module_manifest("storage"), resolved)
-    if issues:
-        raise ManifestError(
-            "Module 'storage' has validation issues that must be resolved before "
-            "assembly:\n" + "\n".join(f"  • {issue}" for issue in issues)
-        )
-
-    backend = str(resolved["backend"]).lower()
     settings = dict(spec.settings)
-    settings.update(
-        {
-            "QUICKSCALE_STORAGE_BACKEND": backend,
-            "MEDIA_URL": _canonical_media_url(str(resolved["media_url"])),
-            "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": str(
-                resolved["public_base_url"]
-            ).strip(),
-            "AWS_STORAGE_BUCKET_NAME": str(resolved["bucket_name"]).strip(),
-            "AWS_S3_ENDPOINT_URL": str(resolved["endpoint_url"]).strip(),
-            "AWS_S3_REGION_NAME": str(resolved["region_name"]).strip(),
-            "QUICKSCALE_STORAGE_ACCESS_KEY_ID_ENV_VAR": str(
-                resolved[STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION]
-            ).strip(),
-            "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR": str(
-                resolved[STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
-            ).strip(),
-            "AWS_DEFAULT_ACL": str(resolved["default_acl"]).strip(),
-            "AWS_QUERYSTRING_AUTH": bool(resolved["querystring_auth"]),
-            "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": bool(
-                resolved["private_media_enabled"]
-            ),
-        }
-    )
-
-    if backend in {"s3", "r2"}:
+    if resolved["backend"] in {"s3", "r2"}:
         settings.update(_cloud_storage_settings(resolved))
 
     # Rule 41: storage owns the one shared Markdownx editor mount, so its
@@ -148,7 +87,7 @@ def _storage_post_hook(
     ]
     settings["MARKDOWNX_MEDIA_PATH"] = "markdownx/"
 
-    if not bool(resolved["enabled"]):
+    if not resolved["enabled"]:
         # Rule 1 (D3): off keeps the module installed — app, migrations,
         # admin, and settings — and mounts none of its public URLs.  The
         # retained admin editors keep the shared staff-guarded Markdownx

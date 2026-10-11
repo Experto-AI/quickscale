@@ -1,4 +1,11 @@
-"""Focused tests for the blog manifest adapter."""
+"""Focused tests for the blog manifest adapter.
+
+The generic manifest boundary owns blog's option defaults, normalization,
+checks, and settings surface; these tests pin the adapter's remaining
+contract — the throttle scope and the off-switch transformation.  The one
+shared staff-guarded Markdownx editor mount and its global settings are
+storage's (rule 41).
+"""
 
 from __future__ import annotations
 
@@ -20,44 +27,24 @@ def test_get_manifest_adapter_returns_callable() -> None:
     assert callable(get_manifest_adapter())
 
 
-def test_missing_blog_setting_raises_key_error() -> None:
-    with pytest.raises(KeyError, match="QUICKSCALE_BLOG_POSTS_PER_PAGE"):
-        _blog_post_hook(
-            ModuleWiringSpec(
-                settings={
-                    "QUICKSCALE_BLOG_RSS_ENABLED": True,
-                    "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
-                }
-            ),
-            {},
-        )
+@pytest.mark.parametrize(
+    ("option_name", "value"),
+    [
+        ("posts_per_page", "10"),
+        ("posts_per_page", 0),
+        ("rss_enabled", 1),
+        ("api_rate_limit", "no-rate"),
+    ],
+)
+def test_wrong_shaped_values_are_refused(option_name: str, value: object) -> None:
+    """A raw value of the wrong shape (or range/pattern) is refused."""
+    with pytest.raises(ManifestError, match="modules.blog."):
+        _blog_manifest_adapter({option_name: value})
 
 
-def test_whitespace_only_rate_limit_raises_manifest_error() -> None:
-    with pytest.raises(ManifestError, match="QUICKSCALE_BLOG_API_RATE_LIMIT"):
-        _blog_post_hook(
-            ModuleWiringSpec(
-                settings={
-                    "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
-                    "QUICKSCALE_BLOG_RSS_ENABLED": True,
-                    "QUICKSCALE_BLOG_API_RATE_LIMIT": "   ",
-                }
-            ),
-            {},
-        )
+def test_manifest_projects_settings_and_throttle_scope() -> None:
+    result = _blog_manifest_adapter({"api_rate_limit": " 5/hour "})
 
-
-def test_post_hook_coerces_and_adds_static_settings() -> None:
-    result = _blog_post_hook(
-        ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BLOG_POSTS_PER_PAGE": "10",
-                "QUICKSCALE_BLOG_RSS_ENABLED": 1,
-                "QUICKSCALE_BLOG_API_RATE_LIMIT": " 5/hour ",
-            }
-        ),
-        {"enabled": True},
-    )
     assert result.settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"] == 10
     assert result.settings["QUICKSCALE_BLOG_RSS_ENABLED"] is True
     assert result.settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "5/hour"
@@ -75,11 +62,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
     result = _blog_post_hook(
         ModuleWiringSpec(
             apps=("rest_framework", "markdownx", "quickscale_modules_blog"),
-            settings={
-                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
-                "QUICKSCALE_BLOG_RSS_ENABLED": True,
-                "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
-            },
+            settings={"QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour"},
             pre_home_url_includes=(),
             url_includes=(
                 ("blog/", "quickscale_modules_blog.urls"),
@@ -95,7 +78,9 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
     assert ("blog/", "quickscale_modules_blog.urls") not in result.url_includes
     assert result.pre_home_url_includes == ()
     assert result.apps == ("rest_framework", "markdownx", "quickscale_modules_blog")
-    assert result.settings["QUICKSCALE_BLOG_RSS_ENABLED"] is True
+    assert result.settings["REST_FRAMEWORK"] == {
+        "DEFAULT_THROTTLE_RATES": {"quickscale_blog_api": "5/hour"}
+    }
 
 
 @patch("quickscale_modules_blog.adapter.build_generic_manifest_spec")

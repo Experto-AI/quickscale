@@ -13,12 +13,10 @@ from quickscale_core.manifest import (
     DerivedSetting,
     LegacyKeyAlias,
     NormalizationRule,
-    ValidationRule,
 )
 from quickscale_core.manifest.resolver import (
     _apply_legacy_transform,
     _apply_normalization_rule,
-    _check_validation_rule,
     _coerce_contribution,
     _project_derived_setting,
 )
@@ -55,48 +53,6 @@ def test_normalization_coercion_and_fallbacks(
         assert result is value
     else:
         assert result == expected
-
-
-@pytest.mark.parametrize(
-    ("value", "rule"),
-    [
-        (
-            "not-a-number",
-            ValidationRule(option_key="option", rule_type="range"),
-        ),
-        (
-            "abc",
-            ValidationRule(
-                option_key="option", rule_type="pattern", pattern=r"^[a-z]+$"
-            ),
-        ),
-        (
-            "three",
-            ValidationRule(option_key="option", rule_type="min_length", min_value=3),
-        ),
-        (
-            "ok",
-            ValidationRule(option_key="option", rule_type="max_length", max_value=2),
-        ),
-        (
-            object(),
-            ValidationRule(option_key="option", rule_type="min_length", min_value=1),
-        ),
-        (
-            object(),
-            ValidationRule(option_key="option", rule_type="max_length", max_value=1),
-        ),
-        (object(), ValidationRule(option_key="option", rule_type="type")),
-    ],
-)
-def test_validation_edge_rules(value: object, rule: ValidationRule) -> None:
-    """Validation handles non-numeric input and passing reserved rules safely."""
-    issue = _check_validation_rule(value, rule, "option")
-
-    if rule.rule_type == "range":
-        assert issue == "option must be a numeric value"
-    else:
-        assert issue is None
 
 
 def test_legacy_transform_mapping_and_fallbacks() -> None:

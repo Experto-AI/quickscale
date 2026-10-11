@@ -939,9 +939,9 @@ class TestRegenerateManagedWiringFailHard:
             "Expected regenerate_managed_wiring to fail with invalid "
             f"analytics options, but it succeeded. Message: {message}"
         )
-        assert "Analytics manifest settings" in message, (
-            "Expected message about analytics settings validation failure, "
-            f"got: {message}"
+        assert "modules.analytics." in message, (
+            "Expected the manifest-owned option failure naming its setting "
+            f"path, got: {message}"
         )
 
     def test_valid_analytics_config_succeeds_with_overrides(

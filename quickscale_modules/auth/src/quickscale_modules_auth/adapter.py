@@ -4,34 +4,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.runtime.manifest import (
-    ManifestError,
-    ModuleWiringSpec,
-    build_generic_manifest_spec,
-    load_module_manifest,
-    validate_module_options,
-)
+from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec
 
 
 def _auth_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Project auth's login/signup settings from the resolved options.
+    """Project auth's login/signup composites and off-switch transformation.
 
-    The manifest declares the option-to-setting mapping; the login-method and
-    signup-field projections are computed from ``authentication_method`` here
-    because the declarative resolver cannot branch a set and an ordered list
-    from one option.  Every option is validated against the manifest's own
-    declared rules, so a retired legacy key or an unknown value fails before a
-    spec is assembled.
+    The manifest owns every option default, normalization rule, and check,
+    and declares the module's static settings (AUTHENTICATION_BACKENDS,
+    AUTH_USER_MODEL, SITE_ID, ACCOUNT_ADAPTER, ACCOUNT_SIGNUP_FORM_CLASS, and
+    the redirects) through the derived-setting vocabulary.  The login-method
+    and signup-field projections are computed from ``authentication_method``
+    here because the declarative resolver cannot branch a set and an ordered
+    list from one option.  Rule 1 (D3): off keeps the module installed — apps,
+    middleware, settings, and the retained admin — and mounts none of its
+    public account URLs.
     """
-    issues = validate_module_options(load_module_manifest("auth"), resolved)
-    if issues:
-        raise ManifestError(
-            "Module 'auth' has validation issues that must be resolved before "
-            "assembly:\n" + "\n".join(f"  • {issue}" for issue in issues)
-        )
-
     authentication_method = resolved["authentication_method"]
     if authentication_method == "username":
         login_methods: set[str] = {"username"}
@@ -44,38 +34,13 @@ def _auth_post_hook(
         signup_fields = ["email*", "password1*", "password2*"]
 
     settings = dict(spec.settings)
-    settings.update(
-        {
-            "AUTHENTICATION_BACKENDS": [
-                "django.contrib.auth.backends.ModelBackend",
-                "allauth.account.auth_backends.AuthenticationBackend",
-            ],
-            "AUTH_USER_MODEL": "quickscale_auth.User",
-            "SITE_ID": 1,
-            "ACCOUNT_LOGIN_METHODS": login_methods,
-            "ACCOUNT_SIGNUP_FIELDS": signup_fields,
-            "ACCOUNT_EMAIL_VERIFICATION": resolved["email_verification"],
-            "ACCOUNT_ALLOW_REGISTRATION": bool(resolved["registration_enabled"]),
-            # ACCOUNT_ADAPTER belongs to this module: auth owns the single
-            # allauth adapter, which collects installed modules' declared
-            # post-auth redirect hooks as AppConfig capabilities.
-            "ACCOUNT_ADAPTER": (
-                "quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter"
-            ),
-            "ACCOUNT_SIGNUP_FORM_CLASS": "quickscale_modules_auth.forms.SignupForm",
-            "LOGIN_REDIRECT_URL": "/accounts/profile/",
-            "LOGOUT_REDIRECT_URL": "/",
-            "SESSION_COOKIE_AGE": int(resolved["session_cookie_age"]),
-        }
-    )
+    settings["ACCOUNT_LOGIN_METHODS"] = login_methods
+    settings["ACCOUNT_SIGNUP_FIELDS"] = signup_fields
 
-    if not bool(resolved["enabled"]):
-        # Rule 1 (D3): off keeps the module installed — apps, middleware,
-        # settings, and the retained admin — and mounts none of its public
-        # account URLs.
-        url_includes: tuple[tuple[str, str], ...] = ()
-    else:
+    if resolved["enabled"]:
         url_includes = spec.url_includes
+    else:
+        url_includes = ()
 
     return ModuleWiringSpec(
         apps=spec.apps,

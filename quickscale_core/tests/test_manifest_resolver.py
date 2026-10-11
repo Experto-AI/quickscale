@@ -1,14 +1,16 @@
 """Tests for the manifest-driven module configuration resolver.
 
 These tests exercise the runtime engine that executes derivation rules:
-computing defaults, normalizing overrides, validating resolved values,
-and projecting derived Django settings.
+computing defaults, normalizing overrides, and projecting derived Django
+settings.
 
 The resolver is the path every module's declared options flow through; the
 per-module contract-file logic it replaced is gone.
 """
 
 from __future__ import annotations
+
+import re
 
 import pytest
 
@@ -21,12 +23,15 @@ from quickscale_core.manifest import (
     NormalizationRule,
     OptionDerivation,
     ResolverResult,
-    ValidationRule,
     WiringProjection,
+    build_schema_from_manifest,
     resolve_module_config,
 )
 from quickscale_core.manifest.resolver import (
     ResolverResult as ResolverResultDirect,
+    _apply_normalization_rule,
+    _normalize_value,
+    normalize_module_option_values,
     resolve_module_config as resolve_module_config_direct,
 )
 
@@ -54,7 +59,6 @@ def _make_schema(
     module_name: str = "test_module",
     option_derivations: dict[str, OptionDerivation] | None = None,
     shared_normalization_rules: list[NormalizationRule] | None = None,
-    shared_validation_rules: list[ValidationRule] | None = None,
     wiring_projections: list[WiringProjection] | None = None,
 ) -> ModuleDerivationSchema:
     """Build a minimal ModuleDerivationSchema for testing."""
@@ -63,7 +67,6 @@ def _make_schema(
         version="1",
         option_derivations=option_derivations or {},
         shared_normalization_rules=shared_normalization_rules or [],
-        shared_validation_rules=shared_validation_rules or [],
         module_wiring_projections=wiring_projections or [],
     )
 
@@ -566,433 +569,6 @@ class TestNormalization:
         result = resolve_module_config(manifest, schema)
 
         assert result.resolved["provider"] == "posthog"
-
-
-# ---------------------------------------------------------------------------
-# Validation rules
-# ---------------------------------------------------------------------------
-
-
-class TestValidation:
-    """Tests for validation rule execution."""
-
-    def test_required_validation_passes(self) -> None:
-        """Required validation passes when value is present."""
-        manifest = _make_manifest(
-            mutable_options={
-                "api_key": ConfigOption(
-                    name="api_key",
-                    option_type="string",
-                    default="phc_abc123",
-                    django_setting="TEST_API_KEY",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "api_key": OptionDerivation(
-                    option_key="api_key",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="api_key",
-                            rule_type="required",
-                            description="API key is required",
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert result.validation_issues == []
-
-    def test_required_validation_fails_on_none(self) -> None:
-        """Required validation fails when value is None."""
-        manifest = _make_manifest(
-            mutable_options={
-                "api_key": ConfigOption(
-                    name="api_key",
-                    option_type="string",
-                    default=None,
-                    django_setting="TEST_API_KEY",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "api_key": OptionDerivation(
-                    option_key="api_key",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="api_key",
-                            rule_type="required",
-                            description="API key is required",
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert len(result.validation_issues) == 1
-        assert "API key is required" in result.validation_issues[0]
-
-    def test_required_validation_fails_on_empty_string(self) -> None:
-        """Required validation fails when value is an empty string."""
-        manifest = _make_manifest(
-            mutable_options={
-                "api_key": ConfigOption(
-                    name="api_key",
-                    option_type="string",
-                    default="",
-                    django_setting="TEST_API_KEY",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "api_key": OptionDerivation(
-                    option_key="api_key",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="api_key",
-                            rule_type="required",
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert len(result.validation_issues) == 1
-
-    def test_choices_validation_passes(self) -> None:
-        """Choices validation passes when value is in allowed set."""
-        manifest = _make_manifest(
-            mutable_options={
-                "provider": ConfigOption(
-                    name="provider",
-                    option_type="string",
-                    default="posthog",
-                    django_setting="TEST_PROVIDER",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "provider": OptionDerivation(
-                    option_key="provider",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="provider",
-                            rule_type="choices",
-                            allowed_values=["posthog", "segment", "none"],
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert result.validation_issues == []
-
-    def test_choices_validation_fails(self) -> None:
-        """Choices validation fails when value is not in allowed set."""
-        manifest = _make_manifest(
-            mutable_options={
-                "provider": ConfigOption(
-                    name="provider",
-                    option_type="string",
-                    default="unknown",
-                    django_setting="TEST_PROVIDER",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "provider": OptionDerivation(
-                    option_key="provider",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="provider",
-                            rule_type="choices",
-                            allowed_values=["posthog", "segment"],
-                            description="Provider must be a known backend",
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert len(result.validation_issues) == 1
-        assert "known backend" in result.validation_issues[0]
-
-    def test_range_validation_passes(self) -> None:
-        """Range validation passes when value is within bounds."""
-        manifest = _make_manifest(
-            mutable_options={
-                "interval": ConfigOption(
-                    name="interval",
-                    option_type="integer",
-                    default=60,
-                    django_setting="TEST_INTERVAL",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "interval": OptionDerivation(
-                    option_key="interval",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="interval",
-                            rule_type="range",
-                            min_value=1,
-                            max_value=3600,
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert result.validation_issues == []
-
-    def test_range_validation_fails_below_min(self) -> None:
-        """Range validation fails when value is below minimum."""
-        manifest = _make_manifest(
-            mutable_options={
-                "interval": ConfigOption(
-                    name="interval",
-                    option_type="integer",
-                    default=0,
-                    django_setting="TEST_INTERVAL",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "interval": OptionDerivation(
-                    option_key="interval",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="interval",
-                            rule_type="range",
-                            min_value=1,
-                            max_value=3600,
-                            description="Interval must be between 1 and 3600",
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert len(result.validation_issues) == 1
-        assert "between 1 and 3600" in result.validation_issues[0]
-
-    def test_range_validation_fails_above_max(self) -> None:
-        """Range validation fails when value exceeds maximum."""
-        manifest = _make_manifest(
-            mutable_options={
-                "interval": ConfigOption(
-                    name="interval",
-                    option_type="integer",
-                    default=9999,
-                    django_setting="TEST_INTERVAL",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "interval": OptionDerivation(
-                    option_key="interval",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="interval",
-                            rule_type="range",
-                            min_value=1,
-                            max_value=3600,
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert len(result.validation_issues) == 1
-
-    def test_pattern_validation_passes(self) -> None:
-        """Pattern validation passes when value matches regex."""
-        manifest = _make_manifest(
-            mutable_options={
-                "api_key": ConfigOption(
-                    name="api_key",
-                    option_type="string",
-                    default="phc_abc123",
-                    django_setting="TEST_API_KEY",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "api_key": OptionDerivation(
-                    option_key="api_key",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="api_key",
-                            rule_type="pattern",
-                            pattern=r"^phc_[a-zA-Z0-9]+$",
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert result.validation_issues == []
-
-    def test_pattern_validation_fails(self) -> None:
-        """Pattern validation fails when value does not match regex."""
-        manifest = _make_manifest(
-            mutable_options={
-                "api_key": ConfigOption(
-                    name="api_key",
-                    option_type="string",
-                    default="invalid_key",
-                    django_setting="TEST_API_KEY",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "api_key": OptionDerivation(
-                    option_key="api_key",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="api_key",
-                            rule_type="pattern",
-                            pattern=r"^phc_[a-zA-Z0-9]+$",
-                            description="API key must start with phc_",
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert len(result.validation_issues) == 1
-        assert "phc_" in result.validation_issues[0]
-
-    def test_shared_validation_rule(self) -> None:
-        """Shared validation rules apply to all options."""
-        manifest = _make_manifest(
-            mutable_options={
-                "key1": ConfigOption(
-                    name="key1",
-                    option_type="string",
-                    default="value1",
-                    django_setting="TEST_KEY1",
-                    mutability="mutable",
-                ),
-                "key2": ConfigOption(
-                    name="key2",
-                    option_type="string",
-                    default=None,
-                    django_setting="TEST_KEY2",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            shared_validation_rules=[
-                ValidationRule(
-                    option_key="*",
-                    rule_type="required",
-                    description="All values are required",
-                ),
-            ],
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        # key1 passes, key2 fails
-        assert len(result.validation_issues) == 1
-        assert "All values are required" in result.validation_issues[0]
-
-    def test_multiple_validation_issues_collected(self) -> None:
-        """Multiple validation failures are all reported."""
-        manifest = _make_manifest(
-            mutable_options={
-                "provider": ConfigOption(
-                    name="provider",
-                    option_type="string",
-                    default="invalid",
-                    django_setting="TEST_PROVIDER",
-                    mutability="mutable",
-                ),
-                "api_key": ConfigOption(
-                    name="api_key",
-                    option_type="string",
-                    default=None,
-                    django_setting="TEST_API_KEY",
-                    mutability="mutable",
-                ),
-            },
-        )
-        schema = _make_schema(
-            option_derivations={
-                "provider": OptionDerivation(
-                    option_key="provider",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="provider",
-                            rule_type="choices",
-                            allowed_values=["posthog", "segment"],
-                            description="Invalid provider",
-                        ),
-                    ],
-                ),
-                "api_key": OptionDerivation(
-                    option_key="api_key",
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="api_key",
-                            rule_type="required",
-                            description="API key is required",
-                        ),
-                    ],
-                ),
-            },
-        )
-
-        result = resolve_module_config(manifest, schema)
-
-        assert len(result.validation_issues) == 2
-        descriptions = " ".join(result.validation_issues)
-        assert "Invalid provider" in descriptions
-        assert "API key is required" in descriptions
 
 
 # ---------------------------------------------------------------------------
@@ -1610,9 +1186,9 @@ class TestDerivedSettingsProjection:
 class TestAnalyticsShapedResolution:
     """End-to-end test using analytics-shaped derivation rules.
 
-    Proves that the resolver can compute defaults, normalize, validate,
-    and project settings for a configuration shape similar to what the
-    analytics module will use as its first pilot.
+    Proves that the resolver can compute defaults, normalize, and project
+    settings for a configuration shape similar to what the analytics module
+    will use as its first pilot.
     """
 
     def _build_analytics_manifest(self) -> ModuleManifest:
@@ -1662,14 +1238,6 @@ class TestAnalyticsShapedResolution:
                             source_key="provider",
                             target_key="provider",
                             rule_type="lowercase",
-                        ),
-                    ],
-                    validation_rules=[
-                        ValidationRule(
-                            option_key="provider",
-                            rule_type="choices",
-                            allowed_values=["posthog", "segment", "none"],
-                            description="Provider must be a known analytics backend",
                         ),
                     ],
                     derived_settings=[
@@ -1732,8 +1300,8 @@ class TestAnalyticsShapedResolution:
         assert result.derived_settings["ANALYTICS_ENABLED"] is True
         assert result.derived_settings["POSTHOG_HOST"] == "https://us.i.posthog.com"
 
-    def test_override_with_normalization_and_validation(self) -> None:
-        """Overrides are normalized and validated through the derivation rules."""
+    def test_override_with_normalization(self) -> None:
+        """Overrides are normalized through the derivation rules."""
         manifest = self._build_analytics_manifest()
         schema = self._build_analytics_schema()
 
@@ -1747,20 +1315,6 @@ class TestAnalyticsShapedResolution:
         assert result.resolved["provider"] == "posthog"
         assert result.validation_issues == []
         assert result.derived_settings["ANALYTICS_PROVIDER"] == "posthog"
-
-    def test_invalid_provider_produces_validation_issue(self) -> None:
-        """An invalid provider value produces a validation issue."""
-        manifest = self._build_analytics_manifest()
-        schema = self._build_analytics_schema()
-
-        result = resolve_module_config(
-            manifest,
-            schema,
-            overrides={"provider": "unknown_backend"},
-        )
-
-        assert len(result.validation_issues) == 1
-        assert "known analytics backend" in result.validation_issues[0]
 
 
 # ---------------------------------------------------------------------------
@@ -2169,3 +1723,193 @@ class TestListNormalization:
             manifest, schema, overrides={"providers": ["ok"]}
         )
         assert result.resolved["providers"] == [{"key": "val"}]
+
+
+# ---------------------------------------------------------------------------
+# path_or_absolute_url normalization kind (Module Conventions rule 12)
+# ---------------------------------------------------------------------------
+
+#: Frozen historical media case table: each row is the composed behavior of
+#: the storage manifest's strip rule plus the module-owned
+#: ``_canonical_media_url`` helper that P2 deletes.  The table is captured
+#: from the pre-deletion source (root owns that version-control provenance)
+#: and is the oracle both normalization paths must reproduce; it is not
+#: generated from the new normalizer.
+_MEDIA_URL_CASE_TABLE: list[tuple[str, str]] = [
+    ("", "/media/"),
+    ("   ", "/media/"),
+    ("\t\n", "/media/"),
+    ("media", "/media/"),
+    ("/media", "/media/"),
+    (" /uploads ", "/uploads/"),
+    ("/media/", "/media/"),
+    ("/", "/"),
+    ("//uploads//", "//uploads//"),
+    ("uploads//", "/uploads//"),
+    ("media\npath", "/media\npath/"),
+    ("/uploads?x=1#f", "/uploads?x=1#f/"),
+    ("https://cdn.example/media", "https://cdn.example/media/"),
+    ("http://cdn.example/media/", "http://cdn.example/media/"),
+    (" https://cdn.example/media/ ", "https://cdn.example/media/"),
+    ("https://cdn.example/media?x=1#f", "https://cdn.example/media?x=1#f/"),
+    ("httpish", "httpish/"),
+    ("HTTP://cdn.example/media", "/HTTP://cdn.example/media/"),
+    ("ftp://cdn.example/media", "/ftp://cdn.example/media/"),
+]
+
+#: A pattern that admits every canonical output the kind produces (rule 12).
+_MEDIA_URL_PATTERN = r"(?s)^/(?:.*/)?$|^http.*/$"
+
+#: The raw per-option derivation a loaded manifest carries for the option.
+_MEDIA_URL_DERIVATION: dict[str, dict[str, object]] = {
+    "media_url": {
+        "normalization_rules": [
+            {
+                "source_key": "media_url",
+                "target_key": "media_url",
+                "rule_type": "path_or_absolute_url",
+            },
+        ],
+    },
+}
+
+
+def _media_manifest(default: str = "/media/") -> ModuleManifest:
+    """Build a manifest with one path_or_absolute_url option."""
+    return ModuleManifest(
+        name="test_module",
+        version="1.0.0",
+        mutable_options={
+            "media_url": ConfigOption(
+                name="media_url",
+                option_type="string",
+                default=default,
+                django_setting="MEDIA_URL",
+                mutability="mutable",
+            ),
+        },
+        option_derivations=dict(_MEDIA_URL_DERIVATION),
+    )
+
+
+def _media_schema() -> ModuleDerivationSchema:
+    """Build the schema declaring the option's path_or_absolute_url rule."""
+    return build_schema_from_manifest(
+        manifest_name="test_module",
+        option_derivations=_MEDIA_URL_DERIVATION,
+    )
+
+
+class TestPathOrAbsoluteUrlNormalization:
+    """The kind preserves the historical MEDIA_URL contract exactly."""
+
+    @pytest.mark.parametrize(("supplied", "expected"), _MEDIA_URL_CASE_TABLE)
+    def test_resolve_module_config_matches_frozen_table(
+        self, supplied: str, expected: str
+    ) -> None:
+        result = resolve_module_config(
+            _media_manifest(), _media_schema(), overrides={"media_url": supplied}
+        )
+        assert result.resolved["media_url"] == expected
+
+    @pytest.mark.parametrize(("supplied", "expected"), _MEDIA_URL_CASE_TABLE)
+    def test_shared_normalization_matches_frozen_table(
+        self, supplied: str, expected: str
+    ) -> None:
+        """The validation/persistence path agrees with resolution."""
+        canonical = normalize_module_option_values(
+            _media_manifest(), {"media_url": supplied}
+        )
+        assert canonical["media_url"] == expected
+
+    def test_omitted_value_uses_the_declared_default(self) -> None:
+        result = resolve_module_config(_media_manifest(), _media_schema())
+        assert result.resolved["media_url"] == "/media/"
+
+    @pytest.mark.parametrize("default", ["/assets/", "assets", " assets ", " /assets "])
+    def test_blank_value_uses_a_changed_declared_default(self, default: str) -> None:
+        """No core media constant exists: the option's own default is the source."""
+        manifest = _media_manifest(default=default)
+        for supplied in ("", "   ", "\t\n"):
+            result = resolve_module_config(
+                manifest, _media_schema(), overrides={"media_url": supplied}
+            )
+            assert result.resolved["media_url"] == "/assets/"
+            assert (
+                normalize_module_option_values(manifest, {"media_url": supplied})[
+                    "media_url"
+                ]
+                == "/assets/"
+            )
+            assert (
+                normalize_module_option_values(manifest, result.resolved)
+                == result.resolved
+            )
+        omitted = resolve_module_config(manifest, _media_schema())
+        assert omitted.resolved["media_url"] == "/assets/"
+        assert normalize_module_option_values(manifest) == omitted.resolved
+
+    @pytest.mark.parametrize(("supplied", "expected"), _MEDIA_URL_CASE_TABLE)
+    def test_canonical_output_is_idempotent(self, supplied: str, expected: str) -> None:
+        result = resolve_module_config(
+            _media_manifest(), _media_schema(), overrides={"media_url": expected}
+        )
+        assert result.resolved["media_url"] == expected
+
+    def test_non_string_values_reach_the_raw_type_refusal_unchanged(self) -> None:
+        for raw in (None, True, 1, ["x"], {"x": 1}):
+            result = resolve_module_config(
+                _media_manifest(), _media_schema(), overrides={"media_url": raw}
+            )
+            assert result.resolved["media_url"] == raw
+
+    def test_missing_context_does_not_invent_a_media_default(self) -> None:
+        rule = NormalizationRule(
+            source_key="media_url",
+            target_key="media_url",
+            rule_type="path_or_absolute_url",
+        )
+        assert _apply_normalization_rule("   ", rule) == ""
+        assert _apply_normalization_rule("   ", rule) != "/media/"
+        assert _apply_normalization_rule(" media ", rule) == "/media/"
+        assert _normalize_value("   ", "media_url", None, [rule]) == ""
+
+    def test_url_kind_is_unchanged_and_distinct(self) -> None:
+        """The url rule keeps its scheme-prepending, slash-stripping form."""
+        url_rule = NormalizationRule(
+            source_key="endpoint_url",
+            target_key="endpoint_url",
+            rule_type="url",
+        )
+        assert (
+            _apply_normalization_rule("cdn.example.com/x/", url_rule)
+            == "https://cdn.example.com/x"
+        )
+
+        path_rule = NormalizationRule(
+            source_key="media_url",
+            target_key="media_url",
+            rule_type="path_or_absolute_url",
+        )
+        assert (
+            _apply_normalization_rule(
+                "cdn.example.com/x/", path_rule, option_default="/media/"
+            )
+            == "/cdn.example.com/x/"
+        )
+
+    def test_declarable_pattern_admits_every_canonical_output(self) -> None:
+        """A media pattern must be permissive, never an absolute-host constraint."""
+        for supplied, expected in _MEDIA_URL_CASE_TABLE:
+            assert re.fullmatch(_MEDIA_URL_PATTERN, expected), (
+                f"expected output for {supplied!r} is not admitted by the "
+                f"pattern: {expected!r}"
+            )
+
+        absolute_host_pattern = r"^https?://[A-Za-z0-9.-]+(?:/[^/]*)*$"
+        rejected = [
+            expected
+            for _, expected in _MEDIA_URL_CASE_TABLE
+            if not re.fullmatch(absolute_host_pattern, expected)
+        ]
+        assert rejected, "the table must include non-absolute outputs"

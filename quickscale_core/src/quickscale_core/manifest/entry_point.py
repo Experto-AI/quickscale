@@ -39,6 +39,7 @@ from quickscale_core.manifest.assembler import (
 )
 from quickscale_core.manifest.derivation import build_schema_from_manifest
 from quickscale_core.manifest.loader import ManifestError, load_manifest_from_path
+from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.manifest.resolver import resolve_module_config
 from quickscale_core.module_wiring import ModuleWiringSpec
 
@@ -84,8 +85,15 @@ def build_generic_manifest_spec(
     """Build a wiring spec from the derivation rules in ``module.yml``.
 
     ``project_package`` is accepted for signature parity with module-owned
-    adapters.  The generic manifest path does not use it.  A supplied retired
-    key or a resolution issue fails closed before wiring is assembled.
+    adapters.  The generic manifest path does not use it.
+
+    The manifest's declared option checks run on the supplied values before
+    resolution, projection, or any post-resolution hook: every option is
+    judged against its declared type and its ``validation`` block against the
+    values as supplied, so an invalid option raises before a hook or any
+    rendering runs.  A supplied retired key keeps its precedence, and the
+    resolution boundary's URL-projection issues still fail closed after
+    resolution.
     """
     del project_package
     manifest = load_module_manifest(module_name)
@@ -93,6 +101,9 @@ def build_generic_manifest_spec(
     retired = sorted(name for name in manifest.retired_options if name in supplied)
     if retired:
         raise ManifestError(manifest.retired_options[retired[0]], module_name)
+    issues = validate_module_options(manifest, supplied, supplied=supplied)
+    if issues:
+        raise ManifestError(issues[0], module_name)
     schema = build_schema_from_manifest(
         manifest_name=module_name,
         wiring_projections=manifest.wiring_projections,

@@ -386,6 +386,48 @@ alone; `derived_settings` is only for a setting computed from several options or
 transformed, and carries no default (the option's `default` is the only one). The
 derivation section keeps normalisation, those computed settings, and wiring.
 
+**SA263 amendment.** The generic boundary owns the whole option pipeline:
+`module.yml` declares each option's default, normalization rules, and checks,
+the shared normalization engine canonicalizes every resolved value before any
+post-resolution hook runs, and a hook contributes only what the declarative
+resolver cannot express (a composite setting, a runtime selection, an
+off-switch transformation, or managed rendering). A hook never re-validates,
+re-coerces, re-normalizes, or manufactures a fallback for an option value the
+boundary already handled, and no hook or rendering runs for a supplied value
+the manifest's checks refuse. Raw supplied values are judged before any lossy
+conversion: the declared type is checked against the supplied shape (`None`,
+containers, and integer booleans are refused), a declared normalization rule's
+conversion is the only way a string spelling satisfies the declared type, and
+hooks consume the canonical value.
+
+`path_or_absolute_url` is the parameter-free normalization kind for a
+relative-or-absolute path URL such as `MEDIA_URL`: strip whitespace; a blank
+result substitutes the owning option's declared string default and strips its
+whitespace through the same transformation; prepend `/` unless the value
+already starts with `/` or the literal `http`; append `/` when absent; and
+preserve every other byte — repeated slashes, query/fragment text, and case
+included. It is distinct from `url`, which prepends `https://` to a scheme-less
+value and strips a trailing slash, and it never lowercases or collapses a path.
+The default comes from the option's own declaration through shared
+normalization; no core or adapter constant supplies a media default, and a
+low-level normalization call with no declared default available must not invent
+one. A mapped `_ENV_VAR` option keeps its name setting and gains the
+suffix-stripped secret setting: the deferred `__QS_ENV__:<name>` reference for a
+nonblank validated name, and the literal empty string for a blank one. Plan and
+apply never read or persist credential material; the generated
+`settings/modules.py` resolves the reference through
+`os.environ.get("<name>", "")` at runtime.
+
+Computed derived settings may declare presence in their expression with
+`when: {<scalar-option>: [<typed-value>, ...]}` (every entry must match) and
+`omit_if_blank: [<string-option>, ...]` (any canonical empty string omits the
+setting). These guards are only for computed settings, never wiring projections;
+the loader refuses unknown options, wrong types, or empty guard declarations.
+An omitted derivation contributes no setting and does not remove a direct
+baseline setting. A cloud-only deferred scalar alias belongs here, not in a
+post-hook: storage declares both `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+with backend and blank-name presence guards. No guard reads secret material.
+
 **Constraints:**
 - ✅ Derivation types are frozen dataclasses and all field types are YAML-safe
   (scalars, lists, dicts), so `module.yml` `derivation:` sections round-trip
@@ -522,7 +564,7 @@ settings read but never declared, and every default written twice. Renames are a
   | `_RATE_LIMIT` | throttle, `"<count>/<period>"`, parsed by DRF's throttle (rule 9) | string |
   | `_RETENTION_DAYS` | days before deletion or anonymization; `0` keeps forever | integer |
   | `_TTL_SECONDS` | lifetime of a cache entry or signed token | integer |
-  | `_ENV_VAR` | the *name* of an environment variable holding a secret, never the secret (rule 35) | string |
+  | `_ENV_VAR` | the *name* of an environment variable holding a secret, never the secret (rule 35); the mapped option also projects the suffix-stripped secret setting through the generic `__QS_ENV__` boundary | string |
 
   Booleans that describe behavior rather than switch a feature keep a descriptive name
   (`QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG`).
@@ -537,7 +579,14 @@ settings read but never declared, and every default written twice. Renames are a
   adapter off and on, with a control case proving it rejects a dropping adapter.
 - ✅ Vendor credentials default to the vendor's variable name (`STRIPE_SECRET_KEY`,
   `RESEND_API_KEY`, `AWS_ACCESS_KEY_ID`); secrets QuickScale itself defines use
-  `QUICKSCALE_<MODULE>_<NAME>`.
+  `QUICKSCALE_<MODULE>_<NAME>`. Listed exception: backups' private-remote credentials default
+  to `QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID` and
+  `QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY`, because that remote is backups' own private
+  artifact store and its credentials stay distinct from storage's media credentials and from
+  the ambient `AWS_*` provider chain.
+  Enforcement binds each known vendor default to its owning module and option;
+  another vendor's name or an unlisted own-stem QuickScale replacement is not an
+  exception. Operator-supplied env-var names remain permitted.
 
 **2. Identity names.** One stem, `quickscale_<module>`, for everything a project or database sees:
 
@@ -801,12 +850,22 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   `_TTL_SECONDS` from 1; `_RATE_LIMIT` the pattern
   `^\d+/(second|minute|hour|day)$`; a closed set of strings its `choices`. Booleans and free text
   are exempt.
-- ✅ Declarative normalization kinds are `identity`, `strip`, `lowercase`, `url`, `choice_map`,
-  `coerce_int`, `coerce_bool`, `slug`, and `list`. `slug` lowercases, maps `_` and whitespace to
-  `-`, drops characters outside `[a-z0-9-]`, collapses repeated dashes, trims leading/trailing
-  dashes, and takes an optional `max_length` and an optional `replace` mapping applied first.
-  `list` comma-splits a string or wraps a scalar, applies its nested `item_rules` to each item,
-  drops empties, and dedupes preserving order; a provider alias table is a `choice_map` item rule.
+- ✅ Declarative normalization kinds are `identity`, `strip`, `lowercase`, `url`,
+  `path_or_absolute_url`, `choice_map`, `coerce_int`, `coerce_bool`, `slug`, and `list`. `slug`
+  lowercases, maps `_` and whitespace to `-`, drops characters outside `[a-z0-9-]`, collapses
+  repeated dashes, trims leading/trailing dashes, and takes an optional `max_length` and an
+  optional `replace` mapping applied first. `list` comma-splits a string or wraps a scalar,
+  applies its nested `item_rules` to each item, drops empties, and dedupes preserving order; a
+  provider alias table is a `choice_map` item rule. `url` canonicalizes an absolute URL by
+  prepending `https://` to a scheme-less value and stripping a trailing slash;
+  `path_or_absolute_url` is the parameter-free relative-or-absolute kind of §[Module Derivation
+  Schema](#module-derivation-schema): it prepends `/` to a non-rooted value that does not
+  literally start with `http`, appends `/` when absent, preserves every other byte, and resolves
+  a blank value through the owning option's declared default. An option that may hold a
+  relative path MUST NOT declare `url`, and a `pattern` declared for a `path_or_absolute_url`
+  option must admit every canonical output the kind produces — a root-leading string ending in
+  `/` with repeated slashes, query/fragment text, or embedded newlines included, or the
+  case-sensitive literal `http`-prefixed form — never an absolute-host constraint.
 - ✅ A mutable option's `django_setting` is its only projection when the setting equals the option
   value; `derivation.option_derivations.<option>.derived_settings` is only for a setting computed
   from several options or transformed, and never repeats a setting name or a default. The

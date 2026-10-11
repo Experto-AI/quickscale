@@ -65,7 +65,7 @@ from scripts.module_conventions.rules_routes import (
 from scripts.module_conventions.rules_settings import (
     rule_1_settings_names,
     rule_3_settings_reads,
-    rule_12_manifest_options,
+    rule_12_manifest_and_adapter_options,
     rule_42_settings_snapshots,
     rule_43_optional_senders,
 )
@@ -95,7 +95,11 @@ RULES: tuple[Rule, ...] = (
     Rule(9, "HTTP APIs", rule_9_http_apis),
     Rule(10, "checks, errors, core ports", rule_10_checks_errors),
     Rule(11, "package files, tests, and one-off file privatization", rule_11_package_files),
-    Rule(12, "manifest option schema", rule_12_manifest_options),
+    Rule(
+        12,
+        "manifest option schema and the adapter's delivered derivations",
+        rule_12_manifest_and_adapter_options,
+    ),
     Rule(13, "tenant models", rule_13_tenant_models),
     Rule(14, "model basics", rule_14_model_basics),
     Rule(15, "package root", rule_15_package_root),

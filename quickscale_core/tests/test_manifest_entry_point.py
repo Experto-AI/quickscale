@@ -34,7 +34,10 @@ import pytest
 
 from quickscale_core.manifest import (
     MANIFEST_ADAPTER_REGISTRY,
+    ConfigOption,
     ManifestAdapterNotFound,
+    ManifestError,
+    ModuleManifest,
     build_generic_manifest_spec,
     build_manifest_wiring_spec,
     load_module_manifest,
@@ -47,8 +50,11 @@ from quickscale_core.manifest.entry_point import (
     ManifestAdapterNotFound as ManifestAdapterNotFoundDirect,
     build_manifest_wiring_spec as build_manifest_wiring_spec_direct,
 )
-from quickscale_core.module_wiring import ModuleWiringSpec
-from quickscale_modules_analytics.adapter import _analytics_post_hook
+from quickscale_core.manifest.option_validation import validate_module_options
+from quickscale_core.module_wiring import (
+    ModuleWiringSpec,
+    render_settings_modules_py,
+)
 from quickscale_modules_auth.adapter import (
     get_manifest_adapter as get_auth_manifest_adapter,
 )
@@ -58,9 +64,6 @@ from quickscale_modules_orgs.adapter import (
 from quickscale_modules_storage.adapter import (
     get_manifest_adapter as get_storage_manifest_adapter,
 )
-from quickscale_modules_blog.adapter import _blog_post_hook
-from quickscale_modules_forms.adapter import _forms_post_hook
-from quickscale_modules_listings.adapter import _listings_post_hook
 
 # SA44 Phase 1: managed adapters are NOT registered
 # at import time.  ``refresh_managed_adapters()`` is called by the
@@ -827,12 +830,6 @@ class TestRegisteredAdapterPaths:
                 "QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS",
                 [],
             ),
-            (
-                "social",
-                {"provider_allowlist": []},
-                "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST",
-                [],
-            ),
         ],
     )
     def test_manifest_setting_edge_values_survive_public_adapters(
@@ -843,10 +840,24 @@ class TestRegisteredAdapterPaths:
         expected: object,
     ) -> None:
         """False and empty values remain settings rather than being omitted."""
-        kwargs = {"project_package": "myapp"} if module_name == "social" else {}
-        spec = build_manifest_wiring_spec(module_name, overrides, **kwargs)
+        spec = build_manifest_wiring_spec(module_name, overrides)
 
         assert spec.settings[setting_name] == expected
+
+    def test_social_empty_allowlist_is_refused_by_manifest_authority(self) -> None:
+        """The shipped social manifest forbids an empty provider allowlist.
+
+        The generic boundary enforces the manifest's own ``not_empty`` check
+        before the adapter's hook runs, so the empty list is refused naming
+        the manifest setting path instead of silently surviving as a setting.
+        """
+        with pytest.raises(ManifestError) as exc_info:
+            build_manifest_wiring_spec(
+                "social", {"provider_allowlist": []}, project_package="myapp"
+            )
+        message = str(exc_info.value)
+        assert "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST" in message
+        assert "modules.social.provider_allowlist" in message
 
 
 # ---------------------------------------------------------------------------
@@ -1956,111 +1967,54 @@ def get_manifest_adapter():
 
 
 # ---------------------------------------------------------------------------
-# SA18.2: Fail-hard on empty-after-resolution analytics manifest settings.
-# An empty result after resolution means the manifest derivation produced
-# an invalid result and should raise ManifestError instead of silently
-# defaulting to PostHog values.
+# SA263: analytics' option checks and secret projections belong to the
+# manifest boundary.  The former adapter-only nonempty policy is gone; an
+# invalid supplied value is refused by the manifest's own declared rules.
 # ---------------------------------------------------------------------------
 
 
-class TestAnalyticsPostHookFailHard:
-    """Empty-after-resolution analytics manifest settings raise ManifestError
-    instead of silently defaulting to PostHog values (SA18.2)."""
+class TestAnalyticsManifestBoundary:
+    """Analytics invalid options fail closed at the manifest boundary."""
 
-    def test_empty_provider_raises_manifest_error(self) -> None:
-        """An empty QUICKSCALE_ANALYTICS_PROVIDER raises ManifestError."""
-        from quickscale_core.manifest import ManifestError
-
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_ANALYTICS_ENABLED": True,
-                "QUICKSCALE_ANALYTICS_PROVIDER": "",
-                "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "POSTHOG_API_KEY",
-                "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "POSTHOG_HOST",
-                "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "https://us.i.posthog.com",
-            }
-        )
-        resolved = {"enabled": True}
-
-        with pytest.raises(ManifestError, match="QUICKSCALE_ANALYTICS_PROVIDER"):
-            _analytics_post_hook(spec, resolved)
-
-    def test_empty_host_raises_manifest_error(self) -> None:
-        """An empty QUICKSCALE_ANALYTICS_POSTHOG_HOST raises ManifestError."""
-        from quickscale_core.manifest import ManifestError
-
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_ANALYTICS_ENABLED": True,
-                "QUICKSCALE_ANALYTICS_PROVIDER": "posthog",
-                "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "POSTHOG_API_KEY",
-                "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "POSTHOG_HOST",
-                "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "",
-            }
-        )
-        resolved = {"enabled": True}
-
-        with pytest.raises(ManifestError, match="QUICKSCALE_ANALYTICS_POSTHOG_HOST"):
-            _analytics_post_hook(spec, resolved)
-
-    def test_multiple_empty_keys_reported(self) -> None:
-        """Multiple empty settings are all listed in the error message."""
-        from quickscale_core.manifest import ManifestError
-
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_ANALYTICS_ENABLED": True,
-                "QUICKSCALE_ANALYTICS_PROVIDER": "",
-                "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "",
-                "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "",
-                "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "",
-            }
-        )
-        resolved = {"enabled": True}
-
+    def test_empty_provider_is_refused_by_the_choices_rule(self) -> None:
+        """An empty QUICKSCALE_ANALYTICS_PROVIDER names its setting path."""
         with pytest.raises(ManifestError) as exc_info:
-            _analytics_post_hook(spec, resolved)
-        msg = str(exc_info.value)
-        assert "QUICKSCALE_ANALYTICS_PROVIDER" in msg
-        assert "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR" in msg
-        assert "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR" in msg
-        assert "QUICKSCALE_ANALYTICS_POSTHOG_HOST" in msg
+            build_manifest_wiring_spec("analytics", {"provider": ""})
+        message = str(exc_info.value)
+        assert "QUICKSCALE_ANALYTICS_PROVIDER" in message
+        assert "modules.analytics.provider" in message
 
-    def test_non_empty_settings_do_not_raise(self) -> None:
-        """Non-empty analytics settings pass through without error."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_ANALYTICS_ENABLED": True,
-                "QUICKSCALE_ANALYTICS_PROVIDER": "posthog",
-                "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "POSTHOG_API_KEY",
-                "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "POSTHOG_HOST",
-                "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "https://eu.i.posthog.com",
-            }
+    def test_blank_host_is_refused_by_the_pattern_rule(self) -> None:
+        """A blank QUICKSCALE_ANALYTICS_POSTHOG_HOST names its setting path."""
+        with pytest.raises(ManifestError) as exc_info:
+            build_manifest_wiring_spec("analytics", {"posthog_host": ""})
+        message = str(exc_info.value)
+        assert "QUICKSCALE_ANALYTICS_POSTHOG_HOST" in message
+        assert "modules.analytics.posthog_host" in message
+
+    def test_blank_env_var_names_are_accepted_spellings(self) -> None:
+        """A blank env-var name is a declared spelling, projected as empty."""
+        from quickscale_core.module_wiring import render_settings_modules_py
+
+        spec = build_manifest_wiring_spec("analytics", {"posthog_api_key_env_var": ""})
+
+        assert spec.settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR"] == ""
+        assert spec.settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"] == ""
+        content = render_settings_modules_py({"analytics": spec})
+        assert 'os.environ.get("", "")' not in content
+
+    def test_disabled_analytics_keeps_apps_and_drops_public_urls(self) -> None:
+        """Rule 1 (D3): off keeps the app and settings; only URLs drop."""
+        spec = build_manifest_wiring_spec("analytics", {"enabled": False})
+
+        assert spec.apps == ("quickscale_modules_analytics",)
+        assert spec.url_includes == ()
+        assert spec.settings["QUICKSCALE_ANALYTICS_ENABLED"] is False
+        assert spec.settings["QUICKSCALE_ANALYTICS_PROVIDER"] == "posthog"
+        assert (
+            spec.settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"]
+            == "__QS_ENV__:POSTHOG_API_KEY"
         )
-        resolved = {"enabled": True}
-
-        # Should not raise.
-        result = _analytics_post_hook(spec, resolved)
-        assert result is not None
-        assert isinstance(result, ModuleWiringSpec)
-
-    def test_disabled_short_circuit_still_works(self) -> None:
-        """Disabled analytics skips nonempty validation and keeps the module."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_ANALYTICS_ENABLED": False,
-                "QUICKSCALE_ANALYTICS_PROVIDER": "",
-            }
-        )
-        resolved = {"enabled": False}
-
-        result = _analytics_post_hook(spec, resolved)
-        assert isinstance(result, ModuleWiringSpec)
-        # Rule 1 (D3): the app stays; only the public URLs unmount.
-        assert result.apps == ()
-        assert result.url_includes == ()
-        for key in spec.settings:
-            assert key in result.settings
 
 
 # ---------------------------------------------------------------------------
@@ -2070,32 +2024,34 @@ class TestAnalyticsPostHookFailHard:
 
 
 class TestOrgsStorageAdapterFailClosed:
-    """Orgs/storage custom manifest-adapter callers must feed validation
-    issues into ResolverResult so that assemble_wiring_spec fails closed
-    on invalid options instead of silently assembling an invalid spec
-    (CR-SA27-001)."""
+    """Orgs/storage custom manifest-adapter callers must fail closed on
+    invalid options (silent-coercion removal caller-parity gap).
+
+    The generic boundary refuses the supplied option through the
+    option-validation engine before resolution, so an invalid option never
+    reaches a hook or the assembler (CR-SA27-001)."""
 
     def test_orgs_invalid_mode_raises_manifest_error(self) -> None:
         """build_manifest_wiring_spec('orgs', {'mode': 'invalid'})
-        raises ManifestError with a descriptive message."""
+        raises ManifestError naming the manifest setting path."""
         from quickscale_core.manifest import ManifestError
 
         with pytest.raises(ManifestError) as exc_info:
             build_manifest_wiring_spec("orgs", {"mode": "invalid_mode"})
         msg = str(exc_info.value)
-        assert "validation issues" in msg
         assert "modules.orgs.mode" in msg
+        assert "must be one of" in msg
 
     def test_storage_invalid_backend_raises_manifest_error(self) -> None:
         """build_manifest_wiring_spec('storage', {'backend': 'invalid'})
-        raises ManifestError with a descriptive message."""
+        raises ManifestError naming the manifest setting path."""
         from quickscale_core.manifest import ManifestError
 
         with pytest.raises(ManifestError) as exc_info:
             build_manifest_wiring_spec("storage", {"backend": "invalid_backend"})
         msg = str(exc_info.value)
-        assert "validation issues" in msg
         assert "modules.storage.backend" in msg
+        assert "must be one of" in msg
 
     def test_orgs_valid_mode_still_succeeds(self) -> None:
         """Valid orgs mode continues to produce a spec (happy path)."""
@@ -2113,231 +2069,85 @@ class TestOrgsStorageAdapterFailClosed:
 
 
 # ---------------------------------------------------------------------------
-# SA42: Post-hook settings reads fail hard instead of silently coercing
-# via .get(key, default).  Missing key -> KeyError; empty blog rate limit
-# -> ManifestError (matching SA18.2 precedent).
+# SA263: module settings boundaries are manifest-owned.  The generic boundary
+# refuses wrong-shaped supplied values before any hook or rendering; the
+# hooks consume canonical values and contribute only composite settings.
 # ---------------------------------------------------------------------------
 
 
-class TestBlogPostHookFailHard:
-    """Missing/empty blog post-hook settings raise instead of defaulting (SA42)."""
+class TestBlogManifestBoundary:
+    """Blog invalid options fail closed at the manifest boundary."""
 
-    def test_missing_posts_per_page_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_BLOG_POSTS_PER_PAGE raises KeyError."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BLOG_RSS_ENABLED": True,
-                "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="QUICKSCALE_BLOG_POSTS_PER_PAGE"):
-            _blog_post_hook(spec, resolved)
+    @pytest.mark.parametrize(
+        "supplied",
+        [
+            {"posts_per_page": "10"},
+            {"api_rate_limit": ""},
+            {"api_rate_limit": "   "},
+            {"rss_enabled": 1},
+        ],
+    )
+    def test_wrong_shaped_options_are_refused(self, supplied: dict[str, Any]) -> None:
+        with pytest.raises(ManifestError, match="modules.blog."):
+            build_manifest_wiring_spec("blog", dict(supplied))
 
-    def test_missing_enable_rss_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_BLOG_RSS_ENABLED raises KeyError."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
-                "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="QUICKSCALE_BLOG_RSS_ENABLED"):
-            _blog_post_hook(spec, resolved)
+    def test_valid_options_flow_to_canonical_settings(self) -> None:
+        spec = build_manifest_wiring_spec("blog", {"posts_per_page": 10})
 
-    def test_missing_rate_limit_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_BLOG_API_RATE_LIMIT raises KeyError."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
-                "QUICKSCALE_BLOG_RSS_ENABLED": True,
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="QUICKSCALE_BLOG_API_RATE_LIMIT"):
-            _blog_post_hook(spec, resolved)
-
-    def test_empty_rate_limit_raises_manifest_error(self) -> None:
-        """An empty QUICKSCALE_BLOG_API_RATE_LIMIT raises ManifestError instead of defaulting."""
-        from quickscale_core.manifest import ManifestError
-
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
-                "QUICKSCALE_BLOG_RSS_ENABLED": True,
-                "QUICKSCALE_BLOG_API_RATE_LIMIT": "",
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(ManifestError, match="QUICKSCALE_BLOG_API_RATE_LIMIT"):
-            _blog_post_hook(spec, resolved)
-
-    def test_blog_whitespace_only_rate_limit_raises_manifest_error(self) -> None:
-        """A whitespace-only QUICKSCALE_BLOG_API_RATE_LIMIT raises ManifestError."""
-        from quickscale_core.manifest import ManifestError
-
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
-                "QUICKSCALE_BLOG_RSS_ENABLED": True,
-                "QUICKSCALE_BLOG_API_RATE_LIMIT": "   ",
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(ManifestError, match="QUICKSCALE_BLOG_API_RATE_LIMIT"):
-            _blog_post_hook(spec, resolved)
-
-    def test_blog_all_settings_present_passes(self) -> None:
-        """All blog settings present and valid pass through without error."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BLOG_POSTS_PER_PAGE": 10,
-                "QUICKSCALE_BLOG_RSS_ENABLED": True,
-                "QUICKSCALE_BLOG_API_RATE_LIMIT": "5/hour",
-            }
-        )
-        resolved: dict[str, Any] = {"enabled": True}
-        result = _blog_post_hook(spec, resolved)
-        assert isinstance(result, ModuleWiringSpec)
-        assert result.settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"] == 10
-        assert result.settings["QUICKSCALE_BLOG_RSS_ENABLED"] is True
-        assert result.settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "5/hour"
+        assert spec.settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"] == 10
+        assert spec.settings["QUICKSCALE_BLOG_RSS_ENABLED"] is True
+        assert spec.settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "5/hour"
+        assert spec.settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {"quickscale_blog_api": "5/hour"}
+        }
 
 
-class TestListingsPostHookFailHard:
-    """Missing listings post-hook settings raise instead of defaulting (SA42)."""
+class TestListingsManifestBoundary:
+    """Listings invalid options fail closed at the manifest boundary."""
 
-    def test_missing_listings_per_page_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_LISTINGS_PER_PAGE raises KeyError."""
-        spec = ModuleWiringSpec(settings={})
-        resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="QUICKSCALE_LISTINGS_PER_PAGE"):
-            _listings_post_hook(spec, resolved)
+    @pytest.mark.parametrize(
+        "supplied",
+        [
+            {"per_page": "24"},
+            {"api_rate_limit": ""},
+        ],
+    )
+    def test_wrong_shaped_options_are_refused(self, supplied: dict[str, Any]) -> None:
+        with pytest.raises(ManifestError, match="modules.listings."):
+            build_manifest_wiring_spec("listings", dict(supplied))
 
-    def test_listings_setting_present_passes(self) -> None:
-        """A valid QUICKSCALE_LISTINGS_PER_PAGE passes through without error."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_LISTINGS_PER_PAGE": 24,
-                "QUICKSCALE_LISTINGS_API_RATE_LIMIT": "5/hour",
-            }
-        )
-        resolved: dict[str, Any] = {"enabled": True}
-        result = _listings_post_hook(spec, resolved)
-        assert isinstance(result, ModuleWiringSpec)
-        assert result.settings["QUICKSCALE_LISTINGS_PER_PAGE"] == 24
+    def test_valid_options_flow_to_canonical_settings(self) -> None:
+        spec = build_manifest_wiring_spec("listings", {"per_page": 24})
+
+        assert spec.settings["QUICKSCALE_LISTINGS_PER_PAGE"] == 24
+        assert spec.settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {"quickscale_listings_api": "5/hour"}
+        }
 
 
-class TestFormsPostHookFailHard:
-    """Missing forms post-hook settings raise instead of defaulting (SA42)."""
+class TestFormsManifestBoundary:
+    """Forms invalid options fail closed at the manifest boundary."""
 
-    def test_missing_forms_per_page_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE raises KeyError."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_FORMS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
-                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
-                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
-                "QUICKSCALE_FORMS_API_ENABLED": True,
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"):
-            _forms_post_hook(spec, resolved)
+    @pytest.mark.parametrize(
+        "supplied",
+        [
+            {"submissions_per_page": "25"},
+            {"per_page": True},
+            {"rate_limit": ""},
+            {"retention_days": -1},
+        ],
+    )
+    def test_wrong_shaped_options_are_refused(self, supplied: dict[str, Any]) -> None:
+        with pytest.raises(ManifestError, match="modules.forms."):
+            build_manifest_wiring_spec("forms", dict(supplied))
 
-    def test_missing_list_forms_per_page_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_FORMS_PER_PAGE raises KeyError."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
-                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
-                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
-                "QUICKSCALE_FORMS_API_ENABLED": True,
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_PER_PAGE"):
-            _forms_post_hook(spec, resolved)
+    def test_valid_options_flow_to_canonical_settings(self) -> None:
+        spec = build_manifest_wiring_spec("forms", {"submissions_per_page": 25})
 
-    def test_missing_spam_protection_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED raises KeyError."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
-                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
-                "QUICKSCALE_FORMS_API_ENABLED": True,
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED"):
-            _forms_post_hook(spec, resolved)
-
-    def test_missing_rate_limit_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_FORMS_RATE_LIMIT raises KeyError."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
-                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
-                "QUICKSCALE_FORMS_API_ENABLED": True,
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_RATE_LIMIT"):
-            _forms_post_hook(spec, resolved)
-
-    def test_missing_retention_days_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_FORMS_RETENTION_DAYS raises KeyError."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
-                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
-                "QUICKSCALE_FORMS_API_ENABLED": True,
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_RETENTION_DAYS"):
-            _forms_post_hook(spec, resolved)
-
-    def test_missing_submissions_api_raises_key_error(self) -> None:
-        """A missing QUICKSCALE_FORMS_API_ENABLED raises KeyError."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
-                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
-                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
-            }
-        )
-        resolved: dict[str, Any] = {}
-        with pytest.raises(KeyError, match="QUICKSCALE_FORMS_API_ENABLED"):
-            _forms_post_hook(spec, resolved)
-
-    def test_forms_all_settings_present_passes(self) -> None:
-        """All forms settings present and valid pass through without error."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_PER_PAGE": 25,
-                "QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED": True,
-                "QUICKSCALE_FORMS_RATE_LIMIT": "5/hour",
-                "QUICKSCALE_FORMS_RETENTION_DAYS": 365,
-                "QUICKSCALE_FORMS_API_ENABLED": True,
-            }
-        )
-        resolved: dict[str, Any] = {"enabled": True}
-        result = _forms_post_hook(spec, resolved)
-        assert isinstance(result, ModuleWiringSpec)
-        assert result.settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] == 25
+        assert spec.settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] == 25
+        assert spec.settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "5/hour"}
+        }
 
 
 _SA167A_MANIFEST_APPS: dict[str, tuple[str, ...]] = {
@@ -2722,3 +2532,440 @@ class TestSA167bRelocationParity:
             old_kind, old_value = self._invoke(core_adapter, dict(options))
             new_kind, new_value = self._invoke(module_adapter, dict(options))
             assert (new_kind, new_value) == (old_kind, old_value), options
+
+
+# ---------------------------------------------------------------------------
+# SA263: the generic boundary validates supplied options before resolution,
+# projection, or any post-resolution hook.
+# ---------------------------------------------------------------------------
+
+
+def _boundary_manifest() -> ModuleManifest:
+    """Build a synthetic hook-free manifest covering the validation vocabulary."""
+    return ModuleManifest(
+        name="demo",
+        version="1.0.0",
+        mutable_options={
+            "mode": ConfigOption(
+                name="mode",
+                option_type="string",
+                default="basic",
+                django_setting="DEMO_MODE",
+                mutability="mutable",
+                validation={"choices": ["basic", "full"]},
+            ),
+            "attempts": ConfigOption(
+                name="attempts",
+                option_type="integer",
+                default=3,
+                django_setting="DEMO_ATTEMPTS",
+                mutability="mutable",
+                validation={"min": 1, "max": 10},
+            ),
+            "endpoint": ConfigOption(
+                name="endpoint",
+                option_type="string",
+                default="",
+                django_setting="DEMO_ENDPOINT",
+                mutability="mutable",
+                validation={"pattern": r"^(?:https?://.*)?$"},
+            ),
+            "feature_enabled": ConfigOption(
+                name="feature_enabled",
+                option_type="boolean",
+                default=False,
+                django_setting="DEMO_FEATURE_ENABLED",
+                mutability="mutable",
+                validation={},
+            ),
+            "tags": ConfigOption(
+                name="tags",
+                option_type="list",
+                default=[],
+                django_setting="DEMO_TAGS",
+                mutability="mutable",
+                validation={},
+            ),
+            "api_token": ConfigOption(
+                name="api_token",
+                option_type="string",
+                default="",
+                django_setting="DEMO_API_TOKEN",
+                mutability="mutable",
+                validation={"required_when": {"mode": "full"}},
+            ),
+        },
+        retired_options={
+            "legacy_mode": "Legacy key 'legacy_mode' is no longer supported."
+        },
+        option_derivations={
+            "feature_enabled": {
+                "normalization_rules": [
+                    {
+                        "source_key": "feature_enabled",
+                        "target_key": "feature_enabled",
+                        "rule_type": "coerce_bool",
+                    },
+                ],
+            },
+            "tags": {
+                "normalization_rules": [
+                    {
+                        "source_key": "tags",
+                        "target_key": "tags",
+                        "rule_type": "list",
+                        "item_rules": [
+                            {
+                                "source_key": "tags",
+                                "target_key": "tags",
+                                "rule_type": "strip",
+                            },
+                        ],
+                    },
+                ],
+            },
+        },
+    )
+
+
+class _HookSpy:
+    """A post-resolution hook that records its invocations."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[ModuleWiringSpec, dict[str, Any]]] = []
+
+    def __call__(
+        self, spec: ModuleWiringSpec, resolved: dict[str, Any]
+    ) -> ModuleWiringSpec:
+        self.calls.append((spec, dict(resolved)))
+        return spec
+
+
+class TestGenericManifestBoundary:
+    """Supplied options are checked before resolution and before hooks."""
+
+    @pytest.fixture()
+    def manifest(self, monkeypatch: pytest.MonkeyPatch) -> ModuleManifest:
+        manifest = _boundary_manifest()
+        monkeypatch.setattr(
+            entry_point_module, "load_module_manifest", lambda _name: manifest
+        )
+        return manifest
+
+    def _assert_refused(
+        self,
+        manifest: ModuleManifest,
+        supplied: dict[str, Any],
+    ) -> None:
+        """Assert the boundary refuses *supplied* with the engine's own message."""
+        spy = _HookSpy()
+        expected = validate_module_options(manifest, dict(supplied))[0]
+        with pytest.raises(ManifestError) as exc_info:
+            build_generic_manifest_spec("demo", dict(supplied), post_hook=spy)
+        assert str(exc_info.value) == f"[demo] {expected}"
+        assert spy.calls == []
+
+    @pytest.mark.parametrize(
+        ("label", "supplied"),
+        [
+            ("choices", {"mode": "unknown"}),
+            ("range", {"attempts": 99}),
+            ("pattern", {"endpoint": "ftp://example.com"}),
+            ("cross_option", {"mode": "full"}),
+            ("retired_key", {"legacy_mode": "basic"}),
+            ("raw_none", {"mode": None}),
+            ("raw_container", {"mode": ["basic"]}),
+            ("raw_mapping", {"attempts": {"min": 1}}),
+            ("integer_bool", {"attempts": True}),
+            ("boolean_integer", {"feature_enabled": 1}),
+            ("unauthorized_string_spelling", {"attempts": "3"}),
+        ],
+    )
+    def test_invalid_supplied_options_refuse_before_the_hook(
+        self,
+        manifest: ModuleManifest,
+        label: str,
+        supplied: dict[str, Any],
+    ) -> None:
+        self._assert_refused(manifest, supplied)
+
+    def test_retired_key_keeps_precedence_over_other_issues(
+        self, manifest: ModuleManifest
+    ) -> None:
+        spy = _HookSpy()
+        with pytest.raises(ManifestError) as exc_info:
+            build_generic_manifest_spec(
+                "demo", {"legacy_mode": "basic", "mode": "unknown"}, post_hook=spy
+            )
+        assert "legacy_mode" in str(exc_info.value)
+        assert spy.calls == []
+
+    def test_declared_rule_converts_a_string_spelling_for_the_hook(
+        self, manifest: ModuleManifest
+    ) -> None:
+        """Only a declared rule converts; the hook consumes canonical types."""
+        spy = _HookSpy()
+        spec = build_generic_manifest_spec(
+            "demo",
+            {"feature_enabled": "true", "tags": "a, b"},
+            post_hook=spy,
+        )
+
+        assert len(spy.calls) == 1
+        _, resolved = spy.calls[0]
+        assert resolved["feature_enabled"] is True
+        assert resolved["tags"] == ["a", "b"]
+        assert spec.settings["DEMO_FEATURE_ENABLED"] is True
+        assert spec.settings["DEMO_TAGS"] == ["a", "b"]
+
+    def test_valid_defaults_assemble_without_a_hook(
+        self, manifest: ModuleManifest
+    ) -> None:
+        spec = build_generic_manifest_spec("demo", {})
+        assert isinstance(spec, ModuleWiringSpec)
+        assert spec.settings["DEMO_MODE"] == "basic"
+
+
+def _secrets_manifest() -> ModuleManifest:
+    """Build a synthetic manifest with a suffix-stripped secret projection."""
+    return ModuleManifest(
+        name="secrets_demo",
+        version="1.0.0",
+        mutable_options={
+            "token_env_var": ConfigOption(
+                name="token_env_var",
+                option_type="string",
+                default="",
+                django_setting="SECRETS_DEMO_TOKEN_ENV_VAR",
+                mutability="mutable",
+                validation={"pattern": r"^(?:[A-Z][A-Z0-9_]*)?$"},
+            ),
+        },
+        option_derivations={
+            "token_env_var": {
+                "normalization_rules": [
+                    {
+                        "source_key": "token_env_var",
+                        "target_key": "token_env_var",
+                        "rule_type": "strip",
+                    },
+                ],
+                "derived_settings": [
+                    {
+                        "setting_key": "SECRETS_DEMO_TOKEN",
+                        "source_options": ["token_env_var"],
+                        "derivation_type": "computed",
+                        "expression": {"template": "__QS_ENV__:{token_env_var}"},
+                        "description": "Deferred secret reference",
+                    },
+                ],
+            },
+        },
+    )
+
+
+class TestGenericBoundarySecrets:
+    """The generic boundary projects deferred secret references, never values."""
+
+    @pytest.fixture()
+    def manifest(self, monkeypatch: pytest.MonkeyPatch) -> ModuleManifest:
+        manifest = _secrets_manifest()
+        monkeypatch.setattr(
+            entry_point_module, "load_module_manifest", lambda _name: manifest
+        )
+        return manifest
+
+    def test_nonblank_env_name_projects_the_deferred_reference(
+        self, manifest: ModuleManifest
+    ) -> None:
+        spec = build_generic_manifest_spec(
+            "secrets_demo", {"token_env_var": "DEMO_TOKEN"}
+        )
+        assert spec.settings["SECRETS_DEMO_TOKEN_ENV_VAR"] == "DEMO_TOKEN"
+        assert spec.settings["SECRETS_DEMO_TOKEN"] == "__QS_ENV__:DEMO_TOKEN"
+
+        content = render_settings_modules_py({"secrets_demo": spec})
+        assert 'os.environ.get("DEMO_TOKEN", "")' in content
+
+    def test_blank_env_name_renders_literal_empty_without_reading(
+        self, manifest: ModuleManifest, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DEMO_TOKEN", "super-secret-value")
+        spec = build_generic_manifest_spec("secrets_demo", {"token_env_var": "   "})
+
+        content = render_settings_modules_py({"secrets_demo": spec})
+
+        assert "super-secret-value" not in content
+        assert 'os.environ.get("", "")' not in content
+        assert "'SECRETS_DEMO_TOKEN': ''" in content
+
+    def test_invalid_env_name_is_refused_before_the_hook(
+        self, manifest: ModuleManifest
+    ) -> None:
+        spy = _HookSpy()
+        with pytest.raises(ManifestError) as exc_info:
+            build_generic_manifest_spec(
+                "secrets_demo", {"token_env_var": "bad-name'"}, post_hook=spy
+            )
+        assert "SECRETS_DEMO_TOKEN_ENV_VAR" in str(exc_info.value)
+        assert spy.calls == []
+
+
+def _mapped_secrets_manifest() -> ModuleManifest:
+    """Build a manifest whose secret setting comes only from the mapping.
+
+    The manifest declares no explicit ``derived_settings`` entry, so the
+    suffix-stripped secret setting can only come from the generic boundary's
+    own projection over the mapped ``_ENV_VAR`` option.
+    """
+    return ModuleManifest(
+        name="mapped_secrets_demo",
+        version="1.0.0",
+        mutable_options={
+            "token_env_var": ConfigOption(
+                name="token_env_var",
+                option_type="string",
+                default="",
+                django_setting="MAPPED_SECRETS_DEMO_TOKEN_ENV_VAR",
+                mutability="mutable",
+                validation={"pattern": r"^(?:[A-Z][A-Z0-9_]*)?$"},
+            ),
+        },
+        option_derivations={
+            "token_env_var": {
+                "normalization_rules": [
+                    {
+                        "source_key": "token_env_var",
+                        "target_key": "token_env_var",
+                        "rule_type": "strip",
+                    },
+                ],
+            },
+        },
+    )
+
+
+class TestGenericMappedEnvVarSecretProjection:
+    """Every mapped ``_ENV_VAR`` option projects its suffix-stripped secret."""
+
+    @pytest.fixture()
+    def manifest(self, monkeypatch: pytest.MonkeyPatch) -> ModuleManifest:
+        manifest = _mapped_secrets_manifest()
+        monkeypatch.setattr(
+            entry_point_module, "load_module_manifest", lambda _name: manifest
+        )
+        return manifest
+
+    def test_nonblank_name_projects_the_suffix_stripped_setting(
+        self, manifest: ModuleManifest
+    ) -> None:
+        spec = build_generic_manifest_spec(
+            "mapped_secrets_demo", {"token_env_var": "DEMO_TOKEN"}
+        )
+
+        # The env-name setting is retained and the secret setting is added by
+        # the generic projection with no explicit manifest declaration.
+        assert spec.settings["MAPPED_SECRETS_DEMO_TOKEN_ENV_VAR"] == "DEMO_TOKEN"
+        assert spec.settings["MAPPED_SECRETS_DEMO_TOKEN"] == "__QS_ENV__:DEMO_TOKEN"
+
+        content = render_settings_modules_py({"mapped_secrets_demo": spec})
+        assert 'os.environ.get("DEMO_TOKEN", "")' in content
+
+    def test_hook_receives_the_full_projected_setting_map(
+        self, manifest: ModuleManifest
+    ) -> None:
+        """Secrets project before hooks: the hook sees the complete setting map."""
+        spy = _HookSpy()
+        spec = build_generic_manifest_spec(
+            "mapped_secrets_demo", {"token_env_var": "DEMO_TOKEN"}, post_hook=spy
+        )
+
+        assert len(spy.calls) == 1
+        hook_spec, _ = spy.calls[0]
+        assert hook_spec.settings["MAPPED_SECRETS_DEMO_TOKEN_ENV_VAR"] == "DEMO_TOKEN"
+        assert (
+            hook_spec.settings["MAPPED_SECRETS_DEMO_TOKEN"] == "__QS_ENV__:DEMO_TOKEN"
+        )
+        assert spec.settings["MAPPED_SECRETS_DEMO_TOKEN"] == "__QS_ENV__:DEMO_TOKEN"
+
+    def test_blank_name_projects_literal_empty_without_reading(
+        self, manifest: ModuleManifest, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DEMO_TOKEN", "super-secret-value")
+        spec = build_generic_manifest_spec(
+            "mapped_secrets_demo", {"token_env_var": "   "}
+        )
+
+        assert spec.settings["MAPPED_SECRETS_DEMO_TOKEN_ENV_VAR"] == ""
+        assert spec.settings["MAPPED_SECRETS_DEMO_TOKEN"] == ""
+
+        content = render_settings_modules_py({"mapped_secrets_demo": spec})
+        assert "super-secret-value" not in content
+        assert 'os.environ.get("", "")' not in content
+        assert "'MAPPED_SECRETS_DEMO_TOKEN': ''" in content
+
+    def test_blank_default_name_projects_literal_empty(
+        self, manifest: ModuleManifest
+    ) -> None:
+        spec = build_generic_manifest_spec("mapped_secrets_demo", {})
+        assert spec.settings["MAPPED_SECRETS_DEMO_TOKEN_ENV_VAR"] == ""
+        assert spec.settings["MAPPED_SECRETS_DEMO_TOKEN"] == ""
+
+    def test_resolution_never_reads_the_environment(
+        self, manifest: ModuleManifest, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DEMO_TOKEN", "super-secret-value")
+        spec = build_generic_manifest_spec(
+            "mapped_secrets_demo", {"token_env_var": "DEMO_TOKEN"}
+        )
+        for value in spec.settings.values():
+            assert "super-secret-value" not in str(value)
+
+
+def _colliding_secrets_manifest() -> ModuleManifest:
+    """Build a manifest whose ``_ENV_VAR`` suffix collides with a mapping."""
+    return ModuleManifest(
+        name="colliding_secrets_demo",
+        version="1.0.0",
+        mutable_options={
+            "host": ConfigOption(
+                name="host",
+                option_type="string",
+                default="https://fallback.example",
+                django_setting="COLLIDING_SECRETS_DEMO_HOST",
+                mutability="mutable",
+                validation={},
+            ),
+            "host_env_var": ConfigOption(
+                name="host_env_var",
+                option_type="string",
+                default="DEMO_HOST",
+                django_setting="COLLIDING_SECRETS_DEMO_HOST_ENV_VAR",
+                mutability="mutable",
+                validation={"pattern": r"^(?:[A-Z][A-Z0-9_]*)?$"},
+            ),
+        },
+    )
+
+
+class TestGenericMappedEnvVarSecretCollision:
+    """An explicit direct mapping wins over the generic suffix projection."""
+
+    @pytest.fixture()
+    def manifest(self, monkeypatch: pytest.MonkeyPatch) -> ModuleManifest:
+        manifest = _colliding_secrets_manifest()
+        monkeypatch.setattr(
+            entry_point_module, "load_module_manifest", lambda _name: manifest
+        )
+        return manifest
+
+    def test_a_claimed_setting_name_is_not_replaced_by_the_projection(
+        self, manifest: ModuleManifest
+    ) -> None:
+        """The fallback setting keeps its value; the env-name setting stays."""
+        spec = build_generic_manifest_spec("colliding_secrets_demo", {})
+
+        assert spec.settings["COLLIDING_SECRETS_DEMO_HOST"] == (
+            "https://fallback.example"
+        )
+        assert spec.settings["COLLIDING_SECRETS_DEMO_HOST_ENV_VAR"] == "DEMO_HOST"

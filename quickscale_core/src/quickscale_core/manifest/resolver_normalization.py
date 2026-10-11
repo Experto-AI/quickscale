@@ -28,6 +28,41 @@ def _canonical_url(value: str) -> str:
     return candidate.rstrip("/")
 
 
+#: Sentinel for a normalization call that supplies no owning-option default.
+#: A rule kind that resolves a blank value through the option's declared
+#: default must not invent one when a low-level caller passes no context.
+_MISSING_OPTION_DEFAULT: object = object()
+
+#: The normalization kind whose blank-value result is the owning option's
+#: declared default rather than a constant owned by this module.
+_PATH_OR_ABSOLUTE_URL_KIND = "path_or_absolute_url"
+
+
+def _canonical_path_or_absolute_url(value: str, default: Any) -> Any:
+    """Return *value* in the canonical relative-or-absolute path form.
+
+    The historical composed ``MEDIA_URL`` contract: strip whitespace; a blank
+    result takes the owning option's declared default; a value that neither
+    starts with ``/`` nor literally with ``http`` gets a leading ``/``; and a
+    trailing ``/`` is appended when absent.  Every other byte — repeated
+    slashes, query/fragment text, embedded newlines, and case — is preserved,
+    so this is deliberately not the ``url`` rule: no scheme is prepended and
+    no trailing slash is stripped.
+    """
+    candidate = value.strip()
+    if not candidate:
+        if not isinstance(default, str):
+            return default
+        candidate = default.strip()
+        if not candidate:
+            return candidate
+    if not candidate.startswith(("/", "http")):
+        candidate = "/" + candidate
+    if not candidate.endswith("/"):
+        candidate += "/"
+    return candidate
+
+
 def _slugify(value: Any, *, max_length: Any, replace: Mapping[str, Any]) -> str:
     """Canonicalize *value* as a slug.
 
@@ -166,6 +201,26 @@ def _apply_url_rule(value: Any, rule: NormalizationRule) -> Any:
     return value
 
 
+def _apply_path_or_absolute_url_rule(
+    value: Any,
+    rule: NormalizationRule,
+    *,
+    option_default: Any = _MISSING_OPTION_DEFAULT,
+) -> Any:
+    """Apply the ``path_or_absolute_url`` rule to strings; others pass through.
+
+    A blank string resolves to ``option_default`` — the owning option's
+    declared default, supplied by the shared normalization engine.  A call
+    that supplies no default resolves a blank string to the empty string
+    instead of inventing a media default: the default belongs to the option's
+    own declaration, never to this module.
+    """
+    if not isinstance(value, str):
+        return value
+    default = "" if option_default is _MISSING_OPTION_DEFAULT else option_default
+    return _canonical_path_or_absolute_url(value, default)
+
+
 def _apply_choice_map_rule(value: Any, rule: NormalizationRule) -> Any:
     """Apply the ``choice_map`` rule: map the stripped value, or keep it."""
     str_value = str(value).strip()
@@ -209,16 +264,32 @@ _NORMALIZATION_RULE_HANDLERS: dict[str, Callable[[Any, NormalizationRule], Any]]
 }
 
 
-def _apply_normalization_rule(value: Any, rule: NormalizationRule) -> Any:
+def _apply_normalization_rule(
+    value: Any,
+    rule: NormalizationRule,
+    *,
+    option_default: Any = _MISSING_OPTION_DEFAULT,
+) -> Any:
     """Apply a single normalization rule to a value.
+
+    The context-aware kinds are dispatched before the context-free registry:
+    ``path_or_absolute_url`` resolves a blank value through the owning
+    option's declared default rather than through a constant.
 
     Args:
         value: The raw input value.
         rule: The normalization rule to apply.
+        option_default: The owning option's declared default, for a rule kind
+            that resolves a blank value through it.  A caller that omits it
+            must not have a default invented for it.
 
     Returns:
         The normalized value.
     """
+    if rule.rule_type == _PATH_OR_ABSOLUTE_URL_KIND:
+        return _apply_path_or_absolute_url_rule(
+            value, rule, option_default=option_default
+        )
     handler = _NORMALIZATION_RULE_HANDLERS.get(rule.rule_type)
     if handler is None:
         # Unknown rule type: pass through unchanged
@@ -247,18 +318,23 @@ def _normalize_value(
     option_key: str,
     option_derivation: Any | None,
     shared_rules: list[NormalizationRule],
+    *,
+    option_default: Any = _MISSING_OPTION_DEFAULT,
 ) -> Any:
     """Apply all applicable normalization rules to a single option value.
 
     Shared rules are applied first (in order), then per-option rules.  A chain
     that declares a ``list`` rule declines an unsupported shape entirely, so no
     earlier rule in the chain can stringify it before the type check sees it.
+    ``option_default`` is the owning option's declared default, threaded to any
+    rule kind that resolves a blank value through it.
 
     Args:
         value: The raw input value.
         option_key: The option key being normalized.
         option_derivation: The per-option derivation metadata, if any.
         shared_rules: Module-wide normalization rules.
+        option_default: The owning option's declared default.
 
     Returns:
         The normalized value.
@@ -276,6 +352,6 @@ def _normalize_value(
 
     result = value
     for rule in rules:
-        result = _apply_normalization_rule(result, rule)
+        result = _apply_normalization_rule(result, rule, option_default=option_default)
 
     return result
