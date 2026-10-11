@@ -1,7 +1,10 @@
 """Focused tests for the social manifest adapter.
 
 Covers ``project_package`` validation, embed-provider filtering,
-renderer-ID replacement, and the sentinel contract.
+renderer-ID replacement, and the sentinel contract.  The manifest boundary
+owns every option default, normalization rule, check, projection, and
+settings surface; the adapter contributes only the embed-capable provider
+slice, the project-qualified mount, and the rendered managed-file content.
 """
 
 from __future__ import annotations
@@ -9,9 +12,8 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-import re
 from typing import Any
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -19,25 +21,36 @@ from quickscale_core.manifest import build_generic_manifest_spec
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_social.adapter import (
+    _build_social_post_hook,
     _qualify_managed_url_includes,
     _social_manifest_adapter,
-    _social_manifest_apps,
     get_manifest_adapter,
 )
 
+_RESOLVED_OPTIONS: dict[str, Any] = {
+    "enabled": True,
+    "link_tree_enabled": True,
+    "layout_variant": "list",
+    "embeds_enabled": True,
+    "provider_allowlist": [
+        "facebook",
+        "instagram",
+        "linkedin",
+        "tiktok",
+        "x",
+        "youtube",
+    ],
+    "cache_ttl_seconds": 300,
+    "links_per_page": 24,
+    "embeds_per_page": 12,
+}
 
-def _social_options() -> dict[str, Any]:
-    """Return the focused adapter options used by manifest mocks."""
-    return {
-        "enabled": True,
-        "provider_allowlist": ["youtube"],
-        "link_tree_enabled": True,
-        "layout_variant": "list",
-        "embeds_enabled": True,
-        "cache_ttl_seconds": 300,
-        "links_per_page": 24,
-        "embeds_per_page": 12,
-    }
+
+def _resolved(**overrides: Any) -> dict[str, Any]:
+    """Return the canonical resolved options the hook consumes."""
+    resolved = dict(_RESOLVED_OPTIONS)
+    resolved.update(overrides)
+    return resolved
 
 
 def _managed_files() -> dict[str, str]:
@@ -47,23 +60,6 @@ def _managed_files() -> dict[str, str]:
         "quickscale_managed/social_urls.py": "social.managed_urls",
         "quickscale_managed/social_views.py": "social.managed_views",
     }
-
-
-def _static_apps_projection(apps: list[Any] | None = None) -> dict[str, Any]:
-    """Build a realistic static apps projection for adapter test manifests."""
-    return {
-        "wiring_field": "apps",
-        "derivation_type": "static",
-        "expression": {"value": ["quickscale_social"] if apps is None else apps},
-    }
-
-
-def _mock_social_manifest(*, wiring_projections: Any) -> MagicMock:
-    """Build a mocked manifest with the fields consumed by the adapter."""
-    return MagicMock(
-        managed_files=PropertyMock(return_value={}),
-        wiring_projections=wiring_projections,
-    )
 
 
 class TestGetManifestAdapter:
@@ -210,7 +206,7 @@ class TestSocialManifestAdapterProjectPackage:
 
 
 class TestSocialManifestAdapterApps:
-    """Django apps must be sourced from one valid manifest projection."""
+    """Django apps come from the manifest's single static projection."""
 
     def test_actual_manifest_provides_social_app(self) -> None:
         """The canonical manifest supplies the social Django app label."""
@@ -218,257 +214,34 @@ class TestSocialManifestAdapterApps:
 
         assert result.apps == ("quickscale_modules_social",)
 
-    @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
-    @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
-    def test_synthetic_manifest_app_propagates(
-        self,
-        mock_resolve: MagicMock,
-        mock_load: MagicMock,
-        mock_assemble: MagicMock,
-    ) -> None:
-        """A changed manifest app value reaches ResolverResult without adapter edits."""
-        mock_resolve.return_value = _social_options()
-        mock_load.return_value = _mock_social_manifest(
-            wiring_projections=[_static_apps_projection(["synthetic_social_app"])]
-        )
-        mock_assemble.return_value = ModuleWiringSpec()
-
-        _social_manifest_adapter({}, project_package="myapp")
-
-        resolver_result = mock_assemble.call_args[0][0]
-        assert resolver_result.apps == ("synthetic_social_app",)
-
-    @pytest.mark.parametrize(
-        "ignored_projection",
-        [
-            pytest.param(None, id="non-dict-none"),
-            pytest.param("ignored", id="non-dict-string"),
-            pytest.param({"wiring_field": "settings"}, id="non-app-dict"),
-        ],
-    )
-    def test_ignored_entries_are_filtered_with_valid_apps_projection(
-        self, ignored_projection: Any
-    ) -> None:
-        """Unrelated entries do not count toward the selected apps projection."""
-        manifest = _mock_social_manifest(
-            wiring_projections=[
-                ignored_projection,
-                _static_apps_projection(["social_first", "social_second"]),
-            ]
-        )
-
-        assert _social_manifest_apps(manifest) == (
-            "social_first",
-            "social_second",
-        )
-
-    @pytest.mark.parametrize(
-        "wiring_projections, expected_error",
-        [
-            pytest.param(
-                None,
-                "Invalid social manifest apps projection: expected exactly one projection, found 0",
-                id="non-list-none",
-            ),
-            pytest.param(
-                {},
-                "Invalid social manifest apps projection: expected exactly one projection, found 0",
-                id="non-list-dict",
-            ),
-            pytest.param(
-                [],
-                "Invalid social manifest apps projection: expected exactly one projection, found 0",
-                id="missing",
-            ),
-            pytest.param(
-                [
-                    _static_apps_projection(["social_one"]),
-                    _static_apps_projection(["social_two"]),
-                ],
-                "Invalid social manifest apps projection: expected exactly one projection, found 2",
-                id="duplicate",
-            ),
-            pytest.param(
-                [
-                    {
-                        "wiring_field": "apps",
-                        "derivation_type": "direct",
-                        "expression": {"option": "app"},
-                    }
-                ],
-                "Invalid social manifest apps projection: projection must be static",
-                id="non-static",
-            ),
-            pytest.param(
-                [
-                    {
-                        "wiring_field": "apps",
-                        "derivation_type": "static",
-                    }
-                ],
-                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
-                id="missing-expression",
-            ),
-            pytest.param(
-                [
-                    {
-                        "wiring_field": "apps",
-                        "derivation_type": "static",
-                        "expression": "not-a-mapping",
-                    }
-                ],
-                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
-                id="non-dict-expression",
-            ),
-            pytest.param(
-                [
-                    {
-                        "wiring_field": "apps",
-                        "derivation_type": "static",
-                        "expression": {"value": "social"},
-                    }
-                ],
-                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
-                id="non-list-value",
-            ),
-            pytest.param(
-                [_static_apps_projection([])],
-                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
-                id="empty",
-            ),
-            pytest.param(
-                [_static_apps_projection([""])],
-                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
-                id="blank-string",
-            ),
-            pytest.param(
-                [_static_apps_projection(["social", 7])],
-                "Invalid social manifest apps projection: static expression.value must be a non-empty list of non-empty strings",
-                id="non-string",
-            ),
-        ],
-    )
-    @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
-    def test_malformed_apps_projection_fails_loudly(
-        self,
-        mock_resolve: MagicMock,
-        mock_load: MagicMock,
-        wiring_projections: Any,
-        expected_error: str,
-    ) -> None:
-        """Missing or malformed social apps projections must fail closed."""
-        mock_resolve.return_value = _social_options()
-        mock_load.return_value = _mock_social_manifest(
-            wiring_projections=wiring_projections
-        )
-
-        with pytest.raises(ValueError, match=f"^{re.escape(expected_error)}$"):
-            _social_manifest_adapter({}, project_package="myapp")
-
 
 class TestSocialManifestAdapterEmbedFiltering:
-    """Embed-provider filtering from the provider allowlist."""
+    """Embed-provider filtering from the canonical provider allowlist."""
 
-    @patch(
-        "quickscale_modules_social.adapter.social_provider_supports_embeds",
-        autospec=True,
-    )
-    @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
-    @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
-    def test_filters_embed_providers(
-        self,
-        mock_resolve: MagicMock,
-        mock_load: MagicMock,
-        mock_assemble: MagicMock,
-        mock_supports_embeds: MagicMock,
-    ) -> None:
+    def test_filters_embed_providers(self) -> None:
         """Only embed-supporting providers appear in the embed allowlist."""
-        mock_resolve.return_value = {
-            "enabled": True,
-            "provider_allowlist": ["youtube", "linkedin", "x"],
-            "link_tree_enabled": True,
-            "layout_variant": "list",
-            "embeds_enabled": True,
-            "cache_ttl_seconds": 300,
-            "links_per_page": 24,
-            "embeds_per_page": 12,
-        }
-        mock_load.return_value = MagicMock(
-            managed_files=PropertyMock(return_value={}),
-            wiring_projections=[_static_apps_projection()],
-        )
-        mock_assemble.return_value = ModuleWiringSpec()
-
-        def supports_embeds_side_effect(provider: str) -> bool:
-            return provider in ("youtube",)
-
-        mock_supports_embeds.side_effect = supports_embeds_side_effect
-
-        _social_manifest_adapter(
-            {},
+        spec = _social_manifest_adapter(
+            {"provider_allowlist": ["youtube", "linkedin", "x"]},
             project_package="myapp",
         )
 
-        # — Retrieve the ResolverResult passed to assemble_wiring_spec —
-        call_args, _ = mock_assemble.call_args
-        resolver_result = call_args[0]
+        assert spec.settings["QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST"] == [
+            "youtube",
+            "linkedin",
+            "x",
+        ]
+        assert spec.settings["QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST"] == [
+            "youtube"
+        ]
 
-        assert resolver_result.derived_settings[
-            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST"
-        ] == ["youtube", "linkedin", "x"]
-        assert resolver_result.derived_settings[
-            "QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST"
-        ] == ["youtube"]
-
-    @patch(
-        "quickscale_modules_social.adapter.social_provider_supports_embeds",
-        autospec=True,
-    )
-    @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
-    @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
-    def test_empty_embed_allowlist_when_no_providers_support_embeds(
-        self,
-        mock_resolve: MagicMock,
-        mock_load: MagicMock,
-        mock_assemble: MagicMock,
-        mock_supports_embeds: MagicMock,
-    ) -> None:
+    def test_empty_embed_allowlist_when_no_providers_support_embeds(self) -> None:
         """When no provider supports embeds, the embed allowlist is empty."""
-        mock_resolve.return_value = {
-            "enabled": True,
-            "provider_allowlist": ["linkedin", "x"],
-            "link_tree_enabled": True,
-            "layout_variant": "list",
-            "embeds_enabled": True,
-            "cache_ttl_seconds": 300,
-            "links_per_page": 24,
-            "embeds_per_page": 12,
-        }
-        mock_load.return_value = MagicMock(
-            managed_files=PropertyMock(return_value={}),
-            wiring_projections=[_static_apps_projection()],
-        )
-        mock_assemble.return_value = ModuleWiringSpec()
-        mock_supports_embeds.return_value = False
-
-        _social_manifest_adapter(
-            {},
+        spec = _social_manifest_adapter(
+            {"provider_allowlist": ["linkedin", "x"], "embeds_enabled": False},
             project_package="myapp",
         )
 
-        call_args, _ = mock_assemble.call_args
-        resolver_result = call_args[0]
-
-        assert (
-            resolver_result.derived_settings[
-                "QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST"
-            ]
-            == []
-        )
+        assert spec.settings["QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST"] == []
 
 
 class TestSocialManifestAdapterRendererIdReplacement:
@@ -477,126 +250,58 @@ class TestSocialManifestAdapterRendererIdReplacement:
     @patch("quickscale_modules_social.adapter.render_social_managed_init_module")
     @patch("quickscale_modules_social.adapter.render_social_managed_urls_module")
     @patch("quickscale_modules_social.adapter.render_social_managed_views_module")
-    @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
-    @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
     def test_renderer_id_placeholders_replaced(
         self,
-        mock_resolve: MagicMock,
-        mock_load: MagicMock,
-        mock_assemble: MagicMock,
         mock_render_views: MagicMock,
         mock_render_urls: MagicMock,
         mock_render_init: MagicMock,
     ) -> None:
-        """The post-resolution hook must replace renderer-ID placeholders with content."""
-        mock_resolve.return_value = {
-            "enabled": True,
-            "provider_allowlist": ["youtube", "linkedin"],
-            "link_tree_enabled": True,
-            "layout_variant": "list",
-            "embeds_enabled": True,
-            "cache_ttl_seconds": 300,
-            "links_per_page": 24,
-            "embeds_per_page": 12,
-        }
-        mock_load.return_value = MagicMock(
-            managed_files=PropertyMock(return_value={}),
-            wiring_projections=[_static_apps_projection()],
-        )
-
+        """The hook replaces each renderer-ID placeholder with its content."""
         mock_render_init.return_value = "# init content"
         mock_render_urls.return_value = "# urls content"
         mock_render_views.return_value = "# views content"
 
-        original_assemble = _import_original_assemble()
-        if original_assemble is None:
-            return
-
-        def assemble_side_effect(result, *, post_hook):
-            """Simulate assemble_wiring_spec: create a spec with placeholder managed_files,
-            then apply the post_hook."""
-            spec = ModuleWiringSpec(
-                managed_files={
-                    "quickscale_managed/__init__.py": "social.managed_init",
-                    "quickscale_managed/social_urls.py": "social.managed_urls",
-                    "quickscale_managed/social_views.py": "social.managed_views",
-                },
-            )
-            return post_hook(spec, dict(result.resolved))
-
-        mock_assemble.side_effect = assemble_side_effect
-
-        result = _social_manifest_adapter(
-            {},
-            project_package="myapp",
+        hook = _build_social_post_hook("myapp")
+        spec = ModuleWiringSpec(
+            apps=("quickscale_modules_social",),
+            url_includes=(("_quickscale/social/", "quickscale_managed.social_urls"),),
+            managed_files=_managed_files(),
         )
 
-        assert (
-            result.managed_files["quickscale_managed/__init__.py"] == "# init content"
+        result = hook(spec, _resolved())
+
+        assert result.managed_files["quickscale_managed/__init__.py"] == (
+            "# init content"
         )
-        assert (
-            result.managed_files["quickscale_managed/social_urls.py"]
-            == "# urls content"
+        assert result.managed_files["quickscale_managed/social_urls.py"] == (
+            "# urls content"
         )
-        assert (
-            result.managed_files["quickscale_managed/social_views.py"]
-            == "# views content"
+        assert result.managed_files["quickscale_managed/social_views.py"] == (
+            "# views content"
         )
         mock_render_init.assert_called_once()
         mock_render_urls.assert_called_once()
-        mock_render_views.assert_called_once()
-
-    @patch("quickscale_modules_social.adapter.assemble_wiring_spec")
-    @patch("quickscale_modules_social.adapter.load_social_manifest")
-    @patch("quickscale_modules_social.adapter.resolve_manifest_module_options")
-    def test_unknown_renderer_id_skipped(
-        self,
-        mock_resolve: MagicMock,
-        mock_load: MagicMock,
-        mock_assemble: MagicMock,
-    ) -> None:
-        """A renderer ID not in the dispatch table must be skipped silently."""
-        mock_resolve.return_value = {
-            "enabled": True,
-            "provider_allowlist": ["youtube"],
-            "link_tree_enabled": True,
-            "layout_variant": "list",
-            "embeds_enabled": True,
-            "cache_ttl_seconds": 300,
-            "links_per_page": 24,
-            "embeds_per_page": 12,
-        }
-        mock_load.return_value = MagicMock(
-            managed_files=PropertyMock(return_value={}),
-            wiring_projections=[_static_apps_projection()],
+        mock_render_views.assert_called_once_with(
+            ["facebook", "instagram", "linkedin", "tiktok", "x", "youtube"],
+            ["tiktok", "youtube"],
+            layout_variant="list",
+            cache_ttl_seconds=300,
+            links_per_page=24,
+            embeds_per_page=12,
         )
 
-        def assemble_side_effect(result, *, post_hook):
-            spec = ModuleWiringSpec(
-                managed_files={
-                    "quickscale_managed/unknown.py": "social.nonexistent_renderer",
-                },
-            )
-            return post_hook(spec, dict(result.resolved))
-
-        mock_assemble.side_effect = assemble_side_effect
-
-        result = _social_manifest_adapter(
-            {},
-            project_package="myapp",
+    def test_unknown_renderer_id_skipped(self) -> None:
+        """A renderer ID not in the dispatch table must be skipped."""
+        hook = _build_social_post_hook("myapp")
+        spec = ModuleWiringSpec(
+            url_includes=(("_quickscale/social/", "quickscale_managed.social_urls"),),
+            managed_files={
+                "quickscale_managed/social_urls.py": "social.managed_urls",
+                "quickscale_managed/unknown.py": "social.nonexistent_renderer",
+            },
         )
+
+        result = hook(spec, _resolved())
 
         assert "quickscale_managed/unknown.py" not in result.managed_files
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _import_original_assemble() -> object | None:
-    """Return the original assemble_wiring_spec for type checking."""
-    from quickscale_core.manifest.assembler import assemble_wiring_spec
-
-    return assemble_wiring_spec
+        assert "quickscale_managed/social_urls.py" in result.managed_files

@@ -101,6 +101,26 @@ derivation:
             - quickscale_managed.social_urls
       description: "Social URL include"
 
+  # The fixed public paths every social installation exposes; static for the
+  # module contract rather than per-option.
+  derived_settings:
+    - setting_key: QUICKSCALE_SOCIAL_LINK_TREE_PATH
+      derivation_type: static
+      expression:
+        value: /social
+    - setting_key: QUICKSCALE_SOCIAL_EMBEDS_PATH
+      derivation_type: static
+      expression:
+        value: /social/embeds
+    - setting_key: QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH
+      derivation_type: static
+      expression:
+        value: /_quickscale/social/
+    - setting_key: QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH
+      derivation_type: static
+      expression:
+        value: /_quickscale/social/embeds/
+
   option_derivations:
     layout_variant:
       normalization_rules:
