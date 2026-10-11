@@ -10,49 +10,45 @@ from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spe
 def _listings_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Apply listings-specific int coercion and static markdownx settings."""
+    """Contribute listings' throttle scope and apply its off-switch transformation.
+
+    Rule 32 — the publish scope carries the module stem and its rate is the
+    ``api_rate_limit`` option, contributed here for rule 30's merge; the
+    canonical value arrives from the manifest boundary.  Rule 1 (D3): off
+    keeps the module installed — app, migrations, admin, and settings — and
+    mounts none of its public URLs.  The retained admin editor
+    (``AdminMarkdownxWidget``) keeps its staff-guarded endpoint mount; the
+    manifest already points that mount at the module's guarded URLconf, never
+    at the shared ``markdownx.urls``.
+    """
     settings = dict(spec.settings)
-    settings["QUICKSCALE_LISTINGS_PER_PAGE"] = int(
-        settings["QUICKSCALE_LISTINGS_PER_PAGE"]
-    )
-    # Rule 32 — the publish scope carries the module stem and its rate is the
-    # api_rate_limit option, contributed here for rule 30's merge.
-    api_rate_limit = str(settings["QUICKSCALE_LISTINGS_API_RATE_LIMIT"]).strip()
     settings["REST_FRAMEWORK"] = {
-        "DEFAULT_THROTTLE_RATES": {"quickscale_listings_api": api_rate_limit},
+        "DEFAULT_THROTTLE_RATES": {
+            "quickscale_listings_api": settings["QUICKSCALE_LISTINGS_API_RATE_LIMIT"],
+        },
     }
-    settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
-        "markdown.extensions.fenced_code",
-        "markdown.extensions.tables",
-        "markdown.extensions.toc",
-    ]
-    if not bool(resolved["enabled"]):
-        # Rule 1 (D3): off keeps the module installed — app, migrations,
-        # admin, and settings — and mounts none of its public URLs.  The
-        # retained admin editor (`AdminMarkdownxWidget`) keeps its
-        # staff-guarded endpoint mount; the manifest already points that mount
-        # at the module's guarded URLconf, never at the shared ``markdownx.urls``.
-        editor_includes = tuple(
-            (prefix, target)
-            for prefix, target in spec.url_includes
-            if target == "quickscale_modules_listings.markdownx_urls"
-        )
+    if resolved["enabled"]:
         return ModuleWiringSpec(
             apps=spec.apps,
             middleware=spec.middleware,
             settings=settings,
-            pre_home_url_includes=(),
-            url_includes=editor_includes,
-            spa_routes=(),
+            pre_home_url_includes=spec.pre_home_url_includes,
+            url_includes=spec.url_includes,
+            spa_routes=spec.spa_routes,
             managed_files=spec.managed_files,
         )
+    editor_includes = tuple(
+        (prefix, target)
+        for prefix, target in spec.url_includes
+        if target == "quickscale_modules_listings.markdownx_urls"
+    )
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,
         settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
-        spa_routes=spec.spa_routes,
+        pre_home_url_includes=(),
+        url_includes=editor_includes,
+        spa_routes=(),
         managed_files=spec.managed_files,
     )
 
@@ -63,6 +59,7 @@ def _listings_manifest_adapter(
     project_package: str | None = None,
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for listings via its manifest."""
+    del project_package
     return build_generic_manifest_spec(
         "listings",
         options,
