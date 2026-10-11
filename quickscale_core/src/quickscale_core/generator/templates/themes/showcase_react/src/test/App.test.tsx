@@ -35,6 +35,12 @@ function applyRuntimeConfig(
       social: '/social',
       analytics: '/analytics/',
     },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
+    },
     owner: config.owner ?? {
       mode: 'solo',
       currentOrgSlug: null,

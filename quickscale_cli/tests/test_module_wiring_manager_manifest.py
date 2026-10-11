@@ -39,6 +39,7 @@ from quickscale_core.manifest.entry_point import (
     refresh_managed_adapters,
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
+from quickscale_core.manifest.required_modules import resolve_required_modules
 from quickscale_core.manifest.settings_schema import compile_settings_schema
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_core import module_wiring as core_module_wiring
@@ -50,6 +51,12 @@ def _with_compiled_schema(spec: ModuleWiringSpec, module_name: str) -> ModuleWir
         spec,
         settings_schema=compile_settings_schema(load_module_manifest(module_name)),
     )
+
+
+def _with_required_modules(*names: str) -> list[str]:
+    """Return *names* plus their transitive required-module closure (rule 39)."""
+    closure = resolve_required_modules(list(names))
+    return sorted({*names, *closure})
 
 
 def _write_minimal_project(
@@ -174,7 +181,7 @@ class TestRegenerateManagedWiringManifestPath:
         _write_complete_embedded_inventory(project)
 
         success, message = regenerate_managed_wiring(
-            project, module_names=["analytics"]
+            project, module_names=_with_required_modules("analytics")
         )
         assert success, f"regenerate_managed_wiring failed: {message}"
 
@@ -196,7 +203,9 @@ class TestRegenerateManagedWiringManifestPath:
             },
         )
 
-        success, message = regenerate_managed_wiring(project, module_names=["social"])
+        success, message = regenerate_managed_wiring(
+            project, module_names=_with_required_modules("social")
+        )
         assert success, f"regenerate_managed_wiring failed: {message}"
 
         managed_init = project / "myapp" / "quickscale_managed" / "__init__.py"
@@ -287,7 +296,7 @@ class TestRegenerateManagedWiringManifestPath:
         )
 
         success, message = regenerate_managed_wiring(
-            project, module_names=["analytics", "billing"]
+            project, module_names=_with_required_modules("analytics", "billing")
         )
         assert success, f"regenerate_managed_wiring failed: {message}"
 
@@ -367,7 +376,7 @@ class TestRegenerateManagedWiringManifestPath:
         ):
             success, message = regenerate_managed_wiring(
                 project,
-                module_names=["analytics"],
+                module_names=_with_required_modules("analytics"),
                 option_overrides=desired_options,
                 project_package="myapp",
             )
@@ -377,7 +386,8 @@ class TestRegenerateManagedWiringManifestPath:
         refresh_spy.assert_called_once_with()
         writer_spy.assert_called_once()
         actual_specs = writer_spy.call_args.args[1]
-        assert actual_specs == {"analytics": expected_spec}
+        assert set(actual_specs) == set(_with_required_modules("analytics"))
+        assert actual_specs["analytics"] == expected_spec
 
         assert render_settings_spy.call_count == 1
         assert render_urls_spy.call_count == 1
@@ -944,7 +954,7 @@ class TestRegenerateManagedWiringFailHard:
 
         success, message = regenerate_managed_wiring(
             project,
-            module_names=["analytics"],
+            module_names=_with_required_modules("analytics"),
             option_overrides={
                 "analytics": {
                     "enabled": True,
@@ -1209,7 +1219,7 @@ class TestRegenerateManagedWiringPriorBasePath:
             )
 
             success, message = regenerate_managed_wiring(
-                project, module_names=["social"]
+                project, module_names=_with_required_modules("social")
             )
             assert success, (
                 f"regenerate_managed_wiring for social via prior base path "
@@ -1245,7 +1255,7 @@ class TestRegenerateManagedWiringPriorBasePath:
 
         try:
             success, message = regenerate_managed_wiring(
-                project, module_names=["billing"]
+                project, module_names=_with_required_modules("billing")
             )
             assert success, (
                 f"regenerate_managed_wiring for billing via prior base path "
@@ -1286,7 +1296,7 @@ class TestRegenerateManagedWiringPriorBasePath:
             assert _md.get_resolution_source() is ModuleResolutionSource.MONOREPO
 
             success, message = regenerate_managed_wiring(
-                project, module_names=["analytics"]
+                project, module_names=_with_required_modules("analytics")
             )
 
             assert success, message
@@ -1363,7 +1373,7 @@ class TestRegenerateManagedWiringVersionMismatch:
         )
 
         success, message = regenerate_managed_wiring(
-            project, module_names=["analytics"]
+            project, module_names=_with_required_modules("analytics")
         )
 
         assert success, f"regenerate_managed_wiring failed: {message}"

@@ -830,6 +830,26 @@ def _declared_mounts(module: Module) -> list[str]:
     return mounts
 
 
+def _declared_url_mounts(module: Module) -> list[str]:
+    """
+    Rule 41: the mounts of both include buckets, pre-home and post-home.
+
+    The two buckets render into one URLconf, so a prefix belongs to one
+    module across both projections.
+    """
+    mounts: list[str] = []
+    for field in ("pre_home_url_includes", "url_includes"):
+        for entry in _wiring_projection(module.manifest, field):
+            if (
+                isinstance(entry, (list, tuple))
+                and entry
+                and isinstance(entry[0], str)
+                and entry[0] not in mounts
+            ):
+                mounts.append(entry[0])
+    return mounts
+
+
 def _body_nodes(body: list[ast.stmt]) -> list[ast.AST]:
     """Return nodes in *body* without descending into nested functions."""
     found: list[ast.AST] = []

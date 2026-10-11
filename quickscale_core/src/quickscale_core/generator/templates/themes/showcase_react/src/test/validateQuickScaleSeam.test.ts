@@ -23,6 +23,12 @@ function buildValidConfig(): QuickScaleConfig {
       social: '/social',
       analytics: '/analytics/',
     },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
+    },
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -55,6 +61,12 @@ function buildPublicInjectorLinkTree(): QuickScaleConfig {
       crm: '/crm/',
       social: '/social',
       analytics: '/analytics/',
+    },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
     },
     owner: {
       mode: 'solo',
@@ -97,6 +109,12 @@ function buildPublicInjectorEmbeds(): QuickScaleConfig {
       crm: '/crm/',
       social: '/social/embeds',
       analytics: '/analytics/',
+    },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
     },
     owner: {
       mode: 'solo',
@@ -385,6 +403,36 @@ describe('validateQuickScaleConfig', () => {
     expect(() => validateQuickScaleConfig()).toThrow(/modulePaths\.social/)
   })
 
+  // ── moduleApiPaths validation ───────────────────────────────────
+
+  it('throws when moduleApiPaths is missing', () => {
+    const config: Record<string, unknown> = JSON.parse(JSON.stringify(buildValidConfig()))
+    delete config.moduleApiPaths
+    window.__QUICKSCALE__ = config as unknown as QuickScaleConfig
+    expect(() => validateQuickScaleConfig()).toThrow(/moduleApiPaths/)
+  })
+
+  it('throws when moduleApiPaths is an array', () => {
+    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleApiPaths: [] as unknown as QuickScaleConfig['moduleApiPaths'] }
+    expect(() => validateQuickScaleConfig()).toThrow(/moduleApiPaths/)
+  })
+
+  it('throws when moduleApiPaths.forms is missing', () => {
+    const paths = { orgs: '/orgs/api/', billing: '/billing/api/', crm: '/crm/api/' }
+    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleApiPaths: paths as QuickScaleConfig['moduleApiPaths'] }
+    expect(() => validateQuickScaleConfig()).toThrow(/moduleApiPaths\.forms/)
+  })
+
+  it('throws when moduleApiPaths.orgs is empty string', () => {
+    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleApiPaths: { orgs: '', billing: '/billing/api/', crm: '/crm/api/', forms: '/forms/api/' } as QuickScaleConfig['moduleApiPaths'] }
+    expect(() => validateQuickScaleConfig()).toThrow(/moduleApiPaths\.orgs/)
+  })
+
+  it('throws when moduleApiPaths.billing is a number', () => {
+    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleApiPaths: { orgs: '/orgs/api/', billing: 42, crm: '/crm/api/', forms: '/forms/api/' } as unknown as QuickScaleConfig['moduleApiPaths'] }
+    expect(() => validateQuickScaleConfig()).toThrow(/moduleApiPaths\.billing/)
+  })
+
   // ── owner validation (SA107-CR-002) ───────────────────────────
 
   it('throws when owner is missing', () => {
@@ -512,6 +560,8 @@ describe('validateQuickScaleConfig', () => {
     expect(result.modulePaths.crm).toBe('/crm/')
     expect(result.modulePaths.social).toBe('/social')
     expect(result.modulePaths.analytics).toBe('/analytics/')
+    expect(result.moduleApiPaths.orgs).toBe('/orgs/api/')
+    expect(result.moduleApiPaths.billing).toBe('/billing/api/')
   })
 
   it('accepts a production-shaped embeds public injector config', () => {

@@ -50,6 +50,12 @@ function buildConfig(mode: 'solo' | 'saas', currentOrgSlug: string | null = null
       social: '/social',
       analytics: '/analytics/',
     },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
+    },
     owner: { mode, currentOrgSlug },
   }
 }

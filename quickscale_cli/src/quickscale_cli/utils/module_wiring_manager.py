@@ -284,6 +284,39 @@ def _write_wiring_files(
     return True, "Managed wiring files regenerated"
 
 
+def _missing_required_modules(selected_modules: list[str]) -> str | None:
+    """Return the error when an installed module's requirement is absent.
+
+    Rule 39 applies a required module together with its dependant, so the
+    installed set always satisfies every manifest's ``required_modules``.
+    Regenerating from a subset that does not — an update of a module that
+    gained a requirement, or a removal of a required module while its
+    dependant stays — refuses before writing wiring that would silently drop
+    the dependant's shared surfaces.
+    """
+    selected = set(selected_modules)
+    offenders: list[tuple[str, str]] = []
+    for module_name in sorted(selected):
+        try:
+            manifest = load_module_manifest(module_name)
+        except Exception:  # noqa: BLE001, S112 - unknown modules are the spec builder's contract
+            continue
+        for required_name in manifest.required_modules:
+            if required_name not in selected:
+                offenders.append((module_name, required_name))
+    if not offenders:
+        return None
+    pairs = ", ".join(
+        f"'{dependant}' requires '{required}'" for dependant, required in offenders
+    )
+    return (
+        f"Installed modules are missing a required module: {pairs}. "
+        "Run 'quickscale apply' to add the required module, or remove the "
+        "dependant first; managed wiring is not written until the installed "
+        "set satisfies every requirement."
+    )
+
+
 def _restore_modules_context(
     prior_base_path: Path | None,
     prior_base_path_was_override: bool,
@@ -350,6 +383,9 @@ def regenerate_managed_wiring(
         if error is not None:
             return False, error
         assert specs is not None  # noqa: S101 - internal invariant guaranteed by the caller
+        requirement_error = _missing_required_modules(selected_modules)
+        if requirement_error is not None:
+            return False, requirement_error
         return _write_wiring_files(project_path, package_name, specs)
     finally:
         _restore_modules_context(

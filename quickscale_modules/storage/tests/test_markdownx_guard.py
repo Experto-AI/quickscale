@@ -1,10 +1,9 @@
-"""Rule 1 (D3): the listings Markdownx editor mount is staff-guarded.
+"""Rule 41: the shared Markdownx editor mount is staff-guarded.
 
-The editor endpoints are mounted through the module's guarded URLconf in every
-state, so a switched-off listings module keeps a working editor without
-exposing an anonymous preview or upload surface.  These are HTTP-level checks
-of that boundary; tenant middleware is isolated out so the guard itself is
-exercised.
+Storage mounts the one staff-guarded URLconf every installed module's Markdown
+editor posts to, so the editor keeps working without exposing an anonymous
+preview or upload surface.  These are HTTP-level checks of that boundary;
+tenant middleware is isolated out so the guard itself is exercised.
 """
 
 from __future__ import annotations
@@ -33,7 +32,7 @@ _GUARD_TEST_MIDDLEWARE = [
 
 def _staff_client() -> Client:
     user = get_user_model().objects.create_user(
-        "listings-markdownx-staff", password="pw", is_staff=True
+        "storage-markdownx-staff", password="pw", is_staff=True
     )
     client = Client()
     client.force_login(user)
@@ -41,7 +40,7 @@ def _staff_client() -> Client:
 
 
 @pytest.mark.django_db
-class TestListingsMarkdownxGuard:
+class TestSharedMarkdownxGuard:
     @pytest.fixture(autouse=True)
     def _guard_settings(self, settings) -> None:
         settings.ROOT_URLCONF = "tests.urls_markdownx_guard"
@@ -57,7 +56,7 @@ class TestListingsMarkdownxGuard:
 
     def test_authenticated_non_staff_is_refused(self) -> None:
         user = get_user_model().objects.create_user(
-            "listings-markdownx-user", password="pw"
+            "storage-markdownx-user", password="pw"
         )
         client = Client()
         client.force_login(user)

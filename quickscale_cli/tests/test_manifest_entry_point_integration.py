@@ -480,9 +480,10 @@ class TestBlogManifestEntryPoint:
 
     def test_url_includes(self) -> None:
         spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
-        # Blog has markdownx/ and root URL includes
+        # Rule 41: the shared markdownx/ editor mount belongs to storage.
         urls = dict(spec.url_includes)
-        assert "markdownx/" in urls
+        assert "blog/" in urls
+        assert "markdownx/" not in urls
 
     def test_posts_per_page_setting(self) -> None:
         spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
@@ -492,12 +493,11 @@ class TestBlogManifestEntryPoint:
         spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
         assert spec.settings.get("QUICKSCALE_BLOG_RSS_ENABLED") is True
 
-    def test_markdownx_settings(self) -> None:
-        """Blog spec includes static markdownx settings."""
+    def test_markdownx_settings_live_in_storage(self) -> None:
+        """Rule 41: blog writes none of the shared editor's global settings."""
         spec = build_manifest_wiring_spec("blog", self._BLOG_OPTIONS)
-        assert "MARKDOWNX_MARKDOWN_EXTENSIONS" in spec.settings
-        assert "MARKDOWNX_MEDIA_PATH" in spec.settings
-        assert spec.settings["MARKDOWNX_MEDIA_PATH"] == "blog/markdownx/"
+        assert "MARKDOWNX_MARKDOWN_EXTENSIONS" not in spec.settings
+        assert "MARKDOWNX_MEDIA_PATH" not in spec.settings
 
     def test_none_options_uses_defaults(self) -> None:
         spec = build_manifest_wiring_spec("blog", None)
@@ -510,8 +510,6 @@ class TestBlogManifestEntryPoint:
             "QUICKSCALE_BLOG_POSTS_PER_PAGE",
             "QUICKSCALE_BLOG_RSS_ENABLED",
             "QUICKSCALE_BLOG_API_RATE_LIMIT",
-            "MARKDOWNX_MARKDOWN_EXTENSIONS",
-            "MARKDOWNX_MEDIA_PATH",
         }
         for key in expected_keys:
             assert key in spec.settings, f"Missing expected setting: {key}"
@@ -542,18 +540,20 @@ class TestListingsManifestEntryPoint:
 
     def test_url_includes(self) -> None:
         spec = build_manifest_wiring_spec("listings", None)
+        # Rule 41: the shared markdownx/ editor mount belongs to storage.
         urls = dict(spec.url_includes)
         assert "listings/" in urls
-        assert "markdownx/" in urls
+        assert "markdownx/" not in urls
 
     def test_listings_per_page_default(self) -> None:
         spec = build_manifest_wiring_spec("listings", None)
         assert spec.settings.get("QUICKSCALE_LISTINGS_PER_PAGE") == 12
 
-    def test_markdownx_settings(self) -> None:
-        """Listings spec includes static markdownx extensions."""
+    def test_markdownx_settings_live_in_storage(self) -> None:
+        """Rule 41: listings writes none of the shared editor's global settings."""
         spec = build_manifest_wiring_spec("listings", None)
-        assert "MARKDOWNX_MARKDOWN_EXTENSIONS" in spec.settings
+        assert "MARKDOWNX_MARKDOWN_EXTENSIONS" not in spec.settings
+        assert "MARKDOWNX_MEDIA_PATH" not in spec.settings
 
     def test_custom_listings_per_page(self) -> None:
         spec = build_manifest_wiring_spec("listings", {"per_page": 24})
@@ -768,18 +768,18 @@ _DISABLED_MODULE_OPTIONS: dict[str, dict[str, object]] = {
 
 
 _DISABLED_EDITOR_INCLUDES: dict[str, tuple[tuple[str, str], ...]] = {
-    # Blog and listings keep a staff-guarded copy of the Markdownx endpoints
-    # their installed admin editors call; crm and forms have no shared editor,
-    # and the five foundation modules keep no URL mount at all while off.
-    "blog": (("markdownx/", "quickscale_modules_blog.markdownx_urls"),),
+    # Only storage mounts the shared staff-guarded Markdownx endpoints the
+    # installed admin editors call (rule 41); crm and forms have no shared
+    # editor, and the other modules keep no URL mount at all while off.
+    "blog": (),
     "crm": (),
     "forms": (),
-    "listings": (("markdownx/", "quickscale_modules_listings.markdownx_urls"),),
+    "listings": (),
     "auth": (),
     "backups": (),
     "orgs": (),
     "social": (),
-    "storage": (),
+    "storage": (("markdownx/", "quickscale_modules_storage.markdownx_urls"),),
 }
 
 
@@ -787,11 +787,17 @@ class TestMarkdownxEditorMountIsAlwaysGuarded:
     """The Markdownx editor mount is staff-guarded in every combination."""
 
     @pytest.mark.parametrize(
-        ("blog_enabled", "listings_enabled"),
-        [(True, True), (True, False), (False, True), (False, False)],
+        ("blog_enabled", "listings_enabled", "storage_enabled"),
+        [
+            (True, True, True),
+            (True, False, True),
+            (False, True, True),
+            (False, False, True),
+            (True, True, False),
+        ],
     )
     def test_no_unguarded_markdownx_mount(
-        self, blog_enabled: bool, listings_enabled: bool
+        self, blog_enabled: bool, listings_enabled: bool, storage_enabled: bool
     ) -> None:
         specs = {
             "blog": build_manifest_wiring_spec(
@@ -802,14 +808,29 @@ class TestMarkdownxEditorMountIsAlwaysGuarded:
                 "listings",
                 {**_DISABLED_MODULE_OPTIONS["listings"], "enabled": listings_enabled},
             ),
+            "storage": build_manifest_wiring_spec(
+                "storage",
+                {**_DISABLED_MODULE_OPTIONS["storage"], "enabled": storage_enabled},
+            ),
         }
         _, _, _, urls = collect_wiring(specs)
         markdownx_targets = [
             target for prefix, target in urls if prefix == "markdownx/"
         ]
-        assert markdownx_targets, "the editor mount must exist while installed"
+        assert markdownx_targets == ["quickscale_modules_storage.markdownx_urls"], (
+            "the one shared editor mount is storage's"
+        )
         assert "markdownx.urls" not in markdownx_targets
-        assert all(target.endswith(".markdownx_urls") for target in markdownx_targets)
+
+    def test_no_mount_without_storage(self) -> None:
+        """An installation without storage mounts no Markdownx editor."""
+        specs = {
+            "blog": build_manifest_wiring_spec(
+                "blog", {**_DISABLED_MODULE_OPTIONS["blog"], "enabled": True}
+            ),
+        }
+        _, _, _, urls = collect_wiring(specs)
+        assert [target for prefix, target in urls if prefix == "markdownx/"] == []
 
 
 class TestModuleDisabledSwitch:

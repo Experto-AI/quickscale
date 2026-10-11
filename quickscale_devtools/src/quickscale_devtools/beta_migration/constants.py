@@ -320,8 +320,13 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "frontend/src/lib/analytics.ts",
     "frontend/src/lib/csrf.ts",
     "frontend/src/lib/validateQuickScaleSeam.ts",
+    # Generated frontend tests share category U7's user-owned disposition
+    # (generated_file_ownership.md). Fresh-first does not replace or merge
+    # them; enumerate each path so new test artifacts still require review.
     "frontend/src/test/setup.ts",
     "frontend/src/test/App.test.tsx",
+    "frontend/src/test/AppRoutes.test.tsx",
+    "frontend/src/test/analytics.test.ts",
     "frontend/src/test/csrf.test.tsx",
     "frontend/src/test/validateQuickScaleSeam.test.ts",
     "frontend/src/test/viteAssetRouting.test.ts",
@@ -329,6 +334,17 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     "frontend/src/test/PublicSocialPages.test.tsx",
     "frontend/src/test/useApiErrors.test.ts",
     "frontend/src/test/FormRenderer.test.tsx",
+    "frontend/src/test/formFields.test.tsx",
+    "frontend/src/test/layoutComponents.test.tsx",
+    "frontend/src/test/orgComponents.test.tsx",
+    "frontend/src/test/orgListPage.test.tsx",
+    "frontend/src/test/settingsPage.test.tsx",
+    "frontend/src/test/socialLinkTreeStates.test.tsx",
+    "frontend/src/test/themeStore.test.ts",
+    "frontend/src/test/uiPrimitives.test.tsx",
+    "frontend/src/test/useModules.test.tsx",
+    "frontend/src/test/useOrgNavigation.test.tsx",
+    "frontend/src/test/useOrgs.test.tsx",
     "frontend/e2e/home.spec.ts",
     # ---- shadcn/ui components (user-owned after generation) ----
     "frontend/src/components/ui/checkbox.tsx",

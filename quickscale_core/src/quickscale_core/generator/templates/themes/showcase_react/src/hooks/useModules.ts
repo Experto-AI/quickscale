@@ -18,6 +18,13 @@ interface QuickScaleModulePaths {
   analytics: string
 }
 
+interface QuickScaleModuleApiPaths {
+  orgs: string
+  billing: string
+  crm: string
+  forms: string
+}
+
 export type QuickScaleOwnerMode = 'solo' | 'saas'
 
 interface QuickScaleOwnerConfig {
@@ -44,6 +51,7 @@ export interface QuickScaleConfig {
   projectName: string
   modules: QuickScaleModules
   modulePaths: QuickScaleModulePaths
+  moduleApiPaths: QuickScaleModuleApiPaths
   owner: QuickScaleOwnerConfig
   publicPage?: QuickScalePublicPageConfig
 }

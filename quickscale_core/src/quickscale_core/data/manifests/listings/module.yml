@@ -34,6 +34,7 @@ config:
 
 required_modules:
   - orgs
+  - storage
 
 dependencies:
   - djangorestframework
@@ -75,9 +76,7 @@ derivation:
         value:
           - - listings/
             - quickscale_modules_listings.urls
-          - - markdownx/
-            - quickscale_modules_listings.markdownx_urls
-      description: "Listings URL includes; the Markdownx editor mount is staff-guarded"
+      description: "Listings URL includes; the shared Markdownx editor mount lives in storage (rule 41)"
 
     - wiring_field: spa_routes
       derivation_type: static
@@ -86,17 +85,6 @@ derivation:
           - - ^listings/?$
             - shell
       description: "Listings React shell route; rendered after the module's own includes (rule 41)"
-
-  # Static editor settings the listings module always contributes while
-  # installed.
-  derived_settings:
-    - setting_key: MARKDOWNX_MARKDOWN_EXTENSIONS
-      derivation_type: static
-      expression:
-        value:
-          - markdown.extensions.fenced_code
-          - markdown.extensions.tables
-          - markdown.extensions.toc
 
   option_derivations:
     per_page:

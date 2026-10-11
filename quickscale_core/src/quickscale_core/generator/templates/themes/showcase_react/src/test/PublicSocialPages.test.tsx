@@ -31,6 +31,12 @@ function buildProjectConfig(surface: 'link_tree' | 'embeds'): QuickScaleConfig {
       social: surface === 'link_tree' ? '/social' : '/social/embeds',
       analytics: '/analytics/',
     },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
+    },
     owner: {
       mode: 'solo',
       currentOrgSlug: null,

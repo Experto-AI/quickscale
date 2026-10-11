@@ -2272,7 +2272,7 @@ class TestGeneratedProjectRuntimeSmoke:
         assert (project_path / "pyproject.toml").exists()
 
         # Phase 2: Embed both auth and orgs modules (auth depends on orgs).
-        for mod_name in ("auth", "orgs"):
+        for mod_name in ("auth", "orgs", "notifications"):
             embedded_path = project_path / "modules" / mod_name
             _copytree_for_generated_project_smoke(
                 REPO_ROOT / "quickscale_modules" / mod_name,
@@ -2288,15 +2288,25 @@ class TestGeneratedProjectRuntimeSmoke:
         # Phase 3: Write declarative config and sync dependencies.
         auth_options = default_module_config_from_manifest("auth")
         orgs_options = default_module_config_from_manifest("orgs")
+        notifications_options = default_module_config_from_manifest("notifications")
         self._write_quickscale_yml_with_modules(
             project_path,
             project_name,
             "showcase_react",
-            {"auth": auth_options, "orgs": orgs_options},
+            {
+                "auth": auth_options,
+                "orgs": orgs_options,
+                "notifications": notifications_options,
+            },
         )
 
         sync_result = sync_project_module_dependencies(
-            project_path, {"auth": auth_options, "orgs": orgs_options}
+            project_path,
+            {
+                "auth": auth_options,
+                "orgs": orgs_options,
+                "notifications": notifications_options,
+            },
         )
         assert any(
             "quickscale-module-orgs" in dep
@@ -2328,6 +2338,12 @@ class TestGeneratedProjectRuntimeSmoke:
         _write_postgres_test_settings(project_path, project_name, postgres_url)
         _allow_bypass_rls = os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS")
         os.environ["QUICKSCALE_ALLOW_BYPASSRLS"] = "1"
+        _notifications_secret = os.environ.get(
+            "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
+        )
+        os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"] = (
+            "qs-e2e-notifications-webhook-secret"
+        )
         try:
             _run_migrations(project_path, project_name)
 
@@ -2351,6 +2367,12 @@ class TestGeneratedProjectRuntimeSmoke:
                 os.environ["QUICKSCALE_ALLOW_BYPASSRLS"] = _allow_bypass_rls
             else:
                 os.environ.pop("QUICKSCALE_ALLOW_BYPASSRLS", None)
+            if _notifications_secret is not None:
+                os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"] = (
+                    _notifications_secret
+                )
+            else:
+                os.environ.pop("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET", None)
 
     @pytest.mark.e2e
     def test_generated_project_boots_through_start_sh_and_serves_healthcheck(
@@ -2874,7 +2896,7 @@ class TestGeneratedProjectRuntimeSmoke:
         assert (project_path / "pyproject.toml").exists()
 
         # Phase 2: Embed both auth and orgs modules (orgs depends on auth).
-        for mod_name in ("auth", "orgs"):
+        for mod_name in ("auth", "orgs", "notifications"):
             embedded_path = project_path / "modules" / mod_name
             _copytree_for_generated_project_smoke(
                 REPO_ROOT / "quickscale_modules" / mod_name,
@@ -2890,15 +2912,25 @@ class TestGeneratedProjectRuntimeSmoke:
         # Phase 3: Write declarative config and sync dependencies for both modules.
         auth_options = default_module_config_from_manifest("auth")
         orgs_options = default_module_config_from_manifest("orgs")
+        notifications_options = default_module_config_from_manifest("notifications")
         self._write_quickscale_yml_with_modules(
             project_path,
             project_name,
             "showcase_react",
-            {"auth": auth_options, "orgs": orgs_options},
+            {
+                "auth": auth_options,
+                "orgs": orgs_options,
+                "notifications": notifications_options,
+            },
         )
 
         sync_result = sync_project_module_dependencies(
-            project_path, {"auth": auth_options, "orgs": orgs_options}
+            project_path,
+            {
+                "auth": auth_options,
+                "orgs": orgs_options,
+                "notifications": notifications_options,
+            },
         )
         assert any(
             "quickscale-module-orgs" in dep
@@ -2937,6 +2969,9 @@ class TestGeneratedProjectRuntimeSmoke:
                 "DATABASE_URL": postgres_url,
                 "RUNTIME_DATABASE_URL": "",
                 "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+                "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
+                    "qs-e2e-notifications-webhook-secret"
+                ),
                 "ALLOWED_HOSTS": "localhost,127.0.0.1",
             }
         )
@@ -2997,7 +3032,7 @@ class TestGeneratedProjectRuntimeSmoke:
         assert (project_path / "pyproject.toml").exists()
 
         # Phase 2: Embed both auth and orgs modules (orgs depends on auth).
-        for mod_name in ("auth", "orgs"):
+        for mod_name in ("auth", "orgs", "notifications"):
             embedded_path = project_path / "modules" / mod_name
             _copytree_for_generated_project_smoke(
                 REPO_ROOT / "quickscale_modules" / mod_name,
@@ -3013,15 +3048,25 @@ class TestGeneratedProjectRuntimeSmoke:
         # Phase 3: Write declarative config and sync dependencies for both modules.
         auth_options = default_module_config_from_manifest("auth")
         orgs_options = default_module_config_from_manifest("orgs")
+        notifications_options = default_module_config_from_manifest("notifications")
         self._write_quickscale_yml_with_modules(
             project_path,
             project_name,
             "showcase_react",
-            {"auth": auth_options, "orgs": orgs_options},
+            {
+                "auth": auth_options,
+                "orgs": orgs_options,
+                "notifications": notifications_options,
+            },
         )
 
         sync_result = sync_project_module_dependencies(
-            project_path, {"auth": auth_options, "orgs": orgs_options}
+            project_path,
+            {
+                "auth": auth_options,
+                "orgs": orgs_options,
+                "notifications": notifications_options,
+            },
         )
         assert any(
             "quickscale-module-orgs" in dep
@@ -3060,6 +3105,9 @@ class TestGeneratedProjectRuntimeSmoke:
                 "DATABASE_URL": postgres_url,
                 "RUNTIME_DATABASE_URL": "",
                 "QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable",
+                "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
+                    "qs-e2e-notifications-webhook-secret"
+                ),
                 "ALLOWED_HOSTS": "localhost,127.0.0.1",
             }
         )
@@ -3162,7 +3210,7 @@ class TestGeneratedProjectRuntimeSmoke:
         project_path = tmp_path / project_name
         ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
 
-        for mod_name in ("auth", "orgs"):
+        for mod_name in ("auth", "orgs", "notifications"):
             embedded_path = project_path / "modules" / mod_name
             _copytree_for_generated_project_smoke(
                 REPO_ROOT / "quickscale_modules" / mod_name,
@@ -3171,8 +3219,13 @@ class TestGeneratedProjectRuntimeSmoke:
 
         auth_options = default_module_config_from_manifest("auth")
         orgs_options = default_module_config_from_manifest("orgs")
+        notifications_options = default_module_config_from_manifest("notifications")
         orgs_options["mode"] = "saas"
-        modules = {"auth": auth_options, "orgs": orgs_options}
+        modules = {
+            "auth": auth_options,
+            "orgs": orgs_options,
+            "notifications": notifications_options,
+        }
         self._write_quickscale_yml_with_modules(
             project_path,
             project_name,
@@ -3200,6 +3253,9 @@ class TestGeneratedProjectRuntimeSmoke:
                 "DATABASE_URL": postgres_url,
                 "RUNTIME_DATABASE_URL": "",
                 "QUICKSCALE_ALLOW_BYPASSRLS": "1",
+                "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
+                    "qs-e2e-notifications-webhook-secret"
+                ),
                 "ALLOWED_HOSTS": "localhost,127.0.0.1",
             }
         )

@@ -32,16 +32,14 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA263 | Adapters validate, coerce, and default only through the manifest | 2 | — | Optional |
 | SA267 | Bring `scripts/` under the quality thresholds without gating it | 2 | — | Optional |
-| SA261 | One owner per URL prefix, and theme API bases from the seam | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (cutover) ∥ SA204 ──► SA153 ──► SA154 (inventory)
-Track 2: SA263 ──► SA267
-Track 3: SA261
+Track 2: SA267
+Track 3: —
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
 ```
@@ -66,8 +64,8 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA263 | yes | yes | yes | **yes** | no |
-| 3 | SA261 | yes | yes | yes | **yes** | no |
+| 2 | SA267 | yes | yes | yes | **yes** | no |
+| 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -309,42 +307,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA260 — One off switch and a closed-world manifest surface.**
 
-- [ ] **SA261 — One owner per URL prefix, and theme API bases from the seam.**
+- [x] **SA261 — One owner per URL prefix, and theme API bases from the seam.**
 
-  **Context:** blog and listings both mount `markdownx/`, so listings' editor uploads land under
-  `blog/markdownx/` (coherence `markdownx-shared-mount`, collision); the theme writes module API
-  paths as literals in four of five API clients (`mount-path-copies`); and the two
-  `markdownx_urls.py` files differ only in the module name (arch audit §14).
+- [x] **SA263 — Adapters validate, coerce, and default only through the manifest.**
 
-  **Acceptance:** coherence §6 proposal 16 is merged and enforced: a shared third-party URLconf is
-  mounted once by the lowest-layer module that needs it, `collect_wiring` fails on two modules
-  mounting one prefix, the runtime seam carries module API bases, and the harness rejects a
-  `/<mount>/api` literal in the theme's TypeScript.
-
-  **Surfaces:** blog and listings URLs, `module_wiring`, the theme's API clients, decisions, the
-  harness, and the coherence audit.
-
-- [ ] **SA263 — Adapters validate, coerce, and default only through the manifest.**
-
-  **Context:** all 12 adapters validate, coerce, and default options differently
-  (coherence `option-schema-and-validation`); core's resolver step 5 validates against rule lists
-  the loader refuses (gap 14); a blank `__QS_ENV__:` marker renders as a literal string (gap 15);
-  backups' remote credentials break rule 1's naming (`secret-env-var-names`).
-
-  **Acceptance:** coherence §6 proposals 2 and 8 are merged and enforced: the generic path
-  validates, types, and projects `_ENV_VAR` options (blank → `""`), post-hooks compute only
-  settings no single option maps to, and the harness rejects re-validation, coercion,
-  `.get(<option>, <default>)`, and value checks in `adapter.py`. The dead resolver step is
-  removed, a blank secret marker renders `""`, and backups' private-remote credentials are a
-  listed rule 1 exception.
-
-  **Progress:** generic validation, secret projection, all 12 adapter migrations, and harness
-  controls are implemented; storage's path-or-absolute media normalization is preserved.
-  **Remaining:** independently confirm the enforcement and IPv6 admission corrections, and
-  finish release validation before merge; unrelated baseline gate failures remain.
-
-  **Surfaces:** the 12 adapters, `resolver.py`, `module_wiring.py`, decisions, the harness, and
-  the coherence audit.
 - [ ] **SA267 — Bring `scripts/` under the quality thresholds without gating it.**
 
   **Context:** `check_quality.sh` scans only packages, and `scripts/` misses its fixed lines:

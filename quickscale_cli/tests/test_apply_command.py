@@ -34,7 +34,13 @@ def _make_apply_context(project_path, *, package_name="myapp"):
         delta=SimpleNamespace(modules_unchanged=[]),
         qs_config=SimpleNamespace(
             project=SimpleNamespace(package=package_name),
-            modules={"auth": SimpleNamespace(options={})},
+            modules={
+                # The rule 39 closure of auth, so regeneration reaches the
+                # step under test instead of refusing an invalid set.
+                "auth": SimpleNamespace(options={}),
+                "notifications": SimpleNamespace(options={}),
+                "orgs": SimpleNamespace(options={}),
+            },
         ),
     )
 
@@ -1296,6 +1302,8 @@ class TestApplyManagedWiringStrictContext:
             "  theme: showcase_react\n"
             "modules:\n"
             "  auth:\n"
+            "  notifications:\n"
+            "  orgs:\n"
             "docker:\n"
             "  start: false\n"
         )
@@ -1307,7 +1315,9 @@ class TestApplyManagedWiringStrictContext:
             side_effect=OSError("disk full"),
         ):
             assert (
-                _regenerate_managed_wiring_for_apply(ctx, embedded_modules=["auth"])
+                _regenerate_managed_wiring_for_apply(
+                    ctx, embedded_modules=["auth", "notifications", "orgs"]
+                )
                 is False
             )
 

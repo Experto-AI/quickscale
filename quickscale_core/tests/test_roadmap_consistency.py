@@ -93,6 +93,8 @@ RETAINED_CLOSED_TICKETS = {
     "SA258",
     "SA260",
     "SA262",
+    "SA261",
+    "SA263",
     "SA264",
     "SA265",
     "SA266",
@@ -260,6 +262,19 @@ def test_rejects_duplicate_schedule(roadmap: str) -> None:
     table = roadmap[roadmap.index("| Ticket") : roadmap.index("- [ ]")]
     with pytest.raises(AssertionError, match="one canonical schedule"):
         _roadmap_tickets(roadmap + table)
+
+
+def test_rejects_unregistered_checked_ticket(roadmap: str) -> None:
+    with pytest.raises(AssertionError, match="unsupported checked tickets"):
+        _roadmap_tickets(roadmap.replace("- [ ] **SA902", "- [x] **SA902"))
+
+
+def test_rejects_closed_ticket_in_open_schedule(roadmap: str) -> None:
+    closed_roadmap = roadmap.replace("SA902", "SA263").replace(
+        "- [ ] **SA263", "- [x] **SA263"
+    )
+    with pytest.raises(AssertionError, match="schedule coverage mismatch"):
+        _roadmap_tickets(closed_roadmap)
 
 
 @pytest.mark.parametrize("closed_ticket", sorted(RETAINED_CLOSED_TICKETS))

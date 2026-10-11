@@ -91,6 +91,90 @@ def _write_project_with_auth(project_path: Path) -> None:
     )
 
 
+def _write_project_with_modules(
+    project_path: Path, module_names: tuple[str, ...]
+) -> None:
+    """Write a generated-project layout embedding *module_names* with real manifests."""
+    modules_root = Path(__file__).resolve().parents[3] / "quickscale_modules"
+    for name in module_names:
+        module_dir = project_path / "modules" / name
+        module_dir.mkdir(parents=True)
+        (module_dir / "__init__.py").write_text("")
+        (module_dir / "module.yml").write_text(
+            (modules_root / name / "module.yml").read_text()
+        )
+
+    package_dir = project_path / "myproject"
+    (package_dir / "settings").mkdir(parents=True)
+    (package_dir / "__init__.py").write_text("")
+    (package_dir / "settings" / "__init__.py").write_text("")
+    (package_dir / "settings" / "modules.py").write_text("# managed\n")
+    (package_dir / "urls_modules.py").write_text("# managed\n")
+
+    quickscale_dir = project_path / ".quickscale"
+    quickscale_dir.mkdir()
+    (quickscale_dir / "state.yml").write_text(
+        yaml.safe_dump(
+            {
+                "version": "1",
+                "project": {
+                    "slug": "myproject",
+                    "package": "myproject",
+                    "theme": "showcase_react",
+                    "created_at": "2024-01-01T00:00:00",
+                    "last_applied": "2024-01-01T00:00:00",
+                },
+                "modules": {
+                    name: {
+                        "version": "0.88.0",
+                        "commit_sha": "abc123",
+                        "embedded_at": "2024-01-01T00:00:00",
+                        "options": {},
+                    }
+                    for name in module_names
+                },
+            },
+            sort_keys=False,
+        )
+    )
+    (quickscale_dir / "config.yml").write_text(
+        yaml.safe_dump(
+            {
+                "default_remote": "https://github.com/Experto-AI/quickscale.git",
+                "modules": {
+                    name: {
+                        "prefix": f"modules/{name}",
+                        "branch": f"splits/{name}-module",
+                        "installed_version": "0.88.0",
+                        "installed_at": "2024-01-01",
+                    }
+                    for name in module_names
+                },
+            },
+            sort_keys=False,
+        )
+    )
+    (project_path / "quickscale.yml").write_text(
+        yaml.safe_dump(
+            {
+                "version": "1",
+                "project": {
+                    "slug": "myproject",
+                    "package": "myproject",
+                    "theme": "showcase_react",
+                },
+                "modules": {name: {} for name in module_names},
+                "docker": {
+                    "start": False,
+                    "build": False,
+                    "create_superuser": False,
+                },
+            },
+            sort_keys=False,
+        )
+    )
+
+
 @pytest.fixture
 def cli_runner() -> CliRunner:
     return CliRunner()
@@ -162,6 +246,37 @@ class TestRemoveCommand:
         # Legacy config.yml is no longer mutated by remove; auth remains as-is.
         assert "auth" in legacy_config.get("modules", {})
 
+    def test_remove_refuses_a_module_a_remaining_module_requires(
+        self,
+        cli_runner: CliRunner,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Rule 39: removal refuses while an installed module requires the target.
+
+        The remaining set (listings, orgs, auth, notifications) is valid only
+        with storage, whose shared editor mount listings' admin needs; the
+        removal rolls back and names the requirement.
+        """
+        project_path = tmp_path / "myproject"
+        project_path.mkdir()
+        _write_project_with_modules(
+            project_path, ("auth", "listings", "notifications", "orgs", "storage")
+        )
+        monkeypatch.chdir(project_path)
+
+        result = cli_runner.invoke(
+            remove,
+            ["storage", "--force"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code != 0
+        assert "'listings' requires 'storage'" in result.output
+        state = yaml.safe_load((project_path / ".quickscale" / "state.yml").read_text())
+        assert "storage" in state.get("modules", {})
+        assert (project_path / "modules" / "storage").exists()
+
     def test_remove_module_not_found(
         self,
         cli_runner: CliRunner,
@@ -204,9 +319,9 @@ class TestRemoveCommand:
     ) -> None:
         legacy_config_path = project_with_module / ".quickscale" / "config.yml"
         legacy_config = yaml.safe_load(legacy_config_path.read_text())
-        legacy_config["modules"]["blog"] = {
-            "prefix": "modules/blog",
-            "branch": "splits/blog-module",
+        legacy_config["modules"]["storage"] = {
+            "prefix": "modules/storage",
+            "branch": "splits/storage-module",
             "installed_version": "0.71.0",
             "installed_at": "2024-01-02",
         }
@@ -225,4 +340,4 @@ class TestRemoveCommand:
         updated_legacy_config = yaml.safe_load(legacy_config_path.read_text())
         # Legacy config.yml is no longer mutated by remove; auth remains as-is.
         assert "auth" in updated_legacy_config.get("modules", {})
-        assert "blog" in updated_legacy_config.get("modules", {})
+        assert "storage" in updated_legacy_config.get("modules", {})

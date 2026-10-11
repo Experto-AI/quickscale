@@ -69,9 +69,8 @@ RULE_28_ALLOWED_DIRS = frozenset(
 RULE_28_LISTED_EXTRA_FILES: dict[str, frozenset[str]] = {
     "backups": frozenset({"persistence.py"}),
     "orgs": frozenset({"debug_views.py"}),
-    "blog": frozenset({"markdownx_urls.py"}),
-    "listings": frozenset({"markdownx_urls.py"}),
     "billing": frozenset({"webhook_urls.py"}),
+    "storage": frozenset({"markdownx_urls.py"}),
 }
 
 RULE_28_ALLOWED_NON_PYTHON = frozenset({"py.typed"})
@@ -111,6 +110,9 @@ RULE_37_ALLOWED_LITERALS: dict[tuple[str, str, str], str] = {
     ),
     ("core", "runtime/seam.py", "_SEAM_MODULE_PATHS"): (
         "the theme seam's server-resolved path table (rule 31)"
+    ),
+    ("core", "runtime/seam.py", "_SEAM_MODULE_API_PATHS"): (
+        "the theme seam's server-resolved API-base table (rule 41)"
     ),
     ("core", "runtime/seam.py", "_NON_SEAM_MODULES"): (
         "the theme's documented orgs exclusion (rule 31)"

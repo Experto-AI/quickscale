@@ -102,6 +102,7 @@ required_modules: []
 dependencies:
   - django-storages
   - boto3
+  - django-markdownx
   - Pillow
   - quickscale-core
 
@@ -125,6 +126,13 @@ derivation:
         value:
           - quickscale_modules_storage
       description: "Storage Django app label"
+    - wiring_field: url_includes
+      derivation_type: static
+      expression:
+        value:
+          - - markdownx/
+            - quickscale_modules_storage.markdownx_urls
+      description: "The one shared staff-guarded Markdownx editor mount (rule 41)"
 
   # The immutable switch has no django_setting of its own; the derived-setting
   # vocabulary is its one home: the projected setting equals the option value.

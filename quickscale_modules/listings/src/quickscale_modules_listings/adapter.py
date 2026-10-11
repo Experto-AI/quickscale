@@ -14,12 +14,10 @@ def _listings_post_hook(
 
     Rule 32 — the publish scope carries the module stem and its rate is the
     ``api_rate_limit`` option, contributed here for rule 30's merge; the
-    canonical value arrives from the manifest boundary.  Rule 1 (D3): off
-    keeps the module installed — app, migrations, admin, and settings — and
-    mounts none of its public URLs.  The retained admin editor
-    (``AdminMarkdownxWidget``) keeps its staff-guarded endpoint mount; the
-    manifest already points that mount at the module's guarded URLconf, never
-    at the shared ``markdownx.urls``.
+    canonical value arrives from the manifest boundary, so the hook never
+    re-coerces or re-reads a raw option.  The one shared staff-guarded
+    Markdownx editor mount, and its global settings, belong to storage
+    (rule 41), so listings contributes neither for it.
     """
     settings = dict(spec.settings)
     settings["REST_FRAMEWORK"] = {
@@ -27,28 +25,26 @@ def _listings_post_hook(
             "quickscale_listings_api": settings["QUICKSCALE_LISTINGS_API_RATE_LIMIT"],
         },
     }
-    if resolved["enabled"]:
+    if not resolved["enabled"]:
+        # Rule 1 (D3): off keeps the module installed — app, migrations,
+        # admin, and settings — and mounts none of its public URLs; the one
+        # shared staff-guarded Markdownx editor mount is storage's (rule 41).
         return ModuleWiringSpec(
             apps=spec.apps,
             middleware=spec.middleware,
             settings=settings,
-            pre_home_url_includes=spec.pre_home_url_includes,
-            url_includes=spec.url_includes,
-            spa_routes=spec.spa_routes,
+            pre_home_url_includes=(),
+            url_includes=(),
+            spa_routes=(),
             managed_files=spec.managed_files,
         )
-    editor_includes = tuple(
-        (prefix, target)
-        for prefix, target in spec.url_includes
-        if target == "quickscale_modules_listings.markdownx_urls"
-    )
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,
         settings=settings,
-        pre_home_url_includes=(),
-        url_includes=editor_includes,
-        spa_routes=(),
+        pre_home_url_includes=spec.pre_home_url_includes,
+        url_includes=spec.url_includes,
+        spa_routes=spec.spa_routes,
         managed_files=spec.managed_files,
     )
 

@@ -129,6 +129,18 @@ def _setting_conflict(
     )
 
 
+def _url_include_conflict(
+    prefix: str, first_module: str, second_module: str
+) -> ValueError:
+    """Build the error raised when two modules mount one URL prefix differently."""
+    return ValueError(
+        f"Module wiring conflict: modules '{first_module}' and '{second_module}' "
+        f"both mount URL prefix '{prefix}' with different include targets. "
+        "A URL prefix belongs to one module; a shared third-party URLconf is "
+        "mounted once, by the module that owns it (rule 41)."
+    )
+
+
 def _rest_framework_admission_error(module: str, value: object) -> ValueError | None:
     """Return the error for a ``REST_FRAMEWORK`` contribution module wiring rejects."""
     if not isinstance(value, Mapping):
@@ -245,16 +257,67 @@ def collect_wiring(
     return apps, middleware, settings, urls
 
 
+def _collect_url_bucket(
+    bucket: list[tuple[str, str]],
+    includes: Iterable[tuple[str, str]],
+    module: str,
+    prefix_owners: dict[str, str],
+    seen_pairs: set[tuple[str, str]],
+) -> None:
+    """Merge one module's includes into a bucket, failing on a prefix conflict.
+
+    The pre-home and post-home buckets render into one URLconf, so the
+    owner registry and the seen-pair set span both: a prefix mounted by one
+    module in either bucket may not be mounted by a *different* module, and
+    an identical ``(prefix, target)`` pair collapses to its first declared
+    bucket.  One module may chain several targets under one prefix (Django
+    falls through to the next include when the earlier one does not match),
+    which is how auth composes ``accounts/``.
+    """
+    for prefix, target in includes:
+        pair = (prefix, target)
+        owner = prefix_owners.get(prefix)
+        if owner is None:
+            prefix_owners[prefix] = module
+        elif owner != module and pair not in seen_pairs:
+            raise _url_include_conflict(prefix, owner, module)
+        if pair not in seen_pairs:
+            seen_pairs.add(pair)
+            bucket.append(pair)
+
+
 def collect_url_wiring(
     module_specs: Mapping[str, ModuleWiringSpec],
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
-    """Collect managed URL includes grouped by pre-home and post-home order."""
+    """Collect managed URL includes grouped by pre-home and post-home order.
+
+    The two buckets render into one URLconf, so a URL prefix belongs to one
+    module (rule 41): one module may chain several targets under one prefix,
+    the identical ``(prefix, target)`` pair from two modules collapses to one
+    entry (in the bucket of its first declaration), and a second *module*
+    claiming a prefix with a different target fails the merge, naming both
+    modules and the prefix.
+    """
     pre_home_urls: list[tuple[str, str]] = []
     post_home_urls: list[tuple[str, str]] = []
+    prefix_owners: dict[str, str] = {}
+    seen_pairs: set[tuple[str, str]] = set()
 
-    for _, spec in _sort_module_items(module_specs):
-        _merge_unique(pre_home_urls, spec.pre_home_url_includes)
-        _merge_unique(post_home_urls, spec.url_includes)
+    for module_name, spec in _sort_module_items(module_specs):
+        _collect_url_bucket(
+            pre_home_urls,
+            spec.pre_home_url_includes,
+            module_name,
+            prefix_owners,
+            seen_pairs,
+        )
+        _collect_url_bucket(
+            post_home_urls,
+            spec.url_includes,
+            module_name,
+            prefix_owners,
+            seen_pairs,
+        )
 
     return pre_home_urls, post_home_urls
 

@@ -5911,6 +5911,9 @@ class TestManagedSocialApplyRegression:
         ctx.qs_config = Mock()
         ctx.qs_config.project.package = project_name
         ctx.qs_config.modules = {
+            "auth": Mock(options={}),
+            "notifications": Mock(options={}),
+            "orgs": Mock(options={}),
             "social": Mock(
                 options={
                     "layout_variant": "grid",
@@ -5919,7 +5922,7 @@ class TestManagedSocialApplyRegression:
                     "links_per_page": 18,
                     "embeds_per_page": 9,
                 }
-            )
+            ),
         }
 
         assert _regenerate_managed_wiring_for_apply(ctx, embedded_modules=[]) is True
@@ -5995,7 +5998,10 @@ class TestManagedAnalyticsApplyRegression:
                     "exclude_staff": False,
                     "anonymous_by_default": True,
                 }
-            )
+            ),
+            "auth": Mock(options={}),
+            "notifications": Mock(options={}),
+            "orgs": Mock(options={}),
         }
 
         assert _regenerate_managed_wiring_for_apply(ctx, embedded_modules=[]) is True

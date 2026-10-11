@@ -79,7 +79,10 @@ renders a key for every shipped module (present as `false` when the module is ab
 `modulePaths` entries reverse named routes instead of literal paths: `crm`
 through the manifest-declared `quickscale_crm_shell` route `apply` renders in
 `<package>/urls_modules.py`, `social` through `social-link-tree` or `social-embeds`, and
-`analytics` through `quickscale_analytics:dashboard`. The two public social pages render the same
+`analytics` through `quickscale_analytics:dashboard`. The same seam carries `moduleApiPaths`,
+each API-bearing module's base (`orgs`, `billing`, `crm`, `forms`) resolved from its URL names
+at the `<mount>api/` boundary, and the theme's API clients read it instead of literal paths.
+The two public social pages render the same
 seam content through the `quickscale_seam` runtime template tag that ships in
 `quickscale_core.runtime` and resolves the flags and paths from the live settings. Existing
 projects compare and manually adopt the current
@@ -88,6 +91,13 @@ projects compare and manually adopt the current
 `quickscale_core.runtime.seam_tags` (without it, the adopted templates fail to load the
 library), `<package>/urls.py`, `<package>/views.py`, and
 `<package>/urls_modules.py` together, because a seam path reverses a route the urls.py names.
+
+The Markdownx editor endpoints have one owner. Storage mounts the shared staff-guarded
+`markdownx/` URLconf and writes the `MARKDOWNX_*` settings for every installed module whose
+admin editor uses them; blog and listings no longer mount or configure the endpoints, and
+listings depends on storage, so its installation selects storage. New editor uploads land under
+`markdownx/`; files already stored keep their recorded paths. Existing projects re-apply so the
+regenerated `<package>/urls_modules.py` carries the one shared mount.
 
 An existing project adopts the module shell route move in its project-owned
 `<package>/urls.py`: remove the retired `^(profile|blog|listings|settings)/?$` and `^crm/?$`

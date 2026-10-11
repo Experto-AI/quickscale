@@ -25,7 +25,7 @@ from quickscale_core.runtime import seam
 
 register = template.Library()
 
-__all__ = ["seam_module_flags", "seam_module_paths"]
+__all__ = ["seam_module_api_paths", "seam_module_flags", "seam_module_paths"]
 
 
 @register.simple_tag
@@ -44,4 +44,16 @@ def seam_module_paths() -> str:
     # which the retired ``{% url %}`` tag also emitted unescaped here.
     return mark_safe(  # noqa: S308
         seam.render_module_paths(seam.seam_module_paths(django_settings, reverse))
+    )
+
+
+@register.simple_tag
+def seam_module_api_paths() -> str:
+    """Render the ``window.__QUICKSCALE__.moduleApiPaths`` object body."""
+    # The body is JavaScript source: quoted paths produced by ``reverse()``,
+    # which the retired ``{% url %}`` tag also emitted unescaped here.
+    return mark_safe(  # noqa: S308
+        seam.render_module_api_paths(
+            seam.seam_module_api_paths(django_settings, reverse)
+        )
     )

@@ -163,10 +163,11 @@ CACHES = {
 USE_X_FORWARDED_FOR = False
 TRUSTED_PROXY_COUNT = 0
 
-# Markdownx settings
+# Markdownx settings (the shared mount and its globals belong to storage,
+# rule 41; the value mirrors what storage's adapter writes)
 MARKDOWNX_MARKDOWN_EXTENSIONS = [
     "markdown.extensions.fenced_code",
     "markdown.extensions.tables",
     "markdown.extensions.toc",
 ]
-MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
+MARKDOWNX_MEDIA_PATH = "markdownx/"

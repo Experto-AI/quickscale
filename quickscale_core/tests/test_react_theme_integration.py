@@ -406,7 +406,9 @@ class TestReactThemeGeneration:
 
         assert "buildOrgApiPath" in use_orgs
         assert "buildBillingApiPath" in use_orgs
-        assert "/billing/api" in use_orgs
+        # Rule 41: the billing base comes from the seam, never a literal.
+        assert "moduleApiPaths.billing" in use_orgs
+        assert "/billing/api" not in use_orgs
         assert "next_url: string" in use_orgs
         assert "billing_pricing_url: string | null" in use_orgs
         assert "member_count?: number" in use_orgs
@@ -1255,6 +1257,9 @@ class TestReactThemeModuleActivationMatrix:
         )[0]
         module_paths_interface = use_modules.split(
             "interface QuickScaleModulePaths {", 1
+        )[1].split("\n}\n\ninterface QuickScaleModuleApiPaths", 1)[0]
+        module_api_paths_interface = use_modules.split(
+            "interface QuickScaleModuleApiPaths {", 1
         )[1].split("\n}\n\ninterface QuickScaleOwnerConfig", 1)[0]
         owner_interface = use_modules.split("interface QuickScaleOwnerConfig {", 1)[
             1
@@ -1263,6 +1268,8 @@ class TestReactThemeModuleActivationMatrix:
         assert "billing: boolean" in modules_interface
         # D1 Option B: billing path removed from module paths until session-sync contract exists
         assert "billing: string" not in module_paths_interface
+        # Rule 41: the seam's moduleApiPaths carries the billing API base.
+        assert "billing: string" in module_api_paths_interface
         assert "mode: QuickScaleOwnerMode" in owner_interface
         assert "currentOrgSlug: string | null" in owner_interface
         # SA113 refactored useModules.ts to use validateQuickScaleConfig() for
@@ -1328,7 +1335,12 @@ class TestReactThemeModuleActivationMatrix:
         # runtime resolution; module-path default values are no longer emitted
         # as constants.  Check the interface types instead.
         # D1 Option B: billing path removed from module paths until session-sync contract exists
-        assert "billing: string" not in use_modules
+        module_paths_interface = use_modules.split(
+            "interface QuickScaleModulePaths {", 1
+        )[1].split("\n}\n\ninterface QuickScaleModuleApiPaths", 1)[0]
+        assert "billing: string" not in module_paths_interface
+        # Rule 41: the seam's moduleApiPaths carries the billing API base.
+        assert "billing: string" in use_modules
         assert "social: string" in use_modules
         assert "QuickScaleOwnerMode" in use_modules
         assert (

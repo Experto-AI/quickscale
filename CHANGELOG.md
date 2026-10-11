@@ -24,6 +24,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
 ## Releases
 
 - v0.89.0 — prepared, not published — [Development Maintenance](docs/releases/release-v0.89.0.md). Begins the post-v0.88 maintenance line with source-derived validation expectations.
+  - **One owner per URL prefix, and theme API bases from the seam.** Storage mounts the shared
+    staff-guarded Markdownx endpoints and writes their settings, listings depends on storage, and
+    new editor uploads land under `markdownx/` no matter which modules are installed; `apply`
+    refuses two modules mounting one URL prefix with different targets. The React theme reads each
+    module's API base from `window.__QUICKSCALE__.moduleApiPaths` instead of hard-coded paths, and
+    a module API path written as a literal in the theme's TypeScript fails the module-conventions
+    gate.
   - **Account anonymization scrubs internationalized addresses.** The shared redaction matcher
     recognizes non-ASCII email addresses in any case and matches names at Unicode word boundaries,
     so `élodie@example.com` is scrubbed and `Ana` no longer rewrites `Anaïs`.
@@ -715,10 +722,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     A module manifest is a closed world: an unknown top-level key fails the load, `apps` and
     `middleware` come only from manifest wiring projections, and `dependencies` lists bare package
     names — including `quickscale-core` — with the versions in the module's `pyproject.toml`.
-  - **Module adapters use the manifest option boundary.** Direct wiring validates options through
-    their declared rules and projects environment-backed secrets generically, blank secret markers
-    render as empty strings, and storage's path-or-absolute `MEDIA_URL` normalization lives in the
-    manifest while preserving its `/media/` default and slash behavior.
+  - **Module adapters use the manifest option boundary.** `module.yml` owns option validation,
+    normalization, defaults, and environment-backed secret projection, and the conventions harness
+    rejects duplicate option handling in adapter hooks, including omitted callable defaults.
+    Blank secret markers render as empty strings, and storage's path-or-absolute `MEDIA_URL`
+    preserves its `/media/` default and slash behavior.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

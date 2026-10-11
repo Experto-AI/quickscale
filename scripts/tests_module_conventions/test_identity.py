@@ -760,7 +760,9 @@ def test_package_file_name_controls() -> None:
         "events.py is not an allowed package file name" in violation
         for violation in _violations(checker.rule_28_file_names, events)
     )
-    markdownx = _with_files(_golden_module("blog"), **{"markdownx_urls.py": "urlpatterns = []\n"})
+    markdownx = _with_files(
+        _golden_module("storage"), **{"markdownx_urls.py": "urlpatterns = []\n"}
+    )
     assert _violations(checker.rule_28_file_names, markdownx) == []
     demo_markdownx = _with_files(module, **{"markdownx_urls.py": "urlpatterns = []\n"})
     assert any(

@@ -1,6 +1,7 @@
 // DORMANT: Forms module hook. Inert unless modules.forms is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant.
 import { useQuery } from '@tanstack/react-query'
 import { ApiError, getApiPayloadMessage } from '@/hooks/useApi'
+import { useProjectConfig } from '@/hooks/useModules'
 
 export interface FormFieldOption {
   value: string
@@ -53,12 +54,11 @@ export interface FormSchema {
   fields: FormFieldSchema[]
 }
 
-function normalizeApiBasePath(apiBasePath?: string): string {
-  const basePath = apiBasePath ?? '/forms/api/'
-  return basePath.endsWith('/') ? basePath : `${basePath}/`
+function normalizeApiBasePath(apiBasePath: string): string {
+  return apiBasePath.endsWith('/') ? apiBasePath : `${apiBasePath}/`
 }
 
-async function fetchFormSchema(slug: string, apiBasePath?: string): Promise<FormSchema> {
+async function fetchFormSchema(slug: string, apiBasePath: string): Promise<FormSchema> {
   const response = await fetch(`${normalizeApiBasePath(apiBasePath)}${slug}/`)
   if (!response.ok) {
     // Surface the one QuickScale error shape's message when the endpoint
@@ -74,9 +74,12 @@ async function fetchFormSchema(slug: string, apiBasePath?: string): Promise<Form
 }
 
 export function useFormSchema(slug: string, apiBasePath?: string) {
+  const { moduleApiPaths } = useProjectConfig()
+  const formsApiBasePath = normalizeApiBasePath(apiBasePath ?? moduleApiPaths.forms)
+
   return useQuery<FormSchema, Error>({
-    queryKey: ['form-schema', apiBasePath ?? '/forms/api/', slug],
-    queryFn: () => fetchFormSchema(slug, apiBasePath),
+    queryKey: ['form-schema', formsApiBasePath, slug],
+    queryFn: () => fetchFormSchema(slug, formsApiBasePath),
     staleTime: 1000 * 60 * 10, // 10 minutes — schemas change rarely
     enabled: !!slug,
     retry: false,

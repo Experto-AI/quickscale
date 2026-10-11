@@ -132,9 +132,7 @@ derivation:
         value:
           - - blog/
             - quickscale_modules_blog.urls
-          - - markdownx/
-            - quickscale_modules_blog.markdownx_urls
-      description: "Blog URL includes; the Markdownx editor mount is staff-guarded"
+      description: "Blog URL includes; the shared Markdownx editor mount lives in storage (rule 41)"
 
     - wiring_field: spa_routes
       derivation_type: static
@@ -143,20 +141,6 @@ derivation:
           - - ^blog/?$
             - shell
       description: "Blog React shell route; rendered after the module's own includes (rule 41)"
-
-  # Static editor settings the blog module always contributes while installed.
-  derived_settings:
-    - setting_key: MARKDOWNX_MARKDOWN_EXTENSIONS
-      derivation_type: static
-      expression:
-        value:
-          - markdown.extensions.fenced_code
-          - markdown.extensions.tables
-          - markdown.extensions.toc
-    - setting_key: MARKDOWNX_MEDIA_PATH
-      derivation_type: static
-      expression:
-        value: blog/markdownx/
 
   option_derivations:
     api_rate_limit:

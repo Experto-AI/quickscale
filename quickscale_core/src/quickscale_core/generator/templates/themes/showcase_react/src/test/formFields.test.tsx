@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -8,6 +8,33 @@ import type { FormFieldSchema, FormSchema } from '@/hooks/useFormSchema'
 const fetchMock = vi.fn()
 
 vi.stubGlobal('fetch', fetchMock)
+
+beforeEach(() => {
+  window.__QUICKSCALE__ = {
+    projectName: 'formFields Test',
+    modules: {
+      auth: false,
+      blog: false,
+      listings: false,
+      crm: false,
+      forms: true,
+      storage: false,
+      backups: false,
+      notifications: false,
+      analytics: false,
+      billing: false,
+      social: false,
+    },
+    modulePaths: { crm: '/crm', social: '/social', analytics: '/analytics/' },
+    moduleApiPaths: {
+      orgs: '/orgs/api/',
+      billing: '/billing/api/',
+      crm: '/crm/api/',
+      forms: '/forms/api/',
+    },
+    owner: { mode: 'solo', currentOrgSlug: null },
+  }
+})
 
 class ResizeObserverStub {
   observe() {}
