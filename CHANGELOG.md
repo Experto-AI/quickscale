@@ -722,7 +722,8 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     A module manifest is a closed world: an unknown top-level key fails the load, `apps` and
     `middleware` come only from manifest wiring projections, and `dependencies` lists bare package
     names — including `quickscale-core` — with the versions in the module's `pyproject.toml`.
-  - **Module adapters use the manifest option boundary.** `module.yml` owns option validation,
+  - **Module adapters use the manifest option boundary — partial; release-gate attribution pending.**
+    `module.yml` owns option validation,
     normalization, defaults, and environment-backed secret projection, and the conventions harness
     rejects duplicate option handling in adapter hooks, including omitted callable defaults.
     Blank secret markers render as empty strings, and storage's path-or-absolute `MEDIA_URL`
