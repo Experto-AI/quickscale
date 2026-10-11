@@ -11,6 +11,8 @@ controls proving a switched-off or absent module resolves ``false`` and the
 from __future__ import annotations
 
 import types
+import ast
+from pathlib import Path
 from typing import Any
 
 from quickscale_core.contracts.module_catalog import MODULE_CATALOG
@@ -187,7 +189,58 @@ class TestSeamApiBaseResolution:
     def test_api_path_names_are_the_api_surfaces(self) -> None:
         assert seam_api_path_names() == ("orgs", "billing", "crm", "forms")
 
-    def test_api_bases_cut_at_the_mount_api_boundary(self) -> None:
+    def test_api_endpoint_suffixes_match_shipped_url_sources(self) -> None:
+        """Route drift cannot silently invalidate the seam's endpoint structure."""
+        from quickscale_core.runtime.seam import _SEAM_MODULE_API_PATHS
+
+        modules_root = Path(__file__).resolve().parents[2] / "quickscale_modules"
+        for module, route, suffix in _SEAM_MODULE_API_PATHS:
+            source = (
+                modules_root
+                / module
+                / "src"
+                / f"quickscale_modules_{module}"
+                / "urls.py"
+            )
+            tree = ast.parse(source.read_text())
+            endpoint_name = route.split(":")[1]
+            if module == "crm":
+                assert any(
+                    isinstance(node, ast.Assign)
+                    and any(
+                        isinstance(target, ast.Name) and target.id == "root_view_name"
+                        for target in node.targets
+                    )
+                    and isinstance(node.value, ast.Constant)
+                    and node.value.value == endpoint_name
+                    for node in ast.walk(tree)
+                )
+            matching_paths = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "path"
+                and node.args
+                and (
+                    any(
+                        keyword.arg == "name"
+                        and isinstance(keyword.value, ast.Constant)
+                        and keyword.value.value == endpoint_name
+                        for keyword in node.keywords
+                    )
+                    or (
+                        module == "crm"
+                        and isinstance(node.args[0], ast.Constant)
+                        and node.args[0].value == "api/"
+                    )
+                )
+            ]
+            assert len(matching_paths) == 1
+            assert ast.literal_eval(matching_paths[0].args[0]) == "api/" + suffix
+
+    @pytest.mark.parametrize("outer_prefix", ["", "/api", "/tenant/api/acme/api"])
+    def test_api_bases_cut_at_the_mount_api_boundary(self, outer_prefix) -> None:
         settings_obj = _settings(
             INSTALLED_APPS=[
                 "quickscale_modules_orgs",
@@ -210,13 +263,16 @@ class TestSeamApiBaseResolution:
             }
         )
 
+        reverse.routes = {
+            name: outer_prefix + path for name, path in reverse.routes.items()
+        }
         paths = seam_module_api_paths(settings_obj, reverse)
 
         assert paths == {
-            "orgs": "/orgs/api/",
-            "billing": "/billing/api/",
-            "crm": "/crm/api/",
-            "forms": "/forms/api/",
+            "orgs": outer_prefix + "/orgs/api/",
+            "billing": outer_prefix + "/billing/api/",
+            "crm": outer_prefix + "/crm/api/",
+            "forms": outer_prefix + "/forms/api/",
         }
         assert reverse.calls == [
             "quickscale_orgs:api_list_create",
@@ -250,13 +306,14 @@ class TestSeamApiBaseResolution:
         assert paths == {"orgs": "/", "billing": "/", "crm": "/", "forms": "/"}
         assert reverse.calls == ["home", "home", "home", "home"]
 
-    def test_route_without_api_boundary_fails_loud(self) -> None:
+    @pytest.mark.parametrize("path", ["/orgs/", "/api/orgs/"])
+    def test_route_without_api_boundary_fails_loud(self, path) -> None:
         settings_obj = _settings(
             INSTALLED_APPS=["quickscale_modules_orgs"],
             QUICKSCALE_ORGS_ENABLED=True,
         )
         reverse = _RecordingReverse(
-            {"quickscale_orgs:api_list_create": "/orgs/", "home": "/"}
+            {"quickscale_orgs:api_list_create": path, "home": "/"}
         )
 
         with pytest.raises(ValueError, match="api"):
@@ -418,3 +475,26 @@ class TestSeamTemplateTags:
         assert '          billing: "/billing/api/",' in rendered
         assert '          crm: "/crm/api/",' in rendered
         assert '          forms: "/forms/api/"' in rendered
+
+    def test_api_bases_preserve_django_script_prefix(self) -> None:
+        from django.urls import get_script_prefix, reverse, set_script_prefix
+
+        settings_obj = _settings(
+            INSTALLED_APPS=[
+                f"quickscale_modules_{name}" for name in seam_api_path_names()
+            ],
+            **{
+                f"QUICKSCALE_{name.upper()}_ENABLED": True
+                for name in seam_api_path_names()
+            },
+        )
+        urlconf = self._urlconf()
+        previous_prefix = get_script_prefix()
+        try:
+            set_script_prefix("/api/")
+            paths = seam_module_api_paths(
+                settings_obj, lambda name: reverse(name, urlconf=urlconf)
+            )
+        finally:
+            set_script_prefix(previous_prefix)
+        assert paths == {name: f"/api/{name}/api/" for name in seam_api_path_names()}

@@ -1334,8 +1334,11 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 2. **Wiring-literal check covers `url_includes` only — resolved (SA260).** Harness rule 7 now
    reads `adapter.py` for literal `apps`, `middleware`, and URL-include declarations and literal
    appends; the app-declaration gate still checks the manifest projection [Item 10].
-3. **URL prefix collisions are unchecked.** `_merge_unique` dedupes identical pairs only, and rule
-   41's "two routes, one path" ❌ has no detector [Item 2].
+3. **URL prefix collisions are unchecked — resolved (SA261).** `collect_url_wiring` fails two
+   *modules* mounting one prefix with different targets, naming both, and harness rule 7 runs the
+   same predicate over every manifest's mounts in both include buckets; the identical
+   `(prefix, target)` pair still merges and one module may chain several targets under one prefix
+   (auth's `accounts/`) [Item 2].
 4. **Capability names are open-world.** A misspelled capability is never collected [Item 15].
 5. **Rule 29's second clause is unenforced.** The detector reads `test_*.py` only [Item 23].
 6. **Rule 10's `<Module>Error` name is unchecked.** Any class ending `Error` passes, and modules

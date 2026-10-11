@@ -291,6 +291,47 @@ class TestCollectWiring:
 class TestCollectUrlWiring:
     """Tests for collect_url_wiring."""
 
+    @pytest.mark.parametrize(
+        "targets", [("vendor.urls", "alpha.urls"), ("alpha.urls", "vendor.urls")]
+    )
+    @pytest.mark.parametrize("duplicate_index", [0, 1])
+    @pytest.mark.parametrize("chain_bucket", ["pre", "post", "split"])
+    @pytest.mark.parametrize("duplicate_bucket", ["pre", "post"])
+    def test_chain_duplicates_merge_across_buckets(
+        self, targets, duplicate_index, chain_bucket, duplicate_bucket
+    ) -> None:
+        """Either chain target deduplicates; an unseen target still conflicts."""
+        pairs = tuple(("shared/", target) for target in targets)
+        pre = (
+            pairs
+            if chain_bucket == "pre"
+            else pairs[:1]
+            if chain_bucket == "split"
+            else ()
+        )
+        post = (
+            pairs
+            if chain_bucket == "post"
+            else pairs[1:]
+            if chain_bucket == "split"
+            else ()
+        )
+        duplicate = (pairs[duplicate_index],)
+        specs = {
+            "beta": ModuleWiringSpec(
+                pre_home_url_includes=duplicate if duplicate_bucket == "pre" else (),
+                url_includes=duplicate if duplicate_bucket == "post" else (),
+            ),
+            "alpha": ModuleWiringSpec(pre_home_url_includes=pre, url_includes=post),
+        }
+        assert collect_url_wiring(specs) == (list(pre), list(post))
+        rendered = render_urls_modules_py(specs)
+        for target in targets:
+            assert rendered.count(f'path("shared/", include("{target}"))') == 1
+        specs["gamma"] = ModuleWiringSpec(url_includes=(("shared/", "other.urls"),))
+        with pytest.raises(ValueError, match="modules 'alpha' and 'gamma'.*'shared/'"):
+            collect_url_wiring(specs)
+
     def test_collect_url_wiring_separates_pre_home_and_post_home(self) -> None:
         """URL includes are grouped into pre-home and post-home buckets."""
         specs = {

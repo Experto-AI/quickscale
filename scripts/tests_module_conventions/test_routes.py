@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 from dataclasses import replace
 
+import pytest
+
 from scripts import check_module_conventions as checker
 from scripts.tests_module_conventions._support import (
     _corpus,
@@ -138,6 +140,42 @@ def test_url_prefix_collision_control() -> None:
         return replace(module, manifest=manifest)
 
     assert checker.rule_7_urls(_corpus(_chain_same_prefix(_golden_module("alpha")))) == []
+
+
+@pytest.mark.parametrize("targets", [("vendor.urls", "alpha.urls"), ("alpha.urls", "vendor.urls")])
+@pytest.mark.parametrize("duplicate_index", [0, 1])
+@pytest.mark.parametrize("chain_bucket", ["pre", "post", "split"])
+@pytest.mark.parametrize("duplicate_bucket", ["pre", "post"])
+def test_url_chain_duplicate_control(
+    targets, duplicate_index, chain_bucket, duplicate_bucket
+) -> None:
+    """The harness admits every existing chain pair, never a new module's target."""
+    from scripts.module_conventions.rules_routes import _url_prefix_collision_violations
+
+    def module_with_buckets(name, pre, post):
+        module = _golden_module(name)
+        manifest = copy.deepcopy(module.manifest)
+        manifest["derivation"]["wiring_projections"] = [
+            {"wiring_field": field, "derivation_type": "static", "expression": {"value": pairs}}
+            for field, pairs in (("pre_home_url_includes", pre), ("url_includes", post))
+        ]
+        return replace(module, manifest=manifest)
+
+    pairs = [["shared/", target] for target in targets]
+    pre = pairs if chain_bucket == "pre" else pairs[:1] if chain_bucket == "split" else []
+    post = pairs if chain_bucket == "post" else pairs[1:] if chain_bucket == "split" else []
+    alpha = module_with_buckets("alpha", pre, post)
+    duplicate = [pairs[duplicate_index]]
+    beta = module_with_buckets(
+        "beta",
+        duplicate if duplicate_bucket == "pre" else [],
+        duplicate if duplicate_bucket == "post" else [],
+    )
+    assert _url_prefix_collision_violations(_corpus(alpha, beta)) == []
+    gamma = module_with_buckets("gamma", [], [["shared/", "other.urls"]])
+    assert _url_prefix_collision_violations(_corpus(alpha, beta, gamma)) == [
+        "rule 7: modules 'alpha' and 'gamma' both mount URL prefix 'shared/' with different targets"
+    ]
 
 
 def test_theme_api_literal_control() -> None:

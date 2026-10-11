@@ -310,7 +310,8 @@ def _url_prefix_collision_violations(corpus: Corpus) -> list[str]:
     rule 30 sanctions; a second *module* claiming a prefix with a different
     target fails here and in ``apply`` itself (``collect_url_wiring``).
     """
-    owners: dict[str, tuple[str, str]] = {}
+    owners: dict[str, str] = {}
+    seen_pairs: set[tuple[str, str]] = set()
     violations: list[str] = []
     for module in corpus.modules:
         for field in ("pre_home_url_includes", "url_includes"):
@@ -322,14 +323,17 @@ def _url_prefix_collision_violations(corpus: Corpus) -> list[str]:
                 ):
                     continue
                 prefix, target = entry
+                pair = (prefix, target)
                 owner = owners.get(prefix)
                 if owner is None:
-                    owners[prefix] = (module.name, target)
-                elif owner[0] != module.name and owner[1] != target:
+                    owners[prefix] = module.name
+                elif owner != module.name and pair not in seen_pairs:
                     violations.append(
-                        f"rule 7: modules '{owner[0]}' and '{module.name}' both mount URL "
+                        f"rule 7: modules '{owner}' and '{module.name}' both mount URL "
                         f"prefix '{prefix}' with different targets"
                     )
+                    continue
+                seen_pairs.add(pair)
     return violations
 
 

@@ -225,7 +225,7 @@ def _collect_url_bucket(
     bucket: list[tuple[str, str]],
     includes: Iterable[tuple[str, str]],
     module: str,
-    prefix_owners: dict[str, tuple[str, str]],
+    prefix_owners: dict[str, str],
     seen_pairs: set[tuple[str, str]],
 ) -> None:
     """Merge one module's includes into a bucket, failing on a prefix conflict.
@@ -239,12 +239,12 @@ def _collect_url_bucket(
     which is how auth composes ``accounts/``.
     """
     for prefix, target in includes:
+        pair = (prefix, target)
         owner = prefix_owners.get(prefix)
         if owner is None:
-            prefix_owners[prefix] = (module, target)
-        elif owner[0] != module and owner[1] != target:
-            raise _url_include_conflict(prefix, owner[0], module)
-        pair = (prefix, target)
+            prefix_owners[prefix] = module
+        elif owner != module and pair not in seen_pairs:
+            raise _url_include_conflict(prefix, owner, module)
         if pair not in seen_pairs:
             seen_pairs.add(pair)
             bucket.append(pair)
@@ -264,7 +264,7 @@ def collect_url_wiring(
     """
     pre_home_urls: list[tuple[str, str]] = []
     post_home_urls: list[tuple[str, str]] = []
-    prefix_owners: dict[str, tuple[str, str]] = {}
+    prefix_owners: dict[str, str] = {}
     seen_pairs: set[tuple[str, str]] = set()
 
     for module_name, spec in _sort_module_items(module_specs):

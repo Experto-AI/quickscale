@@ -164,12 +164,14 @@ def seam_module_paths(
 #: theme receives is the reversed path cut at that ``api/`` boundary, so no
 #: theme file writes ``/<mount>/api`` itself.  These names are the theme's own
 #: module surface, which rule 37 lists as its allowed literal-name exception;
-#: the mount a module actually uses stays in its manifest (rule 7).
-_SEAM_MODULE_API_PATHS: tuple[tuple[str, str], ...] = (
-    ("orgs", "quickscale_orgs:api_list_create"),
-    ("billing", "quickscale_billing:subscription_plans"),
-    ("crm", "quickscale_crm:api_root"),
-    ("forms", "quickscale_forms:admin_form_list"),
+#: the mount a module actually uses stays in its manifest (rule 7). Each entry
+#: also pins the named endpoint's suffix below the API boundary; checking this
+#: suffix fails closed on route drift and preserves any outer ``api/`` segments.
+_SEAM_MODULE_API_PATHS: tuple[tuple[str, str, str], ...] = (
+    ("orgs", "quickscale_orgs:api_list_create", ""),
+    ("billing", "quickscale_billing:subscription_plans", "plans/"),
+    ("crm", "quickscale_crm:api_root", ""),
+    ("forms", "quickscale_forms:admin_form_list", "admin/forms/"),
 )
 
 #: Rule 7's API boundary inside a module's mount.
@@ -178,18 +180,18 @@ _API_BOUNDARY = "/api/"
 
 def seam_api_path_names() -> tuple[str, ...]:
     """Return the API-bearing module surfaces, in route-table order."""
-    return tuple(name for name, _route in _SEAM_MODULE_API_PATHS)
+    return tuple(name for name, _route, _suffix in _SEAM_MODULE_API_PATHS)
 
 
-def _api_base_from_path(path: str, module: str) -> str:
-    """Cut a module's reversed API route at rule 7's ``/api/`` boundary."""
-    boundary = path.find(_API_BOUNDARY)
-    if boundary == -1:
+def _api_base_from_path(path: str, module: str, endpoint_suffix: str) -> str:
+    """Remove only the named endpoint suffix after the module's API boundary."""
+    if not path.endswith(_API_BOUNDARY + endpoint_suffix):
         raise ValueError(
-            f"Seam API path for module '{module}' has no '/api/' boundary: {path!r}. "
+            f"Seam API path for module '{module}' has no '/api/' boundary "
+            f"before endpoint suffix {endpoint_suffix!r}: {path!r}. "
             "A module's API lives at '<mount>api/' (rule 7)."
         )
-    return path[: boundary + len(_API_BOUNDARY)]
+    return path[: -len(endpoint_suffix)] if endpoint_suffix else path
 
 
 def seam_module_api_paths(
@@ -205,13 +207,15 @@ def seam_module_api_paths(
     """
     installed_apps = getattr(settings_obj, "INSTALLED_APPS", ())
     resolved: dict[str, str] = {}
-    for module, route in _SEAM_MODULE_API_PATHS:
+    for module, route, endpoint_suffix in _SEAM_MODULE_API_PATHS:
         installed = f"quickscale_modules_{module}" in installed_apps
         enabled = bool(
             getattr(settings_obj, f"QUICKSCALE_{module.upper()}_ENABLED", False)
         )
         if installed and enabled:
-            resolved[module] = _api_base_from_path(reverse_func(route), module)
+            resolved[module] = _api_base_from_path(
+                reverse_func(route), module, endpoint_suffix
+            )
         else:
             resolved[module] = reverse_func("home")
     return resolved
