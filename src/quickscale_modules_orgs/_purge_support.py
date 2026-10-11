@@ -14,8 +14,17 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from django.apps import apps
+from django.core.exceptions import FieldDoesNotExist
 from django.core.management.base import CommandError
+from django.db import models
 
+from quickscale_modules_orgs._purge_plan import (
+    _carries_provider_value as _carries_provider_value,
+    _get_qs as _get_qs,
+    _mapping_carries_value as _mapping_carries_value,
+)
+from quickscale_modules_orgs._removal_types import ORGANIZATION_MODEL_LABEL
+from quickscale_modules_orgs._tenancy_discovery import has_organization_id_field
 from quickscale_modules_orgs.models import Organization, OrganizationTombstone
 from quickscale_modules_orgs.removal import RemovalCoordinator
 
@@ -212,3 +221,91 @@ class _PurgeSupportMixin:
                 self.stdout.write(f"  {label}: {count}")
         self.stdout.write(f"  Total rows deleted: {total_deleted}")
         self.stdout.write(f"  Tombstone recorded for: {organization.pk}")
+
+    def _refusal_field_rows(
+        self,
+        model: type[models.Model],
+        provider_field: Any,
+        organization: Organization,
+        label: str,
+    ) -> list:
+        """Return the locked rows a declared refusal field must be read from."""
+        if model._meta.label_lower == ORGANIZATION_MODEL_LABEL:
+            # The organization row itself carries the declared state.
+            return [organization]
+        if has_organization_id_field(model):
+            queryset = _get_qs(model, {"organization_id": organization.pk})
+            return list(
+                queryset.select_for_update().only(  # type: ignore[attr-defined]
+                    provider_field.field_name
+                )
+            )
+        raise CommandError(
+            f"Cannot purge organization {organization.pk}: declared "
+            f"refusal field {label} is not organization-scoped, so the "
+            "purge cannot inspect it."
+        )
+
+    def _carried_refusal_field_messages(
+        self,
+        organization: Organization,
+        provider_field: Any,
+    ) -> list[str]:
+        """Return one declared refusal field's carried-value labels."""
+        try:
+            model = apps.get_model(provider_field.model_label)
+        except LookupError as exc:
+            raise CommandError(
+                f"Cannot purge organization {organization.pk}: declared refusal "
+                f"field names {provider_field.model_label}, which is not an "
+                "installed model."
+            ) from exc
+        label = f"{provider_field.model_label}.{provider_field.field_name}"
+        rows = self._refusal_field_rows(model, provider_field, organization, label)
+        try:
+            model_field = model._meta.get_field(provider_field.field_name)
+        except FieldDoesNotExist as exc:
+            raise CommandError(
+                f"Cannot purge organization {organization.pk}: "
+                f"{label} is declared as a refusal field but is not a model "
+                "field."
+            ) from exc
+        if provider_field.structured_keys:
+            return [
+                f"{label}[{key}]"
+                for row in rows
+                for key in provider_field.structured_keys
+                if _mapping_carries_value(getattr(row, provider_field.field_name), key)
+            ]
+        if any(
+            _carries_provider_value(
+                model_field,
+                getattr(row, provider_field.field_name),
+            )
+            for row in rows
+        ):
+            return [label]
+        return []
+
+    def _carried_declared_refusal_fields(
+        self,
+        organization: Organization,
+        refusal_fields: tuple,
+    ) -> list[str]:
+        """Return declared refusal fields that carry a value for *organization*.
+
+        Every discovered obligation whose purge action is refuse-or-reconcile
+        contributes its non-boundary-guarded provider fields; a populated
+        scalar value, or a populated declared structured key, refuses the
+        purge exactly like a model-classified provider-backed field.  The
+        organization row itself is inspected for a field declared on it, and a
+        declared field no organization scope can reach fails closed.  Rows are
+        locked for the rest of the purge transaction so a concurrent write
+        cannot add a value afterwards.
+        """
+        carried: list[str] = []
+        for provider_field in refusal_fields:
+            carried.extend(
+                self._carried_refusal_field_messages(organization, provider_field)
+            )
+        return carried
