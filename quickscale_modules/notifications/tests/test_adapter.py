@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from quickscale_core.manifest import build_generic_manifest_spec
+from quickscale_core.manifest import ManifestError, build_generic_manifest_spec
 from quickscale_modules_notifications.adapter import (
-    _notifications_derived_settings,
     _notifications_manifest_adapter,
     get_manifest_adapter,
 )
@@ -101,12 +100,15 @@ def test_adapter_projects_configured_resend_key_env_var_name() -> None:
     )
 
 
-def test_required_derived_reads_fail_hard() -> None:
-    with pytest.raises(KeyError, match="enabled"):
-        _notifications_derived_settings({})
+def test_null_reply_to_email_is_refused() -> None:
+    """A null option value is refused as the wrong raw type, never coerced."""
+    with pytest.raises(ManifestError, match="QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL"):
+        _notifications_manifest_adapter({"reply_to_email": None})
 
 
-def test_null_reply_to_email_wires_blank() -> None:
-    spec = _notifications_manifest_adapter({"reply_to_email": None})
+def test_sender_aliases_arrive_from_the_manifest_boundary() -> None:
+    """DEFAULT_FROM_EMAIL/SERVER_EMAIL are manifest-declared sender aliases."""
+    spec = _notifications_manifest_adapter({})
 
-    assert spec.settings["QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL"] == ""
+    assert spec.settings["DEFAULT_FROM_EMAIL"] == "noreply@example.com"
+    assert spec.settings["SERVER_EMAIL"] == "noreply@example.com"

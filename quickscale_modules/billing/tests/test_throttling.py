@@ -21,7 +21,10 @@ from quickscale_core.runtime import QuickscaleScopedRateThrottle
 
 import quickscale_modules_billing.views as billing_views
 from quickscale_core.module_wiring import ModuleWiringSpec
-from quickscale_modules_billing.adapter import _billing_post_hook
+from quickscale_modules_billing.adapter import (
+    _billing_manifest_adapter,
+    _billing_post_hook,
+)
 from quickscale_modules_billing.views import (
     CancelSubscriptionView,
     CreateBillingPortalSessionView,
@@ -59,18 +62,11 @@ def test_billing_wiring_contributes_tighter_throttle_scopes() -> None:
 
 
 def test_billing_wiring_carries_the_configured_rate() -> None:
-    """Both scopes take their rate from the module's api_rate_limit option."""
-    spec = _billing_post_hook(
-        ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BILLING_ENABLED": True,
-                "QUICKSCALE_BILLING_API_RATE_LIMIT": " 7/hour ",
-            }
-        ),
-        {"enabled": True},
-    )
+    """Both scopes take the manifest-canonical api_rate_limit value."""
+    spec = _billing_manifest_adapter({"api_rate_limit": " 7/hour "})
 
     rest_framework = spec.settings["REST_FRAMEWORK"]
+    assert spec.settings["QUICKSCALE_BILLING_API_RATE_LIMIT"] == "7/hour"
     assert rest_framework["DEFAULT_THROTTLE_RATES"] == {
         "quickscale_billing_checkout": "7/hour",
         "quickscale_billing_portal": "7/hour",

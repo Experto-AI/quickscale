@@ -1,10 +1,23 @@
-"""Focused tests for the storage manifest adapter."""
+"""Focused tests for the storage manifest adapter.
+
+The generic manifest boundary owns storage's option defaults, normalization
+rules (including the ``path_or_absolute_url`` kind that carries the historical
+``MEDIA_URL`` contract), checks, and secret projections; these tests pin the
+adapter's remaining contract — the cloud-backend ``STORAGES`` block, the
+backend-conditioned AWS credential aliases, and the sentinel.
+
+The media matrix is sourced from the single frozen oracle P1 captured before
+the module-owned helper was deleted; this suite does not maintain a second
+expected-output list.
+"""
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,6 +28,31 @@ from quickscale_modules_storage.adapter import (
     _storage_manifest_adapter,
     get_manifest_adapter,
 )
+
+#: Single frozen historical MEDIA_URL oracle, owned by the P1 core test.
+_CORE_MEDIA_ORACLE_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "quickscale_core"
+    / "tests"
+    / "test_manifest_resolver.py"
+)
+
+
+def _load_frozen_media_table() -> list[tuple[str, str]]:
+    """Load the frozen media case table from its P1-owned oracle module."""
+    spec = importlib.util.spec_from_file_location(
+        "quickscale_core_media_oracle", _CORE_MEDIA_ORACLE_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(
+            f"cannot load the frozen media oracle from {_CORE_MEDIA_ORACLE_PATH}"
+        )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return list(module._MEDIA_URL_CASE_TABLE)
+
+
+_MEDIA_URL_CASE_TABLE: list[tuple[str, str]] = _load_frozen_media_table()
 
 
 class TestStorageManifestAdapter:
@@ -72,6 +110,10 @@ class TestStorageManifestAdapter:
             "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR": "AWS_SECRET_ACCESS_KEY",
             "AWS_DEFAULT_ACL": "",
             "AWS_QUERYSTRING_AUTH": False,
+            "QUICKSCALE_STORAGE_ACCESS_KEY_ID": "__QS_ENV__:AWS_ACCESS_KEY_ID",
+            "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY": (
+                "__QS_ENV__:AWS_SECRET_ACCESS_KEY"
+            ),
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": False,
         }
         assert list(spec.settings) == [
@@ -86,6 +128,8 @@ class TestStorageManifestAdapter:
             "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
             "AWS_DEFAULT_ACL",
             "AWS_QUERYSTRING_AUTH",
+            "QUICKSCALE_STORAGE_ACCESS_KEY_ID",
+            "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY",
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED",
         ]
         assert "STORAGES" not in spec.settings
@@ -138,10 +182,12 @@ class TestStorageManifestAdapter:
             "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR",
             "AWS_DEFAULT_ACL",
             "AWS_QUERYSTRING_AUTH",
+            "QUICKSCALE_STORAGE_ACCESS_KEY_ID",
+            "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY",
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED",
-            "STORAGES",
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
+            "STORAGES",
         ]
         assert list(spec.settings["STORAGES"]["default"]["OPTIONS"]) == [
             "querystring_auth",
@@ -184,7 +230,7 @@ class TestStorageManifestAdapter:
 
         assert spec.settings["QUICKSCALE_STORAGE_BACKEND"] == "s3"
         assert spec.settings["QUICKSCALE_STORAGE_PUBLIC_BASE_URL"] == (
-            "https://cdn.example.com/"
+            "https://cdn.example.com"
         )
         assert spec.settings["MEDIA_URL"] == "/uploads/"
         assert spec.settings["QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED"] is True
@@ -222,19 +268,28 @@ class TestStorageManifestAdapter:
         assert "CUSTOM_SECRET" not in str(spec.settings["STORAGES"])
 
     @pytest.mark.parametrize(
-        "options",
+        ("options", "expected_fragment"),
         [
-            {"backend": "invalid"},
-            {"backend": "s3", "access_key_id_env_var": "AKIA1234567890123456"},
-            {"backend": "s3", "secret_access_key_env_var": "literal-secret"},
-            {"backend": "s3", "access_key_id_env_var": "lower_case"},
+            ({"backend": "invalid"}, "modules.storage.backend"),
+            (
+                {"backend": "s3", "access_key_id_env_var": "AKIA1234567890123456"},
+                "modules.storage.access_key_id_env_var",
+            ),
+            (
+                {"backend": "s3", "secret_access_key_env_var": "literal-secret"},
+                "modules.storage.secret_access_key_env_var",
+            ),
+            (
+                {"backend": "s3", "access_key_id_env_var": "lower_case"},
+                "modules.storage.access_key_id_env_var",
+            ),
         ],
     )
     def test_invalid_backend_and_literal_or_invalid_secret_references_fail_closed(
-        self, options: dict[str, Any]
+        self, options: dict[str, Any], expected_fragment: str
     ) -> None:
         """Invalid backends and credential values are rejected before assembly."""
-        with pytest.raises(ManifestError, match="validation issues"):
+        with pytest.raises(ManifestError, match=expected_fragment):
             _storage_manifest_adapter(options)
 
     @pytest.mark.parametrize(
@@ -282,7 +337,37 @@ class TestStorageManifestAdapter:
             "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY_ENV_VAR": "AWS_SECRET_ACCESS_KEY",
             "AWS_DEFAULT_ACL": "",
             "AWS_QUERYSTRING_AUTH": False,
+            "QUICKSCALE_STORAGE_ACCESS_KEY_ID": "__QS_ENV__:AWS_ACCESS_KEY_ID",
+            "QUICKSCALE_STORAGE_SECRET_ACCESS_KEY": (
+                "__QS_ENV__:AWS_SECRET_ACCESS_KEY"
+            ),
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": False,
         }
         assert r2.settings["QUICKSCALE_STORAGE_BACKEND"] == "r2"
         assert r2.settings["AWS_STORAGE_BUCKET_NAME"] == "r2-bucket"
+
+
+class TestStorageMediaUrlContract:
+    """MEDIA_URL reproduces the frozen historical matrix through the adapter."""
+
+    @pytest.mark.parametrize(("supplied", "expected"), _MEDIA_URL_CASE_TABLE)
+    def test_media_url_matches_frozen_historical_matrix(
+        self, supplied: str, expected: str
+    ) -> None:
+        spec = _storage_manifest_adapter({"media_url": supplied})
+
+        assert spec.settings["MEDIA_URL"] == expected
+
+    def test_omitted_and_blank_media_url_use_the_declared_default(self) -> None:
+        assert _storage_manifest_adapter({}).settings["MEDIA_URL"] == "/media/"
+        for supplied in ("", "   ", "\t\n"):
+            assert (
+                _storage_manifest_adapter({"media_url": supplied}).settings["MEDIA_URL"]
+                == "/media/"
+            )
+
+    @pytest.mark.parametrize("raw_value", [None, True, 1, ["/x/"], {"x": 1}])
+    def test_non_string_media_url_is_refused(self, raw_value: object) -> None:
+        """A non-string MEDIA_URL is a raw-type refusal, never a coercion."""
+        with pytest.raises(ManifestError, match="modules.storage.media_url"):
+            _storage_manifest_adapter({"media_url": raw_value})

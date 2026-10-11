@@ -93,3 +93,42 @@ derivation:
           - - accounts/
             - quickscale_modules_auth.urls
       description: "Auth URL includes"
+
+  # Static settings the auth module always contributes while installed; the
+  # login/signup composites derived from authentication_method stay in the
+  # module adapter because they branch one option into a set and an ordered
+  # list.
+  derived_settings:
+    - setting_key: AUTHENTICATION_BACKENDS
+      derivation_type: static
+      expression:
+        value:
+          - django.contrib.auth.backends.ModelBackend
+          - allauth.account.auth_backends.AuthenticationBackend
+    - setting_key: AUTH_USER_MODEL
+      derivation_type: static
+      expression:
+        value: quickscale_auth.User
+    - setting_key: SITE_ID
+      derivation_type: static
+      expression:
+        value: 1
+    # ACCOUNT_ADAPTER belongs to this module: auth owns the single allauth
+    # adapter, which collects installed modules' declared post-auth redirect
+    # hooks as AppConfig capabilities.
+    - setting_key: ACCOUNT_ADAPTER
+      derivation_type: static
+      expression:
+        value: quickscale_modules_auth.allauth_adapter.QuickscaleAccountAdapter
+    - setting_key: ACCOUNT_SIGNUP_FORM_CLASS
+      derivation_type: static
+      expression:
+        value: quickscale_modules_auth.forms.SignupForm
+    - setting_key: LOGIN_REDIRECT_URL
+      derivation_type: static
+      expression:
+        value: /accounts/profile/
+    - setting_key: LOGOUT_REDIRECT_URL
+      derivation_type: static
+      expression:
+        value: /

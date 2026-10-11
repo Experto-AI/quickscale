@@ -130,10 +130,10 @@ items:
      members_diverging: [billing], population: modules-with-pages-or-apis(9),
      rule: "rule 19; JSON API Endpoint Base Contract", check: "harness rule 19 (partial)",
      closed_world: false, handoff: [tech], first_seen: 2026-09-26, last_verified: 2026-10-08}
-  - {id: option-schema-and-validation, status: open, regressed: false, aspect: B, cost: [ambiguity, tax],
-     members_diverging: [analytics, auth, backups, billing, blog, crm, forms, listings, notifications, orgs, social, storage],
-     population: adapters(12), rule: "rules 3, 12; Module Derivation Schema", check: "harness rules 3, 12 (settings reads only)",
-     closed_world: false, handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-08}
+  - {id: option-schema-and-validation, status: resolved, regressed: false, aspect: B, cost: [ambiguity, tax],
+     members_diverging: [],
+     population: adapters(12), rule: "rules 3, 12; Module Derivation Schema", check: "harness rules 3, 12 (manifest schema, adapter AST, and declared derived settings)",
+     closed_world: false, handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-11}
   - {id: unauthenticated-status-code, status: resolved, aspect: H, cost: [ambiguity, tax],
      members_diverging: [crm, forms], population: session-authenticated-apis(6), rule: none,
      check: none, closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
@@ -183,10 +183,11 @@ items:
      members_diverging: [backups, storage, orgs], population: modules(12),
      rule: "Module Manifest Architecture (names only)", check: none, closed_world: false, handoff: [],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: secret-env-var-names, status: open, regressed: false, aspect: A, cost: [ambiguity],
-     members_diverging: [backups], population: vendor-credential-options(5 modules), rule: "rule 1",
-     check: "harness rule 1 (suffix only)", closed_world: false, handoff: [], first_seen: 2026-09-26,
-     last_verified: 2026-10-08}
+  - {id: secret-env-var-names, status: resolved, regressed: false, aspect: A, cost: [ambiguity],
+     members_diverging: [], population: vendor-credential-options(5 modules), rule: "rule 1",
+     check: "harness rule 1 (module/option-bound vendor defaults and reasoned QuickScale exceptions)",
+     closed_world: true, handoff: [], first_seen: 2026-09-26,
+     last_verified: 2026-10-11}
   - {id: session-and-host-names, status: open, aspect: A, cost: [ambiguity],
      members_diverging: [orgs, auth], population: shared-namespaces, rule: "rule 33", check: none,
      closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
@@ -241,7 +242,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 1 | `module-enabled-switch` | B | defect, ambiguity | 5 / 12 modules (+ core `env_sync`) | open (reopened) |
 | 2 | `markdownx-shared-mount` | A | collision, defect | 2 / 10 mounting modules | open (new) |
 | 3 | `tenant-authorization` | E | ambiguity | 1 / 9 | resolved (SA262) |
-| 4 | `option-schema-and-validation` | B | ambiguity, tax | 12 / 12 adapters | open (reopened) |
+| 4 | `option-schema-and-validation` | B | ambiguity, tax | 0 / 12 adapters | resolved (SA263) |
 | 5 | `module-error-http-mapping` | D | ambiguity, tax | 4 / 12 (5 variants) | open |
 | 6 | `unauthenticated-status-code` | H | ambiguity, tax | 2 / 6 (4 duplicated classes on the other side) | resolved (SA262) |
 | 7 | `startup-checks-and-errors` | B | ambiguity, tax | 5 / 12 | open (reopened) |
@@ -256,7 +257,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 16 | `command-flag-conventions` | J | ambiguity, tax | 3 / 3 command-shipping modules | open |
 | 17 | `dependency-spec-sources` | N | ambiguity, tax | 3 / 12 | open |
 | 18 | `mount-path-copies` | P | ambiguity, tax | 4 / 5 theme API clients | open (reopened) |
-| 19 | `secret-env-var-names` | A | ambiguity | 1 / 5 | open (reopened) |
+| 19 | `secret-env-var-names` | A | ambiguity | 0 / 5 | resolved (SA263) |
 | 20 | `session-and-host-names` | A | ambiguity | 2 | open |
 | 21 | `model-basics` | G | tax, ambiguity | 7 / 10 | open (reopened) |
 | 22 | `template-folder-depth` | L | tax | 6 / 8 | open |
@@ -347,6 +348,18 @@ the generic settings check registered from `ready()` by all 12; `retired_options
 replacements; and the `MODULE_SETTINGS_SCHEMA` startup check.
 
 *Drift:* Items 1, 4, 7, 10.
+
+*SA263 note (2026-10-11):* item 4's adapter drift is closed in the joined tree — every adapter
+routes through the generic boundary, core's dead resolver step 5 is gone, the blank
+`__QS_ENV__:` marker renders the literal empty string, and harness rules 1, 3, and 12 enforce
+the boundary. Round-1 corrections add required absolute-URL patterns for storage's
+`public_base_url`/`endpoint_url` and backups' `remote_endpoint_url` without tightening
+historical `MEDIA_URL` acceptance; module/option-bound vendor defaults with reasoned
+QuickScale exceptions; root and per-option derived-setting read authority; and bounded
+adapter provenance through scalar/container aliases and loops. Storage's scalar AWS aliases
+are now manifest-owned computed settings with cloud/blank presence guards. The frozen media
+oracle is reused through persistence, serialized state, and reapply, including changed-default
+parity. Correction validation and the next independent review, not these claims, grade closure.
 
 ### C. Dependencies, layering, and vocabulary ownership
 
@@ -734,6 +747,22 @@ API status codes) still need a release-notes line.
   resolver step 5 is deleted or rewired. No persisted names change.
 - **Confidence:** High (all 12 adapters, resolver, renderer read).
 - **Hand-off:** none (the blank-marker passthrough is latent; noted in §9 for tech).
+- **SA263 (2026-10-11):** *closed.* All 12 adapters route through
+  `build_generic_manifest_spec`; the hooks keep only off-switch transformations, throttle
+  composites, runtime selections, provider filtering, and managed rendering. Core's resolver
+  step 5 is deleted, the blank `__QS_ENV__:` marker renders the literal empty string (it is not
+  refused, and the name regex is not widened), and the harness's rule 1 (vendor vocabulary plus
+  per-option QuickScale exceptions), rule 3 (the derived-setting declaration), and rule 12 (URL
+  normalizer kinds and the adapter's forbidden `.get(default)`/`bool()`/`int()`/`str()`/
+  `.strip()`/`.lower()`/`.casefold()`/`or`-fallback/`not`-recheck/validator-call shapes)
+  detectors carry the clause with negative and permitted controls. The `social`
+  `.get("layout_variant", "list")` control above is rejected by the delivered detector.
+  **Round-1 correction:** the three optional absolute-URL patterns are now declared, the
+  scalar AWS aliases have moved from Python into manifest-owned presence-guarded computed
+  settings, and enforcement follows simple option/mapped-setting aliases and loops. Root-level
+  derived settings are declaration authority without redundant adapter literals. Frozen-media
+  persistence/state/reapply tests and default-normalization parity controls supplement the
+  original delivery; release readiness remains a root-owned gate, not established here.
 
 ### Item 5: Errors — five ways a module error becomes an HTTP status
 
@@ -1291,7 +1320,8 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
    types, and projects `_ENV_VAR` options (blank → `""`). ✅ Post-hooks compute only settings no
    single option maps to. ❌ In `adapter.py`: re-validation, `bool()`/`int()`/`str()` of a
    projected option, `.get(<option>, <default>)`, value checks. ❌ A URL option without `url`
-   normalization and a pattern.
+   normalization and a pattern. ✅ **Merged (SA263):** rules 1, 3, and 12 carry the clause as
+   described in item 4's closure note.
 9. **Rule 14 — model basics** [Item 21]. Unchanged text, now enforced. Add ❌ `Meta.app_label` in a
    module model.
 10. **Rule 17 — command flags** [Item 16]. ✅ `--json` for machine output. ✅ `--trigger
@@ -1321,7 +1351,10 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 18. **§ Module Wiring Authority / § Module Manifest Architecture** [Items 10, 17]. ✅ `apps` and
     `middleware` come only from `wiring_projections`. ✅ `required_modules` and `dependencies` are
     always present, and `dependencies` lists names only, with specs in `pyproject.toml`. ✅ Every
-    module declares `quickscale-core`. ❌ An unparsed top-level manifest key.
+    module declares `quickscale-core`. ❌ An unparsed top-level manifest key. ✅ **Merged
+    (SA263):** the credential-default clause of §[Module Conventions](#module-conventions) rule 1
+    (vendor vocabulary and per-option QuickScale exceptions) is enforced by the rule-1 detector in
+    proposal 8's harness clause.
 
 ---
 
@@ -1354,9 +1387,13 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
     `DEFAULT_THROTTLE_RATES` from a module.
 14. **Dead validation path.** Core's resolver step 5 (`resolver.py:278`) validates against
     derivation rule lists the loader refuses, so it looks like validation and checks nothing
-    [Item 4].
+    [Item 4]. **Resolved (SA263):** the step and `resolver_validation.py` are deleted;
+    `resolve_module_config` projects derived settings and wiring directly, and the live refusal
+    that remains is `_url_projection_issues`.
 15. **Dangling secret marker.** Core's renderer leaves a blank `__QS_ENV__:` as the literal string
-    `'__QS_ENV__:'` (`module_wiring.py:242`) [Item 4].
+    `'__QS_ENV__:'` (`module_wiring.py:242`) [Item 4]. **Resolved (SA263):** a blank marker renders
+    the literal empty string (`module_wiring.py` renders it explicitly; the regex is not widened
+    to read an empty name), and harness rule 12's controls cover the blank/nonblank pair.
 16. **Undiscoverable or contradictory rules.**
     - module-extension.md:542 says adding a module "requires no edit to `quickscale_core` or
       `quickscale_cli`". Rule 37 requires editing `MODULE_CATALOG` and
@@ -1850,3 +1887,141 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 - 2026-10-10 — Enforcement gaps 1 and 2: **resolved** (SA260 — the closed-world loader makes an
   unparsed top-level key fail the load, and harness rule 7 rejects literal `apps`/`middleware`
   and literal appends in adapters, both with control cases).
+
+### 2026-10-11 — SA263 round-1 record (superseded by the correction note below)
+
+- 2026-10-11 — `option-schema-and-validation`: **resolved** (SA263 — `module.yml` is the sole
+  authority for option validation, canonical typing, normalization, defaults, and secret
+  projection; all 12 adapters route through `build_generic_manifest_spec` and keep only the
+  off-switch, composite, runtime-selection, provider-filtering, and managed-rendering hooks;
+  core's resolver step 5 and `resolver_validation.py` are gone, the blank `__QS_ENV__:` marker
+  renders the literal empty string, and the `path_or_absolute_url` kind carries the historical
+  relative-or-absolute media behaviour through the owning option's declared default).
+- 2026-10-11 — `secret-env-var-names`: **resolved** (SA263 — harness rule 1 now compares every
+  credential reference default against a controlled vendor vocabulary and a per-option table of
+  authorized QuickScale names with recorded reasons, including backups' two private-remote
+  exceptions; controls reject an unlisted vendor-shaped name and a drifted exception).
+- 2026-10-11 — Enforcement gaps 11, 14, and 15: **resolved** (SA263 — harness rule 12 reads
+  `adapter.py` ASTs and rejects re-defaulting, coercion, case/whitespace rewriting,
+  `or`-fallback, and validator-call re-checks on raw/resolved option containers inside the
+  wiring paths, while the readiness predicates that consume canonical values stay legal; the
+  fast-path diagnostics, the focused `scripts/tests_module_conventions/test_settings.py` run,
+  and the full `scripts/tests_module_conventions/` population passed on the joined tree). The
+  separated gaps 11 (rule 3 read coverage) and 14/15 (adapter reads and dead-renderer path) are
+  closed by the same detector pair, and rule 3 now recognises a manifest-declared derived
+  setting, so analytics' `QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE` read is declared surface
+  rather than a violation. The adapter clause lives in
+  `scripts/module_conventions/adapter_options.py` and the URL-family clause in
+  `scripts/module_conventions/url_options.py`, with `rules_settings.py` keeping
+  the rule aggregates and the other settings rules (each file stays under the
+  quality gate's 800-line threshold).
+- 2026-10-11 — Recorded residual, not closed: the three optional absolute-URL options
+  (`storage.public_base_url`, `storage.endpoint_url`, `backups.remote_endpoint_url`) declare the
+  `url` normalizer but an empty `validation` block instead of a full pattern; the harness's URL
+  clause enforces the normalizer kind and refuses a blank declared pattern, and adding the
+  patterns is a manifest edit the post-join review owns.
+
+### 2026-10-11 — SA263 round-1 corrections
+
+The original record above is retained as phase evidence, not current closure authority.
+F-001–F-007 prompted corrections to absolute-URL pattern presence/admission, bounded adapter
+provenance, vendor-default ownership, declarative cloud-only AWS aliases, frozen-media
+persistence/state/reapply coverage, blank/default canonical parity, and root derived-setting
+read collection. The patterns retain blanks and approved scheme-less inputs; media acceptance
+is unchanged. Computed-setting presence guards are generic and loader-validated. The hook no
+longer manufactures credential aliases. Existing historical tables and reconciliation entries
+describe their audited states and are deliberately preserved. Independent correction review
+and root-owned release checks still determine final delivery readiness.
+
+### 2026-10-11 — SA263 round-2 corrections (F-002 / F-008)
+
+Adapter enforcement now seeds provenance from generic-boundary arguments and the
+actual post-hook calling convention, follows simple local calls, aliases, returned
+hook factories, and loop/comprehension bindings, and distinguishes mapped settings
+from structural package/target mappings. Neither annotations, parameter names nor a
+coincidental `backend` key establish ownership. `.get(option, default)` in a wiring
+guard remains a forbidden fallback, including `enabled`; direct off-switch reads,
+`dict(spec.settings)` copies and composites remain legal. Readiness allowance is
+bounded to pure selection results in a call graph rooted at
+`resolve_manifest_module_options`, not arbitrary boolean helpers. Those query
+bodies still participate in provenance analysis, and their results cannot replace
+declared option/scalar settings. Dynamic dispatch and non-simple aliasing are not
+claimed as covered by this static detector.
+
+The three optional absolute-URL patterns admit bracketed IPv6 HTTP(S) authorities
+and optional numeric ports in both canonical and bundled manifests. Configuration,
+generic wiring, module adapters and registered wiring share that admission and the
+existing trailing-slash canonicalization. Blanks and scheme-less spellings retain
+their prior normalization, malformed authorities remain refused, and `MEDIA_URL`
+continues to follow its separate frozen relative-or-absolute contract. Historical
+audit tables and phase records above remain evidence of their dated states, not a
+claim that the prior detector or URL patterns already met these corrections.
+
+### 2026-10-11 — SA263 round-3 corrections (F-002)
+
+Round-3 review reproduced two remaining simple-reference gaps in the round-2
+detector: a locally aliased validator call and a factory returning a local alias
+of its nested hook. Callable checks and hook seeding now use the same recursive,
+cycle-safe reference resolver, resolving each factory return in that factory's
+local assignment scope. Imported validator aliases, ordinary/annotated alias
+chains, nested factory-return chains, keyword scalar arguments, mapped-setting
+reads, and loop/comprehension values have negative module/file/line controls.
+Permitted copies, composites, direct off switches, normalization-rooted readiness
+selection, and structural package/target guards have matching controls. This is
+bounded simple-static enforcement, not a claim about external factory bodies or
+dynamic dispatch. Earlier audit tables and correction records describe their
+dated states; independent correction review and root-owned release validation
+remain the closure and delivery authorities.
+
+### 2026-10-11 — SA263 round-4 corrections (F-002)
+
+Round-4 review reproduced the remaining ordinary-closure gap: a factory's own
+assignment scope was invisible to its nested hook, so `check =
+validate_backend` or `coerce = bool` in the enclosing factory let the hook
+re-validate or coerce declared option values with no diagnostic. Every
+function now carries its lexical alias environment — module, enclosing factory
+scopes at any depth, and the nested hook's own scope, innermost first — with
+locally bound names (parameters, targets, nested defs, imports) shadowing outer
+bindings, and definition names resolve through the same chain, so same-named
+nested hooks in different factories keep separate identities instead of
+collapsing onto one flat name table. The same environment feeds every seam:
+hook seeding from the generic boundary, boundary/option argument tracing,
+readiness-query roots, and the provenance walk. Class bodies stay transparent
+to method scopes, an assignment below a nested def still resolves, and alias
+cycles stay finite through AST identities.
+
+Negative module/file/line controls cover the enclosing validator alias
+(declared option, keyword scalar, simple alias, mapped setting, loop and
+comprehension bindings, assignment-after-def, outer-factory depth, nested
+helper, same-named duplicate hooks in both definition orders) and the enclosing
+bool coercion, each through direct/alias/annotated chain/nested factory-return
+spellings. Shadowing controls (hook-local rebinding and a same-named parameter)
+and normalization-rooted readiness reached through an enclosing alias stay
+legal, a closure cycle invents no target, and the diagnostics are stable across
+repeated runs. This remains bounded simple-static enforcement — external
+factory bodies, dynamic dispatch, and reflection are not claimed; earlier audit
+tables and correction records describe their dated states, and independent
+correction review and root-owned release validation remain the closure and
+delivery authorities.
+
+### 2026-10-11 — SA263 cycle-2 lexical binding corrections (F-001 / F-002 / F-003)
+
+The round-4 record describes its implementation, not proof of complete lexical
+binding: cycle-2 review reproduced captured-builtin alias capture, duplicate local
+validator identity loss, and an intermediate factory parameter borrowing an outer
+validator. Callable alias hops now resume in the defining frame. Parameters,
+imports, assignments, and definitions stop lookup at every intervening frame;
+ordinary positional/keyword callable actuals (and static defaults) are resolved
+in their caller/definition frames and retained separately for each returned
+closure. Validator policy is attached to the resolved definition identity, while
+diagnostics retain the source callable spelling. Hook seeding, helper calls,
+query selection, and scalar inspection share those semantic references.
+
+Registered-rule controls require the captured `bool` diagnostic at line 8, the
+two-factory validator diagnostic at line 6 (and its relocated line when reordered),
+and no diagnostic for the nested factory parameter receiving identity at line 9.
+The validator/builtin alternatives, intermediate import/definition shadows, and
+distinct closure instantiations have paired controls and repeat-stability checks.
+Dynamic reflection and external factory implementations remain outside this
+bounded static analysis. Dated audit tables and earlier phase records are retained;
+independent review and root-owned release validation still grade final acceptance.

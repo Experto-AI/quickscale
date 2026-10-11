@@ -7,17 +7,25 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from scripts.module_conventions.adapter_options import (
+    rule_12_adapter_duplicate_logic,
+)
 from scripts.module_conventions.core import (
+    CREDENTIAL_REFERENCE_NAMES,
+    ENV_VAR_NAME_PATTERN,
     MODULE_IMPORT_PREFIX,
     MODULE_LAYERS,
+    QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS,
     SETTING_NAME_EXCEPTIONS,
     SNAKE_CASE,
+    VENDOR_CREDENTIAL_DEFAULTS,
     Corpus,
     Module,
     _attribute_chain,
     _body_nodes,
     _bound_names,
     _call_func_name,
+    _credential_reference_options,
     _declared_exports,
     _is_settings_receiver,
     _keyword,
@@ -30,6 +38,9 @@ from scripts.module_conventions.core import (
     _settings_attribute_reads,
     _settings_bindings,
     _string_assignments,
+)
+from scripts.module_conventions.url_options import (
+    check_url_normalization,
 )
 
 OPTION_VALIDATION_KEYS = (
@@ -59,7 +70,7 @@ SETTING_SUFFIX_TYPES: dict[str, str] = {
     "env_var": "string",
 }
 
-ENV_VAR_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
+ENV_VAR_NAME = ENV_VAR_NAME_PATTERN
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +88,11 @@ def rule_1_settings_names(corpus: Corpus) -> list[str]:
     exceptions excepted; every standard suffix keeps its fixed type; an
     ``_env_var`` option's default is an environment-variable name, and a
     QuickScale-defined one carries the module stem (rule 35's projection).
+
+    SA263 adds the credential-default clauses: a credential reference option's
+    default is either the controlled vocabulary's vendor name or one of the
+    per-option authorized QuickScale names, and an operator's own name stays
+    allowed — the rule fixes the convention default, never the override.
     """
     violations: list[str] = []
     for module in corpus.modules:
@@ -88,6 +104,8 @@ def rule_1_settings_names(corpus: Corpus) -> list[str]:
                 if isinstance(block, Mapping):
                     options.update(block)
         prefix = f"QUICKSCALE_{module.name.upper()}_"
+        approved = QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS.get(module.name, {})
+        credential_options = _credential_reference_options(module)
         enabled = options.get("enabled")
         if not isinstance(enabled, Mapping):
             violations.append(f"rule 1: {module.name}: declares no enabled option")
@@ -121,19 +139,51 @@ def rule_1_settings_names(corpus: Corpus) -> list[str]:
                             f"{option.get('type')!r}, expected {expected_type}"
                         )
                     break
+            default = option.get("default")
             if key.endswith("_env_var"):
-                default = option.get("default")
                 if not isinstance(default, str) or not ENV_VAR_NAME.match(default):
                     violations.append(
                         f"rule 1: {module.name}: option {key!r} default {default!r} is "
                         "not an environment-variable name"
                     )
-                elif default.startswith("QUICKSCALE_") and not default.startswith(prefix):
-                    violations.append(
-                        f"rule 1: {module.name}: option {key!r} default {default} lacks "
-                        f"the {prefix} stem"
-                    )
+                elif key in approved:
+                    expected = approved[key]["default"]
+                    if default != expected:
+                        violations.append(
+                            f"rule 1: {module.name}: option {key!r} default {default} is "
+                            f"authorized as {expected}; update the recorded exception to "
+                            "rename it"
+                        )
+                elif key in VENDOR_CREDENTIAL_DEFAULTS.get(module.name, {}):
+                    _check_vendor_default(module.name, key, default, violations)
+                elif default.startswith("QUICKSCALE_"):
+                    if not default.startswith(prefix):
+                        violations.append(
+                            f"rule 1: {module.name}: option {key!r} default {default} lacks "
+                            f"the {prefix} stem"
+                        )
+                elif key in credential_options:
+                    _check_vendor_default(module.name, key, default, violations)
     return violations
+
+
+def _check_vendor_default(module_name: str, key: str, default: str, violations: list[str]) -> None:
+    """Refuse a credential reference default outside the controlled vocabulary."""
+    expected = VENDOR_CREDENTIAL_DEFAULTS.get(module_name, {}).get(key)
+    if expected is not None:
+        if default != expected:
+            violations.append(
+                f"rule 1: {module_name}: option {key!r} default {default} must be {expected}"
+            )
+        return
+    if default in CREDENTIAL_REFERENCE_NAMES:
+        return
+    approved = ", ".join(CREDENTIAL_REFERENCE_NAMES)
+    violations.append(
+        f"rule 1: {module_name}: option {key!r} default {default} is not in the "
+        f"controlled vocabulary ({approved}); the vendor's variable name or an "
+        "operator's name is required"
+    )
 
 
 def _option_settings(module: Module) -> set[str]:
@@ -160,7 +210,10 @@ def _manifest_declared_settings(module: Module) -> set[str]:
 
     An option's ``django_setting``; for an ``_env_var`` option also the
     ``_ENV_VAR`` projection core renders for it (the name minus its
-    ``_ENV_VAR`` suffix).
+    ``_ENV_VAR`` suffix); and every ``derivation.derived_settings``
+    ``setting_key`` the manifest declares (SA263 — a computed setting such as
+    analytics' ``QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE`` is manifest-owned
+    runtime surface, not an undeclared read).
     """
     declared = _option_settings(module)
     config = module.manifest.get("config")
@@ -179,6 +232,19 @@ def _manifest_declared_settings(module: Module) -> set[str]:
                     and setting.endswith("_ENV_VAR")
                 ):
                     declared.add(setting[: -len("_ENV_VAR")])
+    derivation = module.manifest.get("derivation")
+    if isinstance(derivation, Mapping):
+        bodies = [derivation]
+        option_derivations = derivation.get("option_derivations")
+        if isinstance(option_derivations, Mapping):
+            bodies.extend(body for body in option_derivations.values() if isinstance(body, Mapping))
+        for body in bodies:
+            derived = body.get("derived_settings")
+            if not isinstance(derived, list):
+                continue
+            for entry in derived:
+                if isinstance(entry, Mapping) and isinstance(entry.get("setting_key"), str):
+                    declared.add(entry["setting_key"])
     return declared
 
 
@@ -336,6 +402,7 @@ def rule_12_manifest_options(corpus: Corpus) -> list[str]:
                         )
                     if key.startswith(f"{module.name}_"):
                         violations.append(f"{prefix} repeats the module name")
+                check_url_normalization(module, key, option, violations)
         if _contains_key(manifest, "validation_rules"):
             violations.append(f"rule 12: {module.name}: manifest declares retired validation_rules")
     return violations
@@ -349,6 +416,14 @@ def _contains_key(node: Any, key: str) -> bool:
     if isinstance(node, list):
         return any(_contains_key(item, key) for item in node)
     return False
+
+
+def rule_12_manifest_and_adapter_options(corpus: Corpus) -> list[str]:
+    """Rule 12's manifest schema and its SA263 adapter clause, in one detector."""
+    return [
+        *rule_12_manifest_options(corpus),
+        *rule_12_adapter_duplicate_logic(corpus),
+    ]
 
 
 def _class_defines_from_settings(node: ast.ClassDef) -> bool:

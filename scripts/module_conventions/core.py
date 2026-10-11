@@ -30,6 +30,81 @@ MODULE_ABSTRACT_BASES = ("TenantModel", "AbstractListing", "BaseSocialItem")
 
 ALLOWED_TEMPLATE_DIRS = ("account", "admin")
 
+# Rule 1's controlled vocabulary of third-party environment-variable names
+# (SA263).  A credential reference option's default is the vendor's own
+# variable name when the vendor names it, so an unapproved vendor-shaped
+# default is a violation.  Precident collision is what the vocabulary
+# prevents: a name already meaning one vendor's credential cannot become a
+# second vendor's default.  An operator replacing the value at apply time is a
+# supplied value, not a manifest default, so this rule never bans an override.
+# This is deliberately NOT the setting-name exception table below — a setting
+# exception fixes a Django/third-party setting name, an entry here fixes an
+# option default.
+CREDENTIAL_REFERENCE_NAMES: tuple[str, ...] = (
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "POSTHOG_API_KEY",
+    "POSTHOG_HOST",
+    "RESEND_API_KEY",
+    "STRIPE_PUBLISHABLE_KEY",
+    "STRIPE_SECRET_KEY",
+)
+# Vendor ownership is per declaration, not membership in a global vocabulary.
+VENDOR_CREDENTIAL_DEFAULTS: dict[str, dict[str, str]] = {
+    "analytics": {
+        "posthog_api_key_env_var": "POSTHOG_API_KEY",
+        "posthog_host_env_var": "POSTHOG_HOST",
+    },
+    "billing": {
+        "publishable_key_env_var": "STRIPE_PUBLISHABLE_KEY",
+        "secret_key_env_var": "STRIPE_SECRET_KEY",
+    },
+    "notifications": {"resend_api_key_env_var": "RESEND_API_KEY"},
+    "storage": {
+        "access_key_id_env_var": "AWS_ACCESS_KEY_ID",
+        "secret_access_key_env_var": "AWS_SECRET_ACCESS_KEY",
+    },
+}
+# Rule 1's per-option authorized QuickScale-defined credential names (SA263).
+# A default that a module tracks in a shared namespace of its own is approved
+# per option rather than by the ``QUICKSCALE_<MODULE>_`` stem alone, so a
+# cross-module collision (backups' private-remote credentials sharing
+# storage's media or the ambient ``AWS_*`` provider chain) stays recorded and
+# reasoned.  These entries are a separate table from
+# :data:`SETTING_NAME_EXCEPTIONS`: they constrain an option's *default value*,
+# not its setting name.
+QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS: dict[str, dict[str, dict[str, str]]] = {
+    "backups": {
+        "remote_access_key_id_env_var": {
+            "default": "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID",
+            "why": "backups' own private artifact store stays distinct from "
+            "storage's media credentials and the ambient AWS_* provider chain",
+        },
+        "remote_secret_access_key_env_var": {
+            "default": "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY",
+            "why": "backups' own private artifact store stays distinct from "
+            "storage's media credentials and the ambient AWS_* provider chain",
+        },
+    },
+    "billing": {
+        "webhook_secret_env_var": {
+            "default": "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+            "why": "the webhook secret is QuickScale-defined, not a vendor name",
+        },
+    },
+    "notifications": {
+        "webhook_secret_env_var": {
+            "default": "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
+            "why": "the webhook secret is QuickScale-defined, not a vendor name",
+        },
+    },
+}
+
+# Rule 1's shape test for an environment-variable name a module declares as a
+# default.  ``^[A-Z][A-Z0-9_]*$`` is the same name grammar the manifests'
+# ``_ENV_VAR`` pattern uses.
+ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
 # Rule 1's listed settings-name exceptions (auth's allauth settings and
 # storage's MEDIA_URL / django-storages AWS_* names) are recorded here so the
 # option-schema detector checks the suffix relation, not the exception list.
@@ -105,6 +180,31 @@ CAPABILITY_NAMES: frozenset[str] = frozenset(
 
 # Rule 5 <-> rule 43: the modules a manifest declares itself to require.
 MODULE_REQUIRED_NAME = "required_modules"
+
+
+def _credential_reference_options(module: Module) -> set[str]:
+    """Return the option keys whose setting is a credential reference (rule 1)."""
+    config = module.manifest.get("config")
+    if not isinstance(config, Mapping):
+        return set()
+    found: set[str] = set()
+    for kind in ("mutable", "immutable"):
+        options = config.get(kind)
+        if not isinstance(options, Mapping):
+            continue
+        for key, option in options.items():
+            if not isinstance(key, str) or not isinstance(option, Mapping):
+                continue
+            setting = option.get("django_setting")
+            if isinstance(setting, str) and (
+                key.endswith("_env_var")
+                or setting.endswith("_ENV_VAR")
+                or "SECRET" in setting
+                or "KEY" in setting
+                or "TOKEN" in setting
+            ):
+                found.add(key)
+    return found
 
 
 def _required_modules(module: Module) -> frozenset[str]:

@@ -197,7 +197,7 @@ def _validate_expression_key_set(
         "direct": {"option"},
         "static": {"value"},
         "conditional": {"branches"},
-        "computed": {"values"} if wiring else {"template"},
+        "computed": {"values"} if wiring else {"template", "when", "omit_if_blank"},
     }[derivation_type]
     for expression_key in expression:
         if expression_key not in allowed_expression_keys:
@@ -246,6 +246,55 @@ def _validate_expression_block(
             path, module_name, wiring=wiring, wiring_field=wiring_field
         )
     _validate_expression_key_set(expression, path, module_name, derivation_type, wiring)
+    if derivation_type == "computed" and not wiring:
+        _validate_setting_omission(expression, path, module_name, declared_options)
+
+
+def _validate_setting_omission(
+    expression: dict[str, Any],
+    path: str,
+    module_name: str | None,
+    declared_options: dict[str, Any],
+) -> None:
+    """Validate computed-setting presence guards; no module-specific policy."""
+    when = expression.get("when", {})
+    if not isinstance(when, dict) or ("when" in expression and not when):
+        raise ManifestError(
+            f"{path}.expression.when must be a non-empty mapping", module_name
+        )
+    for key, values in when.items():
+        option = declared_options.get(key)
+        if option is None or option.option_type not in {"string", "integer", "boolean"}:
+            raise ManifestError(
+                f"{path}.expression.when requires declared scalar options", module_name
+            )
+        expected_type = {"string": str, "integer": int, "boolean": bool}[
+            option.option_type
+        ]
+        if (
+            not isinstance(values, list)
+            or not values
+            or any(type(v) is not expected_type for v in values)
+        ):
+            raise ManifestError(
+                f"{path}.expression.when.{key} must list matching scalar values",
+                module_name,
+            )
+    blanks = expression.get("omit_if_blank", [])
+    if not isinstance(blanks, list) or ("omit_if_blank" in expression and not blanks):
+        raise ManifestError(
+            f"{path}.expression.omit_if_blank must be a non-empty list", module_name
+        )
+    for key in blanks:
+        if (
+            not isinstance(key, str)
+            or key not in declared_options
+            or declared_options[key].option_type != "string"
+        ):
+            raise ManifestError(
+                f"{path}.expression.omit_if_blank requires declared string options",
+                module_name,
+            )
 
 
 def _validate_direct_url_option(

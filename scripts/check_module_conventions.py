@@ -34,8 +34,13 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from scripts.module_conventions.adapter_options import (
+    rule_12_adapter_duplicate_logic,
+)
 from scripts.module_conventions.core import (
+    CREDENTIAL_REFERENCE_NAMES,
     MODULE_LAYERS,
+    QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS,
     AuthorityError,
     Corpus,
     Module,
@@ -113,6 +118,7 @@ from scripts.module_conventions.rules_routes import (
 from scripts.module_conventions.rules_settings import (
     rule_1_settings_names,
     rule_3_settings_reads,
+    rule_12_manifest_and_adapter_options,
     rule_12_manifest_options,
     rule_42_settings_snapshots,
     rule_43_optional_senders,
@@ -123,12 +129,14 @@ from scripts.module_conventions.rules_webhooks import (
 
 __all__ = [
     "AuthorityError",
+    "CREDENTIAL_REFERENCE_NAMES",
     "Corpus",
     "DECISIONS_DOC_RELATIVE_PATH",
     "DELEGATED_RULES",
     "MODULE_LAYERS",
     "Module",
     "OPEN_RULES",
+    "QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS",
     "RULES",
     "THEME_SEAM_TEMPLATE",
     "THEME_SEAM_TEMPLATES",
@@ -139,6 +147,8 @@ __all__ = [
     "partition_violations",
     "rule_10_checks_errors",
     "rule_11_package_files",
+    "rule_12_adapter_duplicate_logic",
+    "rule_12_manifest_and_adapter_options",
     "rule_12_manifest_options",
     "rule_13_tenant_models",
     "rule_14_model_basics",

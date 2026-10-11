@@ -17,19 +17,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from quickscale_core.runtime.manifest import (
-    SOCIAL_EMBEDS_PATH,
-    SOCIAL_INTEGRATION_BASE_PATH,
-    SOCIAL_INTEGRATION_EMBEDS_PATH,
-    SOCIAL_LINK_TREE_PATH,
     ModuleWiringSpec,
-    ResolverResult,
-    assemble_wiring_spec,
     build_generic_manifest_spec,
-    load_social_manifest,
     render_social_managed_init_module,
     render_social_managed_urls_module,
     render_social_managed_views_module,
-    resolve_manifest_module_options,
     social_provider_supports_embeds,
 )
 
@@ -89,6 +81,75 @@ def _qualify_managed_url_includes(
     return tuple(qualified)
 
 
+def _build_social_post_hook(project_package: str) -> Any:
+    """Build the social post-resolution hook for one project package.
+
+    The manifest owns the module's options, defaults, checks, projections,
+    settings (fixed paths included), and managed-file inventory.  The hook
+    contributes only what the declarative resolver cannot express: the
+    embed-capable slice of the canonical provider allowlist, the
+    project-package-qualified mount, and the rendered content of each
+    rendered managed file.  Rule 1 (D3): off keeps the module installed —
+    app, admin, settings, and managed files — and mounts none of its public
+    URLs.
+    """
+
+    def _social_post_hook(
+        spec: ModuleWiringSpec, resolved: dict[str, Any]
+    ) -> ModuleWiringSpec:
+        provider_allowlist = list(resolved["provider_allowlist"])
+        embed_provider_allowlist = [
+            provider
+            for provider in provider_allowlist
+            if social_provider_supports_embeds(provider)
+        ]
+
+        settings = dict(spec.settings)
+        settings["QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST"] = (
+            embed_provider_allowlist
+        )
+
+        if resolved["enabled"]:
+            url_includes = _qualify_managed_url_includes(
+                spec.url_includes,
+                project_package,
+                managed_files=spec.managed_files,
+            )
+        else:
+            url_includes = ()
+
+        renderer_dispatch: dict[str, str] = {
+            "social.managed_init": render_social_managed_init_module(),
+            _MANAGED_URLCONF_RENDERER: render_social_managed_urls_module(),
+            "social.managed_views": render_social_managed_views_module(
+                provider_allowlist,
+                embed_provider_allowlist,
+                layout_variant=resolved["layout_variant"],
+                cache_ttl_seconds=resolved["cache_ttl_seconds"],
+                links_per_page=resolved["links_per_page"],
+                embeds_per_page=resolved["embeds_per_page"],
+            ),
+        }
+
+        managed_content: dict[str, str] = {}
+        for output_path, renderer_id in spec.managed_files.items():
+            rendered = renderer_dispatch.get(renderer_id)
+            if rendered is not None:
+                managed_content[output_path] = rendered
+
+        return ModuleWiringSpec(
+            apps=spec.apps,
+            middleware=spec.middleware,
+            settings=settings,
+            pre_home_url_includes=spec.pre_home_url_includes,
+            url_includes=url_includes,
+            spa_routes=spec.spa_routes,
+            managed_files=managed_content,
+        )
+
+    return _social_post_hook
+
+
 def _social_manifest_adapter(
     options: dict[str, Any],
     *,
@@ -96,18 +157,15 @@ def _social_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the social module via the manifest path.
 
-    Settings: ``QUICKSCALE_SOCIAL_*`` keys derived from resolved options plus
-    fixed path constants.
+    Settings: the manifest's ``QUICKSCALE_SOCIAL_*`` projections plus the
+    embed-capable provider allowlist the hook derives from the canonical
+    provider allowlist.
     URL includes: the manifest-declared mount (``_quickscale/social/``) and
     its project-relative managed URLconf target, qualified with
     ``project_package`` into ``{project_package}.quickscale_managed.social_urls``.
-    Managed files: sourced from the manifest-declared ``managed_files``
-    contract in the social ``module.yml``.  The assembler converts each
-    declaration's ``output_path`` and ``renderer`` into a placeholder
-    mapping; the post-resolution hook then replaces each renderer-ID
-    placeholder with the actual rendered file content.  This keeps the
-    managed-file inventory in the manifest as the single source of truth
-    rather than hardcoding paths in the adapter.
+    Managed files: the manifest-declared ``managed_files`` inventory; the
+    post-resolution hook replaces each renderer-ID placeholder with the
+    rendered file content.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).
@@ -124,161 +182,11 @@ def _social_manifest_adapter(
     if project_package is None:
         raise ValueError("project_package is required for managed social wiring")
 
-    resolved = resolve_manifest_module_options("social", dict(options))
-    provider_allowlist = list(resolved["provider_allowlist"])
-    embed_provider_allowlist = [
-        provider
-        for provider in provider_allowlist
-        if social_provider_supports_embeds(provider)
-    ]
-
-    manifest_spec = build_generic_manifest_spec("social", options)
-    settings = dict(manifest_spec.settings)
-    settings.update(
-        {
-            "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED": bool(resolved["link_tree_enabled"]),
-            "QUICKSCALE_SOCIAL_LAYOUT_VARIANT": str(resolved["layout_variant"]),
-            "QUICKSCALE_SOCIAL_EMBEDS_ENABLED": bool(resolved["embeds_enabled"]),
-            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST": provider_allowlist,
-            "QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST": embed_provider_allowlist,
-            "QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS": int(resolved["cache_ttl_seconds"]),
-            "QUICKSCALE_SOCIAL_LINKS_PER_PAGE": int(resolved["links_per_page"]),
-            "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE": int(resolved["embeds_per_page"]),
-            "QUICKSCALE_SOCIAL_LINK_TREE_PATH": SOCIAL_LINK_TREE_PATH,
-            "QUICKSCALE_SOCIAL_EMBEDS_PATH": SOCIAL_EMBEDS_PATH,
-            "QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH": SOCIAL_INTEGRATION_BASE_PATH,
-            "QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH": SOCIAL_INTEGRATION_EMBEDS_PATH,
-        }
+    return build_generic_manifest_spec(
+        "social",
+        options,
+        post_hook=_build_social_post_hook(project_package),
     )
-
-    # Load the manifest-declared wiring and managed_files contracts so the assembler
-    # populates spec.managed_files with output_path -> renderer_id mappings
-    # sourced from module.yml rather than hardcoding paths in this adapter.
-    social_manifest = load_social_manifest()
-    apps = _social_manifest_apps(social_manifest)
-    managed_file_declarations = tuple(social_manifest.managed_files.values())
-
-    url_includes: tuple[tuple[str, str], ...]
-    if bool(resolved["enabled"]):
-        url_includes = _qualify_managed_url_includes(
-            manifest_spec.url_includes,
-            project_package,
-            managed_files=manifest_spec.managed_files,
-        )
-    else:
-        # Rule 1 (D3): off keeps the module installed — app, admin, settings,
-        # and managed files — and mounts none of its public URLs.  The
-        # qualification helper accepts only the enabled module's declared
-        # mount, so the off branch assigns the empty tuple directly.
-        url_includes = ()
-
-    result = ResolverResult(
-        module_name="social",
-        defaults={},
-        resolved=resolved,
-        derived_settings=settings,
-        apps=apps,
-        middleware=manifest_spec.middleware,
-        url_includes=url_includes,
-        pre_home_url_includes=(),
-        managed_files=managed_file_declarations,
-    )
-
-    # Post-resolution hook: replace renderer-ID placeholders (sourced from the
-    # manifest-declared managed_files contract) with rendered content.
-    def _social_managed_files_hook(
-        spec: ModuleWiringSpec, resolved_opts: dict[str, Any]
-    ) -> ModuleWiringSpec:
-        # Dispatch table: renderer_id (from module.yml) -> rendered content.
-        # The output_path keys come from spec.managed_files which the assembler
-        # populated from the manifest declarations, not from hardcoded paths.
-        renderer_dispatch: dict[str, str] = {
-            "social.managed_init": render_social_managed_init_module(),
-            _MANAGED_URLCONF_RENDERER: render_social_managed_urls_module(),
-            "social.managed_views": render_social_managed_views_module(
-                provider_allowlist,
-                embed_provider_allowlist,
-                layout_variant=str(resolved_opts.get("layout_variant", "list")),
-                cache_ttl_seconds=int(resolved_opts.get("cache_ttl_seconds", 300)),
-                links_per_page=int(resolved_opts.get("links_per_page", 24)),
-                embeds_per_page=int(resolved_opts.get("embeds_per_page", 12)),
-            ),
-        }
-
-        managed_content: dict[str, str] = {}
-        for output_path, renderer_id in spec.managed_files.items():
-            rendered = renderer_dispatch.get(renderer_id)
-            if rendered is not None:
-                managed_content[output_path] = rendered
-
-        return ModuleWiringSpec(
-            apps=spec.apps,
-            middleware=spec.middleware,
-            settings=spec.settings,
-            pre_home_url_includes=spec.pre_home_url_includes,
-            url_includes=spec.url_includes,
-            managed_files=managed_content,
-        )
-
-    return assemble_wiring_spec(result, post_hook=_social_managed_files_hook)
-
-
-def _social_manifest_apps(social_manifest: Any) -> tuple[str, ...]:
-    """Return the sole validated static apps projection from the social manifest.
-
-    The social adapter remains hand-built for its managed-file rendering, but
-    the manifest owns the Django app declaration.  Fail closed when that
-    contract is missing or malformed rather than allowing a second Python-side
-    declaration to drift from ``module.yml``.
-    """
-    error_prefix = "Invalid social manifest apps projection"
-    projection = _select_social_manifest_apps_projection(social_manifest, error_prefix)
-    return _validate_social_manifest_apps_projection(projection, error_prefix)
-
-
-def _select_social_manifest_apps_projection(
-    social_manifest: Any, error_prefix: str
-) -> dict[str, Any]:
-    """Select the sole apps projection, ignoring unrelated manifest entries."""
-    raw_projections = getattr(social_manifest, "wiring_projections", None)
-    projections = (
-        [
-            projection
-            for projection in raw_projections
-            if isinstance(projection, dict) and projection.get("wiring_field") == "apps"
-        ]
-        if isinstance(raw_projections, list)
-        else []
-    )
-
-    if len(projections) != 1:
-        raise ValueError(
-            f"{error_prefix}: expected exactly one projection, found {len(projections)}"
-        )
-
-    return projections[0]
-
-
-def _validate_social_manifest_apps_projection(
-    projection: dict[str, Any], error_prefix: str
-) -> tuple[str, ...]:
-    """Validate the selected apps projection and preserve its declared order."""
-    if projection.get("derivation_type") != "static":
-        raise ValueError(f"{error_prefix}: projection must be static")
-
-    expression = projection.get("expression")
-    apps = expression.get("value") if isinstance(expression, dict) else None
-    if (
-        not isinstance(apps, list)
-        or not apps
-        or any(not isinstance(app, str) or not app.strip() for app in apps)
-    ):
-        raise ValueError(
-            f"{error_prefix}: static expression.value must be a non-empty list "
-            "of non-empty strings"
-        )
-
-    return tuple(apps)
 
 
 def get_manifest_adapter() -> Any:

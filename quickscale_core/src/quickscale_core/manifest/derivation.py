@@ -32,6 +32,7 @@ NORMALIZATION_RULE_KINDS: frozenset[str] = frozenset(
         "strip",
         "lowercase",
         "url",
+        "path_or_absolute_url",
         "choice_map",
         "coerce_int",
         "coerce_bool",
@@ -58,7 +59,7 @@ class NormalizationRule:
         rule_type: The kind of normalization to apply.  Recognised values
             are ``"choice_map"``, ``"lowercase"``, ``"strip"``,
             ``"coerce_int"``, ``"coerce_bool"``, ``"slug"``, ``"list"``,
-            and ``"identity"``.
+            ``"url"``, ``"path_or_absolute_url"``, and ``"identity"``.
         mapping: Optional lookup table for ``choice_map`` rules.  Keys are
             raw input values; values are the canonical outputs.
         description: Human-readable explanation of what this rule does.

@@ -6,6 +6,8 @@ Verifies that raw manifest derivation dicts are correctly converted into typed
 
 from __future__ import annotations
 
+import pytest
+
 from quickscale_core.manifest.derivation import (
     ModuleDerivationSchema,
     NormalizationRule,
@@ -16,6 +18,7 @@ from quickscale_core.manifest.derivation import (
     LegacyKeyAlias,
     build_schema_from_manifest,
 )
+from quickscale_core.manifest.loader import ManifestError
 
 
 class TestBuildSchemaFromManifest:
@@ -520,3 +523,72 @@ derivation:
         assert len(mode_opt.legacy_aliases) == 0
         assert len(mode_opt.derived_settings) == 1
         assert len(mode_opt.wiring_projections) == 1
+
+    def test_yaml_path_or_absolute_url_rule_loads_and_converts(self) -> None:
+        """The loader accepts the parameter-free kind and the builder types it."""
+        yaml_content = """
+name: sample-module
+version: "1.0.0"
+
+config:
+  mutable:
+    media_url:
+      type: string
+      default: '/media/'
+      django_setting: MEDIA_URL
+      description: A description
+      validation: {}
+
+derivation:
+  option_derivations:
+    media_url:
+      normalization_rules:
+        - source_key: media_url
+          target_key: media_url
+          rule_type: path_or_absolute_url
+"""
+        from quickscale_core.manifest.loader import load_manifest
+
+        manifest = load_manifest(yaml_content, "sample-module")
+
+        schema_from_yaml = build_schema_from_manifest(
+            manifest_name="sample-module",
+            option_derivations=manifest.option_derivations,
+        )
+
+        rules = schema_from_yaml.option_derivations["media_url"].normalization_rules
+        assert len(rules) == 1
+        assert isinstance(rules[0], NormalizationRule)
+        assert rules[0].rule_type == "path_or_absolute_url"
+        assert rules[0].source_key == "media_url"
+        assert rules[0].target_key == "media_url"
+
+    def test_yaml_path_or_absolute_url_rule_refuses_parameters(self) -> None:
+        """The kind takes no parameter; a declared one fails the load."""
+        yaml_content = """
+name: sample-module
+version: "1.0.0"
+
+config:
+  mutable:
+    media_url:
+      type: string
+      default: '/media/'
+      django_setting: MEDIA_URL
+      description: A description
+      validation: {}
+
+derivation:
+  option_derivations:
+    media_url:
+      normalization_rules:
+        - source_key: media_url
+          target_key: media_url
+          rule_type: path_or_absolute_url
+          replace:
+            a: b
+"""
+        from quickscale_core.manifest.loader import load_manifest
+
+        with pytest.raises(ManifestError, match="replace.*not a supported parameter"):
+            load_manifest(yaml_content, "sample-module")

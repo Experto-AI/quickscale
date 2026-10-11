@@ -138,6 +138,20 @@ derivation:
             - quickscale_modules_notifications.urls
       description: "Notifications URL includes"
 
+  # The sender aliases every Django project expects; both track the canonical
+  # sender email the manifest owns.
+  derived_settings:
+    - setting_key: DEFAULT_FROM_EMAIL
+      derivation_type: direct
+      expression:
+        option: sender_email
+      description: "Outbound sender address tracks the notifications sender email"
+    - setting_key: SERVER_EMAIL
+      derivation_type: direct
+      expression:
+        option: sender_email
+      description: "Envelope sender address tracks the notifications sender email"
+
   option_derivations:
     sender_name:
       normalization_rules:

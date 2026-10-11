@@ -338,6 +338,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   removed, a blank secret marker renders `""`, and backups' private-remote credentials are a
   listed rule 1 exception.
 
+  **Progress:** generic validation, secret projection, all 12 adapter migrations, and harness
+  controls are implemented; storage's path-or-absolute media normalization is preserved.
+  **Remaining:** independently confirm the enforcement and IPv6 admission corrections, and
+  finish release validation before merge; unrelated baseline gate failures remain.
+
   **Surfaces:** the 12 adapters, `resolver.py`, `module_wiring.py`, decisions, the harness, and
   the coherence audit.
 - [ ] **SA267 — Bring `scripts/` under the quality thresholds without gating it.**

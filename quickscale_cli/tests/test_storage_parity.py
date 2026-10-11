@@ -9,6 +9,9 @@ operator-facing behaviour it produces.
 
 from __future__ import annotations
 
+import importlib.util
+from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
 import click
@@ -20,6 +23,27 @@ from quickscale_core.contracts.resolvers import (
     resolve_manifest_module_options,
 )
 from quickscale_core.manifest.option_validation import validate_module_options
+from quickscale_core.manifest.entry_point import load_managed_adapter_module
+from quickscale_core.contracts.module_options import sanitize_module_options
+from quickscale_core.schema.state_schema import (
+    ModuleState,
+    ProjectState,
+    QuickScaleState,
+    StateManager,
+)
+
+
+def _frozen_media_cases():
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "quickscale_core/tests/test_manifest_resolver.py"
+    )
+    spec = importlib.util.spec_from_file_location("frozen_storage_media", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module._MEDIA_URL_CASE_TABLE
+
 
 _ACCESS_KEY_OPTION = "access_key_id_env_var"
 _SECRET_KEY_OPTION = "secret_access_key_env_var"
@@ -108,11 +132,19 @@ class TestManifestDeclaration:
             rule["rule_type"] for rule in derivations["backend"]["normalization_rules"]
         ]
         assert backend_rules == ["strip", "lowercase"]
+        media_url_rules = [
+            rule["rule_type"]
+            for rule in derivations["media_url"]["normalization_rules"]
+        ]
+        assert media_url_rules == ["path_or_absolute_url"]
+        for option_name in ("public_base_url", "endpoint_url"):
+            rules = [
+                rule["rule_type"]
+                for rule in derivations[option_name]["normalization_rules"]
+            ]
+            assert rules == ["url"], option_name
         for option_name in (
-            "media_url",
-            "public_base_url",
             "bucket_name",
-            "endpoint_url",
             "region_name",
             "default_acl",
             _ACCESS_KEY_OPTION,
@@ -168,16 +200,106 @@ class TestStorageResolution:
         resolved = resolve_manifest_module_options("storage", {"backend": "gcs"})
         assert resolved["backend"] == "gcs"
 
-    def test_media_url_keeps_the_authored_form_at_config_layer(self) -> None:
-        """The canonical slashes are applied by the adapter's projection."""
+    def test_media_url_is_canonical_at_both_layers(self) -> None:
+        """Resolution and persistence share the manifest's media rule.
+
+        The ``path_or_absolute_url`` kind canonicalizes at the shared
+        normalization layer, so validation and persistence agree with the
+        adapter's projection instead of carrying the authored form.
+        """
+        from quickscale_core.contracts.module_options import sanitize_module_options
+
         resolved = resolve_manifest_module_options("storage", {"media_url": " media "})
-        assert resolved["media_url"] == "media"
+        assert resolved["media_url"] == "/media/"
+        assert sanitize_module_options("storage", {"media_url": " media "}) == {
+            "media_url": "/media/"
+        }
 
     def test_resolution_is_idempotent(self) -> None:
         resolved = resolve_manifest_module_options(
             "storage", {"backend": "s3", "media_url": "/uploads/"}
         )
         assert resolve_manifest_module_options("storage", resolved) == resolved
+
+    @pytest.mark.parametrize(
+        ("supplied", "expected"),
+        [(None, _frozen_media_cases()[0][1]), *_frozen_media_cases()],
+    )
+    def test_frozen_media_persistence_and_reapply(
+        self, tmp_path, supplied, expected
+    ) -> None:
+        options = {} if supplied is None else {"media_url": supplied}
+        persisted = {} if supplied is None else {"media_url": expected}
+        adapter = load_managed_adapter_module("storage").get_manifest_adapter()
+        assert (
+            resolve_manifest_module_options("storage", options)["media_url"] == expected
+        )
+        assert adapter(options).settings["MEDIA_URL"] == expected
+        assert sanitize_module_options("storage", options) == persisted
+        state = QuickScaleState(
+            version="1",
+            project=ProjectState(slug="demo", package="demo", theme="showcase_react"),
+            modules={"storage": ModuleState(name="storage", options=options)},
+        )
+        manager = StateManager(tmp_path)
+        manager.save(state)
+        first = manager.state_file.read_bytes()
+        loaded = manager.load()
+        assert loaded is not None
+        reapply = loaded.modules["storage"].options
+        assert reapply == persisted
+        assert sanitize_module_options("storage", reapply) == persisted
+        assert (
+            resolve_manifest_module_options("storage", reapply)["media_url"] == expected
+        )
+        assert adapter(reapply).settings["MEDIA_URL"] == expected
+        manager.save(loaded)
+        assert manager.state_file.read_bytes() == first
+
+    @pytest.mark.parametrize("options", [{}, {"media_url": ""}, {"media_url": " \t\n"}])
+    @pytest.mark.parametrize("default", ["/assets/", " assets "])
+    def test_changed_media_default_at_adapter_and_persistence_seams(
+        self, tmp_path, options, default
+    ) -> None:
+        manifest = _manifest()
+        mutable = dict(manifest.mutable_options)
+        mutable["media_url"] = replace(mutable["media_url"], default=default)
+        changed = replace(manifest, mutable_options=mutable)
+        adapter = load_managed_adapter_module("storage").get_manifest_adapter()
+        with (
+            patch(
+                "quickscale_core.manifest.entry_point.load_module_manifest",
+                return_value=changed,
+            ),
+            patch(
+                "quickscale_core.contracts.resolvers.load_module_manifest_with_fallback",
+                return_value=changed,
+            ),
+        ):
+            assert adapter(options).settings["MEDIA_URL"] == "/assets/"
+            assert (
+                resolve_manifest_module_options("storage", options)["media_url"]
+                == "/assets/"
+            )
+            expected = {"media_url": "/assets/"} if options else {}
+            assert sanitize_module_options("storage", options) == expected
+            manager = StateManager(tmp_path)
+            manager.save(
+                QuickScaleState(
+                    version="1",
+                    project=ProjectState(
+                        slug="demo", package="demo", theme="showcase_react"
+                    ),
+                    modules={"storage": ModuleState(name="storage", options=options)},
+                )
+            )
+            loaded = manager.load()
+            assert loaded is not None
+            assert loaded.modules["storage"].options == expected
+            assert (
+                adapter(loaded.modules["storage"].options).settings["MEDIA_URL"]
+                == "/assets/"
+            )
 
 
 # ===========================================================================

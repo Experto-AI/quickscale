@@ -318,12 +318,23 @@ this is the type reference.
 
 | Type | Purpose |
 |------|---------|
-| `NormalizationRule` | Declarative normalisation transformation (identity, strip, lowercase, url, choice_map, coerce_int, coerce_bool, `slug`, and `list` with nested `item_rules`) |
+| `NormalizationRule` | Declarative normalisation transformation (identity, strip, lowercase, url, `path_or_absolute_url`, choice_map, coerce_int, coerce_bool, `slug`, and `list` with nested `item_rules`) |
 | `ValidationRule` | Declarative validation constraint type (`choices`, `range`, `required`, `pattern`, `type`) used by the derivation-schema API; a manifest's checks are authored in the option's `validation` block, which uses rule 12's complete vocabulary — `choices`, `min` / `max`, `pattern`, `not_empty`, `required_when`, `any_of`, `subset_of`, `excludes`, and `intersects` — and the loader refuses a `derivation.option_derivations.<option>.validation_rules` declaration |
 | `LegacyKeyAlias` | Deprecated-key mapping type retained by the derivation-schema API; manifest alias authoring is refused at load (rule 6 — a renamed option is refused by name via `retired_options`) |
 | `DerivedSetting` | Django setting projected from one or more configuration options |
 | `OptionDerivation` | Per-option bundle of normalisation, validation, alias, and derivation rules |
 | `ModuleDerivationSchema` | Top-level container keyed by module name with per-option derivations and shared rules |
+
+Computed `DerivedSetting.expression` accepts optional `when` and
+`omit_if_blank` presence guards: `when` is a non-empty mapping from declared
+scalar options to non-empty lists of values of the matching type, with all
+conditions required; `omit_if_blank` lists declared string options and omits
+the setting if any canonical value is empty. These keys are refused on other
+derivation types and wiring projections. Omission contributes nothing; it does
+not delete a baseline setting. Storage's manifests use these guards for the two
+cloud-only deferred AWS credential aliases; its hook owns only the `STORAGES`
+composite and provider filtering. The relative-or-absolute media normalizer
+canonicalizes a substituted string default exactly as an omitted value.
 
 ### Configuration Boundaries
 

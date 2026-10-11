@@ -3,7 +3,9 @@
 SA231 moved the resolver implementation into sibling ``resolver_*`` modules.
 Every name the former ``manifest/resolver.py`` module exposed at import time
 must remain importable from the same module path; ``EXPECTED_MODULE_SURFACE``
-records that inventory.
+records that inventory.  SA263 retired the inert derivation-validation step
+(``_check_validation_rule``, ``_validate_value`` and their module), so those
+two names are deliberately outside the expected surface.
 """
 
 import quickscale_core.manifest.resolver as resolver
@@ -12,7 +14,6 @@ from quickscale_core.manifest import (
     resolver_derived,
     resolver_legacy,
     resolver_normalization,
-    resolver_validation,
     resolver_wiring,
     schema,
 )
@@ -37,7 +38,6 @@ EXPECTED_MODULE_SURFACE = frozenset(
         "_apply_list_rule",
         "_apply_normalization_rule",
         "_canonical_url",
-        "_check_validation_rule",
         "_coerce_contribution",
         "_coerce_list_items",
         "_is_empty_container",
@@ -51,7 +51,6 @@ EXPECTED_MODULE_SURFACE = frozenset(
         "_project_wiring_contribution",
         "_slugify",
         "_url_projection_issues",
-        "_validate_value",
         "annotations",
         "build_schema_from_manifest",
         "dataclass",
@@ -82,7 +81,6 @@ def test_facade_reexports_the_original_objects() -> None:
         resolver._apply_normalization_rule
         is resolver_normalization._apply_normalization_rule
     )
-    assert resolver._check_validation_rule is resolver_validation._check_validation_rule
     assert resolver._apply_legacy_transform is resolver_legacy._apply_legacy_transform
     assert (
         resolver._project_derived_setting is resolver_derived._project_derived_setting

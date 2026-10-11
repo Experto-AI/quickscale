@@ -1,12 +1,18 @@
 """Focused tests for the billing manifest adapter.
 
-Covers the post-resolution coercion hook and the sentinel contract.
+Covers the throttle-scope contribution, the off-switch transformation, the
+manifest-owned secret references, and the sentinel contract.  The generic
+manifest boundary owns every option default, normalization rule, check, and
+projection; the adapter contributes only the composite settings.
 """
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from quickscale_core.manifest import ManifestError
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_billing.adapter import (
@@ -25,96 +31,95 @@ class TestGetManifestAdapter:
         assert callable(adapter)
 
 
+class TestBillingManifestAdapterSettings:
+    """The manifest owns every canonical billing setting."""
+
+    def test_defaults_include_throttle_scopes(self) -> None:
+        spec = _billing_manifest_adapter({})
+
+        assert spec.settings["QUICKSCALE_BILLING_ENABLED"] is True
+        assert spec.settings["QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE"] == 25
+        assert spec.settings["QUICKSCALE_BILLING_PLANS_PER_PAGE"] == 25
+        assert spec.settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {
+                "quickscale_billing_checkout": "30/hour",
+                "quickscale_billing_portal": "30/hour",
+            },
+        }
+
+    @pytest.mark.parametrize(
+        ("option_name", "value"),
+        [
+            ("transactions_per_page", "10"),
+            ("plans_per_page", 0),
+            ("enabled", 1),
+            ("currency", 999),
+            ("api_rate_limit", "no-rate"),
+        ],
+    )
+    def test_wrong_shaped_values_are_refused(
+        self, option_name: str, value: object
+    ) -> None:
+        """A raw value of the wrong shape is refused, never coerced."""
+        with pytest.raises(ManifestError, match="modules.billing."):
+            _billing_manifest_adapter({option_name: value})
+
+    def test_canonical_rate_reaches_both_scopes(self) -> None:
+        spec = _billing_manifest_adapter({"api_rate_limit": " 10/minute "})
+
+        assert spec.settings["QUICKSCALE_BILLING_API_RATE_LIMIT"] == "10/minute"
+        assert spec.settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {
+                "quickscale_billing_checkout": "10/minute",
+                "quickscale_billing_portal": "10/minute",
+            },
+        }
+
+
 class TestBillingPostHook:
-    """_billing_post_hook — bool/string coercions."""
+    """_billing_post_hook — off-switch behaviour and throttle scopes."""
 
-    def test_coerces_bool_enabled(self) -> None:
-        """QUICKSCALE_BILLING_ENABLED must be coerced to bool."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BILLING_ENABLED": 1,
-                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
-            },
-        )
-        result = _billing_post_hook(spec, {"enabled": True})
-        assert result.settings["QUICKSCALE_BILLING_ENABLED"] is True
-
-    def test_coerces_bool_enabled_from_falsy_int(self) -> None:
-        """Falsy int values produce False."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BILLING_ENABLED": 0,
-                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
-            },
-        )
-        result = _billing_post_hook(spec, {"enabled": True})
-        assert result.settings["QUICKSCALE_BILLING_ENABLED"] is False
-
-    def test_coerces_str_keys(self) -> None:
-        """String env-var name settings must be coerced to str."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BILLING_ENABLED": True,
-                "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR": 123,
-                "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR": 456,
-                "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR": 789,
-                "QUICKSCALE_BILLING_CURRENCY": 999,
-                "QUICKSCALE_BILLING_API_RATE_LIMIT": 3030,
-            },
-        )
-        result = _billing_post_hook(spec, {"enabled": True})
-        assert result.settings["QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR"] == "123"
-        assert result.settings["QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR"] == "456"
-        assert result.settings["QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR"] == "789"
-        assert result.settings["QUICKSCALE_BILLING_CURRENCY"] == "999"
-        assert result.settings["QUICKSCALE_BILLING_API_RATE_LIMIT"] == "3030"
-
-    def test_preserves_non_setting_fields(self) -> None:
-        """Fields other than settings must pass through unchanged."""
+    def test_enabled_returns_the_assembled_spec_with_scopes(self) -> None:
         spec = ModuleWiringSpec(
             apps=("quickscale_modules_billing",),
             middleware=("some.middleware",),
-            settings={
-                "QUICKSCALE_BILLING_ENABLED": 0,
-                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
-            },
+            settings={"QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour"},
         )
         result = _billing_post_hook(spec, {"enabled": True})
+
         assert result.apps == ("quickscale_modules_billing",)
         assert result.middleware == ("some.middleware",)
-
-    def test_missing_optional_str_key_does_not_raise(self) -> None:
-        """Optional string keys that are absent are silently skipped."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BILLING_ENABLED": True,
-                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
+        assert result.settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {
+                "quickscale_billing_checkout": "30/hour",
+                "quickscale_billing_portal": "30/hour",
             },
-        )
-        result = _billing_post_hook(spec, {"enabled": True})
-        assert result.settings["QUICKSCALE_BILLING_ENABLED"] is True
+        }
 
-    def test_coerces_per_page_settings_to_int(self) -> None:
-        """The list page sizes (rule 9) are forced to int."""
+    def test_disabled_module_keeps_only_the_webhook_mount(self) -> None:
+        """Rule 1 (D3)/rule 26: off unmounts pages and APIs but keeps webhooks."""
         spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BILLING_ENABLED": True,
-                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
-                "QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE": "10",
-                "QUICKSCALE_BILLING_PLANS_PER_PAGE": "20",
+            apps=("rest_framework", "quickscale_modules_billing"),
+            settings={"QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour"},
+            pre_home_url_includes=(),
+            url_includes=(("billing/", "quickscale_modules_billing.urls"),),
+        )
+        result = _billing_post_hook(spec, {"enabled": False})
+
+        assert result.url_includes == (
+            ("billing/", "quickscale_modules_billing.webhook_urls"),
+        )
+        assert result.pre_home_url_includes == ()
+        assert result.settings["REST_FRAMEWORK"] == {
+            "DEFAULT_THROTTLE_RATES": {
+                "quickscale_billing_checkout": "30/hour",
+                "quickscale_billing_portal": "30/hour",
             },
-        )
-        result = _billing_post_hook(spec, {"enabled": True})
-        assert result.settings["QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE"] == 10
-        assert isinstance(
-            result.settings["QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE"], int
-        )
-        assert result.settings["QUICKSCALE_BILLING_PLANS_PER_PAGE"] == 20
-        assert isinstance(result.settings["QUICKSCALE_BILLING_PLANS_PER_PAGE"], int)
+        }
 
 
 class TestBillingSecretProjection:
-    """Rule 35: the adapter projects each Stripe secret through `__QS_ENV__`."""
+    """Rule 35: the generic boundary projects each Stripe secret reference."""
 
     def test_projects_default_env_var_names(self) -> None:
         """Manifest defaults project the three Stripe secrets."""
@@ -152,18 +157,12 @@ class TestBillingSecretProjection:
 
     def test_blank_env_var_name_projects_empty_value(self) -> None:
         """A blank option name projects an empty value, never a dangling reference."""
-        spec = _billing_post_hook(
-            ModuleWiringSpec(
-                settings={
-                    "QUICKSCALE_BILLING_ENABLED": True,
-                    "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR": "   ",
-                    "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR": "",
-                    "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR": "OPS_WEBHOOK_SECRET",
-                    "QUICKSCALE_BILLING_CURRENCY": "usd",
-                    "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
-                },
-            ),
-            {"enabled": True},
+        spec = _billing_manifest_adapter(
+            {
+                "publishable_key_env_var": "   ",
+                "secret_key_env_var": "",
+                "webhook_secret_env_var": "OPS_WEBHOOK_SECRET",
+            }
         )
 
         assert spec.settings["QUICKSCALE_BILLING_PUBLISHABLE_KEY"] == ""

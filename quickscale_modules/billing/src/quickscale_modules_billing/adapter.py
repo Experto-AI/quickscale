@@ -21,106 +21,49 @@ from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spe
 def _billing_post_hook(
     spec: ModuleWiringSpec, resolved: dict[str, Any]
 ) -> ModuleWiringSpec:
-    """Apply billing-specific bool/int/string coercions and DRF throttle scopes.
+    """Contribute billing's throttle scopes and apply its off-switch behaviour.
 
-    Reproduces the legacy coercion behaviour that the declarative resolver
-    cannot express: ``QUICKSCALE_BILLING_ENABLED`` is forced to ``bool``,
-    the per-page list settings are forced to ``int``, and env-var name
-    settings are forced to ``str``.  It also contributes
-    the stemmed billing throttle scopes at the module's ``api_rate_limit``
-    option value, which the generated settings merge over their own
-    ``user``/``anon`` defaults.
+    Rule 32 — every Stripe-calling billing endpoint carries an explicit scope
+    stemmed as ``quickscale_billing_<purpose>``, and the rate for those scopes
+    is the module's ``api_rate_limit`` option, contributed here for rule 30's
+    merge.  The option's canonical value and the Stripe secret references
+    arrive from the manifest boundary; the hook never re-coerces or re-reads a
+    raw option.
+
+    Rule 1 (D3): off keeps the module installed — app, middleware, settings,
+    and admin — and unmounts its public pages and APIs.  The Stripe webhook
+    stays mounted through its own URLconf and answers the module's 404
+    refusal (rule 26), so provider retries get a clean answer.
     """
     settings = dict(spec.settings)
-
-    # Legacy bool coercion on required enabled flag.
-    # The key must already be present (AppConfig.ready() enforces it).
-    settings["QUICKSCALE_BILLING_ENABLED"] = bool(
-        settings["QUICKSCALE_BILLING_ENABLED"]
-    )
-
-    # Legacy int coercions on the list page sizes (rule 9).  Like the string
-    # coercions below, an absent key is skipped: the generated settings always
-    # carry it, and the startup check refuses a missing declared setting.
-    for int_key in (
-        "QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE",
-        "QUICKSCALE_BILLING_PLANS_PER_PAGE",
-    ):
-        if int_key in settings:
-            settings[int_key] = int(settings[int_key])
-
-    # Legacy str() coercion on string fields.
-    for str_key in (
-        "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
-        "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
-        "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
-        "QUICKSCALE_BILLING_CURRENCY",
-        "QUICKSCALE_BILLING_API_RATE_LIMIT",
-    ):
-        if str_key in settings:
-            settings[str_key] = str(settings[str_key])
-
-    # Rule 35 — each Stripe secret reaches module code as a setting that
-    # renders the environment variable its `_ENV_VAR` option names (core's
-    # `__QS_ENV__` projection), as analytics and notifications do.  A blank
-    # option name projects an empty value, never a dangling reference.
-    for env_var_option, secret_setting in (
-        (
-            "QUICKSCALE_BILLING_PUBLISHABLE_KEY_ENV_VAR",
-            "QUICKSCALE_BILLING_PUBLISHABLE_KEY",
-        ),
-        (
-            "QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR",
-            "QUICKSCALE_BILLING_SECRET_KEY",
-        ),
-        (
-            "QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR",
-            "QUICKSCALE_BILLING_WEBHOOK_SECRET",
-        ),
-    ):
-        env_var_name = str(settings.get(env_var_option, "")).strip()
-        settings[secret_setting] = f"__QS_ENV__:{env_var_name}" if env_var_name else ""
-
-    # Rule 32 — every Stripe-calling billing endpoint carries an explicit
-    # scope stemmed as quickscale_billing_<purpose>, and the rate for those
-    # scopes is the module's _RATE_LIMIT option, contributed here for rule
-    # 30's merge. The default 30/hour per client leaves room for retries while
-    # bounding a checkout loop that would otherwise exhaust the Stripe rate
-    # limit for every tenant.
-    api_rate_limit = str(settings["QUICKSCALE_BILLING_API_RATE_LIMIT"]).strip()
+    api_rate_limit = settings["QUICKSCALE_BILLING_API_RATE_LIMIT"]
     settings["REST_FRAMEWORK"] = {
         "DEFAULT_THROTTLE_RATES": {
             "quickscale_billing_checkout": api_rate_limit,
             "quickscale_billing_portal": api_rate_limit,
         },
     }
-
-    # Rule 1 (D3): off keeps the module installed — app, middleware,
-    # settings, and admin — and unmounts its public pages and APIs.  The
-    # Stripe webhook stays mounted through its own URLconf and answers the
-    # module's 404 refusal (rule 26), so provider retries get a clean answer.
-    if not bool(resolved["enabled"]):
-        webhook_includes = tuple(
-            (prefix, "quickscale_modules_billing.webhook_urls")
-            for prefix, target in spec.url_includes
-            if target == "quickscale_modules_billing.urls"
-        )
+    if resolved["enabled"]:
         return ModuleWiringSpec(
             apps=spec.apps,
             middleware=spec.middleware,
             settings=settings,
-            pre_home_url_includes=(),
-            url_includes=webhook_includes,
-            spa_routes=(),
+            pre_home_url_includes=spec.pre_home_url_includes,
+            url_includes=spec.url_includes,
             managed_files=spec.managed_files,
         )
-
+    webhook_includes = tuple(
+        (prefix, "quickscale_modules_billing.webhook_urls")
+        for prefix, target in spec.url_includes
+        if target == "quickscale_modules_billing.urls"
+    )
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,
         settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
+        pre_home_url_includes=(),
+        url_includes=webhook_includes,
+        spa_routes=(),
         managed_files=spec.managed_files,
     )
 
@@ -132,9 +75,10 @@ def _billing_manifest_adapter(
 ) -> ModuleWiringSpec:
     """Build a ModuleWiringSpec for the billing module via the manifest path.
 
-    Uses the generic manifest-driven path that reads derivation rules from the
-    billing ``module.yml`` manifest, then applies module-specific bool/string
-    coercions via the post-resolution hook.
+    Uses the generic manifest-driven path that reads every declared default,
+    normalization rule, check, projection, and secret reference from the
+    billing ``module.yml`` manifest, then contributes the throttle scopes and
+    the off-switch URL transformation via the post-resolution hook.
 
     Args:
         options: Module options (e.g. from ``quickscale.yml``).
@@ -144,6 +88,7 @@ def _billing_manifest_adapter(
     Returns:
         A :class:`~quickscale_core.module_wiring.ModuleWiringSpec` for billing.
     """
+    del project_package
     return build_generic_manifest_spec(
         "billing",
         options,

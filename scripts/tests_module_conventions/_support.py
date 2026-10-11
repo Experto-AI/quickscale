@@ -23,12 +23,33 @@ GOLDEN_MANIFEST: dict[str, object] = {
                 "description": "Enable the demo module.",
                 "validation": {},
             },
+            "backend": {
+                "type": "string",
+                "default": "local",
+                "django_setting": "QUICKSCALE_DEMO_BACKEND",
+                "description": "Demo backend selector.",
+                "validation": {"choices": ["local", "remote"]},
+            },
             "api_rate_limit": {
                 "type": "string",
                 "default": "5/hour",
                 "django_setting": "QUICKSCALE_DEMO_API_RATE_LIMIT",
                 "description": "Throttle rate.",
                 "validation": {"pattern": r"^\d+/(second|minute|hour|day)$"},
+            },
+            "cdn_url": {
+                "type": "string",
+                "default": "/demo/",
+                "django_setting": "QUICKSCALE_DEMO_CDN_URL",
+                "description": "Relative-or-absolute demo URL.",
+                "validation": {},
+            },
+            "marketing_host": {
+                "type": "string",
+                "default": "",
+                "django_setting": "QUICKSCALE_DEMO_MARKETING_HOST",
+                "description": "Optional absolute marketing host.",
+                "validation": {"pattern": r"^(?:https?://[^\s]+)?$"},
             },
         },
         "immutable": {},
@@ -43,6 +64,28 @@ GOLDEN_MANIFEST: dict[str, object] = {
                 "expression": {"value": [["demo/", "quickscale_modules_demo.urls"]]},
             },
         ],
+        "option_derivations": {
+            "cdn_url": {
+                "normalization_rules": [
+                    {
+                        "source_key": "cdn_url",
+                        "target_key": "cdn_url",
+                        "rule_type": "path_or_absolute_url",
+                        "description": "Canonical relative-or-absolute demo URL.",
+                    },
+                ],
+            },
+            "marketing_host": {
+                "normalization_rules": [
+                    {
+                        "source_key": "marketing_host",
+                        "target_key": "marketing_host",
+                        "rule_type": "url",
+                        "description": "Canonical absolute marketing host.",
+                    },
+                ],
+            },
+        },
     },
 }
 
@@ -72,7 +115,10 @@ A demo module.
 
 ## Configuration
 - `enabled` - enable the demo module.
+- `backend` - demo backend selector.
 - `api_rate_limit` - throttle rate.
+- `cdn_url` - relative-or-absolute demo URL.
+- `marketing_host` - optional absolute marketing host.
 
 ## Public surface
 Nothing.
@@ -167,7 +213,10 @@ def _golden_module(name: str = "demo") -> Module:
             "settings.py": (
                 "SECRET_KEY = 'test'\n"
                 "QUICKSCALE_DEMO_ENABLED = True\n"
+                "QUICKSCALE_DEMO_BACKEND = 'local'\n"
                 "QUICKSCALE_DEMO_API_RATE_LIMIT = '5/hour'\n"
+                "QUICKSCALE_DEMO_CDN_URL = '/demo/'\n"
+                "QUICKSCALE_DEMO_MARKETING_HOST = ''\n"
             ),
             "test_apps.py": (
                 '"""App configuration behaviour."""\n\n\ndef test_config():\n    assert True\n'

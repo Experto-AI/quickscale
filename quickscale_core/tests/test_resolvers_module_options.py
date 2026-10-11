@@ -283,14 +283,20 @@ class TestNotificationsAdapterPredicates:
     def test_runtime_backend_is_none_when_disabled(self) -> None:
         assert notifications_runtime_email_backend({"enabled": False}) is None
 
-    def test_null_reply_to_email_wires_blank(self) -> None:
-        """A null state value wires a blank setting, never the string "None"."""
-        spec = get_notifications_adapter()({"reply_to_email": None})
-        assert spec.settings["QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL"] == ""
+    def test_null_reply_to_email_is_refused(self) -> None:
+        """A null option value is refused as the wrong raw type, never coerced."""
+        from quickscale_core.manifest import ManifestError
+
+        with pytest.raises(
+            ManifestError, match="QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL"
+        ):
+            get_notifications_adapter()({"reply_to_email": None})
 
     def test_adapter_refuses_a_retired_key(self) -> None:
         """The adapter path refuses a retired raw-secret key, never drops it."""
-        with pytest.raises(ConfigValidationError, match="webhook_secret"):
+        from quickscale_core.manifest import ManifestError
+
+        with pytest.raises(ManifestError, match="webhook_secret"):
             get_notifications_adapter()({"webhook_secret": "whsec_raw"})
 
 

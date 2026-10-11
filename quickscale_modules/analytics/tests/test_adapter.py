@@ -1,4 +1,10 @@
-"""Focused tests for the analytics manifest adapter."""
+"""Focused tests for the analytics manifest adapter.
+
+The generic manifest boundary owns analytics' option defaults, normalization,
+checks, and secret projections; these tests pin the adapter's remaining
+contract — the off-switch transformation, the manifest-owned settings
+surface, and the fail-closed boundary behaviour.
+"""
 
 from __future__ import annotations
 
@@ -16,62 +22,36 @@ from quickscale_modules_analytics.adapter import (
 )
 
 
-def _settings(**overrides: object) -> dict[str, object]:
-    settings: dict[str, object] = {
-        "QUICKSCALE_ANALYTICS_ENABLED": True,
-        "QUICKSCALE_ANALYTICS_PROVIDER": "posthog",
-        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": "POSTHOG_API_KEY",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": "POSTHOG_HOST",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST": "https://us.i.posthog.com",
-    }
-    settings.update(overrides)
-    return settings
-
-
 def test_get_manifest_adapter_returns_callable() -> None:
     assert callable(get_manifest_adapter())
 
 
 @pytest.mark.parametrize(
-    "key",
+    "options",
     [
-        "QUICKSCALE_ANALYTICS_PROVIDER",
-        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR",
-        "QUICKSCALE_ANALYTICS_POSTHOG_HOST",
+        {"provider": ""},
+        {"provider": "unknown"},
+        {"posthog_host": ""},
+        {"posthog_api_key_env_var": "lower_case"},
+        {"anonymous_by_default": "yes"},
     ],
 )
-def test_empty_required_setting_raises_manifest_error(key: str) -> None:
-    with pytest.raises(ManifestError, match=key):
-        _analytics_post_hook(
-            ModuleWiringSpec(settings=_settings(**{key: ""})),
-            {"enabled": True},
-        )
+def test_invalid_supplied_options_are_refused(options: dict[str, object]) -> None:
+    """Invalid values fail closed at the manifest boundary, before any hook."""
+    with pytest.raises(ManifestError, match="modules.analytics."):
+        _analytics_manifest_adapter(dict(options))
 
 
 def test_disabled_analytics_keeps_apps_and_drops_public_urls() -> None:
     """Rule 1 (D3): off keeps apps/middleware/settings, drops URLs."""
-    settings = _settings(
-        QUICKSCALE_ANALYTICS_ENABLED=False,
-        QUICKSCALE_ANALYTICS_PROVIDER="",
-    )
-    result = _analytics_post_hook(
-        ModuleWiringSpec(
-            apps=("quickscale_modules_analytics",),
-            middleware=("x.middleware.TrackMiddleware",),
-            url_includes=(("analytics/", "quickscale_modules_analytics.urls"),),
-            settings=settings,
-        ),
-        {"enabled": False},
-    )
+    result = _analytics_manifest_adapter({"enabled": False})
+
     assert result.apps == ("quickscale_modules_analytics",)
-    assert result.middleware == ("x.middleware.TrackMiddleware",)
     assert result.url_includes == ()
     assert result.pre_home_url_includes == ()
     assert result.spa_routes == ()
+    assert result.settings["QUICKSCALE_ANALYTICS_ENABLED"] is False
     # The settings surface is retained, including the secret projections.
-    for key in settings:
-        assert key in result.settings
     assert (
         result.settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"]
         == "__QS_ENV__:POSTHOG_API_KEY"
@@ -82,11 +62,8 @@ def test_disabled_analytics_keeps_apps_and_drops_public_urls() -> None:
     )
 
 
-def test_enabled_post_hook_projects_secret_settings_from_env_var_names() -> None:
-    result = _analytics_post_hook(
-        ModuleWiringSpec(settings=_settings()),
-        {"enabled": True},
-    )
+def test_manifest_projects_secret_settings_from_env_var_names() -> None:
+    result = _analytics_manifest_adapter({})
 
     assert (
         result.settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"]
@@ -98,15 +75,12 @@ def test_enabled_post_hook_projects_secret_settings_from_env_var_names() -> None
     )
 
 
-def test_enabled_post_hook_projects_configured_env_var_names() -> None:
-    result = _analytics_post_hook(
-        ModuleWiringSpec(
-            settings=_settings(
-                QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR="OPS_POSTHOG_KEY",
-                QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR="OPS_POSTHOG_HOST",
-            )
-        ),
-        {"enabled": True},
+def test_manifest_projects_configured_env_var_names() -> None:
+    result = _analytics_manifest_adapter(
+        {
+            "posthog_api_key_env_var": "OPS_POSTHOG_KEY",
+            "posthog_host_env_var": "OPS_POSTHOG_HOST",
+        }
     )
 
     assert (
@@ -119,19 +93,22 @@ def test_enabled_post_hook_projects_configured_env_var_names() -> None:
     )
 
 
-def test_post_hook_coerces_settings() -> None:
-    result = _analytics_post_hook(
-        ModuleWiringSpec(
-            apps=("analytics",),
-            settings=_settings(
-                QUICKSCALE_ANALYTICS_ENABLED=1,
-                QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG=0,
-            ),
-        ),
-        {"enabled": True},
-    )
-    assert result.settings["QUICKSCALE_ANALYTICS_ENABLED"] is True
+def test_manifest_owns_canonical_types() -> None:
+    """Canonical boolean values survive the adapter without re-coercion."""
+    result = _analytics_manifest_adapter({"exclude_debug": False})
+
     assert result.settings["QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG"] is False
+
+
+def test_post_hook_only_transforms_when_disabled() -> None:
+    """The hook returns the assembled spec unchanged while enabled."""
+    spec = ModuleWiringSpec(
+        apps=("analytics",),
+        url_includes=(("analytics/", "quickscale_modules_analytics.urls"),),
+        settings={"QUICKSCALE_ANALYTICS_ENABLED": True},
+    )
+
+    assert _analytics_post_hook(spec, {"enabled": True}) is spec
 
 
 @patch("quickscale_modules_analytics.adapter.build_generic_manifest_spec")
