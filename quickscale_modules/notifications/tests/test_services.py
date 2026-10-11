@@ -694,18 +694,25 @@ def test_dispatch_notification_message_rejects_when_runtime_disabled(
     )
 
 
+def _resend_delivered_payload(delivery: NotificationDelivery) -> dict[str, object]:
+    """Return a Resend-shaped delivery event payload for *delivery*."""
+    return {
+        "type": "email.delivered",
+        "created_at": "2026-02-22T23:41:12.126Z",
+        "data": {
+            "email_id": delivery.provider_message_id,
+            "to": [delivery.recipient_email],
+        },
+    }
+
+
 @pytest.mark.django_db
 def test_webhook_ingestion_rejects_when_runtime_disabled(delivery_for_webhook) -> None:
-    payload = {
-        "id": "evt-disabled",
-        "type": "email.delivered",
-        "provider_message_id": delivery_for_webhook.provider_message_id,
-        "recipient": delivery_for_webhook.recipient_email,
-    }
-    body = json.dumps(payload).encode("utf-8")
+    body = json.dumps(_resend_delivered_payload(delivery_for_webhook)).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
         secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
+        svix_id="msg_disabled",
         timestamp=int(time.time()),
     )
 
@@ -713,8 +720,9 @@ def test_webhook_ingestion_rejects_when_runtime_disabled(delivery_for_webhook) -
         with pytest.raises(NotificationDisabledError, match="disabled"):
             ingest_webhook_event(
                 body=body,
-                signature=headers["X-QuickScale-Notifications-Signature"],
-                timestamp=headers["X-QuickScale-Notifications-Timestamp"],
+                svix_id=headers["svix-id"],
+                svix_timestamp=headers["svix-timestamp"],
+                svix_signature=headers["svix-signature"],
             )
 
     delivery_for_webhook.refresh_from_db()
@@ -728,64 +736,57 @@ def test_webhook_ingestion_rejects_when_runtime_disabled(delivery_for_webhook) -
 
 @pytest.mark.django_db
 def test_webhook_signature_rejection_is_explicit(delivery_for_webhook) -> None:
-    payload = {
-        "id": "evt-1",
-        "type": "email.delivered",
-        "provider_message_id": delivery_for_webhook.provider_message_id,
-        "recipient": delivery_for_webhook.recipient_email,
-    }
-    body = json.dumps(payload).encode("utf-8")
+    body = json.dumps(_resend_delivered_payload(delivery_for_webhook)).encode("utf-8")
 
     with pytest.raises(NotificationWebhookSignatureError, match="invalid"):
         ingest_webhook_event(
             body=body,
-            signature="sha256=invalid",
-            timestamp=str(int(time.time())),
+            svix_id="msg_invalid",
+            svix_timestamp=str(int(time.time())),
+            svix_signature="v1,invalid",
         )
 
 
 @pytest.mark.django_db
 def test_webhook_signature_rejects_expired_timestamps(delivery_for_webhook) -> None:
-    payload = {
-        "id": "evt-expired",
-        "type": "email.delivered",
-        "provider_message_id": delivery_for_webhook.provider_message_id,
-        "recipient": delivery_for_webhook.recipient_email,
-    }
-    body = json.dumps(payload).encode("utf-8")
+    body = json.dumps(_resend_delivered_payload(delivery_for_webhook)).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
         secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
+        svix_id="msg_expired",
         timestamp=int(time.time()) - 1_000,
     )
 
     with pytest.raises(NotificationWebhookSignatureError, match="expired"):
         ingest_webhook_event(
             body=body,
-            signature=headers["X-QuickScale-Notifications-Signature"],
-            timestamp=headers["X-QuickScale-Notifications-Timestamp"],
+            svix_id=headers["svix-id"],
+            svix_timestamp=headers["svix-timestamp"],
+            svix_signature=headers["svix-signature"],
         )
 
 
 @pytest.mark.django_db
 def test_webhook_ingestion_requires_provider_message_id(delivery_for_webhook) -> None:
     payload = {
-        "id": "evt-missing-id",
         "type": "email.delivered",
-        "recipient": delivery_for_webhook.recipient_email,
+        "created_at": "2026-02-22T23:41:12.126Z",
+        "data": {"to": [delivery_for_webhook.recipient_email]},
     }
     body = json.dumps(payload).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
         secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
+        svix_id="msg_missing_id",
         timestamp=int(time.time()),
     )
 
     with pytest.raises(Exception, match="provider_message_id"):
         ingest_webhook_event(
             body=body,
-            signature=headers["X-QuickScale-Notifications-Signature"],
-            timestamp=headers["X-QuickScale-Notifications-Timestamp"],
+            svix_id=headers["svix-id"],
+            svix_timestamp=headers["svix-timestamp"],
+            svix_signature=headers["svix-signature"],
         )
 
 
@@ -793,28 +794,25 @@ def test_webhook_ingestion_requires_provider_message_id(delivery_for_webhook) ->
 def test_webhook_ingestion_is_replay_safe_and_updates_delivery_status(
     delivery_for_webhook,
 ) -> None:
-    payload = {
-        "id": "evt-delivered-1",
-        "type": "email.delivered",
-        "provider_message_id": delivery_for_webhook.provider_message_id,
-        "recipient": delivery_for_webhook.recipient_email,
-    }
-    body = json.dumps(payload).encode("utf-8")
+    body = json.dumps(_resend_delivered_payload(delivery_for_webhook)).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
         secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
+        svix_id="msg_delivered_1",
         timestamp=int(time.time()),
     )
 
     first_result = ingest_webhook_event(
         body=body,
-        signature=headers["X-QuickScale-Notifications-Signature"],
-        timestamp=headers["X-QuickScale-Notifications-Timestamp"],
+        svix_id=headers["svix-id"],
+        svix_timestamp=headers["svix-timestamp"],
+        svix_signature=headers["svix-signature"],
     )
     second_result = ingest_webhook_event(
         body=body,
-        signature=headers["X-QuickScale-Notifications-Signature"],
-        timestamp=headers["X-QuickScale-Notifications-Timestamp"],
+        svix_id=headers["svix-id"],
+        svix_timestamp=headers["svix-timestamp"],
+        svix_signature=headers["svix-signature"],
     )
 
     delivery_for_webhook.refresh_from_db()

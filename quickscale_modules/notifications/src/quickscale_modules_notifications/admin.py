@@ -152,7 +152,7 @@ class NotificationSettingsAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     def webhook_notice(self, obj: NotificationSettings) -> str:
         del obj
         return (
-            "Webhook requests must include a valid shared-secret signature and are "
+            "Webhook requests must carry Resend's valid Svix signature and are "
             "processed idempotently to avoid duplicate event corruption."
         )
 

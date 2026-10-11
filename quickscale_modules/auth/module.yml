@@ -49,9 +49,10 @@ config:
       validation:
         choices: ["email", "username", "both"]
 
-# Dependencies required by this module
+# Dependencies required by this module (bare names; specs live in pyproject.toml)
 dependencies:
-  - django-allauth>=65.18.0,<66.0.0
+  - django-allauth
+  - quickscale-core
 
 # Retired option keys are refused by name with the message declared here.
 retired_options:
@@ -77,6 +78,12 @@ derivation:
           - allauth
           - allauth.account
       description: "Auth Django app labels"
+    - wiring_field: middleware
+      derivation_type: static
+      expression:
+        value:
+          - allauth.account.middleware.AccountMiddleware
+      description: "Auth middleware (allauth account)"
     - wiring_field: url_includes
       derivation_type: static
       expression:

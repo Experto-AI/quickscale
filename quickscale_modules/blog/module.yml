@@ -77,9 +77,10 @@ required_modules:
   - storage
 
 dependencies:
-  - djangorestframework>=3.17.2
-  - django-markdownx>=4.0.11
-  - Pillow>=12.3.0,<13.0.0
+  - djangorestframework
+  - django-markdownx
+  - Pillow
+  - quickscale-core
 
 # Retired option keys are refused by name with the message declared here.
 retired_options:

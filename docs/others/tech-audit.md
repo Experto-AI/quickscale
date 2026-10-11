@@ -221,9 +221,9 @@ findings.
 **Residual risk.**
 - No PostgreSQL instance was used, so RLS and lock semantics were reasoned from code.
 - No live Stripe, Resend, or PostHog calls were made in this pass.
-  `notifications-webhook-rejects-resend` rests on the published Resend/Svix contract (see §13);
   `billing-checkout-relative-redirect-urls` was later resolved with a live Stripe test-mode
-  checkout (§15).
+  checkout (§15), and `notifications-webhook-rejects-resend` was resolved against the published
+  Resend/Svix contract with the vendor's documented vector (§15).
 - Out-of-repo controls were not visible: Railway edge, PostHog project ACLs, Stripe
   payment-method settings, and GitHub org token defaults.
 - devtools and the gate scripts were not swept for defects.
@@ -238,12 +238,6 @@ Silence on the skipped areas does not mean they are clean.
 schema: tech-audit/v6
 audited: 2fd8637f2d163c65a873ce74337e4f5d88b9ba99
 items:
-  - {id: notifications-webhook-rejects-resend, status: open, severity: S3, category: IX,
-     title: "Notifications webhook accepts only a custom signing contract Resend never sends",
-     effort: Medium, confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/views.py,
-               quickscale_modules/notifications/src/quickscale_modules_notifications/_webhooks.py],
-     depends_on: [], chain: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
   - {id: forms-notification-status-misreported, status: open, severity: S4, category: VI,
      effort: Trivial, confidence: High, reality: generated-app,
      anchors: [quickscale_modules/forms/src/quickscale_modules_forms/_email.py],
@@ -277,39 +271,15 @@ items:
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 1 · S4 — 1 · total 2 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 1 · total 1 open. Watchlist: 7.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
-| `notifications-webhook-rejects-resend` | S3 | IX | Webhook accepts only a signing contract Resend never sends | Medium | High | new |
 | `forms-notification-status-misreported` | S4 | VI | Submission reports `queued` when notifications are disabled | Trivial | High | new |
 
 ---
 
 ## 4. Findings
-
-### S3 findings (compact)
-
-- **`notifications-webhook-rejects-resend`** · S3 (Moderate × Common) · R2 ·
-  `notifications/views.py:30-40`, `_webhooks.py:68-85`, `:112-135`, `services.py:236-270`,
-  `README.md:100-102`.
-  - **Defect:** The endpoint requires `X-QuickScale-Notifications-Signature`/`-Timestamp`, a hex
-    HMAC over `"{ts}.{body}"` with the raw secret, and top-level `email_id`/`recipient` keys.
-    Resend (via Svix) sends:
-    - `svix-id`/`svix-timestamp`/`svix-signature` with a base64 HMAC over `"{id}.{ts}.{body}"`;
-    - a base64 `whsec_…` secret;
-    - `data.email_id` and a `data.to` array.
-
-    The README tells operators to point Resend directly at this endpoint. Every real delivery
-    event is refused with 400 `webhook_signature_invalid`. Delivered, bounced, and complained
-    statuses never update, and Resend eventually disables the endpoint. The module's tests sign
-    with the module's own helper, so they cannot catch it.
-  - **Fix:** Verify Svix headers per Resend's spec (decode the `whsec_` secret, accept any of the
-    space-separated `v1,` signatures, compare in constant time, keep the TTL window). Map `type`,
-    `data.email_id`, and `data.to[0]`, with `svix-id` as the provider event ID. Add a contract test
-    built from Resend's documented payload. Alternatively, document the relay that re-signs.
-  - **Effort:** Medium. **Confidence:** High (vendor contract confirmed, §1).
-  - **Age:** since `1a143fce` (v0.78.0).
 
 ### S4 findings (one line each)
 
@@ -328,7 +298,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 |---|---|---|---|---|---|---|---|---|---|
 | `StripeWebhookView` | Stripe SDK signature over raw body | n/a | named-release gate | JSON | none by rule 26 | SDK default (watch `single-sync-worker-vendor-calls`) | advisory mutex + unique `WebhookEvent` | rule 9 | `WebhookEvent` row |
 | Billing JSON views | session (CSRF) | owner via orgs' `HasOrgRole(OrgRole.OWNER)` | DRF serializers | JSON | `quickscale_billing_*` scopes | SDK default | Stripe idempotency keys; unknown-outcome reservations reconcile against the provider | rule 9 | reservation rows; return URLs built from the request |
-| `NotificationWebhookView` | custom HMAC: `notifications-webhook-rejects-resend` | n/a | required fields | JSON | none by rule 26 | n/a | idempotency key | rule 9 | delivery event row |
+| `NotificationWebhookView` | Svix signature over raw body (`svix-id`/`svix-timestamp`/`svix-signature`, decoded `whsec_` secret) | n/a | required fields | JSON | none by rule 26 | n/a | `svix-id` replay key | rule 9 | delivery event row |
 | Orgs JSON API | session (CSRF) | `min_org_role` on the org it acts on | `JSONParser` + forms | JSON | invite sends: `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization), both charged only after the role gate and the form's locked eligibility checks pass; other endpoints: DRF `user` default | n/a | n/a | rule 9 | n/a |
 | Orgs HTML views | `LoginRequiredMixin` | `SaasModeRequiredMixin` + `OrgRoleMixin`; the route slug wins over VIEW-AS | Django forms | autoescape | invite sends: `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization), both charged only after the role gate and the form's locked eligibility checks pass; pending cap per organization | n/a | n/a | Django | n/a |
 | Invitation accept | login | token + normalized email match | UUID | autoescape | n/a | n/a | `select_for_update` | Django | n/a |
@@ -381,7 +351,11 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
    carry the `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per
    organization) scopes with a per-organization pending cap, and management pages resolve their
    organization from the route slug.
-5. **`notifications-webhook-rejects-resend`.** Independent.
+5. **Notifications webhook (landed).** `notifications-webhook-rejects-resend` is fixed (SA255):
+   the endpoint verifies Resend's Svix signature over the raw body — any advertised `v1`
+   candidate, decoded `whsec_` secret, `webhook_ttl_seconds` window — maps `type`, `data.email_id`,
+   and `data.to[0]`, and deduplicates by `svix-id`; a contract test built from the vendor's
+   documented payload and signature covers it.
 6. **CLI deploy (landed).** `deploy-settings-module-from-service-name` and
    `deploy-runtime-url-unquoted-password` were fixed together in `_deploy_service_config.py`.
 7. The remaining S4s, opportunistically.
@@ -394,7 +368,7 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 |---|---|---|
 | orgs | clean. Management pages resolve the route slug over VIEW-AS; invitation sends are throttled per sender and per organization with a per-organization pending cap; invitation scrubs gate on a verified address. | Middleware, priming, scopes, permissions, views, API, invitations, anonymization (full). Tenant isolation layers verified. |
 | billing | clean. Checkout, subscription, and portal sessions build absolute return URLs from the request, the client refuses a relative one, and one Stripe test-mode checkout completed from the API view. | Views, webhooks, credits, checkout, client, removal (full). Signature, dedupe, and ledger locking verified. |
-| notifications | `notifications-webhook-rejects-resend` | Webhook path and anonymization (full). |
+| notifications | clean. The webhook verifies Resend's Svix signature (`svix-id`/`svix-timestamp`/`svix-signature`, decoded `whsec_` secret, `webhook_ttl_seconds` window) before parsing and dedupes by `svix-id`. | Webhook path and anonymization (full). |
 | analytics | clean. The distinct ID no longer derives from the session key, and the overview page requires login and the viewer role. | Full. |
 | forms | `forms-notification-status-misreported` | Views and notification helper (full). Public-path scoping, throttle, and CSV neutralization verified. |
 | blog | clean | Views, upload validation, `upload_to`, markdown rendering (full). |
@@ -500,7 +474,8 @@ Added:
   `billing-checkout-relative-redirect-urls`; `StripeClient` now refuses a URL without a scheme
   and host, with contract tests pinning it.
 - **A Resend/Svix contract test built from the vendor's documented payload and signature.** Would
-  have caught `notifications-webhook-rejects-resend`.
+  have caught `notifications-webhook-rejects-resend`; the webhook suite now pins the vendor's
+  documented Svix vector and a documented Resend payload end to end.
 - **A conformance rule rejecting `session_key` in any value passed to an outbound client or
   logger.** Would have caught `analytics-distinct-id-is-session-key`; rule 22's detector now
   carries the clause with its control cases.
@@ -556,8 +531,9 @@ Added:
 
 ## 13. Questions that would change severity
 
-1. Is the notifications webhook meant to receive Resend directly, or through a relay that
-   re-signs? A relay downgrades `notifications-webhook-rejects-resend` to a documentation fix.
+1. Answered (SA255): the notifications webhook receives Resend directly — no relay re-signs — and
+   verifies the Svix signature, so `notifications-webhook-rejects-resend` was a code fix, not a
+   documentation fix.
 
 
 ---
@@ -821,3 +797,11 @@ Added:
   primitives, and the analytics wiring, so a freshly rendered project's frontend
   `pnpm test:coverage` passes its existing per-file thresholds with the thresholds and coverage
   include set unchanged. Dropped from the index and summary.
+- 2026-10-10 — `notifications-webhook-rejects-resend`: **resolved** (SA255). The endpoint reads
+  `svix-id`/`svix-timestamp`/`svix-signature`, decodes the base64 `whsec_` signing secret, checks
+  the `webhook_ttl_seconds` window, and accepts any `v1` candidate in the space-separated
+  signature header with `hmac.compare_digest`; ingestion maps `type`, `data.email_id`, and
+  `data.to[0]` and keeps `svix-id` as the replay key. A contract test built from the vendor's
+  documented payload and signature covers it, and the rule 26 conformance detector credits the
+  vendor's candidate loop. Dropped from the index and summary; the §10 tooling gap and the §13
+  question close with it.

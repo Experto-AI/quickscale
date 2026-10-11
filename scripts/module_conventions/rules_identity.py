@@ -69,6 +69,7 @@ RULE_28_ALLOWED_DIRS = frozenset(
 RULE_28_LISTED_EXTRA_FILES: dict[str, frozenset[str]] = {
     "backups": frozenset({"persistence.py"}),
     "orgs": frozenset({"debug_views.py"}),
+    "billing": frozenset({"webhook_urls.py"}),
     "storage": frozenset({"markdownx_urls.py"}),
 }
 

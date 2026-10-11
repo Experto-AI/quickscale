@@ -79,7 +79,7 @@ def _auth_post_hook(
 
     return ModuleWiringSpec(
         apps=spec.apps,
-        middleware=("allauth.account.middleware.AccountMiddleware",),
+        middleware=spec.middleware,
         settings=settings,
         pre_home_url_includes=spec.pre_home_url_includes,
         url_includes=url_includes,

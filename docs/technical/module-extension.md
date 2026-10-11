@@ -487,6 +487,9 @@ packages = [{include = "quickscale_modules_<name>", from = "src"}]
 [tool.poetry.dependencies]
 python = ">=3.14,<3.15"
 Django = ">=6.0.7,<6.1.0"
+# Every module declares the lockstep core dependency (module.yml lists the
+# bare name `quickscale-core`; this path spec installs it in the monorepo).
+quickscale-core = {path = "../../quickscale_core", develop = true}
 # Add module-specific runtime dependencies here (e.g., django-allauth, Pillow)
 
 [tool.poetry.group.dev.dependencies]
@@ -578,6 +581,13 @@ derivation:
           # plus any third-party apps it requires, e.g. rest_framework
       description: "<name> Django app label"
 ```
+
+`middleware` follows the same rule: it is declared in `wiring_projections` (with
+`wiring_field: middleware`) and read through the adapter, never written as an adapter literal.
+The manifest also always carries `required_modules` and `dependencies`: `required_modules`
+lists bare first-party module names (or `[]`), and `dependencies` lists bare package names —
+one per runtime package in the module's `pyproject.toml`, which carries the specs, including
+the lockstep `quickscale-core` dependency every module declares.
 
 **3. Templates (if applicable):**
 - [ ] `templates/quickscale_<name>/` — Zero-style semantic HTML templates, with one flat `base.html` that the pages extend (emails under `email/`)

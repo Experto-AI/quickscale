@@ -1480,6 +1480,100 @@ class TestLoadManifestRequiredModules:
 
 
 # ---------------------------------------------------------------------------
+# Closed-world top-level keys and bare dependency names (SA260)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadManifestTopLevelKeys:
+    """Top-level keys outside the parsed set are refused (SA260)."""
+
+    def test_unknown_top_level_key_is_refused(self) -> None:
+        """An inert stray key like orgs' old middleware: fails the load."""
+        yaml_content = "name: orgs\nversion: '1.0.0'\nmiddleware:\n  - x.mw\n"
+        with pytest.raises(ManifestError, match="unknown top-level key 'middleware'"):
+            load_manifest(yaml_content, "orgs")
+
+    def test_refusal_lists_the_allowed_keys(self) -> None:
+        """The refusal names the closed set so a typo is fixable."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nsettings:\n  A: 1\n"
+        with pytest.raises(ManifestError) as exc_info:
+            load_manifest(yaml_content, "mymod")
+        message = str(exc_info.value)
+        assert "allowed:" in message
+        assert "derivation" in message
+        assert "dependencies" in message
+
+    def test_known_keys_load(self) -> None:
+        """Every key in the closed set still loads."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\ndescription: ok\n"
+            "dependencies: []\nrequired_modules: []\n"
+            "config:\n  mutable: {}\n  immutable: {}\n"
+            "derivation:\n  wiring_projections: []\n"
+        )
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.name == "mymod"
+
+    def test_implies_keeps_its_dedicated_refusal(self) -> None:
+        """The retired implies key keeps its named message, not unknown-key."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nimplies: []\n"
+        with pytest.raises(ManifestError, match="'implies' is retired"):
+            load_manifest(yaml_content, "mymod")
+
+
+class TestLoadManifestDependencyNames:
+    """dependencies lists bare names; specs live in pyproject.toml (SA260)."""
+
+    def test_bare_names_are_preserved(self) -> None:
+        """Bare package names load in declaration order."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "dependencies:\n  - djangorestframework\n  - quickscale-core\n"
+        )
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.dependencies == ["djangorestframework", "quickscale-core"]
+
+    def test_empty_list_loads(self) -> None:
+        """A module with no extra runtime packages declares an empty list."""
+        yaml_content = "name: social\nversion: '1.0.0'\ndependencies: []\n"
+        manifest = load_manifest(yaml_content, "social")
+        assert manifest.dependencies == []
+
+    @pytest.mark.parametrize(
+        "entry",
+        [
+            "djangorestframework>=3.17.2",
+            "stripe^15.3.1",
+            "pkg==1.0",
+            "quickscale-core[cloud]",
+        ],
+    )
+    def test_version_specifier_is_refused(self, entry: str) -> None:
+        """Specs are refused by name; pyproject.toml carries them."""
+        yaml_content = f"name: mymod\nversion: '1.0.0'\ndependencies:\n  - '{entry}'\n"
+        with pytest.raises(ManifestError, match="bare package names"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_non_string_entry_is_refused(self) -> None:
+        """A non-string entry is refused."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\ndependencies:\n  - 5\n"
+        with pytest.raises(ManifestError, match="bare package names"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_shipped_manifests_list_bare_names(self) -> None:
+        """Every shipped module manifest declares only bare dependency names."""
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        manifest_paths = sorted((repo_root / "quickscale_modules").glob("*/module.yml"))
+        assert manifest_paths, "no shipped module manifests found"
+        for manifest_path in manifest_paths:
+            manifest = load_manifest_from_path(manifest_path)
+            for name in manifest.dependencies:
+                assert " " not in name
+                assert ">" not in name
+                assert "=" not in name
+
+
+# ---------------------------------------------------------------------------
 # Derivation section parsing (T2.3+)
 # ---------------------------------------------------------------------------
 

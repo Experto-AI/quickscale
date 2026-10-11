@@ -125,7 +125,7 @@ class NotificationSettingsSnapshot:
         return str(settings.QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY).strip()
 
     def resolve_webhook_secret(self) -> str:
-        """Resolve the shared webhook signing secret from the applied setting (rule 35).
+        """Resolve Resend's Svix webhook signing secret from the applied setting (rule 35).
 
         Rule 3: the applied setting is the only source.  An unset or empty
         setting resolves to no secret, and the startup check refuses the

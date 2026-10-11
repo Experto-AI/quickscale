@@ -1327,12 +1327,13 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 
 ## 7. Enforcement gaps
 
-1. **Manifest loader is open-world on top-level keys.** `load_manifest` ignores unknown keys, so
-   orgs' `middleware:`/`settings:` load silently. This breaks § Module Wiring Authority's
+1. **Manifest loader is open-world on top-level keys — resolved (SA260).** `load_manifest` now
+   refuses unknown keys; orgs' retired `middleware:`/`settings:` top-level blocks failed the load
+   until they were removed and re-declared under `wiring_projections`. § Module Wiring Authority's
    "parsed-but-unread" ❌ [Item 10].
-2. **Wiring-literal check covers `url_includes` only.** Harness rule 7 reads `adapter.py` for
-   literal URL includes. `apps` and `middleware` literals (notifications, auth, orgs) are
-   unchecked, and the app-declaration gate checks only the manifest projection [Item 10].
+2. **Wiring-literal check covers `url_includes` only — resolved (SA260).** Harness rule 7 now
+   reads `adapter.py` for literal `apps`, `middleware`, and URL-include declarations and literal
+   appends; the app-declaration gate still checks the manifest projection [Item 10].
 3. **URL prefix collisions are unchecked.** `_merge_unique` dedupes identical pairs only, and rule
    41's "two routes, one path" ❌ has no detector [Item 2].
 4. **Capability names are open-world.** A misspelled capability is never collected [Item 15].
@@ -1859,3 +1860,15 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
   outside its test files, controls included; decision rule 41 carries the clause, rules 31 and
   37 name the seam key and its server-side table, and frontend.md records the field).
   Enforcement gap 10 resolved. Item 18.
+
+### 2026-10-10 — SA260 (one off switch and a closed-world manifest surface)
+
+- 2026-10-10 — `module-enabled-switch` (reopened), `manifest-declared-surface`, and
+  `dependency-spec-sources`: **resolved** (SA260 — proposals 1 and 18 merge into rule 1 and the
+  wiring/manifest sections; the loader refuses unknown top-level manifest keys, apps and
+  middleware come only from `wiring_projections`, every module's manifest lists bare dependency
+  names including `quickscale-core` with specs in its `pyproject.toml`, and the new off/on
+  adapter-parity check rejects an off branch that drops apps or middleware).
+- 2026-10-10 — Enforcement gaps 1 and 2: **resolved** (SA260 — the closed-world loader makes an
+  unparsed top-level key fail the load, and harness rule 7 rejects literal `apps`/`middleware`
+  and literal appends in adapters, both with control cases).

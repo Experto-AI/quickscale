@@ -9,6 +9,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY,
@@ -41,7 +42,11 @@ REACT_TEMPLATES_DIR = (
 
 BASE_RUNTIME_DEPENDENCY_NAMES = {"django", "python"}
 FIRST_PARTY_MODULE_PACKAGE_PREFIX = "quickscale-module-"
-MANIFEST_DEPENDENCY_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+")
+# A manifest dependency lists the bare package name; the Poetry spec lives in
+# the module pyproject.toml (SA260).
+MANIFEST_DEPENDENCY_NAME_PATTERN = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+)
 SETTING_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 VERSION_EXPORT_PATTERN = re.compile(r'^__version__ = "([^"]+)"$', re.MULTILINE)
 
@@ -103,7 +108,8 @@ def _manifest_dependency_names(module_name: str) -> set[str]:
             dependency_spec.strip()
         )
         assert dependency_match is not None, (
-            f"{module_name} manifest dependency is missing a package name: {dependency_spec}"
+            f"{module_name} manifest dependency is not a bare package name "
+            f"(the spec belongs in pyproject.toml): {dependency_spec}"
         )
 
         dependency_names.add(dependency_match.group(0).lower())
@@ -282,6 +288,22 @@ def test_ready_packaged_module_dependency_names_match_pyproject_runtime_dependen
             f"{module_name} manifest dependencies should match pyproject runtime packages: "
             f"manifest={sorted(manifest_dependency_names)} "
             f"pyproject={sorted(runtime_dependency_names)}"
+        )
+
+
+def test_ready_packaged_module_manifests_are_closed_world() -> None:
+    """SA260: both list keys are present, bare, and declare quickscale-core."""
+    for entry in get_discovered_module_entries():
+        module_name = entry.name
+        raw = yaml.safe_load(_manifest_path(module_name).read_text())
+        assert isinstance(raw, dict)
+        assert "required_modules" in raw, (
+            f"{module_name} manifest is missing required_modules"
+        )
+        assert "dependencies" in raw, f"{module_name} manifest is missing dependencies"
+        names = _manifest_dependency_names(module_name)
+        assert "quickscale-core" in names, (
+            f"{module_name} manifest dependencies do not declare quickscale-core"
         )
 
 

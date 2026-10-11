@@ -19,6 +19,70 @@ def test_module_dependency_control() -> None:
     assert _violations(checker.rule_39_module_dependencies, replace(module, manifest=manifest))
 
 
+def test_dependency_manifest_surface_controls() -> None:
+    """Presence, bare names, quickscale-core, and the pyproject spec (SA260)."""
+    module = _golden_module()
+    assert _violations(checker.rule_39_module_dependencies, module) == []
+
+    without_required = replace(
+        module,
+        manifest={
+            key: value for key, value in module.manifest.items() if key != "required_modules"
+        },
+    )
+    assert any(
+        "missing required_modules" in violation
+        for violation in _violations(checker.rule_39_module_dependencies, without_required)
+    )
+
+    without_dependencies = replace(
+        module,
+        manifest={key: value for key, value in module.manifest.items() if key != "dependencies"},
+    )
+    assert any(
+        "missing dependencies" in violation
+        for violation in _violations(checker.rule_39_module_dependencies, without_dependencies)
+    )
+
+    specifier = replace(
+        module,
+        manifest={**module.manifest, "dependencies": ["other>=1.0", "quickscale-core"]},
+    )
+    assert any(
+        "not a bare package name" in violation
+        for violation in _violations(checker.rule_39_module_dependencies, specifier)
+    )
+
+    missing_core = replace(module, manifest={**module.manifest, "dependencies": []})
+    assert any(
+        "do not declare quickscale-core" in violation
+        for violation in _violations(checker.rule_39_module_dependencies, missing_core)
+    )
+
+    undeclared = replace(
+        module, manifest={**module.manifest, "dependencies": ["quickscale-core", "other"]}
+    )
+    assert any(
+        "no spec in pyproject.toml" in violation
+        for violation in _violations(checker.rule_39_module_dependencies, undeclared)
+    )
+
+    spec_less_table = replace(
+        module,
+        root_files={
+            **module.root_files,
+            "pyproject.toml": module.root_files["pyproject.toml"].replace(
+                "quickscale-core = {path = '../../quickscale_core', develop = true}",
+                "quickscale-core = {}",
+            ),
+        },
+    )
+    assert any(
+        "has no usable spec" in violation
+        for violation in _violations(checker.rule_39_module_dependencies, spec_less_table)
+    )
+
+
 def test_upward_import_control() -> None:
     auth = _golden_module("auth")
     broken = _with_files(auth, views="from quickscale_modules_blog.models import Post\n")

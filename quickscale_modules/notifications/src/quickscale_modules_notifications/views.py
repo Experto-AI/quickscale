@@ -14,10 +14,10 @@ from quickscale_modules_notifications.services import ingest_webhook_event
 class NotificationWebhookView(APIView):
     """Signed webhook ingestion endpoint for provider delivery events.
 
-    The signature headers are the authentication (Module Conventions rule 26),
-    so the view declares no authentication, permission, or throttle classes
-    and passes the raw body and signature headers to one ``services.py``
-    function.
+    Resend's Svix signature headers are the authentication (Module Conventions
+    rule 26), so the view declares no authentication, permission, or throttle
+    classes and passes the raw body and signature headers to one
+    ``services.py`` function.
     """
 
     authentication_classes = []
@@ -29,13 +29,8 @@ class NotificationWebhookView(APIView):
         del args, kwargs
         result = ingest_webhook_event(
             body=request.body,
-            signature=request.headers.get(
-                "X-QuickScale-Notifications-Signature",
-                "",
-            ),
-            timestamp=request.headers.get(
-                "X-QuickScale-Notifications-Timestamp",
-                "",
-            ),
+            svix_id=request.headers.get("svix-id", ""),
+            svix_timestamp=request.headers.get("svix-timestamp", ""),
+            svix_signature=request.headers.get("svix-signature", ""),
         )
         return Response({"status": "accepted", "duplicate": result.duplicate})

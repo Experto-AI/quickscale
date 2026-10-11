@@ -487,8 +487,10 @@ class TestGeneratedProjectDependencyInstallSmoke:
         # scripts/install_global.sh and quickscale_cli.utils
         # .module_dependency_sync._resolve_wheelhouse_dir).
         # Derived from VERSION rather than spelled out: the lockstep pin is
-        # floor = the release being published, ceiling = the next minor, and
-        # scripts/version_tool.sh stamps exactly that into every module.yml.
+        # floor = the release being published, ceiling = the next minor.
+        # Module manifests list the bare dependency name (rule 39); the
+        # dependency synchronizer derives this spec from the running core
+        # version for root sync and embedded module path repair.
         core_version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         core_major, core_minor, *_ = core_version.split(".")
         core_ceiling = f"{core_major}.{int(core_minor) + 1}.0"

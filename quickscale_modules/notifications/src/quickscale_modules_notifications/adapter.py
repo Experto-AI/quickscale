@@ -173,20 +173,19 @@ def _notifications_manifest_adapter(
         managed_files=manifest_spec.managed_files,
     )
 
-    apps = list(spec.apps)
-    if runtime_email_backend == NOTIFICATIONS_LIVE_EMAIL_BACKEND:
-        if "anymail" not in apps:
-            apps.insert(0, "anymail")
-
     settings = dict(spec.settings)
-    if runtime_email_backend is not None:
-        settings["EMAIL_BACKEND"] = runtime_email_backend
-        sender_email = settings.get("QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL", "")
-        settings["DEFAULT_FROM_EMAIL"] = sender_email
-        settings["SERVER_EMAIL"] = sender_email
+    # Rule 1 (D3): the email settings stay in place while the module is off,
+    # so the settings surface does not change with the switch; delivery is
+    # refused at the runtime service boundary instead.
+    settings["EMAIL_BACKEND"] = (
+        runtime_email_backend or NOTIFICATIONS_CONSOLE_EMAIL_BACKEND
+    )
+    sender_email = settings.get("QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL", "")
+    settings["DEFAULT_FROM_EMAIL"] = sender_email
+    settings["SERVER_EMAIL"] = sender_email
 
     return ModuleWiringSpec(
-        apps=tuple(apps),
+        apps=spec.apps,
         middleware=spec.middleware,
         settings=settings,
         pre_home_url_includes=spec.pre_home_url_includes,

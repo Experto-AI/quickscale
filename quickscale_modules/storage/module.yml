@@ -95,11 +95,14 @@ config:
       description: "Reserved extension point for future private media authorization flows"
       validation: {}
 
+required_modules: []
+
 dependencies:
-  - django-storages>=1.14.6
-  - boto3>=1.43.58
-  - django-markdownx>=4.0.11
-  - Pillow>=12.3.0,<13.0.0
+  - django-storages
+  - boto3
+  - django-markdownx
+  - Pillow
+  - quickscale-core
 
 # Retired option keys are refused by name with the message declared here.
 retired_options:

@@ -2,16 +2,18 @@
 """
 Verify that every QuickScale distribution a generated project pins is published.
 
-Generated projects receive a bounded ``quickscale-core`` constraint derived
-from the module manifests (e.g. ``quickscale-core>=0.87.0,<0.88.0``).  If the
-CLI is published while ``quickscale-core`` for that version is missing from
-PyPI, every ``quickscale apply`` that embeds a core-dependent module dies at
+Generated projects receive a bounded ``quickscale-core`` lockstep constraint
+derived from ``VERSION`` (e.g. ``quickscale-core>=0.87.0,<0.88.0``) whenever
+they embed a core-dependent module.  If the CLI is published while
+``quickscale-core`` for that version is missing from PyPI, every
+``quickscale apply`` that embeds a core-dependent module dies at
 ``poetry lock`` with "which doesn't match any versions".
 
 This gate closes that hole: for the repository's current ``VERSION`` it
-checks that each published distribution exists on the index, and that every
-``quickscale-core`` constraint declared in ``quickscale_modules/*/module.yml``
-is satisfied by at least one published release.
+checks that each published distribution exists on the index, and that the
+derived ``quickscale-core`` constraint of every module that declares the
+dependency in ``quickscale_modules/*/module.yml`` is satisfied by at least
+one published release.
 
 Usage:
     python scripts/check_release_published.py [--repo-root DIR] [--index-url URL]
@@ -35,7 +37,6 @@ from pathlib import Path
 
 DEFAULT_INDEX = "https://pypi.org/pypi"
 PUBLISHED_DISTRIBUTIONS = ("quickscale-core", "quickscale-cli", "quickscale")
-_CORE_REQUIREMENT = re.compile(r"^quickscale-core\s*(?P<spec>.*)$")
 _CLAUSE = re.compile(r"(?P<op>>=|<=|==|!=|<|>|~=|\^)\s*(?P<version>[0-9][0-9.]*)")
 
 
@@ -100,22 +101,33 @@ def _clause_holds(candidate: tuple[int, ...], op: str, bound: str) -> bool:
     raise CheckError(f"Unsupported version operator: {op!r}")
 
 
+def lockstep_core_spec(version: str) -> str:
+    """Return the bounded lockstep ``quickscale-core`` spec for *version*."""
+    major, minor, *_ = version.split(".")
+    return f">={version},<{major}.{int(minor) + 1}.0"
+
+
 def collect_core_constraints(repo_root: Path) -> dict[str, str]:
-    """Return ``{module_name: quickscale-core spec}`` from module manifests."""
+    """
+    Return ``{module_name: quickscale-core spec}`` for core-dependent modules.
+
+    Module manifests list the bare ``quickscale-core`` name (rule 39); the
+    constraint a generated project receives is the lockstep spec derived from
+    ``VERSION`` — floor = the release being published, ceiling = the next
+    minor.
+    """
     constraints: dict[str, str] = {}
     modules_dir = repo_root / "quickscale_modules"
     if not modules_dir.is_dir():
         raise CheckError(f"Modules directory not found: {modules_dir}")
 
+    spec = lockstep_core_spec(read_version(repo_root))
     for manifest_path in sorted(modules_dir.glob("*/module.yml")):
         for raw_line in manifest_path.read_text(encoding="utf-8").splitlines():
             stripped = raw_line.strip()
             if not stripped.startswith("- quickscale-core"):
                 continue
-            match = _CORE_REQUIREMENT.match(stripped[2:].strip())
-            if match is None:
-                continue
-            constraints[manifest_path.parent.name] = match.group("spec").strip()
+            constraints[manifest_path.parent.name] = spec
     return constraints
 
 

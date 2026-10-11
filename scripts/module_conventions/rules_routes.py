@@ -129,16 +129,70 @@ CORE_SESSION_AUTHENTICATION = "QuickscaleSessionAuthentication"
 CORE_LIST_PAGINATION = "PlainListPagination"
 
 
-def _declares_literal_url_includes(value: ast.expr) -> bool:
-    """
-    Return True when a non-empty list/tuple literal hard-codes URL wiring.
+#: Adapter keywords and assignment targets whose values must come only from
+#: the module manifest (Module Wiring Authority): the wiring fields an
+#: adapter may project, never declare as Python literals.
+WIRING_LITERAL_FIELDS = (
+    "apps",
+    "middleware",
+    "url_includes",
+    "pre_home_url_includes",
+    "spa_routes",
+)
 
-    Rule 7 makes the manifest the only place that sets a module's mount, so an
-    adapter naming literal include pairs violates it.  An *empty* literal
-    declares no include at all: it is how a switched-off module mounts none of
-    its public URLs (rule 1), so it stays allowed and the check must not flag it.
+
+def _declares_literal_wiring(value: ast.expr) -> bool:
+    """
+    Return True when a non-empty list/tuple literal hard-codes module wiring.
+
+    The manifest is the only place that sets a module's apps, middleware, and
+    URL mounts, so an adapter naming literal wiring entries violates it.  An
+    *empty* literal declares nothing at all: it is how a switched-off module
+    mounts none of its public URLs (rule 1), so it stays allowed and the check
+    must not flag it.
     """
     return isinstance(value, (ast.List, ast.Tuple)) and bool(value.elts)
+
+
+def _adapter_literal_wiring_violations(module: Module, adapter: str) -> list[str]:
+    """Return rule 7 violations for literal wiring declared in one adapter."""
+    violations: list[str] = []
+    for node in ast.walk(_parse(adapter)):
+        if isinstance(node, ast.Call):
+            for keyword in node.keywords:
+                if keyword.arg in WIRING_LITERAL_FIELDS and _declares_literal_wiring(keyword.value):
+                    violations.append(
+                        f"rule 7: {module.name}: adapter.py declares a literal {keyword.arg}"
+                    )
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"append", "insert"}
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in WIRING_LITERAL_FIELDS
+                and any(
+                    isinstance(argument, ast.Constant) and isinstance(argument.value, str)
+                    for argument in node.args
+                )
+            ):
+                violations.append(
+                    f"rule 7: {module.name}: adapter.py appends a literal to {node.func.value.id}"
+                )
+            continue
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign) and _declares_literal_wiring(node.value):
+            targets = list(node.targets)
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and node.value is not None
+            and _declares_literal_wiring(node.value)
+        ):
+            targets = [node.target]
+        for target in targets:
+            if isinstance(target, ast.Name) and target.id in WIRING_LITERAL_FIELDS:
+                violations.append(
+                    f"rule 7: {module.name}: adapter.py declares a literal {target.id}"
+                )
+    return violations
 
 
 def rule_7_urls(corpus: Corpus) -> list[str]:
@@ -169,30 +223,7 @@ def rule_7_urls(corpus: Corpus) -> list[str]:
             )
         adapter = module.files.get("adapter.py", "")
         if adapter:
-            for node in ast.walk(_parse(adapter)):
-                if isinstance(node, ast.Call):
-                    for keyword in node.keywords:
-                        if keyword.arg == "url_includes" and _declares_literal_url_includes(
-                            keyword.value
-                        ):
-                            violations.append(
-                                f"rule 7: {module.name}: adapter.py declares a literal url_includes"
-                            )
-                    continue
-                targets: list[ast.expr] = []
-                if isinstance(node, ast.Assign) and _declares_literal_url_includes(node.value):
-                    targets = list(node.targets)
-                elif (
-                    isinstance(node, ast.AnnAssign)
-                    and node.value is not None
-                    and _declares_literal_url_includes(node.value)
-                ):
-                    targets = [node.target]
-                for target in targets:
-                    if isinstance(target, ast.Name) and target.id == "url_includes":
-                        violations.append(
-                            f"rule 7: {module.name}: adapter.py declares a literal url_includes"
-                        )
+            violations.extend(_adapter_literal_wiring_violations(module, adapter))
         urls = module.files.get("urls.py")
         if urls is None:
             continue

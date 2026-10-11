@@ -347,7 +347,11 @@ def test_declared_core_spec_strips_distribution_name() -> None:
 
 
 def _write_pin_fixture(tmp_path: Path, version: str, pin: str) -> None:
-    """Build a minimal repo whose single module declares *pin*."""
+    """Build a minimal repo whose single module pins *pin* in its pyproject.
+
+    The manifest lists the bare ``quickscale-core`` name (rule 39); the
+    module pyproject owns the version specifier.
+    """
     core_src = tmp_path / "quickscale_core" / "src" / "quickscale_core"
     core_src.mkdir(parents=True)
     (core_src / "__init__.py").write_text("# core package\n", encoding="utf-8")
@@ -356,11 +360,15 @@ def _write_pin_fixture(tmp_path: Path, version: str, pin: str) -> None:
     mod_dir = tmp_path / "quickscale_modules" / "test_mod"
     mod_dir.mkdir(parents=True)
     (mod_dir / "module.yml").write_text(
-        f"dependencies:\n  - {pin}\n",
+        "dependencies:\n  - quickscale-core\n",
         encoding="utf-8",
     )
+    spec = pin[len(compat.CORE_DEP_NAME) :].strip()
     (mod_dir / "pyproject.toml").write_text(
-        '[tool.poetry]\nname = "quickscale-module-test-mod"\n', encoding="utf-8"
+        '[tool.poetry]\nname = "quickscale-module-test-mod"\n'
+        "\n[tool.poetry.dependencies]\n"
+        f'quickscale-core = "{spec}"\n',
+        encoding="utf-8",
     )
 
 
@@ -402,13 +410,136 @@ def test_main_accepts_derived_lockstep_pin(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The exact pin version_tool.sh stamps passes the lockstep assertion."""
+    """The exact derived pyproject pin passes the lockstep assertion."""
     _write_pin_fixture(tmp_path, "0.88.0", "quickscale-core>=0.88.0,<0.89.0")
 
     compat.main([str(tmp_path)])
     captured = capsys.readouterr()
 
     assert "FAIL: lockstep pin" not in captured.out
+
+
+def test_main_accepts_the_monorepo_path_dependency(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The bare manifest name plus the monorepo path dep passes."""
+    core_src = tmp_path / "quickscale_core" / "src" / "quickscale_core"
+    core_src.mkdir(parents=True)
+    (core_src / "__init__.py").write_text("# core package\n", encoding="utf-8")
+    (tmp_path / "VERSION").write_text("0.88.0\n", encoding="utf-8")
+
+    mod_dir = tmp_path / "quickscale_modules" / "test_mod"
+    mod_dir.mkdir(parents=True)
+    (mod_dir / "module.yml").write_text(
+        "dependencies:\n  - quickscale-core\n", encoding="utf-8"
+    )
+    (mod_dir / "pyproject.toml").write_text(
+        '[tool.poetry]\nname = "quickscale-module-test-mod"\n'
+        "\n[tool.poetry.dependencies]\n"
+        'quickscale-core = {path = "../../quickscale_core", develop = true}\n',
+        encoding="utf-8",
+    )
+
+    compat.main([str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert "FAIL:" not in captured.out
+
+
+def test_main_fails_on_a_stale_table_version(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A table version wins for consumers, so a stale one must fail."""
+    _write_pin_fixture(tmp_path, "0.88.0", "quickscale-core>=0.88.0,<0.89.0")
+    (tmp_path / "quickscale_modules" / "test_mod" / "pyproject.toml").write_text(
+        '[tool.poetry]\nname = "quickscale-module-test-mod"\n'
+        "\n[tool.poetry.dependencies]\n"
+        'quickscale-core = {path = "../../quickscale_core", '
+        'version = ">=0.87.0,<0.88.0"}\n',
+        encoding="utf-8",
+    )
+
+    exit_code = compat.main([str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code != 0
+    assert "FAIL: lockstep pin is >=0.87.0,<0.88.0" in captured.out
+
+
+def test_main_accepts_an_exact_version_table(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A version-only table carrying the exact lockstep spec passes."""
+    _write_pin_fixture(tmp_path, "0.88.0", "quickscale-core>=0.88.0,<0.89.0")
+    (tmp_path / "quickscale_modules" / "test_mod" / "pyproject.toml").write_text(
+        '[tool.poetry]\nname = "quickscale-module-test-mod"\n'
+        "\n[tool.poetry.dependencies]\n"
+        'quickscale-core = {version = ">=0.88.0,<0.89.0"}\n',
+        encoding="utf-8",
+    )
+
+    compat.main([str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert "FAIL: lockstep pin" not in captured.out
+    assert "no usable source" not in captured.out
+
+
+def test_main_fails_on_a_blank_table_version_with_path(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A declared-but-blank version fails even beside a path."""
+    _write_pin_fixture(tmp_path, "0.88.0", "quickscale-core>=0.88.0,<0.89.0")
+    (tmp_path / "quickscale_modules" / "test_mod" / "pyproject.toml").write_text(
+        '[tool.poetry]\nname = "quickscale-module-test-mod"\n'
+        "\n[tool.poetry.dependencies]\n"
+        'quickscale-core = {path = "../../quickscale_core", version = "  "}\n',
+        encoding="utf-8",
+    )
+
+    exit_code = compat.main([str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code != 0
+    assert "version spec is blank or not a string" in captured.out
+
+
+def test_main_fails_on_a_manifest_specifier(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Rule 39: a version suffix in the manifest entry fails the gate."""
+    _write_pin_fixture(tmp_path, "0.88.0", "quickscale-core>=0.88.0,<0.89.0")
+    (tmp_path / "quickscale_modules" / "test_mod" / "module.yml").write_text(
+        "dependencies:\n  - quickscale-core>=0.88.0,<0.89.0\n", encoding="utf-8"
+    )
+
+    exit_code = compat.main([str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code != 0
+    assert "must be the bare name" in captured.out
+
+
+def test_main_fails_when_pyproject_omits_the_core_dependency(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The manifest name needs a pyproject spec to resolve for consumers."""
+    _write_pin_fixture(tmp_path, "0.88.0", "quickscale-core>=0.88.0,<0.89.0")
+    (tmp_path / "quickscale_modules" / "test_mod" / "pyproject.toml").write_text(
+        '[tool.poetry]\nname = "quickscale-module-test-mod"\n', encoding="utf-8"
+    )
+
+    exit_code = compat.main([str(tmp_path)])
+    captured = capsys.readouterr()
+
+    assert exit_code != 0
+    assert "does not declare quickscale-core" in captured.out
 
 
 def test_main_reports_malformed_pyproject(
@@ -432,9 +563,9 @@ def test_main_reports_malformed_pyproject(
     mod_dir = tmp_path / "quickscale_modules" / "test_mod"
     mod_dir.mkdir(parents=True)
 
-    # module.yml with a parseable quickscale-core dependency
+    # module.yml with the bare quickscale-core dependency name (rule 39)
     (mod_dir / "module.yml").write_text(
-        "dependencies:\n  - quickscale-core>=0.86.0\n",
+        "dependencies:\n  - quickscale-core\n",
         encoding="utf-8",
     )
 

@@ -6,7 +6,6 @@ Covers CRM, listings apply, auth apply, and edge cases.
 import tomllib
 import quickscale_cli.utils._dependency_io as _dependency_io
 import quickscale_cli.utils._dependency_write as _dependency_write
-import quickscale_core.manifest.loader as _loader
 import quickscale_cli.utils._dependency_sync_ops as _dependency_sync_ops
 from pathlib import Path
 from unittest.mock import patch
@@ -54,6 +53,7 @@ from quickscale_cli.utils._dependency_write import (
     _update_dependency_entries,
 )
 from quickscale_core.module_wiring import collect_wiring
+from quickscale_core.generator.runtime_pins import QUICKSCALE_CORE_PIN
 
 
 def _build_specs(
@@ -142,10 +142,7 @@ class TestSharedModuleDependencySync:
             project,
             "auth",
             manifest_content=(
-                "name: auth\n"
-                'version: "0.83.0"\n'
-                "dependencies:\n"
-                "  - django-allauth>=0.63.0\n"
+                'name: auth\nversion: "0.83.0"\ndependencies:\n  - django-allauth\n'
             ),
             pyproject_content=(
                 "[project]\n"
@@ -173,10 +170,7 @@ class TestSharedModuleDependencySync:
             project,
             "billing",
             manifest_content=(
-                "name: billing\n"
-                'version: "0.85.0"\n'
-                "dependencies:\n"
-                "  - stripe>=15.0.0,<16.0.0\n"
+                'name: billing\nversion: "0.85.0"\ndependencies:\n  - stripe\n'
             ),
             pyproject_content=(
                 "[project]\n"
@@ -210,10 +204,7 @@ class TestSharedModuleDependencySync:
             project,
             "listings",
             manifest_content=(
-                "name: listings\n"
-                'version: "0.83.0"\n'
-                "dependencies:\n"
-                "  - django-filter>=25.0\n"
+                'name: listings\nversion: "0.83.0"\ndependencies:\n  - django-filter\n'
             ),
             pyproject_content=(
                 "[project]\n"
@@ -244,8 +235,8 @@ class TestSharedModuleDependencySync:
                 "name: storage\n"
                 'version: "0.83.0"\n'
                 "dependencies:\n"
-                "  - django-storages>=1.14.4\n"
-                "  - boto3>=1.35.0\n"
+                "  - django-storages\n"
+                "  - boto3\n"
             ),
             pyproject_content=(
                 "[project]\n"
@@ -281,8 +272,8 @@ class TestSharedModuleDependencySync:
                 "name: storage\n"
                 'version: "0.83.0"\n'
                 "dependencies:\n"
-                "  - django-storages>=1.14.4\n"
-                "  - boto3>=1.35.0\n"
+                "  - django-storages\n"
+                "  - boto3\n"
             ),
             pyproject_content=(
                 "[project]\n"
@@ -425,19 +416,17 @@ class TestSharedModuleDependencySyncHelpers:
 class TestUnpublishedCoreWheelhouseRegression:
     """Regression: a local build must not pin an unpublished quickscale-core.
 
-    Module manifests pin ``quickscale-core>=X,<Y``.  When the running CLI is a
-    locally built (not yet published) release, that constraint resolves to
-    nothing on PyPI and ``quickscale apply`` dies at ``poetry lock`` with
-    "which doesn't match any versions".  ``scripts/install_global.sh`` stages
-    the built core wheel at ``sys.prefix/quickscale_wheels`` so the sync
-    resolves the local wheel instead.
+    Modules depend on the bounded ``quickscale-core`` lockstep spec.  When
+    the running CLI is a locally built (not yet published) release, that
+    constraint resolves to nothing on PyPI and ``quickscale apply`` dies at
+    ``poetry lock`` with "which doesn't match any versions".
+    ``scripts/install_global.sh`` stages the built core wheel at
+    ``sys.prefix/quickscale_wheels`` so the sync resolves the local wheel
+    instead.
     """
 
     BACKUPS_MANIFEST = (
-        "name: backups\n"
-        'version: "0.87.0"\n'
-        "dependencies:\n"
-        "  - quickscale-core>=0.87.0,<0.88.0\n"
+        'name: backups\nversion: "0.87.0"\ndependencies:\n  - quickscale-core\n'
     )
     BACKUPS_PYPROJECT = (
         "[project]\n"
@@ -456,7 +445,7 @@ class TestUnpublishedCoreWheelhouseRegression:
         )
 
     def test_sync_pins_published_range_without_wheelhouse(self, tmp_path, monkeypatch):
-        """Without any wheelhouse the manifest range is used (published path)."""
+        """Without any wheelhouse the canonical lockstep pin is used."""
         monkeypatch.delenv("QUICKSCALE_LOCAL_WHEELHOUSE", raising=False)
         monkeypatch.setattr(
             "sys.prefix",
@@ -468,7 +457,7 @@ class TestUnpublishedCoreWheelhouseRegression:
         sync_project_module_dependencies(project, {"backups": {}})
 
         assert (
-            'quickscale-core = ">=0.87.0,<0.88.0"'
+            f'quickscale-core = "{QUICKSCALE_CORE_PIN}"'
             in (project / "pyproject.toml").read_text()
         )
 
@@ -496,7 +485,7 @@ class TestUnpublishedCoreWheelhouseRegression:
             project / "modules" / "backups" / "pyproject.toml"
         ).read_text()
 
-        assert 'quickscale-core = ">=0.87.0,<0.88.0"' not in project_pyproject
+        assert f'quickscale-core = "{QUICKSCALE_CORE_PIN}"' not in project_pyproject
         assert "quickscale_core-0.87.0-py3-none-any.whl" in project_pyproject
         assert "quickscale_core-0.87.0-py3-none-any.whl" in module_pyproject
         assert (
@@ -571,9 +560,9 @@ class TestUnpublishedCoreWheelhouseRegression:
                 "name: backups\n"
                 'version: "0.87.0"\n'
                 "dependencies:\n"
-                "  - django-storages>=1.14.6\n"
-                "  - boto3>=1.43.58\n"
-                "  - quickscale-core>=0.87.0,<0.88.0\n"
+                "  - django-storages\n"
+                "  - boto3\n"
+                "  - quickscale-core\n"
             ),
             pyproject_content=(
                 "[project]\n"
@@ -616,10 +605,7 @@ class TestUnpublishedCoreWheelhouseRegression:
             project,
             "auth",
             manifest_content=(
-                "name: auth\n"
-                'version: "0.87.0"\n'
-                "dependencies:\n"
-                "  - django-allauth>=0.63.0\n"
+                'name: auth\nversion: "0.87.0"\ndependencies:\n  - django-allauth\n'
             ),
             pyproject_content=(
                 "[project]\n"
@@ -668,10 +654,7 @@ class TestUnpublishedCoreWheelhouseRegression:
             project,
             "auth",
             manifest_content=(
-                "name: auth\n"
-                'version: "0.87.0"\n'
-                "dependencies:\n"
-                "  - django-allauth>=0.63.0\n"
+                'name: auth\nversion: "0.87.0"\ndependencies:\n  - django-allauth\n'
             ),
             pyproject_content=(
                 "[project]\n"
@@ -881,15 +864,18 @@ class TestModuleWiringSpecs:
         assert settings["QUICKSCALE_ANALYTICS_EXCLUDE_STAFF"] is True
         assert settings["QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT"] is False
 
-    def test_analytics_wiring_disabled_omits_managed_settings(self):
-        """Compatibility node: disabled analytics omits apps, not owned settings."""
+    def test_analytics_wiring_disabled_keeps_app_and_omits_public_urls(self):
+        """Rule 1 (D3): disabled analytics keeps the app and drops its public URLs."""
         specs = _build_specs({"analytics": {"enabled": False}})
 
         apps, _, settings, _ = collect_wiring(specs)
 
-        assert "quickscale_modules_analytics" not in apps
-        assert len(settings) == 8
+        assert "quickscale_modules_analytics" in apps
+        assert specs["analytics"].url_includes == ()
         assert settings["QUICKSCALE_ANALYTICS_ENABLED"] is False
+        assert settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"] == (
+            "__QS_ENV__:POSTHOG_API_KEY"
+        )
 
     def test_analytics_wiring_includes_module_owned_urls(self):
         """Analytics wiring should include the module-owned URL mount."""
@@ -1740,7 +1726,7 @@ class TestNotificationsModuleConfig:
             == "OPS_RESEND_API_KEY"
         )
 
-    def test_notifications_wiring_disabled_leaves_email_backend_unmanaged(self):
+    def test_notifications_wiring_disabled_retains_email_settings(self):
         specs = _build_specs(
             {
                 "notifications": {
@@ -1754,7 +1740,12 @@ class TestNotificationsModuleConfig:
         apps, _, settings, _ = collect_wiring(specs)
 
         assert "quickscale_modules_notifications" in apps
-        assert "EMAIL_BACKEND" not in settings
+        # Rule 1 (D3): the settings surface is retained while off; delivery
+        # is refused at the runtime service boundary instead.
+        assert settings["EMAIL_BACKEND"] == (
+            "django.core.mail.backends.console.EmailBackend"
+        )
+        assert settings["DEFAULT_FROM_EMAIL"] == "ops@example.com"
 
 
 class TestConvertedConfiguratorListInput:
@@ -1993,9 +1984,9 @@ class TestUpdateDependencyEntries:
 class TestRepinExistingMode:
     """Tests for sync_project_module_dependencies with repin_existing=True."""
 
-    def test_repin_replaces_path_style_entry_with_manifest_range(self, tmp_path):
+    def test_repin_replaces_path_style_entry_with_declared_range(self, tmp_path):
         """Existing path-style dependency should be replaced with the
-        manifest-derived bounded range when repin_existing=True."""
+        declared package spec when repin_existing=True."""
         project = _make_project(tmp_path)
         # Pre-populate pyproject.toml with a path-style quickscale-core entry
         # similar to what pre-SA9.1 applies would have produced.
@@ -2009,10 +2000,7 @@ class TestRepinExistingMode:
             project,
             "backups",
             manifest_content=(
-                "name: backups\n"
-                'version: "0.77.0"\n'
-                "dependencies:\n"
-                "  - quickscale-core>=0.86.0,<0.87.0\n"
+                'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
             ),
             pyproject_content=(
                 "[project]\n"
@@ -2024,10 +2012,7 @@ class TestRepinExistingMode:
         )
         # Create a minimal manifest file for manifest loading
         (project / "modules" / "backups" / "module.yml").write_text(
-            "name: backups\n"
-            'version: "0.77.0"\n'
-            "dependencies:\n"
-            "  - quickscale-core>=0.86.0,<0.87.0\n"
+            'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
         )
 
         result = sync_project_module_dependencies(
@@ -2044,7 +2029,7 @@ class TestRepinExistingMode:
         assert 'Django = "^6.0"' in pyproject_content
 
     def test_repin_does_not_modify_already_correct_entry(self, tmp_path):
-        """When the existing dependency already matches the manifest range,
+        """When the existing dependency already matches the declared spec,
         repin mode should not modify it."""
         project = _make_project(tmp_path)
         (project / "pyproject.toml").write_text(
@@ -2057,10 +2042,7 @@ class TestRepinExistingMode:
             project,
             "backups",
             manifest_content=(
-                "name: backups\n"
-                'version: "0.77.0"\n'
-                "dependencies:\n"
-                "  - quickscale-core>=0.86.0,<0.87.0\n"
+                'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
             ),
             pyproject_content=(
                 "[project]\n"
@@ -2071,10 +2053,7 @@ class TestRepinExistingMode:
             ),
         )
         (project / "modules" / "backups" / "module.yml").write_text(
-            "name: backups\n"
-            'version: "0.77.0"\n'
-            "dependencies:\n"
-            "  - quickscale-core>=0.86.0,<0.87.0\n"
+            'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
         )
 
         result = sync_project_module_dependencies(
@@ -2105,9 +2084,9 @@ class TestRepinExistingMode:
                 "name: backups\n"
                 'version: "0.77.0"\n'
                 "dependencies:\n"
-                "  - quickscale-core>=0.86.0,<0.87.0\n"
-                "  - django-storages>=1.14.6\n"
-                "  - boto3>=1.40.46\n"
+                "  - quickscale-core\n"
+                "  - django-storages\n"
+                "  - boto3\n"
             ),
             pyproject_content=(
                 "[project]\n"
@@ -2123,9 +2102,9 @@ class TestRepinExistingMode:
             "name: backups\n"
             'version: "0.77.0"\n'
             "dependencies:\n"
-            "  - quickscale-core>=0.86.0,<0.87.0\n"
-            "  - django-storages>=1.14.6\n"
-            "  - boto3>=1.40.46\n"
+            "  - quickscale-core\n"
+            "  - django-storages\n"
+            "  - boto3\n"
         )
 
         result = sync_project_module_dependencies(
@@ -2158,10 +2137,7 @@ class TestRepinExistingMode:
             project,
             "backups",
             manifest_content=(
-                "name: backups\n"
-                'version: "0.77.0"\n'
-                "dependencies:\n"
-                "  - quickscale-core>=0.86.0,<0.87.0\n"
+                'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
             ),
             pyproject_content=(
                 "[project]\n"
@@ -2172,10 +2148,7 @@ class TestRepinExistingMode:
             ),
         )
         (project / "modules" / "backups" / "module.yml").write_text(
-            "name: backups\n"
-            'version: "0.77.0"\n'
-            "dependencies:\n"
-            "  - quickscale-core>=0.86.0,<0.87.0\n"
+            'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
         )
 
         with pytest.raises(DependencySyncError, match="missing the Poetry dependency"):
@@ -2184,6 +2157,130 @@ class TestRepinExistingMode:
                 {"backups": {}},
                 repin_existing=True,
             )
+
+    def test_repin_raises_for_a_spec_less_dependency_table(self, tmp_path):
+        """A table entry with no usable spec is refused, not guessed at."""
+        project = _make_project(tmp_path)
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'quickscale-core = ">=0.85.0,<0.86.0"\n'
+        )
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                "quickscale-core = {}\n"
+            ),
+        )
+
+        with pytest.raises(DependencySyncError, match="without a usable spec"):
+            sync_project_module_dependencies(
+                project,
+                {"backups": {}},
+                repin_existing=True,
+            )
+
+    def test_repin_raises_for_a_blank_version_spec(self, tmp_path):
+        """A table whose version is blank is refused before any mutation."""
+        project = _make_project(tmp_path)
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'quickscale-core = ">=0.85.0,<0.86.0"\n'
+        )
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'quickscale-core = {version = "  "}\n'
+            ),
+        )
+
+        with pytest.raises(DependencySyncError, match="blank version spec"):
+            sync_project_module_dependencies(
+                project,
+                {"backups": {}},
+                repin_existing=True,
+            )
+
+    def test_repin_raises_for_a_blank_version_spec_with_path(self, tmp_path):
+        """A blank version beside a path is refused, matching the gate."""
+        project = _make_project(tmp_path)
+        (project / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'python = "^3.14"\n'
+            'quickscale-core = ">=0.85.0,<0.86.0"\n'
+        )
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'quickscale-core = {path = "../../quickscale_core", version = "  "}\n'
+            ),
+        )
+
+        with pytest.raises(DependencySyncError, match="blank version spec"):
+            sync_project_module_dependencies(
+                project,
+                {"backups": {}},
+                repin_existing=True,
+            )
+
+    def test_sync_uses_the_full_release_floor_for_the_core_path(
+        self, tmp_path, monkeypatch
+    ):
+        """A patch-release floor survives root sync and path repair."""
+        monkeypatch.setattr(_dependency_write, "CORE_VERSION", "0.89.1")
+        monkeypatch.delenv("QUICKSCALE_LOCAL_WHEELHOUSE", raising=False)
+        monkeypatch.setattr("sys.prefix", str(tmp_path / "no-wheelhouse"))
+        project = _make_project(tmp_path)
+        _write_module_package(
+            project,
+            "backups",
+            manifest_content=(
+                'name: backups\nversion: "0.89.1"\ndependencies:\n  - quickscale-core\n'
+            ),
+            pyproject_content=(
+                "[project]\n"
+                'name = "quickscale-module-backups"\n\n'
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.14"\n'
+                'quickscale-core = {path = "../../quickscale_core", develop = true}\n'
+            ),
+        )
+
+        sync_project_module_dependencies(project, {"backups": {}})
+
+        assert (
+            'quickscale-core = ">=0.89.1,<0.90.0"'
+            in (project / "pyproject.toml").read_text()
+        )
+        assert (
+            'quickscale-core = ">=0.89.1,<0.90.0"'
+            in (project / "modules" / "backups" / "pyproject.toml").read_text()
+        )
 
     def test_repin_with_options_skips_cloud_deps_for_local_storage(self, tmp_path):
         """Repin mode should respect module options (e.g., storage backend)."""
@@ -2204,8 +2301,8 @@ class TestRepinExistingMode:
                 "name: storage\n"
                 'version: "0.83.0"\n'
                 "dependencies:\n"
-                "  - django-storages>=1.14.4\n"
-                "  - boto3>=1.35.0\n"
+                "  - django-storages\n"
+                "  - boto3\n"
             ),
             pyproject_content=(
                 "[project]\n"
@@ -2220,8 +2317,8 @@ class TestRepinExistingMode:
             "name: storage\n"
             'version: "0.83.0"\n'
             "dependencies:\n"
-            "  - django-storages>=1.14.4\n"
-            "  - boto3>=1.35.0\n"
+            "  - django-storages\n"
+            "  - boto3\n"
         )
 
         # With local backend, cloud deps are skipped entirely — no update
@@ -2250,10 +2347,7 @@ class TestRepinExistingMode:
             project,
             "backups",
             manifest_content=(
-                "name: backups\n"
-                'version: "0.77.0"\n'
-                "dependencies:\n"
-                "  - quickscale-core>=0.86.0,<0.87.0\n"
+                'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
             ),
             pyproject_content=(
                 "[project]\n"
@@ -2264,10 +2358,7 @@ class TestRepinExistingMode:
             ),
         )
         (project / "modules" / "backups" / "module.yml").write_text(
-            "name: backups\n"
-            'version: "0.77.0"\n'
-            "dependencies:\n"
-            "  - quickscale-core>=0.86.0,<0.87.0\n"
+            'name: backups\nversion: "0.77.0"\ndependencies:\n  - quickscale-core\n'
         )
 
         # Default mode (repin_existing=False) — add-only
@@ -2307,8 +2398,8 @@ class TestRepinExistingMode:
                 "name: backups\n"
                 'version: "0.77.0"\n'
                 "dependencies:\n"
-                "  - django-storages>=1.14.6\n"
-                "  - boto3>=1.40.46\n"
+                "  - django-storages\n"
+                "  - boto3\n"
             ),
             pyproject_content=(
                 "[project]\n"
@@ -2323,8 +2414,8 @@ class TestRepinExistingMode:
             "name: backups\n"
             'version: "0.77.0"\n'
             "dependencies:\n"
-            "  - django-storages>=1.14.6\n"
-            "  - boto3>=1.40.46\n"
+            "  - django-storages\n"
+            "  - boto3\n"
         )
 
         # Storage module: lower minimums, table-form pyproject entries
@@ -2337,8 +2428,8 @@ class TestRepinExistingMode:
                 "name: storage\n"
                 'version: "0.76.0"\n'
                 "dependencies:\n"
-                "  - django-storages>=1.14.4\n"
-                "  - boto3>=1.35.0\n"
+                "  - django-storages\n"
+                "  - boto3\n"
             ),
             pyproject_content=(
                 "[project]\n"
@@ -2354,8 +2445,8 @@ class TestRepinExistingMode:
             "name: storage\n"
             'version: "0.76.0"\n'
             "dependencies:\n"
-            "  - django-storages>=1.14.4\n"
-            "  - boto3>=1.35.0\n"
+            "  - django-storages\n"
+            "  - boto3\n"
         )
 
         # Run repin with both modules (cloud backend on storage so its
@@ -2374,7 +2465,7 @@ class TestRepinExistingMode:
         assert 'django-storages = "^1.14.6"' in pyproject_content
         assert 'boto3 = "^1.40.46"' in pyproject_content
 
-        # Storage's lower manifest-derived fallback must NOT win
+        # Storage's lower table-form version must NOT win
         assert 'django-storages = ">=1.14.4"' not in pyproject_content
         assert 'boto3 = ">=1.35.0"' not in pyproject_content
 
@@ -2387,10 +2478,10 @@ class TestRepinExistingMode:
         tmp_path,
     ):
         """When storage (table-form pyproject deps) is the ONLY module,
-        the non-string fallback to manifest spec should still produce a
-        valid repin.  This confirms that single-module repin is unchanged
-        and that the cross-module _prefer_dependency_value path accepts
-        the fallback value correctly."""
+        the table-form version should still produce a valid repin.  This
+        confirms that single-module repin is unchanged and that the
+        cross-module _prefer_dependency_value path accepts the resolved
+        value correctly."""
         project = _make_project(tmp_path)
         (project / "pyproject.toml").write_text(
             "[tool.poetry.dependencies]\n"
@@ -2402,10 +2493,7 @@ class TestRepinExistingMode:
             project,
             "storage",
             manifest_content=(
-                "name: storage\n"
-                'version: "0.76.0"\n'
-                "dependencies:\n"
-                "  - django-storages>=1.14.4\n"
+                'name: storage\nversion: "0.76.0"\ndependencies:\n  - django-storages\n'
             ),
             pyproject_content=(
                 "[project]\n"
@@ -2416,10 +2504,7 @@ class TestRepinExistingMode:
             ),
         )
         (project / "modules" / "storage" / "module.yml").write_text(
-            "name: storage\n"
-            'version: "0.76.0"\n'
-            "dependencies:\n"
-            "  - django-storages>=1.14.4\n"
+            'name: storage\nversion: "0.76.0"\ndependencies:\n  - django-storages\n'
         )
 
         result = sync_project_module_dependencies(
@@ -2430,8 +2515,8 @@ class TestRepinExistingMode:
 
         assert "django-storages" in result.updated_package_dependencies
         pyproject_content = (project / "pyproject.toml").read_text()
-        # Non-string fallback from storage table-form produces ">=1.14.4"
-        assert 'django-storages = ">=1.14.4"' in pyproject_content
+        # The table-form entry's own version is the repin spec
+        assert 'django-storages = "^1.14.4"' in pyproject_content
 
 
 class TestFacadePatchTargets:
@@ -2484,10 +2569,10 @@ class TestFacadePatchTargets:
         appender.assert_called_once_with(tmp_path / "pyproject.toml", [])
         assert result.changed is False
 
-    def test_patched_manifest_loader_flows_through_path_dependency_patch(
+    def test_patched_published_spec_flows_through_path_dependency_patch(
         self, tmp_path
     ) -> None:
-        """Patching the facade manifest loader reaches path-dependency patching."""
+        """Patching the published-spec helper reaches path-dependency patching."""
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").write_text(
@@ -2498,8 +2583,12 @@ class TestFacadePatchTargets:
             'quickscale-core = { path = "../../missing", develop = true }\n'
         )
         with patch.object(
-            _loader, "get_manifest_for_module", return_value=None
-        ) as loader:
+            _dependency_write,
+            "_published_path_dependency_spec",
+            return_value=QUICKSCALE_CORE_PIN,
+        ) as spec_helper:
             _dependency_write._patch_module_path_dependencies(tmp_path, {"auth": {}})
 
-        loader.assert_called_once_with(tmp_path, "auth", strict=True)
+        spec_helper.assert_called_once_with("quickscale-core")
+        updated = (module_dir / "pyproject.toml").read_text()
+        assert f'quickscale-core = "{QUICKSCALE_CORE_PIN}"' in updated

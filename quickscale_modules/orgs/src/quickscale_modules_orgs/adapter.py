@@ -70,7 +70,7 @@ def _orgs_post_hook(
 
     return ModuleWiringSpec(
         apps=spec.apps,
-        middleware=("quickscale_modules_orgs.middleware.TenantMiddleware",),
+        middleware=spec.middleware,
         settings=settings,
         pre_home_url_includes=pre_home_url_includes,
         url_includes=url_includes,

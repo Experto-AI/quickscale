@@ -238,67 +238,82 @@ def dispatch_notification_message(
 def _verify_webhook_signature(
     *,
     body: bytes,
+    svix_id: str,
+    svix_timestamp: str,
     signature: str,
-    timestamp: str,
-    settings_snapshot: NotificationSettingsSnapshot,
+    secret: str,
+    ttl_seconds: int,
 ) -> None:
-    """Verify the shared-secret HMAC before the body is parsed (rule 26)."""
-    secret = settings_snapshot.resolve_webhook_secret()
+    """Verify Resend's Svix signature before the body is parsed (rule 26).
+
+    The signature covers ``{svix-id}.{svix-timestamp}.{body}``; the header
+    advertises one or more ``v1,`` candidates, any of which may match while
+    Resend rotates the endpoint secret.
+    """
     if not secret:
         raise NotificationWebhookSignatureError(
             "Webhook secret is not configured in the runtime environment."
         )
 
     try:
-        timestamp_value = int(timestamp)
+        timestamp_value = int(svix_timestamp)
     except (TypeError, ValueError) as exc:
         raise NotificationWebhookSignatureError(
             "Webhook timestamp header is invalid."
         ) from exc
 
     age_seconds = abs(int(time.time()) - timestamp_value)
-    if age_seconds > settings_snapshot.webhook_ttl_seconds:
+    if age_seconds > ttl_seconds:
         raise NotificationWebhookSignatureError("Webhook signature has expired.")
 
-    expected_headers = build_webhook_signature_headers(
-        body,
-        secret=secret,
-        timestamp=timestamp_value,
+    expected_signature = _webhooks._build_svix_signature(
+        secret,
+        svix_id=svix_id,
+        timestamp=svix_timestamp,
+        body=body,
     )
-    expected_signature = expected_headers["X-QuickScale-Notifications-Signature"]
-    if not hmac.compare_digest(
-        (signature or "").encode("utf-8"), expected_signature.encode("utf-8")
-    ):
-        raise NotificationWebhookSignatureError("Webhook signature is invalid.")
+    for candidate in signature.split():
+        version, _, encoded = candidate.partition(",")
+        if version != _webhooks._SVIX_SIGNATURE_VERSION:
+            continue
+        if hmac.compare_digest(
+            encoded.strip().encode("utf-8"),
+            expected_signature.encode("utf-8"),
+        ):
+            return
+    raise NotificationWebhookSignatureError("Webhook signature is invalid.")
 
 
 def ingest_webhook_event(
     *,
     body: bytes,
-    signature: str,
-    timestamp: str,
+    svix_id: str,
+    svix_timestamp: str,
+    svix_signature: str,
 ) -> WebhookIngestionResult:
-    """Verify and ingest a signed provider delivery event idempotently.
+    """Verify and ingest a signed Resend delivery event idempotently.
 
-    The signature is verified before the body is parsed (Module Conventions
-    rule 26), so an unsigned or mis-signed request never reaches JSON
-    parsing.
+    The Svix signature is verified before the body is parsed (Module
+    Conventions rule 26), so an unsigned or mis-signed request never reaches
+    JSON parsing; ``svix-id`` is the replay key.
     """
     settings_snapshot = load_settings_snapshot()
     _settings._ensure_notifications_enabled(settings_snapshot)
     _verify_webhook_signature(
         body=body,
-        signature=signature,
-        timestamp=timestamp,
-        settings_snapshot=settings_snapshot,
+        svix_id=svix_id,
+        svix_timestamp=svix_timestamp,
+        signature=svix_signature,
+        secret=settings_snapshot.resolve_webhook_secret(),
+        ttl_seconds=settings_snapshot.webhook_ttl_seconds,
     )
     payload = _webhooks._parse_webhook_payload(body)
-    fields = _webhooks._extract_webhook_event_fields(payload)
+    fields = _webhooks._extract_webhook_event_fields(payload, provider_event_id=svix_id)
     delivery = _webhooks._resolve_webhook_delivery(fields)
 
     occurred_at = _webhooks._parse_event_datetime(
-        payload.get("occurred_at")
-        or payload.get("created_at")
+        payload.get("created_at")
+        or payload.get("occurred_at")
         or payload.get("timestamp")
     )
     normalized_status = _webhooks._EVENT_STATUS_MAP.get(

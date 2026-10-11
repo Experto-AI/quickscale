@@ -652,12 +652,20 @@ class TestRegisteredAdapterPaths:
         assert isinstance(spec, ModuleWiringSpec)
         assert "quickscale_modules_analytics" in spec.apps
 
-    def test_analytics_disabled_suppresses_apps_but_retains_settings(self) -> None:
+    def test_analytics_disabled_keeps_apps_and_drops_public_urls(self) -> None:
         spec = build_manifest_wiring_spec("analytics", {"enabled": False})
         assert isinstance(spec, ModuleWiringSpec)
-        assert spec.apps == ()
-        assert len(spec.settings) == 8
+        assert "quickscale_modules_analytics" in spec.apps
+        assert spec.url_includes == ()
         assert spec.settings["QUICKSCALE_ANALYTICS_ENABLED"] is False
+        assert (
+            spec.settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY"]
+            == "__QS_ENV__:POSTHOG_API_KEY"
+        )
+        assert (
+            spec.settings["QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE"]
+            == "__QS_ENV__:POSTHOG_HOST"
+        )
 
     def test_billing_adapter_returns_spec(self) -> None:
         if "billing" not in MANIFEST_ADAPTER_REGISTRY:
@@ -2037,7 +2045,7 @@ class TestAnalyticsPostHookFailHard:
         assert isinstance(result, ModuleWiringSpec)
 
     def test_disabled_short_circuit_still_works(self) -> None:
-        """Disabled analytics suppresses wiring before nonempty validation."""
+        """Disabled analytics skips nonempty validation and keeps the module."""
         spec = ModuleWiringSpec(
             settings={
                 "QUICKSCALE_ANALYTICS_ENABLED": False,
@@ -2048,8 +2056,11 @@ class TestAnalyticsPostHookFailHard:
 
         result = _analytics_post_hook(spec, resolved)
         assert isinstance(result, ModuleWiringSpec)
+        # Rule 1 (D3): the app stays; only the public URLs unmount.
         assert result.apps == ()
-        assert result.settings == spec.settings
+        assert result.url_includes == ()
+        for key in spec.settings:
+            assert key in result.settings
 
 
 # ---------------------------------------------------------------------------
@@ -2338,6 +2349,7 @@ _SA167A_MANIFEST_APPS: dict[str, tuple[str, ...]] = {
     ),
     "backups": ("quickscale_modules_backups",),
     "notifications": (
+        "anymail",
         "rest_framework",
         "quickscale_modules_notifications",
     ),

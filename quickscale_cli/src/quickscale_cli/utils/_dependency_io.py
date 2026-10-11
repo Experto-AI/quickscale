@@ -217,7 +217,7 @@ def _raise_for_missing_explicit_wheel(
         f"{available_wheels or '[none]'}. Build or copy a wheel matching "
         f"{wheel_pattern!r}, or unset "
         f"{_LOCAL_WHEELHOUSE_ENV} to use the "
-        "manifest version spec."
+        "published lockstep pin."
     )
 
 

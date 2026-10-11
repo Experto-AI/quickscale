@@ -35,16 +35,17 @@ make check-manifest-sync    # module.yml sources equal their core snapshots
 make check-core-compat      # quickscale-core lockstep pins equal the derived specifier
 ```
 
-The `quickscale-core` lockstep pin is **derived**, not hand-maintained. Any module declaring a
-`quickscale-core` requirement in its `module.yml` pins the release being published as the floor and
-the next minor as the ceiling — for `0.88.0`, `quickscale-core>=0.88.0,<0.89.0`. `make bump-version`
-stamps that into every module's `module.yml` and its core snapshot, and `make check-core-compat`
-asserts the exact specifier against `VERSION`, so a stale pin is a red gate rather than something to
+The `quickscale-core` lockstep pin is **derived**, not hand-maintained. Module manifests list the
+bare `quickscale-core` name (rule 39); the bounded pin a generated project receives is derived from
+`VERSION` — floor = the release being published, ceiling = the next minor, for `0.88.0`,
+`quickscale-core>=0.88.0,<0.89.0`. `make check-core-compat` asserts the exact specifier owned by
+the module `pyproject.toml` against `VERSION`, so a stale pin is a red gate rather than something to
 catch by eye. The e2e constraint literal derives from `VERSION` for the same reason.
 
 Note that `scripts/sync_module_manifests.py --sync` only copies a module-owned `module.yml` to its
-core snapshot. It never derives a pin: syncing a stale pin leaves `make check-manifest-sync` green.
-Restamp with `make version-update`, not with `--sync`.
+core snapshot. Manifests carry no pin to restamp — the dependency name stays bare and the specifier
+lives in the module `pyproject.toml` — so `make check-manifest-sync` and `make check-core-compat`
+cover different surfaces.
 
 `contract_vintage.minimum` is **not** a lockstep field. It is the adoption boundary for
 module-specific contracts; leave it alone, and give a genuinely new manual adoption step its own
@@ -148,8 +149,9 @@ Then stamp the version:
 make bump-version X.Y.Z
 ```
 
-This writes `VERSION` and propagates it to every package, module manifest, core snapshot, and
-`quickscale-core` lockstep pin ([§1.1](#11-version-and-manifest-integrity)). Review
+This writes `VERSION` and propagates it to every package, module manifest, and core snapshot; the
+`quickscale-core` lockstep pin is derived from `VERSION`
+([§1.1](#11-version-and-manifest-integrity)). Review
 `contract_vintage.minimum` if a module genuinely gained manual adoption steps. Stage every tracked
 change — the refreshed pins and the version stamp must both be in this commit — inspect the staged
 set, and commit the release state with the conventional subject:

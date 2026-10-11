@@ -76,7 +76,8 @@ config:
 required_modules:
   - orgs
 
-dependencies: []
+dependencies:
+  - quickscale-core
 
 contract_vintage:
   minimum: "0.87.0"

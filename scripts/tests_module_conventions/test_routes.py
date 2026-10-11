@@ -194,6 +194,48 @@ def test_theme_api_literal_control() -> None:
     assert checker.rule_7_urls(_corpus(module)) == []
 
 
+def test_apps_and_middleware_literal_control() -> None:
+    """Wiring literals beyond url_includes fail rule 7 (proposal 18)."""
+    module = _golden_module()
+    literal_apps = _with_files(
+        module,
+        adapter=("def build():\n    return Wiring(apps=['quickscale_modules_demo'])\n"),
+    )
+    assert any(
+        "literal apps" in violation for violation in _violations(checker.rule_7_urls, literal_apps)
+    )
+    literal_middleware = _with_files(
+        module,
+        adapter=(
+            "def build():\n"
+            "    middleware = ['demo.middleware.TenantMiddleware']\n"
+            "    return Wiring(middleware=middleware)\n"
+        ),
+    )
+    assert any(
+        "declares a literal middleware" in violation
+        for violation in _violations(checker.rule_7_urls, literal_middleware)
+    )
+    appended = _with_files(
+        module,
+        adapter=(
+            "def build():\n"
+            "    apps = []\n"
+            "    apps.append('quickscale_modules_demo')\n"
+            "    return Wiring(apps=apps)\n"
+        ),
+    )
+    assert any(
+        "appends a literal to apps" in violation
+        for violation in _violations(checker.rule_7_urls, appended)
+    )
+    empty_literals = _with_files(
+        module,
+        adapter=("def build():\n    return Wiring(apps=(), middleware=())\n"),
+    )
+    assert _violations(checker.rule_7_urls, empty_literals) == []
+
+
 def test_url_mount_template_literal_control() -> None:
     """A mount literal in a generator `.j2` file fails rule 7 (gap 13)."""
     module = _golden_module()

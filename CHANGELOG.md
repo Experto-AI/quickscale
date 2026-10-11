@@ -700,10 +700,23 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     gate renders a project offline and executes the rendered test and migrate commands and the
     healthcheck payload, so the generated automation is proven by execution rather than by text
     assertions.
+  - **Resend webhooks are verified per the vendor contract.** The notifications webhook verifies
+    the Svix `svix-id`/`svix-timestamp`/`svix-signature` headers against the base64 `whsec_`
+    signing secret named by `webhook_secret_env_var`, accepts any advertised `v1` signature
+    within the `webhook_ttl_seconds` window, reads the Resend payload (`type`, `data.email_id`,
+    `data.to`), and deduplicates retries by `svix-id`.
   - **The starter frontend ships a passing coverage gate.** The `showcase_react` test suite
     exercises the starter's pages, hooks, stores, components, and analytics wiring, so a fresh
     project's `pnpm test:coverage` meets its existing per-file thresholds without threshold or
     include changes.
+  - **One off switch, and closed-world module manifests.** Switching any module off keeps its
+    Django app, middleware, settings, admin, and template tags installed and unmounts only its
+    public URLs and SPA routes — billing's and notifications' public pages now answer Django 404
+    while their webhooks stay mounted and answer the module's refusal — and its `.env.example`
+    block stays in place, while scheduled commands refuse only runs marked `--trigger scheduled`.
+    A module manifest is a closed world: an unknown top-level key fails the load, `apps` and
+    `middleware` come only from manifest wiring projections, and `dependencies` lists bare package
+    names — including `quickscale-core` — with the versions in the module's `pyproject.toml`.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
