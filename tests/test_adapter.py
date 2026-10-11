@@ -1,12 +1,17 @@
 """Focused tests for the CRM manifest adapter.
 
-Covers the post-resolution coercion hook and the sentinel contract.
+The generic manifest boundary owns CRM's option defaults, normalization,
+checks, and projections; these tests pin the adapter's remaining contract —
+the off-switch transformation, canonical settings, and the sentinel.
 """
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from quickscale_core.manifest import ManifestError
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_crm.adapter import (
@@ -25,98 +30,48 @@ class TestGetManifestAdapter:
         assert callable(adapter)
 
 
+class TestCrmManifestAdapterSettings:
+    """The manifest owns every canonical CRM setting."""
+
+    def test_defaults_are_canonical(self) -> None:
+        spec = _crm_manifest_adapter({})
+
+        assert spec.settings["QUICKSCALE_CRM_DEALS_PER_PAGE"] == 25
+        assert spec.settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"] == 50
+        assert spec.settings["QUICKSCALE_CRM_API_ENABLED"] is True
+
+    def test_overrides_are_canonical(self) -> None:
+        spec = _crm_manifest_adapter(
+            {"deals_per_page": 10, "contacts_per_page": 20, "api_enabled": False}
+        )
+
+        assert spec.settings["QUICKSCALE_CRM_DEALS_PER_PAGE"] == 10
+        assert spec.settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"] == 20
+        assert spec.settings["QUICKSCALE_CRM_API_ENABLED"] is False
+
+    @pytest.mark.parametrize(
+        ("option_name", "value"),
+        [
+            ("deals_per_page", "25"),
+            ("contacts_per_page", True),
+            ("api_enabled", 1),
+            ("tags_per_page", 0),
+        ],
+    )
+    def test_wrong_shaped_values_are_refused(
+        self, option_name: str, value: object
+    ) -> None:
+        """A raw value of the wrong shape (or range) is refused, never coerced."""
+        with pytest.raises(ManifestError, match="modules.crm."):
+            _crm_manifest_adapter({option_name: value})
+
+
 class TestCrmPostHook:
-    """_crm_post_hook — int/bool coercions."""
+    """_crm_post_hook — the off-switch transformation."""
 
-    def test_coerces_deals_per_page_to_int(self) -> None:
-        """QUICKSCALE_CRM_DEALS_PER_PAGE must be coerced to int."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_CRM_DEALS_PER_PAGE": "25",
-                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "50",
-                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
-                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_API_ENABLED": 1,
-            },
-        )
-        result = _crm_post_hook(spec, {"enabled": True})
-        assert result.settings["QUICKSCALE_CRM_DEALS_PER_PAGE"] == 25
-        assert isinstance(result.settings["QUICKSCALE_CRM_DEALS_PER_PAGE"], int)
-
-    def test_coerces_contacts_per_page_to_int(self) -> None:
-        """QUICKSCALE_CRM_CONTACTS_PER_PAGE must be coerced to int."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_CRM_DEALS_PER_PAGE": "10",
-                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "20",
-                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
-                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_API_ENABLED": 0,
-            },
-        )
-        result = _crm_post_hook(spec, {"enabled": True})
-        assert result.settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"] == 20
-        assert isinstance(result.settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"], int)
-
-    def test_coerces_enable_api_to_bool(self) -> None:
-        """QUICKSCALE_CRM_API_ENABLED must be coerced to bool."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_CRM_DEALS_PER_PAGE": "10",
-                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "10",
-                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
-                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_API_ENABLED": 1,
-            },
-        )
-        result = _crm_post_hook(spec, {"enabled": True})
-        assert result.settings["QUICKSCALE_CRM_API_ENABLED"] is True
-
-    def test_coerces_enable_api_to_false(self) -> None:
-        """Falsy values produce False for the API flag."""
-        spec = ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_CRM_DEALS_PER_PAGE": "5",
-                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "5",
-                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
-                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_API_ENABLED": 0,
-            },
-        )
-        result = _crm_post_hook(spec, {"enabled": True})
-        assert result.settings["QUICKSCALE_CRM_API_ENABLED"] is False
-
-    def test_preserves_non_setting_fields(self) -> None:
-        """Fields other than settings must pass through unchanged."""
-        spec = ModuleWiringSpec(
-            apps=("quickscale_modules_crm",),
-            middleware=(),
-            settings={
-                "QUICKSCALE_CRM_DEALS_PER_PAGE": "10",
-                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": "20",
-                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
-                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_API_ENABLED": True,
-            },
-        )
-        result = _crm_post_hook(spec, {"enabled": True})
-        assert result.apps == ("quickscale_modules_crm",)
-        assert result.middleware == ()
+    def test_enabled_returns_the_assembled_spec(self) -> None:
+        spec = ModuleWiringSpec(apps=("quickscale_modules_crm",))
+        assert _crm_post_hook(spec, {"enabled": True}) is spec
 
     def test_disabled_module_drops_url_mounts_and_keeps_apps(self) -> None:
         """Rule 1 (D3): off keeps the app and settings but mounts no URLs."""
@@ -124,12 +79,6 @@ class TestCrmPostHook:
             apps=("rest_framework", "django_filters", "quickscale_modules_crm"),
             settings={
                 "QUICKSCALE_CRM_DEALS_PER_PAGE": 25,
-                "QUICKSCALE_CRM_CONTACTS_PER_PAGE": 50,
-                "QUICKSCALE_CRM_TAGS_PER_PAGE": 50,
-                "QUICKSCALE_CRM_COMPANIES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_STAGES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_CONTACT_NOTES_PER_PAGE": 50,
-                "QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE": 50,
                 "QUICKSCALE_CRM_API_ENABLED": True,
             },
             pre_home_url_includes=(),
