@@ -74,6 +74,10 @@ pick the tier, run its command once.
 - Escalate to `release` at plan closeout and whenever an E2E trigger under
   [E2E Testing Policy](#e2e-testing-policy) fires — notably after generator
   template changes.
+- **`release` is owned by the final gate, not an implementation phase.** It runs
+  once over the merged tree after independent review, by whoever closes the task
+  (the Adaptive orchestrator's Final gate). Implementation phases and review fixes
+  validate at `change` or `task` and defer `release` to that gate by name.
 - A green `change` tier is a complete obligation at that tier. Report every check
   deferred to a wider tier by naming that tier; a deferral with no named tier is
   an omission, not a tier choice.

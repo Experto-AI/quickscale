@@ -32,6 +32,7 @@ quality_gate_authority:
       - make test-integration MODULE=<name>
       - make check QUIET=1              # when repository gates sit in the delta's surface
     release:                  # closeout, version bump, generator-template change, pre-merge
+      # Owned by the orchestrator's post-review Final gate; never a phase's tier.
       - make ci
       - make ci-e2e                     # instead of make ci when an E2E trigger applies
 
