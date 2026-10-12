@@ -103,6 +103,8 @@ A track is **truly green** only when all three states are yes.
   handlers with core's redaction helpers.
 - **Cross-track edits.** SA204 adds its gate row to the Track 2 registry. All land through
   the serialized merge queue.
+- **Cross-track edits.** For SA267 only, Track 2 may refactor the Track-3-owned conformance
+  harness while Track 3 is idle; detector behavior, rules, and registry rows stay unchanged.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md). Each track resolves the shared set at its
@@ -251,7 +253,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA267 — Bring `scripts/` under the quality thresholds without gating it.**
 
   **Context:** `check_quality.sh` scans only packages, and `scripts/` misses its fixed lines:
-  about 65 functions at CC >= 21, 9 non-test files >= 800 lines, and 8 vulture 100%-confidence
+  63 non-test functions at CC >= 21, 11 non-test Python files >= 800 lines, and 8 vulture 100%-confidence
   findings (arch audit `rules-held-by-parity-not-derivation`).
 
   **Acceptance:** `scripts/` has no finding on the gate's fail lines: radon CC >= 21, files
@@ -259,7 +261,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   code over splitting it. Behavior of every gate is unchanged, and their tests pass. `make
   quality` and `check_quality.sh` discovery are not changed.
 
-  **Slices:** one per script family, largest debt first; each lands green on its own.
+  **Slices:** one per script family, largest debt first; file sub-slices are allowed in the
+  conformance harness. The routes sub-slice is implemented: `rules_routes.py` is a 310-line
+  facade with seven helpers (all <800 lines, max CC 20), removing nine CC failures and one
+  oversized file. Baseline differential checks found no drift; 584 harness controls pass.
+  Next: `rules_identity.py`, then the remaining harness/script families and test-function debt.
+  Keep the module-name tables in the rule-37-exempt facade and preserve lazy renderer binding.
 
   **Surfaces:** `scripts/` and their tests, and the arch audit.
 
