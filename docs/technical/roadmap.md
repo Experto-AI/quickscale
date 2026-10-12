@@ -13,8 +13,8 @@ their value.
 
 **Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
-([publish_procedure.md](publish_procedure.md)); 0.89.0 publishes from `ea41844e` (pre-SA263)
-unless `make release-gate` passes on `v89`.
+([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
+with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#11-watchlist-and-accepted-trade-offs)). Publication remains a maintainer action.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -33,14 +33,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA263 | Adapters validate, coerce, and default only through the manifest | 2 | — | Optional |
 | SA267 | Bring `scripts/` under the quality thresholds without gating it | 2 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (cutover) ∥ SA204 ──► SA153 ──► SA154 (inventory)
-Track 2: SA263 ──► SA267
+Track 2: SA267
 Track 3: —
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
@@ -66,7 +65,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 ∥ SA204 (a) | yes | no | yes | no | yes |
-| 2 | SA263 | yes | no | yes | no | no |
+| 2 | SA267 | yes | yes | yes | **yes** | no |
 | 3 | — | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -247,20 +246,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [ ] **SA263 — Adapters validate, coerce, and default only through the manifest.**
-
-  **Context:** all 12 adapters validate, coerce, and default options differently
-  (coherence `option-schema-and-validation`); core's resolver step 5 validates against rule lists
-  the loader refuses (gap 14); a blank `__QS_ENV__:` marker renders as a literal string (gap 15);
-  backups' remote credentials break rule 1's naming (`secret-env-var-names`).
-
-  **Done:** manifest-owned validation, typing, defaults, and `_ENV_VAR` projection across all 12
-  adapters, with harness enforcement; the coherence findings are closed.
-
-  **Remaining (Tier 1):** attribute the one `make release-gate` failure
-  (`TestDevelopmentCommandsE2E.test_full_development_workflow`, HTTP 500 on `/`). Run it 5× on
-  `ea41844e` and on `v89` with server logs kept; fix it here if only `v89` fails, otherwise move it
-  to the tech-audit watchlist. Close on one clean `make release-gate`.
+- [x] **SA263 — Adapters validate, coerce, and default only through the manifest.**
 
 - [ ] **SA267 — Bring `scripts/` under the quality thresholds without gating it.**
 

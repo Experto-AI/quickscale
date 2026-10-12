@@ -265,13 +265,21 @@ items:
   - {id: migrate-runs-per-replica, status: watchlist, category: II, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/generator/templates/start.sh.j2],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
+  - {id: development-workflow-intermittent-root-500, status: watchlist, category: VI,
+     reality: generated-app,
+     anchors: [quickscale_cli/tests/test_e2e_development_workflow.py],
+     first_seen: 2026-10-11, last_verified: 2026-10-12}
+  - {id: core-e2e-poetry-cache-install-candidates, status: watchlist, category: VI,
+     reality: tooling,
+     anchors: [quickscale_core/tests/conftest.py, quickscale_core/tests/test_generated_project_runtime.py],
+     first_seen: 2026-10-12, last_verified: 2026-10-12}
 ```
 
 ---
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 1 · total 1 open. Watchlist: 7.
+**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 1 · total 1 open. Watchlist: 9.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
@@ -485,6 +493,36 @@ Added:
 
 ## 11. Watchlist and accepted trade-offs
 
+- `development-workflow-intermittent-root-500` — SA263's prior release-gate HTTP 500 on `/`
+  did not reproduce: the exact `TestDevelopmentCommandsE2E.test_full_development_workflow`
+  passed 5/5 on `ea41844eb2d2127162f66e84e71a70990c1563d6` and 5/5 on the synced `v89`
+  tree at `f107118e16d535a0463a41368a7d0fb8e94b65af`; every run exited 0 and retained
+  backend, frontend, and database log streams. No SA263-only regression is established.
+  Command (each revision, five times): `QS_E2E_NO_CLEANUP=1 QS_E2E_PARALLEL=0
+  QS_E2E_CONTAINER_PREFIX=<run-prefix> QS_E2E_RESOURCE_SCOPE=<run-prefix> poetry run pytest
+  quickscale_cli/tests/test_e2e_development_workflow.py::TestDevelopmentCommandsE2E::test_full_development_workflow
+  -m e2e --rootdir=quickscale_cli -o addopts= --tb=long -ra -q`.
+  Local evidence: `/tmp/opencode/sa263-20261012-{base,current}-captured-*` (pytest logs,
+  exit records, and live Docker server logs); wrapper: `/tmp/opencode/sa263-20261012-capture.py`.
+  Trigger: recurrence with a retained backend traceback; do not attribute it to manifest changes
+  from the old status-only failure.
+- `core-e2e-poetry-cache-install-candidates` — separate from the HTTP 500: two full gate runs
+  exited 2 with eight Core Poetry-install failures; labelled stdout identifies
+  `Unable to find installation candidates for ast-serialize (0.12.1)`. The focused all-module
+  migration test passed, including under xdist, so this is not established as a product defect.
+  With a fresh run-local cache, `POETRY_CACHE_DIR=/tmp/opencode/sa263-20261012-poetry-cache
+  make release-gate` exited 0 on the diagnostic-corrected task tree (no product edits).
+  Local gate logs: `/tmp/opencode/sa263-20261012-release-gate-{retry,diagnostics,fresh-cache}.log`.
+  The earlier 600-second gate attempt was killed during E2E and supplied no overall verdict;
+  completed runs used an 1800-second budget. Existing caches were not deleted or modified.
+  Trigger: recurrence with a fresh isolated cache, or evidence identifying why the default
+  worker-cache paths select unusable candidates; the cache-content root cause is unproven.
+  A later final gate exited 2 on different acquisition failures (Core `jinja2` install and
+  CLI Docker Hub DNS timeout); both focused retries exited 0 and the unchanged-tree full
+  confirmation exited 0. Logs: `/tmp/opencode/sa263-20261012-final-release-gate.log`,
+  `/tmp/opencode/sa263-20261012-final-{core,cli}-focused.log`, and
+  `/tmp/opencode/sa263-20261012-final-release-gate-retry.log`. These environment flakes
+  establish neither an HTTP regression nor the cause of the earlier cache-dependent failures.
 - `dr-restore-vintage-exact-match` — the recorded clean-break decision. Trigger: a patch release
   without schema change where operators need an older backup. **Not fired**: there is no
   `dr_engine` change since `e2623cb8`.

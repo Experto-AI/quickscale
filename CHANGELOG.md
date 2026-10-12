@@ -722,12 +722,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     A module manifest is a closed world: an unknown top-level key fails the load, `apps` and
     `middleware` come only from manifest wiring projections, and `dependencies` lists bare package
     names — including `quickscale-core` — with the versions in the module's `pyproject.toml`.
-  - **Module adapters use the manifest option boundary — partial; release-gate attribution pending.**
+  - **Module adapters use the manifest option boundary.**
     `module.yml` owns option validation,
     normalization, defaults, and environment-backed secret projection, and the conventions harness
     rejects duplicate option handling in adapter hooks, including omitted callable defaults.
-    Blank secret markers render as empty strings, and storage's path-or-absolute `MEDIA_URL`
-    preserves its `/media/` default and slash behavior.
+    Blank secret markers render as empty strings, storage's path-or-absolute `MEDIA_URL`
+    preserves its `/media/` default and slash behavior, and Core runtime smoke-test Poetry
+    failures retain labelled stdout and stderr diagnostics.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

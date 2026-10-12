@@ -993,7 +993,11 @@ def _install_project_dependencies(
         and _is_poetry_network_failure(lock_output)
     ):
         pytest.skip("PyPI is unreachable in this environment")
-    assert lock_result.returncode == 0, f"Poetry lock failed: {lock_result.stderr}"
+    assert lock_result.returncode == 0, (
+        "Poetry lock failed:\n"
+        f"stdout: {lock_result.stdout}\n"
+        f"stderr: {lock_result.stderr}"
+    )
 
     install_result = subprocess.run(
         ["poetry", "install", "--no-interaction"],
@@ -1011,7 +1015,9 @@ def _install_project_dependencies(
     ):
         pytest.skip("PyPI is unreachable in this environment")
     assert install_result.returncode == 0, (
-        f"Poetry install failed: {install_result.stderr}"
+        "Poetry install failed:\n"
+        f"stdout: {install_result.stdout}\n"
+        f"stderr: {install_result.stderr}"
     )
 
 
@@ -1518,6 +1524,69 @@ def test_install_project_dependencies_strict_network_failure_is_not_skipped(
     with pytest.raises(AssertionError, match="Poetry lock failed"):
         _install_project_dependencies(tmp_path, strict=True)
     assert calls == [["poetry", "lock"]]
+
+
+def test_install_project_dependencies_lock_failure_reports_labelled_streams(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Nonzero lock results surface both labelled subprocess streams."""
+    stdout_marker = "lock stdout diagnostic: dependency solver conflict"
+    stderr_marker = "lock stderr diagnostic: version solving failed"
+    monkeypatch.setattr(
+        sys.modules[__name__], "_pin_project_core_dependency", lambda _path: None
+    )
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        assert command == ["poetry", "lock"]
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout=stdout_marker,
+            stderr=stderr_marker,
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(AssertionError) as failure:
+        _install_project_dependencies(tmp_path, strict=True)
+    message = str(failure.value)
+    assert "Poetry lock failed" in message
+    assert f"stdout: {stdout_marker}" in message
+    assert f"stderr: {stderr_marker}" in message
+
+
+def test_install_project_dependencies_install_failure_reports_labelled_streams(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Nonzero default-path install results surface both labelled streams."""
+    stdout_marker = "install stdout diagnostic: package not found in the lock file"
+    stderr_marker = "install stderr diagnostic: installation aborted"
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        sys.modules[__name__], "_pin_project_core_dependency", lambda _path: None
+    )
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        if command == ["poetry", "lock"]:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        assert command == ["poetry", "install", "--no-interaction"]
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout=stdout_marker,
+            stderr=stderr_marker,
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(AssertionError) as failure:
+        _install_project_dependencies(tmp_path)
+    message = str(failure.value)
+    assert "Poetry install failed" in message
+    assert f"stdout: {stdout_marker}" in message
+    assert f"stderr: {stderr_marker}" in message
+    assert calls == [["poetry", "lock"], ["poetry", "install", "--no-interaction"]]
 
 
 def _run_migrations(
