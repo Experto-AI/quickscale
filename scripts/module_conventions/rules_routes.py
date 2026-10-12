@@ -1,44 +1,186 @@
-"""Route, template, API, authorization, theme-seam, and throttle rules."""
+"""
+Route, template, API, authorization, theme-seam, and throttle rules.
+
+The mechanics live in private sibling modules grouped by rule theme
+(``_routes_urls``, ``_routes_templates``, ``_routes_http_apis``,
+``_routes_view_index``, ``_routes_authorization``, ``_routes_theme_seam``,
+``_routes_throttles``); this module keeps rule 37's module-name exception
+tables (rule 37's allowlist exempts only ``rules_routes.py``), orchestrates
+rule 7's and rule 19's ordered finding groups, and re-exports every moved name
+so existing import paths and test patch targets keep working.
+"""
 
 from __future__ import annotations
 
-import ast
 import re
-from pathlib import Path
 
-from scripts.module_conventions.core import (
-    ALLOWED_TEMPLATE_DIRS,
-    GENERATOR_TEMPLATE_ROOT,
-    SNAKE_CASE,
-    Corpus,
-    Module,
-    _call_func_name,
-    _declared_mounts,
-    _declared_url_mounts,
-    _docstring_nodes,
-    _keyword,
-    _literal,
-    _parse,
-    _string_assignments,
-    _uses_name,
-    _wiring_projection,
+from scripts.module_conventions._routes_authorization import (
+    FORBIDDEN_VIEW_TOKENS,
+    GUARD_MIXIN_NAMES,
+    PUBLIC_READ_MIXIN_NAMES,
+    PUBLIC_READ_MIXIN_SUFFIX,
+    ROLE_ENFORCING_BASE_NAMES,
+    _allow_any_hand_check_violations,
+    _class_declares_guard,
+    _declares_min_org_role,
+    _declares_permission_classes,
+    _effective_methods,
+    _effective_permission_names,
+    _get_permissions_binding,
+    _guard_violations,
+    _inherits_role_enforcement,
+    _is_sanctioned_guard_name,
+    _module_helper_index,
+    _permission_expression_name,
+    _reads_user_is_authenticated,
+    _sibling_rel,
+    _token_violations,
+    _view_token,
 )
-
-# Rule 31's seam producers, relative to the core package.  The templates render
-# the discovered module set at request time through the runtime tag library; the
-# theme's TypeScript may still name its own React surfaces (rule 37's allowlist).
-THEME_SEAM_TEMPLATE = "generator/templates/themes/showcase_react/templates/index.html.j2"
-
-THEME_SEAM_TEMPLATES: tuple[str, ...] = (
+from scripts.module_conventions._routes_http_apis import (
+    CORE_LIST_PAGINATION,
+    CORE_SESSION_AUTHENTICATION,
+    _declares_page_size_setting,
+    _pagination_bindings,
+    _pagination_violations,
+    _paginator_classifications,
+    _rendered_managed_json_violations,
+    _resolves_to_core_list_pagination,
+    _resolves_to_core_session_authentication,
+    _resolves_to_drf_page_number_pagination,
+    _resolves_to_drf_session_authentication,
+    _session_authentication_bindings,
+    _session_authentication_violations,
+    _sibling_paginator_imports,
+    rule_9_http_apis,
+)
+from scripts.module_conventions._routes_templates import (
+    _is_admin_model_override,
+    rule_8_templates,
+)
+from scripts.module_conventions._routes_theme_seam import (
+    SEAM_LIBRARY_LOAD,
     THEME_SEAM_TEMPLATE,
-    "generator/templates/themes/showcase_react/templates/social/link_tree.html.j2",
-    "generator/templates/themes/showcase_react/templates/social/embeds.html.j2",
+    THEME_SEAM_TEMPLATES,
+    rule_31_theme_seam,
+)
+from scripts.module_conventions._routes_throttles import (
+    RATE_LITERAL,
+    _throttle_registration_violations,
+    _webhook_view_names,
+    rule_32_throttles,
+)
+from scripts.module_conventions._routes_urls import (
+    THEME_TS_ROOT,
+    THEME_TS_TEST_MARKER,
+    WIRING_LITERAL_FIELDS,
+    _adapter_literal_wiring_violations,
+    _declares_literal_wiring,
+    _module_url_violations,
+    _route_name_violations,
+    _theme_api_literal_violations,
+    _url_prefix_collision_violations,
+)
+from scripts.module_conventions._routes_view_index import (
+    DJANGO_VIEW_MODULE_PREFIXES,
+    DRF_VIEW_MODULE_PREFIXES,
+    VIEW_MODULE_PREFIXES,
+    _base_name,
+    _base_view_target,
+    _defines_view_class,
+    _defines_view_code,
+    _dotted_name,
+    _is_view_base,
+    _is_view_module,
+    _takes_request,
+    _view_bindings,
+    _view_class_index,
+    _view_framework,
+)
+from scripts.module_conventions.core import (
+    GENERATOR_TEMPLATE_ROOT,
+    Corpus,
+    _declared_mounts,
 )
 
-#: Rule 31's runtime seam library: every producer loads it, and its tags
-#: resolve the flags and paths from the shipped inventory and live settings
-#: (``quickscale_core.runtime.seam_tags``).
-SEAM_LIBRARY_LOAD = re.compile(r"{%\s*load\b[^%]*\bquickscale_seam\b[^%]*%}")
+#: The rule 40 harness re-exports every name the pre-split module published,
+#: private helpers included: existing import paths (``registry``,
+#: ``check_module_conventions``, the control cases) and test patch targets keep
+#: resolving through this facade.
+__all__ = (
+    "CORE_LIST_PAGINATION",
+    "CORE_SESSION_AUTHENTICATION",
+    "DJANGO_VIEW_MODULE_PREFIXES",
+    "DRF_VIEW_MODULE_PREFIXES",
+    "FORBIDDEN_VIEW_TOKENS",
+    "GUARD_MIXIN_NAMES",
+    "OPERATOR_TOKENS",
+    "PUBLIC_READ_MIXIN_NAMES",
+    "PUBLIC_READ_MIXIN_SUFFIX",
+    "RATE_LITERAL",
+    "ROLE_ENFORCING_BASE_NAMES",
+    "RULE_7_ALLOWED_TEMPLATE_MOUNTS",
+    "SEAM_LIBRARY_LOAD",
+    "THEME_SEAM_TEMPLATE",
+    "THEME_SEAM_TEMPLATES",
+    "THEME_TS_ROOT",
+    "THEME_TS_TEST_MARKER",
+    "TRAFFIC_FILTER_TOKENS",
+    "VIEW_MODULE_PREFIXES",
+    "WIRING_LITERAL_FIELDS",
+    "_adapter_literal_wiring_violations",
+    "_allow_any_hand_check_violations",
+    "_base_name",
+    "_base_view_target",
+    "_class_declares_guard",
+    "_declares_literal_wiring",
+    "_declares_min_org_role",
+    "_declares_page_size_setting",
+    "_declares_permission_classes",
+    "_defines_view_class",
+    "_defines_view_code",
+    "_dotted_name",
+    "_effective_methods",
+    "_effective_permission_names",
+    "_get_permissions_binding",
+    "_inherits_role_enforcement",
+    "_is_admin_model_override",
+    "_is_sanctioned_guard_name",
+    "_is_view_base",
+    "_is_view_module",
+    "_module_helper_index",
+    "_pagination_bindings",
+    "_pagination_violations",
+    "_paginator_classifications",
+    "_permission_expression_name",
+    "_reads_user_is_authenticated",
+    "_rendered_managed_json_violations",
+    "_resolves_to_core_list_pagination",
+    "_resolves_to_core_session_authentication",
+    "_resolves_to_drf_page_number_pagination",
+    "_resolves_to_drf_session_authentication",
+    "_route_name_violations",
+    "_session_authentication_bindings",
+    "_session_authentication_violations",
+    "_sibling_paginator_imports",
+    "_sibling_rel",
+    "_takes_request",
+    "_template_mount_literal_violations",
+    "_theme_api_literal_violations",
+    "_throttle_registration_violations",
+    "_url_prefix_collision_violations",
+    "_view_bindings",
+    "_view_class_index",
+    "_view_framework",
+    "_view_token",
+    "_webhook_view_names",
+    "rule_19_authorization",
+    "rule_31_theme_seam",
+    "rule_32_throttles",
+    "rule_7_urls",
+    "rule_8_templates",
+    "rule_9_http_apis",
+)
 
 # Rule 41's stated exceptions: orgs' tenancy-mode shell reservations and
 # forms' shallow reservations stay host-rendered, but since SA258 they render
@@ -55,23 +197,11 @@ RULE_7_ALLOWED_TEMPLATE_MOUNTS: dict[tuple[str, str], str] = {
     ),
 }
 
-# Rule 19's forbidden tokens, the listed operator paths where a superuser check
-# is sanctioned (audited cross-tenant operator access), and the listed traffic
-# filter.  Rule 46's discovery finds view code by content: a class that
-# subclasses a Django or DRF view (directly or through a class the same file
-# defines), or any function taking a ``request`` parameter.  View code a split
-# files under any private name is therefore scanned, and a token is sanctioned
+# Rule 19's listed operator paths where a superuser check is sanctioned
+# (audited cross-tenant operator access) and the listed traffic filter.  The
+# tables stay defined here because rule 37's allowlist exempts only this
+# module; ``_routes_authorization`` scans with them, and a token is sanctioned
 # only by an explicit mapping entry.
-VIEW_MODULE_PREFIXES = (
-    "django.contrib.auth.views",
-    "django.views",
-    "rest_framework.views",
-    "rest_framework.generics",
-    "rest_framework.viewsets",
-)
-
-FORBIDDEN_VIEW_TOKENS = ("is_staff", "is_superuser", "IsAdminUser", "redirect_to_login")
-
 OPERATOR_TOKENS: dict[tuple[str, str], frozenset[str]] = {
     ("forms", "views.py"): frozenset({"is_superuser"}),
     ("orgs", "_api_views.py"): frozenset({"is_superuser"}),
@@ -90,165 +220,11 @@ TRAFFIC_FILTER_TOKENS: dict[tuple[str, str], frozenset[str]] = {
     ("analytics", "services.py"): frozenset({"is_staff"}),
 }
 
-# Rule 19's sanctioned page-guard mixins and the named public-read
-# declarations: a page declares its guard with a login or role mixin, and a
-# public page declares that with a mixin whose name carries the public-read
-# promise (``PublicSystemOrgReadMixin`` or a ``*PublicReadMixin``).
-GUARD_MIXIN_NAMES: frozenset[str] = frozenset({"LoginRequiredMixin", "OrgRoleMixin"})
-PUBLIC_READ_MIXIN_NAMES: frozenset[str] = frozenset({"PublicSystemOrgReadMixin"})
-PUBLIC_READ_MIXIN_SUFFIX = "PublicReadMixin"
-
-#: Rule 19's enforcers of a ``min_org_role`` attribute: the attribute is a
-#: guard only beside a base that reads it.
-ROLE_ENFORCING_BASE_NAMES: frozenset[str] = frozenset({"OrgApiBaseView", "OrgRoleMixin"})
-
-#: Rule 19's view frameworks: DRF permissions are enforced only on DRF views,
-#: so a ``permission_classes`` attribute on a plain Django page declares nothing.
-DRF_VIEW_MODULE_PREFIXES: tuple[str, ...] = (
-    "rest_framework.views",
-    "rest_framework.generics",
-    "rest_framework.viewsets",
-)
-DJANGO_VIEW_MODULE_PREFIXES: tuple[str, ...] = (
-    "django.views",
-    "django.contrib.auth.views",
-)
-
-RATE_LITERAL = re.compile(r"\d+/(?:second|minute|hour|day)")
-
-#: Rule 9's one session authentication class (SA262), shipped in the
-#: ``quickscale_core.runtime`` facade.  A module-defined subclass or a direct
-#: DRF spelling fails the closed world.
-CORE_SESSION_AUTHENTICATION = "QuickscaleSessionAuthentication"
-
-#: Rule 9's one list paginator (SA262), shipped in the
-#: ``quickscale_core.runtime`` facade.  A module paginator subclasses it and
-#: declares the ``<THING>_PER_PAGE`` setting it reads; a
-#: ``PageNumberPagination`` subclass outside that world and a literal
-#: ``page_size`` both fail the closed world.
-CORE_LIST_PAGINATION = "PlainListPagination"
-
-
-#: Adapter keywords and assignment targets whose values must come only from
-#: the module manifest (Module Wiring Authority): the wiring fields an
-#: adapter may project, never declare as Python literals.
-WIRING_LITERAL_FIELDS = (
-    "apps",
-    "middleware",
-    "url_includes",
-    "pre_home_url_includes",
-    "spa_routes",
-)
-
-
-def _declares_literal_wiring(value: ast.expr) -> bool:
-    """
-    Return True when a non-empty list/tuple literal hard-codes module wiring.
-
-    The manifest is the only place that sets a module's apps, middleware, and
-    URL mounts, so an adapter naming literal wiring entries violates it.  An
-    *empty* literal declares nothing at all: it is how a switched-off module
-    mounts none of its public URLs (rule 1), so it stays allowed and the check
-    must not flag it.
-    """
-    return isinstance(value, (ast.List, ast.Tuple)) and bool(value.elts)
-
-
-def _adapter_literal_wiring_violations(module: Module, adapter: str) -> list[str]:
-    """Return rule 7 violations for literal wiring declared in one adapter."""
-    violations: list[str] = []
-    for node in ast.walk(_parse(adapter)):
-        if isinstance(node, ast.Call):
-            for keyword in node.keywords:
-                if keyword.arg in WIRING_LITERAL_FIELDS and _declares_literal_wiring(keyword.value):
-                    violations.append(
-                        f"rule 7: {module.name}: adapter.py declares a literal {keyword.arg}"
-                    )
-            if (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr in {"append", "insert"}
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id in WIRING_LITERAL_FIELDS
-                and any(
-                    isinstance(argument, ast.Constant) and isinstance(argument.value, str)
-                    for argument in node.args
-                )
-            ):
-                violations.append(
-                    f"rule 7: {module.name}: adapter.py appends a literal to {node.func.value.id}"
-                )
-            continue
-        targets: list[ast.expr] = []
-        if isinstance(node, ast.Assign) and _declares_literal_wiring(node.value):
-            targets = list(node.targets)
-        elif (
-            isinstance(node, ast.AnnAssign)
-            and node.value is not None
-            and _declares_literal_wiring(node.value)
-        ):
-            targets = [node.target]
-        for target in targets:
-            if isinstance(target, ast.Name) and target.id in WIRING_LITERAL_FIELDS:
-                violations.append(
-                    f"rule 7: {module.name}: adapter.py declares a literal {target.id}"
-                )
-    return violations
-
 
 def rule_7_urls(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
-        package = f"quickscale_modules_{module.name}"
-        includes = _wiring_projection(module.manifest, "url_includes")
-        own = [
-            entry
-            for entry in includes
-            if isinstance(entry, list)
-            and len(entry) == 2
-            and isinstance(entry[1], str)
-            and entry[1] == f"{package}.urls"
-        ]
-        for entry in includes:
-            if not isinstance(entry, list) or len(entry) != 2:
-                violations.append(f"rule 7: {module.name}: malformed url_includes entry {entry!r}")
-                continue
-            mount = entry[0]
-            if not isinstance(mount, str) or not mount or mount.startswith("/"):
-                violations.append(
-                    f"rule 7: {module.name}: url mount {mount!r} must be a non-empty relative path"
-                )
-        if "urls.py" in module.files and not own:
-            violations.append(
-                f"rule 7: {module.name}: manifest url_includes does not mount {package}.urls"
-            )
-        adapter = module.files.get("adapter.py", "")
-        if adapter:
-            violations.extend(_adapter_literal_wiring_violations(module, adapter))
-        urls = module.files.get("urls.py")
-        if urls is None:
-            continue
-        tree = _parse(urls)
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            func = _call_func_name(node)
-            if func in {"path", "re_path"}:
-                name = _literal(_keyword(node, "name"))
-                if isinstance(name, str):
-                    violations.extend(_route_name_violations(module.name, name, "path name"))
-            elif func == "register" and node.args and isinstance(node.args[0], ast.Constant):
-                basename = _literal(_keyword(node, "basename"))
-                if isinstance(basename, str):
-                    violations.extend(
-                        _route_name_violations(module.name, basename, "router basename")
-                    )
-                elif basename is None:
-                    violations.append(
-                        f"rule 7: {module.name}: router.register without an explicit basename"
-                    )
-        root_view_name = _string_assignments(tree).get("root_view_name")
-        if root_view_name is not None:
-            violations.extend(_route_name_violations(module.name, root_view_name, "api root"))
+        violations.extend(_module_url_violations(module))
     violations.extend(_template_mount_literal_violations(corpus))
     violations.extend(_url_prefix_collision_violations(corpus))
     violations.extend(_theme_api_literal_violations(corpus))
@@ -299,1280 +275,6 @@ def _template_mount_literal_violations(corpus: Corpus) -> list[str]:
     return violations
 
 
-def _url_prefix_collision_violations(corpus: Corpus) -> list[str]:
-    """
-    Rule 41 over the manifests: a URL prefix belongs to one module.
-
-    The pre-home and post-home buckets render into one URLconf, so the owner
-    registry spans both.  One module may chain several targets under one
-    prefix (auth composes ``accounts/`` that way) and the identical
-    ``(prefix, target)`` pair from two modules is the equal-contribution merge
-    rule 30 sanctions; a second *module* claiming a prefix with a different
-    target fails here and in ``apply`` itself (``collect_url_wiring``).
-    """
-    owners: dict[str, str] = {}
-    seen_pairs: set[tuple[str, str]] = set()
-    violations: list[str] = []
-    for module in corpus.modules:
-        for field in ("pre_home_url_includes", "url_includes"):
-            for entry in _wiring_projection(module.manifest, field):
-                if not (
-                    isinstance(entry, (list, tuple))
-                    and len(entry) == 2
-                    and all(isinstance(part, str) for part in entry)
-                ):
-                    continue
-                prefix, target = entry
-                pair = (prefix, target)
-                owner = owners.get(prefix)
-                if owner is None:
-                    owners[prefix] = module.name
-                elif owner != module.name and pair not in seen_pairs:
-                    violations.append(
-                        f"rule 7: modules '{owner}' and '{module.name}' both mount URL "
-                        f"prefix '{prefix}' with different targets"
-                    )
-                    continue
-                seen_pairs.add(pair)
-    return violations
-
-
-#: Rule 41's theme-API-literal scan root and its test-file exemption: the
-#: theme's own Vitest files build fetch targets by hand.
-THEME_TS_ROOT = "generator/templates/themes/showcase_react/src/"
-THEME_TS_TEST_MARKER = "/test/"
-
-
-def _theme_api_literal_violations(corpus: Corpus) -> list[str]:
-    """
-    Rule 41 over the theme's TypeScript: module API bases come from the seam.
-
-    The theme reads every module API base from ``moduleApiPaths``, so any
-    quoted ``/<mount>/api`` in its TypeScript is the mount written by hand.
-    The trailing lookahead only stops a longer segment (``/orgs/apiary``)
-    from matching; a route-pattern or prose spelling of the mount counts just
-    the same.
-    """
-    violations: list[str] = []
-    for module in corpus.modules:
-        for mount in _declared_url_mounts(module):
-            if not mount:
-                continue
-            anchor = mount.rstrip("/")
-            pattern = re.compile(rf"""["'`]/{re.escape(anchor)}/api(?![A-Za-z0-9_.-])""")
-            for rel, text in corpus.core_files.items():
-                if not (
-                    rel.startswith(THEME_TS_ROOT)
-                    and rel.endswith((".ts", ".tsx"))
-                    and THEME_TS_TEST_MARKER not in rel
-                ):
-                    continue
-                for match in pattern.finditer(text):
-                    line = text.count("\n", 0, match.start()) + 1
-                    violations.append(
-                        f"rule 7: core {rel}:{line}: module '{module.name}' API path "
-                        f"{match.group(0)[1:]!r} is written as a literal; the theme reads "
-                        "moduleApiPaths from the seam"
-                    )
-    return violations
-
-
-def _route_name_violations(module: str, name: str, where: str) -> list[str]:
-    violations: list[str] = []
-    skeleton = name.replace("{basename}", "x").replace("{url_name}", "x").replace("{lookup}", "x")
-    if "{" in skeleton or "}" in skeleton:
-        violations.append(f"rule 7: {module}: unresolved route template {name!r} in {where}")
-        return violations
-    if not SNAKE_CASE.match(skeleton):
-        violations.append(f"rule 7: {module}: route name {name!r} in {where} is not snake_case")
-    if re.search(rf"(^|_){module}(_|$)", skeleton):
-        violations.append(f"rule 7: {module}: route name {name!r} in {where} repeats the module")
-    return violations
-
-
-def _is_admin_model_override(value: str) -> bool:
-    """Return whether a template path is Django's ``admin/<label>/<model>/``."""
-    parts = value.split("/")
-    return len(parts) >= 4 and parts[0] == "admin" and all(parts[1:4]) and value.endswith(".html")
-
-
-def rule_8_templates(corpus: Corpus) -> list[str]:
-    violations: list[str] = []
-    for module in corpus.modules:
-        stem = f"quickscale_{module.name}"
-        base_rel = f"templates/{stem}/base.html"
-        pages: list[str] = []
-        for rel, text in module.files.items():
-            if not rel.startswith("templates/") or not rel.endswith(".html"):
-                continue
-            if Path(rel).name.startswith("_"):
-                continue
-            parts = rel.split("/")[1:-1]
-            if any(part in ALLOWED_TEMPLATE_DIRS for part in parts):
-                continue
-            if "email" in parts:
-                continue
-            if parts and parts[0] != stem:
-                continue
-            pages.append(rel)
-        if pages:
-            if base_rel not in module.files:
-                violations.append(f"rule 8: {module.name}: missing module base {base_rel}")
-            else:
-                if not re.search(r'\{%\s*extends\s+["\']base\.html["\']', module.files[base_rel]):
-                    violations.append(
-                        f"rule 8: {module.name}: {base_rel} does not extend base.html"
-                    )
-                content_block = re.search(
-                    rf"\{{%\s*block\s+{re.escape(module.name)}_content\s*%\}}",
-                    module.files[base_rel],
-                )
-                if content_block is None:
-                    violations.append(
-                        f"rule 8: {module.name}: {base_rel} owns no {module.name}_content block"
-                    )
-            for rel in pages:
-                text = module.files[rel]
-                parts = rel.split("/")[1:-1]
-                if len(parts) > 1:
-                    violations.append(
-                        f"rule 8: {module.name}: {rel} is not flat under templates/{stem}/"
-                    )
-                if re.search(r"<html\b", text, re.IGNORECASE):
-                    violations.append(f"rule 8: {module.name}: {rel} emits <html>")
-                if rel == base_rel:
-                    continue
-                if not re.search(rf'\{{%\s*extends\s+["\']{re.escape(stem)}/base\.html["\']', text):
-                    violations.append(
-                        f"rule 8: {module.name}: {rel} does not extend {stem}/base.html"
-                    )
-                if not re.search(rf"\{{%\s*block\s+{re.escape(module.name)}_content\s*%\}}", text):
-                    violations.append(
-                        f"rule 8: {module.name}: {rel} fills no {module.name}_content block"
-                    )
-        for rel in module.files:
-            if not rel.startswith("static/"):
-                continue
-            parts = rel.split("/")
-            if parts[1] != stem:
-                violations.append(f"rule 8: {module.name}: static path {rel} lacks the {stem} root")
-                continue
-            if len(parts) >= 4 and parts[2] not in {"css", "js", "img"}:
-                violations.append(f"rule 8: {module.name}: static path {rel} is outside css/js/img")
-        for rel in module.files:
-            if not rel.startswith("templatetags/") or not rel.endswith(".py"):
-                continue
-            library = Path(rel).stem
-            if library in {"__init__"} or library.startswith("_"):
-                continue
-            if library != stem and not library.startswith(f"{stem}_"):
-                violations.append(
-                    f"rule 8: {module.name}: template tag library {library!r} lacks the {stem} stem"
-                )
-        for rel, text in module.files.items():
-            if not rel.endswith(".py") or rel.startswith("migrations/"):
-                continue
-            for node in ast.walk(_parse(text)):
-                if not isinstance(node, ast.Assign):
-                    continue
-                for target in node.targets:
-                    if not isinstance(target, ast.Name) or target.id not in {
-                        "change_list_template",
-                        "change_form_template",
-                    }:
-                        continue
-                    value = _literal(node.value)
-                    if isinstance(value, str) and not _is_admin_model_override(value):
-                        violations.append(
-                            f"rule 8: {module.name}: {rel} admin override {value!r} is not "
-                            "under admin/<label>/<model>/"
-                        )
-    return violations
-
-
-def rule_9_http_apis(corpus: Corpus) -> list[str]:
-    violations: list[str] = []
-    for module in corpus.modules:
-        paginator_classes = _paginator_classifications(module)
-        for rel, text in module.files.items():
-            if not rel.endswith(".py") or rel.startswith("migrations/"):
-                continue
-            tree = _parse(text)
-            if _uses_name(tree, "JsonResponse"):
-                violations.append(f"rule 9: {module.name}: {rel} uses JsonResponse")
-            violations.extend(_session_authentication_violations(module.name, rel, tree))
-            violations.extend(_pagination_violations(module.name, rel, tree, paginator_classes))
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Call) and _call_func_name(node) == "HttpResponse":
-                    content_type = _literal(_keyword(node, "content_type"))
-                    if isinstance(content_type, str) and "json" in content_type:
-                        violations.append(
-                            f"rule 9: {module.name}: {rel} builds a JSON HttpResponse"
-                        )
-                if isinstance(node, ast.Dict):
-                    error_values = [
-                        value
-                        for key, value in zip(node.keys, node.values)
-                        if isinstance(key, ast.Constant) and key.value == "error"
-                    ]
-                    if not error_values:
-                        continue
-                    value = error_values[0]
-                    if isinstance(value, ast.Dict):
-                        violations.append(
-                            f"rule 9: {module.name}: {rel} builds an error body in module code"
-                        )
-    violations.extend(_rendered_managed_json_violations())
-    return violations
-
-
-def _session_authentication_bindings(
-    tree: ast.Module,
-) -> tuple[set[str], set[str], dict[str, str]]:
-    """
-    Resolve a module's DRF and core session-authentication bindings.
-
-    Returns the names bound to DRF's ``SessionAuthentication``, the names
-    bound to core's one session authentication class, and the namespace
-    aliases bound to ``rest_framework.authentication``, so ``from
-    rest_framework.authentication import SessionAuthentication``,
-    ``from rest_framework import authentication``, and the fully qualified
-    ``rest_framework.authentication.SessionAuthentication`` all resolve.
-    """
-    drf_names: set[str] = set()
-    core_names: set[str] = set()
-    namespaces: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            for alias in node.names:
-                binding = alias.asname or alias.name
-                if (
-                    node.module == "rest_framework.authentication"
-                    and alias.name == "SessionAuthentication"
-                ):
-                    drf_names.add(binding)
-                elif (
-                    node.module == "quickscale_core.runtime"
-                    or node.module.startswith("quickscale_core.runtime.")
-                ) and alias.name == CORE_SESSION_AUTHENTICATION:
-                    core_names.add(binding)
-                elif node.module == "rest_framework" and alias.name == "authentication":
-                    namespaces[binding] = "rest_framework.authentication"
-                elif node.module == "quickscale_core" and alias.name == "runtime":
-                    namespaces[binding] = "quickscale_core.runtime"
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name in {
-                    "rest_framework",
-                    "rest_framework.authentication",
-                    "quickscale_core",
-                    "quickscale_core.runtime",
-                }:
-                    root = alias.asname or alias.name.split(".")[0]
-                    namespaces[root] = alias.name if alias.asname else root
-    return drf_names, core_names, namespaces
-
-
-def _resolves_to_drf_session_authentication(
-    node: ast.expr, drf_names: set[str], namespaces: dict[str, str]
-) -> bool:
-    """Return whether a base or value resolves to DRF's SessionAuthentication."""
-    if isinstance(node, ast.Name):
-        return node.id in drf_names
-    dotted = _dotted_name(node)
-    if dotted is None:
-        return False
-    root, _, rest = dotted.partition(".")
-    if not rest:
-        return dotted in drf_names
-    resolved = f"{namespaces.get(root, root)}.{rest}"
-    return resolved == "rest_framework.authentication.SessionAuthentication"
-
-
-def _resolves_to_core_session_authentication(
-    node: ast.expr, core_names: set[str], namespaces: dict[str, str]
-) -> bool:
-    """Return whether a value resolves to core's one session authentication class."""
-    if isinstance(node, ast.Name):
-        return node.id in core_names
-    dotted = _dotted_name(node)
-    if dotted is None:
-        return False
-    root, _, rest = dotted.partition(".")
-    if not rest:
-        return dotted in core_names
-    return f"{namespaces.get(root, root)}.{rest}" in {
-        "quickscale_core.runtime.QuickscaleSessionAuthentication",
-        "quickscale_core.runtime.drf.QuickscaleSessionAuthentication",
-    }
-
-
-def _session_authentication_violations(module_name: str, rel: str, tree: ast.Module) -> list[str]:
-    """
-    Return rule 9's session-authentication violations for one module file.
-
-    Closed world: a module defines no ``SessionAuthentication`` subclass, and
-    an ``authentication_classes`` literal names core's one session
-    authentication class or is empty (the webhook and public-read case).
-    """
-    violations: list[str] = []
-    drf_names, core_names, namespaces = _session_authentication_bindings(tree)
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ClassDef):
-            continue
-        if any(
-            _resolves_to_drf_session_authentication(base, drf_names, namespaces)
-            for base in node.bases
-        ):
-            violations.append(
-                f"rule 9: {module_name}: {rel} defines a SessionAuthentication subclass"
-            )
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-            value = node.value
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            targets = [node.target]
-            value = node.value
-        else:
-            continue
-        if not any(
-            isinstance(target, ast.Name) and target.id == "authentication_classes"
-            for target in targets
-        ):
-            continue
-        if isinstance(value, (ast.List, ast.Tuple)):
-            elements = value.elts
-        else:
-            violations.append(
-                f"rule 9: {module_name}: {rel} sets authentication_classes to a non-literal value"
-            )
-            continue
-        for element in elements:
-            if _resolves_to_core_session_authentication(element, core_names, namespaces):
-                continue
-            if _resolves_to_drf_session_authentication(element, drf_names, namespaces):
-                violations.append(
-                    f"rule 9: {module_name}: {rel} names DRF's SessionAuthentication directly"
-                )
-            else:
-                violations.append(
-                    f"rule 9: {module_name}: {rel} authentication_classes entry is "
-                    "not core's session authentication class"
-                )
-    return violations
-
-
-def _pagination_bindings(
-    tree: ast.Module,
-) -> tuple[set[str], set[str], dict[str, str]]:
-    """
-    Resolve a module's DRF and core list-pagination bindings.
-
-    Returns the names bound to DRF's ``PageNumberPagination``, the names
-    bound to core's one list paginator, and the namespace aliases bound to
-    ``rest_framework.pagination``, so the direct import, the ``pagination``
-    module alias, and the fully qualified spelling all resolve.
-    """
-    drf_names: set[str] = set()
-    core_names: set[str] = set()
-    namespaces: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            for alias in node.names:
-                binding = alias.asname or alias.name
-                if (
-                    node.module == "rest_framework.pagination"
-                    and alias.name == "PageNumberPagination"
-                ):
-                    drf_names.add(binding)
-                elif (
-                    node.module == "quickscale_core.runtime"
-                    or node.module.startswith("quickscale_core.runtime.")
-                ) and alias.name == CORE_LIST_PAGINATION:
-                    core_names.add(binding)
-                elif node.module == "rest_framework" and alias.name == "pagination":
-                    namespaces[binding] = "rest_framework.pagination"
-                elif node.module == "quickscale_core" and alias.name == "runtime":
-                    namespaces[binding] = "quickscale_core.runtime"
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name in {
-                    "rest_framework",
-                    "rest_framework.pagination",
-                    "quickscale_core",
-                    "quickscale_core.runtime",
-                }:
-                    root = alias.asname or alias.name.split(".")[0]
-                    namespaces[root] = alias.name if alias.asname else root
-    return drf_names, core_names, namespaces
-
-
-def _resolves_to_drf_page_number_pagination(
-    node: ast.expr, drf_names: set[str], namespaces: dict[str, str]
-) -> bool:
-    """Return whether a base resolves to DRF's PageNumberPagination."""
-    if isinstance(node, ast.Name):
-        return node.id in drf_names
-    dotted = _dotted_name(node)
-    if dotted is None:
-        return False
-    root, _, rest = dotted.partition(".")
-    if not rest:
-        return dotted in drf_names
-    return (
-        f"{namespaces.get(root, root)}.{rest}" == "rest_framework.pagination.PageNumberPagination"
-    )
-
-
-def _resolves_to_core_list_pagination(
-    node: ast.expr, core_names: set[str], namespaces: dict[str, str]
-) -> bool:
-    """Return whether a base resolves to core's one list paginator."""
-    if isinstance(node, ast.Name):
-        return node.id in core_names
-    dotted = _dotted_name(node)
-    if dotted is None:
-        return False
-    root, _, rest = dotted.partition(".")
-    if not rest:
-        return dotted in core_names
-    return f"{namespaces.get(root, root)}.{rest}" in {
-        "quickscale_core.runtime.PlainListPagination",
-        "quickscale_core.runtime.drf.PlainListPagination",
-    }
-
-
-def _declares_page_size_setting(class_node: ast.ClassDef) -> bool:
-    """Return whether a paginator subclass declares a literal page_size_setting."""
-    for statement in class_node.body:
-        if isinstance(statement, ast.Assign):
-            targets = statement.targets
-            value = statement.value
-        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
-            targets = [statement.target]
-            value = statement.value
-        else:
-            continue
-        if not any(
-            isinstance(target, ast.Name) and target.id == "page_size_setting" for target in targets
-        ):
-            continue
-        return isinstance(value, ast.Constant) and isinstance(value.value, str)
-    return False
-
-
-def _paginator_classifications(module: Module) -> dict[str, dict[str, str]]:
-    """
-    Classify the paginator classes each module file defines.
-
-    Maps a package-relative file to ``{class name: "core" | "drf"}`` for every
-    class whose direct base resolves to core's one list paginator or to DRF's
-    ``PageNumberPagination``.  The map lets another file's ``pagination_class``
-    resolve a paginator imported from a sibling module file (rule 28 sanctions
-    private sibling modules).
-    """
-    classifications: dict[str, dict[str, str]] = {}
-    for rel, text in module.files.items():
-        if not rel.endswith(".py") or rel.startswith("migrations/"):
-            continue
-        tree = _parse(text)
-        drf_names, core_names, namespaces = _pagination_bindings(tree)
-        classes: dict[str, str] = {}
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ClassDef):
-                continue
-            if any(
-                _resolves_to_core_list_pagination(base, core_names, namespaces)
-                for base in node.bases
-            ):
-                classes[node.name] = "core"
-            elif any(
-                _resolves_to_drf_page_number_pagination(base, drf_names, namespaces)
-                for base in node.bases
-            ):
-                classes[node.name] = "drf"
-        classifications[rel] = classes
-    return classifications
-
-
-def _sibling_paginator_imports(
-    module_name: str,
-    tree: ast.Module,
-    classifications: dict[str, dict[str, str]],
-) -> dict[str, str]:
-    """
-    Map imported names to the paginator class they resolve to in a sibling file.
-
-    Resolves relative imports (``from ._pagination import DemoPagination``) and
-    the module's own absolute package imports
-    (``from quickscale_modules_<name>._pagination import ...``) against the
-    per-file classifications.
-    """
-    imports: dict[str, str] = {}
-    package_stem = f"quickscale_modules_{module_name}"
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        target_rel: str | None = None
-        if node.level == 1 and node.module:
-            target_rel = f"{node.module.replace('.', '/')}.py"
-        elif node.module and (
-            node.module == package_stem or node.module.startswith(f"{package_stem}.")
-        ):
-            remainder = node.module[len(package_stem) :].lstrip(".")
-            if remainder:
-                target_rel = f"{remainder.replace('.', '/')}.py"
-        if target_rel is None:
-            continue
-        target_classes = classifications.get(target_rel)
-        if not target_classes:
-            continue
-        for alias in node.names:
-            if alias.name in target_classes:
-                imports[alias.asname or alias.name] = target_classes[alias.name]
-    return imports
-
-
-def _pagination_violations(
-    module_name: str,
-    rel: str,
-    tree: ast.Module,
-    paginator_classes: dict[str, dict[str, str]],
-) -> list[str]:
-    """
-    Return rule 9's list-pagination violations for one module file.
-
-    Closed world: a module defines no ``PageNumberPagination`` subclass
-    outside core's one list paginator; a paginator subclass declares the
-    ``page_size_setting`` it reads; a ``pagination_class`` names such a
-    subclass (defined here or imported from a sibling module file); and no
-    code sets a literal ``page_size``.
-    """
-    violations: list[str] = []
-    drf_names, core_names, namespaces = _pagination_bindings(tree)
-    sibling_imports = _sibling_paginator_imports(module_name, tree, paginator_classes)
-    local_core_paginators: set[str] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ClassDef):
-            continue
-        core_base = any(
-            _resolves_to_core_list_pagination(base, core_names, namespaces) for base in node.bases
-        ) or any(
-            isinstance(base, ast.Name) and sibling_imports.get(base.id) == "core"
-            for base in node.bases
-        )
-        if core_base:
-            local_core_paginators.add(node.name)
-            if not _declares_page_size_setting(node):
-                violations.append(
-                    f"rule 9: {module_name}: {rel} paginator {node.name} must declare "
-                    "page_size_setting"
-                )
-            continue
-        drf_base = any(
-            _resolves_to_drf_page_number_pagination(base, drf_names, namespaces)
-            for base in node.bases
-        ) or any(
-            isinstance(base, ast.Name) and sibling_imports.get(base.id) == "drf"
-            for base in node.bases
-        )
-        if drf_base:
-            violations.append(
-                f"rule 9: {module_name}: {rel} defines a PageNumberPagination subclass "
-                f"{node.name} outside core"
-            )
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-            value = node.value
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            targets = [node.target]
-            value = node.value
-        else:
-            continue
-        if not any(isinstance(target, ast.Name) for target in targets):
-            continue
-        names = {target.id for target in targets if isinstance(target, ast.Name)}
-        if "page_size" in names and isinstance(value, ast.Constant):
-            if isinstance(value.value, int):
-                violations.append(f"rule 9: {module_name}: {rel} sets a literal page_size")
-        if "pagination_class" in names:
-            resolved = None
-            if isinstance(value, ast.Name):
-                if value.id in local_core_paginators:
-                    resolved = "core"
-                else:
-                    resolved = sibling_imports.get(value.id)
-            if resolved != "core":
-                violations.append(
-                    f"rule 9: {module_name}: {rel} pagination_class must name a subclass "
-                    "of core's PlainListPagination"
-                )
-    return violations
-
-
-def _rendered_managed_json_violations() -> list[str]:
-    """
-    Return rule 9 violations from core's managed-file renderer output.
-
-    The managed files core renders into a generated project are outside the
-    module corpus, so the detector renders them once and parses the result
-    the same way module source is parsed (rule 9: generated project code that
-    serves JSON follows rule 9).
-    """
-    from quickscale_core.manifest.social_manifest import (  # noqa: PLC0415
-        render_social_managed_views_module,
-    )
-
-    content = render_social_managed_views_module(
-        provider_allowlist=["youtube", "tiktok"],
-        embed_provider_allowlist=["youtube", "tiktok"],
-        layout_variant="list",
-        cache_ttl_seconds=300,
-        links_per_page=24,
-        embeds_per_page=12,
-    )
-    tree = _parse(content)
-    violations: list[str] = []
-    if _uses_name(tree, "JsonResponse"):
-        violations.append("rule 9: managed social views (rendered) use JsonResponse")
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Dict):
-            continue
-        error_values = [
-            value
-            for key, value in zip(node.keys, node.values)
-            if isinstance(key, ast.Constant) and key.value == "error"
-        ]
-        if error_values and isinstance(error_values[0], ast.Dict):
-            violations.append("rule 9: managed social views (rendered) build an error body")
-    return violations
-
-
-def _view_token(node: ast.AST) -> str | None:
-    """Return the forbidden authorization token a view node uses, if any."""
-    if isinstance(node, ast.Name) and node.id in FORBIDDEN_VIEW_TOKENS:
-        return node.id
-    if isinstance(node, ast.Attribute) and node.attr in FORBIDDEN_VIEW_TOKENS:
-        return node.attr
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        if node.value in FORBIDDEN_VIEW_TOKENS:
-            return node.value
-    return None
-
-
-def _is_view_module(module: str) -> bool:
-    """Return whether ``module`` is a Django or DRF module that defines views."""
-    return any(
-        module == prefix or module.startswith(f"{prefix}.") for prefix in VIEW_MODULE_PREFIXES
-    )
-
-
-def _view_bindings(tree: ast.Module) -> tuple[set[str], dict[str, str]]:
-    """
-    Resolve a module's Django and DRF view bindings.
-
-    Returns the names bound to view classes and the namespace aliases bound to
-    view modules, mapped to their dotted targets, so ``from rest_framework
-    import views``, ``import rest_framework.views as drf_views``, and a fully
-    qualified ``rest_framework.views.APIView`` all resolve.  A base imported
-    from another project module is not resolved.
-    """
-    names: set[str] = set()
-    namespaces: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            for alias in node.names:
-                target = f"{node.module}.{alias.name}"
-                binding = alias.asname or alias.name
-                if _is_view_module(node.module):
-                    names.add(binding)
-                if _is_view_module(target):
-                    namespaces[binding] = target
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                root = alias.asname or alias.name.split(".")[0]
-                namespaces[root] = alias.name if alias.asname else root
-    return names, namespaces
-
-
-def _dotted_name(node: ast.expr) -> str | None:
-    """Return the dotted spelling of a name or attribute chain, if it has one."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        value = _dotted_name(node.value)
-        return f"{value}.{node.attr}" if value is not None else None
-    return None
-
-
-def _is_view_base(node: ast.expr, names: set[str], namespaces: dict[str, str]) -> bool:
-    """Return whether a class base resolves to a Django or DRF view class."""
-    if isinstance(node, ast.Name):
-        return node.id in names
-    dotted = _dotted_name(node)
-    if dotted is None:
-        return False
-    root, _, rest = dotted.partition(".")
-    if not rest:
-        return dotted in names
-    resolved = f"{namespaces.get(root, root)}.{rest}"
-    return any(resolved.startswith(f"{prefix}.") for prefix in VIEW_MODULE_PREFIXES)
-
-
-def _defines_view_class(tree: ast.Module) -> bool:
-    """Return whether a module defines a Django or DRF view subclass."""
-    names, namespaces = _view_bindings(tree)
-    if not names and not namespaces:
-        return False
-    classes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
-    view_classes: set[str] = set()
-    changed = True
-    while changed:
-        changed = False
-        for node in classes:
-            if node.name in view_classes:
-                continue
-            if any(
-                _is_view_base(base, names, namespaces)
-                or (isinstance(base, ast.Name) and base.id in view_classes)
-                for base in node.bases
-            ):
-                view_classes.add(node.name)
-                changed = True
-    return bool(view_classes)
-
-
-def _takes_request(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """Return whether a function or method declares a ``request`` parameter."""
-    parameters = node.args.posonlyargs + node.args.args + node.args.kwonlyargs
-    return any(parameter.arg == "request" for parameter in parameters)
-
-
-def _defines_view_code(tree: ast.Module) -> bool:
-    """
-    Rule 46's discovery: return whether a module defines view code.
-
-    View code is a Django or DRF view subclass or a function taking
-    ``request``; the scan set no longer follows file names, so a split that
-    files view code under any private name stays inside the check.
-    """
-    if _defines_view_class(tree):
-        return True
-    return any(
-        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _takes_request(node)
-        for node in ast.walk(tree)
-    )
-
-
-def _base_name(node: ast.expr) -> str | None:
-    """Return the class name a base expression names, directly or qualified."""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        return node.attr
-    return None
-
-
-def _is_sanctioned_guard_name(name: str) -> bool:
-    """Return whether a base-class name is a sanctioned guard declaration."""
-    return (
-        name in GUARD_MIXIN_NAMES
-        or name in PUBLIC_READ_MIXIN_NAMES
-        or name.endswith(PUBLIC_READ_MIXIN_SUFFIX)
-    )
-
-
-def _base_view_target(
-    node: ast.expr,
-    names: set[str],
-    namespaces: dict[str, str],
-) -> str | None:
-    """Resolve a base expression to its dotted view target, when it is one."""
-    if isinstance(node, ast.Name):
-        return namespaces.get(node.id) if node.id in names else None
-    dotted = _dotted_name(node)
-    if dotted is None:
-        return None
-    root, _, rest = dotted.partition(".")
-    if not rest:
-        return namespaces.get(dotted) if dotted in names else None
-    return f"{namespaces.get(root, root)}.{rest}"
-
-
-def _view_framework(
-    name: str,
-    classes: dict[str, tuple[ast.ClassDef, str]],
-    bindings: dict[str, tuple[set[str], dict[str, str]]],
-    seen: set[str],
-) -> str | None:
-    """Return whether a view class's ancestry is ``"drf"`` or ``"django"``."""
-    entry = classes.get(name)
-    if entry is None:
-        return None
-    node, rel = entry
-    names, namespaces = bindings[rel]
-    for base in node.bases:
-        target = _base_view_target(base, names, namespaces)
-        if target is not None:
-            if target.startswith(DRF_VIEW_MODULE_PREFIXES):
-                return "drf"
-            if target.startswith(DJANGO_VIEW_MODULE_PREFIXES):
-                return "django"
-        base_id = _base_name(base)
-        if base_id is not None and base_id in classes and base_id not in seen:
-            seen.add(base_id)
-            found = _view_framework(base_id, classes, bindings, seen)
-            if found is not None:
-                return found
-    return None
-
-
-def _view_class_index(
-    module: Module,
-) -> tuple[
-    dict[str, tuple[ast.ClassDef, str]],
-    set[str],
-    dict[str, tuple[set[str], dict[str, str]]],
-    dict[str, dict[str, str]],
-]:
-    """
-    Index a module's classes and resolve which of them are view classes.
-
-    Returns the name-to-(class, file) map, the view class names, the per-file
-    view bindings, and each file's permission import aliases (``AllowAny as
-    X`` resolves to ``AllowAny`` only inside its declaring file).  A class is
-    a view class when a base resolves to a Django or DRF view module or to
-    another view class the same module defines, wherever a rule 28 split
-    files it (rule 46's discovery).
-    """
-    classes: dict[str, tuple[ast.ClassDef, str]] = {}
-    parsed: dict[str, ast.Module] = {}
-    aliases_by_rel: dict[str, dict[str, str]] = {}
-    for rel, text in module.files.items():
-        if not rel.endswith(".py") or rel.startswith("migrations/"):
-            continue
-        tree = _parse(text)
-        parsed[rel] = tree
-        file_aliases: dict[str, str] = {}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                classes.setdefault(node.name, (node, rel))
-            if isinstance(node, ast.ImportFrom) and node.module == "rest_framework.permissions":
-                for alias in node.names:
-                    if alias.asname:
-                        file_aliases[alias.asname] = alias.name
-        if file_aliases:
-            aliases_by_rel[rel] = file_aliases
-    bindings = {rel: _view_bindings(tree) for rel, tree in parsed.items()}
-    view_names: set[str] = set()
-    changed = True
-    while changed:
-        changed = False
-        for name, (node, rel) in classes.items():
-            if name in view_names:
-                continue
-            names, namespaces = bindings[rel]
-            for base in node.bases:
-                base_id = _base_name(base)
-                if _is_view_base(base, names, namespaces) or (
-                    base_id is not None and base_id in classes and base_id in view_names
-                ):
-                    view_names.add(name)
-                    changed = True
-                    break
-    return classes, view_names, bindings, aliases_by_rel
-
-
-def _permission_expression_name(node: ast.expr) -> str | None:
-    """Return the permission name an expression contributes, call form included."""
-    if isinstance(node, ast.Call):
-        node = node.func
-    return _base_name(node)
-
-
-def _get_permissions_binding(
-    node: ast.ClassDef,
-    aliases: dict[str, str],
-) -> tuple[bool, set[str] | None]:
-    """
-    Return whether a class overrides ``get_permissions()`` and what it returns.
-
-    The second element is the returned permission names with import aliases
-    resolved, or ``None`` when the override exists but returns no literal
-    list/tuple the harness can read; clause A then treats the override as no
-    declaration (fail closed).
-    """
-    override = next(
-        (
-            statement
-            for statement in node.body
-            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and statement.name == "get_permissions"
-        ),
-        None,
-    )
-    if override is None:
-        return False, None
-    names: set[str] = set()
-    recognized = False
-    for child in ast.walk(override):
-        if not isinstance(child, ast.Return) or child.value is None:
-            continue
-        if isinstance(child.value, (ast.List, ast.Tuple)):
-            recognized = True
-            for element in child.value.elts:
-                found = _permission_expression_name(element)
-                if found is not None:
-                    names.add(aliases.get(found, found))
-    return True, names if recognized else None
-
-
-def _declares_permission_classes(node: ast.ClassDef) -> bool:
-    """Return whether a class body assigns ``permission_classes``."""
-    for statement in node.body:
-        if isinstance(statement, ast.Assign):
-            names = {target.id for target in statement.targets if isinstance(target, ast.Name)}
-        elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
-            names = {statement.target.id}
-        else:
-            continue
-        if "permission_classes" in names:
-            return True
-    return False
-
-
-def _declares_min_org_role(node: ast.ClassDef) -> bool:
-    """Return whether a class body declares a ``min_org_role`` attribute."""
-    for statement in node.body:
-        if isinstance(statement, ast.Assign):
-            names = {target.id for target in statement.targets if isinstance(target, ast.Name)}
-        elif isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
-            names = {statement.target.id}
-        else:
-            continue
-        if "min_org_role" in names:
-            return True
-    return False
-
-
-def _inherits_role_enforcement(
-    name: str,
-    classes: dict[str, tuple[ast.ClassDef, str]],
-    seen: set[str],
-) -> bool:
-    """Return whether a class's bases reach an enforcer of ``min_org_role``."""
-    entry = classes.get(name)
-    if entry is None:
-        return False
-    for base in entry[0].bases:
-        base_id = _base_name(base)
-        if base_id is None:
-            continue
-        if base_id in ROLE_ENFORCING_BASE_NAMES:
-            return True
-        if base_id in classes and base_id not in seen:
-            seen.add(base_id)
-            if _inherits_role_enforcement(base_id, classes, seen):
-                return True
-    return False
-
-
-def _class_declares_guard(
-    name: str,
-    classes: dict[str, tuple[ast.ClassDef, str]],
-    bindings: dict[str, tuple[set[str], dict[str, str]]],
-    aliases_by_rel: dict[str, dict[str, str]],
-    memo: dict[tuple[str, bool], bool],
-    in_progress: set[str],
-    allow_drf_permissions: bool,
-) -> bool:
-    """
-    Return whether a class declares a guard itself or inherits one.
-
-    DRF permission declarations count while ``allow_drf_permissions`` holds —
-    a plain Django page enforces none of them, so they are not counted on it
-    or through its ancestry; sanctioned login/role/public-read ancestry
-    (wrapper mixins included) always counts.  A Django page may inherit a
-    guard through another view or through a mixin, but a mixin's DRF
-    permission attributes remain inert there.  Import aliases resolve in the
-    declaring class's file.
-    """
-    key = (name, allow_drf_permissions)
-    if key in memo:
-        return memo[key]
-    if _is_sanctioned_guard_name(name):
-        memo[key] = True
-        return True
-    entry = classes.get(name)
-    if entry is None:
-        memo[key] = False
-        return False
-    node, rel = entry
-    file_aliases = aliases_by_rel.get(rel, {})
-    if allow_drf_permissions:
-        has_override, returned = _get_permissions_binding(node, file_aliases)
-        if has_override:
-            # A get_permissions() override decides the view's permissions at
-            # runtime, so it also blocks an inherited declaration; an
-            # override the harness cannot classify fails closed.
-            memo[key] = returned is not None
-            return memo[key]
-        if _declares_permission_classes(node):
-            memo[key] = True
-            return True
-    if _declares_min_org_role(node) and _inherits_role_enforcement(name, classes, {name}):
-        memo[key] = True
-        return True
-    if name in in_progress:
-        return False
-    in_progress.add(name)
-    declared = False
-    for base in node.bases:
-        base_id = _base_name(base)
-        if base_id is None:
-            continue
-        if _is_sanctioned_guard_name(base_id):
-            declared = True
-            break
-        if base_id not in classes:
-            continue
-        base_framework = _view_framework(base_id, classes, bindings, {base_id})
-        if base_framework == "drf":
-            child_allows_drf = True
-        elif base_framework == "django":
-            child_allows_drf = False
-        else:
-            child_allows_drf = allow_drf_permissions
-        if _class_declares_guard(
-            base_id,
-            classes,
-            bindings,
-            aliases_by_rel,
-            memo,
-            in_progress,
-            child_allows_drf,
-        ):
-            declared = True
-            break
-    in_progress.discard(name)
-    memo[key] = declared
-    return declared
-
-
-def _effective_permission_names(
-    name: str,
-    classes: dict[str, tuple[ast.ClassDef, str]],
-    aliases_by_rel: dict[str, dict[str, str]],
-    memo: dict[str, set[str]],
-    in_progress: set[str],
-) -> set[str]:
-    """Resolve a class's effective permissions, its file's aliases included."""
-    if name in memo:
-        return memo[name]
-    entry = classes.get(name)
-    if entry is None:
-        memo[name] = set()
-        return memo[name]
-    if name in in_progress:
-        return set()
-    in_progress.add(name)
-    node, rel = entry
-    file_aliases = aliases_by_rel.get(rel, {})
-    result: set[str] = set()
-    has_override, returned = _get_permissions_binding(node, file_aliases)
-    if has_override:
-        result = returned if returned is not None else set()
-    else:
-        own: ast.expr | None = None
-        for statement in node.body:
-            if isinstance(statement, ast.Assign) and any(
-                isinstance(target, ast.Name) and target.id == "permission_classes"
-                for target in statement.targets
-            ):
-                own = statement.value
-                break
-            if (
-                isinstance(statement, ast.AnnAssign)
-                and isinstance(statement.target, ast.Name)
-                and statement.target.id == "permission_classes"
-            ):
-                own = statement.value
-                break
-        if own is not None:
-            if isinstance(own, (ast.List, ast.Tuple)):
-                result = {
-                    file_aliases.get(found, found)
-                    for element in own.elts
-                    if (found := _permission_expression_name(element)) is not None
-                }
-            else:
-                aliased = _base_name(own)
-                if aliased is not None and aliased in classes:
-                    result = _effective_permission_names(
-                        aliased, classes, aliases_by_rel, memo, in_progress
-                    )
-        else:
-            for base in node.bases:
-                base_id = _base_name(base)
-                if base_id is not None:
-                    result |= _effective_permission_names(
-                        base_id, classes, aliases_by_rel, memo, in_progress
-                    )
-    in_progress.discard(name)
-    memo[name] = result
-    return result
-
-
-def _reads_user_is_authenticated(node: ast.AST) -> bool:
-    """Return whether a body reads ``X.user.is_authenticated`` directly."""
-    for child in ast.walk(node):
-        owner = child.value if isinstance(child, ast.Attribute) else None
-        if (
-            isinstance(child, ast.Attribute)
-            and child.attr == "is_authenticated"
-            and isinstance(owner, ast.Attribute)
-            and owner.attr == "user"
-        ):
-            return True
-    return False
-
-
-def _sibling_rel(node: ast.ImportFrom, module_name: str) -> str | None:
-    """Resolve a same-module import to the sibling file it reads from."""
-    package = f"quickscale_modules_{module_name}"
-    if node.level == 1:
-        return f"{node.module.replace('.', '/')}.py" if node.module else "__init__.py"
-    if node.level != 0 or not node.module:
-        return None
-    parts = node.module.split(".")
-    if parts[:1] == [package] and len(parts) > 1:
-        return f"{'/'.join(parts[1:])}.py"
-    if parts[:2] == ["quickscale_modules", module_name] and len(parts) > 2:
-        return f"{'/'.join(parts[2:])}.py"
-    return None
-
-
-def _module_helper_index(
-    module: Module,
-) -> tuple[dict[str, set[str]], dict[str, dict[str, tuple[str, str]]]]:
-    """
-    Index a module's authentication-reading helpers and its sibling imports.
-
-    Returns, per file, the names of module-level functions whose bodies read
-    ``user.is_authenticated``, and the file's imports of same-module siblings
-    as local name -> (target file, original name), so a view's helper call
-    resolves to the helper's defining file across a rule 28 split.
-    """
-    readers_by_rel: dict[str, set[str]] = {}
-    imports_by_rel: dict[str, dict[str, tuple[str, str]]] = {}
-    for rel, text in module.files.items():
-        if not rel.endswith(".py") or rel.startswith("migrations/"):
-            continue
-        tree = _parse(text)
-        readers_by_rel[rel] = {
-            node.name
-            for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and _reads_user_is_authenticated(node)
-        }
-        imports: dict[str, tuple[str, str]] = {}
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ImportFrom):
-                continue
-            target = _sibling_rel(node, module.name)
-            if target is None:
-                continue
-            for alias in node.names:
-                imports[alias.asname or alias.name] = (target, alias.name)
-        imports_by_rel[rel] = imports
-    return readers_by_rel, imports_by_rel
-
-
-def _effective_methods(
-    name: str,
-    classes: dict[str, tuple[ast.ClassDef, str]],
-) -> dict[str, tuple[ast.FunctionDef | ast.AsyncFunctionDef, str]]:
-    """Return a class's methods with their defining file, nearest definition first."""
-    methods: dict[str, tuple[ast.FunctionDef | ast.AsyncFunctionDef, str]] = {}
-    seen: set[str] = set()
-
-    def walk(class_name: str) -> None:
-        if class_name in seen:
-            return
-        seen.add(class_name)
-        entry = classes.get(class_name)
-        if entry is None:
-            return
-        node, rel = entry
-        for statement in node.body:
-            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                methods.setdefault(statement.name, (statement, rel))
-        for base in node.bases:
-            base_id = _base_name(base)
-            if base_id is not None:
-                walk(base_id)
-
-    walk(name)
-    return methods
-
-
-def _allow_any_hand_check_violations(
-    module_name: str,
-    rel: str,
-    node: ast.ClassDef,
-    classes: dict[str, tuple[ast.ClassDef, str]],
-    readers_by_rel: dict[str, set[str]],
-    imports_by_rel: dict[str, dict[str, tuple[str, str]]],
-) -> list[str]:
-    """
-    Return rule 19's violations for an ``AllowAny`` view that hand-checks auth.
-
-    A public view states its public guard and must not read
-    ``request.user.is_authenticated`` by hand, directly or through a helper
-    its effective methods call; authentication is the guard's decision, not
-    the view body's.  The scan follows the view's effective methods —
-    inherited handlers and helpers resolved to their nearest definition —
-    and resolves each method's helper calls through that method's defining
-    file, matching Python function globals, private-sibling splits included.
-    """
-    violations: list[str] = []
-    methods = _effective_methods(node.name, classes)
-    if any(_reads_user_is_authenticated(method) for method, _ in methods.values()):
-        violations.append(
-            f"rule 19: {module_name}: {rel}: view class {node.name} declares AllowAny "
-            "and reads request.user.is_authenticated by hand"
-        )
-    helper_names: set[str] = set()
-    for method, method_rel in methods.values():
-        imported_readers: set[str] = set()
-        for local_name, (target_rel, original) in imports_by_rel.get(method_rel, {}).items():
-            if original in readers_by_rel.get(target_rel, set()):
-                imported_readers.add(local_name)
-        local_readers = readers_by_rel.get(method_rel, set()) | imported_readers
-        for child in ast.walk(method):
-            if not isinstance(child, ast.Call):
-                continue
-            func = child.func
-            if isinstance(func, ast.Name) and func.id in local_readers:
-                helper_names.add(func.id)
-            elif (
-                isinstance(func, ast.Attribute)
-                and isinstance(func.value, ast.Name)
-                and func.value.id == "self"
-                and func.attr in methods
-                and _reads_user_is_authenticated(methods[func.attr][0])
-            ):
-                helper_names.add(f"self.{func.attr}")
-    for helper in sorted(helper_names):
-        violations.append(
-            f"rule 19: {module_name}: {rel}: view class {node.name} declares AllowAny "
-            f"and calls {helper}(), which checks request.user by hand"
-        )
-    return violations
-
-
 def rule_19_authorization(corpus: Corpus) -> list[str]:
     """
     Rule 19: module views declare and keep their authorization guard.
@@ -1602,324 +304,7 @@ def rule_19_authorization(corpus: Corpus) -> list[str]:
     ``request``, wherever a rule 28 split files it.  The README role listing
     is rule 38's clause.
     """
-    violations: list[str] = []
+    violations = _token_violations(corpus, OPERATOR_TOKENS, TRAFFIC_FILTER_TOKENS)
     for module in corpus.modules:
-        for rel, text in module.files.items():
-            if not rel.endswith(".py"):
-                continue
-            tree = _parse(text)
-            if not _defines_view_code(tree):
-                continue
-            key = (module.name, Path(rel).name)
-            allowed = OPERATOR_TOKENS.get(key, frozenset()) | TRAFFIC_FILTER_TOKENS.get(
-                key, frozenset()
-            )
-            docstrings = _docstring_nodes(tree)
-            for node in ast.walk(tree):
-                token = _view_token(node)
-                if token is None or token in allowed:
-                    continue
-                if isinstance(node, ast.Constant) and id(node) in docstrings:
-                    continue
-                violations.append(
-                    f"rule 19: {module.name}: {rel}:{node.lineno} uses {token} outside "
-                    "the listed operator paths"
-                )
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom):
-                    imported = [alias.name for alias in node.names]
-                elif isinstance(node, ast.Import):
-                    imported = [alias.name.split(".")[-1] for alias in node.names]
-                else:
-                    continue
-                for name in imported:
-                    if name in FORBIDDEN_VIEW_TOKENS and name not in allowed:
-                        violations.append(
-                            f"rule 19: {module.name}: {rel}:{node.lineno} imports {name} "
-                            "outside the listed operator paths"
-                        )
-    for module in corpus.modules:
-        classes, view_names, bindings, aliases_by_rel = _view_class_index(module)
-        readers_by_rel, imports_by_rel = _module_helper_index(module)
-        guard_memo: dict[tuple[str, bool], bool] = {}
-        permission_memo: dict[str, set[str]] = {}
-        for rel, text in module.files.items():
-            if not rel.endswith(".py") or rel.startswith("migrations/"):
-                continue
-            tree = _parse(text)
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.ClassDef) or node.name not in view_names:
-                    continue
-                framework = _view_framework(node.name, classes, bindings, {node.name})
-                if not _class_declares_guard(
-                    node.name,
-                    classes,
-                    bindings,
-                    aliases_by_rel,
-                    guard_memo,
-                    set(),
-                    framework == "drf",
-                ):
-                    violations.append(
-                        f"rule 19: {module.name}: {rel}: view class {node.name} "
-                        "declares no authorization guard"
-                    )
-                permission_names = _effective_permission_names(
-                    node.name, classes, aliases_by_rel, permission_memo, set()
-                )
-                if "AllowAny" in permission_names:
-                    violations.extend(
-                        _allow_any_hand_check_violations(
-                            module.name,
-                            rel,
-                            node,
-                            classes,
-                            readers_by_rel,
-                            imports_by_rel,
-                        )
-                    )
-    return violations
-
-
-def rule_31_theme_seam(corpus: Corpus) -> list[str]:
-    """
-    Rule 31: the seam producer renders discovery at request time.
-
-    The statically checkable clauses of the seam's producers, the theme's
-    ``index.html.j2`` and its two public social pages: each loads the
-    ``quickscale_seam`` runtime tag library and renders the discovered flags,
-    paths, and module API bases (rule 41) through its tags instead of literal
-    module lines or mount paths, and the index template carries no
-    ``INSTALLED_APPS`` test (the runtime library holds it).  A loaded core
-    tree without the template fails; an empty synthetic corpus does not.
-    """
-    violations: list[str] = []
-    index_template = corpus.core_files.get(THEME_SEAM_TEMPLATE)
-    if index_template is None:
-        if corpus.core_files:
-            violations.append("rule 31: the core tree carries no theme index.html.j2 seam producer")
-        return violations
-    for rel in THEME_SEAM_TEMPLATES:
-        template = corpus.core_files.get(rel)
-        if template is None:
-            continue
-        for tag in (
-            "{% seam_module_flags %}",
-            "{% seam_module_paths %}",
-            "{% seam_module_api_paths %}",
-        ):
-            if tag not in template:
-                violations.append(f"rule 31: {rel} does not render {tag}")
-        if SEAM_LIBRARY_LOAD.search(template) is None:
-            violations.append(f"rule 31: {rel} does not load the quickscale_seam tag library")
-        for module in corpus.modules:
-            name = module.name
-            for mount in _declared_mounts(module):
-                if not mount:
-                    continue
-                for literal in (f'"{mount}"', f"'{mount}'", f'"/{mount}"', f"'/{mount}'"):
-                    if literal in template:
-                        violations.append(
-                            f"rule 31: {rel} writes {name}'s mount {mount!r} literally"
-                        )
-            if rel != THEME_SEAM_TEMPLATE:
-                for literal in (f'"{name}":', f"'{name}':"):
-                    if literal in template:
-                        violations.append(f"rule 31: {rel} writes module {name!r} as a key")
-            if re.search(rf"(?m)^\s*{re.escape(name)}\s*:", template):
-                violations.append(f"rule 31: {rel} writes module {name!r} as a bare key")
-    for module in corpus.modules:
-        name = module.name
-        literals = (
-            f'"{name}"',
-            f"'{name}'",
-            f'"/{name}/"',
-            f"'/{name}/'",
-            f'"{name}/"',
-            f"'{name}/'",
-        )
-        for literal in literals:
-            if literal in index_template:
-                violations.append(
-                    f"rule 31: the theme's index.html.j2 names module {name!r} literally"
-                )
-    if "INSTALLED_APPS" in index_template:
-        violations.append("rule 31: the theme's index.html.j2 carries an INSTALLED_APPS test")
-    return violations
-
-
-def _webhook_view_names(module: Module) -> set[str]:
-    """Return the view classes the module routes as webhooks (rule 26)."""
-    urls = module.files.get("urls.py")
-    if urls is None:
-        return set()
-    names: set[str] = set()
-    for node in ast.walk(_parse(urls)):
-        if not isinstance(node, ast.Call) or _call_func_name(node) != "path":
-            continue
-        route = _literal(node.args[0]) if node.args else None
-        name = _literal(_keyword(node, "name"))
-        if not (
-            (isinstance(route, str) and "webhooks/" in route)
-            or (isinstance(name, str) and "webhook" in name)
-        ):
-            continue
-        if len(node.args) < 2:
-            continue
-        view = node.args[1]
-        if (
-            isinstance(view, ast.Call)
-            and isinstance(view.func, ast.Attribute)
-            and view.func.attr == "as_view"
-        ):
-            target = view.func.value
-            if isinstance(target, ast.Name):
-                names.add(target.id)
-            elif isinstance(target, ast.Attribute):
-                names.add(target.attr)
-    return names
-
-
-def _throttle_registration_violations(
-    module_name: str,
-    rel: str,
-    tree: ast.Module,
-    webhook_views: set[str],
-) -> list[str]:
-    """
-    Rule 32's closed world over ``throttle_classes`` registrations.
-
-    A view attaches a throttle through ``throttle_scope`` only, through
-    core's one scoped throttle class.  The single sanctioned literal is the
-    empty ``throttle_classes`` rule 26 requires on a webhook view; every
-    other registration, empty or not, fails — as a class attribute or
-    through an ``as_view(throttle_classes=...)`` mount.
-    """
-    parents: dict[ast.AST, ast.AST] = {}
-    for node in ast.walk(tree):
-        for child in ast.iter_child_nodes(node):
-            parents[child] = node
-    violations: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-            value = node.value
-        elif isinstance(node, ast.AnnAssign):
-            targets = [node.target]
-            value = node.value
-        else:
-            continue
-        if not any(
-            isinstance(target, ast.Name) and target.id == "throttle_classes" for target in targets
-        ):
-            continue
-        owner = parents.get(node)
-        while owner is not None and not isinstance(owner, (ast.ClassDef, ast.Module)):
-            owner = parents.get(owner)
-        class_name = owner.name if isinstance(owner, ast.ClassDef) else None
-        empty_literal = isinstance(value, (ast.List, ast.Tuple)) and not value.elts
-        if class_name is not None and class_name in webhook_views and empty_literal:
-            continue
-        if class_name is None:
-            violations.append(
-                f"rule 32: {module_name}: {rel} assigns throttle_classes outside a view class"
-            )
-        elif class_name in webhook_views:
-            violations.append(
-                f"rule 32: {module_name}: {rel}: webhook {class_name} declares a "
-                "non-empty throttle_classes"
-            )
-        else:
-            violations.append(
-                f"rule 32: {module_name}: {rel}: {class_name} declares "
-                "throttle_classes; a throttle attaches through throttle_scope only"
-            )
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or _call_func_name(node) != "as_view":
-            continue
-        override = _keyword(node, "throttle_classes")
-        if override is None:
-            continue
-        func = node.func
-        target = func.value if isinstance(func, ast.Attribute) else None
-        target_name: str | None = None
-        if isinstance(target, ast.Name):
-            target_name = target.id
-        elif isinstance(target, ast.Attribute):
-            target_name = target.attr
-        empty_literal = isinstance(override, (ast.List, ast.Tuple)) and not override.elts
-        if target_name is not None and target_name in webhook_views and empty_literal:
-            continue
-        if target_name in webhook_views:
-            violations.append(
-                f"rule 32: {module_name}: {rel}: webhook {target_name}.as_view() "
-                "supplies a non-empty throttle_classes"
-            )
-        else:
-            violations.append(
-                f"rule 32: {module_name}: {rel}: as_view() supplies throttle_classes; "
-                "a throttle attaches through throttle_scope only"
-            )
-    return violations
-
-
-def rule_32_throttles(corpus: Corpus) -> list[str]:
-    violations: list[str] = []
-    for module in corpus.modules:
-        stem = f"quickscale_{module.name}"
-        webhook_views = _webhook_view_names(module)
-        for rel, text in module.files.items():
-            if not rel.endswith(".py") or rel.startswith("migrations/"):
-                continue
-            tree = _parse(text)
-            violations.extend(
-                _throttle_registration_violations(module.name, rel, tree, webhook_views)
-            )
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef) and node.name.endswith("Throttle"):
-                    for stmt in node.body:
-                        if not isinstance(stmt, ast.Assign):
-                            continue
-                        for target in stmt.targets:
-                            if not isinstance(target, ast.Name):
-                                continue
-                            value = _literal(stmt.value)
-                            if target.id == "rate":
-                                violations.append(
-                                    f"rule 32: {module.name}: {node.name} hard-codes a rate"
-                                )
-                            if target.id == "scope" and isinstance(value, str):
-                                if not value.startswith(f"{stem}_"):
-                                    violations.append(
-                                        f"rule 32: {module.name}: {node.name} scope {value!r} "
-                                        f"lacks the {stem}_ stem"
-                                    )
-                if isinstance(node, ast.Assign):
-                    for target in node.targets:
-                        if (
-                            isinstance(target, ast.Name)
-                            and target.id == "throttle_scope"
-                            and isinstance(node.value, ast.Constant)
-                            and isinstance(node.value.value, str)
-                            and not node.value.value.startswith(f"{stem}_")
-                        ):
-                            violations.append(
-                                f"rule 32: {module.name}: {rel} throttle scope "
-                                f"{node.value.value!r} lacks the {stem}_ stem"
-                            )
-            docstrings = _docstring_nodes(tree)
-            for constant in ast.walk(tree):
-                if not isinstance(constant, ast.Constant) or not isinstance(constant.value, str):
-                    continue
-                if id(constant) in docstrings:
-                    continue
-                match = RATE_LITERAL.search(constant.value)
-                if match:
-                    violations.append(
-                        f"rule 32: {module.name}: {rel} writes a throttle rate literal "
-                        f"{match.group()!r}"
-                    )
-                    break
-            if _uses_name(tree, "RunSQL"):
-                violations.append(f"rule 32: {module.name}: {rel} creates raw SQL objects")
+        violations.extend(_guard_violations(module))
     return violations

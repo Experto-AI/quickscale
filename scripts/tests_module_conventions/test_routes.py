@@ -1564,3 +1564,52 @@ def test_pagination_sibling_import_controls() -> None:
     violations = _violations(checker.rule_9_http_apis, sibling_drf)
     assert any("pagination_class must name a subclass" in violation for violation in violations)
     assert any("outside core" in violation for violation in violations)
+
+
+def test_route_findings_keep_duplicates() -> None:
+    """The route detectors report every finding, duplicates and order included."""
+    module = _golden_module()
+    doubled = _with_files(
+        module,
+        urls=module.files["urls.py"].replace(
+            "urlpatterns = [path('', views.IndexView.as_view(), name='index')]",
+            "urlpatterns = [\n"
+            "    path('', views.IndexView.as_view(), name='demo_list'),\n"
+            "    path('x/', views.IndexView.as_view(), name='demo_list'),\n"
+            "]",
+        ),
+    )
+    assert _violations(checker.rule_7_urls, doubled) == [
+        "rule 7: demo: route name 'demo_list' in path name repeats the module",
+        "rule 7: demo: route name 'demo_list' in path name repeats the module",
+    ]
+
+
+@pytest.mark.parametrize(
+    "detector",
+    [
+        checker.rule_8_templates,
+        checker.rule_9_http_apis,
+        checker.rule_19_authorization,
+        checker.rule_32_throttles,
+    ],
+)
+def test_route_detectors_propagate_module_syntax_errors(detector) -> None:
+    """A module file the detector parses still raises SyntaxError (SA267)."""
+    broken = _with_files(_golden_module(), views="def broken(:\n")
+    with pytest.raises(SyntaxError):
+        _violations(detector, broken)
+
+
+def test_url_detector_propagates_urls_syntax_errors() -> None:
+    """Rule 7 parses ``urls.py`` and its adapter and still fails closed (SA267)."""
+    for key in ("urls", "adapter"):
+        broken = _with_files(_golden_module(), **{key: "def broken(:\n"})
+        with pytest.raises(SyntaxError):
+            _violations(checker.rule_7_urls, broken)
+
+
+def test_theme_seam_detector_never_parses_module_source() -> None:
+    """Rule 31 reads template text, so a module syntax error stays invisible."""
+    broken = _with_files(_golden_module(), urls="urlpatterns = [\n")
+    assert _violations(checker.rule_31_theme_seam, broken) == []
