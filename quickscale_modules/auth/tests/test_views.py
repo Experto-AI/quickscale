@@ -1855,12 +1855,13 @@ class TestAccountDeleteView:
             checkout_session_id="cs_former_purchase_open"
         )
 
-    def test_account_delete_resolves_unknown_purchase_checkout_in_a_former_organization(
+    def test_account_delete_blocks_unknown_purchase_checkout_in_a_former_organization(
         self, authenticated_client, user
     ):
-        """A former organization's unknown purchase outcome resolves as absent."""
+        """A former organization's unknown purchase outcome keeps the account intact."""
         from unittest.mock import MagicMock, patch
 
+        from django.contrib import messages as messages_framework
         from django.contrib.auth import get_user_model
 
         from quickscale_modules_billing.models import Plan, PurchaseCheckout
@@ -1918,13 +1919,16 @@ class TestAccountDeleteView:
                 reverse("quickscale_auth:account_delete")
             )
 
-        assert response.status_code == 302
+        assert response.status_code == 200
         retained = get_user_model().objects.get(pk=user.pk)
-        assert retained.is_active is False
-        assert retained.email == f"deleted-{user.pk}@invalid"
+        assert retained.is_active is True
+        assert any(
+            "creation outcome is unknown" in str(message.message)
+            for message in messages_framework.get_messages(response.wsgi_request)
+        )
         with org_scope(organization):
             purchase_checkout.refresh_from_db()
-        assert purchase_checkout.status == PurchaseCheckout.Status.EXPIRED
+        assert purchase_checkout.status == PurchaseCheckout.Status.PREPARING
         stripe_client.retrieve_checkout_session.assert_not_called()
         stripe_client.find_checkout_session_by_reference.assert_not_called()
         stripe_client.search_customers.assert_called_once()

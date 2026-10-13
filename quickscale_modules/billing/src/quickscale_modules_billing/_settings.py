@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from functools import wraps
 from typing import Any, Final, cast
 
@@ -80,6 +81,12 @@ _CUSTOMER_SEARCH_REFERENCE_UNSAFE_CHARACTERS: tuple[tuple[str, str], ...] = (
     ("\\", "backslash"),
     ("\n", "newline"),
 )
+# Stripe documents that Search is eventually consistent: "Under normal
+# operating conditions, data is searchable in less than a minute. Occasionally,
+# propagation of new or updated data can be up to an hour behind during
+# outages." Checkout reconciliation refuses to read a Search miss as absence
+# until the reservation is older than the documented worst case.
+_STRIPE_SEARCH_INDEX_LAG: Final[timedelta] = timedelta(hours=1)
 
 
 @dataclass(frozen=True)

@@ -65,6 +65,14 @@ def _plan(*, slug: str = "reconcile-command-plan") -> Plan:
     )
 
 
+def _age_purchase_reservation(reservation: PurchaseCheckout) -> None:
+    """Move a reservation past Stripe's documented Search indexing lag."""
+    PurchaseCheckout.all_objects.filter(pk=reservation.pk).update(
+        created_at=timezone.now() - timedelta(hours=2)
+    )
+    reservation.refresh_from_db()
+
+
 def _run_command(
     fake_client: _FakeReconciliationClient,
     **options: Any,
@@ -90,12 +98,15 @@ def test_reconcile_checkouts_closes_an_unknown_purchase_outcome(
     organization,
     org_context,
 ) -> None:
-    """A session-less reservation the provider does not hold is closed."""
+    """A session-less reservation past the Search lag is closed."""
     reservation = PurchaseCheckout.all_objects.create(
         user=user,
         organization=organization,
         plan=_plan(),
         status=PurchaseCheckout.Status.PREPARING,
+    )
+    PurchaseCheckout.all_objects.filter(pk=reservation.pk).update(
+        created_at=timezone.now() - timedelta(hours=2)
     )
 
     stdout, stderr = _run_command(_FakeReconciliationClient())
@@ -104,6 +115,28 @@ def test_reconcile_checkouts_closes_an_unknown_purchase_outcome(
     assert reservation.status == PurchaseCheckout.Status.EXPIRED
     assert stderr == ""
     assert "Closed 1 reservation(s); 0 organization(s) still blocked." in stdout
+
+
+@pytest.mark.django_db
+def test_reconcile_checkouts_keeps_a_lagged_purchase_outcome_open(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A fresh session-less reservation is not resolved while Search lags."""
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=_plan(slug="reconcile-command-lagged"),
+        status=PurchaseCheckout.Status.PREPARING,
+    )
+
+    stdout, stderr = _run_command(_FakeReconciliationClient())
+
+    reservation.refresh_from_db()
+    assert reservation.status == PurchaseCheckout.Status.PREPARING
+    assert "Search indexing lag" in stderr
+    assert "1 organization(s) still blocked." in stdout
 
 
 @pytest.mark.django_db
@@ -119,8 +152,9 @@ def test_reconcile_checkouts_dry_run_writes_nothing(
         plan=_plan(slug="reconcile-command-dry-run"),
         status=PurchaseCheckout.Status.PREPARING,
     )
+    _age_purchase_reservation(reservation)
 
-    stdout, _stderr = _run_command(
+    stdout, stderr = _run_command(
         _FakeReconciliationClient(),
         dry_run=True,
     )
@@ -128,6 +162,7 @@ def test_reconcile_checkouts_dry_run_writes_nothing(
     reservation.refresh_from_db()
     assert reservation.status == PurchaseCheckout.Status.PREPARING
     assert "Dry run" in stdout
+    assert "Search indexing lag" not in stderr
 
 
 @pytest.mark.django_db
@@ -179,6 +214,7 @@ def test_reconcile_checkouts_limits_to_the_requested_organization(
         plan=_plan(slug="reconcile-command-targeted"),
         status=PurchaseCheckout.Status.PREPARING,
     )
+    _age_purchase_reservation(targeted)
     other_organization = Organization.objects.create(
         name="Other Reconcile",
         slug="other-reconcile",
@@ -222,6 +258,7 @@ def test_reconcile_checkouts_continues_past_a_live_purchase_reservation(
         plan=_plan(slug="reconcile-command-behind-live"),
         status=PurchaseCheckout.Status.PREPARING,
     )
+    _age_purchase_reservation(resolvable_reservation)
     fake_client = _FakeReconciliationClient(
         checkout_sessions={
             "cs_command_live": {"id": "cs_command_live", "status": "open"},
@@ -326,6 +363,7 @@ def test_reconcile_checkouts_continues_past_a_provider_lookup_error(
         plan=_plan(slug="reconcile-command-behind-error"),
         status=PurchaseCheckout.Status.PREPARING,
     )
+    _age_purchase_reservation(resolvable_reservation)
     fake_client = _FakeReconciliationClient()
 
     def reject_retrieval(**kwargs: Any) -> dict[str, Any]:

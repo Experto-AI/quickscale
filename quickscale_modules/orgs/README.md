@@ -180,7 +180,11 @@ a preparing/open one-time purchase checkout. Before opening the purge transactio
 billing to reconcile hosted checkouts with Stripe: a provider-confirmed expired session
 becomes purgeable, a completed or open session remains blocked, and a reservation whose
 creation outcome is unknown is looked up at Stripe by its stored reference and resolved — a
-live session stays blocked, while an expired or absent one clears. Dry-run inspects provider
+live session stays blocked, while an expired or absent one clears. A customer-search miss
+inside Stripe's Search indexing lag, or while a customer-resolution attempt has no recorded
+outcome, is not read as absence: a completed attempt's miss clears once the lag elapses, while
+an attempt with no recorded outcome keeps blocking until a resolution completes. Dry-run
+inspects provider
 state without persisting it; destructive execution persists reconciliation before purge.
 `quickscale_billing_reconcile_checkouts` runs the same reconciliation for rows accumulated
 before the upgrade. Billing provider operations and purge share an organization-keyed

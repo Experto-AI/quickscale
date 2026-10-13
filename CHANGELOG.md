@@ -747,6 +747,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     validates the `whsec_` value with the decoder the webhook endpoint uses, so a missing prefix,
     a non-base64 remainder, or an empty decoded key refuses startup instead of failing every
     webhook at request time.
+  - **Checkout reconciliation waits out Stripe's Search indexing lag.** A customer-search miss
+    counts as absence only once the organization's latest customer-resolution attempt completed
+    and is older than Stripe's documented indexing lag, and a reference that resolves to two
+    customers fails closed, so account deletion and purge cannot proceed while provider state may
+    still exist.
   - **Migration history has a content identity.** `quickscale_core.migration_hashes` hashes a
     module's applied migration files with SHA-256, and `scripts/sync_migration_hashes.py`
     records those hashes in the checked-in `scripts/migration_hashes.json` for every shipped

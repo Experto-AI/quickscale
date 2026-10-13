@@ -325,6 +325,9 @@ def _find_unknown_outcome_checkout_session(
     customer_id = _resolve_existing_customer_id_for_reconciliation(
         organization=organization,
         stripe_client=stripe_client,
+        reservation_attempted_at=reservation.customer_lookup_attempted_at,
+        reservation_completed_at=reservation.customer_lookup_completed_at,
+        reservation_created_at=reservation.created_at,
         reservation_customer_id=str(reservation.stripe_customer_id or ""),
     )
     if not customer_id:
