@@ -15,8 +15,8 @@ their value.
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
 with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#11-watchlist-and-accepted-trade-offs)).
-Three tickets are release requirements and land before the tag: SA269 (so the release gets its
-hosted E2E run), SA270, and SA271 (the 2026-10-13 tech-audit S3s, all introduced since 0.88.0).
+Two tickets are release requirements and land before the tag: SA270 and SA271 (the 2026-10-13
+tech-audit S3s, all introduced since 0.88.0).
 Publication remains a maintainer action.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
@@ -40,8 +40,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA269 | Make the release pipeline run hosted E2E and pin its Poetry retry | 1 | — | Required |
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | SA269, SA270, SA271 | Optional |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | SA270, SA271 | Optional |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA275 | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
@@ -63,10 +62,10 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA269 ──► SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
+Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
 Track 2: SA270 ∥ SA271 ──► SA275 ──► SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
 Track 3: SA272 ──► SA276 ──► SA274 ──► SA283 ──► SA279 ──► SA281
-     release path:  SA269 + SA270 + SA271 ──► publish 0.89.0 ──► SA191 repin
+     release path:  SA270 + SA271 ──► publish 0.89.0 ──► SA191 repin
      critical path: SA275 ──► SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
 
@@ -76,7 +75,7 @@ its freeze gate costs one registry row instead of about eight hand stations (arc
 SA279 waits on SA278, whose guard test it extends; SA277 waits on SA191's cutover, which decides
 which upgrade mechanism proved itself.
 
-**Parallel start.** SA269, SA204 (a), SA270, SA271, SA275, SA272, and SA276 have no unmet
+**Parallel start.** SA204 (a), SA270, SA271, SA275, SA272, and SA276 have no unmet
 dependency and touch disjoint files, so all three tracks start at once. SA204 (a), (b), (d), and
 (e) do not wait on SA275; only (c) adds a gate row.
 
@@ -99,7 +98,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA269 ∥ SA204 (a) | yes | no | yes | no | yes |
+| 1 | SA204 (a) | yes | no | yes | no | yes |
 | 2 | SA270 ∥ SA271 | yes | yes | yes | no | yes |
 | 3 | SA272 | yes | yes | yes | no | no |
 
@@ -148,8 +147,7 @@ A track is **truly green** only when all three states are yes.
   re-exports, and the conformance harness with its registry row and its parity families, and the
   five `_anonymization.py` handlers with core's redaction helpers.
 - **Cross-track edits.** SA204 (c) adds its gate row to the Track 2 registry; SA204 (d) and (e)
-  edit Track 2's `dr_engine/recovery.py` and `update` command, with Track 2 review. SA269 (b)
-  edits Track 2's `ci.yml` and `nightly-bypassrls.yml` outside their generated regions. SA282 (a)
+  edit Track 2's `dr_engine/recovery.py` and `update` command, with Track 2 review. SA282 (a)
   adds a harness clause and control to Track 3's harness; SA283 (a) edits Track 2's
   `billing/checks.py`; SA281 edits Track 2's option contract. All land through the serialized
   merge queue.
@@ -171,26 +169,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 ## Work
 
 ### Release requirements for 0.89.0
-
-- [ ] **SA269 — Make the release pipeline run hosted E2E and pin its Poetry retry.**
-
-  Closes tech `e2e-release-tag-trigger-never-matches` (S3, quick win) and
-  `ci-poetry-retry-curl-pipe-python` (S4), the audit's pipeline batch.
-
-  **Context:** `e2e.yml` triggers on `tags: ['v*']`, but release tags are `0.89.0`-style
-  (`publish.yml` matches `"[0-9]*"`), so no release has had the hosted E2E run the workflow
-  promises. The Poetry-install retry in `ci.yml` (three jobs) and `nightly-bypassrls.yml` pipes an
-  unpinned `install.python-poetry.org` into `python3`, outside the SHA-pin contract.
-
-  **Acceptance:** a release tag of the form `publish.yml` matches triggers `e2e.yml`, and an
-  existing workflow test pins that the two tag patterns are equal (the audit's trigger-consistency
-  tooling gap, held by a test, not a new gate). Every Poetry retry installs the pinned
-  `poetry==2.4.1` through `pipx` or `pip`, and no workflow pipes a downloaded script into an
-  interpreter. Generated workflow regions are untouched or regenerated by the sync.
-
-  **Slices:**
-  - [ ] (a) The `e2e.yml` tag pattern and its pinning test (Tier 1).
-  - [ ] (b) The pinned Poetry retry in `ci.yml` and `nightly-bypassrls.yml` (Tier 1).
 
 - [ ] **SA270 — Keep checkout reconciliation fail-closed across Stripe Search lag.**
 
@@ -311,8 +289,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   rehearsed on scratch. The cutover rebuilds a fresh database and reseeds the catalog under the
   restricted runtime role; billing stays disabled.
 
-  **Remaining:** after 0.89.0 is published (its release requirements are SA269, SA270, and
-  SA271), repin `bap-web-new` to it and re-run the rehearsal
+  **Remaining:** after 0.89.0 is published (its release requirements are SA270 and SA271),
+  repin `bap-web-new` to it and re-run the rehearsal
   (agent); then the maintainer runs the Railway cutover, carries media, re-invites users, and
   archives the old repository. The pre-cutover database is retained until the reseeded site is
   verified. The production dump at `/home/victor/code/bap-web-prod.dump` holds real user data and
@@ -670,6 +648,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [x] **SA267 — Bring the gate scripts under the quality thresholds.**
 
 - [x] **SA268 — Bring the conformance harness under the quality thresholds.**
+
+- [x] **SA269 — Make the release pipeline run hosted E2E and pin its Poetry retry.**
 
 ## Deferred constraints and references
 
