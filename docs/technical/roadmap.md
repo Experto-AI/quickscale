@@ -291,8 +291,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
    failures (36, 30, 28); parity controls pin the pre-split surface, its imported bindings,
    signatures, exact findings, and rule 3's syntax-error precedence, and 855 harness controls
    pass.
-   Next: the harness families still carrying debt (analytics, docs, redaction, rule 44,
-   adapter flow, core), then the script families, then test-function debt.
+   The analytics sub-slice is implemented: `rules_analytics.py` is an 80-line facade with two
+   private siblings (`_analytics_events`, `_analytics_session_keys`; all <800 lines, max CC 8),
+   removing the CC-31 failure; parity controls pin the pre-split surface, its imported
+   bindings, signatures, and exact findings, and 887 harness controls pass.
+   Next: the harness families still carrying debt (docs, redaction, rule 44, adapter flow,
+   core), then the script families, then test-function debt.
    Keep the module-name tables in the rule-37-exempt facade and preserve lazy renderer binding.
 
   **Surfaces:** `scripts/` and their tests, and the arch audit.
