@@ -59,7 +59,10 @@ from _gate_registry_schema import (
 )
 
 #: Every module-level name the pre-split checker published; the facade
-#: re-exports the schema half from ``_gate_registry_schema``.
+#: re-exports the schema half from ``_gate_registry_schema``.  Per
+#: decisions.md § Split-Facade Seams a facade re-exports public names only:
+#: incidental imported bindings (``argparse``, ``json``, ``Path``, ...) stay
+#: module attributes but are deliberately not part of the wildcard surface.
 __all__ = [
     "SchemaValidationError",
     "_DuplicateKeyError",

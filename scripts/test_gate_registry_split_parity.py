@@ -159,6 +159,35 @@ FROZEN_WILDCARD_SURFACE = (
     "sync_workflow",
 )
 
+#: Non-underscore imported bindings the pre-split wildcard import also bound;
+#: the facades keep them as attributes but exclude them from ``__all__``.
+FROZEN_SYNC_INCIDENTAL_BINDINGS = (
+    "Any",
+    "Path",
+    "SchemaValidationError",
+    "annotations",
+    "argparse",
+    "dataclass",
+    "difflib",
+    "os",
+    "re",
+    "sys",
+    "tempfile",
+    "yaml",
+)
+
+FROZEN_PARITY_INCIDENTAL_BINDINGS = (
+    "Any",
+    "Iterator",
+    "Path",
+    "annotations",
+    "argparse",
+    "difflib",
+    "json",
+    "re",
+    "sys",
+)
+
 #: The pre-split modules' own imports, which they exposed as module attributes.
 FROZEN_SYNC_IMPORTED_BINDINGS = (
     "argparse",
@@ -702,6 +731,23 @@ def test_facade_wildcard_surface_keeps_the_pre_split_public_names() -> None:
     assert missing == []
     for name in sync_ci_gate_jobs.__all__:
         assert hasattr(sync_ci_gate_jobs, name), name
+
+
+def test_facade_wildcard_surface_excludes_incidental_bindings() -> None:
+    """
+    The narrower wildcard contract is explicit, documented, and tested.
+
+    Pre-split, ``from sync_ci_gate_jobs import *`` also bound incidental
+    imported names.  decisions.md § Split-Facade Seams has facades re-export
+    public names only, so those names stay attributes of the facade but are
+    deliberately excluded from the wildcard surface.
+    """
+    for name in FROZEN_SYNC_INCIDENTAL_BINDINGS:
+        assert hasattr(sync_ci_gate_jobs, name), name
+        assert name not in sync_ci_gate_jobs.__all__, name
+    for name in FROZEN_PARITY_INCIDENTAL_BINDINGS:
+        assert hasattr(check_gate_parity, name), name
+        assert name not in check_gate_parity.__all__, name
 
 
 def test_facade_preserves_the_pre_split_imported_bindings() -> None:

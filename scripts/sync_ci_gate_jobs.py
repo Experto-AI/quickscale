@@ -125,9 +125,12 @@ from _sync_ci_gate_publish import expected_publish_workflow_text, sync_publish_w
 from _sync_ci_gate_regions import _validate_marked_regions
 
 #: The names the facade publishes.  Every non-underscore pre-split definition
-#: stays here so a wildcard import keeps the pre-split surface, and the
-#: underscore-prefixed re-exports are listed so the facade's lint surface and
-#: the explicit re-export block agree.
+#: stays here so a wildcard import keeps the pre-split defined surface, and
+#: the underscore-prefixed re-exports are listed so the facade's lint surface
+#: and the explicit re-export block agree.  Per decisions.md § Split-Facade
+#: Seams a facade re-exports public names only: incidental imported bindings
+#: (``os``, ``yaml``, ``Path``, ...) stay module attributes but are
+#: deliberately not part of the wildcard surface.
 __all__ = [
     "CHECKOUT_COMMENT",
     "CHECKOUT_REF",
