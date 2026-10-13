@@ -265,7 +265,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   conformance harness. The routes sub-slice is implemented: `rules_routes.py` is a 310-line
   facade with seven helpers (all <800 lines, max CC 20), removing nine CC failures and one
   oversized file. Baseline differential checks found no drift; 584 harness controls pass.
-  Next: `rules_identity.py`, then the remaining harness/script families and test-function debt.
+  The identity sub-slice is implemented: `rules_identity.py` is a 351-line facade with seven
+  helpers (all <800 lines, max CC 20), removing seven CC failures and one oversized file;
+  parity controls pin the pre-split surface and exact findings, and 608 harness controls pass.
+  Next: the remaining harness/script families and test-function debt.
   Keep the module-name tables in the rule-37-exempt facade and preserve lazy renderer binding.
 
   **Surfaces:** `scripts/` and their tests, and the arch audit.
