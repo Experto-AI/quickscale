@@ -103,6 +103,45 @@ def test_vendor_secret_check_reports_empty_webhook_secret(settings: Any) -> None
     assert "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET" in text
 
 
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "test-webhook-secret",  # no `whsec_` prefix; also invalid base64
+        "YWFhYWFhYWFhYWFhYWFhYQ==",  # no `whsec_` prefix; valid base64
+        "whsec_not base64!!",  # prefix present, remainder is not base64
+        "whsec_",  # prefix present, decodes to an empty HMAC key
+    ],
+)
+def test_vendor_secret_check_reports_malformed_webhook_secret(
+    settings: Any, secret: str
+) -> None:
+    """E003 refuses a secret the webhook endpoint's contract does not accept."""
+    settings.QUICKSCALE_NOTIFICATIONS_ENABLED = True
+    settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET = secret
+
+    messages = check_vendor_secrets()
+
+    assert [message.id for message in messages] == ["quickscale_notifications.E003"]
+    assert "whsec_" in str(messages[0].msg)
+
+
+def test_ready_refuses_unprefixed_webhook_secret(settings: Any) -> None:
+    """The eager AppConfig.ready() pass refuses a valid-base64 unprefixed secret."""
+    settings.QUICKSCALE_NOTIFICATIONS_ENABLED = True
+    settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET = "YWFhYWFhYWFhYWFhYWFhYQ=="
+
+    with pytest.raises(ImproperlyConfigured, match="quickscale_notifications.E003"):
+        _build_config().ready()
+
+
+def test_vendor_secret_check_accepts_svix_shaped_webhook_secret(settings: Any) -> None:
+    """A `whsec_` secret whose remainder is non-empty base64 passes the check."""
+    settings.QUICKSCALE_NOTIFICATIONS_ENABLED = True
+    settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET = "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
+
+    assert check_vendor_secrets() == []
+
+
 def test_vendor_secret_check_reports_empty_resend_key_for_live_backend(
     settings: Any,
 ) -> None:
