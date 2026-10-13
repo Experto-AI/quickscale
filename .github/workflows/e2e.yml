@@ -7,7 +7,8 @@ on:
   # Run on release tags
   push:
     tags:
-      - 'v*'
+      - "[0-9]*"
+      - "v[0-9]*"
 
   # Optionally run on PRs to main (can be disabled)
   pull_request:
