@@ -281,22 +281,86 @@ def _render_generated_workflows(destination: Path) -> Path:
     return workflows
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run the workflow-security gate and return its process exit code."""
-    args = sys.argv[1:] if argv is None else argv
-    preflight_only = "--preflight" in args
+def _parse_cli_arguments(arguments: list[str]) -> tuple[bool, bool, list[str]]:
+    """Return ``(preflight_only, scan_generated, remaining)`` for the raw CLI arguments."""
+    preflight_only = "--preflight" in arguments
     if preflight_only:
-        args = [arg for arg in args if arg != "--preflight"]
-    scan_generated = GENERATED_TEMPLATE_FLAG in args
+        arguments = [arg for arg in arguments if arg != "--preflight"]
+    scan_generated = GENERATED_TEMPLATE_FLAG in arguments
     if scan_generated:
-        args = [arg for arg in args if arg != GENERATED_TEMPLATE_FLAG]
+        arguments = [arg for arg in arguments if arg != GENERATED_TEMPLATE_FLAG]
+    return preflight_only, scan_generated, arguments
+
+
+def _require_executable(pinned_version: str) -> str:
+    """Return the resolved zizmor path, or fail closed with the exact remediation."""
     executable = _resolve_zizmor()
-    pinned_version = _pinned_version()
     if executable is None:
         raise GateError(
             f"{EXECUTABLE} executable not found on PATH. pyproject.toml pins "
             f"{EXECUTABLE} {pinned_version} as a Poetry dev dependency — run: {INSTALL_REMEDIATION}"
         )
+    return executable
+
+
+def _workflow_target(arguments: list[str]) -> Path:
+    """Return the workflow file or directory the gate must scan."""
+    workflows = Path(arguments[0]) if arguments else DEFAULT_WORKFLOWS
+    if not workflows.exists():
+        raise GateError(f"workflow target not found: {workflows}")
+    return workflows
+
+
+def _scan_targets(workflows: Path, scan_generated: bool, stack: contextlib.ExitStack) -> list[Path]:
+    """Return the scan targets, rendering the generated template when asked."""
+    targets = [workflows]
+    if scan_generated:
+        temporary = stack.enter_context(
+            tempfile.TemporaryDirectory(prefix="quickscale-workflow-security-")
+        )
+        targets.append(_render_generated_workflows(Path(temporary)))
+    return targets
+
+
+def _emit_findings(executable: str, targets: list[Path]) -> int:
+    """Scan every target, print each finding, and return the total count."""
+    findings_total = 0
+    for target in targets:
+        returncode, stdout, stderr = _run_zizmor(executable, target)
+        findings = _parse_zizmor_report(stdout, stderr)
+        for finding in findings:
+            ident = finding.get("ident", "<unknown>")
+            desc = str(finding.get("desc", "")).strip()
+            location = f"{_finding_path(finding)}:{_finding_position(finding)}"
+            print(f"{location}: {ident}: {desc}", file=sys.stderr)
+        findings_total += len(findings)
+        if not findings and returncode != 0:
+            raise GateError(f"{EXECUTABLE} exited {returncode} with an empty report")
+    return findings_total
+
+
+def _report_missing_permissions(targets: list[Path]) -> int:
+    """Print the workflows missing a top-level permissions block; return their count."""
+    missing: list[Path] = []
+    for target in targets:
+        missing.extend(_missing_top_level_permissions(target))
+    if not missing:
+        return 0
+    for path in missing:
+        print(
+            f"{path}: missing-top-level-permissions: no workflow-level permissions block",
+            file=sys.stderr,
+        )
+    print(f"workflow security findings: {len(missing)}", file=sys.stderr)
+    return EXIT_FINDINGS
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the workflow-security gate and return its process exit code."""
+    args = sys.argv[1:] if argv is None else argv
+    preflight_only, scan_generated, arguments = _parse_cli_arguments(args)
+    pinned_version = _pinned_version()
+    executable = _require_executable(pinned_version)
     if preflight_only:
         # `make check`'s first step: prove zizmor resolves before running any
         # other (slower) repository gate, so an unsynced worktree fails here
@@ -304,46 +368,19 @@ def main(argv: list[str] | None = None) -> int:
         _warn_if_outside_project_environment(executable, pinned_version)
         print(f"zizmor preflight ok: {executable}")
         return 0
-    workflows = Path(args[0]) if args else DEFAULT_WORKFLOWS
-    if not workflows.exists():
-        raise GateError(f"workflow target not found: {workflows}")
+    workflows = _workflow_target(arguments)
     _warn_if_outside_project_environment(executable, pinned_version)
     with contextlib.ExitStack() as stack:
-        targets = [workflows]
-        if scan_generated:
-            temporary = stack.enter_context(
-                tempfile.TemporaryDirectory(prefix="quickscale-workflow-security-")
-            )
-            targets.append(_render_generated_workflows(Path(temporary)))
-        findings_total = 0
-        for target in targets:
-            returncode, stdout, stderr = _run_zizmor(executable, target)
-            findings = _parse_zizmor_report(stdout, stderr)
-            for finding in findings:
-                ident = finding.get("ident", "<unknown>")
-                desc = str(finding.get("desc", "")).strip()
-                location = f"{_finding_path(finding)}:{_finding_position(finding)}"
-                print(f"{location}: {ident}: {desc}", file=sys.stderr)
-            findings_total += len(findings)
-            if not findings and returncode != 0:
-                raise GateError(f"{EXECUTABLE} exited {returncode} with an empty report")
+        targets = _scan_targets(workflows, scan_generated, stack)
+        findings_total = _emit_findings(executable, targets)
         if findings_total:
             print(f"workflow security findings: {findings_total}", file=sys.stderr)
             return EXIT_FINDINGS
-        missing: list[Path] = []
-        for target in targets:
-            missing.extend(_missing_top_level_permissions(target))
-        if missing:
-            for path in missing:
-                print(
-                    f"{path}: missing-top-level-permissions: no workflow-level permissions block",
-                    file=sys.stderr,
-                )
-            print(f"workflow security findings: {len(missing)}", file=sys.stderr)
+        if _report_missing_permissions(targets):
             return EXIT_FINDINGS
         scanned = ", ".join(str(target) for target in targets)
         print(f"workflow security gate clean: {scanned}")
-        return 0
+    return 0
 
 
 if __name__ == "__main__":

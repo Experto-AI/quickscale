@@ -269,7 +269,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `_publish_module_*` siblings (largest 463 lines, max non-test CC 11), removing the
     1,651-line file and all four CC failures (34, 33, 29, and 24); parity controls pin the
     pre-split surface, signatures, homes, and exact findings, and the coupled suites pass.
-  - [ ] (c) `check_security_gates.py`, `check_workflow_security.py`, `check_csrf_exempt_gate.py`.
+  - [x] (c) `check_security_gates.py`, `check_workflow_security.py`, `check_csrf_exempt_gate.py`.
+    Landed: `check_security_gates.py` is a 230-line facade over five private
+    `_security_gates_*` siblings (largest 469 lines); `check_workflow_security.py` and
+    `check_csrf_exempt_gate.py` keep their pre-split surface with `main` and
+    `_literal_truthiness` decomposed in place. No non-test function in the three files sits
+    at CC >= 21 and no file reaches 800 lines; parity controls pin the pre-split surfaces,
+    signatures, homes, and exact findings, and the runnable gates' pre/post output is
+    byte-identical.
   - [ ] (d) `check_project_contract_vintage.py`, `check_module_core_compatibility.py`,
     `check_module_core_imports.py`, `check_sa117_scope.py`, `check_coverage_policy.py`,
     `check_beta_migration_smoke.py`, and the vulture findings.
