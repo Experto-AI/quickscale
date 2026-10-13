@@ -323,7 +323,7 @@ def sync_publish_workflow(
     try:
         current = path.read_text(encoding="utf-8")
     except OSError as exc:
-        raise GeneratorError(f"cannot read publish workflow {path}: {exc}") from None
+        raise GeneratorError(f"cannot read workflow {path}: {exc}") from None
     gates = _parse_registry(registry_path)
     expected = expected_publish_workflow_text(current, gates)
     return current != expected, expected

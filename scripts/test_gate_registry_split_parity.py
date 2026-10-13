@@ -105,6 +105,60 @@ FROZEN_PARITY_SURFACE = (
     "main",
 )
 
+#: Every non-underscore name the pre-split generator defined; the facade's
+#: ``__all__`` must keep all of them so a wildcard import keeps its surface.
+FROZEN_WILDCARD_SURFACE = (
+    "CHECKOUT_COMMENT",
+    "CHECKOUT_REF",
+    "DEFAULT_DOCS",
+    "DEFAULT_E2E_WORKFLOW",
+    "DEFAULT_MAKE_INCLUDE",
+    "DEFAULT_PUBLISH_WORKFLOW",
+    "DEFAULT_REGISTRY",
+    "DEFAULT_WORKFLOW",
+    "DOCS_TABLE_BEGIN",
+    "DOCS_TABLE_END",
+    "E2E_PATHS_BEGIN",
+    "E2E_PATHS_END",
+    "EXPECTED_UNOWNED_JOB_IDS",
+    "FIXED_NEEDS",
+    "GeneratorError",
+    "HAND_OWNED_MAKE_TARGETS",
+    "HOSTED_GATE_ORDER",
+    "HOSTED_JOB_CATALOG",
+    "HostedJobSpec",
+    "INSTALL_POETRY_COMMENT",
+    "INSTALL_POETRY_REF",
+    "JOB_BEGIN",
+    "JOB_END",
+    "MAKE_INCLUDE_HEADER",
+    "MAKE_TARGET_COMMENTS",
+    "NEEDS_BEGIN",
+    "NEEDS_END",
+    "NEEDS_GATE_IDS",
+    "POETRY_VERSION",
+    "PUBLISH_BEGIN",
+    "PUBLISH_END",
+    "PUBLISH_GATE_ORDER",
+    "PUBLISH_STEP_CATALOG",
+    "PublishStepSpec",
+    "REPO_ROOT",
+    "SETUP_PYTHON_COMMENT",
+    "SETUP_PYTHON_REF",
+    "UNOWNED_JOB_IDS",
+    "UNOWNED_JOB_RATIONALES",
+    "expected_docs_text",
+    "expected_e2e_workflow_text",
+    "expected_publish_workflow_text",
+    "expected_workflow_text",
+    "main",
+    "sync_docs_table",
+    "sync_e2e_workflow",
+    "sync_make_include",
+    "sync_publish_workflow",
+    "sync_workflow",
+)
+
 #: The pre-split modules' own imports, which they exposed as module attributes.
 FROZEN_SYNC_IMPORTED_BINDINGS = (
     "argparse",
@@ -642,6 +696,14 @@ def test_facade_publishes_the_pre_split_surface() -> None:
         assert getattr(check_gate_parity, name) is not None, name
 
 
+def test_facade_wildcard_surface_keeps_the_pre_split_public_names() -> None:
+    """``__all__`` keeps every non-underscore pre-split definition."""
+    missing = [name for name in FROZEN_WILDCARD_SURFACE if name not in sync_ci_gate_jobs.__all__]
+    assert missing == []
+    for name in sync_ci_gate_jobs.__all__:
+        assert hasattr(sync_ci_gate_jobs, name), name
+
+
 def test_facade_preserves_the_pre_split_imported_bindings() -> None:
     """The pre-split modules' own imports stay importable through the facades."""
     import argparse as argparse_module
@@ -1046,6 +1108,32 @@ def test_parse_diagnostics_are_exact(tmp_path: Path) -> None:
     with pytest.raises(sync_ci_gate_jobs.GeneratorError) as error:
         sync_ci_gate_jobs._parse_workflow(duplicate, "fixture ci.yml")
     assert str(error.value) == "fixture ci.yml: Duplicate YAML key: 'name'"
+
+
+def test_unreadable_source_diagnostics_are_exact(tmp_path: Path) -> None:
+    """Missing generated-source inputs keep their pre-split read diagnostics."""
+    missing = tmp_path / "missing.yml"
+    with pytest.raises(sync_ci_gate_jobs.GeneratorError) as error:
+        sync_ci_gate_jobs.sync_workflow(missing)
+    assert str(error.value) == (
+        f"cannot read workflow {missing}: [Errno 2] No such file or directory: '{missing}'"
+    )
+
+    with pytest.raises(sync_ci_gate_jobs.GeneratorError) as error:
+        sync_ci_gate_jobs.sync_e2e_workflow(missing)
+    assert str(error.value) == (
+        f"cannot read E2E workflow {missing}: [Errno 2] No such file or directory: '{missing}'"
+    )
+
+    with pytest.raises(sync_ci_gate_jobs.GeneratorError) as error:
+        sync_ci_gate_jobs.sync_publish_workflow(missing)
+    assert str(error.value) == (
+        f"cannot read workflow {missing}: [Errno 2] No such file or directory: '{missing}'"
+    )
+
+    with pytest.raises(sync_ci_gate_jobs.GeneratorError) as error:
+        sync_ci_gate_jobs.sync_docs_table(missing)
+    assert str(error.value) == f"cannot read docs table file {missing}"
 
 
 def test_pinned_catalog_constants_stay_single_literal_assignments() -> None:

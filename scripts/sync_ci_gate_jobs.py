@@ -63,6 +63,7 @@ from _sync_ci_gate_catalog import (
     DOCS_TABLE_END,
     E2E_PATHS_BEGIN,
     E2E_PATHS_END,
+    EXPECTED_UNOWNED_JOB_IDS,
     FIXED_NEEDS,
     HAND_OWNED_MAKE_TARGETS,
     HOSTED_GATE_ORDER,
@@ -72,12 +73,15 @@ from _sync_ci_gate_catalog import (
     MAKE_TARGET_COMMENTS,
     NEEDS_BEGIN,
     NEEDS_END,
+    NEEDS_GATE_IDS,
     PUBLISH_BEGIN,
     PUBLISH_END,
     PUBLISH_GATE_ORDER,
     PUBLISH_STEP_CATALOG,
     UNOWNED_JOB_IDS,
+    UNOWNED_JOB_RATIONALES,
     HostedJobSpec,
+    PublishStepSpec,
 )
 from _sync_ci_gate_core import (
     DEFAULT_DOCS,
@@ -111,31 +115,76 @@ from _sync_ci_gate_e2e import (
     expected_e2e_workflow_text,
     sync_e2e_workflow,
 )
-from _sync_ci_gate_make import _generated_make_targets, _render_make_include, sync_make_include
+from _sync_ci_gate_make import (
+    MAKE_INCLUDE_HEADER,
+    _generated_make_targets,
+    _render_make_include,
+    sync_make_include,
+)
 from _sync_ci_gate_publish import expected_publish_workflow_text, sync_publish_workflow
 from _sync_ci_gate_regions import _validate_marked_regions
 
-#: Pre-split names the facade re-exports from its private siblings without
-#: defining them here.  Every other pre-split helper stays importable from the
-#: sibling that now defines it.
+#: The names the facade publishes.  Every non-underscore pre-split definition
+#: stays here so a wildcard import keeps the pre-split surface, and the
+#: underscore-prefixed re-exports are listed so the facade's lint surface and
+#: the explicit re-export block agree.
 __all__ = [
+    "CHECKOUT_COMMENT",
+    "CHECKOUT_REF",
+    "DEFAULT_DOCS",
+    "DEFAULT_E2E_WORKFLOW",
+    "DEFAULT_MAKE_INCLUDE",
+    "DEFAULT_PUBLISH_WORKFLOW",
+    "DEFAULT_REGISTRY",
+    "DEFAULT_WORKFLOW",
     "DOCS_TABLE_BEGIN",
     "DOCS_TABLE_END",
     "E2E_PATHS_BEGIN",
     "E2E_PATHS_END",
+    "EXPECTED_UNOWNED_JOB_IDS",
+    "FIXED_NEEDS",
+    "GeneratorError",
     "HAND_OWNED_MAKE_TARGETS",
+    "HOSTED_GATE_ORDER",
+    "HOSTED_JOB_CATALOG",
+    "HostedJobSpec",
+    "INSTALL_POETRY_COMMENT",
+    "INSTALL_POETRY_REF",
+    "JOB_BEGIN",
+    "JOB_END",
+    "MAKE_INCLUDE_HEADER",
     "MAKE_TARGET_COMMENTS",
+    "NEEDS_BEGIN",
+    "NEEDS_END",
+    "NEEDS_GATE_IDS",
+    "POETRY_VERSION",
     "PUBLISH_BEGIN",
     "PUBLISH_END",
     "PUBLISH_GATE_ORDER",
     "PUBLISH_STEP_CATALOG",
+    "PublishStepSpec",
     "REPO_ROOT",
+    "SETUP_PYTHON_COMMENT",
+    "SETUP_PYTHON_REF",
+    "UNOWNED_JOB_IDS",
+    "UNOWNED_JOB_RATIONALES",
+    "_atomic_write",
+    "_bootstrap_job_markers",
     "_expected_e2e_paths",
     "_generated_make_targets",
+    "_parse_registry",
+    "_parse_workflow",
     "_render_make_include",
     "expected_docs_text",
     "expected_e2e_workflow_text",
     "expected_publish_workflow_text",
+    "expected_workflow_text",
+    "main",
+    "sync_docs_table",
+    "sync_e2e_workflow",
+    "sync_make_include",
+    "sync_publish_workflow",
+    "sync_workflow",
 ]
 
 # SA202 pins every generated job's third-party action to a full commit SHA with
