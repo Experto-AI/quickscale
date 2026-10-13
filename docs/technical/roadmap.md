@@ -264,7 +264,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `_`-prefixed siblings (max non-test CC 20, largest file 702 lines, vulture 100% clean);
     parity controls pin the pre-split surface, signatures, homes, and exact findings with no
     behavior, CLI, or generated-artifact change.
-  - [ ] (b) `publish_module.py`.
+  - [x] (b) `publish_module.py`. The split is implemented: `publish_module.py` is a 406-line
+    facade re-exporting the pre-split surface; the implementation lives in six private
+    `_publish_module_*` siblings (largest 463 lines, max non-test CC 11), removing the
+    1,651-line file and all four CC failures (34, 33, 29, and 24); parity controls pin the
+    pre-split surface, signatures, homes, and exact findings, and the coupled suites pass.
   - [ ] (c) `check_security_gates.py`, `check_workflow_security.py`, `check_csrf_exempt_gate.py`.
   - [ ] (d) `check_project_contract_vintage.py`, `check_module_core_compatibility.py`,
     `check_module_core_imports.py`, `check_sa117_scope.py`, `check_coverage_policy.py`,

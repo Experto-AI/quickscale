@@ -9,6 +9,15 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+# The SA267(b) split keeps each seam in the sibling that defines or resolves
+# it: shared base names live in ``_publish_module_core``, git collaborators in
+# ``_publish_module_git``, and the publish/status/seal/cli families in their
+# own private siblings (decisions.md, Split-Facade Seams).
+import _publish_module_core as core_module
+import _publish_module_git as git_module
+import _publish_module_publish as publish_module_impl
+import _publish_module_seal as seal_module
+import _publish_module_status as status_module
 import pytest
 
 import scripts.publish_module as publish_module
@@ -64,7 +73,7 @@ def test_list_modules_fails_closed_when_authoritative_contract_is_missing(
     """A missing inventory contract cannot fall back to directory names."""
     (tmp_path / "billing").mkdir()
     (tmp_path / "teams").mkdir()
-    monkeypatch.setattr(publish_module, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(core_module, "_REPO_ROOT", tmp_path)
     monkeypatch.setitem(sys.modules, "quickscale_core.contracts.module_discovery", None)
 
     with pytest.raises(ModuleNotFoundError):
@@ -80,7 +89,7 @@ def test_list_modules_fails_closed_when_authoritative_contract_is_missing(
 
 def _patch_selector_surroundings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point the selector at *tmp_path* and neutralize git bootstrap calls."""
-    monkeypatch.setattr(publish_module, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(core_module, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr(
         publish_module, "build_publication_git_runner", lambda git_executable: object()
     )
@@ -212,7 +221,7 @@ def test_require_authoritative_module_rejects_unknown_name(
 ) -> None:
     """F-002: a name absent from a healthy inventory hits the generic rejection."""
     authoritative_names = [f"module_{index:02d}" for index in range(12)]
-    monkeypatch.setattr(publish_module, "_list_modules", lambda: authoritative_names)
+    monkeypatch.setattr(core_module, "_list_modules", lambda: authoritative_names)
 
     with pytest.raises(SystemExit) as excinfo:
         publish_module._require_authoritative_module("nonexistent")
@@ -231,12 +240,12 @@ def test_release_gates_require_local_config_before_mutation(
     runner = object()
     calls: list[str] = []
     monkeypatch.setattr(
-        publish_module,
+        publish_module_impl,
         "_check_release_authoritative",
         lambda active_runner: calls.append("release"),
     )
     monkeypatch.setattr(
-        publish_module,
+        git_module,
         "validate_publication_origin",
         lambda path, runner: calls.append("origin"),
     )
@@ -247,7 +256,7 @@ def test_release_gates_require_local_config_before_mutation(
         raise publish_module.GitError("missing repository-local publication config")
 
     monkeypatch.setattr(
-        publish_module,
+        git_module,
         "validate_publication_local_config",
         reject_missing_local_config,
     )
@@ -473,34 +482,34 @@ class _SealLedger:
 def _install_seal_ledger(monkeypatch: pytest.MonkeyPatch, ledger: _SealLedger) -> None:
     """Install every Git seam through the trusted scripted runner."""
     monkeypatch.setattr(
-        publish_module,
+        git_module,
         "resolve_remote_ref",
         ledger.resolve_remote_ref,
         raising=False,
     )
-    monkeypatch.setattr(publish_module, "get_tree_sha", ledger.get_tree_sha, raising=False)
+    monkeypatch.setattr(git_module, "get_tree_sha", ledger.get_tree_sha, raising=False)
     monkeypatch.setattr(
-        publish_module,
+        git_module,
         "get_local_tag_commit",
         ledger.get_local_tag_commit,
         raising=False,
     )
     monkeypatch.setattr(
-        publish_module,
+        git_module,
         "create_annotated_tag",
         ledger.create_annotated_tag,
         raising=False,
     )
-    monkeypatch.setattr(publish_module, "push_tag", ledger.push_tag, raising=False)
+    monkeypatch.setattr(git_module, "push_tag", ledger.push_tag, raising=False)
     monkeypatch.setattr(
-        publish_module,
+        git_module,
         "delete_local_tag",
         ledger.delete_local_tag,
         raising=False,
     )
-    monkeypatch.setattr(publish_module, "resolve_split_branch", lambda name: BRANCH)
+    monkeypatch.setattr(git_module, "resolve_split_branch", lambda name: BRANCH)
     monkeypatch.setattr(
-        publish_module,
+        git_module,
         "resolve_module_path",
         lambda name: f"quickscale_modules/{name}",
     )
@@ -516,7 +525,7 @@ class TestSealLocalTagPrimitives:
         assert all(
             call[1]
             == {
-                "cwd": publish_module._REPO_ROOT,
+                "cwd": core_module._REPO_ROOT,
                 "capture_output": True,
                 "text": True,
             }
@@ -697,7 +706,7 @@ class TestSealMechanics:
                 raise SystemExit("stop before verification")
             return value
 
-        monkeypatch.setattr(publish_module, "resolve_remote_ref", stop_before_verification)
+        monkeypatch.setattr(git_module, "resolve_remote_ref", stop_before_verification)
 
         with pytest.raises(publish_module.SealError) as excinfo:
             publish_module._seal_module(MODULE, VERSION, runner=ledger.runner)
@@ -987,9 +996,9 @@ class TestSealMechanics:
             if module == "module_01":
                 raise publish_module.GitError("planned failure")
 
-        monkeypatch.setattr(publish_module, "_seal_module", fake_seal, raising=False)
+        monkeypatch.setattr(seal_module, "_seal_module", fake_seal, raising=False)
         monkeypatch.setattr(
-            publish_module,
+            core_module,
             "_list_modules",
             lambda: ["module_00", "module_01", "module_02"],
         )
@@ -1108,20 +1117,20 @@ class TestSealCliAndStatus:
         (tmp_path / "VERSION").write_text(f"{VERSION}\n")
         runner = object()
         calls: list[str] = []
-        monkeypatch.setattr(publish_module, "_REPO_ROOT", tmp_path)
+        monkeypatch.setattr(core_module, "_REPO_ROOT", tmp_path)
         monkeypatch.setattr(
             publish_module, "build_publication_git_runner", lambda executable: runner
         )
         monkeypatch.setattr(publish_module, "is_git_repo", lambda path, runner: True)
         monkeypatch.setattr(
-            publish_module,
+            publish_module_impl,
             "_check_release_authoritative",
             lambda active_runner: (_ for _ in ()).throw(
                 publish_module.GitError("not authoritative")
             ),
         )
         monkeypatch.setattr(
-            publish_module,
+            seal_module,
             "_seal_module",
             lambda *args, **kwargs: calls.append("seal"),
             raising=False,
@@ -1147,20 +1156,20 @@ class TestSealCliAndStatus:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         names = [f"module_{index:02d}" for index in range(12)]
-        monkeypatch.setattr(publish_module, "_list_modules", lambda: names)
-        monkeypatch.setattr(publish_module, "_warn_uncommitted_changes", lambda runner: None)
+        monkeypatch.setattr(core_module, "_list_modules", lambda: names)
+        monkeypatch.setattr(git_module, "_warn_uncommitted_changes", lambda runner: None)
         monkeypatch.setattr(
-            publish_module,
+            status_module,
             "_show_provenance_diagnostics",
             lambda runner: True,
         )
         monkeypatch.setattr(
-            publish_module,
+            status_module,
             "_get_module_publish_state",
             lambda module, runner: ("up-to-date", HEAD_SHA, HEAD_SHA, "remote-live"),
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "resolve_remote_ref",
             lambda remote, ref, *, runner: HEAD_SHA,
         )
@@ -1181,26 +1190,26 @@ class TestSealCliAndStatus:
         ``ls-remote`` value used to derive publication status.
         """
         stale_sha = "b" * 40
-        monkeypatch.setattr(publish_module, "_list_modules", lambda: ["auth"])
-        monkeypatch.setattr(publish_module, "_warn_uncommitted_changes", lambda runner: None)
-        monkeypatch.setattr(publish_module, "_show_provenance_diagnostics", lambda runner: True)
+        monkeypatch.setattr(core_module, "_list_modules", lambda: ["auth"])
+        monkeypatch.setattr(git_module, "_warn_uncommitted_changes", lambda runner: None)
+        monkeypatch.setattr(status_module, "_show_provenance_diagnostics", lambda runner: True)
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "resolve_module_path",
             lambda module: f"quickscale_modules/{module}",
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_get_local_split_sha",
             lambda path, runner: stale_sha,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_observe_remote_branch_sha",
             lambda module, runner: HEAD_SHA,
         )
         monkeypatch.setattr(
-            publish_module,
+            status_module,
             "_get_module_seal_state",
             lambda module, version, published_sha, runner: "unsealed",
         )
@@ -1215,26 +1224,26 @@ class TestSealCliAndStatus:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """No origin or no network is distinct from a confirmed absent branch."""
-        monkeypatch.setattr(publish_module, "_list_modules", lambda: ["auth"])
-        monkeypatch.setattr(publish_module, "_warn_uncommitted_changes", lambda runner: None)
-        monkeypatch.setattr(publish_module, "_show_provenance_diagnostics", lambda runner: True)
+        monkeypatch.setattr(core_module, "_list_modules", lambda: ["auth"])
+        monkeypatch.setattr(git_module, "_warn_uncommitted_changes", lambda runner: None)
+        monkeypatch.setattr(status_module, "_show_provenance_diagnostics", lambda runner: True)
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "resolve_module_path",
             lambda module: f"quickscale_modules/{module}",
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_get_local_split_sha",
             lambda path, runner: HEAD_SHA,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_observe_remote_branch_sha",
             lambda module, runner: None,
         )
         monkeypatch.setattr(
-            publish_module,
+            status_module,
             "_get_module_seal_state",
             lambda module, version, published_sha, runner: "unsealed",
         )
@@ -1255,30 +1264,30 @@ class TestSealCliAndStatus:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        monkeypatch.setattr(publish_module, "_list_modules", lambda: ["auth"])
-        monkeypatch.setattr(publish_module, "_warn_uncommitted_changes", lambda runner: None)
+        monkeypatch.setattr(core_module, "_list_modules", lambda: ["auth"])
+        monkeypatch.setattr(git_module, "_warn_uncommitted_changes", lambda runner: None)
         monkeypatch.setattr(
-            publish_module,
+            status_module,
             "_show_provenance_diagnostics",
             lambda runner: is_authoritative,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "resolve_module_path",
             lambda module: f"quickscale_modules/{module}",
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_get_local_split_sha",
             lambda path, runner: HEAD_SHA,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_observe_remote_branch_sha",
             lambda module, runner: "",
         )
         monkeypatch.setattr(
-            publish_module,
+            status_module,
             "_get_module_seal_state",
             lambda module, version, published_sha, runner: "unsealed",
         )
@@ -1299,7 +1308,7 @@ class TestSealCliAndStatus:
     ) -> None:
         """F-008 status accepts a direct target when no peeled record exists."""
         calls: list[str] = []
-        monkeypatch.setattr(publish_module, "resolve_split_tag", lambda module, version: TAG)
+        monkeypatch.setattr(git_module, "resolve_split_tag", lambda module, version: TAG)
 
         def resolve_direct_target(
             remote: str,
@@ -1312,7 +1321,7 @@ class TestSealCliAndStatus:
             return HEAD_SHA
 
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "resolve_remote_ref",
             resolve_direct_target,
         )
@@ -1328,7 +1337,7 @@ class TestSealCliAndStatus:
     ) -> None:
         calls: list[str] = []
         monkeypatch.setattr(
-            publish_module,
+            core_module,
             "_list_modules",
             lambda: ["module_00", "module_01", "module_02"],
         )
@@ -1344,7 +1353,7 @@ class TestSealCliAndStatus:
             if module == "module_01":
                 raise publish_module.GitError("stop")
 
-        monkeypatch.setattr(publish_module, "_seal_module", fake_seal, raising=False)
+        monkeypatch.setattr(seal_module, "_seal_module", fake_seal, raising=False)
         with pytest.raises((publish_module.GitError, SystemExit)):
             publish_module._seal_all(VERSION, runner=object())
         assert calls == ["module_00", "module_01"]
@@ -1813,27 +1822,27 @@ class TestPublishFastForward:
         pushed: list[tuple[str, str, str]],
     ) -> None:
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "resolve_module_path",
             lambda module: f"quickscale_modules/{module}",
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "resolve_split_branch",
             lambda module: f"splits/{module}-module",
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "run_git_subtree_split",
             lambda **kwargs: HEAD_SHA,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_get_local_split_sha",
             lambda path, runner: HEAD_SHA,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "push_split_branch",
             lambda branch, *, expected_remote_sha, source_sha, **kwargs: pushed.append(
                 (branch, expected_remote_sha, source_sha)
@@ -1867,7 +1876,7 @@ class TestPublishFastForward:
         split: list[str] = []
         self._patch_publish(monkeypatch, pushed)
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "run_git_subtree_split",
             lambda **kwargs: split.append("split") or HEAD_SHA,
         )
@@ -1921,7 +1930,7 @@ class TestPublishFastForward:
         self._patch_publish(monkeypatch, pushed)
         changed_split_sha = "c" * 40
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "run_git_subtree_split",
             lambda **kwargs: changed_split_sha,
         )
@@ -1944,30 +1953,30 @@ class TestPublishFastForward:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        monkeypatch.setattr(publish_module, "_list_modules", lambda: [MODULE])
-        monkeypatch.setattr(publish_module, "_warn_uncommitted_changes", lambda runner: None)
+        monkeypatch.setattr(core_module, "_list_modules", lambda: [MODULE])
+        monkeypatch.setattr(git_module, "_warn_uncommitted_changes", lambda runner: None)
         monkeypatch.setattr(
-            publish_module,
+            status_module,
             "_show_provenance_diagnostics",
             lambda runner: True,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "resolve_module_path",
             lambda module: f"quickscale_modules/{module}",
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_get_local_split_sha",
             lambda path, runner: HEAD_SHA,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_observe_remote_branch_sha",
             lambda module, runner: OTHER_SHA,
         )
         monkeypatch.setattr(
-            publish_module,
+            status_module,
             "_get_module_seal_state",
             lambda module, version, published_sha, runner: "unsealed",
         )
@@ -1992,20 +2001,18 @@ class TestPublishAll:
         remote: dict[str, str],
     ) -> list[tuple[str, str]]:
         pushes: list[tuple[str, str]] = []
-        monkeypatch.setattr(publish_module, "resolve_module_path", lambda m: m)
+        monkeypatch.setattr(git_module, "resolve_module_path", lambda m: m)
+        monkeypatch.setattr(git_module, "_get_local_split_sha", lambda path, runner: local[path])
         monkeypatch.setattr(
-            publish_module, "_get_local_split_sha", lambda path, runner: local[path]
-        )
-        monkeypatch.setattr(
-            publish_module, "_observe_remote_branch_sha", lambda m, runner: remote.get(m, "")
+            git_module, "_observe_remote_branch_sha", lambda m, runner: remote.get(m, "")
         )
 
         def _fake_publish(module_name: str, *, expected_remote_sha: str, runner: object) -> None:
             pushes.append((module_name, expected_remote_sha))
 
-        monkeypatch.setattr(publish_module, "_publish_module", _fake_publish)
-        monkeypatch.setattr(publish_module, "_head_tree", lambda runner: "t" * 40)
-        monkeypatch.setattr(publish_module, "_read_repository_version", lambda: VERSION)
+        monkeypatch.setattr(publish_module_impl, "_publish_module", _fake_publish)
+        monkeypatch.setattr(publish_module_impl, "_head_tree", lambda runner: "t" * 40)
+        monkeypatch.setattr(core_module, "_read_repository_version", lambda: VERSION)
         return pushes
 
     def test_each_outdated_module_uses_its_own_observed_sha_and_up_to_date_is_skipped(
@@ -2033,7 +2040,7 @@ class TestPublishAll:
             remote={"auth": "1" * 40, "blog": "2" * 40},
         )
         trees = iter(["t" * 40, "t" * 40, "u" * 40])
-        monkeypatch.setattr(publish_module, "_head_tree", lambda runner: next(trees))
+        monkeypatch.setattr(publish_module_impl, "_head_tree", lambda runner: next(trees))
 
         with pytest.raises(SystemExit) as excinfo:
             publish_module._publish_all(object(), modules=["auth", "blog"])
@@ -2067,19 +2074,19 @@ class TestPublishAll:
         remote = {"auth": "1" * 40, "blog": "2" * 40, "crm": "3" * 40}
         pushed: list[str] = []
         split: list[str] = []
-        monkeypatch.setattr(publish_module, "resolve_module_path", lambda module: module)
+        monkeypatch.setattr(git_module, "resolve_module_path", lambda module: module)
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "resolve_split_branch",
             lambda module: f"splits/{module}-module",
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_get_local_split_sha",
             lambda path, runner: local[path],
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_observe_remote_branch_sha",
             lambda module, runner: remote[module],
         )
@@ -2090,14 +2097,14 @@ class TestPublishAll:
             split.append(prefix)
             return local[prefix]
 
-        monkeypatch.setattr(publish_module, "run_git_subtree_split", _split)
+        monkeypatch.setattr(git_module, "run_git_subtree_split", _split)
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "push_split_branch",
             lambda branch, **kwargs: pushed.append(branch),
         )
-        monkeypatch.setattr(publish_module, "_head_tree", lambda runner: "t" * 40)
-        monkeypatch.setattr(publish_module, "_read_repository_version", lambda: VERSION)
+        monkeypatch.setattr(publish_module_impl, "_head_tree", lambda runner: "t" * 40)
+        monkeypatch.setattr(core_module, "_read_repository_version", lambda: VERSION)
         runner = _ScriptedGitRunner([_GitResponse(returncode=0), _GitResponse(returncode=1)])
 
         with pytest.raises(SystemExit) as excinfo:
@@ -2117,34 +2124,34 @@ class TestPublishAll:
     ) -> None:
         split: list[str] = []
         pushed: list[str] = []
-        monkeypatch.setattr(publish_module, "resolve_module_path", lambda module: module)
+        monkeypatch.setattr(git_module, "resolve_module_path", lambda module: module)
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "resolve_split_branch",
             lambda module: f"splits/{module}-module",
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_get_local_split_sha",
             lambda path, runner: HEAD_SHA,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "_observe_remote_branch_sha",
             lambda module, runner: OTHER_SHA,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "run_git_subtree_split",
             lambda **kwargs: split.append("split") or HEAD_SHA,
         )
         monkeypatch.setattr(
-            publish_module,
+            git_module,
             "push_split_branch",
             lambda branch, **kwargs: pushed.append(branch),
         )
-        monkeypatch.setattr(publish_module, "_head_tree", lambda runner: "t" * 40)
-        monkeypatch.setattr(publish_module, "_read_repository_version", lambda: VERSION)
+        monkeypatch.setattr(publish_module_impl, "_head_tree", lambda runner: "t" * 40)
+        monkeypatch.setattr(core_module, "_read_repository_version", lambda: VERSION)
 
         with pytest.raises(SystemExit) as excinfo:
             publish_module._publish_all(

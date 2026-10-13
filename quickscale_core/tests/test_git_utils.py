@@ -23,6 +23,11 @@ if str(_REPO_ROOT) not in sys.path:
 from scripts import publish_module  # noqa: E402
 from scripts.publish_module import _has_uncommitted_changes  # noqa: E402
 
+# The SA267(b) split resolves shared seams through the private siblings the
+# facade re-exports; patches target the defining sibling (decisions.md,
+# Split-Facade Seams).
+import _publish_module_core as core_module  # noqa: E402
+
 from quickscale_core.utils.git_utils import (  # noqa: E402
     GitError,
     GitRunner,
@@ -127,6 +132,26 @@ def _symlink_git_utils_surface(core_src: Path, real_repo_root: Path) -> None:
     )
     for module_file in _GIT_UTILS_FACADE_MODULES:
         (core_src / module_file).symlink_to(real_utils_dir / module_file)
+
+
+_PUBLISH_MODULE_FACADE_MODULES = (
+    "_publish_module_cli.py",
+    "_publish_module_core.py",
+    "_publish_module_git.py",
+    "_publish_module_publish.py",
+    "_publish_module_seal.py",
+    "_publish_module_status.py",
+    "publish_module.py",
+)
+
+
+def _copy_publish_module_surface(scripts_dir: Path, real_repo_root: Path) -> None:
+    """Copy publish_module.py and its split sibling modules into the hermetic repo."""
+    real_scripts_dir = real_repo_root / "scripts"
+    for module_file in _PUBLISH_MODULE_FACADE_MODULES:
+        (scripts_dir / module_file).write_text(
+            (real_scripts_dir / module_file).read_text(encoding="utf-8")
+        )
 
 
 def _git_available() -> bool:
@@ -319,7 +344,7 @@ class TestGetRemoteUrl:
 class TestPublicationGitControls:
     """Tests for publication-only executable, environment, and origin gates."""
 
-    @patch("scripts.publish_module.is_working_directory_clean", return_value=True)
+    @patch("_publish_module_git.is_working_directory_clean", return_value=True)
     def test_publisher_cleanliness_accepts_clean_worktree(
         self, mock_clean: MagicMock
     ) -> None:
@@ -332,7 +357,7 @@ class TestPublicationGitControls:
             runner=runner,
         )
 
-    @patch("scripts.publish_module.is_working_directory_clean", return_value=False)
+    @patch("_publish_module_git.is_working_directory_clean", return_value=False)
     def test_publisher_cleanliness_detects_dirty_worktree(
         self, mock_clean: MagicMock
     ) -> None:
@@ -343,7 +368,7 @@ class TestPublicationGitControls:
         mock_clean.assert_called_once()
 
     @patch(
-        "scripts.publish_module.is_working_directory_clean",
+        "_publish_module_git.is_working_directory_clean",
         side_effect=GitError("status unavailable"),
     )
     def test_publisher_cleanliness_fails_closed_on_status_error(
@@ -2416,13 +2441,11 @@ class TestPublishModuleReleaseAuthoritativeGate:
         # Create the authoritative module-discovery seam and its fake inventory.
         _add_authoritative_module_contract(repo_dir)
 
-        # Create scripts/ directory and copy the wrapper script
+        # Create scripts/ directory and copy the wrapper surface
         scripts_dir = repo_dir / "scripts"
         scripts_dir.mkdir()
         real_repo_root = Path(__file__).resolve().parent.parent.parent
-        real_script = real_repo_root / "scripts" / "publish_module.py"
-        script_copy = scripts_dir / "publish_module.py"
-        script_copy.write_text(real_script.read_text())
+        _copy_publish_module_surface(scripts_dir, real_repo_root)
 
         # Create quickscale_core/src structure with symlinks to the real
         # git_utils surface (facade plus its split sibling modules).
@@ -2700,12 +2723,11 @@ class _PublishModuleExpectedRemoteShaBase:
         # Create the authoritative module-discovery seam and its fake inventory.
         _add_authoritative_module_contract(repo_dir)
 
-        # Copy publish_module.py
+        # Copy publish_module.py and its split sibling modules
         scripts_dir = repo_dir / "scripts"
         scripts_dir.mkdir()
         real_repo_root = Path(__file__).resolve().parent.parent.parent
-        real_script = real_repo_root / "scripts" / "publish_module.py"
-        (scripts_dir / "publish_module.py").write_text(real_script.read_text())
+        _copy_publish_module_surface(scripts_dir, real_repo_root)
 
         # Symlink git_utils.py and its split sibling modules so the facade's
         # eager imports resolve inside the hermetic repo.
@@ -3060,7 +3082,7 @@ class TestPublishModuleSealRealGit:
         # _seal_module intentionally resolves its repository through the
         # production module root.  Redirecting only this test seam keeps every
         # helper and state-machine operation real while retaining hermeticity.
-        monkeypatch.setattr(publish_module, "_REPO_ROOT", repo.working)
+        monkeypatch.setattr(core_module, "_REPO_ROOT", repo.working)
 
     @staticmethod
     def _tag(version: str) -> str:
@@ -3767,7 +3789,7 @@ class TestPublishModuleCliTrustedOrigin:
         before_work = _ref_inventory(repo.working)
         before_origin = _ref_inventory(repo.origin)
 
-        monkeypatch.setattr(publish_module, "_REPO_ROOT", repo.working)
+        monkeypatch.setattr(core_module, "_REPO_ROOT", repo.working)
         monkeypatch.setattr(
             sys,
             "argv",
