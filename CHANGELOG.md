@@ -740,6 +740,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     The E2E workflow triggers on the same tag forms as publication, and the CI and BYPASSRLS
     workflows' retry steps install `poetry==2.4.1` from the package index instead of piping an
     installer script into Python.
+  - **Blog's media-upload field is a documented public class.** `BlogMediaAsset.file` uses
+    `BlogMediaAssetImageField`, the class the module's `0001_initial` migration and README
+    name; migration history references only stability-promised symbols.
   - **A malformed Resend webhook signing secret fails startup.** The notifications module
     validates the `whsec_` value with the decoder the webhook endpoint uses, so a missing prefix,
     a non-base64 remainder, or an empty decoded key refuses startup instead of failing every

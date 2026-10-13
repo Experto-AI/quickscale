@@ -98,7 +98,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA204 (a) | yes | no | yes | no | yes |
+| 1 | SA204 (b) | yes | no | yes | no | yes |
 | 2 | SA270 ∥ SA271 | yes | yes | yes | no | yes |
 | 3 | SA272 | yes | yes | yes | no | no |
 
@@ -264,7 +264,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   whose applied migration hashes differ from the embedded files under an equal version label.
 
   **Slices** (in order; the one-way door is isolated in (g), behind the proof in (f)):
-  - [ ] (a) Promote or replace `blog`'s `_BlogMediaAssetImageField` (Tier 1).
+  - [x] (a) Promote or replace `blog`'s `_BlogMediaAssetImageField` (Tier 1). Promoted as the
+    public, documented `BlogMediaAssetImageField`; `0001_initial` now names only
+    stability-promised symbols, and the blog README lists the field in its public surface.
+    Next: (b), the migration hash manifest and its helper (no gate yet).
   - [ ] (b) The migration hash manifest: its generator, the checked-in manifest, and the helper
     that hashes a module's applied migrations; no gate yet (Tier 2-fast).
   - [ ] (c) The freeze gate as one registry row (after SA275), with controls for an in-place
