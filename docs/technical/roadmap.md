@@ -282,7 +282,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Slices** (in order, each with a parity test pinning the pre-split surface, imported
   bindings, signatures, and exact findings):
-  - [ ] (a) `rules_docs.py` and `rules_redaction.py`.
+  - [ ] (a) `rules_docs.py` and `rules_redaction.py`. The docs half is implemented:
+    `rules_docs.py` is a 61-line facade with one private sibling (`_docs_readme`; all <800
+    lines, max CC 10), removing the CC-22 failure; parity controls pin the pre-split surface,
+    its imported bindings, signatures, and exact findings, and 910 harness controls pass.
+    Redaction remains.
   - [ ] (b) `rule_44.py`.
   - [ ] (c) `adapter_flow.py`.
   - [ ] (d) `core.py`.
