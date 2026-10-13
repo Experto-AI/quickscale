@@ -98,7 +98,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA204 (b) | yes | no | yes | no | yes |
+| 1 | SA204 (c) | no | no | yes | no | yes |
 | 2 | SA270 ∥ SA271 | yes | yes | yes | no | yes |
 | 3 | SA272 | yes | yes | yes | no | no |
 
@@ -268,8 +268,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     public, documented `BlogMediaAssetImageField`; `0001_initial` now names only
     stability-promised symbols, and the blog README lists the field in its public surface.
     Next: (b), the migration hash manifest and its helper (no gate yet).
-  - [ ] (b) The migration hash manifest: its generator, the checked-in manifest, and the helper
-    that hashes a module's applied migrations; no gate yet (Tier 2-fast).
+  - [x] (b) The migration hash manifest: its generator, the checked-in manifest, and the helper
+    that hashes a module's applied migrations; no gate yet (Tier 2-fast). Landed as
+    `quickscale_core.migration_hashes`, `scripts/sync_migration_hashes.py`, and the checked-in
+    `scripts/migration_hashes.json` (per-module SHA-256 of each migration file, all twelve
+    modules). Next: (c), the freeze gate row, still waiting on SA275.
   - [ ] (c) The freeze gate as one registry row (after SA275), with controls for an in-place
     edit, a deletion, a new `0002`, and a `_`-symbol import, and the topology test's chain and
     inverted canary (Tier 2-fast).
