@@ -52,6 +52,7 @@ on:
       - 'poetry.lock'
       - 'quickscale_core/pyproject.toml'
       - 'scripts/check_security_gates.py'
+      - 'scripts/_security_gates_*.py'
       - 'scripts/security_suppressions.json'
       - 'scripts/security_probe_cases.json'
       - 'quickscale/src/**'

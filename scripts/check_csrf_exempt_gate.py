@@ -245,6 +245,15 @@ def _literal_truthiness(node: ast.expr) -> bool | None:
       * ``+True`` (truthy), ``+False`` (falsey)
       * ``-True`` (truthy, ``-True == -1``), ``-False`` (falsey)
     """
+    if isinstance(node, ast.UnaryOp):
+        return _unary_truthiness(node)
+    if isinstance(node, ast.Constant):
+        return _constant_truthiness(node)
+    return _container_truthiness(node)
+
+
+def _unary_truthiness(node: ast.expr) -> bool | None:
+    """Fold a unary operator over a constant operand when its truthiness is known."""
     # --- Unary operators ----------------------------------------------------
     if isinstance(node, ast.UnaryOp):
         # ``-1``, ``+0.0``, ``-1j`` etc. are parsed as
@@ -276,6 +285,11 @@ def _literal_truthiness(node: ast.expr) -> bool | None:
         # Any other unary op (nested unary, non-constant operand, …)
         return None
 
+    return None
+
+
+def _constant_truthiness(node: ast.expr) -> bool | None:
+    """Return the truthiness of a literal constant, or ``None`` when not foldable."""
     # --- ``ast.Constant`` values --------------------------------------------
     if isinstance(node, ast.Constant):
         val = node.value
@@ -302,6 +316,11 @@ def _literal_truthiness(node: ast.expr) -> bool | None:
         if isinstance(val, bytes):
             return val != b""
 
+    return None
+
+
+def _container_truthiness(node: ast.expr) -> bool | None:
+    """Return the truthiness of a literal container, or ``None`` when uncertain."""
     # --- Literal containers: truthiness depends only on length -------------
     # ``ast.Tuple`` and ``ast.List`` are used for literal ``()``, ``(1,)``,
     # ``[]``, ``[1]`` etc. in the AST — they are not ``ast.Constant`` nodes.

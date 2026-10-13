@@ -15,6 +15,10 @@ import tarfile
 import tomllib
 from pathlib import Path
 
+import _security_gates_adjudication as adjudication
+import _security_gates_bandit as bandit_module
+import _security_gates_support as support
+import _security_gates_trivy as trivy_module
 import pytest
 
 import scripts.check_security_gates as gates
@@ -105,7 +109,7 @@ def test_source_roots_reject_incomplete_module_directory(
 ) -> None:
     """A module directory without module.yml fails closed instead of being skipped."""
     (tmp_path / "broken").mkdir()
-    monkeypatch.setattr(gates, "MODULES_ROOT", tmp_path)
+    monkeypatch.setattr(bandit_module, "MODULES_ROOT", tmp_path)
     with pytest.raises(GateError, match="without module.yml"):
         gates._discover_module_source_roots()
 
@@ -141,7 +145,7 @@ def test_adjudication_rejects_stale_entries(monkeypatch: pytest.MonkeyPatch) -> 
         "code_identity": "line=1",
         "fingerprint": "stale",
     }
-    monkeypatch.setattr(gates, "_load_suppressions", lambda: [entry])
+    monkeypatch.setattr(adjudication, "_load_suppressions", lambda: [entry])
     with pytest.raises(GateError, match="suppression cardinality failure"):
         _adjudicate(
             [
@@ -166,7 +170,7 @@ def test_adjudication_rejects_stale_entry_when_scanner_is_clean(
         "scanner": "bandit",
         "fingerprint": "stale",
     }
-    monkeypatch.setattr(gates, "_load_suppressions", lambda: [entry])
+    monkeypatch.setattr(adjudication, "_load_suppressions", lambda: [entry])
     with pytest.raises(GateError, match="suppression cardinality failure"):
         _adjudicate([], executed_scanners={"bandit"})
 
@@ -187,10 +191,10 @@ def test_trivy_scan_accepts_clean_report(monkeypatch: pytest.MonkeyPatch, tmp_pa
         ],
     }
     monkeypatch.setattr(
-        gates, "_lock_inventory", lambda _path: ({("sentinel", "1")}, "sentinel", False)
+        trivy_module, "_lock_inventory", lambda _path: ({("sentinel", "1")}, "sentinel", False)
     )
     monkeypatch.setattr(
-        gates,
+        support,
         "run_command",
         lambda *_args, **_kwargs: gates.Completed(0, json.dumps(report), ""),
     )
@@ -203,9 +207,9 @@ def test_trivy_scan_rejects_infrastructure_exit(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Unexpected scanner exits are infrastructure failures, not findings."""
-    monkeypatch.setattr(gates, "_lock_inventory", lambda _path: (set(), "sentinel", False))
+    monkeypatch.setattr(trivy_module, "_lock_inventory", lambda _path: (set(), "sentinel", False))
     monkeypatch.setattr(
-        gates,
+        support,
         "run_command",
         lambda *_args, **_kwargs: gates.Completed(2, "", "database unavailable"),
     )
@@ -219,10 +223,10 @@ def test_trivy_acquisition_rejects_wrong_checksum(
     """Trivy bytes must match the committed release digest before extraction."""
     payload = b"not a Trivy archive"
     monkeypatch.setattr(
-        gates, "_download", lambda _url, destination: destination.write_bytes(payload)
+        trivy_module, "_download", lambda _url, destination: destination.write_bytes(payload)
     )
     monkeypatch.setattr(
-        gates,
+        trivy_module,
         "_trivy_asset",
         lambda: ("trivy_0.74.0_Linux-64bit.tar.gz", hashlib.sha256(b"different").hexdigest()),
     )
@@ -305,8 +309,8 @@ def test_bandit_scan_binds_categories_and_forbids_exit_zero(
             return gates.Completed(0, " ".join(gates.BANDIT_TESTS), "")
         return gates.Completed(0, '{"results": []}', "")
 
-    monkeypatch.setattr(gates, "run_command", fake_run)
-    monkeypatch.setattr(gates, "_source_files", lambda: [Path("source.py")])
+    monkeypatch.setattr(support, "run_command", fake_run)
+    monkeypatch.setattr(bandit_module, "_source_files", lambda: [Path("source.py")])
     findings, evidence = gates._bandit_scan()
     assert findings == []
     assert set(evidence["tests"]) == {
@@ -355,7 +359,7 @@ def test_misconfig_scan_accepts_a_clean_generated_dockerfile(
     dockerfile = tmp_path / "Dockerfile"
     dockerfile.write_text("FROM python:3.14-slim\n", encoding="utf-8")
     monkeypatch.setattr(
-        gates,
+        support,
         "run_command",
         lambda *_args, **_kwargs: gates.Completed(
             0, _misconfig_payload(dockerfile, misconfigurations=[]), ""
@@ -374,7 +378,7 @@ def test_misconfig_scan_reports_high_severity_findings(
     dockerfile.write_text("FROM ubuntu:latest\nUSER root\n", encoding="utf-8")
     finding = {"ID": "DS-0002", "Severity": "HIGH", "Status": "FAIL", "Title": "root user"}
     monkeypatch.setattr(
-        gates,
+        support,
         "run_command",
         lambda *_args, **_kwargs: gates.Completed(
             1, _misconfig_payload(dockerfile, misconfigurations=[finding]), ""
@@ -392,7 +396,7 @@ def test_misconfig_scan_rejects_exit_status_report_disagreement(
     dockerfile = tmp_path / "Dockerfile"
     dockerfile.write_text("FROM python:3.14-slim\n", encoding="utf-8")
     monkeypatch.setattr(
-        gates,
+        support,
         "run_command",
         lambda *_args, **_kwargs: gates.Completed(
             1, _misconfig_payload(dockerfile, misconfigurations=[]), ""
@@ -411,7 +415,7 @@ def test_misconfig_scan_rejects_the_wrong_artifact(
     payload = json.loads(_misconfig_payload(dockerfile, misconfigurations=[]))
     payload["ArtifactName"] = str(tmp_path / "other" / "Dockerfile")
     monkeypatch.setattr(
-        gates,
+        support,
         "run_command",
         lambda *_args, **_kwargs: gates.Completed(0, json.dumps(payload), ""),
     )
@@ -426,7 +430,7 @@ def test_misconfig_scan_rejects_infrastructure_exit(
     dockerfile = tmp_path / "Dockerfile"
     dockerfile.write_text("FROM python:3.14-slim\n", encoding="utf-8")
     monkeypatch.setattr(
-        gates,
+        support,
         "run_command",
         lambda *_args, **_kwargs: gates.Completed(2, "", "checks bundle unavailable"),
     )
@@ -457,12 +461,12 @@ def test_dependency_gate_propagates_misconfiguration_findings(
         "severity": "HIGH",
         "title": "Image user should not be 'root'",
     }
-    monkeypatch.setattr(gates, "_new_temp_dir", lambda _prefix: tmp_path)
-    monkeypatch.setattr(gates, "_generated_dockerfile", lambda _destination: dockerfile)
-    monkeypatch.setattr(gates, "acquire_trivy", lambda: Path("trivy"))
-    monkeypatch.setattr(gates, "_trivy_scan", lambda *_args: ([], {"project": "root"}))
+    monkeypatch.setattr(support, "_new_temp_dir", lambda _prefix: tmp_path)
+    monkeypatch.setattr(trivy_module, "_generated_dockerfile", lambda _destination: dockerfile)
+    monkeypatch.setattr(trivy_module, "acquire_trivy", lambda: Path("trivy"))
+    monkeypatch.setattr(trivy_module, "_trivy_scan", lambda *_args: ([], {"project": "root"}))
     monkeypatch.setattr(
-        gates,
+        trivy_module,
         "_trivy_misconfig_scan",
         lambda *_args: ([finding], {"project": "generated-dockerfile"}),
     )
