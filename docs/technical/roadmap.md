@@ -518,9 +518,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `notifications-webhook-secret-format-unchecked-at-startup`, and
   `orgs-invite-throttle-partial-charge` (S4).
 
-  **Context:** `_apply_delivery_event` (`notifications/_webhooks.py:257+`) overwrites the status
-  with no ordering check and no row lock, so a late `email.sent` regresses a `delivered` or
-  `bounced` row. `notifications/checks.py:62–71` (E003) refuses only an empty secret, so a malformed
+  **Context:** `_apply_delivery_event` (`notifications/_webhooks.py`) overwrote the status
+  with no ordering check and no row lock, so a late `email.sent` regressed a `delivered` or
+  `bounced` row; slice (a) delivers the ranking and the row lock.
+  `notifications/checks.py:62–71` (E003) refuses only an empty secret, so a malformed
   `whsec_` value passes startup and every webhook is then refused. In `orgs/views.py:184` and
   `OrgApiInviteView.post`, a per-org refusal after a passing per-sender check still costs the
   sender a token.
@@ -532,7 +533,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   the sender's bucket unchanged.
 
   **Slices:**
-  - [ ] (a) Forward-only delivery status under a row lock (Tier 2-fast).
+  - [x] (a) Forward-only delivery status under a row lock (Tier 2-fast). The
+    reconciliation ranks the delivery statuses and applies an event only when it
+    outranks the recorded one, re-reading the delivery under `select_for_update`;
+    the out-of-order controls prove a late `email.sent` leaves delivered and
+    bounced rows, their timestamps, and the parent message's derived status
+    unchanged while the receipt is still recorded.
   - [ ] (b) The `whsec_` format check in E003 (Tier 1).
   - [ ] (c) Check-then-charge for both invite throttles (Tier 1).
 

@@ -25,7 +25,7 @@ from quickscale_modules_orgs.models import Organization
 
 from quickscale_modules_forms._email import notify_submission
 
-from quickscale_modules_notifications import services
+from quickscale_modules_notifications import _webhooks, services
 from quickscale_modules_notifications.models import (
     NotificationDelivery,
     NotificationDeliveryEvent,
@@ -694,10 +694,13 @@ def test_dispatch_notification_message_rejects_when_runtime_disabled(
     )
 
 
-def _resend_delivered_payload(delivery: NotificationDelivery) -> dict[str, object]:
-    """Return a Resend-shaped delivery event payload for *delivery*."""
+def _resend_event_payload(
+    delivery: NotificationDelivery,
+    event_type: str = "email.delivered",
+) -> dict[str, object]:
+    """Return a Resend-shaped *event_type* payload for *delivery*."""
     return {
-        "type": "email.delivered",
+        "type": event_type,
         "created_at": "2026-02-22T23:41:12.126Z",
         "data": {
             "email_id": delivery.provider_message_id,
@@ -708,7 +711,7 @@ def _resend_delivered_payload(delivery: NotificationDelivery) -> dict[str, objec
 
 @pytest.mark.django_db
 def test_webhook_ingestion_rejects_when_runtime_disabled(delivery_for_webhook) -> None:
-    body = json.dumps(_resend_delivered_payload(delivery_for_webhook)).encode("utf-8")
+    body = json.dumps(_resend_event_payload(delivery_for_webhook)).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
         secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
@@ -736,7 +739,7 @@ def test_webhook_ingestion_rejects_when_runtime_disabled(delivery_for_webhook) -
 
 @pytest.mark.django_db
 def test_webhook_signature_rejection_is_explicit(delivery_for_webhook) -> None:
-    body = json.dumps(_resend_delivered_payload(delivery_for_webhook)).encode("utf-8")
+    body = json.dumps(_resend_event_payload(delivery_for_webhook)).encode("utf-8")
 
     with pytest.raises(NotificationWebhookSignatureError, match="invalid"):
         ingest_webhook_event(
@@ -749,7 +752,7 @@ def test_webhook_signature_rejection_is_explicit(delivery_for_webhook) -> None:
 
 @pytest.mark.django_db
 def test_webhook_signature_rejects_expired_timestamps(delivery_for_webhook) -> None:
-    body = json.dumps(_resend_delivered_payload(delivery_for_webhook)).encode("utf-8")
+    body = json.dumps(_resend_event_payload(delivery_for_webhook)).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
         secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
@@ -794,7 +797,7 @@ def test_webhook_ingestion_requires_provider_message_id(delivery_for_webhook) ->
 def test_webhook_ingestion_is_replay_safe_and_updates_delivery_status(
     delivery_for_webhook,
 ) -> None:
-    body = json.dumps(_resend_delivered_payload(delivery_for_webhook)).encode("utf-8")
+    body = json.dumps(_resend_event_payload(delivery_for_webhook)).encode("utf-8")
     headers = build_webhook_signature_headers(
         body,
         secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
@@ -826,6 +829,95 @@ def test_webhook_ingestion_is_replay_safe_and_updates_delivery_status(
         NotificationDeliveryEvent.objects.filter(delivery=delivery_for_webhook).count()
         == 1
     )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("terminal_event", "terminal_status", "message_status"),
+    [
+        (
+            "email.delivered",
+            NotificationDelivery.Status.DELIVERED,
+            NotificationMessage.Status.SENT,
+        ),
+        (
+            "email.bounced",
+            NotificationDelivery.Status.BOUNCED,
+            NotificationMessage.Status.FAILED,
+        ),
+    ],
+)
+def test_webhook_out_of_order_event_does_not_regress_a_terminal_status(
+    delivery_for_webhook,
+    terminal_event: str,
+    terminal_status: str,
+    message_status: str,
+) -> None:
+    """A late ``email.sent`` leaves a terminal delivery row unchanged.
+
+    The receipt is still recorded as an event whose ``status_after`` is the
+    retained status; the delivery's status and event timestamps do not move,
+    and the parent message keeps the status derived from the retained one.
+    """
+    body = json.dumps(
+        _resend_event_payload(delivery_for_webhook, terminal_event)
+    ).encode("utf-8")
+    headers = build_webhook_signature_headers(
+        body,
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
+        svix_id=f"msg_{terminal_status}_1",
+        timestamp=int(time.time()),
+    )
+    first_result = ingest_webhook_event(
+        body=body,
+        svix_id=headers["svix-id"],
+        svix_timestamp=headers["svix-timestamp"],
+        svix_signature=headers["svix-signature"],
+    )
+
+    delivery_for_webhook.refresh_from_db()
+    recorded_event_at = delivery_for_webhook.last_event_at
+    recorded_failed_at = delivery_for_webhook.failed_at
+
+    late_body = json.dumps(
+        _resend_event_payload(delivery_for_webhook, "email.sent")
+    ).encode("utf-8")
+    late_headers = build_webhook_signature_headers(
+        late_body,
+        secret=settings.QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET,
+        svix_id=f"msg_{terminal_status}_late_sent",
+        timestamp=int(time.time()),
+    )
+    late_result = ingest_webhook_event(
+        body=late_body,
+        svix_id=late_headers["svix-id"],
+        svix_timestamp=late_headers["svix-timestamp"],
+        svix_signature=late_headers["svix-signature"],
+    )
+
+    delivery_for_webhook.refresh_from_db()
+    delivery_for_webhook.message.refresh_from_db()
+    late_event = NotificationDeliveryEvent.objects.get(
+        provider_event_id=f"msg_{terminal_status}_late_sent"
+    )
+
+    assert first_result.status == terminal_status
+    assert late_result.duplicate is False
+    assert late_result.status == terminal_status
+    assert delivery_for_webhook.status == terminal_status
+    assert delivery_for_webhook.last_event_type == terminal_event
+    assert delivery_for_webhook.last_event_at == recorded_event_at
+    assert delivery_for_webhook.failed_at == recorded_failed_at
+    assert late_event.status_after == terminal_status
+    assert delivery_for_webhook.message.status == message_status
+
+
+def test_status_rank_covers_every_delivery_status() -> None:
+    """Every status the model can record has a forward rank.
+
+    A status added without a rank would silently never advance a delivery.
+    """
+    assert set(_webhooks._STATUS_RANK) == set(NotificationDelivery.Status.values)
 
 
 def test_services_publishes_exactly_the_declared_surface() -> None:

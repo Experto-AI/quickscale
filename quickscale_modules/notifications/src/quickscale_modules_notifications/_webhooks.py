@@ -47,6 +47,20 @@ _EVENT_STATUS_MAP = {
 _SVIX_SIGNATURE_VERSION = "v1"
 _WH_SEC_PREFIX = "whsec_"
 
+#: Delivery statuses ranked by lifecycle progress and outcome finality.  A
+#: webhook event advances a delivery's status only when its target status
+#: outranks the recorded one, so a late or retried provider event (Svix may
+#: redeliver after a failure) never regresses a delivery that already reached
+#: a later state.
+_STATUS_RANK: dict[str, int] = {
+    NotificationDelivery.Status.QUEUED: 0,
+    NotificationDelivery.Status.SENT: 1,
+    NotificationDelivery.Status.DELIVERED: 2,
+    NotificationDelivery.Status.FAILED: 3,
+    NotificationDelivery.Status.BOUNCED: 4,
+    NotificationDelivery.Status.COMPLAINED: 5,
+}
+
 
 @dataclass(frozen=True)
 class WebhookIngestionResult:
@@ -217,12 +231,20 @@ def _record_delivery_event(
     idempotency_key: str,
     payload: Mapping[str, Any],
 ) -> WebhookIngestionResult:
-    """Record one provider event idempotently and reconcile its delivery."""
+    """Record one provider event idempotently and reconcile its delivery.
+
+    The delivery row is re-read under ``select_for_update`` inside the
+    transaction: its recorded status is the one the event is reconciled
+    against, so concurrent or redelivered events apply in a serialized order.
+    """
     with transaction.atomic():
+        locked_delivery = NotificationDelivery.objects.select_for_update().get(
+            pk=delivery.pk
+        )
         event, created = NotificationDeliveryEvent.objects.get_or_create(
             idempotency_key=idempotency_key,
             defaults={
-                "delivery": delivery,
+                "delivery": locked_delivery,
                 "provider_event_id": fields.provider_event_id,
                 "event_type": fields.event_type,
                 "provider_message_id": fields.provider_message_id,
@@ -234,23 +256,23 @@ def _record_delivery_event(
         if not created:
             return WebhookIngestionResult(
                 duplicate=True,
-                delivery_id=delivery.pk,
-                status=delivery.status,
+                delivery_id=locked_delivery.pk,
+                status=locked_delivery.status,
             )
 
         _apply_delivery_event(
-            delivery=delivery,
+            delivery=locked_delivery,
             event_type=fields.event_type,
             status=normalized_status,
             occurred_at=occurred_at,
         )
-        event.status_after = delivery.status
+        event.status_after = locked_delivery.status
         event.save(update_fields=["status_after"])
-        _refresh_message_status(delivery.message)
+        _refresh_message_status(locked_delivery.message)
         return WebhookIngestionResult(
             duplicate=False,
-            delivery_id=delivery.pk,
-            status=delivery.status,
+            delivery_id=locked_delivery.pk,
+            status=locked_delivery.status,
         )
 
 
@@ -261,6 +283,16 @@ def _apply_delivery_event(
     status: str,
     occurred_at: datetime | None,
 ) -> None:
+    """Apply one event to *delivery*, advancing its status only forward.
+
+    ``delivery`` must be the row locked by the caller's
+    ``select_for_update``.  An event whose target status does not outrank the
+    recorded one is ignored here — the event row itself still records the
+    receipt — so an out-of-order ``email.sent`` never regresses a delivered
+    or bounced delivery.
+    """
+    if _STATUS_RANK.get(status, -1) <= _STATUS_RANK.get(delivery.status, -1):
+        return
     event_time = occurred_at or timezone.now()
     delivery.status = status
     delivery.last_event_type = event_type

@@ -732,6 +732,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Maintainer gate scripts sit under their own quality thresholds.** Non-test gate scripts are
     below the fixed complexity, file-size, and dead-code lines, and every control function is below
     the complexity line, with gate behavior and control cases unchanged.
+  - **Notification delivery statuses only move forward.** Reconciliation ranks the delivery
+    statuses and re-reads the row under a lock, so a late or redelivered Resend event — an
+    out-of-order `email.sent`, for example — cannot regress a delivery that already reached
+    `delivered` or `bounced`.
   - **Release tags trigger the hosted E2E workflow, and Poetry reinstall retries are pinned.**
     The E2E workflow triggers on the same tag forms as publication, and the CI and BYPASSRLS
     workflows' retry steps install `poetry==2.4.1` from the package index instead of piping an
