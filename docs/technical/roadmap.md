@@ -272,8 +272,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   helpers (all <800 lines, max CC 18), removing six CC failures and one oversized file;
   parity controls pin the pre-split surface, its imported bindings, and exact findings, and
   638 harness controls pass.
-  Next: `rules_misc` (five CC failures, the largest remaining family), the rest of the
-  harness/script families, then test-function debt.
+  The misc sub-slice is implemented: `rules_misc.py` is a 105-line facade with four helpers
+  (`_misc_flow`, `_misc_ready`, `_misc_checks`, `_misc_rules`; all <800 lines, max CC 18),
+  removing five CC failures; parity controls pin the pre-split surface, its imported bindings,
+  signatures, and exact findings, and 665 harness controls pass.
+  Next: `rules_dependencies` and `rules_package` (four CC failures each, the largest remaining
+  rule families), then the rest of the harness/script families, then test-function debt.
   Keep the module-name tables in the rule-37-exempt facade and preserve lazy renderer binding.
 
   **Surfaces:** `scripts/` and their tests, and the arch audit.
