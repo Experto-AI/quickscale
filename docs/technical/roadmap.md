@@ -67,7 +67,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 ∥ SA204 (a) | yes | no | yes | no | yes |
 | 2 | SA267 (gate registry) | yes | yes | yes | **yes** | no |
-| 3 | SA268 (docs) | yes | yes | yes | **yes** | no |
+| 3 | SA268 (rule 44) | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -282,11 +282,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Slices** (in order, each with a parity test pinning the pre-split surface, imported
   bindings, signatures, and exact findings):
-  - [ ] (a) `rules_docs.py` and `rules_redaction.py`. The docs half is implemented:
+  - [x] (a) `rules_docs.py` and `rules_redaction.py`. The docs half is implemented:
     `rules_docs.py` is a 61-line facade with one private sibling (`_docs_readme`; all <800
     lines, max CC 10), removing the CC-22 failure; parity controls pin the pre-split surface,
     its imported bindings, signatures, and exact findings, and 910 harness controls pass.
-    Redaction remains.
+    The redaction half is implemented: `rules_redaction.py` is a 98-line facade with one
+    private sibling (`_redaction_handlers`; all <800 lines, max CC 16), removing the CC-23
+    failure; parity controls pin the pre-split surface, its imported bindings, signatures,
+    and exact findings, and 955 harness controls pass.
   - [ ] (b) `rule_44.py`.
   - [ ] (c) `adapter_flow.py`.
   - [ ] (d) `core.py`.
