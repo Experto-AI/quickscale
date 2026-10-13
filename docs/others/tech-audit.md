@@ -1,234 +1,151 @@
 # QuickScale — Deep Technical Audit (defect sweep)
 
-Audited: 2fd8637f (v89) · 2026-10-08 · working tree dirty (uncommitted `docs/others/arch-audit.md`; only its §13–14 hand-off sections were read, as leads, not as code) · repository public (github.com/Experto-AI/quickscale; no `SECURITY.md`) · prompt: deep-technical-audit v6
+Audited: 7d9782a99a6606853c2299170489fe291acc6a10 (v89) · 2026-10-13 · working tree dirty (uncommitted `docs/others/arch-audit.md`; read only for its hand-off sections) · repository public (github.com/Experto-AI/quickscale; no `SECURITY.md`) · prompt: deep-technical-audit v7
 
-> **Mode:** an independent full sweep, at the invoker's request ("start from scratch, a full
-> review, not a continuation"). The prior deliverable (audited `e2623cb8`, 2026-10-05) was read
-> only **after** the sweep, to reconcile its IDs, verify its claimed closures, and carry its
-> watchlist. It held no open finding. Every prior ID has a line in §15.
+> **Mode:** re-run. Delta `2fd8637f..7d9782a9`: 104 non-merge commits, plus merge commits that
+> resolved conflicts in production files. The format is regenerated to v7. Every prior ID has a
+> line in §15.
 
 ---
 
 ## 1. Orientation summary
 
-**What the system is.** A Python 3.14 / Django 6.0 **project generator** (`quickscale_core`), its
-**CLI** (`quickscale_cli`), and **12 embeddable Django modules** (auth, orgs, billing, blog,
-listings, crm, forms, storage, backups, notifications, analytics, social), shipped from one
-Poetry monorepo. Modules are embedded into generated projects by git subtree. The generated
-project includes a React/Vite/TypeScript theme. About 85k lines of first-party production Python,
-plus Jinja templates for the generated project.
+**System.** Unchanged since the prior pass:
+- A Python 3.14 / Django 6.0 **project generator** (`quickscale_core`) and its **CLI**
+  (`quickscale_cli`).
+- **12 embeddable Django modules**, embedded into generated projects by git subtree.
+- **devtools** (beta migration) and the `scripts/` CI gates.
 
-**Deployment realities.**
-- **R1 — generator/CLI** on developer machines: `plan`/`apply`, `deploy railway`, module
-  embed/update/push (git), and DR operator commands.
-- **R2 — the generated Django SaaS**, internet-facing on Railway: Docker image, `start.sh`,
-  gunicorn, PostgreSQL 18 with FORCE RLS under a restricted runtime role, in solo or saas
-  organization mode. Its defaults and its generated CI workflow are production reality, because
-  users copy them.
-- **R3 — the release pipeline**: tag-triggered GitHub Actions publishing to PyPI through OIDC
-  trusted publishing.
+**Deployment realities** (the same three):
+- **R1:** the generator and CLI on developer machines.
+- **R2:** the generated Django SaaS, internet-facing on Railway. It runs gunicorn on PostgreSQL
+  with FORCE RLS under a restricted runtime role, in solo or saas organization mode. Its defaults
+  and its generated CI are production reality.
+- **R3:** the tag-triggered release pipeline to PyPI over OIDC.
 
-**Entry points.**
-- The generated URLconf: health check, Django admin, SPA catch-all.
-- Module routes:
-  - auth: allauth, profile, account delete.
-  - orgs: HTML views and JSON API, invitation accept, VIEW-AS.
-  - billing: JSON API and the Stripe webhook.
-  - blog and listings: automation APIs and public reads.
-  - crm: DRF viewsets.
-  - forms: public schema and submit, plus an admin API.
-  - notifications: the Resend webhook.
-  - analytics: an overview page.
-  - social: payload endpoints.
-- Management commands: org purge; backups create/restore/prune; forms anonymize/seed.
-- The CLI commands and the release workflows.
+**Entry points, actors, crown jewels, configuration axes, and data sensitivity** are as recorded
+in the prior pass. Changes since then:
+- The managed URLconf now comes from a runtime facade (SA258c/SA260/SA261).
+- One storage-owned, staff-guarded Markdownx mount replaces the blog and listings mounts.
+- Billing gained the `quickscale_billing_reconcile_checkouts` operator command.
+- The Stripe customer identity moved from orgs into billing (SA265a).
+- Session authentication is the only DRF default authentication class (SA262; previously Session
+  and Basic).
 
-**Actors.**
-- Anonymous visitors.
-- Self-registered users (registration defaults on).
-- Members, admins, and owners of other tenants.
-- Staff and superusers (Django admin, VIEW-AS, `operator_access`).
-- Stripe and Resend as signed webhook callers.
-- Third-party processors: Stripe, Resend, PostHog.
-- Maintainers with tag-push rights.
+**Tooling baseline.**
+- **Fail the build:** ruff, mypy, and pytest (including PostgreSQL RLS integration), plus Bandit,
+  Trivy, gitleaks, the zizmor workflow gate (now also over the rendered generated CI template),
+  and the convention, parity, CSRF, and contract-vintage gates.
+- **Gate wiring:** Makefile targets and the publish workflow's gate steps are now generated from
+  `scripts/gate_registry.json` (SA259).
+- **Not in hosted CI:** the new `check-generated-project-automation` gate runs locally only
+  (watchlist).
 
-**Crown jewels.**
-- Cross-tenant data (RLS).
-- Session credentials and accounts.
-- Money movement (Stripe checkout, the credit ledger).
-- The database and its backups (restore).
-- The release pipeline, and the generated artifacts every user copies.
-
-**Configuration axes.**
-- `QUICKSCALE_ORGS_MODE` (solo/saas).
-- Module installed and enabled flags.
-- Auth `email_verification` (default `none`) and `registration_enabled` (default on).
-- Analytics `enabled`, `anonymous_by_default` (default on), and `exclude_staff` (default off).
-- Notifications enabled; Resend live.
-- `REDIS_URL` set or unset (unset falls back to `DatabaseCache`).
-- `USE_X_FORWARDED_FOR` / `TRUSTED_PROXY_COUNT`.
-- `QUICKSCALE_PRIVILEGED_COMMAND`, `QUICKSCALE_NON_DB_COMMAND`, and `QUICKSCALE_ALLOW_BYPASSRLS`.
-- Storage backend (local/s3/r2).
-- `GUNICORN_WORKERS` (default 1).
-
-**Tooling baseline.** All of these run in CI and fail the build:
-- ruff and mypy.
-- pytest: unit tests, plus integration tests on a PostgreSQL NOBYPASSRLS role.
-- Bandit 1.9.4 and Trivy v0.74.0 (including a rendered-Dockerfile misconfiguration scan).
-- gitleaks.
-- A zizmor-backed workflow-security gate over the repository's own four workflows.
-- The custom convention, parity, CSRF, and contract-vintage gates.
-
-**Scope.** The whole repository:
-- **Read in depth:** R2 module entry points, generated templates, and billing.
-- **Sampled:** R1 CLI and the DR engine.
-- **Read lightly:** devtools (beta migration) and the `scripts/` CI gates.
-
-**Oracle list** (declared rules hunted during the sweep; from `decisions.md`):
-1. Fail-hard: no silent fallback in generator, CLI, manifest, or startup paths.
-2. The RLS boot guard, and runtime serving that fails closed without `RUNTIME_DATABASE_URL`.
-3. Rule 9: every JSON endpoint is a DRF view on one of two bases, with no `JsonResponse` APIs and
-   no module-built error bodies.
-4. Rule 26: a webhook verifies its signature before parsing, a replay is a no-op, and no error
-   body is built from `str(exc)`.
+**Oracle list** (unchanged, from `decisions.md`):
+1. Fail-hard: no silent fallback.
+2. The RLS boot guard.
+3. Rule 9: JSON endpoints are DRF views on the core bases.
+4. Rule 26: webhooks verify before parsing, a replay is a no-op, and no body is built from
+   `str(exc)`.
 5. Rule 19: tenant data is authorized by org role.
-6. Rules 20/21: email goes only through `send_notification`, and write effects run on commit.
-7. Rule 35: secrets arrive through settings, with startup checks.
-8. Billing: `WebhookEvent` is the idempotency gate, and Stripe secrets never reach the database.
-9. Notifications: provider tags use a non-sensitive allowlist.
-10. Self-service account removal "receives no cross-tenant write scope" (§Multi-tenant SaaS,
-    "Operator access").
-11. Security gates never skip silently.
-12. Repository workflow policy (SA202): third-party actions are SHA-pinned under a top-level
-    `permissions:` block.
+6. Rules 20/21: email goes through `send_notification`, and effects run on commit.
+7. Rule 35: secrets come from settings, with startup checks.
+8. `WebhookEvent` is the idempotency gate.
+9. Security gates never skip silently.
+10. Workflows are SHA-pinned under top-level `permissions`.
 
-**Data sensitivity.**
-- **Classes:**
-  - Credentials: Django session IDs; Stripe, Resend, and PostHog keys; database URLs.
-  - Personal data: emails, names, form submissions, IPs, user agents.
-  - Payment metadata: Stripe customer and subscription IDs, the credit ledger.
-  - Tenant content: CRM, forms, blog drafts.
-- **Where it travels:** PostgreSQL, the cache, JSON logs, Stripe, Resend, PostHog, and backups
-  (local, S3, R2).
-- **Obligations:** erasure, through the account-anonymization feature. Stripe-hosted checkout
-  keeps card data out of scope.
+**Measurements.** In re-run mode the delta replaces the churn ranking.
+- **Delta size:** about 91 core/CLI files (+9.7k/−1.2k, including the 4.7k-line `pnpm-lock.yaml`
+  and about 2.5k lines of theme tests) and 172 module source files (+4.4k/−3.0k).
+- **Fix commits:** 17 (defect-gravity grep).
+- **Churn filter:** commits touching more than 30 files were dropped. Most module changes landed
+  in large sweep commits, so file-level churn is unreliable for this window.
 
-**Measurements (§3.4).**
-- **Window and filter:** 12 months, 3,259 non-merge commits. That count includes git-subtree
-  synthetic copies, which were excluded by keeping only `quickscale_(core|cli|modules|devtools)/…/src`
-  paths. Commits touching more than 30 files, tests, and docs were also excluded.
-- **Fix density (fix commits / all):**
-
-  | File | Fix / all |
-  |---|---|
-  | `runtime/conventions.py` | 5/6 |
-  | `contracts/module_discovery.py` | 6/9 |
-  | `utils/theme_validation.py` | 4/6 |
-  | generated `local.py.j2` | 4/9 |
-  | CLI `railway_utils.py` | 7/17 |
-  | auth `views.py` | 6/16 |
-  | `module_wiring_manager.py` | 7/19 |
-  | `manifest/entry_point.py` | 10/30 |
-  | `Dockerfile.j2` | 8/27 |
-  | `docker-compose.yml.j2` | 6/19 |
-
-- **Churn:**
-
-  | File | Commits |
-  |---|---|
-  | `apply_command.py` | 70 |
-  | `module_config.py` | 41 |
-  | `module_commands.py` | 38 |
-  | backups `services.py` | 38 |
-  | billing `services.py` | 37 |
-  | `generator.py` | 35 |
-  | orgs `tenancy.py` | 31 |
-
-Each hotspot was read or sampled (§3).
+**Delta classification.**
+- **Review-tracked:** SA251–SA268 and SA191, each with a roadmap/changelog trail.
+- **Housekeeping, no production hunks:** `48ad0796`, `e0557de9`, `a185f998`, `f107118e`,
+  `3b91faf7`, `71a0b25e`, `33f49b67`, `f21a8178`.
+- **Unreviewed-behavioral candidates, read in full:**
+  - `6b56515b` ("gate fixes"): moved the purge helpers and added Bandit B703/B308 suppressions for
+    `seam_tags.py` lines 37, 45, and 55.
+  - `00fa86f2` ("review fixes"): changed the `drf.py` paginator and the social public-payload
+    marker.
+  - Merge `192195e2`: conflict-resolved production hunks in the blog, listings, and storage
+    `adapter.py` files and storage's `module.yml`. Storage's post-hook no longer calls
+    `validate_module_options`, but the check now runs at the manifest boundary
+    (`manifest/entry_point.py:104`) before any hook. Killed.
 
 ### Coverage and residual-risk statement
 
+**Method.** Seven parallel enumeration units, then main-agent judgment and spot re-verification
+of every surviving card:
+- billing;
+- orgs + auth;
+- core runtime + generated templates;
+- the other nine modules;
+- CLI/manifest/devtools/DR media;
+- gates + pipeline;
+- test-diff + variant analysis.
+
 **Read in full:**
-- **orgs:** tenant middleware, the GUC priming wrapper, `current_org` scopes and
-  `operator_access`, managers, public context, permissions, VIEW-AS, all HTML and JSON views,
-  invitation accept, redirect hooks, anonymization, and the invite and create forms.
-- **billing:** views, webhook dispatch, credit ledger, one-time checkout, the Stripe client
-  wrapper, removal reconciliation, exceptions, and `handle_stripe_event`.
-- **blog:** views, upload validation, and `upload_to`.
-- **forms:** views, the submission serializer, the notification helper, and throttles.
-- **notifications:** webhook view, verification, parse/resolve/record, and anonymization.
-- **analytics:** services, views, and template tags.
-- **auth:** account-delete view, allauth adapter, and wiring adapter.
-- **Other modules:** the listings publish path and the social payload views and cache keys.
-- **Generated templates:** URLs, views, settings (base/production/local), `start.sh`,
-  `Dockerfile`, `railway.json`, `docker-compose`, `.dockerignore`, the CI workflow,
-  `package.json`, `index.html`, `csrf.ts`, and `analytics.ts`.
-- **Core runtime and deploy:** `runtime/settings.py`, `runtime/conventions.py`,
-  `runtime_database.py`, and the deploy flow.
-- **Pipeline:** `publish.yml`, plus the `ci.yml` and nightly workflow headers.
+- **billing:** `_webhooks_checkout.py`, `_webhooks.py`, `_removal.py`, `_checkout.py`,
+  `_customers.py`, `views.py`, `exceptions.py`, the reconcile command, and the models and
+  `0001_initial` diffs.
+- **orgs:** `throttles.py`, `views.py`, `forms.py`, `_view_context.py`, `middleware.py`,
+  `_tenancy_references.py`, `permissions.py`, and the purge command's guards.
+- **auth:** the anonymize boundary and the account-deletion guard.
+- **core runtime:** `seam.py`, `seam_tags.py`, `urls.py`, `drf.py`, `_error_shape.py`, and the
+  `settings.py`/`conventions.py` diffs.
+- **Generated templates:** every changed template.
+- **notifications:** `_webhooks.py` and the verify/ingest path.
+- **Other modules:** the forms submit and email paths, the CRM viewsets, the blog/listings APIs,
+  the storage adapter and Markdownx URLs, and the backups diff.
+- **CLI:** deploy service config and the dependency writers.
+- **Manifest and DR:** the manifest loader, resolver, entry point, and option validation;
+  `dr_engine/_media.py`.
+- **Pipeline:** all four workflows, `gates.mk`, and the security-gate scripts.
 
 **Sampled:**
-- crm serializers and views; backups admin, restore, and dispatch.
-- DR engine primitives and media sync.
-- CLI remove, push, and dependency-write paths.
-- Config and identifier validation, the git runner, and the publish scripts.
-- Social models and contracts, and the storage manifest.
+- billing's `_subscription_checkout*.py` and `_stripe_client.py`;
+- the orgs/auth anonymization, `_purge_support`, and `_purge_plan`;
+- analytics/social/crm serializers and checks;
+- `check_quality.sh` and the publish scripts;
+- about 35 files in the variant sweep.
 
 **Skipped:**
-- devtools beta-migration internals.
-- `scripts/` gate implementations (except publish).
-- Manifest loader and resolver internals; DR recovery and verification internals.
-- Most CLI `plan`/`apply` internals.
-- Theme React components other than seam, analytics, CSRF, and social.
-
-**Tools:** git; the repository's Django 6.0 virtualenv (read-only use); a web search of two vendor
-contracts. Bandit, Trivy, and gitleaks were **not** re-run, because CI already fails on their
-findings.
+- billing `_webhooks_invoice.py` and `_subscription_events.py` (not in the delta);
+- the React theme test files;
+- devtools internals beyond the diff;
+- module-convention detector internals, covered instead by a differential replay (below).
 
 **Empirical checks (§1e):**
-1. **Generated CI fails on a fresh checkout — confirmed.** I generated a zero-module project with
-   the repository's own generator into scratch space (`QS_SKIP_POETRY_LOCK=1`, no network), then
-   committed and cloned it to reproduce a CI checkout:
-   - `settings.local` raises `ValueError: DATABASE_URL … is required`.
-   - `settings.base` fails with `Unable to configure handler 'file'`.
-2. **The image health check always fails — confirmed.** I loaded the same project under
-   `settings.production` and used Django's test client. With `Host: localhost:8000`, both `GET /`
-   and `GET /healthcheck/` return 400.
-3. **History credential scan: clean.** The patterns searched were `sk_live_`, AWS access keys,
-   GitHub tokens, Slack tokens, private keys, PyPI, Resend, and PostHog tokens. Every hit is a
-   placeholder or a fixture.
-4. **Vendor contracts:**
-   - Resend webhooks are Svix-signed: `svix-id`, `svix-timestamp`, and `svix-signature` headers,
-     with a base64 `whsec_` secret. Their fields sit under `data.*`.
-   - Stripe rejects non-absolute success and cancel URLs.
+1. **Differential replay of the convention-gate tests:** the `2fd8637f` test suites run against
+   the HEAD `scripts/` in a scratch copy. 230 passed. All 7 failures are HEAD being stricter; none
+   is a missed violation. The SA267/SA268 "behavior parity" refactors lost no rule.
+2. **`check_gate_parity.py` and `sync_ci_gate_jobs.py --check`:** both exit 0. The `ci.yml` and
+   `publish.yml` gate command sets are identical at both SHAs.
+3. **Seam escaping probe:** Django `reverse()` percent-encodes `</script>`, quotes, backslash, and
+   U+2028. The only request-derived seam value, `currentOrgSlug`, passes `escapejs`. Seam XSS
+   killed.
 
 **Category activation:**
-- **Active:** I, II, III, IV (sampled), V (sampled), VI, VII, VIII, IX; X: generator, multi-tenant,
-  service/webhooks, frontend, CLI, library (modules), IaC (Dockerfile/Railway).
-- **Inert:** X mobile, firmware, GraphQL/RPC, ML/LLM (no model runtime), data pipeline (DR is
-  operator batch, so it was sampled under IV/VI instead).
-- **Produced:** I, III, VI, VII, VIII, IX, X-generator.
+- **Active:** I, II, III, IV, V (sampled), VI, VII, VIII, IX; X: generator, multi-tenant,
+  service/webhooks, frontend, CLI, library, IaC.
+- **Inert:** X mobile, firmware, GraphQL/RPC, ML/LLM (no model runtime), data pipeline.
+- **Produced:** I, II, III, IV, VI, VII, VIII.
 
-**Sibling sweep:** each of the 12 modules was checked for these signatures:
-- unauthenticated views
-- `str(exc)` response bodies
-- `all_objects` in request paths
-- missing throttles on email-sending or provider-calling endpoints
-- session data leaving the process
-- relative URLs handed to providers
-- address-based selectors
+**Sibling sweep:** the 10 variant patterns of §3.5 (below) were searched across core, the CLI, all
+12 modules, and the generator templates.
 
 **Residual risk.**
-- No PostgreSQL instance was used, so RLS and lock semantics were reasoned from code.
-- No live Stripe, Resend, or PostHog calls were made in this pass.
-  `billing-checkout-relative-redirect-urls` was later resolved with a live Stripe test-mode
-  checkout (§15), and `notifications-webhook-rejects-resend` was resolved against the published
-  Resend/Svix contract with the vendor's documented vector (§15).
-- Out-of-repo controls were not visible: Railway edge, PostHog project ACLs, Stripe
-  payment-method settings, and GitHub org token defaults.
-- devtools and the gate scripts were not swept for defects.
+- No PostgreSQL, Stripe, or Resend instance was used this pass. Lock, RLS, and Stripe Search
+  consistency semantics were reasoned from code and vendor documentation.
+- Out-of-repo controls stay invisible: the Railway edge, GitHub org defaults, Stripe and PostHog
+  project settings.
+- The skipped billing invoice and subscription-event handlers were last read in full on
+  2026-10-08.
 
-Silence on the skipped areas does not mean they are clean.
+Silence on skipped areas licenses no conclusion.
 
 ---
 
@@ -236,137 +153,268 @@ Silence on the skipped areas does not mean they are clean.
 
 ```yaml
 schema: tech-audit/v6
-audited: 2fd8637f2d163c65a873ce74337e4f5d88b9ba99
+audited: 7d9782a99a6606853c2299170489fe291acc6a10
 items:
-  - {id: forms-notification-status-misreported, status: open, severity: S4, category: VI,
+  - {id: stripe-customer-search-lag-resolves-absent, status: open, severity: S3, category: II,
+     title: "Checkout reconciliation treats a Stripe Search miss as proof that no customer exists",
+     effort: Small, confidence: Medium, reality: generated-app,
+     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_customers.py,
+               quickscale_modules/billing/src/quickscale_modules_billing/_stripe_client.py],
+     fix_files: [quickscale_modules/auth/tests/test_views.py], depends_on: [], chain: [],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: dr-private-remote-restore-whole-object-in-memory, status: open, severity: S3, category: IV,
+     title: "Private-remote restore reads the whole dump into memory", effort: Small,
+     confidence: High, reality: generated-app,
+     anchors: [quickscale_core/src/quickscale_core/dr_engine/_remote.py], depends_on: [],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: e2e-release-tag-trigger-never-matches, status: open, severity: S3, category: VII,
+     title: "Hosted E2E never runs on a release tag", effort: Trivial, confidence: High,
+     reality: release-pipeline, anchors: [.github/workflows/e2e.yml], depends_on: [],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: crm-theme-stats-always-zero, status: open, severity: S4, category: IX, effort: Trivial,
+     confidence: High, reality: generated-app,
+     anchors: [quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/pages/CrmPage.tsx],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: notifications-webhook-status-regresses-out-of-order, status: open, severity: S4,
+     category: II, effort: Small, confidence: Medium, reality: generated-app,
+     anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/_webhooks.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: notifications-webhook-secret-format-unchecked-at-startup, status: open, severity: S4,
+     category: VI, effort: Trivial, confidence: High, reality: generated-app,
+     anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/checks.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: orgs-invite-throttle-partial-charge, status: open, severity: S4, category: I,
+     effort: Small, confidence: Medium, reality: generated-app,
+     anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/views.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: markdownx-upload-client-extension-and-content-type, status: open, severity: S4,
+     category: III, effort: Small, confidence: Medium, reality: generated-app,
+     anchors: [quickscale_modules/storage/src/quickscale_modules_storage/markdownx_urls.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: dr-media-part-file-leak-on-publish-failure, status: open, severity: S4, category: IV,
      effort: Trivial, confidence: High, reality: generated-app,
-     anchors: [quickscale_modules/forms/src/quickscale_modules_forms/_email.py],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
+     anchors: [quickscale_core/src/quickscale_core/dr_engine/_media.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: pyproject-write-not-atomic, status: open, severity: S4, category: IV, effort: Trivial,
+     confidence: Medium, reality: cli,
+     anchors: [quickscale_cli/src/quickscale_cli/utils/_dependency_write.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: ci-poetry-retry-curl-pipe-python, status: open, severity: S4, category: VII,
+     effort: Trivial, confidence: High, reality: release-pipeline,
+     anchors: [.github/workflows/ci.yml, .github/workflows/nightly-bypassrls.yml],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
   - {id: dr-restore-vintage-exact-match, status: watchlist, category: I, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/dr_engine/recovery.py],
-     first_seen: 2026-09-24, last_verified: 2026-10-08}
+     first_seen: 2026-09-24, last_verified: 2026-10-13}
   - {id: orgs-provider-id-check-blocks-migrate, status: watchlist, category: VI, reality: generated-app,
      anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/checks.py],
-     first_seen: 2026-09-24, last_verified: 2026-10-08}
+     first_seen: 2026-09-24, last_verified: 2026-10-13}
   - {id: crm-stage-seed-lost-on-commit-failure, status: watchlist, category: II, reality: generated-app,
      anchors: [quickscale_modules/crm/src/quickscale_modules_crm/receivers.py],
-     first_seen: 2026-10-03, last_verified: 2026-10-08}
+     first_seen: 2026-10-03, last_verified: 2026-10-13}
   - {id: backups-upload-restore-by-model-permission, status: watchlist, category: III,
      reality: generated-app,
      anchors: [quickscale_modules/backups/src/quickscale_modules_backups/_admin_restore.py],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
+     first_seen: 2026-10-08, last_verified: 2026-10-13}
   - {id: single-sync-worker-vendor-calls, status: watchlist, category: IV, reality: generated-app,
-     anchors: [quickscale_core/src/quickscale_core/generator/templates/start.sh.j2,
-               quickscale_modules/billing/src/quickscale_modules_billing/_stripe_client.py],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
+     anchors: [quickscale_core/src/quickscale_core/generator/templates/start.sh.j2],
+     first_seen: 2026-10-08, last_verified: 2026-10-13}
   - {id: allow-bypassrls-serving-undetected, status: watchlist, category: VI, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/runtime/settings.py],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
+     first_seen: 2026-10-08, last_verified: 2026-10-13}
   - {id: migrate-runs-per-replica, status: watchlist, category: II, reality: generated-app,
      anchors: [quickscale_core/src/quickscale_core/generator/templates/start.sh.j2],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
+     first_seen: 2026-10-08, last_verified: 2026-10-13}
   - {id: development-workflow-intermittent-root-500, status: watchlist, category: VI,
-     reality: generated-app,
-     anchors: [quickscale_cli/tests/test_e2e_development_workflow.py],
-     first_seen: 2026-10-11, last_verified: 2026-10-12}
-  - {id: core-e2e-poetry-cache-install-candidates, status: watchlist, category: VI,
-     reality: tooling,
-     anchors: [quickscale_core/tests/conftest.py, quickscale_core/tests/test_generated_project_runtime.py],
-     first_seen: 2026-10-12, last_verified: 2026-10-12}
+     reality: generated-app, anchors: [quickscale_cli/tests/test_e2e_development_workflow.py],
+     first_seen: 2026-10-11, last_verified: 2026-10-13}
+  - {id: core-e2e-poetry-cache-install-candidates, status: watchlist, category: VI, reality: tooling,
+     anchors: [quickscale_core/tests/conftest.py], first_seen: 2026-10-12, last_verified: 2026-10-13}
+  - {id: orgs-role-mixin-checks-request-org, status: watchlist, category: III, reality: generated-app,
+     anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/permissions.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: social-config-error-served-200, status: watchlist, category: VI, reality: generated-app,
+     anchors: [quickscale_modules/social/src/quickscale_modules_social/services.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: deploy-existing-settings-module-never-corrected, status: watchlist, category: VI,
+     reality: cli, anchors: [quickscale_cli/src/quickscale_cli/commands/_deploy_service_config.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: account-deletion-hook-exception-text, status: watchlist, category: VI, reality: generated-app,
+     anchors: [quickscale_modules/auth/src/quickscale_modules_auth/views.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: security-suppressions-uniform-expiry, status: watchlist, category: VII, reality: tooling,
+     anchors: [scripts/security_suppressions.json], first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: generated-project-automation-local-only, status: watchlist, category: VIII, reality: tooling,
+     anchors: [scripts/check_generated_project_automation.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: initial-migration-edited-in-place, status: watchlist, category: IX, reality: generated-app,
+     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/migrations/0001_initial.py,
+               quickscale_modules/orgs/src/quickscale_modules_orgs/migrations/0001_initial.py],
+     first_seen: 2026-10-13, last_verified: 2026-10-13}
 ```
 
 ---
 
 ## 3. Summary table
 
-**Counts:** S1 — 0 · S2 — 0 · S3 — 0 · S4 — 1 · total 1 open. Watchlist: 9.
+**Counts:**
+- **Open:** 11 in total: S1 — 0 · S2 — 0 · S3 — 3 · S4 — 8.
+- **Watchlist:** 16.
+- **This pass:** prior open `forms-notification-status-misreported` resolved; 11 findings new, 0
+  carried, 0 regressed.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
-| `forms-notification-status-misreported` | S4 | VI | Submission reports `queued` when notifications are disabled | Trivial | High | new |
+| `stripe-customer-search-lag-resolves-absent` | S3 | II | Checkout reconciliation treats a Stripe Search miss as proof that no customer exists | Small | Medium | new |
+| `dr-private-remote-restore-whole-object-in-memory` | S3 | IV | Private-remote restore reads the whole dump into memory | Small | High | new |
+| `e2e-release-tag-trigger-never-matches` | S3 | VII | Hosted E2E never runs on a release tag | Trivial | High | new (**quick win**) |
+| `crm-theme-stats-always-zero` | S4 | IX | Theme CRM stat cards always show 0 | Trivial | High | new |
+| `notifications-webhook-status-regresses-out-of-order` | S4 | II | A late delivery event overwrites a terminal status | Small | Medium | new |
+| `notifications-webhook-secret-format-unchecked-at-startup` | S4 | VI | A malformed `whsec_` secret passes the startup check | Trivial | High | new |
+| `orgs-invite-throttle-partial-charge` | S4 | I | The per-sender bucket is charged when the per-org throttle refuses | Small | Medium | new |
+| `markdownx-upload-client-extension-and-content-type` | S4 | III | The staff editor upload trusts the client's extension and type | Small | Medium | new |
+| `dr-media-part-file-leak-on-publish-failure` | S4 | IV | A `.part` file is left behind when publish fails | Trivial | High | new |
+| `pyproject-write-not-atomic` | S4 | IV | The CLI rewrites `pyproject.toml` in place | Trivial | Medium | new |
+| `ci-poetry-retry-curl-pipe-python` | S4 | VII | The CI retry path pipes an unpinned installer into Python | Trivial | High | new |
 
 ---
 
 ## 4. Findings
 
+### S3 findings (compact)
+
+- **`stripe-customer-search-lag-resolves-absent`**
+  - **Severity:** S3. High impact (account deletion, or closing a reservation, while provider
+    state may exist) × Rare. The deviation is one step up from S4: a test that pinned the safe
+    behavior was inverted in the delta.
+  - **Location:**
+    - `billing/_customers.py:115-150` (`_resolve_existing_customer_id_for_reconciliation`);
+    - `billing/_stripe_client.py:72` (`Customer.search(query=…, limit=1)`).
+  - **Defect:**
+    - When neither the reservation nor the organization records a customer ID, reconciliation asks
+      Stripe Search and treats an empty result as "no customer, so no checkout can exist".
+      Stripe Search is eventually consistent: a customer created just before the lookup may not
+      be indexed yet.
+    - `limit=1` means the `len(customer_ids) > 1` fail-closed guard can never fire.
+  - **Failure scenario** (walked on paper, not run):
+    1. A `create_customer` call has an unknown outcome: the Stripe customer exists but the local
+       sync never ran.
+    2. Within the Search indexing lag, the owner deletes their account, or an operator runs
+       purge or reconcile.
+    3. The miss resolves the reservation as absent and deletion proceeds.
+  - **Evidence of the blessed change:** `auth/tests/test_views.py:1858` used to assert that an
+    unknown outcome blocks deletion (200, user active). Since `9592bab5` it mocks
+    `search_customers=[]` and asserts the deletion proceeds (302). No test covers a Search error or
+    a lagged miss.
+  - **Fix (Small):** for the absent verdict, require a strongly consistent lookup — list customers
+    by the idempotency-keyed create, or retrieve by a stored reservation reference — or keep the
+    reservation open until the reservation is older than Stripe's documented Search lag. Request
+    `limit=2` so the multiple-customers guard is live. Add a test for the fail-closed branch.
+  - **Confidence:** Medium. The Search lag is vendor-documented; the preconditions were not
+    reproduced.
+
+- **`dr-private-remote-restore-whole-object-in-memory`**
+  - **Severity:** S3. Moderate impact (a restore OOM-killed during disaster recovery) × Rare
+    (operator restore). The deviation is one step up because it fails at the worst moment.
+  - **Location:** `dr_engine/_remote.py:90-93` (`_materialize_private_remote_key`).
+  - **Defect:** the private-remote restore copies through `S3Storage.open()`, which spools the
+    whole object in memory (`AWS_S3_MAX_MEMORY_SIZE` defaults to unbounded). This is the unfixed
+    sibling of SA256's media fix, whose comment at `_media.py:148` names the same cause.
+  - **Failure scenario:** a database dump larger than the container's memory limit is
+    materialized from a private remote, the process is OOM-killed, and the restore fails.
+  - **Fix (Small):** stream with the boto3 client's `download_fileobj` into the destination, the
+    same way `_media.py` does.
+  - **Confidence:** High. Introduced in `04d896d8`.
+
+- **`e2e-release-tag-trigger-never-matches`** (quick win)
+  - **Severity:** S3. Moderate impact (releases ship without the hosted E2E run the workflow
+    promises) × Common (every release).
+  - **Location:** `.github/workflows/e2e.yml:8-10`: `push: tags: ['v*']`.
+  - **Defect:** release tags are `0.89.0`-style (`publish.yml` matches `"[0-9]*"`), so the release
+    trigger never fires. The only mitigation is the manual `make ci-e2e` step in the publish
+    procedure.
+  - **Fix (Trivial):** add `"[0-9]*"`, matching `publish.yml`.
+  - **Confidence:** High. Pre-existing.
+
 ### S4 findings (one line each)
 
-- `forms-notification-status-misreported` · `forms/_email.py:44-53` · When notifications are
-  disabled, the submit response reports `"queued"` while logging "skipped". · Return a distinct
-  `"disabled"` status.
+- `crm-theme-stats-always-zero` · `themes/showcase_react/src/pages/CrmPage.tsx:28-31`
+  - **Defect:** the stat cards read `.count`, then `.results.length`, but the CRM lists return a
+    bare array (`runtime/drf.py:75-77`, `PlainListPagination`), so every card shows 0. Even
+    `.length` would count only one page.
+  - **Fix:** expose a count endpoint, or a header the theme reads.
+- `notifications-webhook-status-regresses-out-of-order` · `notifications/_webhooks.py:257+ (`_apply_delivery_event`)`
+  - **Defect:** `_apply_delivery_event` overwrites the status with no ordering check and no row
+    lock, so a late `email.sent` regresses a `delivered` or `bounced` row.
+  - **Fix:** rank the statuses and update only forward, under `select_for_update`.
+- `notifications-webhook-secret-format-unchecked-at-startup` · `notifications/checks.py:62-71`
+  - **Defect:** E003 refuses only an empty secret. A malformed `whsec_` value passes startup, and
+    then every webhook is refused at runtime.
+  - **Fix:** validate the prefix and the base64 decode in the check.
+- `orgs-invite-throttle-partial-charge` · `orgs/views.py:184` (and `OrgApiInviteView.post`)
+  - **Defect:** when the per-sender throttle passes and the per-org throttle refuses, the rolled-
+    back invitation still costs the sender a token.
+  - **Fix:** check both throttles before charging either.
+- `markdownx-upload-client-extension-and-content-type` · `storage/markdownx_urls.py:19-24` (vendor
+  `markdownx/forms.py:52-57`)
+  - **Defect:** the staff-only editor upload keeps the client's extension and content type. GIF
+    and SVG skip Pillow, so a staff account can store an HTML or SVG document in public media on
+    the site's origin.
+  - **Fix:** wrap the vendor form with the SA239 format-derived extension, and drop SVG from
+    `MARKDOWNX_UPLOAD_CONTENT_TYPES`.
+- `dr-media-part-file-leak-on-publish-failure` · `dr_engine/_media.py:153-179`
+  - **Defect:** `chmod` and `replace` run outside the cleanup `try`, so a failure there (for
+    example, the target is a directory) leaves a stray `.part` file.
+  - **Fix:** move them inside the `try`.
+- `pyproject-write-not-atomic` · `quickscale_cli/utils/_dependency_write.py:65-74`
+  - **Defect:** `_write_validated_toml` truncates the file and writes in place, so an interrupted
+    write leaves a corrupt `pyproject.toml`.
+  - **Fix:** write to a sibling temp file, then `os.replace`.
+- `ci-poetry-retry-curl-pipe-python` · `.github/workflows/ci.yml:667` (3 jobs) and `nightly-bypassrls.yml`
+  - **Defect:** the Poetry install retry runs `curl install.python-poetry.org | python3`, unpinned,
+    bypassing the SHA-pin contract.
+  - **Fix:** retry `pipx`/`pip install poetry==2.4.1` instead.
 
 ---
 
 ## 5. Safeguard matrix
 
-The populations are module entry points and webhooks, generated launch artifacts, and outbound
-clients. A cell names the layer that supplies the safeguard, or a finding ID.
+The prior matrix (`git show 2fd8637f:docs/others/tech-audit.md`, §5) was re-checked on the rows
+the delta touched. Changed cells:
 
-| Entry point | AuthN | AuthZ | Input validation | Output encoding | Rate limit | Timeout | Idempotency | Error shape | Audit |
-|---|---|---|---|---|---|---|---|---|---|
-| `StripeWebhookView` | Stripe SDK signature over raw body | n/a | named-release gate | JSON | none by rule 26 | SDK default (watch `single-sync-worker-vendor-calls`) | advisory mutex + unique `WebhookEvent` | rule 9 | `WebhookEvent` row |
-| Billing JSON views | session (CSRF) | owner via orgs' `HasOrgRole(OrgRole.OWNER)` | DRF serializers | JSON | `quickscale_billing_*` scopes | SDK default | Stripe idempotency keys; unknown-outcome reservations reconcile against the provider | rule 9 | reservation rows; return URLs built from the request |
-| `NotificationWebhookView` | Svix signature over raw body (`svix-id`/`svix-timestamp`/`svix-signature`, decoded `whsec_` secret) | n/a | required fields | JSON | none by rule 26 | n/a | `svix-id` replay key | rule 9 | delivery event row |
-| Orgs JSON API | session (CSRF) | `min_org_role` on the org it acts on | `JSONParser` + forms | JSON | invite sends: `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization), both charged only after the role gate and the form's locked eligibility checks pass; other endpoints: DRF `user` default | n/a | n/a | rule 9 | n/a |
-| Orgs HTML views | `LoginRequiredMixin` | `SaasModeRequiredMixin` + `OrgRoleMixin`; the route slug wins over VIEW-AS | Django forms | autoescape | invite sends: `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per organization), both charged only after the role gate and the form's locked eligibility checks pass; pending cap per organization | n/a | n/a | Django | n/a |
-| Invitation accept | login | token + normalized email match | UUID | autoescape | n/a | n/a | `select_for_update` | Django | n/a |
-| VIEW-AS | login | superuser, POST only | slug | n/a | n/a | n/a | n/a | 404 | INFO log |
-| CRM API | session (CSRF) | `HasOrgRole` viewer/member | serializers reject foreign-org FKs; composite FKs | DRF | DRF defaults | n/a | n/a | rule 9 | n/a |
-| Forms public schema/submit | none (`AllowAny`) | System or active org | serializer | DRF | `quickscale_forms_submit` scope (core scoped throttle) | Resend on commit | n/a | rule 9; status: `forms-notification-status-misreported` | submission row; analytics distinct ID is the stable non-secret or random anonymous ID |
-| Forms admin API + CSV | session (CSRF) | `HasOrgRole`; superuser via `operator_access` | DRF | CSV formula cells neutralized | DRF defaults | n/a | n/a | rule 9 | `operator_access` log |
-| Blog/listings automation APIs | session (CSRF) | `HasOrgRole(MEMBER)` | Pillow format/size/pixels; extension from format | JSON | blog `quickscale_blog_api` and listings `quickscale_listings_api` scopes (core scoped throttle) | n/a | slug 409 | rule 9 | n/a |
-| Blog/listings public reads | none | System org or active org via `org_scope` | slug | markdown over escaped text + href scheme filter | none | n/a | n/a | Django | n/a |
-| Social payload endpoints (generated) | `AllowAny` (declared) | System or active org; org-partitioned cache | n/a | DRF | none | n/a | n/a | rule 9 | n/a |
-| Analytics page | session (login required) | active organization's `viewer` role | n/a | autoescape | none | n/a | n/a | Django | n/a |
-| `AccountDeleteView` → anonymize boundary | login | self; last-owner check under locks | form | autoescape | allauth N/A | provider I/O outside atomics | compensating resume | messages | skip log; address-based selectors require a verified address |
-| auth (allauth) | allauth | n/a | allauth forms | autoescape | allauth `ACCOUNT_RATE_LIMITS` defaults | n/a | n/a | allauth | n/a; address-based anonymization selectors require allauth verification |
-| Backups admin restore | admin session | `change_backuppolicy` + `QUICKSCALE_BACKUPS_ALLOW_RESTORE` (watch) | confirmation = filename; custom-dump only | autoescape | n/a | background `Popen` | atomic claim | messages | status row |
-| `TenantMiddleware` | — | saas membership or 403; solo personal org; VIEW-AS superuser | UUID parse | n/a | n/a | n/a | n/a | 403/redirect; unmounted orgs pass through (`a621299b`) | n/a |
-| Management commands (purge/prune/anonymize/restore) | shell | reserved-org guards | args | n/a | n/a | n/a | `--dry-run` on all destructive commands | `CommandError` | tombstones/logs |
-| Generated CI workflow | n/a | SHA-pinned actions + top-level `permissions` (SA253); gate `check-workflow-security` | n/a | n/a | n/a | n/a | n/a | gate `check-generated-project-automation` | n/a |
-| Image / launcher | n/a | runtime role NOSUPERUSER/NOBYPASSRLS + boot guard | n/a | n/a | n/a | gunicorn 60 s, 1 worker (watch) | migrate per boot (watch) | `HEALTHCHECK` probes `/healthcheck/` with the always-admitted `healthcheck.railway.app` Host (SA253); gate `check-generated-project-automation` | stdout |
-| Deploy (`deploy railway`) | Railway CLI auth | n/a | n/a | secrets via stdin, never argv | n/a | per-call timeouts | reuses secrets | settings module from project state or left alone | summary masks secrets |
-| Outbound clients (Stripe, Resend, PostHog) | API keys from settings (rule 35) | n/a | n/a | n/a | n/a | SDK defaults (watch); PostHog async | Stripe idempotency keys | mapped errors | n/a |
-| Release pipeline (`publish.yml`) | OIDC trusted publishing | environment-gated jobs | tag = `VERSION` check | n/a | n/a | n/a | `skip-existing` on TestPyPI | job failure | GitHub release |
+| Entry point | Changed cell(s) at HEAD |
+|---|---|
+| All module session APIs | AuthN: one core session-authentication class (Basic removed, SA262). Throttle: core's one scoped class; a scope with no rate raises `ImproperlyConfigured` (fail-closed). Error shape: core `_error_shape.py`, with no traceback. Declared errors echo `str(exc)` by design, and no secret-bearing message was found. |
+| Markdownx editor upload | Now one storage mount, staff-only. Input validation: vendor `ImageForm` (`markdownx-upload-client-extension-and-content-type`). |
+| `NotificationWebhookView` | Startup: secret non-empty only (`notifications-webhook-secret-format-unchecked-at-startup`). Ordering: `notifications-webhook-status-regresses-out-of-order`. |
+| Billing reconcile command | `--dry-run` gates every write. Shares the per-org provider mutex with the webhooks. Conditional writes. Absent verdict: `stripe-customer-search-lag-resolves-absent`. |
+| Orgs invite (HTML + JSON) | Both scopes charged inside the atomic block, rolled back on refusal (`orgs-invite-throttle-partial-charge`). Pending cap under the org row lock. |
+| Orgs HTML management views | The object comes from the route slug. The role check uses `resolve_request_org` (watch: `orgs-role-mixin-checks-request-org`). |
+| Social payload views (core-rendered) | DRF `AllowAny`, `SocialPayloadUnavailable` 503 with no exception text. The `status=error` branch is unreachable (watch: `social-config-error-served-200`). |
+| CRM lists | Bare-list pagination, page size fixed by setting, no client override (`crm-theme-stats-always-zero` is on the theme side). |
+| React seam (`quickscale_seam` tags) | Output from the catalog and `reverse()` only; `currentOrgSlug` through `escapejs`. Probe-verified. |
+| DR restore (private remote) | `dr-private-remote-restore-whole-object-in-memory`. |
+| Release E2E | `e2e-release-tag-trigger-never-matches`. |
+
+All other rows are unchanged, and their cells were re-verified where the delta touched their
+files.
 
 ---
 
 ## 6. Fix order and batching
 
-1. **Billing batch (landed).** `billing-checkout-relative-redirect-urls`, the unknown-outcome
-   reservation repair, and delayed-payment crediting are fixed, and one Stripe test-mode checkout
-   completed from the API view. **Release note:** 0.89.0 may publish as the arch-audit red-flag
-   fix.
-2. **Analytics batch (landed).** `analytics-distinct-id-is-session-key` and
-   `analytics-dashboard-unauthenticated` are fixed: the distinct ID is the stable non-secret ID or
-   a random anonymous ID, and the overview page requires login and the viewer org role. Each
-   deployment that ran analytics must invalidate existing sessions and purge or re-key the PostHog
-   persons after upgrading (the invalidation must follow the fix, or the old keys keep their
-   value).
-3. **Generator-output batch (landed).** `generated-ci-fails-out-of-box`,
-   `generated-ci-mutable-action-tags`, `docker-healthcheck-always-unhealthy`, and
-   `frontend-image-floating-deps` landed together on v89 (SA253): the rendered CI pins its
-   actions by SHA with top-level `permissions`, sets the test step's `DATABASE_URL`, runs the
-   migrate and isolation steps under `settings.local`, the container healthcheck probes
-   `/healthcheck/` with the always-admitted `healthcheck.railway.app` Host, the image installs
-   from the committed
-   `frontend/pnpm-lock.yaml` with `--frozen-lockfile`, and the registered
-   `check-generated-project-automation` gate executes the rendered test and migrate commands and
-   the healthcheck against a fresh offline-rendered project.
-4. **Self-registration hardening (landed).** `anonymize-matches-unverified-address`,
-   `org-invitation-email-unthrottled`, and `viewas-overrides-management-org` are fixed: the
-   anonymization handlers gate their address selectors on allauth verification, both invite paths
-   carry the `quickscale_orgs_invite` (per sender) and `quickscale_orgs_invite_organization` (per
-   organization) scopes with a per-organization pending cap, and management pages resolve their
-   organization from the route slug.
-5. **Notifications webhook (landed).** `notifications-webhook-rejects-resend` is fixed (SA255):
-   the endpoint verifies Resend's Svix signature over the raw body — any advertised `v1`
-   candidate, decoded `whsec_` secret, `webhook_ttl_seconds` window — maps `type`, `data.email_id`,
-   and `data.to[0]`, and deduplicates by `svix-id`; a contract test built from the vendor's
-   documented payload and signature covers it.
-6. **CLI deploy (landed).** `deploy-settings-module-from-service-name` and
-   `deploy-runtime-url-unquoted-password` were fixed together in `_deploy_service_config.py`.
-7. The remaining S4s, opportunistically.
+All batches are independent of each other.
+1. **Pipeline batch (Trivial):** `e2e-release-tag-trigger-never-matches` and
+   `ci-poetry-retry-curl-pipe-python`. Land them before tagging 0.89.0 so the release gets its
+   hosted E2E run.
+2. **DR batch:** `dr-private-remote-restore-whole-object-in-memory` and
+   `dr-media-part-file-leak-on-publish-failure`. They share the streaming idiom in `_media.py`.
+3. **Billing:** `stripe-customer-search-lag-resolves-absent`, together with the restored
+   fail-closed test in `auth/tests/test_views.py`.
+4. **Notifications:** the two webhook S4s (`_webhooks.py`, `checks.py`).
+5. **Opportunistic:** `crm-theme-stats-always-zero` (theme + CRM, plus a contract-vintage
+   adoption step), `orgs-invite-throttle-partial-charge`,
+   `markdownx-upload-client-extension-and-content-type`, and `pyproject-write-not-atomic`.
 
 ---
 
@@ -374,217 +422,189 @@ clients. A cell names the layer that supplies the safeguard, or a finding ID.
 
 | Subsystem | Verdict | What was read |
 |---|---|---|
-| orgs | clean. Management pages resolve the route slug over VIEW-AS; invitation sends are throttled per sender and per organization with a per-organization pending cap; invitation scrubs gate on a verified address. | Middleware, priming, scopes, permissions, views, API, invitations, anonymization (full). Tenant isolation layers verified. |
-| billing | clean. Checkout, subscription, and portal sessions build absolute return URLs from the request, the client refuses a relative one, and one Stripe test-mode checkout completed from the API view. | Views, webhooks, credits, checkout, client, removal (full). Signature, dedupe, and ledger locking verified. |
-| notifications | clean. The webhook verifies Resend's Svix signature (`svix-id`/`svix-timestamp`/`svix-signature`, decoded `whsec_` secret, `webhook_ttl_seconds` window) before parsing and dedupes by `svix-id`. | Webhook path and anonymization (full). |
-| analytics | clean. The distinct ID no longer derives from the session key, and the overview page requires login and the viewer role. | Full. |
-| forms | `forms-notification-status-misreported` | Views and notification helper (full). Public-path scoping, throttle, and CSV neutralization verified. |
-| blog | clean | Views, upload validation, `upload_to`, markdown rendering (full). |
-| listings | clean | Publish API and service (full). |
-| crm | clean | Serializers and viewset permissions (sampled). |
-| auth | clean. The anonymize boundary captures allauth verification before the hooks run, and address-based selectors require it. | Delete view and adapters. |
-| social | clean. The generated payload views answer DRF's error shape with no exception text. | Cache keys clean. |
-| storage | clean | Manifest defaults only. |
-| backups | clean; one watch item | Admin restore and dispatch (sampled). |
-| core runtime / generator | generator-output batch above | Settings facade clean. Identifier validation clean (empirical generation). |
-| CLI | clean. Deploy writes the settings module from project state, leaves an existing value alone, and percent-encodes runtime credentials. | Deploy flow (full); remove, push, dependency write (sampled). |
-| DR engine | clean. Media sync streams objects in bounded chunks. | Primitives and media (sampled). |
-| Release pipeline | clean | `publish.yml` (full); SHA pins, OIDC, build job without restored caches. |
-| devtools, `scripts/` gates | not swept | — |
+| billing | `stripe-customer-search-lag-resolves-absent`. SA251 a/b/c fix-regression passed: double credit, webhook ordering, reconciler vs. webhook, and client amounts are all safe. | SA251/SA265 delta in full; subscription-checkout steps sampled. |
+| orgs | `orgs-invite-throttle-partial-charge`; one watch item. SA254/SA257/SA265 fix-regression passed. | Delta in full except the purge-plan internals. |
+| auth | clean (latent watch item `account-deletion-hook-exception-text`). | Anonymize boundary, deletion guard. |
+| notifications | two S4s. Svix verification verified. | Webhook path in full. |
+| forms | clean. The prior S4 is resolved and the view surfaces `notification_status: "skipped"`. | Views, `_email.py`. |
+| crm | clean server side; theme S4. | Viewsets, pagination. |
+| blog / listings | clean. Throttle scopes kept; the bucket identity moved to per-user, as declared. | API views. |
+| storage | `markdownx-upload-client-extension-and-content-type` | Adapter, Markdownx URLs. |
+| social | clean; one watch item. | Services, cache path. |
+| analytics | clean. The coherence lead `module-enabled-switch` is killed: the app stays installed when off, and no shipped template loads the tag. | Adapter, services. |
+| backups | clean. The `--scheduled` removal and the prune default are documented (release notes, `decisions.md:946`). | Diff in full. |
+| core runtime / templates | clean. Seam, DRF admission, error shape, URL ownership, and the blank `__QS_ENV__` marker (now renders `''`) are all verified. | New runtime files in full. |
+| CLI / manifest | `pyproject-write-not-atomic`; one watch item. The SA256 and SA260 closures hold. | Delta in full. |
+| DR engine | two findings. | `_media.py` in full, `_remote.py` (variant sweep). |
+| gates + pipeline | two S4/S3 findings; two watch items. No gate dropped, no detector weakened (differential replay). | Workflows, `gates.mk`, security gates in full. |
+| devtools | clean (diff only). | Beta-migration delta. |
 
 ---
 
 ## 8. Clean sweeps and rejected candidates
 
-- **Verified — RLS fails closed:**
-  - GUC priming issues `SET LOCAL` per transaction, and statements outside an atomic block are
-    wrapped. There is no session-level `SET` of `app.current_org_id` anywhere.
-  - `RESET app.current_org_id` is session-level despite its docstring, but it resets to empty,
-    which is the fail-closed direction.
-  - A rolled-back savepoint can leave the priming memo stale. That yields zero rows (the policy
-    intersects with an empty GUC), not a leak.
-- **Verified — no solo-mode IDOR:** solo mode sets `request.org` on `/orgs/<slug>/…`, but every
-  slug view and the whole JSON API are behind `SaasModeRequiredMixin` (404).
-- **Verified:** CRM write serializers resolve related objects through `all_objects` but reject
-  foreign-org IDs in `validate()`, with composite FKs and RLS underneath.
-- **Verified:** blog and listings markdown escapes the source before rendering and filters href
-  schemes. No `attr_list`/raw-HTML extension is enabled; Markdownx endpoints are staff-only.
-- **Verified:** blog upload type and extension come from Pillow (SA239), with a decompression-bomb
-  guard.
-- **Verified:** Stripe signature verification happens before parsing. Event-ID dedupe runs under a
-  per-event advisory mutex, and credit idempotency under an org row lock plus a unique
-  `(stripe_event_id, transaction_type)`.
-- **Verified:** generator identifiers are validated (`^[a-z][a-z0-9_-]*$`, `isidentifier`), so
-  template interpolation into Python and shell is closed. There is no `shell=True` anywhere, and
-  every subprocess call uses an argv list.
-- **Verified:** YAML is loaded only through `safe_load`. There is no pickle or eval of external
-  data.
-- **Verified:** the history credential scan is clean (empirical check 3).
-- **Verified:** Railway secrets travel by stdin, never argv. The runtime-role SQL uses
-  `psycopg2.sql.Literal`/`Identifier`. Runtime grants cover later tables through
-  `ALTER DEFAULT PRIVILEGES` executed by the same superuser that runs `migrate`.
-- **Verified:** the production `CSRF_COOKIE_HTTPONLY` is compatible with the SPA, which reads the
-  token from a `<meta>` tag.
-- **Verified:** the social payload cache is partitioned by org ID; social embeds do no server-side
-  fetch, so there is no SSRF.
-- **Verified:** the release pipeline is safe as built. Actions are SHA-pinned, `permissions` is
-  `contents: read`, publishing uses OIDC, and the build job restores no cache. Tag-name
-  interpolation into `run:` requires tag-push rights, so the actor already holds what it would
-  grant.
-- **Verified:** the closures claimed since the prior pass hold:
-  - `billing-anonymize-name-substring` (SA245): word-bounded `redact_names` at
-    `billing/_anonymization.py:94-104`.
-  - `anonymize-prefilter-ascii-only-casefold`: the Unicode `\w` address pattern at
-    `runtime/redaction.py:27-29`.
-- **Rejected:** the `deploy railway` app-service name used as the Railway service. That is by
-  design; only the derived settings module is wrong.
-- **Rejected (§0 consequential):**
-  - The forms honeypot path stores unvalidated values. They are bounded by
-    `DATA_UPLOAD_MAX_MEMORY_SIZE` and the submit throttle.
-  - Forms multipart submissions fail validation (`dict(QueryDict)` yields lists), but the shipped
-    client sends JSON.
-- **Rejected (§0 live):** a DR media manifest `relative_path` with `..`. The manifest is
-  self-generated from storage listings, and the command is operator-only.
-- **Rejected (deliberate, documented):** the invitation accepts on GET. It needs the token and the
-  matching email, and the state change is the link-click UX.
+- **Verified:**
+  - Every closure claimed since `2fd8637f` holds in code: SA251 a/b/c, SA252, SA253, SA254,
+    SA255, SA256, and SA262 social.
+  - `forms-notification-status-misreported` is fixed (`a6b58799`, `forms/_email.py:44-53`).
+- **Verified — no gate weakened:**
+  - The `ci.yml` and `publish.yml` gate command sets are identical at both SHAs.
+  - The SA267/SA268 detector refactors pass the old test suites, except where HEAD is stricter.
+  - The security-gate split keeps fail-closed handling of a missing tool, empty input, a bad
+    exit code, bad JSON, and expiry.
+- **Verified — release scripts:** `--force-with-lease` with a freshly observed SHA and an
+  ancestry check; tags created without force; no `pull_request_target`; no `github.event.*` in
+  `run:`.
+- **Verified — test diff:** no skip or xfail added; the moves are R100 renames. The one inversion
+  is evidence for `stripe-customer-search-lag-resolves-absent`. About 135 `test_gate_parity` tests
+  were removed together with the observer SA259 replaced, as the commit documents.
+- **Verified — variant sweep, clean:**
+  - relative provider URLs;
+  - session-key identifiers;
+  - unguarded views (every view and its guard enumerated);
+  - `request.org` vs. the route slug (object resolution);
+  - `email_verified` gating;
+  - unthrottled email paths;
+  - `all_objects` in request paths.
+- **Killed:**
+  - **Coherence leads:** `module-error-http-mapping` (`InsufficientCreditsError` is now 402
+    `insufficient_credits`, SA264); `markdownx-shared-mount` (fixed by SA261);
+    `option-schema-and-validation` (a blank marker renders `''`; the one template without
+    `omit_if_blank` falls back to the validated host); billing `tenant-authorization` (every
+    billing JSON view checks owner on the caller's org; the plan catalog is deliberately public).
+  - **Storage post-hook validation** (merge `192195e2`): it now runs at the manifest boundary.
+  - **Seam `mark_safe`** (Bandit suppressions in `6b56515b`): the escaping probe confirms the
+    suppressions' rationale.
+  - **Social `str(SocialConfigurationError)` in a public payload:** nothing raises that error
+    (watch item).
+  - **Forms recipients logged at WARNING:** not found in source.
+  - **Declared module 5xx errors echoing `str(exc)`:** no secret-bearing message; by design under
+    rule 9.
+  - **DR media s3→local `..` keys:** still operator-only with a self-generated listing; the
+    streaming rewrite did not change what killed it.
+  - **`core-lockstep-spec-from-running-cli`:** Low; the lockstep release unit is an accepted
+    architectural decision.
+  - **`PENDING_INVITATION_LIMIT` read with no default:** a declared option, covered by the
+    rule-3 check.
+  - **CRM per-row counts:** bounded by the page size.
+- **Lead, not carded:** the forms CSV export builds the whole file in memory. It is bounded by
+  per-org submission volume; re-check if exports grow.
 
 ---
 
 ## 9. Structural smells
 
-Carried from the prior passes:
-- A typed Stripe provider-adapter seam is missing.
+Carried:
+- The typed Stripe provider-adapter seam is missing.
 - Session-level advisory locks silently fail under transaction pooling.
 - Outbound timeout policy is implicit.
-- `start.sh`'s psycopg2 connection is a second database-connection constructor.
-- `TenantMiddleware` path ownership is declared twice. The orgs prefixes are now reversed from URL
-  names (`a621299b`), but `EXEMPT_PATH_PREFIXES` still hard-codes `/accounts/`, `/admin/`, and
-  `/healthcheck/`.
+- `start.sh` has a second database-connection constructor.
+- `TenantMiddleware` declares path ownership twice.
 
 Added:
-- **Generated artifacts are now executed, not only text-asserted.** The rendered CI workflow,
-  the image `HEALTHCHECK`, and the deploy-time environment were previously grepped by tests
-  (`e2e.yml:162-169`), never executed; three of this pass's findings lived there. SA253 adds the
-  registered `check-generated-project-automation` gate, which renders a project offline and
-  executes the rendered CI test and migrate commands and the image healthcheck payload against a
-  provisioned PostgreSQL.
-- **Provider "unknown outcome" is a state with no exit.** Billing persists provider intent before
-  non-transactional calls (correctly), but at audit time no provider-side lookup resolved it for
-  one-time or subscription checkouts. One now does, and the operator reconciler clears
-  accumulated rows (SA251, slice b).
+- **Two S3 streaming idioms.** DR materializes objects through two different S3 paths: the
+  storage API, which spools in memory, and the boto3 client, which streams. Only one is safe for
+  large objects. That is the root of `dr-private-remote-restore-whole-object-in-memory`.
+- **Clean-break schema edits with no data path.** `0001_initial` is edited in place across
+  versions (SA265a moved `stripe_customer_id`). The architectural audit owns this as
+  `clean-break-schema-no-data-path`.
 
 ---
 
 ## 10. Tooling gaps
 
-- **A provider-contract assertion that every URL handed to Stripe is absolute.** Either a unit
-  check in `StripeClient`, or one Stripe test-mode e2e call. Would have caught
-  `billing-checkout-relative-redirect-urls`; `StripeClient` now refuses a URL without a scheme
-  and host, with contract tests pinning it.
-- **A Resend/Svix contract test built from the vendor's documented payload and signature.** Would
-  have caught `notifications-webhook-rejects-resend`; the webhook suite now pins the vendor's
-  documented Svix vector and a documented Resend payload end to end.
-- **A conformance rule rejecting `session_key` in any value passed to an outbound client or
-  logger.** Would have caught `analytics-distinct-id-is-session-key`; rule 22's detector now
-  carries the clause with its control cases.
+- **A lint rule rejecting `S3Storage.open()` / `storage.open()` in `dr_engine`.** It would have
+  prevented `dr-private-remote-restore-whole-object-in-memory`.
+- **A workflow-trigger consistency check:** every workflow that claims to run on release tags uses
+  `publish.yml`'s tag pattern. It would have prevented `e2e-release-tag-trigger-never-matches`.
+- **A theme-to-API contract test:** a theme hook's expected response shape is checked against a
+  rendered DRF response. It would have caught `crm-theme-stats-always-zero`.
 - Carried: image-layer and broader IaC scanning.
 
 ---
 
 ## 11. Watchlist and accepted trade-offs
 
-- `development-workflow-intermittent-root-500` — SA263's prior release-gate HTTP 500 on `/`
-  did not reproduce: the exact `TestDevelopmentCommandsE2E.test_full_development_workflow`
-  passed 5/5 on `ea41844eb2d2127162f66e84e71a70990c1563d6` and 5/5 on the synced `v89`
-  tree at `f107118e16d535a0463a41368a7d0fb8e94b65af`; every run exited 0 and retained
-  backend, frontend, and database log streams. No SA263-only regression is established.
-  Command (each revision, five times): `QS_E2E_NO_CLEANUP=1 QS_E2E_PARALLEL=0
-  QS_E2E_CONTAINER_PREFIX=<run-prefix> QS_E2E_RESOURCE_SCOPE=<run-prefix> poetry run pytest
-  quickscale_cli/tests/test_e2e_development_workflow.py::TestDevelopmentCommandsE2E::test_full_development_workflow
-  -m e2e --rootdir=quickscale_cli -o addopts= --tb=long -ra -q`.
-  Local evidence: `/tmp/opencode/sa263-20261012-{base,current}-captured-*` (pytest logs,
-  exit records, and live Docker server logs); wrapper: `/tmp/opencode/sa263-20261012-capture.py`.
-  Trigger: recurrence with a retained backend traceback; do not attribute it to manifest changes
-  from the old status-only failure.
-- `core-e2e-poetry-cache-install-candidates` — separate from the HTTP 500: two full gate runs
-  exited 2 with eight Core Poetry-install failures; labelled stdout identifies
-  `Unable to find installation candidates for ast-serialize (0.12.1)`. The focused all-module
-  migration test passed, including under xdist, so this is not established as a product defect.
-  With a fresh run-local cache, `POETRY_CACHE_DIR=/tmp/opencode/sa263-20261012-poetry-cache
-  make release-gate` exited 0 on the diagnostic-corrected task tree (no product edits).
-  Local gate logs: `/tmp/opencode/sa263-20261012-release-gate-{retry,diagnostics,fresh-cache}.log`.
-  The earlier 600-second gate attempt was killed during E2E and supplied no overall verdict;
-  completed runs used an 1800-second budget. Existing caches were not deleted or modified.
-  Trigger: recurrence with a fresh isolated cache, or evidence identifying why the default
-  worker-cache paths select unusable candidates; the cache-content root cause is unproven.
-  A later final gate exited 2 on different acquisition failures (Core `jinja2` install and
-  CLI Docker Hub DNS timeout); both focused retries exited 0 and the unchanged-tree full
-  confirmation exited 0. Logs: `/tmp/opencode/sa263-20261012-final-release-gate.log`,
-  `/tmp/opencode/sa263-20261012-final-{core,cli}-focused.log`, and
-  `/tmp/opencode/sa263-20261012-final-release-gate-retry.log`. These environment flakes
-  establish neither an HTTP regression nor the cause of the earlier cache-dependent failures.
-- `dr-restore-vintage-exact-match` — the recorded clean-break decision. Trigger: a patch release
-  without schema change where operators need an older backup. **Not fired**: there is no
-  `dr_engine` change since `e2623cb8`.
-- `orgs-provider-id-check-blocks-migrate` — deliberate. Trigger: a contract-vintage step that does
-  not list it. **Not fired**: it is listed at `orgs/module.yml:34-35`.
-- `crm-stage-seed-lost-on-commit-failure` — Trigger: a report of an org without stages. **Not
-  fired**: `receivers.py:17-29` is unchanged.
-- `backups-upload-restore-by-model-permission` (new) — Uploaded-dump restore needs only
-  `change_backuppolicy` plus `QUICKSCALE_BACKUPS_ALLOW_RESTORE=true`, not superuser. A restored
-  dump can write `auth_user`. It is documented as a staff capability, so it is not a finding.
-  Trigger: a deployment grants that permission to non-superuser staff while restore is enabled.
-- `single-sync-worker-vendor-calls` (new; absorbs the carried "Stripe SDK timeout implicit"
-  note) — The launcher defaults to one sync gunicorn worker with a 60 s timeout (documented
-  low-cost baseline). Stripe calls run with the SDK's default timeout (80 s), so one slow vendor
-  call stalls every request. Trigger: production traffic above one concurrent request, or a
-  vendor latency incident.
-- `allow-bypassrls-serving-undetected` (new) — `QUICKSCALE_ALLOW_BYPASSRLS=1` plus a blank
-  `RUNTIME_DATABASE_URL` in a serving environment silently disables RLS. It is the documented
-  escape hatch, and nothing at startup flags a serving process using it. Trigger: any deploy
-  tooling or docs that set it outside dev.
-- `migrate-runs-per-replica` (new) — `start.sh` runs `migrate` on every container boot. Concurrent
-  replicas race, and the loser exits and restarts. Trigger: running more than one replica.
-- Carried one-liners, triggers not fired: sender-free `pre_delete` disables fast-delete;
-  `org_scope`'s `finally` issues SQL after the body; DRF throttle history is non-atomic on
-  `DatabaseCache`; the credit-dedup O(n) scan (`_credits.py:190`);
-  `QUICKSCALE_PRIVILEGED_COMMAND` as persistent config; analytics JSON escaping; `BackupError`
-  echoing host/user/db; `set_railway_variable` swallowing exceptions; future-dated notification
-  timestamps within the TTL.
+- **`orgs-role-mixin-checks-request-org` (new).**
+  - **Why watch:** `OrgRoleMixin.dispatch` checks the role on `resolve_request_org()`, which
+    prefers `request.org`, while `get_organization()` prefers the URL slug. In shipped code,
+    `request.org` differs from the slug only under superuser VIEW-AS, and superusers pass the role
+    check, so it is not live.
+  - **Trigger:** a host middleware or a new code path sets `request.org` on `/orgs/<slug>/`
+    management paths for a non-superuser. Then an admin of A could edit B.
+  - **Cheap hardening:** check the role on `get_organization()`, as `OrgApiBaseView.initial`
+    already does.
+- **`social-config-error-served-200` (new).**
+  - **Why watch:** since `73bcc7c7` the DRF payload views return 200 for a `status=error` payload
+    whose `error` field holds `str(exc)`. `social_payload_status_code` is now unused. Nothing
+    raises `SocialConfigurationError` today.
+  - **Trigger:** any new raise of it in `_settings.py` or the services.
+- **`deploy-existing-settings-module-never-corrected` (new).**
+  - **Why watch:** deploy leaves an existing `DJANGO_SETTINGS_MODULE` alone, so a value wrongly
+    derived before SA256 persists. This is blessed by SA256 and pinned by a test.
+  - **Trigger:** a report of a pre-SA256 Railway service that fails to boot.
+- **`account-deletion-hook-exception-text` (new).**
+  - **Why watch:** undeclared `reconcile_account_deletion_provider_state` hooks flash `str(exc)`
+    to the user. This is latent and needs a host-project hook.
+  - **Trigger:** a documented host extension point for that hook.
+- **`security-suppressions-uniform-expiry` (new).**
+  - **Why watch:** all 10 suppressions expire on 2026-12-31. The gates then fail closed by
+    design, blocking CI and publish.
+  - **Trigger:** 2026-12-01 with no review scheduled.
+- **`generated-project-automation-local-only` (new).**
+  - **Why watch:** the SA253 gate runs only locally. Its docstring blesses this (no hosted
+    PostgreSQL).
+  - **Trigger:** a generated-artifact regression that reaches a release.
+- **`initial-migration-edited-in-place` (new).**
+  - **Why watch:** SA265a dropped `orgs.stripe_customer_id` and added `BillingCustomer` by editing
+    both `0001_initial` migrations, with no data copy. `decisions.md` §Clean-Break Migration
+    History allows this pre-1.0 for fresh databases only.
+  - **Trigger:** any supported upgrade path from a live 0.88.0 install. Its first customer lookup
+    would raise `ProgrammingError`, and the existing customer IDs would be orphaned.
+- **Carried, triggers evaluated — not fired:**
+  - `dr-restore-vintage-exact-match`: `recovery.py` is unchanged.
+  - `orgs-provider-id-check-blocks-migrate`: still listed at `orgs/module.yml:52`.
+  - `crm-stage-seed-lost-on-commit-failure`: `receivers.py` docstring-only change.
+  - `backups-upload-restore-by-model-permission`: `_admin_restore.py` import-only change.
+  - `single-sync-worker-vendor-calls`: `start.sh.j2` unchanged.
+  - `allow-bypassrls-serving-undetected`: the guard text is unchanged; no tooling sets it outside
+    dev.
+  - `migrate-runs-per-replica`: `start.sh.j2` unchanged.
+  - `development-workflow-intermittent-root-500`: no recurrence recorded.
+  - `core-e2e-poetry-cache-install-candidates`: no recurrence recorded.
+  - The carried one-liners from the prior pass: not fired.
 
 ---
 
 ## 12. Coherence hand-offs
 
-- Listings' publish API now declares its module throttle scope (SA262): the
-  `quickscale_listings_api` scope from the new `api_rate_limit` option, attached by
-  `throttle_scope` through core's one scoped throttle class. Blog's sibling moved to the same
-  core class and keeps its `api_rate_limit` option.
-- The generated social payload views are DRF views on rule 9's base and return no exception text.
-- `analytics` was the only module whose page had no auth or role guard; it now requires login and
-  the viewer role (SA252). Rule 19's shape divergence for billing belongs to coherence; the info
-  leak was the S4 above.
+- The `project_contract.yml:188` step text still describes the pre-SA258 generation-time seam
+  mechanism. It is stale prose, not a defect.
+- The blog and listings API throttle identity moved from per-IP to per-user while forms stays
+  per-IP. This is declared, but it is divergent across siblings.
 
 ---
 
 ## 13. Questions that would change severity
 
-1. Answered (SA255): the notifications webhook receives Resend directly — no relay re-signs — and
-   verifies the Svix signature, so `notifications-webhook-rejects-resend` was a code fix, not a
-   documentation fix.
-
+1. Is upgrading a live 0.88.0 install to 0.89.0 a supported path? Yes promotes
+   `initial-migration-edited-in-place` to an S2 data-loss finding. No keeps it as a watch item.
+2. Does any deployment rely on hosted E2E at release, rather than the manual `make ci-e2e`? Yes
+   raises `e2e-release-tag-trigger-never-matches` one step.
 
 ---
 
 ## 14. Companion hand-off intake
 
-- **Arch-audit red flag** (`arch-audit.md` §13): "0.88.0 on PyPI ships billing that fails every
-  Stripe webhook and every checkout with real keys. The fix is on v89."
-  - Evaluated as a lead. The webhook part is fixed on v89 (SA209, re-verified).
-  - The checkout part is fixed on v89 and verified with a live test-mode checkout (SA251), so
-    0.89.0 repairs it.
-- **Coherence-audit hand-offs to this audit** (`coherence-audit.md` §9): only
-  `billing-anonymize-name-substring`, which was resolved (SA245) and is re-verified in §8.
+- **Arch-audit red flag** (0.88.0 billing broken on PyPI): still present. The fix is on v89 and
+  0.89.0 is unpublished. §6 batch 1 should land before the tag.
+- **Coherence hand-offs:**
+  - `module-enabled-switch`: killed.
+  - `markdownx-shared-mount`: killed (SA261).
+  - `option-schema-and-validation`: killed.
+  - `module-error-http-mapping`: killed (SA264).
+  - `optional-sender-guard`: resolved as `forms-notification-status-misreported`.
+  - `tenant-authorization`, billing half: killed. Details in §8.
 
 ---
 
@@ -843,3 +863,9 @@ Added:
   documented payload and signature covers it, and the rule 26 conformance detector credits the
   vendor's candidate loop. Dropped from the index and summary; the §10 tooling gap and the §13
   question close with it.
+- 2026-10-13 — re-run at `7d9782a9` (delta `2fd8637f..7d9782a9`, 104 non-merge commits; prompt v7). Every closure claimed since the prior pass (SA251 a/b/c, SA252, SA253, SA254, SA255, SA256, SA262 social) was re-verified in code and passed the fix-regression pass. None regressed.
+- 2026-10-13 — `forms-notification-status-misreported`: **resolved** (`a6b58799`, SA265b). Verified at `forms/_email.py:44-53`: notifications off returns `"skipped"`, and the submit view surfaces it as `notification_status`.
+- 2026-10-13 — `dr-restore-vintage-exact-match`, `orgs-provider-id-check-blocks-migrate`, `crm-stage-seed-lost-on-commit-failure`, `backups-upload-restore-by-model-permission`, `single-sync-worker-vendor-calls`, `allow-bypassrls-serving-undetected`, `migrate-runs-per-replica`, `development-workflow-intermittent-root-500`, `core-e2e-poetry-cache-install-candidates`: carried (triggers not fired; evidence in §11).
+- 2026-10-13 — new open: `stripe-customer-search-lag-resolves-absent`, `dr-private-remote-restore-whole-object-in-memory`, `e2e-release-tag-trigger-never-matches` (S3); `crm-theme-stats-always-zero`, `notifications-webhook-status-regresses-out-of-order`, `notifications-webhook-secret-format-unchecked-at-startup`, `orgs-invite-throttle-partial-charge`, `markdownx-upload-client-extension-and-content-type`, `dr-media-part-file-leak-on-publish-failure`, `pyproject-write-not-atomic`, `ci-poetry-retry-curl-pipe-python` (S4).
+- 2026-10-13 — new watchlist: `orgs-role-mixin-checks-request-org`, `social-config-error-served-200`, `deploy-existing-settings-module-never-corrected`, `account-deletion-hook-exception-text`, `security-suppressions-uniform-expiry`, `generated-project-automation-local-only`, `initial-migration-edited-in-place`.
+- 2026-10-13 — Question 1 (answered SA255) retired. Two new questions added (§13).

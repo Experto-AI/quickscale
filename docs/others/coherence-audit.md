@@ -1,8 +1,126 @@
 # QuickScale — Deep Coherence Audit (cross-module conformance)
 
-Audited: 2fd8637f (v89) · 2026-10-08 · working tree dirty (uncommitted `docs/others/arch-audit.md` and `tech-audit.md` only; read only for their hand-off sections) · repository public (github.com/Experto-AI/quickscale) · prompt: deep-coherence-audit v1 · passes: 3
+Audited: 0ddc7e30 (v89) · 2026-10-13 · working tree dirty (uncommitted `docs/others/tech-audit.md` only; read for its hand-offs) · repository public (github.com/Experto-AI/quickscale) · prompt: deep-coherence-audit v2 · passes: 2 (prior full pass: 2fd8637f, 2026-10-08, v1, 3 passes)
 
-> **How this pass was run.** The maintainer asked for a full review from scratch, not a
+> **Re-run 2026-10-13 (`0ddc7e30`).** This pass re-checked every item that was open at
+> `2fd8637f` against HEAD, and swept the delta for new variants. The aspect tables in §4 and
+> the items in §5 keep their 2026-10-08 values as dated evidence. **Where they disagree, this
+> block, the index (§2), the summary (§3), and the log (§12) win.**
+>
+> - **Delta.** `git log --no-merges --since=2026-10-08` has 38 commits that touch modules, core,
+>   or the CLI. 27 apply a convention (SA251–SA266), 9 are unrelated, and 2 break one:
+>   - `9592bab5`, SA251(b): the reconcile command's org selector;
+>   - `dbe561a7`, SA254: orgs' invite throttles. These turned out to be rule 32's listed
+>     exception, so the card was killed.
+> - **Harness.** `scripts/check_module_conventions.py` at HEAD reports *All 43 covered module
+>   conventions pass*.
+> - **Passes: 2.** Pass 1 re-checked the items cold, in five parallel units: four batches of
+>   items plus the delta sweep. Pass 2 chased the leads those units found
+>   (`contract_vintage.id`, the `--cov` forms, the org selector, auth's `account/` tree, and
+>   throttle identity) and added no further aspect.
+> - **Companion hand-offs taken in:**
+>   - From the tech audit: blog and listings throttle per user while forms throttles per IP.
+>     This is consistent by design (§9 below).
+>   - From the arch audit: `useModules.ts` lists the module set beside the seam producer. This
+>     is rule 31's allowed exception, so it is consistent by design.
+>   - From the arch audit: dr_engine's `ModuleNotFoundError` name check is copied in 2 files.
+>     It is below this audit's population threshold, so it stays on the arch watchlist.
+>
+> **Still open after this pass (5).**
+>
+> 1. **`command-flag-conventions`** (J, ambiguity/tax, regressed). Only 2 of the 16 commands take
+>    an organization selector, and they spell it two ways:
+>    - `quickscale_billing_reconcile_checkouts --organization`
+>      (`billing/.../quickscale_billing_reconcile_checkouts.py:52`);
+>    - `quickscale_orgs_purge_organization --organization-id <uuid>`
+>      (`orgs/.../quickscale_orgs_purge_organization.py:173`).
+>
+>    Every other rule-17 clause holds in all 16: `--json`, `--trigger` defaulting to `manual`,
+>    and `--confirm` on purge and restore. **Rule:** ✅ an organization selector is
+>    `--organization-id <uuid>`, validated as a UUID; ❌ `--organization`, `--org`, a slug.
+>    **Check:** harness rule 17 adds the spelling to its banned list. The control is a fixture
+>    command with `--organization`. The harness bans spellings (open-world), so this does not
+>    make the check closed-world. Confidence: High, both files read.
+> 2. **`contract-vintage-identity`** (B, ambiguity, new). `contract_vintage.id` is optional
+>    (`manifest/loader_sections.py:222`), and whether it is present decides which mechanism
+>    applies (`quickscale_cli/commands/contract_vintage.py:108–110`):
+>    - With an `id` (billing, orgs), the CLI tracks the step by adoption.
+>    - Without one (backups, social), the CLI compares versions, so a project cannot mark the
+>      step adopted.
+>
+>    That is 2 of the 4 declaring manifests. The next author has two examples and nothing says
+>    which to copy. **Rule:** ✅ every `contract_vintage` carries an `id` (a
+>    `sa<NNN>-<slug>` style key, as in billing and orgs); ❌ an id-less vintage. **Check:** the
+>    loader refuses a missing `id`. The control is a manifest without one. Changing a persisted
+>    adoption key is a one-way door; adding a key that never existed is not. Confidence: High.
+> 3. **`dependency-spec-sources`** (N, tax). Every residual in the original table is gone except
+>    one: auth and blog run `--cov=src/<pkg>` (a path), while the other 10 run
+>    `--cov=<pkg>` (`*/pyproject.toml` addopts). **Rule:** ✅ `--cov=<import package>`.
+>    **Check:** the harness reads the pyproject addopts and compares the value with the package
+>    name. Confidence: High, all 12 files grepped.
+> 4. **`startup-checks-and-errors`** (B, tax, narrowed). Error naming, check order, and retired
+>    settings now conform, under rules 6 and 10. One divergence remains: the `checks.py` of
+>    analytics, billing, and notifications hand-list the setting and secret names that their
+>    manifests already project, so a rename has to be made twice. No check covers this.
+>    **Rule:** ✅ a startup check reads required names from the manifest projection; ❌ a
+>    literal list of the module's own setting names in `checks.py`. **Check:** an AST scan in
+>    harness rule 6 for `<MODULE>_*` string literals in `checks.py`. Confidence: Medium, because
+>    the three modules' lists were read by a worker and not re-opened here.
+> 5. **`capability-collection`** (D, ambiguity, narrowed). Core's `CAPABILITIES` is now a closed
+>    list of 11 names. One walk remains outside `collect_capabilities`: the orgs purge command's
+>    `getattr(app_config, "invalidate_organization_cache", None)`
+>    (`quickscale_orgs_purge_organization.py:533`). An obligation that declares the hook
+>    validates it, which limits the risk. **Rule:** ✅ every cross-app hook lookup goes through
+>    `collect_capabilities`. **Check:** the harness bans `getattr(app_config, ...)` outside
+>    core. Confidence: High.
+>
+> **Accepted (1).** `core-cli-module-knowledge`: 6 places still hold per-module knowledge,
+> naming 7 of the 12 modules. Each one is a reasoned entry in rule 37's closed exception
+> list, so that recorded decision makes it *accepted*. **Revisit** when that list grows.
+>
+> **Resolved this pass (11):**
+> - `module-enabled-switch`: SA260. A closed-world parity test over all 12 modules checks apps,
+>   middleware, and settings. URL drops and trigger refusal are unchecked (§7 gap).
+> - `module-error-http-mapping`: SA264. Every module error base is `Exception`; `status_code`
+>   and `default_code` go through core's `_error_shape`; harness rule 10 enforces it.
+>   `InsufficientCreditsError` → 402. Vendor failures answer 500 consistently in billing,
+>   notifications, blog, and listings.
+> - `manifest-declared-surface`: SA260. The loader refuses unknown top-level keys, and orgs'
+>   old `middleware:` key is the control.
+> - `upward-name-references`: SA265(a/b). Obligation names and email templates are owned per
+>   module, and `stripe_customer_id` now lives in billing.
+> - `optional-sender-guard`: rule 43, checked against `required_modules`.
+> - `module-dependency-direction`: rule 4. No module source imports another module's private
+>   names. Tests still hold 38 such imports, but tests are out of the rule's scope.
+> - `session-and-host-names`: rule 33. All 4 session keys are `quickscale_<module>:<name>`.
+> - `model-basics`: SA266, enforced by rule 14.
+> - `template-folder-depth`: SA266. (Correction: a worker reported auth's 12 nested
+>   `quickscale_auth/account/` pages as residual. They are the real templates, and the 12
+>   top-level `account/*.html` files are one-line allauth override shims that include them,
+>   because allauth needs that path. Consistent by design.)
+> - `test-file-names`: rule 29 now covers every `tests/` entry.
+> - `ticket-ids-in-shipped-source`: 0 ticket ids remain, down from 183, and rule 29 now scans
+>   shipped source. READMEs and templates are not scanned (§7 gap).
+> - `constraint-purpose-tokens`: 28 constraints and 6 indexes follow amended rule 25.
+>
+> **New enforcement gaps (§7 addenda):**
+> 1. The off-switch parity test checks apps, middleware, and settings, but not URL drops or
+>    scheduled-trigger refusal.
+> 2. Rule 17 bans spellings (open-world). It does not require `--json` and does not check the
+>    off-refusal.
+> 3. Rule 33 does not check the prefix of removal-obligation names, and rule 34 misses names
+>    without the `quickscale_` prefix.
+> 4. The `home` host route is documented in module-extension.md, but nothing checks it.
+> 5. The rule 29 ticket-id scan skips READMEs and templates.
+> 6. Nothing checks the `--cov` form.
+> 7. A `contract_vintage` without an `id` is accepted silently.
+>
+> **Hand-offs from this pass:** none to the technical audit, since no residual is a live
+> defect. To the architectural audit: `core-cli-module-knowledge` stays accepted under rule 37,
+> and that audit watches its exception list.
+
+>
+> **How the 2026-10-08 pass was run.** The maintainer asked for a full review from scratch, not a
 > continuation. Passes 1–3 below were made without reading the prior coherence audit (`f00ed460`)
 > or the frozen inventory (`docs/planning/module-conventions-inventory.md`). Only after the third
 > pass added nothing new were both read. Every prior ID is reconciled in §12, and the prior items
@@ -115,13 +233,13 @@ and the rules alone. These decisions are left open, each filed under an item:
 
 ```yaml
 schema: coherence-audit/v1
-audited: 2fd8637f
+audited: 0ddc7e30
 items:
   # ---- open: this pass (ranked per §6) ----
-  - {id: module-enabled-switch, status: open, regressed: false, aspect: B, cost: [defect, ambiguity],
+  - {id: module-enabled-switch, status: resolved, regressed: false, aspect: B, cost: [defect, ambiguity],
      members_diverging: [analytics, billing, notifications, backups, forms], population: modules(12),
      rule: "rule 1 (D3)", check: "none for the mechanism", closed_world: false, handoff: [tech],
-     first_seen: 2026-09-26, last_verified: 2026-10-08}
+     first_seen: 2026-09-26, last_verified: 2026-10-13}
   - {id: markdownx-shared-mount, status: resolved, aspect: A, cost: [collision, defect],
      members_diverging: [blog, listings], population: url-mount-prefixes(14 includes / 10 modules),
      rule: "rule 41 (two routes, one path)", check: "harness rule 7; collect_url_wiring", closed_world: false, handoff: [tech],
@@ -137,27 +255,27 @@ items:
   - {id: unauthenticated-status-code, status: resolved, aspect: H, cost: [ambiguity, tax],
      members_diverging: [crm, forms], population: session-authenticated-apis(6), rule: none,
      check: none, closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: module-error-http-mapping, status: open, aspect: D, cost: [ambiguity, tax],
+  - {id: module-error-http-mapping, status: resolved, aspect: D, cost: [ambiguity, tax],
      members_diverging: [billing, blog, listings, notifications], population: modules(12),
      rule: "rules 9, 10 (silent on the mapping)", check: none, closed_world: false, handoff: [tech],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
+     first_seen: 2026-10-08, last_verified: 2026-10-13}
   - {id: startup-checks-and-errors, status: open, regressed: false, aspect: B, cost: [ambiguity, tax],
      members_diverging: [analytics, backups, blog, forms, notifications], population: modules(12),
      rule: "rules 6, 10", check: "harness rule 10 (any *Error base passes)", closed_world: false,
-     handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-08}
-  - {id: upward-name-references, status: open, regressed: true, aspect: C, cost: [ambiguity, tax],
+     handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-13}
+  - {id: upward-name-references, status: resolved, regressed: true, aspect: C, cost: [ambiguity, tax],
      members_diverging: [orgs, notifications], population: cross-module-vocabularies(4),
      rule: "rule 34; rule 8 (email templates)", check: "harness rule 34 (labels/packages/models only)",
-     closed_world: false, handoff: [arch], first_seen: 2026-09-26, last_verified: 2026-10-08}
-  - {id: core-cli-module-knowledge, status: open, aspect: C, cost: [ambiguity, tax],
+     closed_world: false, handoff: [arch], first_seen: 2026-09-26, last_verified: 2026-10-13}
+  - {id: core-cli-module-knowledge, status: accepted, aspect: C, cost: [ambiguity, tax],
      members_diverging: [analytics, backups, billing, notifications, social, storage],
      population: modules(12), rule: "Module Wiring Authority; rule 12 ❌ (names contracts.module_options)",
-     check: none, closed_world: false, handoff: [arch], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: manifest-declared-surface, status: open, aspect: B, cost: [ambiguity, tax],
+     check: none, closed_world: false, handoff: [arch], first_seen: 2026-10-08, last_verified: 2026-10-13}
+  - {id: manifest-declared-surface, status: resolved, aspect: B, cost: [ambiguity, tax],
      members_diverging: [auth, orgs, notifications], population: manifests(12),
      rule: "Module Wiring Authority (no parsed-but-unread key; apps never a literal)",
      check: "app-declaration gate (apps projection); harness rule 7 (url_includes literals only)",
-     closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
+     closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-13}
   - {id: http-api-shape, status: resolved, regressed: false, aspect: H, cost: [ambiguity, tax],
      members_diverging: [billing, social], population: json-api-modules(7), rule: "rule 9",
      check: "harness rule 9 (module source only)", closed_world: false, handoff: [tech],
@@ -166,55 +284,58 @@ items:
      members_diverging: [billing, blog, forms, listings], population: json-api-modules(6),
      rule: "rule 32 (names and rates only)", check: none, closed_world: false, handoff: [],
      first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: optional-sender-guard, status: open, regressed: false, aspect: C, cost: [ambiguity, tax],
+  - {id: optional-sender-guard, status: resolved, regressed: false, aspect: C, cost: [ambiguity, tax],
      members_diverging: [forms, orgs], population: cross-module-service-calls(4), rule: "rules 4, 39, 43",
-     check: "harness rule 43", closed_world: false, handoff: [], first_seen: 2026-10-03, last_verified: 2026-10-08}
-  - {id: module-dependency-direction, status: open, regressed: false, aspect: C, cost: [ambiguity, tax],
+     check: "harness rule 43", closed_world: false, handoff: [], first_seen: 2026-10-03, last_verified: 2026-10-13}
+  - {id: module-dependency-direction, status: resolved, regressed: false, aspect: C, cost: [ambiguity, tax],
      members_diverging: [blog, crm, social], population: modules-importing-orgs(8), rule: "rule 4",
      check: "harness rule 4 (file-level surface only)", closed_world: false, handoff: [],
-     first_seen: 2026-09-26, last_verified: 2026-10-08}
+     first_seen: 2026-09-26, last_verified: 2026-10-13}
   - {id: capability-collection, status: open, aspect: D, cost: [ambiguity, tax],
      members_diverging: [orgs], population: appconfig-capabilities(13), rule: "rule 4 (one core helper)",
-     check: none, closed_world: false, handoff: [arch], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: command-flag-conventions, status: open, aspect: J, cost: [ambiguity, tax],
+     check: none, closed_world: false, handoff: [arch], first_seen: 2026-10-08, last_verified: 2026-10-13}
+  - {id: command-flag-conventions, status: open, regressed: true, aspect: J, cost: [ambiguity, tax],
      members_diverging: [backups, forms, orgs], population: commands(15), rule: "rules 1, 17 (silent)",
-     check: none, closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
+     check: none, closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-13}
   - {id: dependency-spec-sources, status: open, aspect: N, cost: [ambiguity, tax],
      members_diverging: [backups, storage, orgs], population: modules(12),
      rule: "Module Manifest Architecture (names only)", check: none, closed_world: false, handoff: [],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
+     first_seen: 2026-10-08, last_verified: 2026-10-13}
   - {id: secret-env-var-names, status: resolved, regressed: false, aspect: A, cost: [ambiguity],
      members_diverging: [], population: vendor-credential-options(5 modules), rule: "rule 1",
      check: "harness rule 1 (module/option-bound vendor defaults and reasoned QuickScale exceptions)",
      closed_world: true, handoff: [], first_seen: 2026-09-26,
      last_verified: 2026-10-11}
-  - {id: session-and-host-names, status: open, aspect: A, cost: [ambiguity],
+  - {id: session-and-host-names, status: resolved, aspect: A, cost: [ambiguity],
      members_diverging: [orgs, auth], population: shared-namespaces, rule: "rule 33", check: none,
-     closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: model-basics, status: open, regressed: false, aspect: G, cost: [tax, ambiguity],
+     closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-13}
+  - {id: model-basics, status: resolved, regressed: false, aspect: G, cost: [tax, ambiguity],
      members_diverging: [blog, listings, auth, backups, notifications, orgs, social], population: models(10 modules),
      rule: "rule 14", check: "harness rule 14 (gettext, str, ordering, related_name)", closed_world: false,
-     handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-08}
-  - {id: template-folder-depth, status: open, aspect: L, cost: [tax],
+     handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-13}
+  - {id: template-folder-depth, status: resolved, aspect: L, cost: [tax],
      members_diverging: [auth, billing, blog, crm, forms, listings], population: modules-with-page-templates(8),
      rule: "rule 8 (base only)", check: none, closed_world: false, handoff: [], first_seen: 2026-10-08,
-     last_verified: 2026-10-08}
-  - {id: test-file-names, status: open, regressed: false, aspect: M, cost: [tax],
+     last_verified: 2026-10-13}
+  - {id: test-file-names, status: resolved, regressed: false, aspect: M, cost: [tax],
      members_diverging: [auth, backups, billing, forms, listings, orgs], population: modules(12),
      rule: "rule 29 (second clause)", check: "harness rule 29 (test_*.py only)", closed_world: false,
-     handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-08}
-  - {id: ticket-ids-in-shipped-source, status: open, aspect: O, cost: [tax],
+     handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-13}
+  - {id: ticket-ids-in-shipped-source, status: resolved, aspect: O, cost: [tax],
      members_diverging: [auth, backups, billing, blog, crm, forms, listings, orgs, social, storage],
      population: modules(12), rule: "rule 29 (tests only)", check: none, closed_world: false,
-     handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-08}
-  - {id: constraint-purpose-tokens, status: open, aspect: A, cost: [tax],
+     handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-13}
+  - {id: constraint-purpose-tokens, status: resolved, aspect: A, cost: [tax],
      members_diverging: [crm, forms, orgs, notifications], population: constraint-names(31),
      rule: "rule 25 (prefix only)", check: "harness rule 25", closed_world: false, handoff: [],
-     first_seen: 2026-10-08, last_verified: 2026-10-08}
+     first_seen: 2026-10-08, last_verified: 2026-10-13}
   - {id: mount-path-copies, status: resolved, regressed: false, aspect: P, cost: [ambiguity, tax],
      members_diverging: [orgs, billing, forms, social], population: theme-module-api-clients(5),
      rule: "rule 41 (no literal module path in theme templates)", check: "harness rules 7 (theme TypeScript), 31, 37 (seam producer)",
      closed_world: false, handoff: [], first_seen: 2026-10-03, last_verified: 2026-10-10}
+  - {id: contract-vintage-identity, status: open, aspect: B, cost: [ambiguity],
+     members_diverging: [backups, social], population: contract-vintage-manifests(4), rule: none,
+     check: none, closed_world: false, handoff: [], first_seen: 2026-10-13, last_verified: 2026-10-13}
   # ---- resolved: re-verified by the harness run at 2fd8637f (43 rules pass); see §12 ----
   # write-effects-on-commit, settings-snapshot-readers, org-role-check-copies, mypy-overrides-unread,
   # split-facade-conventions, theme-module-presence, module-lists-outside-members, shared-setting-writes,
@@ -232,38 +353,39 @@ items:
 
 ## 3. Summary table
 
-**Counts (open):** defect 2 · collision 1 (also counted under defect) · ambiguity 17 · tax 5 ·
+**Counts (open, 2026-10-13):** defect 0 · collision 0 · ambiguity 4 · tax 3 (items carry more than one class) · **total 5**, plus 1 accepted. **Counts (open, 2026-10-08):** defect 2 · collision 1 (also counted under defect) · ambiguity 17 · tax 5 ·
 **total 25**. 12 of the 25 are prior IDs reopened, and one of those (`upward-name-references`)
 is flagged `regressed`. The other 13 are new. One new item, `markdownx-shared-mount`, recreates a
 state the frozen inventory had warned against (§12). Resolved prior IDs still holding: 43 of 55.
 
 | # | ID | Aspect | Cost | Diverging / population | Status |
 |---|---|---|---|---|---|
-| 1 | `module-enabled-switch` | B | defect, ambiguity | 5 / 12 modules (+ core `env_sync`) | open (reopened) |
+| 1 | `module-enabled-switch` | B | defect, ambiguity | 5 / 12 modules (+ core `env_sync`) | resolved (2026-10-13) |
 | 2 | `markdownx-shared-mount` | A | collision, defect | 2 / 10 mounting modules | resolved (SA261) |
 | 3 | `tenant-authorization` | E | ambiguity | 1 / 9 | resolved (SA262) |
 | 4 | `option-schema-and-validation` | B | ambiguity, tax | 0 / 12 adapters | resolved (SA263) |
-| 5 | `module-error-http-mapping` | D | ambiguity, tax | 4 / 12 (5 variants) | open |
+| 5 | `module-error-http-mapping` | D | ambiguity, tax | 4 / 12 (5 variants) | resolved (2026-10-13) |
 | 6 | `unauthenticated-status-code` | H | ambiguity, tax | 2 / 6 (4 duplicated classes on the other side) | resolved (SA262) |
-| 7 | `startup-checks-and-errors` | B | ambiguity, tax | 5 / 12 | open (reopened) |
-| 8 | `upward-name-references` | C | ambiguity, tax | 2 owners / 4 vocabularies | open (reopened, regressed) |
-| 9 | `core-cli-module-knowledge` | C | ambiguity, tax | 6 / 12 named in core or CLI | open |
-| 10 | `manifest-declared-surface` | B | ambiguity, tax | 3 / 12 (+4 key-presence) | open |
+| 7 | `startup-checks-and-errors` | B | ambiguity, tax | 5 / 12 | open (2026-10-13) |
+| 8 | `upward-name-references` | C | ambiguity, tax | 2 owners / 4 vocabularies | resolved (2026-10-13) |
+| 9 | `core-cli-module-knowledge` | C | ambiguity, tax | 6 / 12 named in core or CLI | accepted (2026-10-13) |
+| 10 | `manifest-declared-surface` | B | ambiguity, tax | 3 / 12 (+4 key-presence) | resolved (2026-10-13) |
 | 11 | `http-api-shape` | H | ambiguity, tax | 2 / 7 | resolved (SA262) |
 | 12 | `throttle-attachment` | H | ambiguity, tax | 4 / 6 | resolved (SA262) |
-| 13 | `optional-sender-guard` | C | ambiguity, tax | 2 / 4 call edges | open (reopened) |
-| 14 | `module-dependency-direction` | C | ambiguity, tax | 3 / 8 | open (reopened) |
-| 15 | `capability-collection` | D | ambiguity, tax | 1 owner / 13 names | open |
-| 16 | `command-flag-conventions` | J | ambiguity, tax | 3 / 3 command-shipping modules | open |
-| 17 | `dependency-spec-sources` | N | ambiguity, tax | 3 / 12 | open |
+| 13 | `optional-sender-guard` | C | ambiguity, tax | 2 / 4 call edges | resolved (2026-10-13) |
+| 14 | `module-dependency-direction` | C | ambiguity, tax | 3 / 8 | resolved (2026-10-13) |
+| 15 | `capability-collection` | D | ambiguity, tax | 1 owner / 13 names | open (2026-10-13) |
+| 16 | `command-flag-conventions` | J | ambiguity, tax | 3 / 3 command-shipping modules | open (2026-10-13) |
+| 17 | `dependency-spec-sources` | N | ambiguity, tax | 3 / 12 | open (2026-10-13) |
 | 18 | `mount-path-copies` | P | ambiguity, tax | 4 / 5 theme API clients | resolved (SA261) |
 | 19 | `secret-env-var-names` | A | ambiguity | 0 / 5 | resolved (SA263) |
-| 20 | `session-and-host-names` | A | ambiguity | 2 | open |
-| 21 | `model-basics` | G | tax, ambiguity | 7 / 10 | open (reopened) |
-| 22 | `template-folder-depth` | L | tax | 6 / 8 | open |
-| 23 | `test-file-names` | M | tax | 6 / 12 | open (reopened) |
-| 24 | `ticket-ids-in-shipped-source` | O | tax | 10 / 12 | open |
-| 25 | `constraint-purpose-tokens` | A | tax | 4 / 9 | open |
+| 20 | `session-and-host-names` | A | ambiguity | 2 | resolved (2026-10-13) |
+| 21 | `model-basics` | G | tax, ambiguity | 7 / 10 | resolved (2026-10-13) |
+| 22 | `template-folder-depth` | L | tax | 6 / 8 | resolved (2026-10-13) |
+| 23 | `test-file-names` | M | tax | 6 / 12 | resolved (2026-10-13) |
+| 24 | `ticket-ids-in-shipped-source` | O | tax | 10 / 12 | resolved (2026-10-13) |
+| 25 | `constraint-purpose-tokens` | A | tax | 4 / 9 | resolved (2026-10-13) |
+| 26 | `contract-vintage-identity` | B | ambiguity | 2 / 4 vintage manifests | open (new 2026-10-13) |
 
 ---
 
@@ -2050,3 +2172,24 @@ distinct closure instantiations have paired controls and repeat-stability checks
 Dynamic reflection and external factory implementations remain outside this
 bounded static analysis. Dated audit tables and earlier phase records are retained;
 independent review and root-owned release validation still grade final acceptance.
+
+- 2026-10-13 — **Re-run** at `0ddc7e30` (prompt v2, 2 passes, 5 parallel verification units + delta sweep; harness: 43 covered rules pass).
+- 2026-10-13 — `module-enabled-switch`: resolved (SA260 2ce26e74/a206061a — verified; parity test closed-world over 12 modules, URLs/triggers unchecked).
+- 2026-10-13 — `module-error-http-mapping`: resolved (SA264 ac157cb1 — verified; harness rule 10).
+- 2026-10-13 — `startup-checks-and-errors`: still-open (narrowed to hand-listed setting names in analytics, billing, notifications checks.py).
+- 2026-10-13 — `manifest-declared-surface`: resolved (SA260 — verified; loader refuses unknown top-level keys). The `contract_vintage.id` residual is split out as `contract-vintage-identity`.
+- 2026-10-13 — `upward-name-references`: resolved (SA265 d443aba0/a6b58799 — verified; rule 34).
+- 2026-10-13 — `core-cli-module-knowledge`: accepted (rule 37 closed exception list, SA265(c) 7bcbbd5a; revisit when the list grows).
+- 2026-10-13 — `optional-sender-guard`: resolved (rule 43 — verified).
+- 2026-10-13 — `module-dependency-direction`: resolved (rule 4 — verified in source; 38 cross-module private imports in tests are out of scope).
+- 2026-10-13 — `capability-collection`: still-open (narrowed to orgs purge command getattr walk, `quickscale_orgs_purge_organization.py:533`).
+- 2026-10-13 — `command-flag-conventions`: regressed (9592bab5 SA251(b) added `--organization` beside orgs' `--organization-id`; every other rule-17 clause holds).
+- 2026-10-13 — `dependency-spec-sources`: still-open (narrowed to `--cov=src/...` in auth and blog).
+- 2026-10-13 — `session-and-host-names`: resolved (rule 33 — verified).
+- 2026-10-13 — `model-basics`: resolved (SA266 fed5307e — verified; rule 14).
+- 2026-10-13 — `template-folder-depth`: resolved (SA266 — verified; auth's top-level `account/` files are allauth shims, consistent by design).
+- 2026-10-13 — `test-file-names`: resolved (rule 29 — verified).
+- 2026-10-13 — `ticket-ids-in-shipped-source`: resolved (SA266 — verified, 0 ids; READMEs/templates unscanned).
+- 2026-10-13 — `constraint-purpose-tokens`: resolved (SA266 — verified; amended rule 25).
+- 2026-10-13 — `contract-vintage-identity`: **new**, open.
+- 2026-10-13 — Prior resolved IDs (`markdownx-shared-mount`, `tenant-authorization`, `option-schema-and-validation`, `unauthenticated-status-code`, `http-api-shape`, `throttle-attachment`, `mount-path-copies`, `secret-env-var-names`, and the 43 listed in §2): still resolved (harness pass at HEAD; no regression found by the delta sweep).
