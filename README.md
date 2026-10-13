@@ -58,7 +58,9 @@ REST_FRAMEWORK = compose_rest_framework(
 ## Public surface
 
 Models: `Post`, `Category`, `Tag`, `AuthorProfile`, and `BlogMediaAsset`, the stored
-image-upload asset the automation flow references. The models are registered in the Django
+image-upload asset the automation flow references. `BlogMediaAsset.file` uses
+`BlogMediaAssetImageField`, the public field class the module's `0001_initial` migration
+names, so its import path is a stability promise. The models are registered in the Django
 admin with Markdown editing support.
 
 Module-to-module use goes through `services.py` (Module Conventions rule 4): the publish and
