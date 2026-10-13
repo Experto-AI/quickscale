@@ -740,6 +740,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     The E2E workflow triggers on the same tag forms as publication, and the CI and BYPASSRLS
     workflows' retry steps install `poetry==2.4.1` from the package index instead of piping an
     installer script into Python.
+  - **Blog's media-upload field is a documented public class.** `BlogMediaAsset.file` uses
+    `BlogMediaAssetImageField`, the class the module's `0001_initial` migration and README
+    name; migration history references only stability-promised symbols.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -139,8 +139,13 @@ class _BlogMediaAssetFile(ImageFieldFile):
         super().save(name, content, save=save)
 
 
-class _BlogMediaAssetImageField(models.ImageField):
-    """``ImageField`` for ``BlogMediaAsset.file`` with the recording FieldFile."""
+class BlogMediaAssetImageField(models.ImageField):
+    """Public ``ImageField`` for ``BlogMediaAsset.file`` with the recording FieldFile.
+
+    The module's ``0001_initial`` names this class, so its import path and
+    constructor surface are a stability promise; the recording FieldFile
+    supplies the upload's validated Pillow format to the filename builder.
+    """
 
     attr_class = _BlogMediaAssetFile
 
@@ -283,7 +288,7 @@ class BlogMediaAsset(TenantModel):
         FEATURED = "featured", "Featured"
         GENERAL = "general", "General"
 
-    file = _BlogMediaAssetImageField(upload_to=blog_media_upload_to)
+    file = BlogMediaAssetImageField(upload_to=blog_media_upload_to)
     alt = models.CharField(
         max_length=200,
         blank=True,
