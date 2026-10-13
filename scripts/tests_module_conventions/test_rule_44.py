@@ -215,6 +215,9 @@ def test_role_check_controls() -> None:
     )
     assert _violations(checker.rule_44_role_checks, unrelated_inline) == []
 
+
+def test_role_check_shadowing_controls() -> None:
+    module = _golden_module()
     sibling_scopes = _with_files(
         module,
         services=(
@@ -365,6 +368,9 @@ def test_role_check_controls() -> None:
         for violation in _violations(checker.rule_44_role_checks, nested_global)
     )
 
+
+def test_role_check_control_flow_controls() -> None:
+    module = _golden_module()
     match_after = _with_files(
         module,
         services=(

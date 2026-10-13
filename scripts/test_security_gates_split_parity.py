@@ -319,27 +319,31 @@ def test_facade_preserves_the_pre_split_imported_bindings() -> None:
     from urllib.request import Request as Request_class
     from urllib.request import urlopen as urlopen_function
 
-    assert gates.argparse is argparse
-    assert gates.atexit is atexit
-    assert gates.hashlib is hashlib
-    assert gates.json is json
-    assert gates.os is os
-    assert gates.platform is platform
-    assert gates.re is re
-    assert gates.shutil is shutil
-    assert gates.signal is signal
-    assert gates.stat is stat
-    assert gates.subprocess is subprocess
-    assert gates.sys is sys
-    assert gates.tarfile is tarfile
-    assert gates.tempfile is tempfile
-    assert gates.dataclass is dataclasses_dataclass
-    assert gates.date is datetime_date
-    assert gates.Path is Path_class
-    assert gates.Any is Any_type
-    assert gates.urlparse is urlparse
-    assert gates.Request is Request_class
-    assert gates.urlopen is urlopen_function
+    expected = {
+        "argparse": argparse,
+        "atexit": atexit,
+        "hashlib": hashlib,
+        "json": json,
+        "os": os,
+        "platform": platform,
+        "re": re,
+        "shutil": shutil,
+        "signal": signal,
+        "stat": stat,
+        "subprocess": subprocess,
+        "sys": sys,
+        "tarfile": tarfile,
+        "tempfile": tempfile,
+        "dataclass": dataclasses_dataclass,
+        "date": datetime_date,
+        "Path": Path_class,
+        "Any": Any_type,
+        "urlparse": urlparse,
+        "Request": Request_class,
+        "urlopen": urlopen_function,
+    }
+    mismatched = [name for name, value in expected.items() if getattr(gates, name) is not value]
+    assert mismatched == []
 
 
 def test_facade_attributes_are_the_defining_sibling_objects() -> None:

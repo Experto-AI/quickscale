@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -556,6 +557,59 @@ def test_describe_uses_sibling_catalog_without_importable_package(
     assert "teams" not in modules
 
 
+def _assert_backups_profile_contract(data: dict[str, Any]) -> None:
+    assert [entry["key"] for entry in data["databases"]] == ["backups"]
+    assert set(data["environment"]) == {
+        "QS_BACKUPS_DB_" + suffix for suffix in ("NAME", "USER", "HOST", "PORT")
+    }
+
+
+def _assert_client_only_profile_contract(data: dict[str, Any]) -> None:
+    assert data["databases"] == [] and data["environment"] == {}
+
+
+def _assert_module_profile_contract(profile: str, data: dict[str, Any]) -> None:
+    modules = data["discovery"]["modules"]
+    expected = ["smoke", *modules]
+    if profile == "isolation":
+        expected = [key for key in expected if key != "backups"]
+    assert [entry["key"] for entry in data["databases"]] == expected
+    if profile == "isolation":
+        mapped = sorted(
+            {
+                key.removeprefix("QS_").split("_DB_", 1)[0].lower()
+                for key in data["environment"]
+                if key.startswith("QS_")
+            }
+        )
+        # The mapping covers exactly the suites the isolation gate runs:
+        # orgs' conformance gate plus every module that ships an RLS
+        # boundary suite (rule 37 discovery, so social is enrolled).
+        rls_suite_modules = sorted(
+            path.parent.parent.name
+            for path in (ROOT / "quickscale_modules").glob("*/tests/test_rls_boundary.py")
+        )
+        assert mapped == sorted({"orgs", *rls_suite_modules})
+        assert "social" in mapped
+        assert "backups" not in mapped
+    else:
+        mapped = [entry["module"] for entry in data["databases"] if entry["module"]]
+    assert set(data["environment"]) == {
+        f"QS_{module.upper()}_DB_{suffix}"
+        for module in mapped
+        for suffix in ("NAME", "USER", "HOST", "PORT")
+    } | {"QUICKSCALE_ALLOW_BYPASSRLS"}
+
+
+def _assert_profile_role_contract(profile: str, data: dict[str, Any]) -> None:
+    if profile == "bypassrls":
+        assert data["role"]["name"] == "quickscale_bypassrls_test_role"
+        assert data["environment"]["QUICKSCALE_ALLOW_BYPASSRLS"] == "1"
+    elif profile in {"restricted", "isolation"}:
+        assert data["role"]["name"] == "quickscale_test_role"
+        assert data["environment"]["QUICKSCALE_ALLOW_BYPASSRLS"] == "0"
+
+
 @pytest.mark.parametrize(
     "profile", ["backups", "restricted", "isolation", "bypassrls", "client-only"]
 )
@@ -571,49 +625,12 @@ def test_all_profiles_have_exact_database_and_environment_contract(profile: str)
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
     if profile == "backups":
-        assert [entry["key"] for entry in data["databases"]] == ["backups"]
-        assert set(data["environment"]) == {
-            "QS_BACKUPS_DB_" + suffix for suffix in ("NAME", "USER", "HOST", "PORT")
-        }
+        _assert_backups_profile_contract(data)
     elif profile == "client-only":
-        assert data["databases"] == [] and data["environment"] == {}
+        _assert_client_only_profile_contract(data)
     else:
-        modules = data["discovery"]["modules"]
-        expected = ["smoke", *modules]
-        if profile == "isolation":
-            expected = [key for key in expected if key != "backups"]
-        assert [entry["key"] for entry in data["databases"]] == expected
-        if profile == "isolation":
-            mapped = sorted(
-                {
-                    key.removeprefix("QS_").split("_DB_", 1)[0].lower()
-                    for key in data["environment"]
-                    if key.startswith("QS_")
-                }
-            )
-            # The mapping covers exactly the suites the isolation gate runs:
-            # orgs' conformance gate plus every module that ships an RLS
-            # boundary suite (rule 37 discovery, so social is enrolled).
-            rls_suite_modules = sorted(
-                path.parent.parent.name
-                for path in (ROOT / "quickscale_modules").glob("*/tests/test_rls_boundary.py")
-            )
-            assert mapped == sorted({"orgs", *rls_suite_modules})
-            assert "social" in mapped
-            assert "backups" not in mapped
-        else:
-            mapped = [entry["module"] for entry in data["databases"] if entry["module"]]
-        assert set(data["environment"]) == {
-            f"QS_{module.upper()}_DB_{suffix}"
-            for module in mapped
-            for suffix in ("NAME", "USER", "HOST", "PORT")
-        } | {"QUICKSCALE_ALLOW_BYPASSRLS"}
-    if profile == "bypassrls":
-        assert data["role"]["name"] == "quickscale_bypassrls_test_role"
-        assert data["environment"]["QUICKSCALE_ALLOW_BYPASSRLS"] == "1"
-    elif profile in {"restricted", "isolation"}:
-        assert data["role"]["name"] == "quickscale_test_role"
-        assert data["environment"]["QUICKSCALE_ALLOW_BYPASSRLS"] == "0"
+        _assert_module_profile_contract(profile, data)
+    _assert_profile_role_contract(profile, data)
 
 
 def test_profile_descriptions_are_complete_source_bindings() -> None:

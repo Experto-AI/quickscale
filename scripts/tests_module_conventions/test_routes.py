@@ -850,6 +850,10 @@ def test_authorization_controls() -> None:
         "IsAdminUser" in violation
         for violation in _violations(checker.rule_19_authorization, suffix_sibling)
     )
+
+
+def test_authorization_private_view_scan_controls() -> None:
+    module = _golden_module()
     unscanned_class = _with_files(
         module,
         **{
@@ -996,6 +1000,10 @@ def test_authorization_controls() -> None:
         views=('def index(request):\n    """redirect_to_login"""\n    return None\n'),
     )
     assert _violations(checker.rule_19_authorization, documented) == []
+
+
+def test_authorization_view_class_guard_controls() -> None:
+    module = _golden_module()
     unguarded_view = _with_files(
         module,
         views=(
@@ -1217,6 +1225,10 @@ def test_authorization_controls() -> None:
         "require_authenticated" in violation
         for violation in _violations(checker.rule_19_authorization, inherited_imported_helper)
     )
+
+
+def test_authorization_dynamic_permission_controls() -> None:
+    module = _golden_module()
     dynamic_allow_any = _with_files(
         module,
         views=(

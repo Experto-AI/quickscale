@@ -341,6 +341,11 @@ def test_typecheck_config_controls() -> None:
         "declares an extra section [mypy-quickscale_modules_demo/models.*]" in violation
         for violation in checker.rule_36_typecheck_config(separator_section)
     )
+
+
+def test_typecheck_config_option_controls() -> None:
+    module = _golden_module()
+    corpus = _corpus(module)
     aliased_relaxation = replace(
         corpus,
         mypy_ini="[mypy-quickscale_modules_demo.*]\nallow_untyped_calls = True\n",

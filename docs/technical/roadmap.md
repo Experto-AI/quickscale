@@ -33,13 +33,12 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA267 | Bring the gate scripts under the quality thresholds | 2 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (cutover) ∥ SA204 ──► SA153 ──► SA154 (inventory)
-Track 2: SA267
+Track 2: — (SA267 landed)
 Track 3: — (SA268 landed)
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
@@ -65,7 +64,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 ∥ SA204 (a) | yes | no | yes | no | yes |
-| 2 | SA267 (gate registry) | yes | yes | yes | **yes** | no |
+| 2 | — (SA267 landed) | yes | yes | yes | **yes** | no |
 | 3 | — (SA268 landed) | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
@@ -246,46 +245,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [ ] **SA267 — Bring the gate scripts under the quality thresholds.**
-
-  **Context:** `check_quality.sh` scans only packages. Outside the conformance harness (SA268),
-  `scripts/` still has 23 non-test functions at CC >= 21, 7 non-test files >= 800 lines, and 3
-  vulture 100%-confidence findings (arch audit `rules-held-by-parity-not-derivation`).
-
-  **Acceptance:** non-harness `scripts/` has no finding at radon CC >= 21, files >= 800 lines, or
-  vulture 100% confidence. Prefer deleting dead or redundant governance code over splitting it.
-  Every gate's behavior is unchanged and its tests pass; `make quality` and `check_quality.sh`
-  discovery are unchanged.
-
-  **Slices** (in order, each with parity controls pinning the pre-split surface and findings):
-  - [x] (a) Gate registry: `sync_ci_gate_jobs.py` and `check_gate_parity.py`. The executed prefix
-    of `check_ci_locally.sh` stays byte-stable. Landed: both files are facades over private
-    `_`-prefixed siblings (max non-test CC 20, largest file 702 lines, vulture 100% clean);
-    parity controls pin the pre-split surface, signatures, homes, and exact findings with no
-    behavior, CLI, or generated-artifact change.
-  - [x] (b) `publish_module.py`. The split is implemented: `publish_module.py` is a 406-line
-    facade re-exporting the pre-split surface; the implementation lives in six private
-    `_publish_module_*` siblings (largest 463 lines, max non-test CC 11), removing the
-    1,651-line file and all four CC failures (34, 33, 29, and 24); parity controls pin the
-    pre-split surface, signatures, homes, and exact findings, and the coupled suites pass.
-  - [x] (c) `check_security_gates.py`, `check_workflow_security.py`, `check_csrf_exempt_gate.py`.
-    Landed: `check_security_gates.py` is a 230-line facade over five private
-    `_security_gates_*` siblings (largest 469 lines); `check_workflow_security.py` and
-    `check_csrf_exempt_gate.py` keep their pre-split surface with `main` and
-    `_literal_truthiness` decomposed in place. No non-test function in the three files sits
-    at CC >= 21 and no file reaches 800 lines; parity controls pin the pre-split surfaces,
-    signatures, homes, and exact findings, and the runnable gates' pre/post output is
-    byte-identical.
-  - [x] (d) `check_project_contract_vintage.py`, `check_module_core_compatibility.py`,
-    `check_module_core_imports.py`, `check_sa117_scope.py`, `check_coverage_policy.py`,
-    `check_beta_migration_smoke.py`, and the vulture findings. Landed: the four oversized
-    files are facades over private `_`-prefixed siblings (largest file 763 lines, max
-    non-test CC 20); the two small files' `main` and `check_policy` are decomposed in
-    place; all eight vulture 100% findings are gone; parity controls pin each pre-split
-    surface, signatures, homes, and exact findings; every gate's tests pass.
-  - [ ] (e) Test-function CC debt across `scripts/`, after SA268 lands.
-
-  **Surfaces:** non-harness `scripts/` and their tests, and the arch audit.
+- [x] **SA267 — Bring the gate scripts under the quality thresholds.**
 
 - [x] **SA268 — Bring the conformance harness under the quality thresholds.**
 
