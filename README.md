@@ -781,7 +781,15 @@ mutation mutex: a session-bearing row is retrieved by its session id, and a
 session-less row is looked up by its stored reservation reference. A
 provider-confirmed expired session and a session Stripe does not hold are both
 closed, and a live session is adopted so the existing refusal guard reports
-provider truth. The command reports every organization it cannot clear.
+provider truth. Reconciliation must not add provider state, so the absent
+verdict waits out Stripe's Search indexing lag: because Search is eventually
+consistent (Stripe documents data as searchable in less than a minute, and up
+to an hour behind during outages), a customer-search miss is trusted as
+absence only once the organization's latest customer-resolution attempt
+completed and is older than that lag; while the window is open, and while an
+attempt has no recorded outcome, the reservation stays open. A reference that
+resolves to more than one customer fails closed instead of binding the first.
+The command reports every organization it cannot clear.
 
 ```bash
 python manage.py quickscale_billing_reconcile_checkouts

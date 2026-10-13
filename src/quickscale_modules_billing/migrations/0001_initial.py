@@ -282,6 +282,14 @@ class Migration(migrations.Migration):
                 ("checkout_expires_at", models.DateTimeField(blank=True, null=True)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 (
+                    "customer_lookup_attempted_at",
+                    models.DateTimeField(blank=True, null=True),
+                ),
+                (
+                    "customer_lookup_completed_at",
+                    models.DateTimeField(blank=True, null=True),
+                ),
+                (
                     "organization",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
@@ -363,6 +371,15 @@ class Migration(migrations.Migration):
                 ("checkout_expires_at", models.DateTimeField(blank=True, null=True)),
                 ("current_period_start", models.DateTimeField(blank=True, null=True)),
                 ("current_period_end", models.DateTimeField(blank=True, null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "customer_lookup_attempted_at",
+                    models.DateTimeField(blank=True, null=True),
+                ),
+                (
+                    "customer_lookup_completed_at",
+                    models.DateTimeField(blank=True, null=True),
+                ),
                 (
                     "organization",
                     models.ForeignKey(

@@ -53,7 +53,12 @@ class StripeClient:
         user_reference: str = "",
         organization_reference: str = "",
     ) -> list[dict[str, Any]]:
-        """Search Stripe customers by the authoritative local metadata reference."""
+        """Search Stripe customers by the authoritative local metadata reference.
+
+        The search asks for two matches so a caller can fail closed when one
+        reference resolves to more than one customer instead of silently
+        binding the first.
+        """
         _validate_customer_search_reference(
             field_name="user_reference",
             reference=user_reference,
@@ -69,7 +74,7 @@ class StripeClient:
             )
         else:
             query = f"metadata['{_USER_METADATA_KEY}']:'{user_reference}'"
-        search_result = self._stripe_module.Customer.search(query=query, limit=1)
+        search_result = self._stripe_module.Customer.search(query=query, limit=2)
         data = getattr(search_result, "data", None)
         if data is None and isinstance(search_result, Mapping):
             data = search_result.get("data", [])

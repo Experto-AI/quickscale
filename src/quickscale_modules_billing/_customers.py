@@ -7,10 +7,13 @@ rule 28), so existing import paths and test patch targets keep working.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from django.apps import apps
 from django.db import IntegrityError, transaction
+from django.utils import timezone
+from quickscale_modules_orgs.current_org import org_scope
 
 from quickscale_modules_billing._payload import (
     _build_customer_create_idempotency_key as _build_customer_create_idempotency_key,
@@ -23,6 +26,9 @@ from quickscale_modules_billing._payload import (
 )
 from quickscale_modules_billing._settings import (
     _ORG_REFERENCE_METADATA_KEY as _ORG_REFERENCE_METADATA_KEY,
+)
+from quickscale_modules_billing._settings import (
+    _STRIPE_SEARCH_INDEX_LAG as _STRIPE_SEARCH_INDEX_LAG,
 )
 from quickscale_modules_billing._settings import (
     _USER_METADATA_KEY as _USER_METADATA_KEY,
@@ -42,6 +48,7 @@ from quickscale_modules_billing.exceptions import (
 )
 from quickscale_modules_billing.models import (
     BillingCustomer,
+    PurchaseCheckout,
     Subscription,
 )
 import quickscale_modules_billing._stripe_client as _stripe_client
@@ -58,6 +65,50 @@ def _organization_customer_id(organization: Any) -> str:
         .first()
     )
     return str(customer_id or "").strip()
+
+
+def _distinct_customer_ids(remote_customers: list[dict[str, Any]]) -> list[str]:
+    """Return the distinct non-empty Stripe customer ids in a search result."""
+    return sorted(
+        {
+            str(customer.get("id") or "").strip()
+            for customer in remote_customers
+            if str(customer.get("id") or "").strip()
+        }
+    )
+
+
+def _stamp_organization_customer_attempt(
+    organization: Any,
+    *,
+    completed: bool,
+) -> None:
+    """Record a customer-resolution attempt on the organization's reservations.
+
+    Stripe's customer identity is organization-wide, so an attempt made by any
+    checkout or portal flow refreshes the Search indexing lag window of every
+    unresolved reservation the organization holds. The attempt is stamped in
+    flight and again on completion, so an interrupted attempt cannot age into
+    a trusted absence.
+    """
+    attempt_at = timezone.now()
+    values: dict[str, Any] = (
+        {"customer_lookup_completed_at": attempt_at}
+        if completed
+        else {
+            "customer_lookup_attempted_at": attempt_at,
+            "customer_lookup_completed_at": None,
+        }
+    )
+    with org_scope(organization):
+        Subscription.all_objects.filter(
+            organization=organization,
+            status=Subscription.Status.INCOMPLETE,
+        ).update(**values)
+        PurchaseCheckout.all_objects.filter(
+            organization=organization,
+            status=PurchaseCheckout.Status.PREPARING,
+        ).update(**values)
 
 
 @_translate_stripe_errors("Stripe customer resolution failed.")
@@ -82,46 +133,69 @@ def get_or_create_stripe_customer(
         settings_snapshot=snapshot
     )
     customer_metadata = _build_customer_metadata(user, organization=organization)
-    remote_customers = resolved_client.search_customers(
-        user_reference=str(customer_metadata.get(_USER_METADATA_KEY) or ""),
-        organization_reference=str(
-            customer_metadata.get(_ORG_REFERENCE_METADATA_KEY) or ""
-        ),
-    )
-    if remote_customers:
-        remote_customer_id = str(remote_customers[0].get("id") or "").strip()
-        if not remote_customer_id:
-            raise BillingWebhookError(
-                "Stripe customer search returned a customer without an id."
+    # Stripe Search is eventually consistent, so reconciliation must be able to
+    # tell how recently the organization may have created a customer. The
+    # attempt is stamped on every unresolved reservation of the organization
+    # before the provider call and again once its outcome is known, so a slow
+    # search or a lost response cannot outlast the reconciliation window.
+    _stamp_organization_customer_attempt(organization, completed=False)
+    try:
+        remote_customers = resolved_client.search_customers(
+            user_reference=str(customer_metadata.get(_USER_METADATA_KEY) or ""),
+            organization_reference=str(
+                customer_metadata.get(_ORG_REFERENCE_METADATA_KEY) or ""
+            ),
+        )
+        if len(_distinct_customer_ids(remote_customers)) > 1:
+            raise BillingError(
+                "Multiple Stripe customers match the billing reference; manual "
+                "billing reconciliation is required."
             )
-        _sync_organization_customer_id(organization, remote_customer_id)
-        return remote_customer_id, False
+        if remote_customers:
+            remote_customer_id = str(remote_customers[0].get("id") or "").strip()
+            if not remote_customer_id:
+                raise BillingWebhookError(
+                    "Stripe customer search returned a customer without an id."
+                )
+            _sync_organization_customer_id(organization, remote_customer_id)
+            return remote_customer_id, False
 
-    idempotency_reference = _organization_reference(organization)
-    created_customer = resolved_client.create_customer(
-        email="",
-        name="",
-        metadata=customer_metadata,
-        idempotency_key=_build_customer_create_idempotency_key(idempotency_reference),
-    )
-    created_customer_id = str(created_customer.get("id") or "").strip()
-    if not created_customer_id:
-        raise BillingWebhookError("Stripe customer creation did not return an id.")
-    _sync_organization_customer_id(organization, created_customer_id)
-    return created_customer_id, True
+        idempotency_reference = _organization_reference(organization)
+        created_customer = resolved_client.create_customer(
+            email="",
+            name="",
+            metadata=customer_metadata,
+            idempotency_key=_build_customer_create_idempotency_key(
+                idempotency_reference
+            ),
+        )
+        created_customer_id = str(created_customer.get("id") or "").strip()
+        if not created_customer_id:
+            raise BillingWebhookError("Stripe customer creation did not return an id.")
+        _sync_organization_customer_id(organization, created_customer_id)
+        return created_customer_id, True
+    finally:
+        _stamp_organization_customer_attempt(organization, completed=True)
 
 
 def _resolve_existing_customer_id_for_reconciliation(
     *,
     organization: Any,
     stripe_client: Any,
+    reservation_attempted_at: datetime | None,
+    reservation_completed_at: datetime | None,
+    reservation_created_at: datetime,
     reservation_customer_id: str = "",
 ) -> str:
     """Return the organization's Stripe customer id without creating one.
 
     Reconciliation must not add provider state, so an organization with no
-    recorded customer id is looked up by reference and a miss is reported as
-    an empty id: no customer means no provider checkout can exist.
+    recorded customer id is looked up by reference. Stripe's customer search
+    is eventually consistent, so a miss counts as absence only once the
+    reservation's latest recorded customer-resolution attempt is older than
+    the documented Search indexing lag, measured from when the search was
+    issued; before that, and while an attempt has no recorded outcome, the
+    reservation stays open instead of being resolved as absent.
     """
     for candidate in (
         reservation_customer_id,
@@ -130,22 +204,35 @@ def _resolve_existing_customer_id_for_reconciliation(
         normalized_candidate = candidate.strip()
         if normalized_candidate:
             return normalized_candidate
+    if reservation_attempted_at is not None and reservation_completed_at is None:
+        raise BillingError(
+            "A Stripe checkout reservation's customer resolution has no "
+            "recorded outcome; the reservation stays open until a resolution "
+            "completes. Retry the checkout or reconcile manually."
+        )
+    lag_anchor = (
+        reservation_completed_at or reservation_attempted_at or reservation_created_at
+    )
+    query_started_at = timezone.now()
     remote_customers = stripe_client.search_customers(
         organization_reference=_organization_reference(organization),
     )
-    customer_ids = sorted(
-        {
-            str(customer.get("id") or "").strip()
-            for customer in remote_customers
-            if str(customer.get("id") or "").strip()
-        }
-    )
+    customer_ids = _distinct_customer_ids(remote_customers)
     if len(customer_ids) > 1:
         raise BillingError(
             "Multiple Stripe customers match the organization for checkout "
             "reconciliation; manual billing reconciliation is required."
         )
-    return customer_ids[0] if customer_ids else ""
+    if customer_ids:
+        return customer_ids[0]
+    if query_started_at - lag_anchor < _STRIPE_SEARCH_INDEX_LAG:
+        raise BillingError(
+            "A Stripe checkout reservation's creation outcome is unknown and "
+            "Stripe's customer search returned no match inside the Search "
+            "indexing lag; the reservation stays open until the lag elapses. "
+            "Retry after the lag or reconcile manually."
+        )
+    return ""
 
 
 def _resolve_user_from_reference(user_reference: str) -> Any | None:
