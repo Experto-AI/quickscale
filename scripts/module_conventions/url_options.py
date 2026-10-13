@@ -5,8 +5,8 @@ An option that holds a URL or a host declares a ``url``-family normalization
 rule, so the kind choice is checkable and a relative-capable option's
 ``path_or_absolute_url`` contract stays distinct from ``url``'s
 scheme-prepending, trailing-slash-stripping behavior.  This module holds the
-clause so the rule's other themes stay in
-:mod:`scripts.module_conventions.rules_settings`.
+clause so the rule's other themes stay in the
+:mod:`scripts.module_conventions.rules_settings` family.
 """
 
 from __future__ import annotations

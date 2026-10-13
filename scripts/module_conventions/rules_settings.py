@@ -1,76 +1,192 @@
-"""Settings and manifest-option rules."""
+"""
+Settings rules: names, reads, manifest options, snapshots, and optional senders.
+
+The mechanics live in private sibling modules (``_settings_names``,
+``_settings_reads``, ``_settings_manifest``, ``_settings_snapshots``,
+``_settings_senders``); this module orchestrates rules 1, 3, 12, 42, and 43,
+and re-exports every moved name so existing import paths and the rule registry
+keep working.
+"""
 
 from __future__ import annotations
 
-import ast
-import re
+# The pre-split module also exposed its own imports as module attributes
+# (``ast``, ``re``, ``Mapping``, ``Any``, and core's helpers); the redundant
+# aliases keep every one importable from this facade.
+import ast as ast
+import re as re
 from collections.abc import Mapping
-from typing import Any
+from typing import Any as Any
 
+from scripts.module_conventions._settings_manifest import (
+    OPTION_TYPES,
+    OPTION_VALIDATION_KEYS,
+    _contains_key,
+    _declares_option_blocks,
+    _manifest_key_violations,
+    _option_schema_violations,
+)
+from scripts.module_conventions._settings_names import (
+    ENV_VAR_NAME,
+    SETTING_SUFFIX_TYPES,
+    _check_vendor_default,
+    _enabled_switch_violations,
+    _option_name_violations,
+    _settings_options,
+)
+from scripts.module_conventions._settings_reads import (
+    _declared_settings,
+    _manifest_declared_settings,
+    _module_level_targets,
+    _option_settings,
+    _read_violations,
+    _tests_settings_violations,
+)
+from scripts.module_conventions._settings_senders import (
+    _RULE_43_SETTINGS_ATTRIBUTE,
+    _attribute_binding_module,
+    _broad_except_violations,
+    _call_other_module_service,
+    _cross_attribute_violations,
+    _getattr_service_owner,
+    _guard_call_violations,
+    _guarded_module_name,
+    _import_module_service_bindings,
+    _other_module_service_imports,
+    _reference_module_name,
+)
+from scripts.module_conventions._settings_snapshots import (
+    _COERCION_BUILTINS,
+    _RULE_42_EXPORTED_SNAPSHOT,
+    _call_builds_settings_snapshot,
+    _class_defines_from_settings,
+    _intra_module_import_names,
+    _is_direct_setting_read,
+    _returns_settings_snapshot,
+    _settings_snapshot_names,
+    _snapshot_scan_violations,
+)
 from scripts.module_conventions.adapter_options import (
     rule_12_adapter_duplicate_logic,
 )
 from scripts.module_conventions.core import (
-    CREDENTIAL_REFERENCE_NAMES,
-    ENV_VAR_NAME_PATTERN,
-    MODULE_IMPORT_PREFIX,
-    MODULE_LAYERS,
+    CREDENTIAL_REFERENCE_NAMES as CREDENTIAL_REFERENCE_NAMES,
+)
+from scripts.module_conventions.core import (
+    ENV_VAR_NAME_PATTERN as ENV_VAR_NAME_PATTERN,
+)
+from scripts.module_conventions.core import (
+    MODULE_IMPORT_PREFIX as MODULE_IMPORT_PREFIX,
+)
+from scripts.module_conventions.core import (
+    MODULE_LAYERS as MODULE_LAYERS,
+)
+from scripts.module_conventions.core import (
     QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS,
-    SETTING_NAME_EXCEPTIONS,
-    SNAKE_CASE,
-    VENDOR_CREDENTIAL_DEFAULTS,
     Corpus,
-    Module,
-    _attribute_chain,
-    _body_nodes,
-    _bound_names,
-    _call_func_name,
     _credential_reference_options,
-    _declared_exports,
-    _is_settings_receiver,
-    _keyword,
-    _module_target,
     _parse,
     _required_modules,
-    _scope_nodes,
     _service_module_bindings,
-    _setting_name_module,
-    _settings_attribute_reads,
-    _settings_bindings,
     _string_assignments,
 )
+from scripts.module_conventions.core import (
+    SETTING_NAME_EXCEPTIONS as SETTING_NAME_EXCEPTIONS,
+)
+from scripts.module_conventions.core import (
+    SNAKE_CASE as SNAKE_CASE,
+)
+from scripts.module_conventions.core import (
+    VENDOR_CREDENTIAL_DEFAULTS as VENDOR_CREDENTIAL_DEFAULTS,
+)
+from scripts.module_conventions.core import (
+    Module as Module,
+)
+from scripts.module_conventions.core import (
+    _attribute_chain as _attribute_chain,
+)
+from scripts.module_conventions.core import (
+    _body_nodes as _body_nodes,
+)
+from scripts.module_conventions.core import (
+    _bound_names as _bound_names,
+)
+from scripts.module_conventions.core import (
+    _call_func_name as _call_func_name,
+)
+from scripts.module_conventions.core import (
+    _declared_exports as _declared_exports,
+)
+from scripts.module_conventions.core import (
+    _is_settings_receiver as _is_settings_receiver,
+)
+from scripts.module_conventions.core import (
+    _keyword as _keyword,
+)
+from scripts.module_conventions.core import (
+    _module_target as _module_target,
+)
+from scripts.module_conventions.core import (
+    _scope_nodes as _scope_nodes,
+)
+from scripts.module_conventions.core import (
+    _setting_name_module as _setting_name_module,
+)
+from scripts.module_conventions.core import (
+    _settings_attribute_reads as _settings_attribute_reads,
+)
+from scripts.module_conventions.core import (
+    _settings_bindings as _settings_bindings,
+)
 from scripts.module_conventions.url_options import (
-    check_url_normalization,
+    check_url_normalization as check_url_normalization,
 )
 
-OPTION_VALIDATION_KEYS = (
-    "choices",
-    "min",
-    "max",
-    "pattern",
-    "not_empty",
-    "required_when",
-    "any_of",
-    "subset_of",
-    "excludes",
-    "intersects",
+# Rule 23's listed exception: analytics' services are best-effort and never
+# raise to callers, so a caller may tolerate any failure while using them.
+# The module-name table stays in this rule-37-exempt facade and is passed into
+# the private sibling's scan.
+_RULE_43_BEST_EFFORT_MODULES = frozenset({"analytics"})
+
+#: The rule 40 harness re-exports every name the pre-split module published,
+#: private helpers included: existing import paths (``registry``,
+#: ``check_module_conventions``, the control cases) keep resolving through this
+#: facade.
+__all__ = (
+    "ENV_VAR_NAME",
+    "OPTION_TYPES",
+    "OPTION_VALIDATION_KEYS",
+    "SETTING_SUFFIX_TYPES",
+    "_COERCION_BUILTINS",
+    "_RULE_42_EXPORTED_SNAPSHOT",
+    "_RULE_43_BEST_EFFORT_MODULES",
+    "_RULE_43_SETTINGS_ATTRIBUTE",
+    "_attribute_binding_module",
+    "_call_builds_settings_snapshot",
+    "_call_other_module_service",
+    "_check_vendor_default",
+    "_class_defines_from_settings",
+    "_contains_key",
+    "_declared_settings",
+    "_getattr_service_owner",
+    "_guarded_module_name",
+    "_import_module_service_bindings",
+    "_intra_module_import_names",
+    "_is_direct_setting_read",
+    "_manifest_declared_settings",
+    "_module_level_targets",
+    "_option_settings",
+    "_other_module_service_imports",
+    "_reference_module_name",
+    "_returns_settings_snapshot",
+    "_settings_snapshot_names",
+    "rule_12_manifest_and_adapter_options",
+    "rule_12_manifest_options",
+    "rule_1_settings_names",
+    "rule_3_settings_reads",
+    "rule_42_settings_snapshots",
+    "rule_43_optional_senders",
 )
-
-OPTION_TYPES = ("string", "integer", "boolean", "list", "mapping")
-
-# Rule 1's fixed suffix types; every standard suffix carries the type in this
-# table.  A descriptive boolean (analytics' exclude_debug) is not a suffix.
-SETTING_SUFFIX_TYPES: dict[str, str] = {
-    "enabled": "boolean",
-    "api_enabled": "boolean",
-    "per_page": "integer",
-    "rate_limit": "string",
-    "retention_days": "integer",
-    "ttl_seconds": "integer",
-    "env_var": "string",
-}
-
-ENV_VAR_NAME = ENV_VAR_NAME_PATTERN
 
 
 # ---------------------------------------------------------------------------
@@ -96,202 +212,20 @@ def rule_1_settings_names(corpus: Corpus) -> list[str]:
     """
     violations: list[str] = []
     for module in corpus.modules:
-        config = module.manifest.get("config")
-        options: dict[str, Any] = {}
-        if isinstance(config, Mapping):
-            for kind in ("mutable", "immutable"):
-                block = config.get(kind)
-                if isinstance(block, Mapping):
-                    options.update(block)
+        options = _settings_options(module)
         prefix = f"QUICKSCALE_{module.name.upper()}_"
         approved = QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS.get(module.name, {})
         credential_options = _credential_reference_options(module)
-        enabled = options.get("enabled")
-        if not isinstance(enabled, Mapping):
-            violations.append(f"rule 1: {module.name}: declares no enabled option")
-        else:
-            if enabled.get("type") != "boolean":
-                violations.append(
-                    f"rule 1: {module.name}: enabled type is {enabled.get('type')!r}, "
-                    "expected boolean"
-                )
-            if enabled.get("django_setting") != f"{prefix}ENABLED":
-                violations.append(
-                    f"rule 1: {module.name}: enabled setting is "
-                    f"{enabled.get('django_setting')!r}, expected {prefix}ENABLED"
-                )
+        violations.extend(_enabled_switch_violations(module.name, prefix, options))
         for key, option in options.items():
             if not isinstance(key, str) or not isinstance(option, Mapping):
                 continue
-            setting = option.get("django_setting")
-            if isinstance(setting, str) and setting.startswith("QUICKSCALE_"):
-                exception = SETTING_NAME_EXCEPTIONS.get(module.name, {}).get(key)
-                if exception is None and not setting.startswith(prefix):
-                    violations.append(
-                        f"rule 1: {module.name}: option {key!r} setting {setting} lacks "
-                        f"the {prefix} stem"
-                    )
-            for suffix, expected_type in SETTING_SUFFIX_TYPES.items():
-                if key == suffix or key.endswith(f"_{suffix}"):
-                    if option.get("type") != expected_type:
-                        violations.append(
-                            f"rule 1: {module.name}: option {key!r} type is "
-                            f"{option.get('type')!r}, expected {expected_type}"
-                        )
-                    break
-            default = option.get("default")
-            if key.endswith("_env_var"):
-                if not isinstance(default, str) or not ENV_VAR_NAME.match(default):
-                    violations.append(
-                        f"rule 1: {module.name}: option {key!r} default {default!r} is "
-                        "not an environment-variable name"
-                    )
-                elif key in approved:
-                    expected = approved[key]["default"]
-                    if default != expected:
-                        violations.append(
-                            f"rule 1: {module.name}: option {key!r} default {default} is "
-                            f"authorized as {expected}; update the recorded exception to "
-                            "rename it"
-                        )
-                elif key in VENDOR_CREDENTIAL_DEFAULTS.get(module.name, {}):
-                    _check_vendor_default(module.name, key, default, violations)
-                elif default.startswith("QUICKSCALE_"):
-                    if not default.startswith(prefix):
-                        violations.append(
-                            f"rule 1: {module.name}: option {key!r} default {default} lacks "
-                            f"the {prefix} stem"
-                        )
-                elif key in credential_options:
-                    _check_vendor_default(module.name, key, default, violations)
-    return violations
-
-
-def _check_vendor_default(module_name: str, key: str, default: str, violations: list[str]) -> None:
-    """Refuse a credential reference default outside the controlled vocabulary."""
-    expected = VENDOR_CREDENTIAL_DEFAULTS.get(module_name, {}).get(key)
-    if expected is not None:
-        if default != expected:
-            violations.append(
-                f"rule 1: {module_name}: option {key!r} default {default} must be {expected}"
+            violations.extend(
+                _option_name_violations(
+                    module.name, key, option, prefix, approved, credential_options
+                )
             )
-        return
-    if default in CREDENTIAL_REFERENCE_NAMES:
-        return
-    approved = ", ".join(CREDENTIAL_REFERENCE_NAMES)
-    violations.append(
-        f"rule 1: {module_name}: option {key!r} default {default} is not in the "
-        f"controlled vocabulary ({approved}); the vendor's variable name or an "
-        "operator's name is required"
-    )
-
-
-def _option_settings(module: Module) -> set[str]:
-    """Rule 3: the setting names the manifest's options declare."""
-    settings: set[str] = set()
-    config = module.manifest.get("config")
-    if isinstance(config, Mapping):
-        for kind in ("mutable", "immutable"):
-            options = config.get(kind)
-            if not isinstance(options, Mapping):
-                continue
-            for option in options.values():
-                if not isinstance(option, Mapping):
-                    continue
-                setting = option.get("django_setting")
-                if isinstance(setting, str):
-                    settings.add(setting)
-    return settings
-
-
-def _manifest_declared_settings(module: Module) -> set[str]:
-    """
-    Rule 3: the settings the manifest declares for the module's runtime.
-
-    An option's ``django_setting``; for an ``_env_var`` option also the
-    ``_ENV_VAR`` projection core renders for it (the name minus its
-    ``_ENV_VAR`` suffix); and every ``derivation.derived_settings``
-    ``setting_key`` the manifest declares (SA263 — a computed setting such as
-    analytics' ``QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE`` is manifest-owned
-    runtime surface, not an undeclared read).
-    """
-    declared = _option_settings(module)
-    config = module.manifest.get("config")
-    if isinstance(config, Mapping):
-        for kind in ("mutable", "immutable"):
-            options = config.get(kind)
-            if not isinstance(options, Mapping):
-                continue
-            for key, option in options.items():
-                if not isinstance(key, str) or not isinstance(option, Mapping):
-                    continue
-                setting = option.get("django_setting")
-                if (
-                    isinstance(setting, str)
-                    and key.endswith("_env_var")
-                    and setting.endswith("_ENV_VAR")
-                ):
-                    declared.add(setting[: -len("_ENV_VAR")])
-    derivation = module.manifest.get("derivation")
-    if isinstance(derivation, Mapping):
-        bodies = [derivation]
-        option_derivations = derivation.get("option_derivations")
-        if isinstance(option_derivations, Mapping):
-            bodies.extend(body for body in option_derivations.values() if isinstance(body, Mapping))
-        for body in bodies:
-            derived = body.get("derived_settings")
-            if not isinstance(derived, list):
-                continue
-            for entry in derived:
-                if isinstance(entry, Mapping) and isinstance(entry.get("setting_key"), str):
-                    declared.add(entry["setting_key"])
-    return declared
-
-
-def _declared_settings(module: Module) -> set[str]:
-    """
-    Rule 3: manifest-declared settings plus the adapter's literal wiring.
-
-    A setting a module's own ``adapter.py`` names (its post-hook, as analytics
-    and billing project their secrets) is module-declared wiring too.
-    """
-    declared = _manifest_declared_settings(module)
-    adapter = module.files.get("adapter.py")
-    if adapter is not None:
-        prefix = f"QUICKSCALE_{module.name.upper()}_"
-        for node in ast.walk(_parse(adapter)):
-            if (
-                isinstance(node, ast.Constant)
-                and isinstance(node.value, str)
-                and node.value.startswith(prefix)
-            ):
-                declared.add(node.value)
-    return declared
-
-
-def _module_level_targets(statements: list[ast.stmt]) -> set[str]:
-    """Return names assigned or imported at a settings module's top level."""
-    names: set[str] = set()
-    for node in statements:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            continue
-        targets: list[ast.expr] = []
-        if isinstance(node, ast.Assign):
-            targets = list(node.targets)
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            targets = [node.target]
-        for target in targets:
-            names |= _bound_names(target)
-        for alias in getattr(node, "names", []) or []:
-            if isinstance(alias, ast.alias):
-                names.add(alias.asname or alias.name.split(".")[0])
-        for field in ("body", "orelse", "finalbody"):
-            block = getattr(node, field, None)
-            if isinstance(block, list):
-                names |= _module_level_targets(block)
-        for handler in getattr(node, "handlers", []) or []:
-            names |= _module_level_targets(handler.body)
-    return names
+    return violations
 
 
 def rule_3_settings_reads(corpus: Corpus) -> list[str]:
@@ -306,39 +240,8 @@ def rule_3_settings_reads(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
         declared = _declared_settings(module)
-        tests_settings = module.tests.get("settings.py")
-        if tests_settings is not None:
-            defined = _module_level_targets(_parse(tests_settings).body)
-            for setting in sorted(_option_settings(module)):
-                if setting not in defined:
-                    violations.append(
-                        f"rule 3: {module.name}: tests/settings.py does not define {setting}"
-                    )
-        for rel, text in module.files.items():
-            if not rel.endswith(".py") or rel.startswith("migrations/"):
-                continue
-            tree = _parse(text)
-            names, modules = _settings_bindings(tree)
-            for name, lineno in _settings_attribute_reads(tree):
-                owner = _setting_name_module(name)
-                if owner is not None and owner != module.name:
-                    violations.append(
-                        f"rule 3: {module.name}: {rel}:{lineno} reads {owner}'s {name}"
-                    )
-                elif name not in declared:
-                    violations.append(
-                        f"rule 3: {module.name}: {rel}:{lineno} reads undeclared {name}"
-                    )
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
-                    continue
-                if not isinstance(node.func, ast.Name) or node.func.id != "getattr":
-                    continue
-                if node.args and _is_settings_receiver(node.args[0], names, modules):
-                    violations.append(
-                        f"rule 3: {module.name}: {rel}:{node.lineno} reads settings "
-                        "through getattr()"
-                    )
+        violations.extend(_tests_settings_violations(module))
+        violations.extend(_read_violations(module, declared))
     return violations
 
 
@@ -346,76 +249,20 @@ def rule_12_manifest_options(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
         manifest = module.manifest
-        config = manifest.get("config")
-        if not isinstance(config, Mapping) or "mutable" not in config or "immutable" not in config:
+        if not _declares_option_blocks(manifest):
             violations.append(f"rule 12: {module.name}: config must declare mutable and immutable")
             continue
-        if "dependencies" not in manifest:
-            violations.append(f"rule 12: {module.name}: manifest has no dependencies key")
-        if "implies" in manifest:
-            violations.append(f"rule 12: {module.name}: retired implies key present")
+        violations.extend(_manifest_key_violations(module.name, manifest))
         for kind in ("mutable", "immutable"):
-            options = config.get(kind)
+            options = manifest["config"].get(kind)
             if not isinstance(options, Mapping):
                 violations.append(f"rule 12: {module.name}: config.{kind} must be a mapping")
                 continue
             for key, option in options.items():
-                prefix = f"rule 12: {module.name}: option {key!r}"
-                if not isinstance(key, str) or not SNAKE_CASE.match(key):
-                    violations.append(f"{prefix} is not snake_case")
-                    continue
-                if not isinstance(option, Mapping):
-                    violations.append(f"{prefix} must be a mapping")
-                    continue
-                if option.get("type") not in OPTION_TYPES:
-                    violations.append(f"{prefix} has type {option.get('type')!r}")
-                if "default" not in option:
-                    violations.append(f"{prefix} has no default")
-                if not str(option.get("description", "")).strip():
-                    violations.append(f"{prefix} has no description")
-                validation = option.get("validation")
-                if validation not in (None, {}):
-                    if not isinstance(validation, Mapping):
-                        violations.append(f"{prefix} validation must be a mapping")
-                    else:
-                        for rule_key in validation:
-                            if rule_key not in OPTION_VALIDATION_KEYS:
-                                violations.append(
-                                    f"{prefix} uses unsupported validation key {rule_key!r}"
-                                )
-                setting = option.get("django_setting")
-                if kind == "mutable" and setting is None:
-                    violations.append(f"{prefix} is mutable but declares no django_setting")
-                elif kind == "immutable" and setting is not None:
-                    violations.append(f"{prefix} is immutable but declares a django_setting")
-                elif isinstance(setting, str):
-                    exception = SETTING_NAME_EXCEPTIONS.get(module.name, {}).get(key)
-                    if exception is not None:
-                        if setting != exception:
-                            violations.append(f"{prefix} maps to {setting}, expected {exception}")
-                    elif setting not in {
-                        f"QUICKSCALE_{key.upper()}",
-                        f"QUICKSCALE_{module.name.upper()}_{key.upper()}",
-                    }:
-                        violations.append(
-                            f"{prefix} maps to {setting}, expected a QUICKSCALE_ suffix"
-                        )
-                    if key.startswith(f"{module.name}_"):
-                        violations.append(f"{prefix} repeats the module name")
-                check_url_normalization(module, key, option, violations)
+                violations.extend(_option_schema_violations(module, kind, key, option))
         if _contains_key(manifest, "validation_rules"):
             violations.append(f"rule 12: {module.name}: manifest declares retired validation_rules")
     return violations
-
-
-def _contains_key(node: Any, key: str) -> bool:
-    if isinstance(node, Mapping):
-        if key in node:
-            return True
-        return any(_contains_key(value, key) for value in node.values())
-    if isinstance(node, list):
-        return any(_contains_key(item, key) for item in node)
-    return False
 
 
 def rule_12_manifest_and_adapter_options(corpus: Corpus) -> list[str]:
@@ -426,125 +273,6 @@ def rule_12_manifest_and_adapter_options(corpus: Corpus) -> list[str]:
     ]
 
 
-def _class_defines_from_settings(node: ast.ClassDef) -> bool:
-    """Return whether a class declares the rule 42 ``from_settings()`` factory."""
-    return any(
-        isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name == "from_settings"
-        for item in node.body
-    )
-
-
-_RULE_42_EXPORTED_SNAPSHOT = re.compile(r"SettingsSnapshot$")
-
-_RULE_43_SETTINGS_ATTRIBUTE = re.compile(r"(?:Settings|Snapshot)")
-
-_COERCION_BUILTINS = frozenset({"bool", "float", "int", "list", "str", "tuple"})
-
-
-# Rule 23's listed exception: analytics' services are best-effort and never
-# raise to callers, so a caller may tolerate any failure while using them.
-_RULE_43_BEST_EFFORT_MODULES = frozenset({"analytics"})
-
-
-def _is_direct_setting_read(
-    node: ast.expr,
-    names: set[str],
-    modules: set[tuple[str, ...]],
-) -> bool:
-    """Return whether an expression is a setting read, wrapped coercions included."""
-    if isinstance(node, ast.Attribute):
-        return _is_settings_receiver(node.value, names, modules)
-    if (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id in _COERCION_BUILTINS
-        and len(node.args) == 1
-        and not node.keywords
-    ):
-        return _is_direct_setting_read(node.args[0], names, modules)
-    return False
-
-
-def _call_builds_settings_snapshot(
-    call: ast.Call,
-    names: set[str],
-    modules: set[tuple[str, ...]],
-) -> bool:
-    """Return whether a call is a ``from_settings()`` factory or an all-settings constructor."""
-    if isinstance(call.func, ast.Attribute) and call.func.attr == "from_settings":
-        return True
-    if isinstance(call.func, ast.Name) and call.func.id in _COERCION_BUILTINS:
-        return False
-    arguments = [*call.args, *(keyword.value for keyword in call.keywords)]
-    return bool(arguments) and all(
-        _is_direct_setting_read(argument, names, modules) for argument in arguments
-    )
-
-
-def _intra_module_import_names(tree: ast.Module, module: Module) -> dict[str, str]:
-    """Map own-package import aliases to their original names (rule 42 resolution)."""
-    names: dict[str, str] = {}
-    prefix = f"{MODULE_IMPORT_PREFIX}{module.name}"
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        same_package = bool(node.level) or (
-            node.module is not None
-            and (node.module == prefix or node.module.startswith(f"{prefix}."))
-        )
-        if not same_package:
-            continue
-        for alias in node.names:
-            names[alias.asname or alias.name] = alias.name
-    return names
-
-
-def _settings_snapshot_names(module: Module) -> set[str]:
-    """Collect the snapshot names the module's private ``_settings.py`` builds."""
-    text = module.files.get("_settings.py")
-    if text is None:
-        return set()
-    tree = _parse(text)
-    names, modules = _settings_bindings(tree)
-    aliases = _intra_module_import_names(tree, module)
-    found = {
-        node.name
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and _class_defines_from_settings(node)
-    }
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not _call_builds_settings_snapshot(
-            node, names, modules
-        ):
-            continue
-        if isinstance(node.func, ast.Name):
-            found.add(aliases.get(node.func.id, node.func.id))
-        elif isinstance(node.func, ast.Attribute):
-            if node.func.attr == "from_settings":
-                if isinstance(node.func.value, ast.Name):
-                    found.add(aliases.get(node.func.value.id, node.func.value.id))
-            else:
-                found.add(node.func.attr)
-    return found
-
-
-def _returns_settings_snapshot(
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
-    names: set[str],
-    modules: set[tuple[str, ...]],
-) -> int | None:
-    """Return the line of a return that builds a settings snapshot, if any."""
-    for item in _scope_nodes(node):
-        if (
-            isinstance(item, ast.Return)
-            and item.value is not None
-            and isinstance(item.value, ast.Call)
-            and _call_builds_settings_snapshot(item.value, names, modules)
-        ):
-            return item.lineno
-    return None
-
-
 def rule_42_settings_snapshots(corpus: Corpus) -> list[str]:
     """Rule 42: a settings snapshot lives only in the private ``_settings.py``."""
     violations: list[str] = []
@@ -552,159 +280,8 @@ def rule_42_settings_snapshots(corpus: Corpus) -> list[str]:
         for rel, text in module.files.items():
             if not rel.endswith(".py") or rel.startswith("migrations/"):
                 continue
-            tree = _parse(text)
-            in_settings_module = rel == "_settings.py"
-            names, modules = _settings_bindings(tree)
-            snapshot_names = _settings_snapshot_names(module)
-            for node in tree.body:
-                if (
-                    isinstance(node, ast.ClassDef)
-                    and not in_settings_module
-                    and (_class_defines_from_settings(node) or node.name in snapshot_names)
-                ):
-                    violations.append(
-                        f"rule 42: {module.name}: {rel}:{node.lineno} defines the settings "
-                        f"snapshot {node.name} outside _settings.py"
-                    )
-                if (
-                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                    and not in_settings_module
-                ):
-                    returned_at = _returns_settings_snapshot(node, names, modules)
-                    if returned_at is not None:
-                        violations.append(
-                            f"rule 42: {module.name}: {rel}:{returned_at} builds a settings "
-                            "snapshot outside _settings.py"
-                        )
-            for export in _declared_exports(tree) or ():
-                resolved = _intra_module_import_names(tree, module).get(export, export)
-                if resolved in snapshot_names or _RULE_42_EXPORTED_SNAPSHOT.search(resolved):
-                    violations.append(
-                        f"rule 42: {module.name}: {rel} exports the settings snapshot {resolved}"
-                    )
+            violations.extend(_snapshot_scan_violations(module, rel, _parse(text)))
     return violations
-
-
-def _import_module_service_bindings(tree: ast.Module) -> dict[str, str]:
-    """Map locals assigned from ``import_module("<module>.services")`` to that module."""
-    bindings: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
-            continue
-        target = node.targets[0]
-        value = node.value
-        if not isinstance(target, ast.Name) or not isinstance(value, ast.Call):
-            continue
-        func = value.func
-        if not isinstance(func, ast.Name) or func.id != "import_module":
-            continue
-        if len(value.args) != 1 or not isinstance(value.args[0], ast.Constant):
-            continue
-        path = value.args[0].value
-        if not isinstance(path, str):
-            continue
-        target_module = _module_target(tuple(path.split(".")))
-        if target_module is not None and target_module[1] == ("services",):
-            bindings[target.id] = target_module[0]
-    return bindings
-
-
-def _other_module_service_imports(tree: ast.Module, module_name: str) -> dict[str, str]:
-    """Map names imported from another module's ``services`` to that module."""
-    names: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom) or not node.module or node.level:
-            continue
-        target = _module_target(tuple(node.module.split(".")))
-        if target is None or target[0] == module_name or target[1] != ("services",):
-            continue
-        for alias in node.names:
-            names[alias.asname or alias.name] = target[0]
-    return names
-
-
-def _attribute_binding_module(
-    chain: tuple[str, ...],
-    service_bindings: dict[tuple[str, ...], str],
-    import_module_bindings: dict[str, str],
-) -> str | None:
-    """Resolve the module an attribute chain is rooted in, if it is another module."""
-    direct = _module_target(chain)
-    if direct is not None:
-        return direct[0]
-    if (chain[0],) in service_bindings:
-        return service_bindings[(chain[0],)]
-    return import_module_bindings.get(chain[0])
-
-
-def _call_other_module_service(
-    call: ast.Call,
-    service_names: dict[str, str],
-    service_bindings: dict[tuple[str, ...], str],
-    import_module_bindings: dict[str, str],
-) -> tuple[str, str] | None:
-    """Return the module and name a call targets through its ``services`` surface."""
-    func = call.func
-    if isinstance(func, ast.Name):
-        owner = service_names.get(func.id)
-        return (owner, func.id) if owner is not None else None
-    if isinstance(func, ast.Attribute):
-        chain = _attribute_chain(func)
-        if chain is None:
-            return None
-        for prefix, binding_owner in sorted(
-            service_bindings.items(), key=lambda item: len(item[0]), reverse=True
-        ):
-            if len(prefix) < len(chain) and chain[: len(prefix)] == prefix:
-                return (binding_owner, func.attr)
-        owner = import_module_bindings.get(chain[0])
-        if owner is not None:
-            return (owner, func.attr)
-    return None
-
-
-def _reference_module_name(value: str) -> str | None:
-    """Resolve a package stem or app label to a module name."""
-    target = _module_target(tuple(value.split(".")))
-    if target is not None:
-        return target[0]
-    for name in MODULE_LAYERS:
-        if value == f"quickscale_{name}":
-            return name
-    return None
-
-
-def _guarded_module_name(node: ast.expr | None, constants: Mapping[str, str]) -> str | None:
-    """Resolve the module an ``apps.is_installed`` argument names."""
-    value: str | None = None
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        value = node.value
-    elif isinstance(node, ast.Name):
-        value = constants.get(node.id)
-    if value is None:
-        return None
-    return _reference_module_name(value)
-
-
-def _getattr_service_owner(
-    target: ast.expr,
-    service_names: Mapping[str, str],
-    service_bindings: Mapping[tuple[str, ...], str],
-    import_module_bindings: Mapping[str, str],
-) -> str | None:
-    """Resolve the module whose services a ``getattr`` target is rooted in."""
-    if isinstance(target, ast.Name):
-        return (
-            service_names.get(target.id)
-            or service_bindings.get((target.id,))
-            or import_module_bindings.get(target.id)
-        )
-    if isinstance(target, ast.Attribute):
-        chain = _attribute_chain(target)
-        if chain is None:
-            return None
-        return _attribute_binding_module(chain, service_bindings, import_module_bindings)
-    return None
 
 
 def rule_43_optional_senders(corpus: Corpus) -> list[str]:
@@ -720,78 +297,32 @@ def rule_43_optional_senders(corpus: Corpus) -> list[str]:
             import_module_bindings = _import_module_service_bindings(tree)
             service_names = _other_module_service_imports(tree, module.name)
             constants = _string_assignments(tree)
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
-                    continue
-                if _call_func_name(node) == "is_installed":
-                    argument = node.args[0] if node.args else _keyword(node, "app_name")
-                    guarded = _guarded_module_name(argument, constants)
-                    if guarded is not None and guarded in required:
-                        violations.append(
-                            f"rule 43: {module.name}: {rel}:{node.lineno} guards "
-                            f"required module {guarded} with apps.is_installed"
-                        )
-                elif _call_func_name(node) == "getattr" and len(node.args) >= 3:
-                    owner = _getattr_service_owner(
-                        node.args[0],
-                        service_names,
-                        service_bindings,
-                        import_module_bindings,
-                    )
-                    if owner is not None and owner != module.name:
-                        violations.append(
-                            f"rule 43: {module.name}: {rel}:{node.lineno} reads "
-                            f"{owner}'s service through getattr with a default"
-                        )
-            for node in ast.walk(tree):
-                if not (
-                    isinstance(node, ast.Attribute)
-                    and _RULE_43_SETTINGS_ATTRIBUTE.search(node.attr)
-                ):
-                    continue
-                chain = _attribute_chain(node)
-                if chain is None:
-                    continue
-                owner = _attribute_binding_module(chain, service_bindings, import_module_bindings)
-                if owner is not None and owner != module.name:
-                    violations.append(
-                        f"rule 43: {module.name}: {rel}:{node.lineno} reads {owner}'s "
-                        f"settings through {node.attr}"
-                    )
-            for node in ast.walk(tree):
-                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    continue
-                for item in _scope_nodes(node):
-                    if not isinstance(item, ast.Try):
-                        continue
-                    owner = next(
-                        (
-                            found
-                            for found in (
-                                _call_other_module_service(
-                                    child,
-                                    service_names,
-                                    service_bindings,
-                                    import_module_bindings,
-                                )
-                                for child in _body_nodes(item.body)
-                                if isinstance(child, ast.Call)
-                            )
-                            if found is not None
-                            and found[0] != module.name
-                            and found[0] not in _RULE_43_BEST_EFFORT_MODULES
-                        ),
-                        None,
-                    )
-                    if owner is None:
-                        continue
-                    for handler in item.handlers:
-                        catches_everything = handler.type is None or (
-                            isinstance(handler.type, ast.Name) and handler.type.id == "Exception"
-                        )
-                        if catches_everything:
-                            violations.append(
-                                f"rule 43: {module.name}: {rel}:{handler.lineno} catches "
-                                f"Exception around {owner[0]}'s service call"
-                            )
+            violations.extend(
+                _guard_call_violations(
+                    module,
+                    rel,
+                    tree,
+                    required,
+                    service_names,
+                    service_bindings,
+                    import_module_bindings,
+                    constants,
+                )
+            )
+            violations.extend(
+                _cross_attribute_violations(
+                    module, rel, tree, service_bindings, import_module_bindings
+                )
+            )
+            violations.extend(
+                _broad_except_violations(
+                    module,
+                    rel,
+                    tree,
+                    service_names,
+                    service_bindings,
+                    import_module_bindings,
+                    _RULE_43_BEST_EFFORT_MODULES,
+                )
+            )
     return violations
