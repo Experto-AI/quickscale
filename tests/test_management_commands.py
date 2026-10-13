@@ -1008,8 +1008,10 @@ def test_purge_organization_resolves_a_sessionless_pending_checkout(
 ) -> None:
     """A session-less reservation the provider never created no longer blocks.
 
-    A dry run still rehearses the pre-reconciliation refusal because it does
-    not persist the resolved absence; the destructive run clears the row.
+    The reservation is older than Stripe's Search indexing lag, so the
+    provider lookup's miss is trusted. A dry run still rehearses the
+    pre-reconciliation refusal because it does not persist the resolved
+    absence; the destructive run clears the row.
     """
     from quickscale_modules_billing import _stripe_client
 
@@ -1028,7 +1030,7 @@ def test_purge_organization_resolves_a_sessionless_pending_checkout(
     )
     set_current_org_id(organization.pk)
     try:
-        Subscription.objects.create(
+        reservation = Subscription.objects.create(
             organization=organization,
             user=owner,
             plan=plan,
@@ -1038,6 +1040,11 @@ def test_purge_organization_resolves_a_sessionless_pending_checkout(
                 if future_expiry
                 else None
             ),
+        )
+        # Older than Stripe's Search indexing lag, so the provider lookup's
+        # miss is trusted and the reservation resolves as absent.
+        Subscription.all_objects.filter(pk=reservation.pk).update(
+            created_at=timezone.now() - timezone.timedelta(hours=2)
         )
     finally:
         reset_current_org_id()
@@ -1080,6 +1087,61 @@ def test_purge_organization_resolves_a_sessionless_pending_checkout(
     assert OrganizationTombstone.objects.filter(
         organization_id=organization.pk
     ).exists()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("dry_run", [False, True], ids=["purge", "dry-run"])
+def test_purge_organization_keeps_a_fresh_sessionless_checkout_open(
+    dry_run: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reservation inside Stripe's Search lag is not resolved as absent."""
+    from quickscale_modules_billing import _stripe_client
+
+    owner = get_user_model().objects.create_user(
+        username=f"lagged-checkout-owner-{dry_run}",
+        email=f"lagged-checkout-owner-{dry_run}@example.com",
+        password="secret123",
+    )
+    organization = Organization.objects.create(
+        name=f"Lagged Checkout {dry_run}",
+        slug=f"lagged-checkout-{dry_run}",
+    )
+    plan = _create_plan(
+        slug=f"growth-lagged-checkout-{dry_run}",
+        price_id=f"price_growth_lagged_checkout_{dry_run}",
+    )
+    set_current_org_id(organization.pk)
+    try:
+        Subscription.objects.create(
+            organization=organization,
+            user=owner,
+            plan=plan,
+            status=Subscription.Status.INCOMPLETE,
+        )
+    finally:
+        reset_current_org_id()
+
+    stripe_client = MagicMock()
+    stripe_client.search_customers.return_value = []
+    monkeypatch.setattr(
+        _stripe_client,
+        "get_stripe_client",
+        lambda **kwargs: stripe_client,
+    )
+
+    with pytest.raises(CommandError, match="Search indexing lag"):
+        call_command(
+            "quickscale_orgs_purge_organization",
+            organization_id=str(organization.pk),
+            confirm=str(organization.pk),
+            dry_run=dry_run,
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    assert Organization.objects.filter(pk=organization.pk).exists()
 
 
 @pytest.mark.django_db
