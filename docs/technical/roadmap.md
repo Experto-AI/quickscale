@@ -268,7 +268,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   The identity sub-slice is implemented: `rules_identity.py` is a 351-line facade with seven
   helpers (all <800 lines, max CC 20), removing seven CC failures and one oversized file;
   parity controls pin the pre-split surface and exact findings, and 608 harness controls pass.
-  Next: the remaining harness/script families and test-function debt.
+  The webhooks sub-slice is implemented: `rules_webhooks.py` is a 132-line facade with five
+  helpers (all <800 lines, max CC 18), removing six CC failures and one oversized file;
+  parity controls pin the pre-split surface, its imported bindings, and exact findings, and
+  638 harness controls pass.
+  Next: `rules_misc` (five CC failures, the largest remaining family), the rest of the
+  harness/script families, then test-function debt.
   Keep the module-name tables in the rule-37-exempt facade and preserve lazy renderer binding.
 
   **Surfaces:** `scripts/` and their tests, and the arch audit.
