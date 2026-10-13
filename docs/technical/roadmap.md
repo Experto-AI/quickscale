@@ -285,8 +285,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
    private siblings (`_models_tenancy`, `_models_basics`, `_models_constraints`; all <800 lines,
    max CC 16), removing three CC failures (69, 34, 21); parity controls pin the pre-split
    surface, its imported bindings, signatures, and exact findings, and 785 harness controls pass.
-   Next: the harness families still carrying debt (settings, analytics, docs, redaction,
-   rule 44, adapter flow, core), then the script families, then test-function debt.
+   The settings sub-slice is implemented: `rules_settings.py` is a 328-line facade with five
+   private siblings (`_settings_names`, `_settings_reads`, `_settings_manifest`,
+   `_settings_snapshots`, `_settings_senders`; all <800 lines, max CC 19), removing three CC
+   failures (36, 30, 28); parity controls pin the pre-split surface, its imported bindings,
+   signatures, exact findings, and rule 3's syntax-error precedence, and 855 harness controls
+   pass.
+   Next: the harness families still carrying debt (analytics, docs, redaction, rule 44,
+   adapter flow, core), then the script families, then test-function debt.
    Keep the module-name tables in the rule-37-exempt facade and preserve lazy renderer binding.
 
   **Surfaces:** `scripts/` and their tests, and the arch audit.
