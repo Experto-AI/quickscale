@@ -78,7 +78,8 @@ declaration, so notifications names no other module's key or path.
 Startup checks run through the shared `quickscale_core.runtime` helper: the module's declared
 settings are validated against the schema `quickscale apply` writes, and a secret a switched-on
 feature needs — the webhook signing secret while notifications are enabled, the Resend API key
-while the live Resend backend is active — fails startup when empty.
+while the live Resend backend is active — fails startup when empty or unusable; the webhook
+signing secret must carry the `whsec_` prefix and decode as base64.
 
 ## URLs
 
