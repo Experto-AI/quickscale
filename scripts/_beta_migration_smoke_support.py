@@ -391,7 +391,7 @@ def _assert_recipient_services_lifecycle(
         f"{label} did not run the recipient's Poetry test environment:\n{spy}",
     )
     _require(
-        "notifications_secret=whsec_test_ci" in spy,
+        "notifications_secret=whsec_YWFhYWFhYWFhYWFhYWFhYQ==" in spy,
         f"{label} verification environment did not inherit the project's "
         f"declared CI test credentials:\n{spy}",
     )

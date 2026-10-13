@@ -524,8 +524,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Context:** `_apply_delivery_event` (`notifications/_webhooks.py`) overwrote the status
   with no ordering check and no row lock, so a late `email.sent` regressed a `delivered` or
   `bounced` row; slice (a) delivers the ranking and the row lock.
-  `notifications/checks.py:62–71` (E003) refuses only an empty secret, so a malformed
-  `whsec_` value passes startup and every webhook is then refused. In `orgs/views.py:184` and
+  `notifications/checks.py` (E003) refused only an empty secret until slice (b) extended it to
+  every value the webhook endpoint's decoder refuses. In `orgs/views.py:184` and
   `OrgApiInviteView.post`, a per-org refusal after a passing per-sender check still costs the
   sender a token.
 
@@ -542,7 +542,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     the out-of-order controls prove a late `email.sent` leaves delivered and
     bounced rows, their timestamps, and the parent message's derived status
     unchanged while the receipt is still recorded.
-  - [ ] (b) The `whsec_` format check in E003 (Tier 1).
+  - [x] (b) The `whsec_` format check in E003 (Tier 1). E003 validates the secret through the
+    webhook endpoint's own decoder, so a missing `whsec_` prefix, a non-base64 remainder, and an
+    empty decoded key all refuse startup; the generated CI placeholder, the module and
+    generated-project fixtures, and the beta-migration smoke assertion carry conforming
+    synthetic secrets.
   - [ ] (c) Check-then-charge for both invite throttles (Tier 1).
 
 - [ ] **SA276 — Generate the theme's seam types from the manifest set.**

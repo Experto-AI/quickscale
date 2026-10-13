@@ -2411,7 +2411,7 @@ class TestGeneratedProjectRuntimeSmoke:
             "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
         )
         os.environ["QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"] = (
-            "qs-e2e-notifications-webhook-secret"
+            "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
         )
         try:
             _run_migrations(project_path, project_name)
@@ -2729,7 +2729,7 @@ class TestGeneratedProjectRuntimeSmoke:
                 "STRIPE_SECRET_KEY": "sk_test_all_modules",
                 "QUICKSCALE_BILLING_WEBHOOK_SECRET": "whsec_test_all_modules",
                 "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
-                    "whsec_test_all_modules_notifications"
+                    "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
                 ),
             }
             migrate_environment = _standalone_generated_env(
@@ -3039,7 +3039,7 @@ class TestGeneratedProjectRuntimeSmoke:
                 "RUNTIME_DATABASE_URL": "",
                 "QUICKSCALE_ALLOW_BYPASSRLS": "1",
                 "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
-                    "qs-e2e-notifications-webhook-secret"
+                    "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
                 ),
                 "ALLOWED_HOSTS": "localhost,127.0.0.1",
             }
@@ -3175,7 +3175,7 @@ class TestGeneratedProjectRuntimeSmoke:
                 "RUNTIME_DATABASE_URL": "",
                 "QUICKSCALE_PRIVILEGED_COMMAND": "createcachetable",
                 "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
-                    "qs-e2e-notifications-webhook-secret"
+                    "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
                 ),
                 "ALLOWED_HOSTS": "localhost,127.0.0.1",
             }
@@ -3323,7 +3323,7 @@ class TestGeneratedProjectRuntimeSmoke:
                 "RUNTIME_DATABASE_URL": "",
                 "QUICKSCALE_ALLOW_BYPASSRLS": "1",
                 "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
-                    "qs-e2e-notifications-webhook-secret"
+                    "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
                 ),
                 "ALLOWED_HOSTS": "localhost,127.0.0.1",
             }

@@ -19,9 +19,13 @@ QUICKSCALE_ORGS_INVITE_RATE_LIMIT = "20/day"
 QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT = 50
 QUICKSCALE_ORGS_MODE = "saas"
 
-# The notifications webhook signing secret must resolve because the suite
-# installs notifications enabled; its rule 35 startup check reads the env var.
-os.environ.setdefault("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET", "whsec_forms_suite")
+# The notifications webhook signing secret must resolve and be Svix-shaped
+# because the suite installs notifications enabled; its rule 35 startup check
+# refuses an empty or undecodable value.
+os.environ.setdefault(
+    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
+    "whsec_YWFhYWFhYWFhYWFhYWFhYQ==",
+)
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
@@ -70,7 +74,7 @@ QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR = (
     "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
 )
 QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY = "test-resend-api-key"
-QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET = "test-webhook-secret"
+QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET = "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
 QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS = ["quickscale", "transactional"]
 QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS = [
     "quickscale",

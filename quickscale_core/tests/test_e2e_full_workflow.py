@@ -1096,7 +1096,7 @@ class TestFullE2EWorkflow:
                     "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
                     "QUICKSCALE_ALLOW_BYPASSRLS": "1",
                     "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
-                        "qs-e2e-notifications-webhook-secret"
+                        "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
                     ),
                 }
             ),
@@ -1126,7 +1126,7 @@ class TestFullE2EWorkflow:
                     "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
                     "QUICKSCALE_ALLOW_BYPASSRLS": "1",
                     "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
-                        "qs-e2e-notifications-webhook-secret"
+                        "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
                     ),
                 }
             ),
@@ -2244,7 +2244,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
             env_overrides={
                 "QUICKSCALE_ALLOW_BYPASSRLS": "1",
                 "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
-                    "qs-e2e-notifications-webhook-secret"
+                    "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
                 ),
             },
         )
@@ -2256,7 +2256,7 @@ class TestModuleEmbedE2E(TestFullE2EWorkflow):
             env_overrides={
                 "QUICKSCALE_ALLOW_BYPASSRLS": "1",
                 "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": (
-                    "qs-e2e-notifications-webhook-secret"
+                    "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
                 ),
             },
         )
