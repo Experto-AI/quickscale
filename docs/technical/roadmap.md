@@ -67,7 +67,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 ∥ SA204 (a) | yes | no | yes | no | yes |
 | 2 | SA267 (gate registry) | yes | yes | yes | **yes** | no |
-| 3 | SA268 (rule 44) | yes | yes | yes | **yes** | no |
+| 3 | SA268 (adapter flow) | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -290,7 +290,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
     private sibling (`_redaction_handlers`; all <800 lines, max CC 16), removing the CC-23
     failure; parity controls pin the pre-split surface, its imported bindings, signatures,
     and exact findings, and 955 harness controls pass.
-  - [ ] (b) `rule_44.py`.
+  - [x] (b) `rule_44.py`. The split is implemented: `rule_44.py` is a 126-line
+    facade re-exporting the pre-split surface; the mechanics live in three private
+    siblings (`_rule44_names`, `_rule44_expressions`, `_rule44_statements`; all
+    <800 lines, max CC 20), removing both CC failures (49 and 31) and the
+    1090-line file; parity controls pin the pre-split surface, its imported
+    bindings, signatures, and exact findings, and 996 harness controls pass.
   - [ ] (c) `adapter_flow.py`.
   - [ ] (d) `core.py`.
 
