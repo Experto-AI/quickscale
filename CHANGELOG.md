@@ -732,6 +732,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Maintainer gate scripts sit under their own quality thresholds.** Non-test gate scripts are
     below the fixed complexity, file-size, and dead-code lines, and every control function is below
     the complexity line, with gate behavior and control cases unchanged.
+  - **Notification delivery statuses only move forward.** Reconciliation ranks the delivery
+    statuses and re-reads the row under a lock, so a late or redelivered Resend event — an
+    out-of-order `email.sent`, for example — cannot regress a delivery that already reached
+    `delivered` or `bounced`.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

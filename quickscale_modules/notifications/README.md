@@ -44,7 +44,8 @@ Retired option keys (`resend_api_key`, `webhook_secret`) are refused by name; us
 - `NotificationSettings` is the read-only settings snapshot.
 - `NotificationMessage` records one outbound message with its rendered content and status.
 - `NotificationDelivery` records per-recipient delivery state.
-- `NotificationDeliveryEvent` records the provider events that advanced a delivery.
+- `NotificationDeliveryEvent` records the accepted provider event receipts for a delivery,
+  including a late event whose target status did not advance it.
 - The admin registers the settings, message, and delivery models as read-only surfaces for
   operators.
 
