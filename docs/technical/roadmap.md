@@ -276,9 +276,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
     at CC >= 21 and no file reaches 800 lines; parity controls pin the pre-split surfaces,
     signatures, homes, and exact findings, and the runnable gates' pre/post output is
     byte-identical.
-  - [ ] (d) `check_project_contract_vintage.py`, `check_module_core_compatibility.py`,
+  - [x] (d) `check_project_contract_vintage.py`, `check_module_core_compatibility.py`,
     `check_module_core_imports.py`, `check_sa117_scope.py`, `check_coverage_policy.py`,
-    `check_beta_migration_smoke.py`, and the vulture findings.
+    `check_beta_migration_smoke.py`, and the vulture findings. Landed: the four oversized
+    files are facades over private `_`-prefixed siblings (largest file 763 lines, max
+    non-test CC 20); the two small files' `main` and `check_policy` are decomposed in
+    place; all eight vulture 100% findings are gone; parity controls pin each pre-split
+    surface, signatures, homes, and exact findings; every gate's tests pass.
   - [ ] (e) Test-function CC debt across `scripts/`, after SA268 lands.
 
   **Surfaces:** non-harness `scripts/` and their tests, and the arch audit.

@@ -474,10 +474,12 @@ class ResourceCleanup:
 
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: object,
+        _exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: object,
     ) -> None:
+        # The protocol parameters are deliberately unused: cleanup is
+        # unconditional and never suppresses an exception.
         self.cleanup()
 
 

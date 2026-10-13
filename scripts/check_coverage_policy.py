@@ -183,43 +183,15 @@ def _validate_file_summary(
     return int(covered), int(statements), float(percent)
 
 
-def check_policy(
-    coverage_path: str,
-    mean_threshold: float = 90.0,
-    file_threshold: float = 80.0,
-) -> int:
+def _accumulate_file_coverage(
+    files: dict[str, Any],
+) -> tuple[dict[str, int], dict[str, int], list[tuple[str, float, int, int]]] | None:
     """
-    Evaluate coverage policy and return an exit code.
+    Validate every file entry and accumulate per-package coverage.
 
-    Parameters
-    ----------
-    coverage_path:
-        Path to a ``coverage.json`` file as produced by ``coverage json``.
-    mean_threshold:
-        Minimum equal-weight package-mean coverage percentage
-        (default: 90.0).
-    file_threshold:
-        Minimum coverage percentage per individual file (default: 80.0).
-
-    Returns
-    -------
-    int
-        0 if policy passes, 1 if it fails, 2 on data error.
-
+    Returns ``(pkg_covered, pkg_statements, file_results)`` on success, or
+    ``None`` (and prints an error) on the first data error.
     """
-    data = load_coverage_json(Path(coverage_path))
-    if data is None:
-        return 2
-
-    files: dict[str, Any] = data.get("files", {})
-
-    if not files:
-        print(
-            "ERROR: No files found in coverage data - nothing to check.",
-            file=sys.stderr,
-        )
-        return 2
-
     # Per-package accumulators: {pkg_name: (covered, statements)}
     pkg_covered: dict[str, int] = {}
     pkg_statements: dict[str, int] = {}
@@ -233,13 +205,13 @@ def check_policy(
                 f"ERROR: File entry for {filepath!r} is not a dict (got {type(entry).__name__})",
                 file=sys.stderr,
             )
-            return 2
+            return None
 
         summary = entry.get("summary")
 
         validated = _validate_file_summary(summary, filepath)
         if validated is None:
-            return 2
+            return None
 
         covered, statements, percent = validated
 
@@ -259,22 +231,31 @@ def check_policy(
         )
         for fp in unknown_paths:
             print(f"    {fp}", file=sys.stderr)
-        return 2
+        return None
 
-    # -- Compute equal-weight package mean ----------------------------------
-    # Each recognised package's percentage is calculated independently, then
-    # the package percentages are averaged with equal weight (not weighted by
-    # statement count).  This prevents a large high-coverage package from
-    # masking a small low-coverage one.
+    return pkg_covered, pkg_statements, file_results
+
+
+def _package_percentages(
+    pkg_covered: dict[str, int], pkg_statements: dict[str, int]
+) -> dict[str, float] | None:
+    """
+    Compute the equal-weight package percentages.
+
+    Each recognised package's percentage is calculated independently, then
+    the package percentages are averaged with equal weight (not weighted by
+    statement count).  This prevents a large high-coverage package from
+    masking a small low-coverage one.  Returns ``None`` (and prints an error)
+    when a required package is missing or has no measurable statements.
+    """
     found_packages = sorted(pkg_covered.keys())
     if not found_packages:
         print(
             "ERROR: No recognised-package files found in coverage data.",
             file=sys.stderr,
         )
-        return 2
+        return None
 
-    # -- Require both core and CLI -------------------------------------------
     missing: list[str] = [pkg for pkg in KNOWN_PACKAGES if pkg not in found_packages]
     if missing:
         print(
@@ -283,7 +264,7 @@ def check_policy(
             "Both quickscale_core and quickscale_cli must have measured files.",
             file=sys.stderr,
         )
-        return 2
+        return None
 
     pkg_percentages: dict[str, float] = {}
     for pkg in found_packages:
@@ -293,10 +274,22 @@ def check_policy(
                 f"ERROR: Package {pkg!r} has 0 measurable statements.",
                 file=sys.stderr,
             )
-            return 2
+            return None
         pct = (pkg_covered[pkg] / stmts) * 100.0
         pkg_percentages[pkg] = pct
+    return pkg_percentages
 
+
+def _report_coverage_result(
+    pkg_covered: dict[str, int],
+    pkg_statements: dict[str, int],
+    pkg_percentages: dict[str, float],
+    file_results: list[tuple[str, float, int, int]],
+    mean_threshold: float,
+    file_threshold: float,
+) -> int:
+    """Print the coverage report and return the policy exit code."""
+    found_packages = sorted(pkg_percentages)
     overall_mean = sum(pkg_percentages.values()) / len(pkg_percentages)
 
     # -- Header -------------------------------------------------------------
@@ -337,6 +330,62 @@ def check_policy(
         print(f"  All {len(file_results)} files meet {file_threshold:.1f}% per-file threshold")
 
     return 1 if policy_failed else 0
+
+
+def check_policy(
+    coverage_path: str,
+    mean_threshold: float = 90.0,
+    file_threshold: float = 80.0,
+) -> int:
+    """
+    Evaluate coverage policy and return an exit code.
+
+    Parameters
+    ----------
+    coverage_path:
+        Path to a ``coverage.json`` file as produced by ``coverage json``.
+    mean_threshold:
+        Minimum equal-weight package-mean coverage percentage
+        (default: 90.0).
+    file_threshold:
+        Minimum coverage percentage per individual file (default: 80.0).
+
+    Returns
+    -------
+    int
+        0 if policy passes, 1 if it fails, 2 on data error.
+
+    """
+    data = load_coverage_json(Path(coverage_path))
+    if data is None:
+        return 2
+
+    files: dict[str, Any] = data.get("files", {})
+
+    if not files:
+        print(
+            "ERROR: No files found in coverage data - nothing to check.",
+            file=sys.stderr,
+        )
+        return 2
+
+    accumulated = _accumulate_file_coverage(files)
+    if accumulated is None:
+        return 2
+    pkg_covered, pkg_statements, file_results = accumulated
+
+    pkg_percentages = _package_percentages(pkg_covered, pkg_statements)
+    if pkg_percentages is None:
+        return 2
+
+    return _report_coverage_result(
+        pkg_covered,
+        pkg_statements,
+        pkg_percentages,
+        file_results,
+        mean_threshold,
+        file_threshold,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

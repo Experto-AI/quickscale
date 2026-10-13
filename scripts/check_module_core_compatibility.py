@@ -36,7 +36,7 @@ without ``ImportError``.  A passing probe is the strongest pre-publish
 evidence that the module's ``module.yml`` version claim is honest.
 
 Thoroughness notes
-------------------
+-----------------
 - Both top-level imports (``from quickscale_core.x import y``) and
   lazy/nested imports (inside functions, classes) are detected by the
   static pass.
@@ -53,22 +53,135 @@ Thoroughness notes
   versions not yet published to PyPI.
 
 Exit codes:
-   0 — all modules compatible
-   1 — one or more incompatibilities found
-   2 — a configuration or filesystem error
+    0 — all modules compatible
+    1 — one or more incompatibilities found
+    2 — a configuration or filesystem error
 """
+
+# The implementation lives in private ``_module_core_compat_*`` siblings
+# (SA267): ``_module_core_compat_versions`` (version and pyproject/manifest
+# parsing), ``_module_core_compat_ast`` (AST import extraction and symbol
+# resolution), and ``_module_core_compat_probe`` (the install/import probe).
+# This module owns the per-module orchestration, the CLI, and the constants
+# the rule-37 identity allowlist pins, and re-exports the pre-split surface
+# for unchanged import paths, so a test's seam is the sibling that defines the
+# name (decisions.md, Split-Facade Seams).
+
+# ruff: noqa: E402 — the sys.path bootstrap must precede the sibling imports.
 
 from __future__ import annotations
 
-import ast
-import os
-import re
-import subprocess
+import ast as ast
+import os as os
+import re as re
+import subprocess as subprocess
 import sys
-import tempfile
+import tempfile as tempfile
 import tomllib  # Python 3.11+ stdlib
 from pathlib import Path
-from typing import Final, cast
+from typing import Final
+from typing import cast as cast
+
+# Ensure the private siblings are importable whether this file is executed
+# directly (``sys.path[0]`` is ``scripts/``) or imported with only the
+# repository root on ``sys.path`` (``scripts.check_module_core_compatibility``).
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from _module_core_compat_ast import (
+    _collect_core_imports as _collect_core_imports,
+)
+from _module_core_compat_ast import (
+    _collect_defined_names as _collect_defined_names,
+)
+from _module_core_compat_ast import (
+    _collect_defined_names_internal as _collect_defined_names_internal,
+)
+from _module_core_compat_ast import (
+    _collect_getattr_dynamic_submodules as _collect_getattr_dynamic_submodules,
+)
+from _module_core_compat_ast import (
+    _collect_lazy_symbol_names as _collect_lazy_symbol_names,
+)
+from _module_core_compat_ast import (
+    _collect_submodule_aliases as _collect_submodule_aliases,
+)
+from _module_core_compat_ast import (
+    _CoreImportVisitor as _CoreImportVisitor,
+)
+from _module_core_compat_ast import (
+    _module_path_to_fs_path as _module_path_to_fs_path,
+)
+from _module_core_compat_ast import (
+    _resolve_import as _resolve_import,
+)
+from _module_core_compat_ast import (
+    _resolve_name_via_getattr_chain as _resolve_name_via_getattr_chain,
+)
+from _module_core_compat_probe import (
+    _build_probe_script as _build_probe_script,
+)
+from _module_core_compat_probe import (
+    _probe_module_install_import as _probe_module_install_import,
+)
+from _module_core_compat_versions import (
+    _MIN_VERSION_PATTERN as _MIN_VERSION_PATTERN,
+)
+from _module_core_compat_versions import (
+    CORE_DEP_NAME as CORE_DEP_NAME,
+)
+from _module_core_compat_versions import (
+    _declared_core_spec as _declared_core_spec,
+)
+from _module_core_compat_versions import (
+    _expected_core_spec as _expected_core_spec,
+)
+from _module_core_compat_versions import (
+    _extract_min_core_version as _extract_min_core_version,
+)
+from _module_core_compat_versions import (
+    _get_core_dep_spec as _get_core_dep_spec,
+)
+from _module_core_compat_versions import (
+    _get_management_command_modules as _get_management_command_modules,
+)
+from _module_core_compat_versions import (
+    _get_module_non_core_deps as _get_module_non_core_deps,
+)
+from _module_core_compat_versions import (
+    _get_module_package_name as _get_module_package_name,
+)
+from _module_core_compat_versions import (
+    _get_pyproject_core_dep as _get_pyproject_core_dep,
+)
+from _module_core_compat_versions import (
+    _parse_module_yml as _parse_module_yml,
+)
+from _module_core_compat_versions import (
+    _parse_version_tuple as _parse_version_tuple,
+)
+from _module_core_compat_versions import (
+    _poetry_spec_to_pep440 as _poetry_spec_to_pep440,
+)
+from _module_core_compat_versions import (
+    _read_version_file as _read_version_file,
+)
+
+#: Every name the facade re-exports.  Per decisions.md § Split-Facade Seams a
+#: facade re-exports public names only: incidental imported bindings
+#: (``ast``, ``cast``, ``Path``, ...) stay module attributes but are
+#: deliberately not part of the wildcard surface.
+__all__ = [
+    "CORE_DEP_NAME",
+    "CORE_SRC_RELATIVE",
+    "MODULES_DIR_RELATIVE",
+    "MODULE_YML",
+    "REPO_ROOT_ENV",
+    "SKIP_INSTALL_PROBE_FLAG",
+    "SKIP_INSTALL_PROBE_MODULES",
+    "main",
+]
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -80,11 +193,6 @@ _DEFAULT_REPO_ROOT: Final[Path] = Path(os.environ.get(REPO_ROOT_ENV, os.getcwd()
 CORE_SRC_RELATIVE: Final[Path] = Path("quickscale_core/src")
 MODULES_DIR_RELATIVE: Final[Path] = Path("quickscale_modules")
 MODULE_YML: Final[str] = "module.yml"
-CORE_DEP_NAME: Final[str] = "quickscale-core"
-
-# Regex to extract the minimum version from a pep-440-style specifier.
-# Handles shapes like: >=0.86.0, >=0.86.0,<0.87.0, >=0.86.0,!=0.86.1
-_MIN_VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r">=\s*(?P<min_ver>\d+[.]\d+[.]\d+)")
 
 # Modules exempt from the install/import probe (Phase 2) only.
 # Static analysis (Phase 1) still runs for all modules.
@@ -102,960 +210,207 @@ SKIP_INSTALL_PROBE_MODULES: Final[dict[str, str]] = {
 
 
 # ---------------------------------------------------------------------------
-# Helpers: version parsing
+# Per-module checks
 # ---------------------------------------------------------------------------
 
 
-def _read_version_file(repo_root: Path) -> str:
-    """Return the trimmed version string from the repository ``VERSION`` file."""
-    version_file = repo_root / "VERSION"
-    if not version_file.is_file():
-        raise SystemExit(f"VERSION file not found: {version_file}")
-    raw = version_file.read_text(encoding="utf-8")
-    cleaned = raw.replace("\r", "").strip()
-    if not cleaned:
-        raise SystemExit(f"VERSION file is empty: {version_file}")
-    return cleaned
-
-
-def _parse_version_tuple(version_str: str) -> tuple[int, ...]:
-    """Parse ``'0.86.0'`` → ``(0, 86, 0)``."""
-    parts = version_str.strip().split(".", maxsplit=2)
-    return tuple(int(p) for p in parts)
-
-
-def _extract_min_core_version(dep_spec: str) -> str | None:
+def _check_pyproject_pin(
+    mod_dir: Path, expected_spec: str, current_version_str: str
+) -> tuple[bool, bool]:
     """
-    Extract the minimum version from a PEP 440 dependency specifier.
+    Check one module's pyproject lockstep pin.
 
-    Examples::
-
-        >>> _extract_min_core_version(">=0.86.0")
-        '0.86.0'
-        >>> _extract_min_core_version(">=0.86.0,<0.87.0")
-        '0.86.0'
-        >>> _extract_min_core_version("^0.86")
-        None  # not PEP 440; the repo uses PEP 440 style
-    """
-    match = _MIN_VERSION_PATTERN.search(dep_spec)
-    if match:
-        return match.group("min_ver")
-    return None
-
-
-def _expected_core_spec(version_str: str) -> str:
-    """
-    Return the lockstep specifier a module must declare for *version_str*.
-
-    The rule (decisions.md §Module Version Lockstep) is mechanical: the
-    floor is the release being published, the ceiling is the next minor.
-
-        >>> _expected_core_spec("0.88.0")
-        '>=0.88.0,<0.89.0'
-    """
-    major, minor, *_ = version_str.split(".")
-    return f">={version_str},<{major}.{int(minor) + 1}.0"
-
-
-def _declared_core_spec(dep_spec: str) -> str:
-    """Strip the distribution name off a dependency entry, leaving the specifier."""
-    return dep_spec[len(CORE_DEP_NAME) :].strip()
-
-
-# ---------------------------------------------------------------------------
-# Helpers: module.yml parsing
-# ---------------------------------------------------------------------------
-
-
-def _parse_module_yml(module_yml: Path) -> dict:
-    """Parse a ``module.yml`` file, returning the raw dict."""
-    import yaml  # pyyaml is a core dependency
-
-    with module_yml.open(encoding="utf-8") as fh:
-        return cast(dict, yaml.safe_load(fh))
-
-
-def _get_core_dep_spec(data: dict) -> str | None:
-    """
-    Return the ``quickscale-core`` dependency entry from a parsed module.yml.
-
-    Returns ``None`` if the module doesn't depend on core.  Rule 39 makes the
-    entry a bare name; a version suffix here is refused by the caller.
-    """
-    deps = data.get("dependencies", [])
-    if not isinstance(deps, list):
-        return None
-    for dep in deps:
-        if not isinstance(dep, str):
-            continue
-        # Match both "quickscale-core" and a legacy "quickscale-core>=..." form
-        if dep.startswith(CORE_DEP_NAME) or dep.startswith(f"{CORE_DEP_NAME} "):
-            return dep
-    return None
-
-
-def _get_pyproject_core_dep(mod_dir: Path) -> object | None:
-    """
-    Return the module pyproject's ``quickscale-core`` dependency value.
-
-    The value is the monorepo path table or a version string; ``None`` when
-    the file or the dependency is absent.  A malformed ``pyproject.toml``
-    raises :class:`tomllib.TOMLDecodeError` for the caller to report.
-    """
-    pyproject = mod_dir / "pyproject.toml"
-    if not pyproject.is_file():
-        return None
-    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    poetry = data.get("tool", {}).get("poetry", {})
-    deps = poetry.get("dependencies", {}) if isinstance(poetry, dict) else {}
-    if not isinstance(deps, dict):
-        return None
-    return deps.get(CORE_DEP_NAME)
-
-
-# ---------------------------------------------------------------------------
-# Helpers: AST-based import extraction
-# ---------------------------------------------------------------------------
-
-
-class _CoreImportVisitor(ast.NodeVisitor):
-    """Collect all ``quickscale_core`` import references from an AST."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        # (target_path, imported_names) where imported_names may be None
-        # for ``import quickscale_core.x`` (whole-module import)
-        self.imports: list[tuple[str, list[str] | None]] = []
-
-    def _is_quickscale_core(self, module: str | None) -> bool:
-        if module is None:
-            return False
-        return module == "quickscale_core" or module.startswith("quickscale_core.")
-
-    def visit_Import(self, node: ast.Import) -> None:
-        for alias in node.names:
-            if self._is_quickscale_core(alias.name):
-                # ``import quickscale_core.dr_engine.adapter``
-                self.imports.append((alias.name, None))
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if self._is_quickscale_core(node.module):
-            names = [a.name for a in node.names]
-            # ``from quickscale_core.x import y``
-            assert node.module is not None  # guaranteed by the guard above
-            self.imports.append((node.module, names))
-
-
-def _collect_core_imports(source_dir: Path) -> dict[Path, list[tuple[str, list[str] | None]]]:
-    """
-    Collect quickscale_core imports from a module source tree.
-
-    Walks ``source_dir`` for ``.py`` files and returns a mapping from file
-    path to the list of ``(quickscale_core_path, imported_names_or_None)``
-    tuples found in that file.
-    """
-    results: dict[Path, list[tuple[str, list[str] | None]]] = {}
-    for py_file in sorted(source_dir.rglob("*.py")):
-        try:
-            tree = ast.parse(py_file.read_text(encoding="utf-8"))
-        except SyntaxError:
-            # Skip files with syntax errors (unlikely in a healthy repo)
-            continue
-        visitor = _CoreImportVisitor()
-        visitor.visit(tree)
-        if visitor.imports:
-            results[py_file] = visitor.imports
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Helpers: symbol resolution against on-disk core
-# ---------------------------------------------------------------------------
-
-
-def _module_path_to_fs_path(
-    core_src_root: Path,
-    module_path: str,
-) -> Path | None:
-    """
-    Convert a dotted module path to a filesystem path.
-
-    E.g. ``quickscale_core.dr_engine.primitives`` →
-    ``<core_src_root>/quickscale_core/dr_engine/primitives.py``.
-
-    Returns ``None`` if the path does not exist on disk.
-    """
-    # quickscale_core.dr_engine.primitives → quickscale_core/dr_engine/primitives
-    relative = module_path.replace(".", "/")
-    # Try package/__init__.py first, then module.py
-    as_init = core_src_root / relative / "__init__.py"
-    if as_init.is_file():
-        return as_init
-    as_module = core_src_root / f"{relative}.py"
-    if as_module.is_file():
-        return as_module
-    return None
-
-
-def _collect_defined_names(py_file: Path) -> set[str]:
-    """
-    Return the set of public names defined at the top level of *py_file*.
-
-    Considers:
-    - Top-level ``FunctionDef``, ``AsyncFunctionDef``, ``ClassDef``
-    - Top-level ``Assign`` targets that are simple ``Name`` nodes
-    - Top-level ``AnnAssign`` targets that are simple ``Name`` nodes
-    - Re-exported imports (e.g. ``from x import y``) at top level
-    - ``__all__`` if it is a literal list of strings
-    - ``__getattr__`` for lazy-loading modules (trusts ``__all__`` directly)
+    Returns ``(failed, skip_module)``; a malformed pyproject reports and
+    short-circuits the module.
     """
     try:
-        tree = ast.parse(py_file.read_text(encoding="utf-8"))
-    except SyntaxError:
-        return set()
-
-    names: set[str] = set()
-    all_list: set[str] | None = None
-    has_getattr: bool = False
-
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names.add(node.name)
-            if node.name == "__getattr__":
-                has_getattr = True
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    names.add(target.id)
-                elif isinstance(target, ast.Tuple):
-                    for elt in target.elts:
-                        if isinstance(elt, ast.Name):
-                            names.add(elt.id)
-        elif isinstance(node, ast.AnnAssign):
-            if isinstance(node.target, ast.Name):
-                names.add(node.target.id)
-        elif isinstance(node, ast.ImportFrom):
-            names.update(a.name for a in node.names if a.asname is None)
-            names.update(a.asname for a in node.names if a.asname is not None)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.asname:
-                    names.add(alias.asname)
-                else:
-                    # ``import quickscale_core`` - the local name is the
-                    # last component (or the whole thing for a top-level pkg)
-                    local = alias.name.split(".")[0]
-                    names.add(local)
-
-    # Detect __all__
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "__all__":
-                    if isinstance(node.value, ast.List):
-                        all_list = {
-                            elt.value
-                            for elt in node.value.elts
-                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                        }
-
-    # If __all__ is present, the public surface is restricted to that list.
-    # For modules with __getattr__ (lazy-loading facades), trust __all__
-    # directly — lazy symbols are resolved at runtime and won't appear in
-    # the literal names set (the __getattr__ body handles them).
-    if all_list is not None:
-        if has_getattr:
-            return all_list  # __getattr__ resolves lazy symbols at runtime
-        return all_list & names  # only names that are actually defined
-
-    return names
-
-
-def _collect_lazy_symbol_names(tree: ast.AST) -> set[str]:
-    """
-    Collect lazy symbol names from frozenset literals in ``__getattr__`` modules.
-
-    Handles patterns like::
-
-        _LAZY_ORCHESTRATION_SYMBOLS: frozenset[str] = frozenset({"a", "b"})
-        _LAZY_PRIMITIVES_SYMBOLS = frozenset({"c", "d"})
-
-    Returns the set of string literals found in all such assignments.
-    """
-    lazy_names: set[str] = set()
-    for node in ast.iter_child_nodes(tree):
-        target: ast.expr | None = None
-        value: ast.expr | None = None
-
-        if isinstance(node, ast.Assign):
-            if len(node.targets) == 1:
-                target = node.targets[0]
-            value = node.value
-        elif isinstance(node, ast.AnnAssign):
-            target = node.target
-            value = node.value  # type: ignore[assignment]
-
-        if target is None or value is None:
-            continue
-        if not isinstance(target, ast.Name):
-            continue
-        if not target.id.startswith("_LAZY_") or "_SYMBOLS" not in target.id:
-            continue
-
-        # Value should be frozenset({...}) or frozenset[...]({...})
-        if (
-            isinstance(value, ast.Call)
-            and isinstance(value.func, ast.Name)
-            and value.func.id == "frozenset"
-            and value.args
-        ):
-            container = value.args[0]
-            if isinstance(container, (ast.Set, ast.List, ast.Tuple)):
-                for elt in container.elts:
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                        lazy_names.add(elt.value)
-    return lazy_names
-
-
-def _collect_submodule_aliases(tree: ast.AST) -> dict[str, str]:
-    """
-    Collect sub-module aliases from import statements in a module.
-
-    Handles::
-
-        from quickscale_core.runtime import dr as _dr
-        import quickscale_core.runtime.dr as _dr
-
-    Returns a mapping: ``{alias_name: dotted_module_path}``.
-    """
-    aliases: dict[str, str] = {}
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            for alias in node.names:
-                if alias.asname:
-                    aliases[alias.asname] = f"{node.module}.{alias.name}"
-                else:
-                    aliases[alias.name] = f"{node.module}.{alias.name}"
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.asname:
-                    aliases[alias.asname] = alias.name
-                else:
-                    aliases[alias.name] = alias.name
-    return aliases
-
-
-def _collect_getattr_dynamic_submodules(tree: ast.AST) -> set[str]:
-    """
-    Collect literal lazy-import edges reachable from ``__getattr__``.
-
-    Supports a facade that delegates to a helper such as ``_load_dr()`` whose
-    body returns ``importlib.import_module("quickscale_core.runtime.dr")``.
-    Only the ``__getattr__`` body and directly called local helpers are scanned,
-    so unrelated dynamic imports do not widen the facade's reported surface.
-    """
-    functions = {
-        node.name: node
-        for node in ast.iter_child_nodes(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-    getattr_node = functions.get("__getattr__")
-    if getattr_node is None:
-        return set()
-
-    scan_nodes: list[ast.AST] = [getattr_node]
-    called_helpers = {
-        call.func.id
-        for call in ast.walk(getattr_node)
-        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-    }
-    scan_nodes.extend(functions[name] for name in called_helpers if name in functions)
-
-    module_paths: set[str] = set()
-    for scan_node in scan_nodes:
-        for call in ast.walk(scan_node):
-            if not isinstance(call, ast.Call) or not call.args:
-                continue
-            if not (
-                isinstance(call.func, ast.Attribute)
-                and call.func.attr == "import_module"
-                and isinstance(call.func.value, ast.Name)
-                and call.func.value.id == "importlib"
-            ):
-                continue
-            module_arg = call.args[0]
-            if (
-                isinstance(module_arg, ast.Constant)
-                and isinstance(module_arg.value, str)
-                and module_arg.value.startswith("quickscale_core.")
-            ):
-                module_paths.add(module_arg.value)
-    return module_paths
-
-
-def _resolve_name_via_getattr_chain(
-    name: str,
-    target_file: Path,
-    core_src_root: Path,
-    *,
-    _visited: set[Path] | None = None,
-) -> bool:
-    """
-    Try to resolve *name* through ``__getattr__`` or direct eager imports.
-
-    Checks:
-    1. Whether the module defines ``__getattr__``.
-    2. Lazy frozenset literal assignments (``_LAZY_*_SYMBOLS``).
-    3. Direct-level eager imports that define *name* as a module-level
-       attribute but may not appear in ``__all__``.
-    4. Sub-module aliases (``from X import Y as _alias``), recursively.
-
-    Guards against cycles via ``_visited``.
-    """
-    if _visited is None:
-        _visited = set()
-    if target_file in _visited:
-        return False
-    _visited.add(target_file)
-
-    try:
-        tree = ast.parse(target_file.read_text(encoding="utf-8"))
-    except SyntaxError:
-        return False
-
-    # Collect all names defined in this module (from imports, defs, etc.)
-    full_names = _collect_defined_names_internal(tree)
-
-    # Check if __getattr__ is defined
-    has_getattr = any(
-        isinstance(node, ast.FunctionDef) and node.name == "__getattr__"
-        for node in ast.iter_child_nodes(tree)
+        pyproject_core = _get_pyproject_core_dep(mod_dir)
+    except tomllib.TOMLDecodeError as exc:
+        print(f"  ERROR: Malformed module pyproject.toml ({mod_dir / 'pyproject.toml'}): {exc}")
+        return True, True
+    if pyproject_core is None:
+        print("  FAIL: pyproject.toml does not declare quickscale-core.")
+        return True, False
+    if isinstance(pyproject_core, str):
+        declared_spec = pyproject_core.replace(" ", "")
+        if declared_spec != expected_spec:
+            print(
+                f"  FAIL: lockstep pin is {declared_spec or '(empty)'}; expected "
+                f"{expected_spec} for core {current_version_str}."
+            )
+            return True, False
+        return False, False
+    if isinstance(pyproject_core, dict):
+        if "version" in pyproject_core:
+            # A declared version wins for consumers, exactly as the CLI
+            # resolver selects it; it must be a non-blank lockstep pin,
+            # even when a path is also declared.
+            table_version = pyproject_core["version"]
+            if not isinstance(table_version, str) or not table_version.strip():
+                print(
+                    "  FAIL: pyproject.toml quickscale-core version spec is blank or not a string."
+                )
+                return True, False
+            declared_spec = table_version.replace(" ", "")
+            if declared_spec != expected_spec:
+                print(
+                    f"  FAIL: lockstep pin is {declared_spec or '(empty)'}; "
+                    f"expected {expected_spec} for core {current_version_str}."
+                )
+                return True, False
+            return False, False
+        if isinstance(pyproject_core.get("path"), str) and pyproject_core["path"].strip():
+            # Monorepo path dependency: no published spec to stamp.
+            return False, False
+        print(
+            "  FAIL: pyproject.toml quickscale-core entry declares no usable "
+            "source (path or version)."
+        )
+        return True, False
+    print(
+        "  FAIL: pyproject.toml quickscale-core entry declares no usable source (path or version)."
     )
-    if has_getattr:
-        # Check lazy frozenset literals (pre-existing lazy facade pattern)
-        if name in _collect_lazy_symbol_names(tree):
-            return True
-    else:
-        # Without __getattr__, check direct eager imports that define *name*
-        # as a module-level attribute but may not be in __all__ ∩ names.
-        if name in full_names:
-            return True
+    return True, False
 
-    # Check sub-module aliases recursively
-    for _alias_name, alias_module in _collect_submodule_aliases(tree).items():
-        sub_path = _module_path_to_fs_path(core_src_root, alias_module)
-        if sub_path and sub_path.is_file():
-            # Check sub-module's defined names first
-            sub_defined = _collect_defined_names(sub_path)
-            if name in sub_defined:
-                return True
-            # Chase sub-module's __getattr__ chain
-            if _resolve_name_via_getattr_chain(name, sub_path, core_src_root, _visited=_visited):
-                return True
 
-    # Follow literal importlib edges used by lazy facade helpers reached from
-    # __getattr__. This preserves static compatibility checks without forcing
-    # the production facade to import heavyweight sub-modules eagerly.
-    for dynamic_module in _collect_getattr_dynamic_submodules(tree):
-        sub_path = _module_path_to_fs_path(core_src_root, dynamic_module)
-        if sub_path and sub_path.is_file():
-            sub_defined = _collect_defined_names(sub_path)
-            if name in sub_defined:
-                return True
-            if _resolve_name_via_getattr_chain(name, sub_path, core_src_root, _visited=_visited):
-                return True
+def _check_module_imports(mod_dir: Path, core_src_root: Path) -> tuple[bool, bool]:
+    """
+    Resolve one module's static quickscale_core imports.
 
+    Returns ``(failed, skip_module)``; a missing source tree or a clean tree
+    short-circuits the module's later phases.
+    """
+    src_dir = mod_dir / "src"
+    if not src_dir.is_dir():
+        print("  SKIP: No src/ directory — cannot check imports.")
+        return False, True
+
+    imports_by_file = _collect_core_imports(src_dir)
+    if not imports_by_file:
+        print("  OK: No quickscale_core imports found in module source.")
+        return False, True
+
+    # Resolve each import
+    file_issues: list[str] = []
+    for py_file, import_list in imports_by_file.items():
+        rel_path = py_file.relative_to(src_dir)
+        for module_path, imported_names in import_list:
+            issues = _resolve_import(core_src_root, module_path, imported_names)
+            if issues:
+                file_issues.append(f"  In {rel_path}:")
+                file_issues.extend(issues)
+
+    if file_issues:
+        print("  IMPORT ISSUES:")
+        for line in file_issues:
+            print(f"    {line}")
+        return True, False
+
+    total_groups = sum(len(lst) for lst in imports_by_file.values())
+    total_files = len(imports_by_file)
+    files_label = "file" if total_files == 1 else "files"
+    groups_label = "group" if total_groups == 1 else "groups"
+    print(
+        f"  OK: {total_groups} quickscale_core import {groups_label}"
+        f" in {total_files} {files_label} resolved."
+    )
+    return False, False
+
+
+def _run_install_probe(mod_name: str, mod_dir: Path, src_dir: Path, min_ver_str: str) -> bool:
+    """Run the Phase 2 install/import probe; return whether it reported issues."""
+    if mod_name in SKIP_INSTALL_PROBE_MODULES:
+        print(f"  INSTALL PROBE: Skipped — {SKIP_INSTALL_PROBE_MODULES[mod_name]}")
+        return False
+    try:
+        package_name = _get_module_package_name(mod_dir)
+    except tomllib.TOMLDecodeError as exc:
+        print(f"  ERROR: Malformed module pyproject.toml ({mod_dir / 'pyproject.toml'}): {exc}")
+        return True
+    if package_name and src_dir.is_dir():
+        probe_issues = _probe_module_install_import(
+            mod_name=mod_name,
+            package_name=package_name,
+            min_version=min_ver_str,
+            src_dir=src_dir,
+            module_dir=mod_dir,
+        )
+        for pi in probe_issues:
+            print(pi)
+        return bool(probe_issues)
+    print("  INSTALL PROBE: Could not determine package name from pyproject.toml — skipping probe.")
     return False
 
 
-def _collect_defined_names_internal(tree: ast.AST) -> set[str]:
+def _check_module(
+    mod_dir: Path, core_src_root: Path, current_version_str: str, skip_install_probe: bool
+) -> tuple[bool, bool, bool]:
     """
-    Collect all names assigned or imported in a module, including private.
+    Run every per-module check.
 
-    This is a subset of ``_collect_defined_names`` that returns the raw
-    ``names`` set without filtering through ``__all__``.
+    Returns ``(failed, declares_core, reached_end)``: ``reached_end`` is false
+    for a short-circuited module, which does not get the trailing blank line.
     """
-    names: set[str] = set()
+    mod_name = mod_dir.name
+    module_yml = mod_dir / MODULE_YML
 
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names.add(node.name)
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    names.add(target.id)
-                elif isinstance(target, ast.Tuple):
-                    for elt in target.elts:
-                        if isinstance(elt, ast.Name):
-                            names.add(elt.id)
-        elif isinstance(node, ast.AnnAssign):
-            if isinstance(node.target, ast.Name):
-                names.add(node.target.id)
-        elif isinstance(node, ast.ImportFrom):
-            names.update(a.name for a in node.names if a.asname is None)
-            names.update(a.asname for a in node.names if a.asname is not None)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.asname:
-                    names.add(alias.asname)
-                else:
-                    local = alias.name.split(".")[0]
-                    names.add(local)
-
-    return names
-
-
-def _resolve_import(
-    core_src_root: Path,
-    module_path: str,
-    imported_names: list[str] | None,
-) -> list[str]:
-    """
-    Resolve one collected import against the on-disk core source.
-
-    Returns a list of human-readable issues (empty = compatible).
-
-    *module_path* is the dotted import path (e.g.
-    ``quickscale_core.dr_engine.primitives``).
-
-    *imported_names* is ``None`` for ``import quickscale_core.x`` (whole-module
-    import) or a list of symbol names for ``from quickscale_core.x import y``.
-    """
-    issues: list[str] = []
-
-    target_file = _module_path_to_fs_path(core_src_root, module_path)
-    if target_file is None:
-        issues.append(f"  Module path does not exist: {module_path} (looked under {core_src_root})")
-        return issues
-
-    if imported_names is None:
-        # ``import quickscale_core.x`` — just the module path itself needs
-        # to exist, which we already confirmed.
-        return issues
-
-    defined = _collect_defined_names(target_file)
-    for name in imported_names:
-        if name == "*":
-            # Star import — check __all__ if available
-            if not defined:
-                issues.append(
-                    f"  Star import from {module_path}: target has no __all__ "
-                    f"defined and no public names detected; requires manual review."
-                )
-            continue
-        if name not in defined:
-            # Fallback: the module may use __getattr__ to re-export symbols
-            # from frozenset-based lazy tables or sub-module aliases.
-            if _resolve_name_via_getattr_chain(name, target_file, core_src_root):
-                continue
-            issues.append(f"  Symbol {name!r} not found in {module_path}.")
-
-    return issues
-
-
-# ---------------------------------------------------------------------------
-# Install / import probe (runtime check against oldest claimed core)
-# ---------------------------------------------------------------------------
-
-
-def _get_module_package_name(module_dir: Path) -> str | None:
-    """
-    Extract the importable package name from a module's ``pyproject.toml``.
-
-    Looks at ``[tool.poetry.packages]`` and returns the ``include`` value
-    of the first entry.  Returns ``None`` if the file is absent or the
-    information cannot be extracted.
-    """
-    pyproject = module_dir / "pyproject.toml"
-    if not pyproject.is_file():
-        return None
+    # Parse module.yml for core dependency
     try:
-        with pyproject.open("rb") as fh:
-            data = tomllib.load(fh)
-    except OSError:
-        return None
-    packages = data.get("tool", {}).get("poetry", {}).get("packages", [])
-    if not isinstance(packages, list):
-        return None
-    for entry in packages:
-        if isinstance(entry, dict):
-            name = entry.get("include")
-            if isinstance(name, str) and name:
-                return name
-    return None
-
-
-def _poetry_spec_to_pep440(spec: str) -> str:
-    """
-    Convert a Poetry version specifier to PEP 440 form for ``pip install``.
-
-    Handles the forms found in this repository:
-
-    * ``^X.Y.Z`` → ``>=X.Y.Z,<X+1.0.0`` (X >= 1) or ``>=0.Y.Z,<0.Y+1.0`` (X == 0)
-    * ``^X.Y``   → ``>=X.Y,<X+1.0`` (X >= 1) or ``>=0.Y,<0.Y+1`` (X == 0)
-    * ``~X.Y.Z`` → ``>=X.Y.Z,<X.Y+1.0``
-    * Everything else is passed through as-is (assumed PEP 440 compatible).
-
-    This is intentionally limited to the forms present in the QuickScale
-    monorepo module dependencies.  It is not a general Poetry-to-PEP 440
-    converter.
-    """
-    # Caret: ^X.Y.Z or ^X.Y
-    caret_match = re.match(r"^\^(\d+)\.(\d+)(?:\.(\d+))?$", spec)
-    if caret_match:
-        major = int(caret_match.group(1))
-        minor = int(caret_match.group(2))
-        patch = caret_match.group(3)
-        if major >= 1:
-            upper_major = major + 1
-            lower = f"{major}.{minor}" if patch is None else f"{major}.{minor}.{patch}"
-            upper = f"{upper_major}.0.0"
-        else:
-            # Pre-1.0: bounded by minor version (Poetry's convention)
-            upper_minor = minor + 1
-            lower = f"0.{minor}" if patch is None else f"0.{minor}.{patch}"
-            upper = f"0.{upper_minor}.0"
-        return f">={lower},<{upper}"
-
-    # Tilde: ~X.Y.Z
-    tilde_match = re.match(r"^~(\d+)\.(\d+)\.(\d+)$", spec)
-    if tilde_match:
-        major = int(tilde_match.group(1))
-        minor = int(tilde_match.group(2))
-        patch = tilde_match.group(3)
-        upper_minor = minor + 1
-        return f">={major}.{minor}.{patch},<{major}.{upper_minor}.0"
-
-    # Plain wildcard: X.Y.* or just a bare version
-    # Pass through unchanged (pip may handle it or fail with a clear error)
-    return spec
-
-
-def _get_module_non_core_deps(module_dir: Path) -> list[str]:
-    """
-    Return non-core, installable dependency specs from a module's pyproject.
-
-    Excludes ``python``, ``quickscale-core``, and any dependency entry that
-    uses a path (editable / develop) form.  The returned list uses PEP 440
-    specifiers suitable for passing to ``pip install``.
-    """
-    pyproject = module_dir / "pyproject.toml"
-    if not pyproject.is_file():
-        return []
-    try:
-        with pyproject.open("rb") as fh:
-            data = tomllib.load(fh)
-    except OSError:
-        return []
-
-    poetry_deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
-    if not isinstance(poetry_deps, dict):
-        return []
-
-    specs: list[str] = []
-    for dep_name, dep_spec in poetry_deps.items():
-        if dep_name in ("python", "quickscale-core"):
-            continue
-        if isinstance(dep_spec, str):
-            converted = _poetry_spec_to_pep440(dep_spec)
-            specs.append(f"{dep_name}{converted}")
-        elif isinstance(dep_spec, dict):
-            # Skip path-only deps (editable / develop entries);
-            # include version-constrained entries.
-            if "path" in dep_spec and "version" not in dep_spec:
-                continue
-            version = dep_spec.get("version", "")
-            if version:
-                converted = _poetry_spec_to_pep440(version)
-                specs.append(f"{dep_name}{converted}")
-    return specs
-
-
-def _get_management_command_modules(package_name: str, src_dir: Path) -> list[str]:
-    """
-    Return dotted import paths for management command modules in *package_name*.
-
-    Scans ``src_dir/<package_name>/management/commands/*.py`` (excluding
-    ``__init__.py``) and returns fully-qualified dotted paths suitable for
-    ``importlib.import_module`` or ``__import__``.
-
-    Returns an empty list when the directory does not exist or no commands
-    are found.
-    """
-    pkg_dir = src_dir / package_name
-    commands_dir = pkg_dir / "management" / "commands"
-    if not commands_dir.is_dir():
-        return []
-    modules: list[str] = []
-    for cmd_file in sorted(commands_dir.iterdir()):
-        if cmd_file.suffix == ".py" and cmd_file.stem != "__init__":
-            modules.append(f"{package_name}.management.commands.{cmd_file.stem}")
-    return modules
-
-
-def _probe_module_install_import(
-    mod_name: str,
-    package_name: str,
-    min_version: str,
-    src_dir: Path,
-    module_dir: Path,
-) -> list[str]:
-    """
-    Run the install/import probe for one module.
-
-    Returns a list of human-readable issues (empty = probe passed).
-    """
-    issues: list[str] = []
-
-    try:
-        with tempfile.TemporaryDirectory(prefix=f"qs_compat_probe_{mod_name}_") as tmpdir_str:
-            tmpdir = Path(tmpdir_str)
-            venv_path = tmpdir / ".venv"
-
-            # --- create isolated venv ---
-            log_prefix = "  INSTALL PROBE:"
-            _log = lambda msg: print(f"  {log_prefix} {msg}")  # noqa: E731
-
-            result = subprocess.run(
-                [sys.executable, "-m", "venv", str(venv_path)],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode != 0:
-                issues.append(
-                    f"{log_prefix} Failed to create virtual environment: {result.stderr.strip()}"
-                )
-                return issues
-
-            pip_cmd = str(venv_path / "bin" / "pip")
-            python_cmd = str(venv_path / "bin" / "python")
-
-            # upgrade pip to avoid stale resolver warnings
-            subprocess.run(
-                [pip_cmd, "install", "--upgrade", "pip", "--quiet"],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-
-            # --- install oldest claimed core ---
-            _log(f"Installing quickscale-core=={min_version} ...")
-            result = subprocess.run(
-                [pip_cmd, "install", f"quickscale-core=={min_version}", "--quiet"],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if result.returncode != 0:
-                stderr = result.stderr.strip()
-                if "No matching distribution" in stderr or "Could not find" in stderr:
-                    _log(
-                        f"quickscale-core=={min_version} not found on PyPI "
-                        f"(may not be published yet) — skipping probe."
-                    )
-                else:
-                    issues.append(
-                        f"{log_prefix} Failed to install quickscale-core=={min_version}: {stderr}"
-                    )
-                return issues
-
-            # --- install module deps (non-core) ---
-            has_django = False
-            extra_deps = _get_module_non_core_deps(module_dir)
-            if extra_deps:
-                has_django = any("Django" in d or "django" in d for d in extra_deps)
-                _log("Installing module dependencies ...")
-                result = subprocess.run(
-                    [pip_cmd, "install", *extra_deps, "--quiet"],
-                    capture_output=True,
-                    text=True,
-                    timeout=180,
-                )
-                if result.returncode != 0:
-                    issues.append(
-                        f"{log_prefix} Failed to install module dependencies: "
-                        f"{result.stderr.strip()}"
-                    )
-
-            # --- discover management command modules ---
-            management_cmds = _get_management_command_modules(package_name, src_dir)
-
-            # --- write probe script ---
-            probe_script = tmpdir / "_probe.py"
-            probe_script.write_text(
-                _build_probe_script(
-                    package_name=package_name,
-                    src_dir=src_dir,
-                    has_django=has_django,
-                    management_commands=management_cmds,
-                ),
-                encoding="utf-8",
-            )
-
-            # --- execute probe ---
-            probe_env = os.environ.copy()
-            probe_env["PYTHONPATH"] = f"{src_dir}:{probe_env.get('PYTHONPATH', '')}"
-
-            result = subprocess.run(
-                [str(python_cmd), str(probe_script)],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                env=probe_env,
-            )
-
-            # Interpret probe output
-            probe_passed = False
-            core_failure = False
-            for line in result.stdout.strip().splitlines():
-                line = line.strip()
-                if line == "PROBE_RESULT: PASS":
-                    probe_passed = True
-                elif line.startswith("PROBE_FAIL:"):
-                    core_failure = True
-                    issues.append(f"{log_prefix} {line[len('PROBE_FAIL:') :].strip()}")
-
-            if result.returncode != 0 and not core_failure:
-                # Non-zero exit but no PROBE_FAIL marker — likely a
-                # Django config or other infrastructure issue.
-                stderr = result.stderr.strip()
-                if stderr:
-                    _log(f"Probe script stderr (non-fatal): {stderr}")
-
-            if probe_passed:
-                _log(f"OK — {package_name} importable against quickscale-core=={min_version}")
-            elif not core_failure:
-                # Probe script ran but didn't reach PASS or FAIL marker
-                issues.append(
-                    f"{log_prefix} Probe script did not complete successfully "
-                    f"(exit code {result.returncode})"
-                )
-
-    except subprocess.TimeoutExpired as exc:
-        issues.append(f"  INSTALL PROBE: Probe timed out ({exc})")
+        data = _parse_module_yml(module_yml)
     except Exception as exc:
-        issues.append(f"  INSTALL PROBE: Unexpected error during probe: {exc}")
+        print(f"[{mod_name}] ERROR: Could not parse {module_yml}: {exc}")
+        return True, False, False
 
-    return issues
+    dep_entry = _get_core_dep_spec(data)
+    if dep_entry is None:
+        print(f"[{mod_name}] No quickscale-core dependency declared — skipping.")
+        return False, False, False
 
+    print(f"[{mod_name}] quickscale-core dependency: {dep_entry}")
 
-def _build_probe_script(
-    package_name: str,
-    src_dir: Path,
-    has_django: bool,
-    management_commands: list[str] | None = None,
-) -> str:
-    """
-    Build the probe script that will be run inside the isolated venv.
+    expected_spec = _expected_core_spec(current_version_str)
+    failed = False
 
-    The script writes PROBE_RESULT: PASS on success, or PROBE_FAIL: <msg>
-    on failure.  Any other output is informational.
+    # Rule 39: the manifest lists the bare dependency name; the spec lives
+    # in the module pyproject.toml.
+    if dep_entry.strip() != CORE_DEP_NAME:
+        print(
+            f"  FAIL: manifest entry must be the bare name {CORE_DEP_NAME!r} "
+            f"with the spec in pyproject.toml (rule 39); got {dep_entry!r}."
+        )
+        failed = True
 
-    *management_commands* is an optional list of dotted module paths for
-    management command modules (e.g. ``["backups.management.commands.quickscale_backups_create"]``)
-    that should be imported during the probe to verify they resolve.
-    """
-    lines: list[str] = [
-        "import sys",
-        f"sys.path.insert(0, {str(src_dir)!r})",
-        "",
-        "# Phase 1: import the top-level package",
-        "try:",
-        f"    import {package_name}",
-        f'    print(f"OK: top-level {package_name} imported")',
-        "except Exception as exc:",
-        '    print(f"PROBE_FAIL: top-level import failed: {exc}")',
-        "    sys.exit(1)",
-        "",
-    ]
+    # The module pyproject owns the spec: the monorepo path dependency, or
+    # exactly the lockstep pin derived from VERSION, so a stale or
+    # hand-edited pin fails the gate rather than passing on a floor
+    # comparison alone.
+    pin_failed, skip_module = _check_pyproject_pin(mod_dir, expected_spec, current_version_str)
+    if pin_failed:
+        failed = True
+    if skip_module:
+        return failed, True, False
 
-    if has_django:
-        lines += [
-            "# Phase 2: configure Django settings for submodule probes",
-            "import django",
-            "from django.conf import settings",
-            "# Minimal settings that let Django models load without a database",
-            "settings.configure(",
-            "    INSTALLED_APPS=[",
-            f"        {package_name!r},",
-            "    ],",
-            "    DATABASES={",
-            '        "default": {',
-            '            "ENGINE": "django.db.backends.sqlite3",',
-            '            "NAME": ":memory:",',
-            "        }",
-            "    },",
-            "    USE_TZ=True,",
-            "    # Allow any SECRET_KEY for the import test",
-            '    SECRET_KEY="compat-probe-insecure-key",',
-            ")",
-            "django.setup()",
-            "",
-        ]
+    # Phase 2 probes the floor of the derived lockstep spec: the oldest
+    # released core the generated project's pin admits.
+    min_ver_str = _extract_min_core_version(expected_spec)
+    if min_ver_str is None:
+        print(
+            f"  WARNING: Could not extract minimum version from spec "
+            f"({expected_spec}). Cannot verify version baseline."
+        )
 
-    # Phase 2b: probe core-importing submodules (services.py)
-    services_mod = f"{package_name}.services"
-    lines += [
-        "# Phase 2b: probe core-importing submodules",
-        f"for _mod in [{services_mod!r}]:",
-        "    try:",
-        "        __import__(_mod)",
-        '        print(f"OK: {_mod} imported")',
-        "    except ImportError as exc:",
-        "        # Report quickscale_core import errors as failures",
-        "        msg = str(exc)",
-        '        if "quickscale_core" in msg or "quickscale" in msg.lower():',
-        '            print(f"PROBE_FAIL: import {_mod} failed: {exc}")',
-        "        else:",
-        '            print(f"SKIP: {_mod} requires configuration: {exc}")',
-        "    except Exception as exc:",
-        "        if 'ImproperlyConfigured' in type(exc).__name__:",
-        '            print(f"SKIP: {_mod} needs Django app config: {exc}")',
-        "        elif hasattr(exc, '__module__') and 'django' in getattr(exc, '__module__', ''):",
-        '            print(f"SKIP: {_mod} Django infrastructure: {exc}")',
-        "        else:",
-        '            print(f"PROBE_FAIL: import {_mod} failed: {exc}")',
-    ]
+    imports_failed, skip_module = _check_module_imports(mod_dir, core_src_root)
+    if imports_failed:
+        failed = True
+    if skip_module:
+        return failed, True, False
 
-    # Phase 3: probe management command modules (if any found)
-    if management_commands:
-        _cmd_list_repr = repr(management_commands)
-        lines += [
-            "",
-            "# Phase 3: probe management command modules",
-            f"for _cmd_mod in {_cmd_list_repr}:",
-            "    try:",
-            "        __import__(_cmd_mod)",
-            '        print(f"OK: {_cmd_mod} imported")',
-            "    except ImportError as exc:",
-            "        msg = str(exc)",
-            '        if "quickscale_core" in msg or "quickscale" in msg.lower():',
-            '            print(f"PROBE_FAIL: import {_cmd_mod} failed: {exc}")',
-            "        else:",
-            '            print(f"SKIP: {_cmd_mod} requires configuration: {exc}")',
-            "    except Exception as exc:",
-            "        if 'ImproperlyConfigured' in type(exc).__name__:",
-            '            print(f"SKIP: {_cmd_mod} needs Django app config: {exc}")',
-            "        elif hasattr(exc, '__module__') and 'django'"
-            " in getattr(exc, '__module__', ''):",
-            '            print(f"SKIP: {_cmd_mod} Django infrastructure: {exc}")',
-            "        else:",
-            '            print(f"PROBE_FAIL: import {_cmd_mod} failed: {exc}")',
-        ]
+    # ---- Phase 2: install / import probe ----
+    if not skip_install_probe and min_ver_str is not None:
+        if _run_install_probe(mod_name, mod_dir, mod_dir / "src", min_ver_str):
+            failed = True
 
-    # Success marker
-    lines += [
-        "",
-        'print("PROBE_RESULT: PASS")',
-    ]
-
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# Main check logic
-# ---------------------------------------------------------------------------
+    return failed, True, True
 
 
 SKIP_INSTALL_PROBE_FLAG: Final[str] = "--skip-install-probe"
@@ -1111,173 +466,19 @@ def main(argv: list[str] | None = None) -> int:
     for mod_dir in module_dirs:
         if not mod_dir.is_dir():
             continue
-        module_yml = mod_dir / MODULE_YML
-        if not module_yml.is_file():
+        if not (mod_dir / MODULE_YML).is_file():
             continue
 
         modules_found += 1
-        mod_name = mod_dir.name
-
-        # Parse module.yml for core dependency
-        try:
-            data = _parse_module_yml(module_yml)
-        except Exception as exc:
-            print(f"[{mod_name}] ERROR: Could not parse {module_yml}: {exc}")
+        failed, declares_core, reached_end = _check_module(
+            mod_dir, core_src_root, current_version_str, skip_install_probe
+        )
+        if failed:
             overall_exit = 1
-            continue
-
-        dep_entry = _get_core_dep_spec(data)
-        if dep_entry is None:
-            print(f"[{mod_name}] No quickscale-core dependency declared — skipping.")
-            continue
-
-        modules_with_core_dep += 1
-        print(f"[{mod_name}] quickscale-core dependency: {dep_entry}")
-
-        expected_spec = _expected_core_spec(current_version_str)
-
-        # Rule 39: the manifest lists the bare dependency name; the spec lives
-        # in the module pyproject.toml.
-        if dep_entry.strip() != CORE_DEP_NAME:
-            print(
-                f"  FAIL: manifest entry must be the bare name {CORE_DEP_NAME!r} "
-                f"with the spec in pyproject.toml (rule 39); got {dep_entry!r}."
-            )
-            overall_exit = 1
-
-        # The module pyproject owns the spec: the monorepo path dependency, or
-        # exactly the lockstep pin derived from VERSION, so a stale or
-        # hand-edited pin fails the gate rather than passing on a floor
-        # comparison alone.
-        try:
-            pyproject_core = _get_pyproject_core_dep(mod_dir)
-        except tomllib.TOMLDecodeError as exc:
-            print(f"  ERROR: Malformed module pyproject.toml ({mod_dir / 'pyproject.toml'}): {exc}")
-            overall_exit = 1
-            continue
-        if pyproject_core is None:
-            print("  FAIL: pyproject.toml does not declare quickscale-core.")
-            overall_exit = 1
-        elif isinstance(pyproject_core, str):
-            declared_spec = pyproject_core.replace(" ", "")
-            if declared_spec != expected_spec:
-                print(
-                    f"  FAIL: lockstep pin is {declared_spec or '(empty)'}; expected "
-                    f"{expected_spec} for core {current_version_str}."
-                )
-                overall_exit = 1
-        elif isinstance(pyproject_core, dict):
-            if "version" in pyproject_core:
-                # A declared version wins for consumers, exactly as the CLI
-                # resolver selects it; it must be a non-blank lockstep pin,
-                # even when a path is also declared.
-                table_version = pyproject_core["version"]
-                if not isinstance(table_version, str) or not table_version.strip():
-                    print(
-                        "  FAIL: pyproject.toml quickscale-core version spec is "
-                        "blank or not a string."
-                    )
-                    overall_exit = 1
-                else:
-                    declared_spec = table_version.replace(" ", "")
-                    if declared_spec != expected_spec:
-                        print(
-                            f"  FAIL: lockstep pin is {declared_spec or '(empty)'}; "
-                            f"expected {expected_spec} for core {current_version_str}."
-                        )
-                        overall_exit = 1
-            elif isinstance(pyproject_core.get("path"), str) and pyproject_core["path"].strip():
-                pass  # Monorepo path dependency: no published spec to stamp.
-            else:
-                print(
-                    "  FAIL: pyproject.toml quickscale-core entry declares no usable "
-                    "source (path or version)."
-                )
-                overall_exit = 1
-        else:
-            print(
-                "  FAIL: pyproject.toml quickscale-core entry declares no usable "
-                "source (path or version)."
-            )
-            overall_exit = 1
-
-        # Phase 2 probes the floor of the derived lockstep spec: the oldest
-        # released core the generated project's pin admits.
-        min_ver_str = _extract_min_core_version(expected_spec)
-        if min_ver_str is None:
-            print(
-                f"  WARNING: Could not extract minimum version from spec "
-                f"({expected_spec}). Cannot verify version baseline."
-            )
-
-        # Collect quickscale_core imports from module source
-        src_dir = mod_dir / "src"
-        if not src_dir.is_dir():
-            print("  SKIP: No src/ directory — cannot check imports.")
-            continue
-
-        imports_by_file = _collect_core_imports(src_dir)
-        if not imports_by_file:
-            print("  OK: No quickscale_core imports found in module source.")
-            continue
-
-        # Resolve each import
-        file_issues: list[str] = []
-        for py_file, import_list in imports_by_file.items():
-            rel_path = py_file.relative_to(src_dir)
-            for module_path, imported_names in import_list:
-                issues = _resolve_import(core_src_root, module_path, imported_names)
-                if issues:
-                    file_issues.append(f"  In {rel_path}:")
-                    file_issues.extend(issues)
-
-        if file_issues:
-            print("  IMPORT ISSUES:")
-            for line in file_issues:
-                print(f"    {line}")
-            overall_exit = 1
-        else:
-            total_groups = sum(len(lst) for lst in imports_by_file.values())
-            total_files = len(imports_by_file)
-            files_label = "file" if total_files == 1 else "files"
-            groups_label = "group" if total_groups == 1 else "groups"
-            print(
-                f"  OK: {total_groups} quickscale_core import {groups_label}"
-                f" in {total_files} {files_label} resolved."
-            )
-
-        # ---- Phase 2: install / import probe ----
-        if not skip_install_probe and min_ver_str is not None:
-            if mod_name in SKIP_INSTALL_PROBE_MODULES:
-                print(f"  INSTALL PROBE: Skipped — {SKIP_INSTALL_PROBE_MODULES[mod_name]}")
-            else:
-                try:
-                    package_name = _get_module_package_name(mod_dir)
-                except tomllib.TOMLDecodeError as exc:
-                    print(
-                        f"  ERROR: Malformed module pyproject.toml "
-                        f"({mod_dir / 'pyproject.toml'}): {exc}"
-                    )
-                    overall_exit = 1
-                    continue
-                if package_name and src_dir.is_dir():
-                    probe_issues = _probe_module_install_import(
-                        mod_name=mod_name,
-                        package_name=package_name,
-                        min_version=min_ver_str,
-                        src_dir=src_dir,
-                        module_dir=mod_dir,
-                    )
-                    for pi in probe_issues:
-                        print(pi)
-                        overall_exit = 1
-                else:
-                    print(
-                        "  INSTALL PROBE: Could not determine package name "
-                        "from pyproject.toml — skipping probe."
-                    )
-
-        print()  # blank line between modules
+        if declares_core:
+            modules_with_core_dep += 1
+        if reached_end:
+            print()  # blank line between modules
 
     # Summary
     if modules_found == 0:

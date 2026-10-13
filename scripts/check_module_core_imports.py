@@ -184,89 +184,94 @@ def _check_module_source(source_dir: Path, module_name: str) -> _ScanResults:
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run the import linter and return an exit code."""
-    if argv is None:
-        argv = sys.argv[1:]
+def _scan_modules_direction(
+    modules_root: Path,
+    all_violations: list[tuple[str, Path, int, str]],
+) -> tuple[bool, list[tuple[Path, str]]]:
+    """
+    Scan the forward direction (modules → core) and print its violations.
 
-    repo_root = _DEFAULT_REPO_ROOT
-    if argv:
-        repo_root = Path(argv[0]).resolve()
-
-    # ------------------------------------------------------------------
-    # Forward direction: modules → core
-    # ------------------------------------------------------------------
-    modules_root = (repo_root / MODULES_DIR_RELATIVE).resolve()
-
-    all_violations: list[tuple[str, Path, int, str]] = []  # (context, file, lineno, import_path)
-    scan_failures: list[tuple[Path, str]] = []
-
-    modules_root_found = modules_root.is_dir()
-    if modules_root_found:
-        for mod_dir in sorted(modules_root.iterdir()):
-            if not mod_dir.is_dir():
-                continue
-
-            src_dir = mod_dir / "src"
-            if not src_dir.is_dir():
-                continue
-
-            mod_name = mod_dir.name
-            violations_by_file = _check_module_source(src_dir, mod_name)
-            scan_failures.extend(violations_by_file.failures)
-
-            if not violations_by_file:
-                continue
-
-            _header_printed = False
-            for py_file, violations in sorted(violations_by_file.items()):
-                rel_path = py_file.relative_to(src_dir)
-                for lineno, import_path in violations:
-                    if not _header_printed:
-                        print(f"[{mod_name}] Core import boundary violations:")
-                        _header_printed = True
-                    print(f"  {rel_path}:{lineno}  {import_path}")
-                    all_violations.append((mod_name, rel_path, lineno, import_path))
-    else:
+    Returns whether the scan root exists and the fail-closed inspection
+    failures, keeping the pre-split print order.
+    """
+    if not modules_root.is_dir():
         print(
             f"ERROR: Required scan root not found: {modules_root}; "
             f"cannot perform forward direction scan.",
             file=sys.stderr,
         )
+        return False, []
 
-    # ------------------------------------------------------------------
-    # Reverse direction: core → modules
-    # ------------------------------------------------------------------
-    core_src = (repo_root / CORE_SRC_RELATIVE).resolve()
+    scan_failures: list[tuple[Path, str]] = []
+    for mod_dir in sorted(modules_root.iterdir()):
+        if not mod_dir.is_dir():
+            continue
 
-    core_src_found = core_src.is_dir()
-    if core_src_found:
-        reverse_violations = _check_core_source(core_src)
-        scan_failures.extend(reverse_violations.failures)
-        if reverse_violations:
-            _header_printed = False
-            for py_file, violations in sorted(reverse_violations.items()):
-                rel_path = py_file.relative_to(core_src)
-                for lineno, import_path in violations:
-                    if not _header_printed:
-                        print(
-                            "Core source import boundary violations "
-                            "(quickscale_modules prohibited):"
-                        )
-                        _header_printed = True
-                    print(f"  {rel_path}:{lineno}  {import_path}")
-                    all_violations.append(("quickscale_core", rel_path, lineno, import_path))
-    else:
+        src_dir = mod_dir / "src"
+        if not src_dir.is_dir():
+            continue
+
+        mod_name = mod_dir.name
+        violations_by_file = _check_module_source(src_dir, mod_name)
+        scan_failures.extend(violations_by_file.failures)
+
+        if not violations_by_file:
+            continue
+
+        header_printed = False
+        for py_file, violations in sorted(violations_by_file.items()):
+            rel_path = py_file.relative_to(src_dir)
+            for lineno, import_path in violations:
+                if not header_printed:
+                    print(f"[{mod_name}] Core import boundary violations:")
+                    header_printed = True
+                print(f"  {rel_path}:{lineno}  {import_path}")
+                all_violations.append((mod_name, rel_path, lineno, import_path))
+    return True, scan_failures
+
+
+def _scan_core_direction(
+    core_src: Path,
+    all_violations: list[tuple[str, Path, int, str]],
+) -> tuple[bool, list[tuple[Path, str]]]:
+    """
+    Scan the reverse direction (core → modules) and print its violations.
+
+    Returns whether the scan root exists and the fail-closed inspection
+    failures, keeping the pre-split print order.
+    """
+    if not core_src.is_dir():
         print(
             f"ERROR: Required scan root not found: {core_src}; "
             f"cannot perform reverse direction scan.",
             file=sys.stderr,
         )
+        return False, []
 
+    reverse_violations = _check_core_source(core_src)
+    if reverse_violations:
+        header_printed = False
+        for py_file, violations in sorted(reverse_violations.items()):
+            rel_path = py_file.relative_to(core_src)
+            for lineno, import_path in violations:
+                if not header_printed:
+                    print("Core source import boundary violations (quickscale_modules prohibited):")
+                    header_printed = True
+                print(f"  {rel_path}:{lineno}  {import_path}")
+                all_violations.append(("quickscale_core", rel_path, lineno, import_path))
+    return True, list(reverse_violations.failures)
+
+
+def _report_boundary_result(
+    total: int,
+    scan_failures: list[tuple[Path, str]],
+    modules_root_found: bool,
+    core_src_found: bool,
+) -> int:
+    """Print the inspection failures and the summary; return the exit code."""
     for py_file, failure in scan_failures:
         print(f"ERROR: Unable to inspect {py_file}: {failure}", file=sys.stderr)
 
-    total = len(all_violations)
     if total == 0 and not scan_failures and modules_root_found and core_src_found:
         print(
             "All imports respect the core↔module boundary:\n"
@@ -296,6 +301,35 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
     return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the import linter and return an exit code."""
+    if argv is None:
+        argv = sys.argv[1:]
+
+    repo_root = _DEFAULT_REPO_ROOT
+    if argv:
+        repo_root = Path(argv[0]).resolve()
+
+    all_violations: list[tuple[str, Path, int, str]] = []  # (context, file, lineno, import_path)
+
+    # Forward direction: modules → core
+    modules_root_found, forward_failures = _scan_modules_direction(
+        (repo_root / MODULES_DIR_RELATIVE).resolve(), all_violations
+    )
+
+    # Reverse direction: core → modules
+    core_src_found, reverse_failures = _scan_core_direction(
+        (repo_root / CORE_SRC_RELATIVE).resolve(), all_violations
+    )
+
+    return _report_boundary_result(
+        len(all_violations),
+        forward_failures + reverse_failures,
+        modules_root_found,
+        core_src_found,
+    )
 
 
 if __name__ == "__main__":

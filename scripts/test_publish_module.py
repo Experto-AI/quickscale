@@ -242,7 +242,7 @@ def test_release_gates_require_local_config_before_mutation(
     monkeypatch.setattr(
         publish_module_impl,
         "_check_release_authoritative",
-        lambda active_runner: calls.append("release"),
+        lambda _active_runner: calls.append("release"),
     )
     monkeypatch.setattr(
         git_module,
@@ -1125,7 +1125,7 @@ class TestSealCliAndStatus:
         monkeypatch.setattr(
             publish_module_impl,
             "_check_release_authoritative",
-            lambda active_runner: (_ for _ in ()).throw(
+            lambda _active_runner: (_ for _ in ()).throw(
                 publish_module.GitError("not authoritative")
             ),
         )

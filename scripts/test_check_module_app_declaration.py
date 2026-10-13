@@ -28,9 +28,9 @@ class _PartialScandir:
 
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: object,
+        _exc_type: type[BaseException] | None,
+        _exc_value: BaseException | None,
+        _traceback: object,
     ) -> None:
         self._close()
 
