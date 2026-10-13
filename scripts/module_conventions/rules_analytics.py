@@ -1,118 +1,80 @@
-"""Analytics event rule."""
+"""
+Analytics event rule.
+
+The mechanics live in private sibling modules (``_analytics_events`` and
+``_analytics_session_keys``); this module orchestrates rule 22 and re-exports
+every moved name so existing import paths and the rule registry keep working.
+"""
 
 from __future__ import annotations
 
-import ast
-from typing import Any
+# The pre-split module also exposed its own imports as module attributes
+# (``ast``, ``Any``, and core's helpers); the redundant aliases keep every one
+# importable from this facade.
+import ast as ast
+from typing import Any as Any
 
+from scripts.module_conventions._analytics_events import (
+    _capture_surface_violations,
+    _event_stem_scan_violations,
+)
+from scripts.module_conventions._analytics_session_keys import (
+    _names_session_key,
+    _session_key_scan_violations,
+    _session_key_violations,
+)
 from scripts.module_conventions.core import (
     Corpus,
-    Module,
-    _call_func_name,
-    _docstring_nodes,
-    _keyword,
-    _literal,
-    _parse,
-    _string_assignments,
-    _string_list,
+)
+from scripts.module_conventions.core import (
+    Module as Module,
+)
+from scripts.module_conventions.core import (
+    _call_func_name as _call_func_name,
+)
+from scripts.module_conventions.core import (
+    _docstring_nodes as _docstring_nodes,
+)
+from scripts.module_conventions.core import (
+    _keyword as _keyword,
+)
+from scripts.module_conventions.core import (
+    _literal as _literal,
+)
+from scripts.module_conventions.core import (
+    _parse as _parse,
+)
+from scripts.module_conventions.core import (
+    _string_assignments as _string_assignments,
+)
+from scripts.module_conventions.core import (
+    _string_list as _string_list,
+)
+
+#: The rule 40 harness re-exports every name the pre-split module published,
+#: private helpers included: existing import paths (``registry``,
+#: ``check_module_conventions``, the control cases) keep resolving through this
+#: facade.
+__all__ = (
+    "_names_session_key",
+    "_session_key_violations",
+    "rule_22_analytics_events",
 )
 
 
-def _names_session_key(node: ast.AST) -> bool:
-    """
-    Return whether a node reads or names the session credential.
-
-    Rule 22: the credential the session stores (``session.session_key``, or
-    the ``"session_key"`` string ``getattr`` reads it through) is the token
-    the rule forbids, wherever a module reads or constructs it.
-    """
-    if isinstance(node, ast.Attribute) and node.attr == "session_key":
-        return True
-    if isinstance(node, ast.Name) and node.id == "session_key":
-        return True
-    return isinstance(node, ast.Constant) and node.value == "session_key"
-
-
-def _session_key_violations(
-    module: Module,
-    tree: ast.Module,
-    rel: str,
-) -> list[str]:
-    """Return rule 22 violations for session-credential uses in one file."""
-    violations: list[str] = []
-    docstrings = _docstring_nodes(tree)
-    for node in ast.walk(tree):
-        if not _names_session_key(node):
-            continue
-        if isinstance(node, ast.Constant) and id(node) in docstrings:
-            continue
-        violations.append(
-            f"rule 22: {module.name}: {rel}:{node.lineno} uses session_key "
-            "(a live session credential) in module source"
-        )
-    return violations
-
-
 def rule_22_analytics_events(corpus: Corpus) -> list[str]:
-    violations: list[str] = []
-    analytics = next((module for module in corpus.modules if module.name == "analytics"), None)
-    if analytics is not None:
-        services = analytics.files.get("services.py", "")
-        if services:
-            tree = _parse(services)
-            helpers = [
-                node.name
-                for node in tree.body
-                if isinstance(node, ast.FunctionDef) and node.name.startswith("capture_")
-            ]
-            if helpers != ["capture_event"]:
-                violations.append(
-                    f"rule 22: analytics: capture helpers are {helpers}, expected ['capture_event']"
-                )
-            exports = _string_list(tree).get("__all__", [])
-            if "capture_event" not in exports:
-                violations.append("rule 22: analytics: capture_event is not in services.__all__")
-    for module in corpus.modules:
-        for rel, text in module.files.items():
-            if not rel.endswith(".py"):
-                continue
-            violations.extend(_session_key_violations(module, _parse(text), rel))
-    for module in corpus.modules:
-        if module.name == "analytics":
-            continue
-        constants: dict[str, Any] = {}
-        for rel, text in module.files.items():
-            if rel.endswith(".py"):
-                constants.update(
-                    {
-                        name: value
-                        for name, value in _string_assignments(_parse(text)).items()
-                        if name.isupper() or name.endswith("_EVENT")
-                    }
-                )
-        for rel, text in module.files.items():
-            if not rel.endswith(".py"):
-                continue
-            for node in ast.walk(_parse(text)):
-                if not isinstance(node, ast.Call):
-                    continue
-                if _call_func_name(node) != "capture_event":
-                    continue
-                argument = _keyword(node, "event")
-                if argument is None and len(node.args) >= 2:
-                    argument = node.args[1]
-                if isinstance(argument, ast.Name):
-                    event = constants.get(argument.id)
-                else:
-                    event = _literal(argument)
-                if not isinstance(event, str):
-                    violations.append(
-                        f"rule 22: {module.name}: {rel} calls capture_event with no resolvable "
-                        "event name"
-                    )
-                elif event != "$pageview" and not event.startswith(f"quickscale_{module.name}_"):
-                    violations.append(
-                        f"rule 22: {module.name}: event {event!r} lacks the "
-                        f"quickscale_{module.name}_ stem"
-                    )
-    return violations
+    """
+    Rule 22: analytics events go through the module's one capture helper.
+
+    The statically checkable clauses: ``analytics`` publishes exactly one
+    ``capture_`` helper, ``capture_event``, and exports it from
+    ``services.__all__``; no module source reads or names the session
+    credential; every other module's ``capture_event`` call names an event
+    whose string carries the calling module's ``quickscale_<module>_`` stem
+    (``$pageview`` excepted).
+    """
+    return [
+        *_capture_surface_violations(corpus),
+        *_session_key_scan_violations(corpus),
+        *_event_stem_scan_violations(corpus),
+    ]
