@@ -303,7 +303,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
     <800 lines, max CC 20), removing both CC failures (49 and 31) and the
     1090-line file; parity controls pin the pre-split surface, its imported
     bindings, signatures, and exact findings, and 996 harness controls pass.
-  - [ ] (c) `adapter_flow.py`.
+  - [x] (c) `adapter_flow.py`. The split is implemented: `adapter_flow.py` is a
+    420-line facade keeping the `AdapterFlow` entry point; the mechanics live in four
+    private siblings (`_adapter_lexical`, `_adapter_reference`, `_adapter_queries`,
+    `_adapter_seed`; all <800 lines, max CC 19), removing all three CC failures (25, 23,
+    and 22) and leaving no harness function at CC >= 21; parity controls pin the
+    pre-split surface, its imported bindings, signatures, wildcard-import surface, and
+    exact findings, and 1016 harness controls pass.
   - [ ] (d) `core.py`.
 
   **Surfaces:** `scripts/module_conventions/` and its tests, and the arch audit.
