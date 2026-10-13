@@ -259,8 +259,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   discovery are unchanged.
 
   **Slices** (in order, each with parity controls pinning the pre-split surface and findings):
-  - [ ] (a) Gate registry: `sync_ci_gate_jobs.py` and `check_gate_parity.py`. The executed prefix
-    of `check_ci_locally.sh` stays byte-stable.
+  - [x] (a) Gate registry: `sync_ci_gate_jobs.py` and `check_gate_parity.py`. The executed prefix
+    of `check_ci_locally.sh` stays byte-stable. Landed: both files are facades over private
+    `_`-prefixed siblings (max non-test CC 20, largest file 702 lines, vulture 100% clean);
+    parity controls pin the pre-split surface, signatures, homes, and exact findings with no
+    behavior, CLI, or generated-artifact change.
   - [ ] (b) `publish_module.py`.
   - [ ] (c) `check_security_gates.py`, `check_workflow_security.py`, `check_csrf_exempt_gate.py`.
   - [ ] (d) `check_project_contract_vintage.py`, `check_module_core_compatibility.py`,
