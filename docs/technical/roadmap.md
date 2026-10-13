@@ -33,14 +33,15 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA267 | Bring `scripts/` under the quality thresholds without gating it | 2 | — | Optional |
+| SA267 | Bring the gate scripts under the quality thresholds | 2 | — | Optional |
+| SA268 | Bring the conformance harness under the quality thresholds | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (cutover) ∥ SA204 ──► SA153 ──► SA154 (inventory)
 Track 2: SA267
-Track 3: —
+Track 3: SA268
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
 ```
@@ -65,8 +66,8 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 ∥ SA204 (a) | yes | no | yes | no | yes |
-| 2 | SA267 | yes | yes | yes | **yes** | no |
-| 3 | — | yes | yes | yes | **yes** | no |
+| 2 | SA267 (gate registry) | yes | yes | yes | **yes** | no |
+| 3 | SA268 (docs) | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -103,8 +104,6 @@ A track is **truly green** only when all three states are yes.
   handlers with core's redaction helpers.
 - **Cross-track edits.** SA204 adds its gate row to the Track 2 registry. All land through
   the serialized merge queue.
-- **Cross-track edits.** For SA267 only, Track 2 may refactor the Track-3-owned conformance
-  harness while Track 3 is idle; detector behavior, rules, and registry rows stay unchanged.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), both audits, and
   [decisions.md](decisions.md). Each track resolves the shared set at its
@@ -248,58 +247,47 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [x] **SA263 — Adapters validate, coerce, and default only through the manifest.**
+- [ ] **SA267 — Bring the gate scripts under the quality thresholds.**
 
-- [ ] **SA267 — Bring `scripts/` under the quality thresholds without gating it.**
+  **Context:** `check_quality.sh` scans only packages. Outside the conformance harness (SA268),
+  `scripts/` still has 23 non-test functions at CC >= 21, 7 non-test files >= 800 lines, and 3
+  vulture 100%-confidence findings (arch audit `rules-held-by-parity-not-derivation`).
 
-  **Context:** `check_quality.sh` scans only packages, and `scripts/` misses its fixed lines:
-  63 non-test functions at CC >= 21, 11 non-test Python files >= 800 lines, and 8 vulture 100%-confidence
-  findings (arch audit `rules-held-by-parity-not-derivation`).
+  **Acceptance:** non-harness `scripts/` has no finding at radon CC >= 21, files >= 800 lines, or
+  vulture 100% confidence. Prefer deleting dead or redundant governance code over splitting it.
+  Every gate's behavior is unchanged and its tests pass; `make quality` and `check_quality.sh`
+  discovery are unchanged.
 
-  **Acceptance:** `scripts/` has no finding on the gate's fail lines: radon CC >= 21, files
-  >= 800 lines, and vulture at 100% confidence. Prefer deleting dead or redundant governance
-  code over splitting it. Behavior of every gate is unchanged, and their tests pass. `make
-  quality` and `check_quality.sh` discovery are not changed.
+  **Slices** (in order, each with parity controls pinning the pre-split surface and findings):
+  - [ ] (a) Gate registry: `sync_ci_gate_jobs.py` and `check_gate_parity.py`. The executed prefix
+    of `check_ci_locally.sh` stays byte-stable.
+  - [ ] (b) `publish_module.py`.
+  - [ ] (c) `check_security_gates.py`, `check_workflow_security.py`, `check_csrf_exempt_gate.py`.
+  - [ ] (d) `check_project_contract_vintage.py`, `check_module_core_compatibility.py`,
+    `check_module_core_imports.py`, `check_sa117_scope.py`, `check_coverage_policy.py`,
+    `check_beta_migration_smoke.py`, and the vulture findings.
+  - [ ] (e) Test-function CC debt across `scripts/`, after SA268 lands.
 
-  **Slices:** one per script family, largest debt first; file sub-slices are allowed in the
-  conformance harness. The routes sub-slice is implemented: `rules_routes.py` is a 310-line
-  facade with seven helpers (all <800 lines, max CC 20), removing nine CC failures and one
-  oversized file. Baseline differential checks found no drift; 584 harness controls pass.
-  The identity sub-slice is implemented: `rules_identity.py` is a 351-line facade with seven
-  helpers (all <800 lines, max CC 20), removing seven CC failures and one oversized file;
-  parity controls pin the pre-split surface and exact findings, and 608 harness controls pass.
-  The webhooks sub-slice is implemented: `rules_webhooks.py` is a 132-line facade with five
-  helpers (all <800 lines, max CC 18), removing six CC failures and one oversized file;
-  parity controls pin the pre-split surface, its imported bindings, and exact findings, and
-  638 harness controls pass.
-  The misc sub-slice is implemented: `rules_misc.py` is a 105-line facade with four helpers
-  (`_misc_flow`, `_misc_ready`, `_misc_checks`, `_misc_rules`; all <800 lines, max CC 18),
-  removing five CC failures; parity controls pin the pre-split surface, its imported bindings,
-  signatures, and exact findings, and 665 harness controls pass.
-  The dependencies and package sub-slice is implemented: `rules_dependencies.py` is a 184-line
-  facade with four helpers (all <800 lines, max CC 15), and `rules_package.py` is a 241-line
-  facade with five helpers (all <800 lines, max CC 20), removing four CC failures each;
-  parity controls pin the pre-split surface, its imported bindings, signatures, and exact
-   findings, and 740 harness controls pass.
-   The models sub-slice is implemented: `rules_models.py` is a 195-line facade with three
-   private siblings (`_models_tenancy`, `_models_basics`, `_models_constraints`; all <800 lines,
-   max CC 16), removing three CC failures (69, 34, 21); parity controls pin the pre-split
-   surface, its imported bindings, signatures, and exact findings, and 785 harness controls pass.
-   The settings sub-slice is implemented: `rules_settings.py` is a 328-line facade with five
-   private siblings (`_settings_names`, `_settings_reads`, `_settings_manifest`,
-   `_settings_snapshots`, `_settings_senders`; all <800 lines, max CC 19), removing three CC
-   failures (36, 30, 28); parity controls pin the pre-split surface, its imported bindings,
-   signatures, exact findings, and rule 3's syntax-error precedence, and 855 harness controls
-   pass.
-   The analytics sub-slice is implemented: `rules_analytics.py` is an 80-line facade with two
-   private siblings (`_analytics_events`, `_analytics_session_keys`; all <800 lines, max CC 8),
-   removing the CC-31 failure; parity controls pin the pre-split surface, its imported
-   bindings, signatures, and exact findings, and 887 harness controls pass.
-   Next: the harness families still carrying debt (docs, redaction, rule 44, adapter flow,
-   core), then the script families, then test-function debt.
-   Keep the module-name tables in the rule-37-exempt facade and preserve lazy renderer binding.
+  **Surfaces:** non-harness `scripts/` and their tests, and the arch audit.
 
-  **Surfaces:** `scripts/` and their tests, and the arch audit.
+- [ ] **SA268 — Bring the conformance harness under the quality thresholds.**
+
+  **Context:** `scripts/module_conventions/` still has 7 non-test functions at CC >= 21 and 2
+  files >= 800 lines (arch audit `rules-held-by-parity-not-derivation`). Split rule families
+  keep a public facade with private `_<family>_*` siblings.
+
+  **Acceptance:** as SA267, for `scripts/module_conventions/`. Detector behavior, rules, and
+  registry rows are unchanged; the full harness control suite passes. Keep the module-name
+  tables in the rule-37-exempt facade and preserve lazy renderer binding.
+
+  **Slices** (in order, each with a parity test pinning the pre-split surface, imported
+  bindings, signatures, and exact findings):
+  - [ ] (a) `rules_docs.py` and `rules_redaction.py`.
+  - [ ] (b) `rule_44.py`.
+  - [ ] (c) `adapter_flow.py`.
+  - [ ] (d) `core.py`.
+
+  **Surfaces:** `scripts/module_conventions/` and its tests, and the arch audit.
 
 ## Deferred constraints and references
 
