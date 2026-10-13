@@ -34,14 +34,13 @@ context, scope, and acceptance; [CHANGELOG.md](../../CHANGELOG.md) preserves his
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA267 | Bring the gate scripts under the quality thresholds | 2 | — | Optional |
-| SA268 | Bring the conformance harness under the quality thresholds | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (cutover) ∥ SA204 ──► SA153 ──► SA154 (inventory)
 Track 2: SA267
-Track 3: SA268
+Track 3: — (SA268 landed)
      release path:  publish 0.89.0
      critical path: SA191 → SA204 → SA153
 ```
@@ -67,7 +66,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 ∥ SA204 (a) | yes | no | yes | no | yes |
 | 2 | SA267 (gate registry) | yes | yes | yes | **yes** | no |
-| 3 | SA268 (adapter flow) | yes | yes | yes | **yes** | no |
+| 3 | — (SA268 landed) | yes | yes | yes | **yes** | no |
 
 ### Ownership and merge coordination
 
@@ -277,42 +276,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   **Surfaces:** non-harness `scripts/` and their tests, and the arch audit.
 
-- [ ] **SA268 — Bring the conformance harness under the quality thresholds.**
-
-  **Context:** `scripts/module_conventions/` still has 7 non-test functions at CC >= 21 and 2
-  files >= 800 lines (arch audit `rules-held-by-parity-not-derivation`). Split rule families
-  keep a public facade with private `_<family>_*` siblings.
-
-  **Acceptance:** as SA267, for `scripts/module_conventions/`. Detector behavior, rules, and
-  registry rows are unchanged; the full harness control suite passes. Keep the module-name
-  tables in the rule-37-exempt facade and preserve lazy renderer binding.
-
-  **Slices** (in order, each with a parity test pinning the pre-split surface, imported
-  bindings, signatures, and exact findings):
-  - [x] (a) `rules_docs.py` and `rules_redaction.py`. The docs half is implemented:
-    `rules_docs.py` is a 61-line facade with one private sibling (`_docs_readme`; all <800
-    lines, max CC 10), removing the CC-22 failure; parity controls pin the pre-split surface,
-    its imported bindings, signatures, and exact findings, and 910 harness controls pass.
-    The redaction half is implemented: `rules_redaction.py` is a 98-line facade with one
-    private sibling (`_redaction_handlers`; all <800 lines, max CC 16), removing the CC-23
-    failure; parity controls pin the pre-split surface, its imported bindings, signatures,
-    and exact findings, and 955 harness controls pass.
-  - [x] (b) `rule_44.py`. The split is implemented: `rule_44.py` is a 126-line
-    facade re-exporting the pre-split surface; the mechanics live in three private
-    siblings (`_rule44_names`, `_rule44_expressions`, `_rule44_statements`; all
-    <800 lines, max CC 20), removing both CC failures (49 and 31) and the
-    1090-line file; parity controls pin the pre-split surface, its imported
-    bindings, signatures, and exact findings, and 996 harness controls pass.
-  - [x] (c) `adapter_flow.py`. The split is implemented: `adapter_flow.py` is a
-    420-line facade keeping the `AdapterFlow` entry point; the mechanics live in four
-    private siblings (`_adapter_lexical`, `_adapter_reference`, `_adapter_queries`,
-    `_adapter_seed`; all <800 lines, max CC 19), removing all three CC failures (25, 23,
-    and 22) and leaving no harness function at CC >= 21; parity controls pin the
-    pre-split surface, its imported bindings, signatures, wildcard-import surface, and
-    exact findings, and 1016 harness controls pass.
-  - [ ] (d) `core.py`.
-
-  **Surfaces:** `scripts/module_conventions/` and its tests, and the arch audit.
+- [x] **SA268 — Bring the conformance harness under the quality thresholds.**
 
 ## Deferred constraints and references
 
