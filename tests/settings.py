@@ -27,11 +27,13 @@ DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
 # This suite installs billing and notifications enabled; their rule 35
-# startup checks need the Stripe and Resend webhook secrets to resolve.
+# startup checks need the Stripe and Resend webhook secrets to resolve and the
+# notifications webhook secret to be Svix-shaped.
 os.environ.setdefault("STRIPE_SECRET_KEY", "sk_test_orgs_suite")
 os.environ.setdefault("QUICKSCALE_BILLING_WEBHOOK_SECRET", "whsec_orgs_suite")
 os.environ.setdefault(
-    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET", "whsec_notifications_orgs_suite"
+    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
+    "whsec_YWFhYWFhYWFhYWFhYWFhYQ==",
 )
 
 INSTALLED_APPS = [
@@ -232,7 +234,7 @@ QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR = (
     "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
 )
 QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY = "test-resend-api-key"
-QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET = "test-webhook-secret"
+QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET = "whsec_YWFhYWFhYWFhYWFhYWFhYQ=="
 QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS = ["quickscale", "transactional"]
 QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS = [
     "quickscale",
