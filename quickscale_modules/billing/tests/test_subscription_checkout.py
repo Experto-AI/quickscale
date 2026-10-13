@@ -1,6 +1,7 @@
 """Tests for subscription Checkout creation and provider reconciliation."""
 
 from __future__ import annotations
+import quickscale_modules_billing._customers as _customers
 import quickscale_modules_billing._subscription_checkout as _subscription_checkout
 import quickscale_modules_billing._settings as _settings
 import quickscale_modules_billing._payload as _payload
@@ -39,6 +40,7 @@ class _FakeCheckoutClient:
 
     price: dict[str, Any] = field(default_factory=dict)
     checkout_sessions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    customers: list[dict[str, Any]] = field(default_factory=list)
     created_session: dict[str, Any] = field(default_factory=dict)
     created_customer: dict[str, Any] = field(default_factory=dict)
     searched_checkout_references: list[dict[str, Any]] = field(default_factory=list)
@@ -56,7 +58,7 @@ class _FakeCheckoutClient:
 
     def search_customers(self, **kwargs: Any) -> list[dict[str, Any]]:
         del kwargs
-        return []
+        return [dict(customer) for customer in self.customers]
 
     def create_customer(self, **kwargs: Any) -> dict[str, Any]:
         del kwargs
@@ -103,6 +105,14 @@ def _create_reservation(
     }
     values.update(overrides)
     return Subscription.all_objects.create(**values)
+
+
+def _age_reservation(reservation: Subscription) -> None:
+    """Move a reservation past Stripe's documented Search indexing lag."""
+    Subscription.all_objects.filter(pk=reservation.pk).update(
+        created_at=timezone.now() - timedelta(hours=2)
+    )
+    reservation.refresh_from_db()
 
 
 @pytest.mark.django_db
@@ -289,13 +299,14 @@ def test_subscription_reconciliation_closes_unknown_outcome_without_a_session(
     org_context,
     persist: bool,
 ) -> None:
-    """A session-less reservation Stripe holds no session for resolves empty."""
+    """A session-less reservation past the Search lag resolves empty."""
     plan = _create_plan()
     reservation = _create_reservation(
         user=user,
         organization=organization,
         plan=plan,
     )
+    _age_reservation(reservation)
     client = _FakeCheckoutClient()
 
     result = (
@@ -314,6 +325,230 @@ def test_subscription_reconciliation_closes_unknown_outcome_without_a_session(
         if persist
         else Subscription.Status.INCOMPLETE
     )
+
+
+@pytest.mark.django_db
+def test_subscription_reconciliation_keeps_a_lagged_miss_open(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A Search miss inside the indexing lag must not resolve as absent."""
+    plan = _create_plan()
+    reservation = _create_reservation(
+        user=user,
+        organization=organization,
+        plan=plan,
+    )
+    client = _FakeCheckoutClient()
+
+    with pytest.raises(BillingError, match="Search indexing lag"):
+        _subscription_checkout.reconcile_organization_removal_subscription_checkout(
+            organization.pk,
+            persist=True,
+            stripe_client=client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.status == Subscription.Status.INCOMPLETE
+
+
+@pytest.mark.django_db
+def test_subscription_retry_refreshes_the_search_lag_window(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A failed retry on an aged reservation keeps it inside the lag window."""
+    plan = _create_plan(price_id="price_checkout_retry_lag")
+    reservation = _create_reservation(
+        user=user,
+        organization=organization,
+        plan=plan,
+    )
+    _age_reservation(reservation)
+    client = _FakeCheckoutClient(price=_matching_price(plan))
+
+    def fail_customer_create(**kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        raise stripe.StripeError("network down")
+
+    client.create_customer = fail_customer_create  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="customer resolution failed"):
+        _subscription_checkout.create_subscription_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/success",
+            cancel_url="https://app.example.com/cancel",
+            organization=organization,
+            stripe_client=client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.customer_lookup_attempted_at is not None
+    assert reservation.customer_lookup_completed_at is not None
+
+    with pytest.raises(BillingError, match="Search indexing lag"):
+        _subscription_checkout.reconcile_organization_removal_subscription_checkout(
+            organization.pk,
+            persist=True,
+            stripe_client=_FakeCheckoutClient(),
+        )
+
+
+@pytest.mark.django_db
+def test_slow_subscription_resolution_keeps_the_lag_window_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A resolution that outlasts the lag still stamps its completion."""
+    clock = {"now": timezone.now()}
+    monkeypatch.setattr(
+        _customers,
+        "timezone",
+        SimpleNamespace(now=lambda: clock["now"]),
+    )
+    plan = _create_plan(price_id="price_checkout_slow_lookup")
+    reservation = _create_reservation(
+        user=user,
+        organization=organization,
+        plan=plan,
+    )
+    _age_reservation(reservation)
+    client = _FakeCheckoutClient(price=_matching_price(plan))
+
+    def slow_failed_create(**kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        # The resolution outlasts the Search lag before its response is lost.
+        clock["now"] = clock["now"] + timedelta(hours=2)
+        raise stripe.StripeError("network down")
+
+    client.create_customer = slow_failed_create  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="customer resolution failed"):
+        _subscription_checkout.create_subscription_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/success",
+            cancel_url="https://app.example.com/cancel",
+            organization=organization,
+            stripe_client=client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.customer_lookup_completed_at == clock["now"]
+
+    with pytest.raises(BillingError, match="Search indexing lag"):
+        _subscription_checkout.reconcile_organization_removal_subscription_checkout(
+            organization.pk,
+            persist=True,
+            stripe_client=_FakeCheckoutClient(),
+        )
+
+
+@pytest.mark.django_db
+def test_failed_completion_stamp_keeps_the_reservation_open(
+    monkeypatch: pytest.MonkeyPatch,
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A completion-stamp failure leaves the attempt unresolved and blocking."""
+    plan = _create_plan(price_id="price_checkout_stamp_failure")
+    reservation = _create_reservation(
+        user=user,
+        organization=organization,
+        plan=plan,
+    )
+    _age_reservation(reservation)
+    client = _FakeCheckoutClient(price=_matching_price(plan))
+
+    def fail_customer_create(**kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        raise stripe.StripeError("network down")
+
+    client.create_customer = fail_customer_create  # type: ignore[method-assign]
+
+    real_stamp = _customers._stamp_organization_customer_attempt
+
+    def fail_completion(organization: Any, *, completed: bool) -> None:
+        if completed:
+            raise RuntimeError("completion stamp failed")
+        real_stamp(organization, completed=completed)
+
+    monkeypatch.setattr(
+        _customers,
+        "_stamp_organization_customer_attempt",
+        fail_completion,
+    )
+
+    with pytest.raises(RuntimeError, match="completion stamp failed"):
+        _subscription_checkout.create_subscription_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/success",
+            cancel_url="https://app.example.com/cancel",
+            organization=organization,
+            stripe_client=client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.customer_lookup_attempted_at is not None
+    assert reservation.customer_lookup_completed_at is None
+
+    with pytest.raises(BillingError, match="no recorded outcome"):
+        _subscription_checkout.reconcile_organization_removal_subscription_checkout(
+            organization.pk,
+            persist=True,
+            stripe_client=_FakeCheckoutClient(),
+        )
+
+
+@pytest.mark.django_db
+def test_slow_search_response_does_not_trust_an_inside_window_miss(
+    monkeypatch: pytest.MonkeyPatch,
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A miss whose search was issued inside the window stays untrusted."""
+    clock = {"now": timezone.now()}
+    monkeypatch.setattr(
+        _customers,
+        "timezone",
+        SimpleNamespace(now=lambda: clock["now"]),
+    )
+    plan = _create_plan(price_id="price_checkout_slow_search")
+    reservation = _create_reservation(
+        user=user,
+        organization=organization,
+        plan=plan,
+    )
+    # The reservation is inside the one-hour window when the search is issued.
+    Subscription.all_objects.filter(pk=reservation.pk).update(
+        created_at=timezone.now() - timedelta(minutes=30)
+    )
+    client = _FakeCheckoutClient()
+
+    def slow_empty_search(**kwargs: Any) -> list[dict[str, Any]]:
+        del kwargs
+        clock["now"] = clock["now"] + timedelta(hours=2)
+        return []
+
+    client.search_customers = slow_empty_search  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="Search indexing lag"):
+        _subscription_checkout.reconcile_organization_removal_subscription_checkout(
+            organization.pk,
+            persist=True,
+            stripe_client=client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.status == Subscription.Status.INCOMPLETE
 
 
 @pytest.mark.django_db

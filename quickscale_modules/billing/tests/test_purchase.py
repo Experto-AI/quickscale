@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 import quickscale_modules_billing._checkout as _checkout
+import quickscale_modules_billing._customers as _customers
 import quickscale_modules_billing._payload as _payload
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -21,6 +23,7 @@ from quickscale_modules_billing.models import (
     CreditTransaction,
     Plan,
     PurchaseCheckout,
+    Subscription,
     WebhookEvent,
 )
 from quickscale_modules_billing.serializers import (
@@ -88,6 +91,14 @@ def _create_monthly_plan(*, slug: str = "starter-monthly") -> Plan:
 
 def _user_reference(user: Any) -> str:
     return f"{user._meta.label_lower}:{user.pk}"
+
+
+def _age_reservation(reservation: PurchaseCheckout) -> None:
+    """Move a reservation past Stripe's documented Search indexing lag."""
+    PurchaseCheckout.all_objects.filter(pk=reservation.pk).update(
+        created_at=timezone.now() - timedelta(hours=2)
+    )
+    reservation.refresh_from_db()
 
 
 def _checkout_session_completed_event(
@@ -813,7 +824,7 @@ def test_purchase_checkout_reconciliation_closes_unknown_outcome_without_a_sessi
     org_context,
     persist: bool,
 ) -> None:
-    """A reservation Stripe holds no session for resolves to nothing created."""
+    """A reservation Stripe holds no session for, past the Search lag, resolves empty."""
     plan = _create_one_time_plan(slug=f"reconcile-absent-{persist}")
     reservation = PurchaseCheckout.all_objects.create(
         user=user,
@@ -821,6 +832,7 @@ def test_purchase_checkout_reconciliation_closes_unknown_outcome_without_a_sessi
         plan=plan,
         status=PurchaseCheckout.Status.PREPARING,
     )
+    _age_reservation(reservation)
     fake_client = FakePurchaseStripeClient()
 
     expired_ids = reconcile_purchase_checkouts_for_removal(
@@ -837,6 +849,297 @@ def test_purchase_checkout_reconciliation_closes_unknown_outcome_without_a_sessi
         if persist
         else PurchaseCheckout.Status.PREPARING
     )
+
+
+@pytest.mark.django_db
+def test_purchase_checkout_reconciliation_keeps_a_lagged_miss_open(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A Search miss inside the indexing lag must not resolve as absent."""
+    plan = _create_one_time_plan(slug="reconcile-lagged-miss")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.PREPARING,
+    )
+    fake_client = FakePurchaseStripeClient()
+
+    with pytest.raises(BillingError, match="Search indexing lag"):
+        reconcile_purchase_checkouts_for_removal(
+            organization.pk,
+            persist=True,
+            stripe_client=fake_client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.status == PurchaseCheckout.Status.PREPARING
+
+
+@pytest.mark.django_db
+def test_purchase_checkout_reconciliation_fails_closed_on_two_customer_matches(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """One organization reference resolving to two customers fails closed."""
+    plan = _create_one_time_plan(slug="reconcile-two-matches")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.PREPARING,
+    )
+    fake_client = FakePurchaseStripeClient(
+        customers=[{"id": "cus_two_matches_a"}, {"id": "cus_two_matches_b"}],
+    )
+
+    with pytest.raises(BillingError, match="Multiple Stripe customers"):
+        reconcile_purchase_checkouts_for_removal(
+            organization.pk,
+            persist=True,
+            stripe_client=fake_client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.status == PurchaseCheckout.Status.PREPARING
+
+
+@pytest.mark.django_db
+def test_purchase_checkout_reconciliation_fails_closed_on_a_search_error(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A failed customer search never resolves a reservation as absent."""
+    plan = _create_one_time_plan(slug="reconcile-search-error")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.PREPARING,
+    )
+    fake_client = FakePurchaseStripeClient()
+
+    def failing_search(**kwargs: Any) -> list[dict[str, Any]]:
+        del kwargs
+        raise stripe.StripeError("network down")
+
+    fake_client.search_customers = failing_search  # type: ignore[method-assign]
+
+    with pytest.raises(
+        BillingError, match="Stripe purchase checkout reconciliation failed"
+    ):
+        reconcile_purchase_checkouts_for_removal(
+            organization.pk,
+            persist=True,
+            stripe_client=fake_client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.status == PurchaseCheckout.Status.PREPARING
+
+
+@pytest.mark.django_db
+def test_purchase_retry_refreshes_the_search_lag_window(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A failed retry on an aged reservation keeps it inside the lag window."""
+    plan = _create_one_time_plan(slug="reconcile-retry-lag")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.PREPARING,
+    )
+    _age_reservation(reservation)
+    fake_client = FakePurchaseStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "one_time",
+            }
+        }
+    )
+
+    def fail_customer_create(**kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        raise stripe.StripeError("network down")
+
+    fake_client.create_customer = fail_customer_create  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="customer resolution failed"):
+        create_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.customer_lookup_attempted_at is not None
+    assert reservation.customer_lookup_completed_at is not None
+
+    with pytest.raises(BillingError, match="Search indexing lag"):
+        reconcile_purchase_checkouts_for_removal(
+            organization.pk,
+            persist=True,
+            stripe_client=FakePurchaseStripeClient(),
+        )
+
+
+@pytest.mark.django_db
+def test_purchase_attempt_refreshes_a_subscription_reservation(
+    monkeypatch: pytest.MonkeyPatch,
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A slow lost resolution from another flow refreshes the org's reservations."""
+    from quickscale_modules_billing._subscription_checkout import (
+        reconcile_organization_removal_subscription_checkout,
+    )
+
+    clock = {"now": timezone.now()}
+    monkeypatch.setattr(
+        _customers,
+        "timezone",
+        SimpleNamespace(now=lambda: clock["now"]),
+    )
+    plan = _create_one_time_plan(slug="cross-flow-attempt")
+    subscription = Subscription.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=_create_monthly_plan(slug="cross-flow-subscription"),
+        status=Subscription.Status.INCOMPLETE,
+    )
+    # Older than the lag, so only the attempt stamp can keep it open.
+    Subscription.all_objects.filter(pk=subscription.pk).update(
+        created_at=timezone.now() - timedelta(hours=2)
+    )
+    fake_client = FakePurchaseStripeClient(
+        prices={
+            plan.stripe_price_id: {
+                "id": plan.stripe_price_id,
+                "unit_amount": plan.price_cents,
+                "currency": plan.currency,
+                "type": "one_time",
+            }
+        }
+    )
+
+    def slow_failed_create(**kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        clock["now"] = clock["now"] + timedelta(hours=2)
+        raise stripe.StripeError("network down")
+
+    fake_client.create_customer = slow_failed_create  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="customer resolution failed"):
+        create_checkout_session(
+            user,
+            plan=plan,
+            success_url="https://app.example.com/billing/purchase/success",
+            cancel_url="https://app.example.com/billing/purchase/cancel",
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    subscription.refresh_from_db()
+    assert subscription.customer_lookup_completed_at == clock["now"]
+
+    with pytest.raises(BillingError, match="Search indexing lag"):
+        reconcile_organization_removal_subscription_checkout(
+            organization.pk,
+            persist=True,
+            stripe_client=FakePurchaseStripeClient(),
+        )
+
+
+@pytest.mark.django_db
+def test_interrupted_purchase_attempt_keeps_the_reservation_open(
+    user,
+    organization,
+    org_context,
+) -> None:
+    """An attempt with no recorded outcome blocks regardless of its age."""
+    plan = _create_one_time_plan(slug="reconcile-interrupted-attempt")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.PREPARING,
+    )
+    _age_reservation(reservation)
+    PurchaseCheckout.all_objects.filter(pk=reservation.pk).update(
+        customer_lookup_attempted_at=timezone.now() - timedelta(hours=2),
+        customer_lookup_completed_at=None,
+    )
+
+    with pytest.raises(BillingError, match="no recorded outcome"):
+        reconcile_purchase_checkouts_for_removal(
+            organization.pk,
+            persist=True,
+            stripe_client=FakePurchaseStripeClient(),
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.status == PurchaseCheckout.Status.PREPARING
+
+
+@pytest.mark.django_db
+def test_slow_purchase_search_response_does_not_trust_an_inside_window_miss(
+    monkeypatch: pytest.MonkeyPatch,
+    user,
+    organization,
+    org_context,
+) -> None:
+    """A miss whose search was issued inside the window stays untrusted."""
+    clock = {"now": timezone.now()}
+    monkeypatch.setattr(
+        _customers,
+        "timezone",
+        SimpleNamespace(now=lambda: clock["now"]),
+    )
+    plan = _create_one_time_plan(slug="reconcile-slow-search")
+    reservation = PurchaseCheckout.all_objects.create(
+        user=user,
+        organization=organization,
+        plan=plan,
+        status=PurchaseCheckout.Status.PREPARING,
+    )
+    # The reservation is inside the one-hour window when the search is issued.
+    PurchaseCheckout.all_objects.filter(pk=reservation.pk).update(
+        created_at=timezone.now() - timedelta(minutes=30)
+    )
+    fake_client = FakePurchaseStripeClient()
+
+    def slow_empty_search(
+        *, user_reference: str = "", organization_reference: str = ""
+    ) -> list[dict[str, Any]]:
+        del user_reference, organization_reference
+        clock["now"] = clock["now"] + timedelta(hours=2)
+        return []
+
+    fake_client.search_customers = slow_empty_search  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="Search indexing lag"):
+        reconcile_purchase_checkouts_for_removal(
+            organization.pk,
+            persist=True,
+            stripe_client=fake_client,
+        )
+
+    reservation.refresh_from_db()
+    assert reservation.status == PurchaseCheckout.Status.PREPARING
 
 
 @pytest.mark.django_db

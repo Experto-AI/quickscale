@@ -155,13 +155,6 @@ Silence on skipped areas licenses no conclusion.
 schema: tech-audit/v6
 audited: 7d9782a99a6606853c2299170489fe291acc6a10
 items:
-  - {id: stripe-customer-search-lag-resolves-absent, status: open, severity: S3, category: II,
-     title: "Checkout reconciliation treats a Stripe Search miss as proof that no customer exists",
-     effort: Small, confidence: Medium, reality: generated-app,
-     anchors: [quickscale_modules/billing/src/quickscale_modules_billing/_customers.py,
-               quickscale_modules/billing/src/quickscale_modules_billing/_stripe_client.py],
-     fix_files: [quickscale_modules/auth/tests/test_views.py], depends_on: [], chain: [],
-     first_seen: 2026-10-13, last_verified: 2026-10-13}
   - {id: dr-private-remote-restore-whole-object-in-memory, status: open, severity: S3, category: IV,
      title: "Private-remote restore reads the whole dump into memory", effort: Small,
      confidence: High, reality: generated-app,
@@ -258,14 +251,13 @@ items:
 ## 3. Summary table
 
 **Counts:**
-- **Open:** 11 in total: S1 — 0 · S2 — 0 · S3 — 3 · S4 — 8.
+- **Open:** 10 in total: S1 — 0 · S2 — 0 · S3 — 2 · S4 — 8.
 - **Watchlist:** 16.
 - **This pass:** prior open `forms-notification-status-misreported` resolved; 11 findings new, 0
   carried, 0 regressed.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
-| `stripe-customer-search-lag-resolves-absent` | S3 | II | Checkout reconciliation treats a Stripe Search miss as proof that no customer exists | Small | Medium | new |
 | `dr-private-remote-restore-whole-object-in-memory` | S3 | IV | Private-remote restore reads the whole dump into memory | Small | High | new |
 | `e2e-release-tag-trigger-never-matches` | S3 | VII | Hosted E2E never runs on a release tag | Trivial | High | new (**quick win**) |
 | `crm-theme-stats-always-zero` | S4 | IX | Theme CRM stat cards always show 0 | Trivial | High | new |
@@ -282,36 +274,6 @@ items:
 ## 4. Findings
 
 ### S3 findings (compact)
-
-- **`stripe-customer-search-lag-resolves-absent`**
-  - **Severity:** S3. High impact (account deletion, or closing a reservation, while provider
-    state may exist) × Rare. The deviation is one step up from S4: a test that pinned the safe
-    behavior was inverted in the delta.
-  - **Location:**
-    - `billing/_customers.py:115-150` (`_resolve_existing_customer_id_for_reconciliation`);
-    - `billing/_stripe_client.py:72` (`Customer.search(query=…, limit=1)`).
-  - **Defect:**
-    - When neither the reservation nor the organization records a customer ID, reconciliation asks
-      Stripe Search and treats an empty result as "no customer, so no checkout can exist".
-      Stripe Search is eventually consistent: a customer created just before the lookup may not
-      be indexed yet.
-    - `limit=1` means the `len(customer_ids) > 1` fail-closed guard can never fire.
-  - **Failure scenario** (walked on paper, not run):
-    1. A `create_customer` call has an unknown outcome: the Stripe customer exists but the local
-       sync never ran.
-    2. Within the Search indexing lag, the owner deletes their account, or an operator runs
-       purge or reconcile.
-    3. The miss resolves the reservation as absent and deletion proceeds.
-  - **Evidence of the blessed change:** `auth/tests/test_views.py:1858` used to assert that an
-    unknown outcome blocks deletion (200, user active). Since `9592bab5` it mocks
-    `search_customers=[]` and asserts the deletion proceeds (302). No test covers a Search error or
-    a lagged miss.
-  - **Fix (Small):** for the absent verdict, require a strongly consistent lookup — list customers
-    by the idempotency-keyed create, or retrieve by a stored reservation reference — or keep the
-    reservation open until the reservation is older than Stripe's documented Search lag. Request
-    `limit=2` so the multiple-customers guard is live. Add a test for the fail-closed branch.
-  - **Confidence:** Medium. The Search lag is vendor-documented; the preconditions were not
-    reproduced.
 
 - **`dr-private-remote-restore-whole-object-in-memory`**
   - **Severity:** S3. Moderate impact (a restore OOM-killed during disaster recovery) × Rare
@@ -387,7 +349,7 @@ the delta touched. Changed cells:
 | All module session APIs | AuthN: one core session-authentication class (Basic removed, SA262). Throttle: core's one scoped class; a scope with no rate raises `ImproperlyConfigured` (fail-closed). Error shape: core `_error_shape.py`, with no traceback. Declared errors echo `str(exc)` by design, and no secret-bearing message was found. |
 | Markdownx editor upload | Now one storage mount, staff-only. Input validation: vendor `ImageForm` (`markdownx-upload-client-extension-and-content-type`). |
 | `NotificationWebhookView` | Startup: secret non-empty only (`notifications-webhook-secret-format-unchecked-at-startup`). Ordering: `notifications-webhook-status-regresses-out-of-order`. |
-| Billing reconcile command | `--dry-run` gates every write. Shares the per-org provider mutex with the webhooks. Conditional writes. Absent verdict: `stripe-customer-search-lag-resolves-absent`. |
+| Billing reconcile command | `--dry-run` gates every write. Shares the per-org provider mutex with the webhooks. Conditional writes. Absent verdict waits out Stripe's Search indexing lag; two customer matches fail closed. |
 | Orgs invite (HTML + JSON) | Both scopes charged inside the atomic block, rolled back on refusal (`orgs-invite-throttle-partial-charge`). Pending cap under the org row lock. |
 | Orgs HTML management views | The object comes from the route slug. The role check uses `resolve_request_org` (watch: `orgs-role-mixin-checks-request-org`). |
 | Social payload views (core-rendered) | DRF `AllowAny`, `SocialPayloadUnavailable` 503 with no exception text. The `status=error` branch is unreachable (watch: `social-config-error-served-200`). |
@@ -409,8 +371,8 @@ All batches are independent of each other.
    hosted E2E run.
 2. **DR batch:** `dr-private-remote-restore-whole-object-in-memory` and
    `dr-media-part-file-leak-on-publish-failure`. They share the streaming idiom in `_media.py`.
-3. **Billing:** `stripe-customer-search-lag-resolves-absent`, together with the restored
-   fail-closed test in `auth/tests/test_views.py`.
+3. **Billing (landed):** `stripe-customer-search-lag-resolves-absent` — reconciliation waits out
+   Stripe's Search indexing lag, and the auth deletion test asserts the block again.
 4. **Notifications:** the two webhook S4s (`_webhooks.py`, `checks.py`).
 5. **Opportunistic:** `crm-theme-stats-always-zero` (theme + CRM, plus a contract-vintage
    adoption step), `orgs-invite-throttle-partial-charge`,
@@ -422,7 +384,7 @@ All batches are independent of each other.
 
 | Subsystem | Verdict | What was read |
 |---|---|---|
-| billing | `stripe-customer-search-lag-resolves-absent`. SA251 a/b/c fix-regression passed: double credit, webhook ordering, reconciler vs. webhook, and client amounts are all safe. | SA251/SA265 delta in full; subscription-checkout steps sampled. |
+| billing | clean. The Search-lag absent verdict is closed; SA251 a/b/c fix-regression passed: double credit, webhook ordering, reconciler vs. webhook, and client amounts are all safe. | SA251/SA265 delta in full; subscription-checkout steps sampled. |
 | orgs | `orgs-invite-throttle-partial-charge`; one watch item. SA254/SA257/SA265 fix-regression passed. | Delta in full except the purge-plan internals. |
 | auth | clean (latent watch item `account-deletion-hook-exception-text`). | Anonymize boundary, deletion guard. |
 | notifications | two S4s. Svix verification verified. | Webhook path in full. |
@@ -456,8 +418,9 @@ All batches are independent of each other.
   ancestry check; tags created without force; no `pull_request_target`; no `github.event.*` in
   `run:`.
 - **Verified — test diff:** no skip or xfail added; the moves are R100 renames. The one inversion
-  is evidence for `stripe-customer-search-lag-resolves-absent`. About 135 `test_gate_parity` tests
-  were removed together with the observer SA259 replaced, as the commit documents.
+  was evidence for `stripe-customer-search-lag-resolves-absent` (restored by SA270). About 135
+  `test_gate_parity` tests were removed together with the observer SA259 replaced, as the commit
+  documents.
 - **Verified — variant sweep, clean:**
   - relative provider URLs;
   - session-key identifiers;
@@ -865,6 +828,7 @@ Added:
   question close with it.
 - 2026-10-13 — re-run at `7d9782a9` (delta `2fd8637f..7d9782a9`, 104 non-merge commits; prompt v7). Every closure claimed since the prior pass (SA251 a/b/c, SA252, SA253, SA254, SA255, SA256, SA262 social) was re-verified in code and passed the fix-regression pass. None regressed.
 - 2026-10-13 — `forms-notification-status-misreported`: **resolved** (`a6b58799`, SA265b). Verified at `forms/_email.py:44-53`: notifications off returns `"skipped"`, and the submit view surfaces it as `notification_status`.
+- 2026-10-13 — `stripe-customer-search-lag-resolves-absent`: **resolved** (SA270). Verified at `billing/_customers.py`: a customer-search miss counts as absence only once the organization's latest customer-resolution attempt completed and is older than Stripe's documented Search indexing lag (up to an hour behind during outages), two matches fail closed, the search requests `limit=2`, and `auth/tests/test_views.py` asserts an unknown outcome blocks deletion again. Dropped from the index and summary.
 - 2026-10-13 — `dr-restore-vintage-exact-match`, `orgs-provider-id-check-blocks-migrate`, `crm-stage-seed-lost-on-commit-failure`, `backups-upload-restore-by-model-permission`, `single-sync-worker-vendor-calls`, `allow-bypassrls-serving-undetected`, `migrate-runs-per-replica`, `development-workflow-intermittent-root-500`, `core-e2e-poetry-cache-install-candidates`: carried (triggers not fired; evidence in §11).
 - 2026-10-13 — new open: `stripe-customer-search-lag-resolves-absent`, `dr-private-remote-restore-whole-object-in-memory`, `e2e-release-tag-trigger-never-matches` (S3); `crm-theme-stats-always-zero`, `notifications-webhook-status-regresses-out-of-order`, `notifications-webhook-secret-format-unchecked-at-startup`, `orgs-invite-throttle-partial-charge`, `markdownx-upload-client-extension-and-content-type`, `dr-media-part-file-leak-on-publish-failure`, `pyproject-write-not-atomic`, `ci-poetry-retry-curl-pipe-python` (S4).
 - 2026-10-13 — new watchlist: `orgs-role-mixin-checks-request-org`, `social-config-error-served-200`, `deploy-existing-settings-module-never-corrected`, `account-deletion-hook-exception-text`, `security-suppressions-uniform-expiry`, `generated-project-automation-local-only`, `initial-migration-edited-in-place`.

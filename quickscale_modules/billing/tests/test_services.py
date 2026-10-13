@@ -29,6 +29,7 @@ from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
     Plan,
+    PurchaseCheckout,
     Subscription,
     WebhookEvent,
 )
@@ -3122,11 +3123,11 @@ def test_stripe_client_search_customers_emits_metadata_query_for_safe_references
     organization_reference: str,
     expected_query: str,
 ) -> None:
-    """A safe reference still emits the unchanged metadata search query."""
-    captured_queries: list[str] = []
+    """A safe reference emits the unchanged metadata query and asks for two matches."""
+    captured_searches: list[dict[str, Any]] = []
 
     def record_search(**kwargs: Any) -> dict[str, Any]:
-        captured_queries.append(kwargs["query"])
+        captured_searches.append(kwargs)
         return {"data": []}
 
     stripe_module = SimpleNamespace(
@@ -3142,7 +3143,7 @@ def test_stripe_client_search_customers_emits_metadata_query_for_safe_references
     )
 
     assert customers == []
-    assert captured_queries == [expected_query]
+    assert captured_searches == [{"query": expected_query, "limit": 2}]
 
 
 def test_stripe_client_create_customer_includes_name_and_email() -> None:
@@ -3428,6 +3429,78 @@ def test_get_or_create_stripe_customer_translates_provider_errors(
             organization=organization,
             stripe_client=fake_client,
         )
+
+
+@pytest.mark.django_db
+def test_get_or_create_stripe_customer_fails_closed_on_two_customer_matches(
+    user, organization, org_context
+) -> None:
+    """One billing reference resolving to two customers fails closed."""
+    fake_client = FakeStripeClient(
+        customers=[{"id": "cus_ambiguous_a"}, {"id": "cus_ambiguous_b"}],
+    )
+
+    with pytest.raises(BillingError, match="Multiple Stripe customers"):
+        get_or_create_stripe_customer(
+            user,
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+
+@pytest.mark.django_db
+def test_customer_attempt_stamps_carry_their_own_tenant_scope(
+    user, organization
+) -> None:
+    """Attempt stamps update both reservation types without ambient org context."""
+    from quickscale_modules_orgs.current_org import (
+        reset_current_org_id,
+        set_current_org_id,
+    )
+
+    set_current_org_id(organization.pk)
+    try:
+        subscription = Subscription.all_objects.create(
+            user=user,
+            organization=organization,
+            plan=_create_plan(price_id="price_scope_stamp_subscription"),
+            status=Subscription.Status.INCOMPLETE,
+        )
+        purchase = PurchaseCheckout.all_objects.create(
+            user=user,
+            organization=organization,
+            plan=_create_plan(price_id="price_scope_stamp_purchase"),
+            status=PurchaseCheckout.Status.PREPARING,
+        )
+    finally:
+        reset_current_org_id()
+
+    fake_client = FakeStripeClient()
+
+    def failing_create(**kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        raise stripe.StripeError("network down")
+
+    fake_client.create_customer = failing_create  # type: ignore[method-assign]
+
+    with pytest.raises(BillingError, match="Stripe customer resolution failed"):
+        get_or_create_stripe_customer(
+            user,
+            organization=organization,
+            stripe_client=fake_client,
+        )
+
+    set_current_org_id(organization.pk)
+    try:
+        subscription.refresh_from_db()
+        purchase.refresh_from_db()
+    finally:
+        reset_current_org_id()
+
+    assert subscription.customer_lookup_attempted_at is not None
+    assert subscription.customer_lookup_completed_at is not None
+    assert purchase.customer_lookup_attempted_at is not None
+    assert purchase.customer_lookup_completed_at is not None
 
 
 @pytest.mark.django_db

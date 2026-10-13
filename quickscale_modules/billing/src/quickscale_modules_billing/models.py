@@ -240,6 +240,8 @@ class PurchaseCheckout(TenantModel):
     )
     checkout_expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    customer_lookup_attempted_at = models.DateTimeField(null=True, blank=True)
+    customer_lookup_completed_at = models.DateTimeField(null=True, blank=True)
 
     if TYPE_CHECKING:
         # FK attnames; unset until the relation is assigned.
@@ -310,6 +312,9 @@ class Subscription(TenantModel):
     checkout_expires_at = models.DateTimeField(null=True, blank=True)
     current_period_start = models.DateTimeField(null=True, blank=True)
     current_period_end = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    customer_lookup_attempted_at = models.DateTimeField(null=True, blank=True)
+    customer_lookup_completed_at = models.DateTimeField(null=True, blank=True)
 
     if TYPE_CHECKING:
         # FK attnames; unset until the relation is assigned.
