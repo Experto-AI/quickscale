@@ -279,3 +279,9 @@ steps:
     title: "Adopt the theme test suite's seam fixtures"
     adoption_steps:
       - 'The theme''s own Vitest fixtures construct `window.__QUICKSCALE__` with the `moduleApiPaths` key the seam validator requires (the orgs, billing, crm, and forms bases), so a project that copies the starter tests runs them against the same seam contract. Test-only: no project file changes beyond the `sa261-seam-module-api-paths` step.'
+
+  - id: sa272-generated-ci-notifications-secret
+    minimum: "0.89.0"
+    title: "Adopt a decodable notifications webhook secret in the generated CI workflow"
+    adoption_steps:
+      - "Compare and manually adopt the current .github/workflows/ci.yml job environment: replace the notifications signing-secret placeholder (`whsec_test_ci`) with a `whsec_`-prefixed value whose remainder is valid base64 (for example `whsec_YWFhYWFhYWFhYWFhYWFhYQ==`), because the notifications module's startup check now refuses a malformed signing secret and would fail the workflow's pytest and migrate steps. A project that renamed the variable through `webhook_secret_env_var` updates that name instead."
