@@ -1,253 +1,175 @@
-"""Package structure rules: public surface, files, signals, commands, tooling."""
+"""
+Package structure rules: public surface, files, signals, commands, tooling.
+
+The mechanics live in private sibling modules (``_package_surfaces``,
+``_package_legacy``, ``_package_commands``, ``_package_services``,
+``_package_files``); this module orchestrates rules 4, 6, 17, and 23 and
+re-exports every moved name so existing import paths and the rule registry
+keep working.
+"""
 
 from __future__ import annotations
 
-import ast
-import tomllib
+# The pre-split module also exposed its own imports as module attributes
+# (``ast``, ``tomllib``, ``Mapping``, ``Path``, ``Any``, and core's helpers);
+# the redundant aliases keep every one importable from this facade.
+import ast as ast
+import tomllib as tomllib
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any as Any
 
+from scripts.module_conventions._package_commands import (
+    CONFIRM_COMMAND_KEYWORDS,
+    DESTRUCTIVE_COMMAND_KEYWORDS,
+    _command_findings,
+    _command_flags,
+    _constant_string,
+    _literal_strings,
+)
+from scripts.module_conventions._package_files import (
+    RULE_11_ONE_OFF_FILES,
+    RULE_11_REQUIRED_FILES,
+    RULE_11_REQUIRED_ROOT_FILES,
+    RULE_11_REQUIRED_TESTS,
+    _has_tenant_model,
+    rule_11_package_files,
+    rule_15_package_root,
+    rule_16_signals,
+    rule_18_package_tooling,
+)
+from scripts.module_conventions._package_legacy import (
+    RETIRED_SETTINGS_NAME,
+    _all_option_keys,
+    _manifest_retired_settings,
+    _mapping_entries,
+    _module_legacy_findings,
+    _retired_declaration_keys,
+    _retired_name_reads,
+    _settings_attribute_names,
+)
+from scripts.module_conventions._package_services import (
+    _module_bindings,
+    _service_declarations,
+    _service_functions,
+    _service_usage_findings,
+)
+from scripts.module_conventions._package_surfaces import (
+    _capability_arguments,
+    _file_surface_violations,
+    _module_member_bindings,
+    _module_string_constants,
+    _private_member_accesses,
+    _public_surface,
+)
 from scripts.module_conventions.core import (
-    CAPABILITY_NAMES,
-    MODULE_ABSTRACT_BASES,
-    MODULE_IMPORT_PREFIX,
-    ORG_PUBLIC_SURFACE,
+    CAPABILITY_NAMES as CAPABILITY_NAMES,
+)
+from scripts.module_conventions.core import (
+    MODULE_ABSTRACT_BASES as MODULE_ABSTRACT_BASES,
+)
+from scripts.module_conventions.core import (
+    MODULE_IMPORT_PREFIX as MODULE_IMPORT_PREFIX,
+)
+from scripts.module_conventions.core import (
+    ORG_PUBLIC_SURFACE as ORG_PUBLIC_SURFACE,
+)
+from scripts.module_conventions.core import (
     Corpus,
-    Module,
-    _ancestors,
-    _attribute_chain,
-    _call_func_name,
-    _class_names,
-    _cross_module_imports,
-    _declared_exports,
-    _docstring_nodes,
-    _is_settings_receiver,
-    _keyword,
-    _model_classes,
-    _module_target,
     _parse,
-    _service_module_bindings,
-    _setting_name_module,
-    _settings_attribute_reads,
-    _settings_bindings,
-    _string_assignments,
-    _string_list,
+)
+from scripts.module_conventions.core import (
+    Module as Module,
+)
+from scripts.module_conventions.core import (
+    _ancestors as _ancestors,
+)
+from scripts.module_conventions.core import (
+    _attribute_chain as _attribute_chain,
+)
+from scripts.module_conventions.core import (
+    _call_func_name as _call_func_name,
+)
+from scripts.module_conventions.core import (
+    _class_names as _class_names,
+)
+from scripts.module_conventions.core import (
+    _cross_module_imports as _cross_module_imports,
+)
+from scripts.module_conventions.core import (
+    _declared_exports as _declared_exports,
+)
+from scripts.module_conventions.core import (
+    _docstring_nodes as _docstring_nodes,
+)
+from scripts.module_conventions.core import (
+    _is_settings_receiver as _is_settings_receiver,
+)
+from scripts.module_conventions.core import (
+    _keyword as _keyword,
+)
+from scripts.module_conventions.core import (
+    _model_classes as _model_classes,
+)
+from scripts.module_conventions.core import (
+    _module_target as _module_target,
+)
+from scripts.module_conventions.core import (
+    _service_module_bindings as _service_module_bindings,
+)
+from scripts.module_conventions.core import (
+    _setting_name_module as _setting_name_module,
+)
+from scripts.module_conventions.core import (
+    _settings_attribute_reads as _settings_attribute_reads,
+)
+from scripts.module_conventions.core import (
+    _settings_bindings as _settings_bindings,
+)
+from scripts.module_conventions.core import (
+    _string_assignments as _string_assignments,
+)
+from scripts.module_conventions.core import (
+    _string_list as _string_list,
 )
 
-CONFIRM_COMMAND_KEYWORDS = ("purge", "restore")
-
-
-def _command_flags(tree: ast.Module) -> dict[str, ast.Call]:
-    """Map each ``add_argument`` option string to the call declaring it."""
-    flags: dict[str, ast.Call] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and _call_func_name(node) == "add_argument":
-            for argument in node.args:
-                if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
-                    flags.setdefault(argument.value, node)
-    return flags
-
-
-def _literal_strings(node: ast.expr | None) -> set[str]:
-    """Return the string members of a literal list, tuple, or set."""
-    if not isinstance(node, (ast.List, ast.Tuple, ast.Set)):
-        return set()
-    return {
-        element.value
-        for element in node.elts
-        if isinstance(element, ast.Constant) and isinstance(element.value, str)
-    }
-
-
-def _constant_string(node: ast.expr | None) -> str | None:
-    """Return a string literal's value, or None for anything else."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    return None
-
-
-DESTRUCTIVE_COMMAND_KEYWORDS = (
-    "purge",
-    "anonymize",
-    "restore",
-    "prune",
-    "delete",
-    "sync_media",
-    "promote",
+#: The rule 40 harness re-exports every name the pre-split module published,
+#: private helpers included: existing import paths (``registry``,
+#: ``check_module_conventions``, the control cases) keep resolving through this
+#: facade.
+__all__ = (
+    "CONFIRM_COMMAND_KEYWORDS",
+    "DESTRUCTIVE_COMMAND_KEYWORDS",
+    "RETIRED_SETTINGS_NAME",
+    "RULE_11_ONE_OFF_FILES",
+    "RULE_11_REQUIRED_FILES",
+    "RULE_11_REQUIRED_ROOT_FILES",
+    "RULE_11_REQUIRED_TESTS",
+    "_all_option_keys",
+    "_capability_arguments",
+    "_command_flags",
+    "_constant_string",
+    "_has_tenant_model",
+    "_literal_strings",
+    "_manifest_retired_settings",
+    "_mapping_entries",
+    "_module_bindings",
+    "_module_member_bindings",
+    "_module_string_constants",
+    "_private_member_accesses",
+    "_public_surface",
+    "_retired_declaration_keys",
+    "_service_functions",
+    "_settings_attribute_names",
+    "rule_11_package_files",
+    "rule_15_package_root",
+    "rule_16_signals",
+    "rule_17_management_commands",
+    "rule_18_package_tooling",
+    "rule_23_service_surface",
+    "rule_4_public_surface",
+    "rule_6_no_legacy_names",
 )
-
-# Rule 6's refusal declarations live in the module's manifest: retired option
-# keys under ``retired_options`` and retired setting names under
-# ``retired_settings``.  A Python ``RETIRED_SETTINGS`` mapping is the retired
-# inline home the detector refuses.
-RETIRED_SETTINGS_NAME = "RETIRED_SETTINGS"
-
-# Rule 11's required package files and tests.  The manifest is guaranteed by
-# the loader; the root files are checked through ``Module.root_files``.
-RULE_11_REQUIRED_FILES = ("apps.py", "adapter.py", "services.py", "py.typed")
-
-RULE_11_REQUIRED_ROOT_FILES = ("pyproject.toml", "poetry.toml", "README.md")
-
-# Rule 11's one-off public files fold into a standard file or become private.
-RULE_11_ONE_OFF_FILES = ("contracts.py", "helpers.py", "constants.py")
-
-RULE_11_REQUIRED_TESTS = ("test_apps.py", "test_services.py")
-
-
-def _public_surface(module_name: str) -> tuple[str, ...]:
-    """Rule 4: services.py everywhere, plus the foundation's extension bases."""
-    return ORG_PUBLIC_SURFACE if module_name == "orgs" else ("services",)
-
-
-def _settings_attribute_names(tree: ast.Module) -> list[tuple[str, int]]:
-    """Collect every settings attribute read, whatever the name (rule 6)."""
-    found: list[tuple[str, int]] = []
-    names, modules = _settings_bindings(tree)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and _is_settings_receiver(node.value, names, modules):
-            found.append((node.attr, node.lineno))
-    return found
-
-
-def _service_functions(
-    module: Module, tree: ast.Module
-) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
-    """Resolve exported service functions, following intra-package re-exports."""
-    functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {
-        node.name: node
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
-    prefix = f"quickscale_modules_{module.name}."
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom) or not node.module:
-            continue
-        if node.level:
-            source = f"{node.module.replace('.', '/')}.py"
-        elif node.module.startswith(prefix):
-            source = f"{node.module[len(prefix) :].replace('.', '/')}.py"
-        else:
-            continue
-        if source == "services.py":
-            continue
-        text = module.files.get(source)
-        if text is None:
-            continue
-        sibling = _parse(text)
-        definitions = {
-            child.name: child
-            for child in sibling.body
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-        for alias in node.names:
-            local = alias.asname or alias.name
-            if local not in functions and alias.name in definitions:
-                functions[local] = definitions[alias.name]
-    return functions
-
-
-def _module_bindings(tree: ast.Module) -> set[str]:
-    """Names bound at module level: definitions, assignments, and imports."""
-    bound: set[str] = set()
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            bound.add(node.name)
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    bound.add(target.id)
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            bound.add(node.target.id)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                bound.add(alias.asname or alias.name.split(".")[0])
-        elif isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                bound.add(alias.asname or alias.name)
-    return bound
-
-
-def _module_member_bindings(
-    tree: ast.Module, module_name: str
-) -> dict[str, tuple[str, tuple[str, ...]]]:
-    """
-    Map local names bound to another module's package, file, or symbol.
-
-    ``import quickscale_modules_orgs.current_org as org_context`` binds the
-    file (path ``("current_org",)``), as does ``from
-    quickscale_modules_orgs import admin``; a dotted import without an alias
-    binds the package root and is left to the raw-path scan; ``from
-    quickscale_modules_orgs.models import Organization`` binds a symbol
-    (path length two) whose own attributes are object members, not module
-    names, so it carries no private-member surface.
-    """
-    bindings: dict[str, tuple[str, tuple[str, ...]]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if "." in alias.name and alias.asname is None:
-                    continue
-                target = _module_target(tuple(alias.name.split(".")))
-                if target is None or target[0] == module_name:
-                    continue
-                bindings[alias.asname or alias.name.split(".")[0]] = target
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            target = _module_target(tuple(node.module.split(".")))
-            if target is None or target[0] == module_name:
-                continue
-            if target[1]:
-                continue
-            for alias in node.names:
-                bindings[alias.asname or alias.name] = (target[0], (alias.name,))
-    return bindings
-
-
-def _private_member_accesses(tree: ast.Module, module_name: str) -> list[tuple[int, str, str]]:
-    """
-    Return reads of another module's private member through its package path.
-
-    A module reaches a foundation's member through the published file
-    (``org_context._restore_current_org_id``) or through the raw package path
-    (``quickscale_modules_orgs.admin._org_db_context``); both bypass rule 4's
-    import-name clause, so they are checked here.  A private name deeper in a
-    symbol's own attributes (``Organization._meta``) is not a module private
-    name and does not count.
-    """
-    bindings = _module_member_bindings(tree, module_name)
-    found: list[tuple[int, str, str]] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Attribute):
-            continue
-        chain = _attribute_chain(node)
-        if chain is None:
-            continue
-        binding = bindings.get(chain[0])
-        if binding is not None and binding[1]:
-            other, path = binding
-            surface = _public_surface(other)
-            if path[0] in surface and len(chain) > 1 and chain[1].startswith("_"):
-                found.append((node.lineno, ".".join(chain), other))
-            continue
-        other: str | None = None
-        after: tuple[str, ...] = ()
-        if chain[0].startswith(MODULE_IMPORT_PREFIX) and len(chain[0]) > len(MODULE_IMPORT_PREFIX):
-            other = chain[0][len(MODULE_IMPORT_PREFIX) :]
-            after = chain[1:]
-        elif chain[0] == "quickscale_modules" and len(chain) > 1:
-            other = chain[1]
-            after = chain[2:]
-        if other is None or other == module_name:
-            continue
-        surface = _public_surface(other)
-        for position, component in enumerate(after):
-            if component not in surface:
-                continue
-            following = after[position + 1 :]
-            if following and following[0].startswith("_"):
-                found.append((node.lineno, ".".join(chain), other))
-            break
-    return found
 
 
 def rule_4_public_surface(corpus: Corpus) -> list[str]:
@@ -257,156 +179,8 @@ def rule_4_public_surface(corpus: Corpus) -> list[str]:
         for rel, text in module.files.items():
             if not rel.endswith(".py"):
                 continue
-            tree = _parse(text)
-            in_migrations = rel.startswith("migrations/")
-            for other, path, names, lineno, _kind in _cross_module_imports(tree):
-                if other == module.name:
-                    continue
-                surface = _public_surface(other)
-                components = (path[0],) if path else names
-                for component in components:
-                    if component not in surface and not (in_migrations and component == "models"):
-                        violations.append(
-                            f"rule 4: {module.name}: {rel}:{lineno} imports {other}:{component} "
-                            "outside the module's public surface"
-                        )
-                if path and path[0] in surface:
-                    for name in names:
-                        if name.startswith("_"):
-                            violations.append(
-                                f"rule 4: {module.name}: {rel}:{lineno} imports private "
-                                f"name {name!r} from {other}"
-                            )
-            for lineno, expression, other in _private_member_accesses(tree, module.name):
-                violations.append(
-                    f"rule 4: {module.name}: {rel}:{lineno} reads private member "
-                    f"{expression} of {other}"
-                )
-            for attribute, lineno in _settings_attribute_reads(tree):
-                owner = _setting_name_module(attribute)
-                if owner is not None and owner != module.name:
-                    violations.append(
-                        f"rule 4: {module.name}: {rel}:{lineno} reads {owner}'s setting {attribute}"
-                    )
-            for capability, lineno in _capability_arguments(tree, module):
-                if capability in CAPABILITY_NAMES:
-                    continue
-                described = repr(capability) if capability is not None else "an unresolved name"
-                violations.append(
-                    f"rule 4: {module.name}: {rel}:{lineno} collects {described}, "
-                    "which is not in CAPABILITIES"
-                )
+            violations.extend(_file_surface_violations(module, rel, text))
     return violations
-
-
-def _module_string_constants(module: Module) -> dict[str, str]:
-    """Map every module-level string constant in the package to its value."""
-    constants: dict[str, str] = {}
-    for rel, text in module.files.items():
-        if not rel.endswith(".py"):
-            continue
-        tree = _parse(text)
-        for node in tree.body:
-            if (
-                isinstance(node, ast.Assign)
-                and isinstance(node.value, ast.Constant)
-                and isinstance(node.value.value, str)
-            ):
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        constants.setdefault(target.id, node.value.value)
-            elif (
-                isinstance(node, ast.AnnAssign)
-                and isinstance(node.target, ast.Name)
-                and isinstance(node.value, ast.Constant)
-                and isinstance(node.value.value, str)
-            ):
-                constants.setdefault(node.target.id, node.value.value)
-    return constants
-
-
-def _capability_arguments(tree: ast.Module, module: Module) -> list[tuple[str | None, int]]:
-    """
-    Resolve every ``collect_capabilities`` call's capability argument.
-
-    A literal is its own value; a name resolves through the file's string
-    assignments, then through the package's module-level constants (the
-    vocabulary constants callers import from a sibling).  An argument that
-    resolves to neither is reported as ``None`` so a constructed name fails
-    closed instead of passing the vocabulary check.
-    """
-    constants = _string_assignments(tree)
-    package_constants = _module_string_constants(module)
-    arguments: list[tuple[str | None, int]] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or _call_func_name(node) != "collect_capabilities":
-            continue
-        argument = node.args[0] if node.args else _keyword(node, "capability")
-        resolved: str | None = None
-        if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
-            resolved = argument.value
-        elif isinstance(argument, ast.Name):
-            resolved = constants.get(argument.id) or package_constants.get(argument.id)
-        arguments.append((resolved, node.lineno))
-    return arguments
-
-
-def _mapping_entries(node: Any) -> list[tuple[Any, Any]]:
-    """Return every key/value pair in a nested mapping or list."""
-    entries: list[tuple[Any, Any]] = []
-    if isinstance(node, Mapping):
-        entries.extend(node.items())
-        for value in node.values():
-            entries.extend(_mapping_entries(value))
-    elif isinstance(node, list):
-        for item in node:
-            entries.extend(_mapping_entries(item))
-    return entries
-
-
-def _retired_declaration_keys(tree: ast.Module) -> list[ast.Constant]:
-    """Return the string keys of every ``RETIRED_SETTINGS`` mapping in a tree."""
-    keys: list[ast.Constant] = []
-    for node in ast.walk(tree):
-        targets: list[ast.expr] = []
-        value: ast.expr | None = None
-        if isinstance(node, ast.Assign):
-            targets = list(node.targets)
-            value = node.value
-        elif isinstance(node, ast.AnnAssign):
-            targets = [node.target]
-            value = node.value
-        if not any(
-            isinstance(target, ast.Name) and target.id.endswith(RETIRED_SETTINGS_NAME)
-            for target in targets
-        ):
-            continue
-        if not isinstance(value, ast.Dict):
-            continue
-        for key in value.keys:
-            if isinstance(key, ast.Constant) and isinstance(key.value, str):
-                keys.append(key)
-    return keys
-
-
-def _manifest_retired_settings(module: Module) -> set[str]:
-    """Return the retired setting names the module's manifest declares."""
-    section = module.manifest.get("retired_settings")
-    if not isinstance(section, Mapping):
-        return set()
-    return {str(key) for key in section if isinstance(key, str)}
-
-
-def _all_option_keys(module: Module) -> set[str]:
-    """Return every option key the module's manifest declares."""
-    keys: set[str] = set()
-    config = module.manifest.get("config")
-    if isinstance(config, Mapping):
-        for kind in ("mutable", "immutable"):
-            options = config.get(kind)
-            if isinstance(options, Mapping):
-                keys.update(str(key) for key in options)
-    return keys
 
 
 def rule_6_no_legacy_names(corpus: Corpus) -> list[str]:
@@ -425,26 +199,7 @@ def rule_6_no_legacy_names(corpus: Corpus) -> list[str]:
     retired: set[str] = set()
     for module in corpus.modules:
         retired.update(_manifest_retired_settings(module))
-        for rel, text in module.files.items():
-            if rel.endswith(".py") and RETIRED_SETTINGS_NAME in text:
-                if _retired_declaration_keys(_parse(text)):
-                    violations.append(
-                        f"rule 6: {module.name}: {rel} keeps retired setting names "
-                        "in Python; declare them in module.yml as retired_settings"
-                    )
-        if any(
-            key == "legacy_aliases" and value not in (None, [], {})
-            for key, value in _mapping_entries(module.manifest)
-        ):
-            violations.append(f"rule 6: {module.name}: manifest authors a legacy alias")
-        retired_options = module.manifest.get("retired_options")
-        if isinstance(retired_options, Mapping):
-            live = _all_option_keys(module)
-            for key in retired_options:
-                if isinstance(key, str) and key in live:
-                    violations.append(
-                        f"rule 6: {module.name}: retired option {key!r} is still accepted"
-                    )
+        violations.extend(_module_legacy_findings(module))
     if not retired:
         return violations
     populations: list[tuple[str, Mapping[str, str]]] = [
@@ -452,109 +207,7 @@ def rule_6_no_legacy_names(corpus: Corpus) -> list[str]:
     ]
     populations.append(("core ", corpus.core_files))
     populations.append(("cli ", corpus.cli_files))
-    for prefix, files in populations:
-        for rel, text in files.items():
-            if not rel.endswith(".py"):
-                continue
-            tree = _parse(text)
-            allowed = {id(key) for key in _retired_declaration_keys(tree)}
-            docstrings = _docstring_nodes(tree)
-            for attribute, lineno in _settings_attribute_names(tree):
-                if attribute in retired:
-                    violations.append(
-                        f"rule 6: {prefix}{rel}:{lineno} reads retired setting {attribute}"
-                    )
-            for node in ast.walk(tree):
-                if (
-                    isinstance(node, ast.Constant)
-                    and isinstance(node.value, str)
-                    and node.value in retired
-                    and id(node) not in allowed
-                    and id(node) not in docstrings
-                ):
-                    violations.append(
-                        f"rule 6: {prefix}{rel}:{node.lineno} names retired setting {node.value}"
-                    )
-    return violations
-
-
-def rule_15_package_root(corpus: Corpus) -> list[str]:
-    violations: list[str] = []
-    for module in corpus.modules:
-        init = module.files.get("__init__.py")
-        if init is None:
-            violations.append(f"rule 15: {module.name}: missing __init__.py")
-            continue
-        tree = _parse(init)
-        for index, node in enumerate(tree.body):
-            if (
-                index == 0
-                and isinstance(node, ast.Expr)
-                and isinstance(node.value, ast.Constant)
-                and isinstance(node.value.value, str)
-            ):
-                continue
-            if isinstance(node, ast.Assign) and len(node.targets) == 1:
-                target = node.targets[0]
-                if isinstance(target, ast.Name) and target.id in {"__version__", "__all__"}:
-                    continue
-            if isinstance(node, ast.ImportFrom) and node.module == "__future__":
-                continue
-            violations.append(
-                f"rule 15: {module.name}: __init__.py holds {type(node).__name__} outside "
-                "__version__/__all__"
-            )
-        assignments = _string_assignments(tree)
-        if not isinstance(assignments.get("__version__"), str):
-            violations.append(f"rule 15: {module.name}: __init__.py declares no __version__")
-        if _string_list(tree).get("__all__") != ["__version__"]:
-            violations.append(
-                f"rule 15: {module.name}: __init__.py __all__ must be ['__version__']"
-            )
-    return violations
-
-
-def rule_16_signals(corpus: Corpus) -> list[str]:
-    violations: list[str] = []
-    for module in corpus.modules:
-        signals = module.files.get("signals.py")
-        if signals is not None:
-            tree = _parse(signals)
-            for index, node in enumerate(tree.body):
-                if (
-                    index == 0
-                    and isinstance(node, ast.Expr)
-                    and isinstance(node.value, ast.Constant)
-                    and isinstance(node.value.value, str)
-                ):
-                    continue
-                if isinstance(node, (ast.Import, ast.ImportFrom, ast.Assign)):
-                    continue
-                violations.append(f"rule 16: {module.name}: signals.py holds {type(node).__name__}")
-            for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef):
-                    violations.append(
-                        f"rule 16: {module.name}: signals.py defines a receiver function"
-                    )
-        receivers = module.files.get("receivers.py")
-        if receivers is not None:
-            tree = _parse(receivers)
-            receivers_found = 0
-            for node in ast.walk(tree):
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    decorators = [
-                        _call_func_name(decorator)
-                        if isinstance(decorator, ast.Call)
-                        else (decorator.id if isinstance(decorator, ast.Name) else "")
-                        for decorator in node.decorator_list
-                    ]
-                    if "receiver" in decorators:
-                        receivers_found += 1
-            if receivers_found == 0:
-                violations.append(f"rule 16: {module.name}: receivers.py defines no receiver")
-            apps = module.files.get("apps.py", "")
-            if "receivers" not in apps:
-                violations.append(f"rule 16: {module.name}: ready() never imports receivers")
+    violations.extend(_retired_name_reads(populations, retired))
     return violations
 
 
@@ -567,84 +220,7 @@ def rule_17_management_commands(corpus: Corpus) -> list[str]:
             command = Path(rel).stem
             if command == "__init__":
                 continue
-            tree = _parse(text)
-            flags = _command_flags(tree)
-            if "--format" in flags:
-                violations.append(
-                    f"rule 17: {module.name}: {command} spells machine output --format; use --json"
-                )
-            if "--scheduled" in flags:
-                violations.append(
-                    f"rule 17: {module.name}: {command} keeps the retired "
-                    "--scheduled alias; use --trigger scheduled"
-                )
-            trigger = flags.get("--trigger")
-            if trigger is not None:
-                choices = _literal_strings(_keyword(trigger, "choices"))
-                if "manual" not in choices or "scheduled" not in choices:
-                    violations.append(
-                        f"rule 17: {module.name}: {command} --trigger must offer "
-                        "manual and scheduled"
-                    )
-                if (
-                    _keyword(trigger, "default") is None
-                    or _constant_string(_keyword(trigger, "default")) != "manual"
-                ):
-                    violations.append(
-                        f"rule 17: {module.name}: {command} --trigger must default to manual"
-                    )
-            if (
-                any(keyword in command for keyword in CONFIRM_COMMAND_KEYWORDS)
-                and "--confirm" not in flags
-            ):
-                violations.append(
-                    f"rule 17: {module.name}: {command} deletes data and takes no --confirm"
-                )
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Call) and _call_func_name(node) == "print":
-                    violations.append(f"rule 17: {module.name}: {command} calls print()")
-                if (
-                    isinstance(node, ast.Call)
-                    and _call_func_name(node) == "exit"
-                    and isinstance(node.func, ast.Attribute)
-                    and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "sys"
-                ):
-                    violations.append(f"rule 17: {module.name}: {command} calls sys.exit()")
-            if any(keyword in command for keyword in DESTRUCTIVE_COMMAND_KEYWORDS):
-                if "--dry-run" not in text:
-                    violations.append(
-                        f"rule 17: {module.name}: destructive {command} takes no --dry-run"
-                    )
-    return violations
-
-
-def rule_18_package_tooling(corpus: Corpus) -> list[str]:
-    violations: list[str] = []
-    known = {module.name for module in corpus.modules}
-    for name in corpus.module_dir_names:
-        if name not in known:
-            violations.append(f"rule 18: module directory {name} ships no module.yml")
-    for module in corpus.modules:
-        pyproject = module.root_files.get("pyproject.toml")
-        if pyproject is None:
-            violations.append(f"rule 18: {module.name}: missing pyproject.toml")
-        else:
-            try:
-                data = tomllib.loads(pyproject)
-            except tomllib.TOMLDecodeError as exc:
-                violations.append(f"rule 18: {module.name}: pyproject.toml is invalid: {exc}")
-                data = {}
-            tool = data.get("tool")
-            if not isinstance(tool, Mapping):
-                tool = {}
-            pytest_config = tool.get("pytest")
-            if not isinstance(pytest_config, Mapping) or "ini_options" not in pytest_config:
-                violations.append(f"rule 18: {module.name}: pyproject has no pytest ini_options")
-            if "ruff" not in tool:
-                violations.append(f"rule 18: {module.name}: pyproject has no [tool.ruff]")
-        if "settings.py" not in module.tests:
-            violations.append(f"rule 18: {module.name}: tests/settings.py is missing")
+            violations.extend(_command_findings(module.name, command, _parse(text), text))
     return violations
 
 
@@ -653,126 +229,13 @@ def rule_23_service_surface(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     exports: dict[str, set[str]] = {}
     for module in corpus.modules:
-        services = module.files.get("services.py")
-        if services is None:
-            violations.append(f"rule 23: {module.name}: services.py is missing")
-            continue
-        tree = _parse(services)
-        declared = _declared_exports(tree)
-        if declared is None:
-            violations.append(f"rule 23: {module.name}: services.py declares no __all__")
-            continue
-        exports[module.name] = set(declared)
-        bound = _module_bindings(tree)
-        functions = _service_functions(module, tree)
-        for name in declared:
-            if name not in bound:
-                violations.append(
-                    f"rule 23: {module.name}: service {name!r} in __all__ is not defined"
-                )
-                continue
-            function = functions.get(name)
-            if function is None:
-                continue
-            positional = len(function.args.posonlyargs) + len(function.args.args)
-            if positional > 1 or function.args.vararg is not None:
-                violations.append(
-                    f"rule 23: {module.name}: {name} takes {positional} positional "
-                    "parameter(s); services take keyword-only parameters after at most "
-                    "one subject"
-                )
+        module_violations, declared = _service_declarations(module)
+        violations.extend(module_violations)
+        if declared is not None:
+            exports[module.name] = declared
     for module in corpus.modules:
         for rel, text in module.files.items():
             if not rel.endswith(".py"):
                 continue
-            tree = _parse(text)
-            for other, path, names, lineno, kind in _cross_module_imports(tree):
-                if other == module.name or kind != "from" or path[:1] != ("services",):
-                    continue
-                other_exports = exports.get(other)
-                if other_exports is None:
-                    continue
-                for name in names:
-                    if name not in other_exports:
-                        violations.append(
-                            f"rule 23: {module.name}: {rel}:{lineno} imports {name!r} "
-                            f"outside {other}'s services.__all__"
-                        )
-            for prefix, provider in _service_module_bindings(tree).items():
-                provider_exports = exports.get(provider)
-                if provider == module.name or provider_exports is None:
-                    continue
-                for node in ast.walk(tree):
-                    if not isinstance(node, ast.Attribute):
-                        continue
-                    chain = _attribute_chain(node)
-                    if chain is None or len(chain) != len(prefix) + 1:
-                        continue
-                    member = chain[-1]
-                    if chain[: len(prefix)] != prefix or member in provider_exports:
-                        continue
-                    if member.startswith("__"):
-                        continue
-                    violations.append(
-                        f"rule 23: {module.name}: {rel}:{node.lineno} uses "
-                        f"{provider}.services.{member} outside services.__all__"
-                    )
-    return violations
-
-
-# ---------------------------------------------------------------------------
-# SA215's remaining rules: package files, constraint names, file names,
-# type-check configuration, and module lists outside the modules.
-# ---------------------------------------------------------------------------
-
-
-def _has_tenant_model(text: str) -> bool:
-    """Return whether a ``models.py`` declares a TenantModel subclass."""
-    tree = _parse(text)
-    classes = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
-    for node in _model_classes(tree):
-        if node.name == "TenantModel":
-            continue
-        bases = [
-            *_class_names(node),
-            *(ancestor.name for ancestor in _ancestors(node, classes)),
-        ]
-        if "TenantModel" in bases or any(base in MODULE_ABSTRACT_BASES for base in bases):
-            return True
-    return False
-
-
-def rule_11_package_files(corpus: Corpus) -> list[str]:
-    """Rule 11: required package files and tests, and no one-off public files."""
-    violations: list[str] = []
-    for module in corpus.modules:
-        for name in RULE_11_REQUIRED_FILES:
-            if name not in module.files:
-                violations.append(f"rule 11: {module.name}: missing {name}")
-        for name in RULE_11_REQUIRED_ROOT_FILES:
-            if name not in module.root_files:
-                violations.append(f"rule 11: {module.name}: missing {name}")
-        services = module.files.get("services.py")
-        if services is not None:
-            declared = _declared_exports(_parse(services))
-            if declared is None or "is_enabled" not in declared:
-                violations.append(
-                    f"rule 11: {module.name}: services.py does not publish is_enabled()"
-                )
-        for name in RULE_11_ONE_OFF_FILES:
-            if name in module.files:
-                violations.append(
-                    f"rule 11: {module.name}: {name} must fold into a standard file "
-                    "or become private"
-                )
-        for name in RULE_11_REQUIRED_TESTS:
-            if name not in module.tests:
-                violations.append(f"rule 11: {module.name}: missing tests/{name}")
-        models = module.files.get("models.py")
-        if models is not None and "test_migrations.py" not in module.tests:
-            violations.append(f"rule 11: {module.name}: missing tests/test_migrations.py")
-        if models is not None and _has_tenant_model(models):
-            for name in ("test_isolation.py", "test_rls_boundary.py"):
-                if name not in module.tests:
-                    violations.append(f"rule 11: {module.name}: missing tests/{name}")
+            violations.extend(_service_usage_findings(module, rel, _parse(text), exports))
     return violations
