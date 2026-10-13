@@ -752,6 +752,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     and is older than Stripe's documented indexing lag, and a reference that resolves to two
     customers fails closed, so account deletion and purge cannot proceed while provider state may
     still exist.
+  - **Migration history has a content identity.** `quickscale_core.migration_hashes` hashes a
+    module's applied migration files with SHA-256, and `scripts/sync_migration_hashes.py`
+    records those hashes in the checked-in `scripts/migration_hashes.json` for every shipped
+    module.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.
