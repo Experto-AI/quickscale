@@ -6,6 +6,11 @@ through private ``_``-prefixed siblings.  These controls pin the preserved
 surface, the split's structural invariants, and the exact diagnostics and
 generated texts captured from the pre-split modules, so a later slice cannot
 silently drop, reorder, or reword them.
+
+SA275(a) deleted the gate-order tuples, the hosted/publish/help catalogs, and
+the copy-equality refusals they fed; the pinned name lists below no longer
+carry those deleted names, and the registry metadata fields that replaced
+them are validated through the schema diagnostics exercised here.
 """
 
 from __future__ import annotations
@@ -25,11 +30,9 @@ from _sync_ci_gate_catalog import (
     DOCS_TABLE_BEGIN,
     DOCS_TABLE_END,
     E2E_PATHS_END,
-    HOSTED_GATE_ORDER,
     JOB_BEGIN,
     JOB_END,
     PUBLISH_END,
-    PUBLISH_GATE_ORDER,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -56,14 +59,11 @@ FROZEN_SYNC_SURFACE = (
     "INSTALL_POETRY_REF",
     "JOB_BEGIN",
     "JOB_END",
-    "MAKE_TARGET_COMMENTS",
     "NEEDS_BEGIN",
     "NEEDS_END",
     "POETRY_VERSION",
     "PUBLISH_BEGIN",
     "PUBLISH_END",
-    "PUBLISH_GATE_ORDER",
-    "PUBLISH_STEP_CATALOG",
     "SETUP_PYTHON_COMMENT",
     "SETUP_PYTHON_REF",
     "UNOWNED_JOB_IDS",
@@ -124,24 +124,17 @@ FROZEN_WILDCARD_SURFACE = (
     "FIXED_NEEDS",
     "GeneratorError",
     "HAND_OWNED_MAKE_TARGETS",
-    "HOSTED_GATE_ORDER",
-    "HOSTED_JOB_CATALOG",
-    "HostedJobSpec",
     "INSTALL_POETRY_COMMENT",
     "INSTALL_POETRY_REF",
     "JOB_BEGIN",
     "JOB_END",
     "MAKE_INCLUDE_HEADER",
-    "MAKE_TARGET_COMMENTS",
     "NEEDS_BEGIN",
     "NEEDS_END",
     "NEEDS_GATE_IDS",
     "POETRY_VERSION",
     "PUBLISH_BEGIN",
     "PUBLISH_END",
-    "PUBLISH_GATE_ORDER",
-    "PUBLISH_STEP_CATALOG",
-    "PublishStepSpec",
     "REPO_ROOT",
     "SETUP_PYTHON_COMMENT",
     "SETUP_PYTHON_REF",
@@ -305,6 +298,7 @@ def _gate(**over: Any) -> dict[str, Any]:
         "description": "A gate",
         "required_contexts": ["hosted"],
         "bindings": {"make_target": "check-a", "ci_job": "job-a", "local_ci_stage": None},
+        "hosted": {"order": 1, "display_name": "Gate A", "check_step_name": "Run gate a"},
         "depends_on": [],
         "trigger_inputs": [],
     }
@@ -333,6 +327,7 @@ def _second_gate(**over: Any) -> dict[str, Any]:
     gate = _gate(
         id="gate-b",
         bindings={"make_target": "check-b", "ci_job": "job-b", "local_ci_stage": None},
+        hosted={"order": 2, "display_name": "Gate B", "check_step_name": "Run gate b"},
     )
     gate.update(over)
     return gate
@@ -704,6 +699,11 @@ FROZEN_REGISTRY_FINDINGS: tuple[tuple[str, Callable[[], Any], str, str], ...] = 
                             "ci_job": "job-c",
                             "local_ci_stage": None,
                         },
+                        hosted={
+                            "order": 3,
+                            "display_name": "Gate C",
+                            "check_step_name": "Run gate c",
+                        },
                         depends_on=["gate-a"],
                     ),
                 ],
@@ -1048,62 +1048,6 @@ def test_generator_diagnostics_are_exact() -> None:
     )
 
 
-def test_unsupported_gate_set_diagnostics_are_exact(tmp_path: Path) -> None:
-    """Registry-vs-catalog gate-set diagnostics keep the pre-split wording."""
-    data = json.loads(sync_ci_gate_jobs.DEFAULT_REGISTRY.read_text(encoding="utf-8"))
-    dropped = "check-manifest-sync"
-    data["gates"] = [gate for gate in data["gates"] if gate["id"] != dropped]
-    registry_path = tmp_path / "registry.json"
-    registry_path.write_text(json.dumps(data), encoding="utf-8")
-    gates = sync_ci_gate_jobs._parse_registry(registry_path)
-    workflow = sync_ci_gate_jobs.DEFAULT_WORKFLOW.read_text(encoding="utf-8")
-    hosted_expected = [gate_id for gate_id in HOSTED_GATE_ORDER]
-    hosted_got = [gate_id for gate_id in HOSTED_GATE_ORDER if gate_id != dropped]
-    with pytest.raises(sync_ci_gate_jobs.GeneratorError) as error:
-        sync_ci_gate_jobs.expected_workflow_text(workflow, gates)
-    assert str(error.value) == (
-        f"unsupported hosted gate set: expected {hosted_expected!r}, got {hosted_got!r}"
-    )
-
-    publish_dropped = "check-core-compat"
-    data = json.loads(sync_ci_gate_jobs.DEFAULT_REGISTRY.read_text(encoding="utf-8"))
-    for gate in data["gates"]:
-        if gate["id"] == publish_dropped:
-            gate["required_contexts"] = [
-                context for context in gate["required_contexts"] if context != "publish"
-            ]
-    registry_path = tmp_path / "registry_publish.json"
-    registry_path.write_text(json.dumps(data), encoding="utf-8")
-    gates = sync_ci_gate_jobs._parse_registry(registry_path)
-    # The registry's declaration order, minus the dropped gate, exactly as the
-    # pre-split message carried it.
-    frozen_publish_got = (
-        "check-module-core-imports",
-        "check-manifest-sync",
-        "check-org-context-primitives",
-        "check-csrf-exempt",
-        "check-project-contract-vintage",
-        "frontend-proof",
-        "smoke-install",
-        "check-dependency-vulnerabilities",
-        "check-security-static-analysis",
-        "check-beta-migration-smoke",
-        "check-generated-deploy-posture",
-        "check-workflow-security",
-        "check-secret-scanning",
-        "check-module-conventions",
-        "check-split-facade-imports",
-    )
-    with pytest.raises(sync_ci_gate_jobs.GeneratorError) as error:
-        sync_ci_gate_jobs.expected_publish_workflow_text(
-            sync_ci_gate_jobs.DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8"), gates
-        )
-    assert str(error.value) == (
-        f"unsupported publish gate set: expected {list(PUBLISH_GATE_ORDER)!r}, "
-        f"got {list(frozen_publish_got)!r}"
-    )
-
-
 def test_e2e_duplicate_path_claim_diagnostic_is_exact(tmp_path: Path) -> None:
     """A path claimed by two gates fails closed with the pre-split message."""
     data = json.loads(sync_ci_gate_jobs.DEFAULT_REGISTRY.read_text(encoding="utf-8"))
@@ -1112,10 +1056,12 @@ def test_e2e_duplicate_path_claim_diagnostic_is_exact(tmp_path: Path) -> None:
     duplicate["id"] = "gate-dup"
     duplicate["bindings"] = {
         "make_target": "check-dup",
-        "ci_job": "job-dup",
+        "ci_job": None,
         "local_ci_stage": None,
     }
     duplicate["required_contexts"] = ["e2e-trigger"]
+    duplicate.pop("hosted", None)
+    duplicate.pop("publish", None)
     duplicate["depends_on"] = []
     duplicate["trigger_inputs"] = [owner["trigger_inputs"][0]]
     data["gates"].append(duplicate)
@@ -1209,9 +1155,4 @@ def test_frozen_catalog_exports_are_the_catalog_objects() -> None:
     assert sync_ci_gate_jobs.PUBLISH_BEGIN is catalog.PUBLISH_BEGIN
     assert sync_ci_gate_jobs.PUBLISH_END is catalog.PUBLISH_END
     assert sync_ci_gate_jobs.HAND_OWNED_MAKE_TARGETS is catalog.HAND_OWNED_MAKE_TARGETS
-    assert sync_ci_gate_jobs.MAKE_TARGET_COMMENTS is catalog.MAKE_TARGET_COMMENTS
-    assert sync_ci_gate_jobs.PUBLISH_GATE_ORDER is catalog.PUBLISH_GATE_ORDER
-    assert sync_ci_gate_jobs.PUBLISH_STEP_CATALOG is catalog.PUBLISH_STEP_CATALOG
     assert sync_ci_gate_jobs.UNOWNED_JOB_IDS is catalog.UNOWNED_JOB_IDS
-    assert sync_ci_gate_jobs.HOSTED_GATE_ORDER is catalog.HOSTED_GATE_ORDER
-    assert sync_ci_gate_jobs.HOSTED_JOB_CATALOG is catalog.HOSTED_JOB_CATALOG

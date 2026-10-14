@@ -31,10 +31,9 @@ except ImportError:  # pragma: no cover - direct script execution supplies scrip
 from _sync_ci_gate_catalog import (
     EXPECTED_UNOWNED_JOB_IDS,
     FIXED_NEEDS,
-    HOSTED_GATE_ORDER,
-    HOSTED_JOB_CATALOG,
     JOB_BEGIN,
     JOB_END,
+    NEEDS_ALL_HOSTED_CONSUMERS,
     NEEDS_BEGIN,
     NEEDS_END,
     NEEDS_GATE_IDS,
@@ -167,21 +166,33 @@ def _top_level_job_headers(lines: list[str]) -> list[tuple[int, str]]:
     return headers
 
 
-def _registry_bindings(gates: list[dict[str, Any]]) -> dict[str, tuple[str, str]]:
-    """Validate and return the supported hosted gate bindings."""
-    hosted = [
-        gate
-        for gate in gates
-        if "hosted" in gate["required_contexts"] or gate["bindings"].get("ci_job") is not None
-    ]
-    hosted_ids = tuple(gate["id"] for gate in hosted)
-    if hosted_ids != HOSTED_GATE_ORDER:
-        raise GeneratorError(
-            "unsupported hosted gate set: "
-            f"expected {list(HOSTED_GATE_ORDER)!r}, got {list(hosted_ids)!r}"
-        )
-    bindings: dict[str, tuple[str, str]] = {}
+def _hosted_gates(gates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Return the hosted-context gates in their registry-declared order.
+
+    The registry's per-gate ``hosted`` metadata owns the order, display name,
+    and check-step label the hosted-workflow projection consumes (SA275a);
+    this helper fails closed when a hosted gate does not carry it.
+    """
+    hosted = [gate for gate in gates if "hosted" in gate["required_contexts"]]
     for gate in hosted:
+        metadata = gate.get("hosted")
+        if not isinstance(metadata, dict):
+            raise GeneratorError(f"hosted gate {gate['id']!r} has no hosted metadata")
+        for key in ("order", "display_name", "check_step_name"):
+            if key not in metadata:
+                raise GeneratorError(
+                    f"hosted gate {gate['id']!r} is missing hosted metadata field {key!r}"
+                )
+        if not isinstance(metadata["order"], int) or isinstance(metadata["order"], bool):
+            raise GeneratorError(f"hosted gate {gate['id']!r} has a non-integer hosted order")
+    return sorted(hosted, key=lambda gate: gate["hosted"]["order"])
+
+
+def _registry_bindings(gates: list[dict[str, Any]]) -> dict[str, tuple[str, str]]:
+    """Validate and return the hosted gate bindings, in registry order."""
+    bindings: dict[str, tuple[str, str]] = {}
+    for gate in _hosted_gates(gates):
         ci_job = gate["bindings"].get("ci_job")
         make_target = gate["bindings"].get("make_target")
         if not isinstance(ci_job, str) or not isinstance(make_target, str):
@@ -192,7 +203,10 @@ def _registry_bindings(gates: list[dict[str, Any]]) -> dict[str, tuple[str, str]
 
 def _expected_needs(gates: list[dict[str, Any]]) -> dict[str, tuple[str, ...]]:
     bindings = _registry_bindings(gates)
-    needs: dict[str, tuple[str, ...]] = {}
+    all_hosted_jobs = tuple(bindings[gate_id][0] for gate_id in bindings)
+    needs: dict[str, tuple[str, ...]] = {
+        consumer: FIXED_NEEDS + all_hosted_jobs for consumer in NEEDS_ALL_HOSTED_CONSUMERS
+    }
     for consumer, gate_ids in NEEDS_GATE_IDS.items():
         try:
             registry_jobs = tuple(bindings[gate_id][0] for gate_id in gate_ids)
@@ -210,29 +224,33 @@ def _render_needs(gates: list[dict[str, Any]], consumer: str) -> str:
 
 
 def _locate_hosted_jobs(
-    jobs: dict[str, Any], label: str, *, allow_missing: bool = False
+    jobs: dict[str, Any],
+    hosted_gates: list[dict[str, Any]],
+    label: str,
+    *,
+    allow_missing: bool = False,
 ) -> dict[str, str]:
     """
-    Locate the sixteen hosted jobs by their static catalog display names.
+    Locate the registry-bound hosted jobs by their registry-owned display names.
 
-    Display metadata is helper-owned and static, so the generated job IDs may
-    be stale before an edit: a registry ``ci_job`` (F-005) or Make-target
-    change must be projectable by ``--write`` without treating the previously
-    generated job IDs as drift.
+    Display metadata is registry data, so the generated job IDs may be stale
+    before an edit: a registry ``ci_job`` (F-005) or Make-target change must be
+    projectable by ``--write`` without treating the previously generated job
+    IDs as drift.
     """
     located: dict[str, str] = {}
-    for gate_id in HOSTED_GATE_ORDER:
-        spec = HOSTED_JOB_CATALOG[gate_id]
+    for gate in hosted_gates:
+        display_name = gate["hosted"]["display_name"]
         matches = [
             job_id
             for job_id, job in jobs.items()
-            if isinstance(job, dict) and job.get("name") == spec.display_name
+            if isinstance(job, dict) and job.get("name") == display_name
         ]
         if not matches and allow_missing:
             continue
         if len(matches) != 1:
-            raise GeneratorError(f"{label}: expected exactly one job named {spec.display_name!r}")
-        located[gate_id] = matches[0]
+            raise GeneratorError(f"{label}: expected exactly one job named {display_name!r}")
+        located[gate["id"]] = matches[0]
     return located
 
 
@@ -243,7 +261,7 @@ def _pins_same_action(actual: Any, expected_ref: str) -> bool:
     """
     Return True when *actual* pins the same action as *expected_ref* to a SHA.
 
-    Pre-edit projection tolerates a stale commit SHA — the catalog refresh is
+    Pre-edit projection tolerates a stale commit SHA — an action-pin refresh is
     projected by ``--write`` — but not a different action, a missing pin, or a
     mutable ref.
     """
@@ -265,18 +283,20 @@ def _step_matches(actual: Any, expected: dict[str, Any], *, strict: bool) -> boo
     }
 
 
-def _locate_hosted_job_headers(lines: list[str], *, allow_missing: bool = False) -> list[int]:
+def _locate_hosted_job_headers(
+    lines: list[str], hosted_gates: list[dict[str, Any]], *, allow_missing: bool = False
+) -> list[int]:
     """
-    Locate the sixteen hosted job header lines by their display names.
+    Locate the registry-bound hosted job header lines by their display names.
 
-    Use static display metadata to find the (possibly stale) hosted job IDs;
-    this permits a registry ``ci_job`` (F-005) or Make-target edit while
+    Use registry-owned display metadata to find the (possibly stale) hosted job
+    IDs; this permits a registry ``ci_job`` (F-005) or Make-target edit while
     keeping the bootstrap independent of generated job text.
     """
     headers = _top_level_job_headers(lines)
     starts: list[int] = []
-    for gate_id in HOSTED_GATE_ORDER:
-        expected_name = HOSTED_JOB_CATALOG[gate_id].display_name
+    for gate in hosted_gates:
+        expected_name = gate["hosted"]["display_name"]
         found = [
             index
             for index, _job_id in headers

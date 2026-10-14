@@ -338,11 +338,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   recommendation folded it into SA267 (a), which landed as a file split instead.
 
   **Context:** SA259 generated `gates.mk`, the workflow regions, and the docs table, but
-  `sync_ci_gate_jobs.py` re-holds the registry by hand: `HOSTED_GATE_ORDER` (`:89–107`),
-  `PUBLISH_GATE_ORDER` (`:273–290`), `HOSTED_JOB_CATALOG`, `PUBLISH_STEP_CATALOG`, and the help-text
-  map, and it refuses to run unless they equal the registry. `check_ci_locally.sh` keeps a
-  hand-written `case` arm per gate, and the `Makefile` help line names gates. A new gate costs
-  about eight hand stations; SA204 (c) adds the next one.
+  `sync_ci_gate_jobs.py` re-held the registry by hand — `HOSTED_GATE_ORDER`, `PUBLISH_GATE_ORDER`,
+  `HOSTED_JOB_CATALOG`, `PUBLISH_STEP_CATALOG`, and the help-text map — and refused to run unless
+  they equaled the registry; slice (a) moved that data into registry fields. `check_ci_locally.sh`
+  keeps a hand-written `case` arm per gate, and the `Makefile` help line names gates; those remain
+  the hand stations. SA204 (c) adds the next gate row.
 
   **Acceptance:** gate order and the hosted, publish, and help metadata are fields of
   `gate_registry.json`; the order tuples and catalogs are deleted, and the generator raises no
@@ -353,8 +353,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
   gates.
 
   **Slices:**
-  - [ ] (a) Registry fields for order and hosted/publish/help metadata; delete the order tuples,
-    catalogs, and equality refusals (Tier 2-fast).
+  - [x] (a) Registry fields for order and hosted/publish/help metadata; delete the order tuples,
+    catalogs, and equality refusals (Tier 2-fast). Landed as per-gate `hosted`/`publish` objects
+    (unique positive order, display/step labels, full-history flag and command prefix) and an
+    optional `help` comment in `scripts/gate_registry.json`; the tuples, both catalogs, the help
+    map, and the refusals are deleted, emitted output is unchanged, and the schema rejects missing
+    or mismatched metadata. Next: (b), the generated `check_ci_locally.sh` gate arms and Makefile
+    gate help with the one-station fixture test. Watch: a hosted-gate addition projects from its
+    row alone, but an existing gate's edited labels/order — and a publish-bound addition — still
+    fail pre-edit until the workflow's old value is hand-replaced; the fixture test decides what
+    (b) must project.
   - [ ] (b) Generate `check_ci_locally.sh`'s gate arms and the Makefile gate help, with the
     one-station fixture test (Tier 2-fast).
 

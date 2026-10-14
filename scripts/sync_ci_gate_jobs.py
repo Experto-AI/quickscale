@@ -2,10 +2,10 @@
 """
 Synchronize registry-bound gates across workflows and the generated Make include.
 
-The registry owns gate membership, hosted job IDs, Make targets, publish
+The registry owns gate membership, gate order, hosted and publish presentation
+metadata, curated Make-target comments, hosted job IDs, Make targets, publish
 gate membership, and each gate's generated Make recipe (``make_recipe``).
-This helper owns the intentionally static GitHub Actions display and step
-metadata.  Only the marked hosted-job, consumer-``needs``, E2E path, and
+Only the marked hosted-job, consumer-``needs``, E2E path, and
 publish gate-step regions are generated in the workflows, plus the fully
 generated ``scripts/gates.mk`` include and the gate-roster table in
 ``docs/technical/validation_policy.md``; all other workflow and document
@@ -19,14 +19,13 @@ hosted-workflow projection they feed, and the CLI.
 A registry gate with a ``make_target`` must either carry a ``make_recipe`` or
 be declared in ``HAND_OWNED_MAKE_TARGETS`` (the recipe is a large inline shell
 program that cannot be expressed as a registry command list); generation
-fails closed otherwise, and the include's per-target comments come from the
-helper-owned ``MAKE_TARGET_COMMENTS`` catalog, falling back to the registry
+fails closed otherwise, and the include's per-target comments come from each
+gate's registry-owned ``help`` field, falling back to the registry
 description.
 
-The publish workflow's gate steps are generated from the registry's
-``publish`` context membership through the helper-owned ``PublishStepSpec``
-catalog; a publish-context change that is not projected by that catalog fails
-closed before any byte is written.
+The hosted-job and publish gate-step sequences are projected from each gate's
+registry-declared ``hosted``/``publish`` order; a gate that declares those
+contexts without its metadata fails closed before any byte is written.
 
 Exit codes:
     0 - clean (``--check``) or successfully written (``--write``)
@@ -66,22 +65,15 @@ from _sync_ci_gate_catalog import (
     EXPECTED_UNOWNED_JOB_IDS,
     FIXED_NEEDS,
     HAND_OWNED_MAKE_TARGETS,
-    HOSTED_GATE_ORDER,
-    HOSTED_JOB_CATALOG,
     JOB_BEGIN,
     JOB_END,
-    MAKE_TARGET_COMMENTS,
     NEEDS_BEGIN,
     NEEDS_END,
     NEEDS_GATE_IDS,
     PUBLISH_BEGIN,
     PUBLISH_END,
-    PUBLISH_GATE_ORDER,
-    PUBLISH_STEP_CATALOG,
     UNOWNED_JOB_IDS,
     UNOWNED_JOB_RATIONALES,
-    HostedJobSpec,
-    PublishStepSpec,
 )
 from _sync_ci_gate_core import (
     DEFAULT_DOCS,
@@ -95,6 +87,7 @@ from _sync_ci_gate_core import (
     _any_marker_present,
     _atomic_write,
     _expected_needs,
+    _hosted_gates,
     _job_steps,
     _locate_hosted_job_headers,
     _locate_hosted_jobs,
@@ -148,24 +141,17 @@ __all__ = [
     "FIXED_NEEDS",
     "GeneratorError",
     "HAND_OWNED_MAKE_TARGETS",
-    "HOSTED_GATE_ORDER",
-    "HOSTED_JOB_CATALOG",
-    "HostedJobSpec",
     "INSTALL_POETRY_COMMENT",
     "INSTALL_POETRY_REF",
     "JOB_BEGIN",
     "JOB_END",
     "MAKE_INCLUDE_HEADER",
-    "MAKE_TARGET_COMMENTS",
     "NEEDS_BEGIN",
     "NEEDS_END",
     "NEEDS_GATE_IDS",
     "POETRY_VERSION",
     "PUBLISH_BEGIN",
     "PUBLISH_END",
-    "PUBLISH_GATE_ORDER",
-    "PUBLISH_STEP_CATALOG",
-    "PublishStepSpec",
     "REPO_ROOT",
     "SETUP_PYTHON_COMMENT",
     "SETUP_PYTHON_REF",
@@ -204,17 +190,21 @@ POETRY_VERSION = "2.4.1"
 
 
 def _expected_action_refs() -> tuple[str, str, str]:
-    """Return the catalog's pinned action refs in their emitted order."""
+    """Return the pinned action refs in their emitted order."""
     return (CHECKOUT_REF, SETUP_PYTHON_REF, INSTALL_POETRY_REF)
 
 
 def _resolve_hosted_locations(
-    jobs: dict[str, Any], bindings: dict[str, tuple[str, str]], *, strict: bool
+    jobs: dict[str, Any],
+    bindings: dict[str, tuple[str, str]],
+    hosted_gates: list[dict[str, Any]],
+    *,
+    strict: bool,
 ) -> dict[str, str]:
     """Locate the hosted jobs exactly (strict) or by display name (pre-edit)."""
     if strict:
-        return {gate_id: bindings[gate_id][0] for gate_id in HOSTED_GATE_ORDER}
-    return _locate_hosted_jobs(jobs, "ci.yml", allow_missing=True)
+        return {gate_id: bindings[gate_id][0] for gate_id in bindings}
+    return _locate_hosted_jobs(jobs, hosted_gates, "ci.yml", allow_missing=True)
 
 
 def _validate_hosted_job_set(jobs: dict[str, Any], hosted_locations: dict[str, str]) -> None:
@@ -234,23 +224,23 @@ def _validate_job_step_uses(steps: list[dict[str, Any]], job_id: str, *, strict:
         if actual_uses != expected_refs:
             raise GeneratorError(f"ci.yml: jobs.{job_id} action versions/ordering drifted")
         return
-    # Pre-edit, an action pin one release behind the catalog is projected
+    # Pre-edit, an action pin one release behind the pinned refs is projected
     # by --write rather than rejected; the action identity and its pinned
     # shape must still hold, and post-generation validation requires the
-    # catalog's exact refs.
+    # facade's exact refs.
     for step, expected_ref in zip(steps, expected_refs):
         if not _pins_same_action(step.get("uses"), expected_ref):
             raise GeneratorError(f"ci.yml: jobs.{job_id} action versions/ordering drifted")
 
 
 def _validate_job_step_values(
-    steps: list[dict[str, Any]], job_id: str, spec: HostedJobSpec, *, strict: bool
+    steps: list[dict[str, Any]], job_id: str, spec: dict[str, Any], *, strict: bool
 ) -> None:
     expected_checkout: dict[str, Any] = {
         "name": "Checkout code",
         "uses": CHECKOUT_REF,
     }
-    if spec.full_history:
+    if spec.get("full_history"):
         expected_checkout["with"] = {"fetch-depth": "0"}
     if not _step_matches(steps[0], expected_checkout, strict=strict):
         raise GeneratorError(f"ci.yml: jobs.{job_id} checkout step drifted")
@@ -305,10 +295,12 @@ def _validate_hosted_jobs(
     jobs: dict[str, Any],
     hosted_locations: dict[str, str],
     bindings: dict[str, tuple[str, str]],
+    hosted_gates: list[dict[str, Any]],
     *,
     strict: bool,
 ) -> None:
-    for gate_id in HOSTED_GATE_ORDER:
+    gate_by_id = {gate["id"]: gate for gate in hosted_gates}
+    for gate_id in bindings:
         job_id = hosted_locations.get(gate_id)
         if job_id is None:
             if strict:
@@ -317,16 +309,16 @@ def _validate_hosted_jobs(
         job = jobs.get(job_id)
         if not isinstance(job, dict):
             raise GeneratorError(f"ci.yml: jobs.{job_id} must be a mapping")
-        spec = HOSTED_JOB_CATALOG[gate_id]
+        spec = gate_by_id[gate_id]["hosted"]
         make_target = bindings[gate_id][1]
-        if job.get("name") != spec.display_name or job.get("runs-on") != "ubuntu-24.04":
+        if job.get("name") != spec["display_name"] or job.get("runs-on") != "ubuntu-24.04":
             raise GeneratorError(f"ci.yml: jobs.{job_id} static display metadata drifted")
         steps = _job_steps(job, job_id)
         if len(steps) != 5:
             raise GeneratorError(f"ci.yml: jobs.{job_id} must retain exactly five steps")
         _validate_job_step_uses(steps, job_id, strict=strict)
         _validate_job_step_values(steps, job_id, spec, strict=strict)
-        _validate_job_check_step(steps, job_id, spec.check_step_name, make_target, strict=strict)
+        _validate_job_check_step(steps, job_id, spec["check_step_name"], make_target, strict=strict)
 
 
 def _validate_consumer_needs(
@@ -374,7 +366,7 @@ def _validate_workflow_projection(
 
     ``strict=True`` (post-generation) requires the registry's exact hosted job
     IDs, ``needs`` lists, and check commands.  ``strict=False`` (pre-edit)
-    locates the hosted jobs by their static catalog display names so a registry
+    locates the hosted jobs by their registry-owned display names so a registry
     ``ci_job`` (F-005) or Make-target edit can be projected by ``--write``;
     static display and step metadata is validated identically in both modes
     except that a stale action pin is tolerated pre-edit, exactly like a stale
@@ -386,22 +378,23 @@ def _validate_workflow_projection(
     if not isinstance(jobs, dict):
         raise GeneratorError("ci.yml: jobs must be a mapping")
     _validate_unowned_job_rationales()
+    hosted_gates = _hosted_gates(gates)
     bindings = _registry_bindings(gates)
-    hosted_locations = _resolve_hosted_locations(jobs, bindings, strict=strict)
+    hosted_locations = _resolve_hosted_locations(jobs, bindings, hosted_gates, strict=strict)
     _validate_hosted_job_set(jobs, hosted_locations)
-    _validate_hosted_jobs(jobs, hosted_locations, bindings, strict=strict)
+    _validate_hosted_jobs(jobs, hosted_locations, bindings, hosted_gates, strict=strict)
     _validate_consumer_needs(jobs, hosted_locations, gates, strict=strict)
     return workflow
 
 
-def _render_job(gate_id: str, job_id: str, make_target: str) -> str:
-    spec = HOSTED_JOB_CATALOG[gate_id]
+def _render_job(gate: dict[str, Any], job_id: str, make_target: str) -> str:
+    spec = gate["hosted"]
     checkout = f"    - name: Checkout code\n      uses: {CHECKOUT_REF} {CHECKOUT_COMMENT}\n" + (
-        "      with:\n        fetch-depth: 0\n" if spec.full_history else ""
+        "      with:\n        fetch-depth: 0\n" if spec.get("full_history") else ""
     )
     return (
         f"  {job_id}:\n"
-        f"    name: {spec.display_name}\n"
+        f"    name: {spec['display_name']}\n"
         "    runs-on: ubuntu-24.04\n"
         "\n"
         "    steps:\n"
@@ -423,7 +416,7 @@ def _render_job(gate_id: str, job_id: str, make_target: str) -> str:
         "      run: |\n"
         "        poetry install --with dev\n"
         "\n"
-        f"    - name: {spec.check_step_name}\n"
+        f"    - name: {spec['check_step_name']}\n"
         "      run: |\n"
         f"        make {make_target}\n"
     )
@@ -431,15 +424,16 @@ def _render_job(gate_id: str, job_id: str, make_target: str) -> str:
 
 def _render_jobs(gates: list[dict[str, Any]]) -> str:
     bindings = _registry_bindings(gates)
+    gate_by_id = {gate["id"]: gate for gate in _hosted_gates(gates)}
     return "\n\n".join(
-        _render_job(gate_id, *bindings[gate_id]).rstrip("\n") for gate_id in HOSTED_GATE_ORDER
+        _render_job(gate_by_id[gate_id], *bindings[gate_id]).rstrip("\n") for gate_id in bindings
     )
 
 
 def _bootstrap_job_markers(lines: list[str], gates: list[dict[str, Any]]) -> list[str]:
-    starts = _locate_hosted_job_headers(lines, allow_missing=True)
+    starts = _locate_hosted_job_headers(lines, _hosted_gates(gates), allow_missing=True)
     if not starts:
-        raise GeneratorError("hosted job bootstrap: no catalog-owned jobs were found")
+        raise GeneratorError("hosted job bootstrap: no registry-owned jobs were found")
     first = starts[0]
     last = starts[-1]
     next_header = next(
