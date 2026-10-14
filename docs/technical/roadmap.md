@@ -91,7 +91,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA204 (e) | yes | no | yes | no | yes |
+| 1 | SA204 (c) | no | no | yes | no | yes |
 | 2 | SA275 (b) | yes | yes | yes | yes | yes |
 | 3 | SA276 (b) | yes | yes | yes | yes | no |
 
@@ -217,15 +217,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [ ] (c) The freeze gate as one registry row (after SA275), with controls for an in-place
     edit, a deletion, a new `0002`, and a `_`-symbol import, and the topology test's chain and
     inverted canary (Tier 2-fast).
-  - [x] (d) Restore-forward in `dr_engine/recovery.py` keyed on the hash manifest: forward
-    migration from N to N+1, the bare-file refusal, and the equal-label hash-mismatch refusal,
-    with tests (Tier 2-fast; Track 2 reviews). Landed as per-module `migration_hashes` recorded
-    in every backup's metadata and content-identity checks in recovery.py: a restore proceeds
-    when the recorded migration files are still installed byte-identical (newer installed
-    migrations apply forward), and refuses a changed, missing, or unrecorded identity. Next:
-    (e), with (c) still waiting on SA275.
-  - [ ] (e) `quickscale update` compares applied migration hashes and refuses an equal-label
-    mismatch, with tests (Tier 2-fast; Track 2 reviews).
+  - [x] (e) `quickscale update` refuses a same-label rewrite of an applied migration file and
+    restores the pre-update content; an added migration file still applies forward, and a
+    version-label change keeps the upgrade path.
   - [ ] (f) The restored-`bap-web` proof: `migrate` from the frozen `0001` reproduces the
     FORCE-RLS parity baseline, and no schema change shipped between SA191's rebuild and the freeze
     (Tier 2-full; environment-sensitive, read-mostly).
