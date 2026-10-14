@@ -495,12 +495,13 @@ Both invite paths (the HTML members surface and the JSON API) are throttled thro
 scopes fed by the `invite_rate_limit` option: `quickscale_orgs_invite` per sender (revoking and
 re-inviting does not reset it, and it spans every organization) and
 `quickscale_orgs_invite_organization` per target organization (every sender shares one budget).
-Both buckets are charged only after the role and eligibility checks pass, so an attempt refused
-by the role gate, validation, the pending cap, or the duplicate guard spends neither budget; a
-throttle refusal rolls the invitation back, so no invitation and no email result. Each
-organization additionally caps its active pending invitations at `pending_invitation_limit`,
-enforced under the organization row lock. The invitation email's sender-chosen text (the
-organization and inviter names) is bounded by its stored fields and rendered escaped.
+Both buckets are charged only after the role and eligibility checks pass and only when both
+allow, so an attempt refused by the role gate, validation, the pending cap, the duplicate guard,
+or either throttle spends neither budget; a throttle refusal rolls the invitation back, so no
+invitation and no email result. Each organization additionally caps its active pending
+invitations at `pending_invitation_limit`, enforced under the organization row lock. The
+invitation email's sender-chosen text (the organization and inviter names) is bounded by its
+stored fields and rendered escaped.
 
 ### Focused Validation Notes
 

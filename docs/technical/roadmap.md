@@ -51,10 +51,9 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA282 | One organization-selector flag and a required contract-vintage id | 2 | — | Optional |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | SA275 | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
-| SA272 | Harden the notifications webhook and the orgs invite throttle | 3 | — | Optional |
 | SA276 | Generate the theme's seam types from the manifest set | 3 | — | Optional |
 | SA274 | Show real counts on the theme's CRM stat cards | 3 | — | Optional |
-| SA283 | Manifest-read startup checks, one capability collector, one `--cov` form | 3 | SA272 | Optional |
+| SA283 | Manifest-read startup checks, one capability collector, one `--cov` form | 3 | — | Optional |
 | SA279 | Retire the conformance harness's frozen surfaces | 3 | SA278 | Optional |
 | SA281 | Hand adapter hooks typed resolved options and delete the dataflow detector | 3 | SA279 | Optional |
 
@@ -63,7 +62,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
 Track 2: SA271 ──► SA275 ──► SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
-Track 3: SA272 ──► SA276 ──► SA274 ──► SA283 ──► SA279 ──► SA281
+Track 3: SA276 ──► SA274 ──► SA283 ──► SA279 ──► SA281
      release path:  SA271 ──► publish 0.89.0 ──► SA191 repin
      critical path: SA275 ──► SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
@@ -74,7 +73,7 @@ its freeze gate costs one registry row instead of about eight hand stations (arc
 SA279 waits on SA278, whose guard test it extends; SA277 waits on SA191's cutover, which decides
 which upgrade mechanism proved itself.
 
-**Parallel start.** SA204 (a), SA271, SA275, SA272, and SA276 have no unmet
+**Parallel start.** SA204 (a), SA271, SA275, and SA276 have no unmet
 dependency and touch disjoint files, so all three tracks start at once. SA204 (a), (b), (d), and
 (e) do not wait on SA275; only (c) adds a gate row.
 
@@ -86,8 +85,8 @@ when its last slice lands; slices are not scheduled.
 **Order.** Every change to a shipped module `0001_initial` lands before SA204 freezes
 migration history, and SA204 lands before SA153 slice (a), whose schema work is `0002+` from the
 start. None of the new tickets changes a module schema except SA270's additive reservation
-attempt timestamps, which its Search-lag window reads; SA274's count endpoint and SA272's
-status ranking are code-only. SA154 is an inventory, not work. SA191's agent work is done; its
+attempt timestamps, which its Search-lag window reads; SA274's count endpoint is code-only.
+SA154 is an inventory, not work. SA191's agent work is done; its
 remaining repin waits for the 0.89.0 publication, and SA204 proceeds alongside it. SA276 should
 land before 0.89.0 is tagged if it fits, so `bap-web-new` adopts its step once at the repin
 instead of on a live site (arch audit §7); it is not a release requirement.
@@ -100,7 +99,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA204 (c) | no | no | yes | no | yes |
 | 2 | SA271 | yes | yes | yes | no | yes |
-| 3 | SA272 | yes | yes | yes | no | no |
+| 3 | SA276 | yes | yes | yes | no | no |
 
 ### Ownership and merge coordination
 
@@ -497,40 +496,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 3 — Track 3 hardening, theme seam types, and harness by construction
 
-- [ ] **SA272 — Harden the notifications webhook and the orgs invite throttle.**
-
-  Closes tech `notifications-webhook-status-regresses-out-of-order`,
-  `notifications-webhook-secret-format-unchecked-at-startup`, and
-  `orgs-invite-throttle-partial-charge` (S4).
-
-  **Context:** `_apply_delivery_event` (`notifications/_webhooks.py`) overwrote the status
-  with no ordering check and no row lock, so a late `email.sent` regressed a `delivered` or
-  `bounced` row; slice (a) delivers the ranking and the row lock.
-  `notifications/checks.py` (E003) refused only an empty secret until slice (b) extended it to
-  every value the webhook endpoint's decoder refuses. In `orgs/views.py:184` and
-  `OrgApiInviteView.post`, a per-org refusal after a passing per-sender check still costs the
-  sender a token.
-
-  **Acceptance:** delivery statuses are ranked and updated only forward under
-  `select_for_update`, with an out-of-order test. E003 also refuses a value without the `whsec_`
-  prefix or whose remainder is not valid base64, with tests. Both invite throttles are checked
-  before either is charged, in the HTML and JSON views, with a test that a per-org refusal leaves
-  the sender's bucket unchanged.
-
-  **Slices:**
-  - [x] (a) Forward-only delivery status under a row lock (Tier 2-fast). The
-    reconciliation ranks the delivery statuses and applies an event only when it
-    outranks the recorded one, re-reading the delivery under `select_for_update`;
-    the out-of-order controls prove a late `email.sent` leaves delivered and
-    bounced rows, their timestamps, and the parent message's derived status
-    unchanged while the receipt is still recorded.
-  - [x] (b) The `whsec_` format check in E003 (Tier 1). E003 validates the secret through the
-    webhook endpoint's own decoder, so a missing `whsec_` prefix, a non-base64 remainder, and an
-    empty decoded key all refuse startup; the generated CI placeholder, the module and
-    generated-project fixtures, and the beta-migration smoke assertion carry conforming
-    synthetic secrets.
-  - [ ] (c) Check-then-charge for both invite throttles (Tier 1).
-
 - [ ] **SA276 — Generate the theme's seam types from the manifest set.**
 
   Closes the theme half of arch `generated-file-ownership-unmodeled` (Finding 2, option 2) and
@@ -589,8 +554,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   name (control: a path form).
 
   **Slices:**
-  - [ ] (a) Manifest-read startup checks in analytics, billing, and notifications, after SA272 (b)
-    lands in the same `checks.py` (Tier 2-fast).
+  - [ ] (a) Manifest-read startup checks in analytics, billing, and notifications, on the same
+    `checks.py` SA272 (b) extended (Tier 2-fast).
   - [ ] (b) The purge command's hook through `collect_capabilities` (Tier 1).
   - [ ] (c) The `--cov` form in auth and blog with its harness check (Tier 1).
 
@@ -641,6 +606,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [x] **SA269 — Make the release pipeline run hosted E2E and pin its Poetry retry.**
 
 - [x] **SA270 — Keep checkout reconciliation fail-closed across Stripe Search lag.**
+
+- [x] **SA272 — Harden the notifications webhook and the orgs invite throttle.**
 
 ## Deferred constraints and references
 
