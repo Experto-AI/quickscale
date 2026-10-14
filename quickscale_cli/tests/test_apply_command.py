@@ -1460,6 +1460,8 @@ class TestApplyDriftDetection:
         (project / "myapp" / "settings").mkdir(parents=True)
         (project / "myapp" / "settings" / "modules.py").write_text("A = 1\n")
         (project / "myapp" / "urls_modules.py").write_text("URLS = []\n")
+        (project / "frontend" / "src").mkdir(parents=True)
+        (project / "frontend" / "src" / "quickscaleSeam.d.ts").write_text("// seam\n")
 
         config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
         state = QuickScaleState(
@@ -1473,6 +1475,7 @@ class TestApplyDriftDetection:
         assert state.managed_files, "Expected managed_files to be populated"
         assert "myapp/settings/modules.py" in state.managed_files
         assert "myapp/urls_modules.py" in state.managed_files
+        assert "frontend/src/quickscaleSeam.d.ts" in state.managed_files
 
         captured = capsys.readouterr().out
         assert "Tracked managed file hashes" in captured
@@ -1486,6 +1489,7 @@ class TestApplyDriftDetection:
         paths = _resolve_managed_wiring_paths(config)
         assert "myapp/settings/modules.py" in paths
         assert "myapp/urls_modules.py" in paths
+        assert "frontend/src/quickscaleSeam.d.ts" in paths
         assert all("\\" not in p for p in paths)
 
 

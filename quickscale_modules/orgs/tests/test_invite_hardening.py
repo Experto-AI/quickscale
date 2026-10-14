@@ -391,6 +391,131 @@ def test_unauthorized_callers_cannot_exhaust_the_organization_budget(
 
 
 # ---------------------------------------------------------------------------
+# Both buckets are checked before either is charged
+# ---------------------------------------------------------------------------
+
+
+def test_invite_throttle_allow_request_keeps_drfs_contract() -> None:
+    """A direct DRF-style call allows what it records, then refuses."""
+    request = SimpleNamespace(user=SimpleNamespace(pk=42, is_authenticated=True))
+    view = SimpleNamespace()
+    cache.clear()
+
+    with patch.object(OrgInviteThrottle, "THROTTLE_RATES", THROTTLE_RATES):
+        allowed = [OrgInviteThrottle().allow_request(request, view) for _ in range(3)]
+
+    assert allowed == [True, True, False]
+
+
+@pytest.mark.django_db
+def test_html_organization_refusal_keeps_the_sender_budget(
+    client, settings, captured_invites, django_capture_on_commit_callbacks
+) -> None:
+    """A refused organization bucket leaves the sender's budget untouched."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    organization = Organization.objects.create(name="Refused Org", slug="refused-org")
+    fresh_organization = Organization.objects.create(name="Fresh Org", slug="fresh-org")
+    sender = _admin(organization)
+    OrganizationMembership.objects.create(
+        user=sender,
+        organization=fresh_organization,
+        role=OrgRole.ADMIN,
+    )
+    hog = _admin(organization, username="budget-hog")
+    cache.clear()
+
+    with (
+        patch.object(OrgInviteThrottle, "THROTTLE_RATES", THROTTLE_RATES),
+        patch.object(OrgInviteOrganizationThrottle, "THROTTLE_RATES", THROTTLE_RATES),
+    ):
+        with django_capture_on_commit_callbacks(execute=True):
+            # Another sender exhausts the organization's shared bucket.
+            client.force_login(hog)
+            hog_responses = [
+                client.post(
+                    f"/orgs/{organization.slug}/members/invite/",
+                    {"email": f"hog{i}@example.com", "role": OrgRole.MEMBER},
+                )
+                for i in range(2)
+            ]
+            # The organization bucket refuses the sender, and neither bucket
+            # records the attempt: the sender's key was never written.
+            client.force_login(sender)
+            refused = client.post(
+                f"/orgs/{organization.slug}/members/invite/",
+                {"email": "refused@example.com", "role": OrgRole.MEMBER},
+            )
+            sender_key = OrgInviteThrottle().cache_format % {
+                "scope": "quickscale_orgs_invite",
+                "ident": sender.pk,
+            }
+            sender_history = cache.get(sender_key)
+            # The sender's full budget still serves a fresh organization.
+            fresh_responses = [
+                client.post(
+                    f"/orgs/{fresh_organization.slug}/members/invite/",
+                    {"email": f"fresh{i}@example.com", "role": OrgRole.MEMBER},
+                )
+                for i in range(2)
+            ]
+
+    assert [response.status_code for response in hog_responses] == [302, 302]
+    assert refused.status_code == 429
+    assert sender_history is None
+    assert [response.status_code for response in fresh_responses] == [302, 302]
+
+
+@pytest.mark.django_db
+def test_api_organization_refusal_keeps_the_sender_budget(
+    client, settings, captured_invites
+) -> None:
+    """The JSON path leaves the sender's budget untouched on a refusal too."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    organization = Organization.objects.create(name="Api Refused", slug="api-refused")
+    fresh_organization = Organization.objects.create(name="Api Fresh", slug="api-fresh")
+    sender = _admin(organization)
+    OrganizationMembership.objects.create(
+        user=sender,
+        organization=fresh_organization,
+        role=OrgRole.ADMIN,
+    )
+    hog = _admin(organization, username="api-budget-hog")
+    cache.clear()
+
+    def api_invite(slug: str, email: str) -> Any:
+        return client.post(
+            f"/orgs/api/{slug}/members/invite/",
+            data=json.dumps({"email": email, "role": OrgRole.MEMBER}),
+            content_type="application/json",
+        )
+
+    with (
+        patch.object(OrgInviteThrottle, "THROTTLE_RATES", THROTTLE_RATES),
+        patch.object(OrgInviteOrganizationThrottle, "THROTTLE_RATES", THROTTLE_RATES),
+    ):
+        client.force_login(hog)
+        hog_responses = [
+            api_invite(organization.slug, f"api-hog{i}@example.com") for i in range(2)
+        ]
+        client.force_login(sender)
+        refused = api_invite(organization.slug, "api-refused@example.com")
+        sender_key = OrgInviteThrottle().cache_format % {
+            "scope": "quickscale_orgs_invite",
+            "ident": sender.pk,
+        }
+        sender_history = cache.get(sender_key)
+        fresh_responses = [
+            api_invite(fresh_organization.slug, f"api-fresh{i}@example.com")
+            for i in range(2)
+        ]
+
+    assert [response.status_code for response in hog_responses] == [201, 201]
+    assert refused.status_code == 429
+    assert sender_history is None
+    assert [response.status_code for response in fresh_responses] == [201, 201]
+
+
+# ---------------------------------------------------------------------------
 # The per-organization pending cap
 # ---------------------------------------------------------------------------
 

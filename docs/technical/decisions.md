@@ -1140,9 +1140,9 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
   canonical client IP (the trusted-proxy derivation, never a request's own headers). Every
   vendor-calling or publishing write API declares a scope.
 - ✅ Orgs' invitation sends are the listed exception: both paths keep their two manual
-  per-sender and per-organization buckets, charged after the form's locked eligibility checks so
-  a refused attempt spends no budget, and the JSON API's default DRF classes still apply their
-  conservative rates on top.
+  per-sender and per-organization buckets, charged after the form's locked eligibility checks
+  and only when both allow, so a refused attempt spends neither budget, and the JSON API's
+  default DRF classes still apply their conservative rates on top.
 - ❌ `throttle_classes` on a non-webhook view (a webhook keeps the empty literal rule 26
   requires); a rate written in code or `adapter.py`; a table created by `RunSQL` (blog's
   throttle-counter table goes with its hand-written limiter, rule 9).

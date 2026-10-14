@@ -73,6 +73,11 @@ def get_lint_context() -> dict:
     else:
         modules = _all_modules
 
+    # The managed seam declaration is rendered content, never a dummy: the
+    # emitted file must lint and type-check exactly as a generated project
+    # receives it.  Imported here so ``--list-modules`` stays dependency-free.
+    from quickscale_core.runtime.seam import render_seam_declaration
+
     return {
         "project_name": "MyApp",
         "package_name": "myapp",
@@ -80,6 +85,7 @@ def get_lint_context() -> dict:
         # Full module list so 'foo in selected_modules' is always True
         # and 'selected_modules is none' is False for maximal coverage.
         "selected_modules": modules,
+        "seam_declaration": render_seam_declaration(),
     }
 
 

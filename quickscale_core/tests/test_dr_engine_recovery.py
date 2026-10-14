@@ -408,69 +408,187 @@ class TestGetRestoreCompatibilityIssues:
         )
         assert any("client major" in issue for issue in issues)
 
-    def test_matching_module_vintage_passes(self) -> None:
+    def test_matching_migration_hashes_passes(self) -> None:
         artifact = FakeArtifact(
-            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+            metadata_json={
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                }
+            },
         )
         issues = _get_restore_compatibility_issues(
             artifact,
             "django.db.backends.postgresql",
-            installed_module_versions={"quickscale_modules_auth": "1.2"},
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+            },
         )
         assert issues == []
 
-    def test_differing_module_vintage_names_both_versions(self) -> None:
+    def test_forward_migration_from_older_vintage_passes(self) -> None:
+        # Every recorded file is still installed byte-identical; the installed
+        # module carries a newer migration for ``migrate`` to apply forward.
         artifact = FakeArtifact(
-            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+            metadata_json={
+                "module_versions": {"quickscale_modules_auth": "0.88.0"},
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
+            },
         )
         issues = _get_restore_compatibility_issues(
             artifact,
             "django.db.backends.postgresql",
-            installed_module_versions={"quickscale_modules_auth": "2.0"},
+            installed_migration_hashes={
+                "quickscale_modules_auth": {
+                    "0001_initial.py": "hash-1",
+                    "0002_add_team.py": "hash-2",
+                },
+            },
+            allow_forward=True,
+        )
+        assert issues == []
+
+    def test_forward_migration_refused_without_allow_forward(self) -> None:
+        # A surface that does not complete the forward migration may only
+        # restore an exact content identity.
+        artifact = FakeArtifact(
+            metadata_json={
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
+            },
+        )
+        issues = _get_restore_compatibility_issues(
+            artifact,
+            "django.db.backends.postgresql",
+            installed_migration_hashes={
+                "quickscale_modules_auth": {
+                    "0001_initial.py": "hash-1",
+                    "0002_add_team.py": "hash-2",
+                },
+            },
         )
         assert len(issues) == 1
-        assert "module vintage differs from the installed modules" in issues[0]
-        assert "quickscale_modules_auth recorded '1.2' but installed '2.0'" in issues[0]
+        assert "does not complete the forward migration" in issues[0]
+        assert (
+            "quickscale_modules_auth installed migration '0002_add_team.py' is newer"
+            in issues[0]
+        )
 
-    def test_module_absent_from_artifact_is_named(self) -> None:
+    def test_changed_content_under_equal_label_is_refused(self) -> None:
+        # The same version label with different recorded file content is the
+        # in-place ``0001_initial`` rewrite the content identity exists to catch.
         artifact = FakeArtifact(
-            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+            metadata_json={
+                "module_versions": {"quickscale_modules_auth": "0.89.0"},
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-old"},
+                },
+            },
         )
         issues = _get_restore_compatibility_issues(
             artifact,
             "django.db.backends.postgresql",
-            installed_module_versions={
-                "quickscale_modules_auth": "1.2",
-                "quickscale_modules_listings": "0.89.0",
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-new"},
+            },
+        )
+        assert len(issues) == 1
+        assert "backup migration content cannot advance" in issues[0]
+        assert (
+            "quickscale_modules_auth migration '0001_initial.py' changed" in issues[0]
+        )
+
+    def test_recorded_migration_missing_from_installed_is_refused(self) -> None:
+        artifact = FakeArtifact(
+            metadata_json={
+                "migration_hashes": {
+                    "quickscale_modules_auth": {
+                        "0001_initial.py": "hash-1",
+                        "0002_add_team.py": "hash-2",
+                    },
+                }
+            },
+        )
+        issues = _get_restore_compatibility_issues(
+            artifact,
+            "django.db.backends.postgresql",
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
             },
         )
         assert len(issues) == 1
         assert (
-            "quickscale_modules_listings recorded 'none' but installed '0.89.0'"
-            in issues[0]
+            "quickscale_modules_auth recorded migration '0002_add_team.py' is not "
+            "installed" in issues[0]
         )
 
-    def test_artifact_recording_no_module_vintage_is_refused(self) -> None:
+    def test_installed_module_added_after_capture_passes_with_forward_allowed(
+        self,
+    ) -> None:
+        artifact = FakeArtifact(
+            metadata_json={
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                }
+            },
+        )
+        issues = _get_restore_compatibility_issues(
+            artifact,
+            "django.db.backends.postgresql",
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                "quickscale_modules_listings": {"0001_initial.py": "hash-9"},
+            },
+            allow_forward=True,
+        )
+        assert issues == []
+
+    def test_recorded_module_with_no_hashes_anywhere_is_refused(self) -> None:
+        # An outer mapping whose module entries hold no file hashes establishes
+        # no identity and must not pass the guard.
+        artifact = FakeArtifact(
+            metadata_json={
+                "migration_hashes": {
+                    "quickscale_modules_auth": {},
+                    "quickscale_modules_missing": {},
+                }
+            },
+        )
+        issues = _get_restore_compatibility_issues(
+            artifact,
+            "django.db.backends.postgresql",
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+            },
+        )
+        assert len(issues) == 1
+        assert "records no migration content identity" in issues[0]
+
+    def test_artifact_recording_no_migration_hashes_is_refused(self) -> None:
         artifact = FakeArtifact()
         issues = _get_restore_compatibility_issues(
             artifact,
             "django.db.backends.postgresql",
-            installed_module_versions={"quickscale_modules_auth": "1.2"},
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+            },
         )
         assert len(issues) == 1
-        assert "records no module vintage" in issues[0]
+        assert "records no migration content identity" in issues[0]
 
-    def test_empty_recorded_module_versions_are_refused(self) -> None:
-        artifact = FakeArtifact(metadata_json={"module_versions": {}})
+    def test_empty_recorded_migration_hashes_are_refused(self) -> None:
+        artifact = FakeArtifact(metadata_json={"migration_hashes": {}})
         issues = _get_restore_compatibility_issues(
             artifact,
             "django.db.backends.postgresql",
-            installed_module_versions={},
+            installed_migration_hashes={},
         )
         assert len(issues) == 1
-        assert "records no module vintage" in issues[0]
+        assert "records no migration content identity" in issues[0]
 
-    def test_module_vintage_check_skipped_without_installed_versions(self) -> None:
+    def test_migration_content_check_skipped_without_installed_hashes(self) -> None:
         artifact = FakeArtifact()
         issues = _get_restore_compatibility_issues(
             artifact, "django.db.backends.postgresql"
@@ -517,9 +635,13 @@ class TestGetRestoreSourceCompatibilityIssues:
         )
         assert issues == []
 
-    def test_artifact_module_vintage_mismatch_is_reported(self) -> None:
+    def test_artifact_migration_content_mismatch_is_reported(self) -> None:
         artifact = FakeArtifact(
-            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+            metadata_json={
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-old"},
+                }
+            },
         )
         src = ResolvedRestoreSource(
             confirmation_value="test.dump",
@@ -530,11 +652,13 @@ class TestGetRestoreSourceCompatibilityIssues:
         issues = _get_restore_source_compatibility_issues(
             src,
             "django.db.backends.postgresql",
-            installed_module_versions={"quickscale_modules_auth": "2.0"},
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-new"},
+            },
         )
-        assert any("module vintage differs" in issue for issue in issues)
+        assert any("migration content cannot advance" in issue for issue in issues)
 
-    def test_operator_supplied_source_is_not_vintage_checked(self) -> None:
+    def test_operator_supplied_bare_file_is_refused(self) -> None:
         src = ResolvedRestoreSource(
             confirmation_value="test.dump",
             local_path=Path("/tmp/test.dump"),
@@ -543,11 +667,13 @@ class TestGetRestoreSourceCompatibilityIssues:
         issues = _get_restore_source_compatibility_issues(
             src,
             "django.db.backends.postgresql",
-            installed_module_versions={"quickscale_modules_auth": "2.0"},
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+            },
         )
-        assert issues == []
+        assert any("records no migration content identity" in issue for issue in issues)
 
-    def test_recorded_vintage_mismatch_is_reported_for_artifactless_source(
+    def test_recorded_migration_content_mismatch_is_reported_for_artifactless_source(
         self,
     ) -> None:
         src = ResolvedRestoreSource(
@@ -558,16 +684,22 @@ class TestGetRestoreSourceCompatibilityIssues:
         issues = _get_restore_source_compatibility_issues(
             src,
             "django.db.backends.postgresql",
-            installed_module_versions={"quickscale_modules_auth": "2.0"},
-            recorded_module_versions={"quickscale_modules_auth": "1.2"},
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-new"},
+            },
+            recorded_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-old"},
+            },
         )
-        assert any("module vintage differs" in issue for issue in issues)
+        assert any("migration content cannot advance" in issue for issue in issues)
         assert any(
-            "quickscale_modules_auth recorded '1.2' but installed '2.0'" in issue
+            "quickscale_modules_auth migration '0001_initial.py' changed" in issue
             for issue in issues
         )
 
-    def test_matching_recorded_vintage_passes_for_artifactless_source(self) -> None:
+    def test_matching_recorded_migration_hashes_passes_for_artifactless_source(
+        self,
+    ) -> None:
         src = ResolvedRestoreSource(
             confirmation_value="test.dump",
             local_path=Path("/tmp/test.dump"),
@@ -576,8 +708,12 @@ class TestGetRestoreSourceCompatibilityIssues:
         issues = _get_restore_source_compatibility_issues(
             src,
             "django.db.backends.postgresql",
-            installed_module_versions={"quickscale_modules_auth": "2.0"},
-            recorded_module_versions={"quickscale_modules_auth": "2.0"},
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+            },
+            recorded_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+            },
         )
         assert issues == []
 
@@ -1265,7 +1401,7 @@ class TestExecuteRestoreForResolvedSource:
         assert "Restore executed" in result.message
         mock_run.assert_called()
 
-    def test_differing_module_vintage_refused_before_pg_restore(
+    def test_changed_migration_content_refused_before_pg_restore(
         self, tmp_path: Path
     ) -> None:
         dump_file = tmp_path / "test-backup.dump"
@@ -1276,7 +1412,12 @@ class TestExecuteRestoreForResolvedSource:
             filename="test-backup.dump",
             checksum_sha256=_compute_sha256(dump_file),
             size_bytes=dump_file.stat().st_size,
-            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+            metadata_json={
+                "module_versions": {"quickscale_modules_auth": "0.89.0"},
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-old"},
+                },
+            },
         )
         src = ResolvedRestoreSource(
             confirmation_value="test-backup.dump",
@@ -1293,7 +1434,7 @@ class TestExecuteRestoreForResolvedSource:
         ):
             with pytest.raises(
                 BackupRestoreBlocked,
-                match="module vintage differs from the installed modules",
+                match="migration content cannot advance",
             ) as exc_info:
                 _execute_restore_for_resolved_source(
                     src,
@@ -1307,59 +1448,15 @@ class TestExecuteRestoreForResolvedSource:
                         "USER": "test",
                         "NAME": "testdb",
                     },
-                    installed_module_versions={"quickscale_modules_auth": "2.0"},
-                )
-
-        assert "recorded '1.2' but installed '2.0'" in str(exc_info.value)
-        mock_run.assert_not_called()
-
-    def test_artifact_without_module_vintage_refused_before_pg_restore(
-        self, tmp_path: Path
-    ) -> None:
-        dump_file = tmp_path / "test-backup.dump"
-        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
-        from quickscale_core.dr_engine.primitives import _compute_sha256
-
-        artifact = FakeArtifact(
-            filename="test-backup.dump",
-            checksum_sha256=_compute_sha256(dump_file),
-            size_bytes=dump_file.stat().st_size,
-        )
-        src = ResolvedRestoreSource(
-            confirmation_value="test-backup.dump",
-            local_path=dump_file,
-            backup_format="pg_dump_custom",
-            artifact=artifact,
-        )
-        with (
-            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
-            patch.dict(
-                "os.environ",
-                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
-            ),
-        ):
-            with pytest.raises(
-                BackupRestoreBlocked,
-                match="records no module vintage",
-            ):
-                _execute_restore_for_resolved_source(
-                    src,
-                    confirmation="test-backup.dump",
-                    dry_run=False,
-                    allow_production=True,
-                    current_engine="django.db.backends.postgresql",
-                    connection_settings={
-                        "HOST": "localhost",
-                        "PORT": 5432,
-                        "USER": "test",
-                        "NAME": "testdb",
+                    installed_migration_hashes={
+                        "quickscale_modules_auth": {"0001_initial.py": "hash-new"},
                     },
-                    installed_module_versions={"quickscale_modules_auth": "2.0"},
                 )
 
+        assert "changed" in str(exc_info.value)
         mock_run.assert_not_called()
 
-    def test_matching_module_vintage_artifact_executes_restore(
+    def test_forward_migration_artifact_restores_under_newer_modules(
         self, tmp_path: Path
     ) -> None:
         dump_file = tmp_path / "test-backup.dump"
@@ -1370,7 +1467,12 @@ class TestExecuteRestoreForResolvedSource:
             filename="test-backup.dump",
             checksum_sha256=_compute_sha256(dump_file),
             size_bytes=dump_file.stat().st_size,
-            metadata_json={"module_versions": {"quickscale_modules_auth": "2.0"}},
+            metadata_json={
+                "module_versions": {"quickscale_modules_auth": "0.88.0"},
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
+            },
         )
         src = ResolvedRestoreSource(
             confirmation_value="test-backup.dump",
@@ -1397,14 +1499,20 @@ class TestExecuteRestoreForResolvedSource:
                     "USER": "test",
                     "NAME": "testdb",
                 },
-                installed_module_versions={"quickscale_modules_auth": "2.0"},
+                installed_migration_hashes={
+                    "quickscale_modules_auth": {
+                        "0001_initial.py": "hash-1",
+                        "0002_add_team.py": "hash-2",
+                    },
+                },
+                allow_forward=True,
             )
 
         assert result.executed is True
         assert "Restore executed" in result.message
         mock_run.assert_called()
 
-    def test_module_vintage_refused_without_engine_when_installed_versions_given(
+    def test_forward_migration_refused_without_allow_forward_before_pg_restore(
         self, tmp_path: Path
     ) -> None:
         dump_file = tmp_path / "test-backup.dump"
@@ -1415,7 +1523,11 @@ class TestExecuteRestoreForResolvedSource:
             filename="test-backup.dump",
             checksum_sha256=_compute_sha256(dump_file),
             size_bytes=dump_file.stat().st_size,
-            metadata_json={"module_versions": {"quickscale_modules_auth": "1.2"}},
+            metadata_json={
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
+            },
         )
         src = ResolvedRestoreSource(
             confirmation_value="test-backup.dump",
@@ -1432,7 +1544,166 @@ class TestExecuteRestoreForResolvedSource:
         ):
             with pytest.raises(
                 BackupRestoreBlocked,
-                match="module vintage differs from the installed modules",
+                match="does not complete the forward migration",
+            ):
+                _execute_restore_for_resolved_source(
+                    src,
+                    confirmation="test-backup.dump",
+                    dry_run=False,
+                    allow_production=True,
+                    current_engine="django.db.backends.postgresql",
+                    connection_settings={
+                        "HOST": "localhost",
+                        "PORT": 5432,
+                        "USER": "test",
+                        "NAME": "testdb",
+                    },
+                    installed_migration_hashes={
+                        "quickscale_modules_auth": {
+                            "0001_initial.py": "hash-1",
+                            "0002_add_team.py": "hash-2",
+                        },
+                    },
+                )
+
+        mock_run.assert_not_called()
+
+    def test_artifact_without_migration_hashes_refused_before_pg_restore(
+        self, tmp_path: Path
+    ) -> None:
+        # Version labels alone no longer qualify: the artifact records the
+        # installed label but no migration content identity.
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        artifact = FakeArtifact(
+            filename="test-backup.dump",
+            checksum_sha256=_compute_sha256(dump_file),
+            size_bytes=dump_file.stat().st_size,
+            metadata_json={"module_versions": {"quickscale_modules_auth": "0.89.0"}},
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test-backup.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+        with (
+            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
+            patch.dict(
+                "os.environ",
+                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+            ),
+        ):
+            with pytest.raises(
+                BackupRestoreBlocked,
+                match="records no migration content identity",
+            ):
+                _execute_restore_for_resolved_source(
+                    src,
+                    confirmation="test-backup.dump",
+                    dry_run=False,
+                    allow_production=True,
+                    current_engine="django.db.backends.postgresql",
+                    connection_settings={
+                        "HOST": "localhost",
+                        "PORT": 5432,
+                        "USER": "test",
+                        "NAME": "testdb",
+                    },
+                    installed_migration_hashes={
+                        "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                    },
+                )
+
+        mock_run.assert_not_called()
+
+    def test_matching_migration_hashes_artifact_executes_restore(
+        self, tmp_path: Path
+    ) -> None:
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        artifact = FakeArtifact(
+            filename="test-backup.dump",
+            checksum_sha256=_compute_sha256(dump_file),
+            size_bytes=dump_file.stat().st_size,
+            metadata_json={
+                "module_versions": {"quickscale_modules_auth": "0.89.0"},
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
+            },
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test-backup.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+        with (
+            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
+            patch.dict(
+                "os.environ",
+                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+            ),
+        ):
+            result = _execute_restore_for_resolved_source(
+                src,
+                confirmation="test-backup.dump",
+                dry_run=False,
+                allow_production=True,
+                current_engine="django.db.backends.postgresql",
+                connection_settings={
+                    "HOST": "localhost",
+                    "PORT": 5432,
+                    "USER": "test",
+                    "NAME": "testdb",
+                },
+                installed_migration_hashes={
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
+            )
+
+        assert result.executed is True
+        assert "Restore executed" in result.message
+        mock_run.assert_called()
+
+    def test_migration_content_refused_without_engine_when_installed_hashes_given(
+        self, tmp_path: Path
+    ) -> None:
+        dump_file = tmp_path / "test-backup.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        from quickscale_core.dr_engine.primitives import _compute_sha256
+
+        artifact = FakeArtifact(
+            filename="test-backup.dump",
+            checksum_sha256=_compute_sha256(dump_file),
+            size_bytes=dump_file.stat().st_size,
+            metadata_json={
+                "migration_hashes": {
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-old"},
+                },
+            },
+        )
+        src = ResolvedRestoreSource(
+            confirmation_value="test-backup.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+            artifact=artifact,
+        )
+        with (
+            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
+            patch.dict(
+                "os.environ",
+                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+            ),
+        ):
+            with pytest.raises(
+                BackupRestoreBlocked,
+                match="migration content cannot advance",
             ):
                 _execute_restore_for_resolved_source(
                     src,
@@ -1445,12 +1716,14 @@ class TestExecuteRestoreForResolvedSource:
                         "USER": "test",
                         "NAME": "testdb",
                     },
-                    installed_module_versions={"quickscale_modules_auth": "2.0"},
+                    installed_migration_hashes={
+                        "quickscale_modules_auth": {"0001_initial.py": "hash-new"},
+                    },
                 )
 
         mock_run.assert_not_called()
 
-    def test_recorded_vintage_refused_for_file_source_before_pg_restore(
+    def test_recorded_migration_content_refused_for_file_source_before_pg_restore(
         self, tmp_path: Path
     ) -> None:
         dump_file = tmp_path / "snapshot-restore.dump"
@@ -1469,7 +1742,7 @@ class TestExecuteRestoreForResolvedSource:
         ):
             with pytest.raises(
                 BackupRestoreBlocked,
-                match="module vintage differs from the installed modules",
+                match="migration content cannot advance",
             ):
                 _execute_restore_for_resolved_source(
                     src,
@@ -1483,13 +1756,57 @@ class TestExecuteRestoreForResolvedSource:
                         "USER": "test",
                         "NAME": "testdb",
                     },
-                    installed_module_versions={"quickscale_modules_auth": "2.0"},
-                    recorded_module_versions={"quickscale_modules_auth": "1.2"},
+                    installed_migration_hashes={
+                        "quickscale_modules_auth": {"0001_initial.py": "hash-new"},
+                    },
+                    recorded_migration_hashes={
+                        "quickscale_modules_auth": {"0001_initial.py": "hash-old"},
+                    },
                 )
 
         mock_run.assert_not_called()
 
-    def test_matching_recorded_vintage_executes_file_source_restore(
+    def test_bare_file_without_recorded_identity_refused_before_pg_restore(
+        self, tmp_path: Path
+    ) -> None:
+        dump_file = tmp_path / "snapshot-restore.dump"
+        dump_file.write_bytes(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC + b"rest")
+        src = ResolvedRestoreSource(
+            confirmation_value="snapshot-restore.dump",
+            local_path=dump_file,
+            backup_format="pg_dump_custom",
+        )
+        with (
+            patch("quickscale_core.dr_engine.recovery._run_shell_command") as mock_run,
+            patch.dict(
+                "os.environ",
+                {"QUICKSCALE_BACKUPS_ALLOW_RESTORE": "true"},
+            ),
+        ):
+            with pytest.raises(
+                BackupRestoreBlocked,
+                match="records no migration content identity",
+            ):
+                _execute_restore_for_resolved_source(
+                    src,
+                    confirmation="snapshot-restore.dump",
+                    dry_run=False,
+                    allow_production=True,
+                    current_engine="django.db.backends.postgresql",
+                    connection_settings={
+                        "HOST": "localhost",
+                        "PORT": 5432,
+                        "USER": "test",
+                        "NAME": "testdb",
+                    },
+                    installed_migration_hashes={
+                        "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                    },
+                )
+
+        mock_run.assert_not_called()
+
+    def test_matching_recorded_migration_hashes_execute_file_source_restore(
         self, tmp_path: Path
     ) -> None:
         dump_file = tmp_path / "snapshot-restore.dump"
@@ -1518,8 +1835,12 @@ class TestExecuteRestoreForResolvedSource:
                     "USER": "test",
                     "NAME": "testdb",
                 },
-                installed_module_versions={"quickscale_modules_auth": "2.0"},
-                recorded_module_versions={"quickscale_modules_auth": "2.0"},
+                installed_migration_hashes={
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
+                recorded_migration_hashes={
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
             )
 
         assert result.executed is True

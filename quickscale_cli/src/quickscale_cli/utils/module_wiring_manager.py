@@ -31,6 +31,10 @@ from quickscale_core.manifest.loader import (
 )
 from quickscale_core.manifest.settings_schema import compile_settings_schema
 from quickscale_core.module_wiring import ModuleWiringSpec
+from quickscale_core.runtime.seam import (
+    SEAM_DECLARATION_RELATIVE_PATH,
+    render_seam_declaration,
+)
 from quickscale_core.schema.config_schema import validate_config
 from quickscale_core.schema.state_schema import StateManager
 from quickscale_core.module_wiring import write_managed_wiring
@@ -268,6 +272,19 @@ def _build_wiring_specs(
     return specs, None
 
 
+def _write_seam_declaration(project_path: Path) -> None:
+    """Write the managed theme seam declaration (SA276).
+
+    The declaration carries the theme's module-key types, rendered from the
+    shipped module set; apply, embed, update, and remove all regenerate it
+    alongside the managed wiring files, so it never drifts from the shipped
+    set on its own.
+    """
+    target_path = project_path / SEAM_DECLARATION_RELATIVE_PATH
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(render_seam_declaration())
+
+
 def _write_wiring_files(
     project_path: Path,
     package_name: str,
@@ -279,6 +296,7 @@ def _write_wiring_files(
 
     try:
         write_managed_wiring(package_dir, specs)
+        _write_seam_declaration(project_path)
     except Exception as error:
         return False, f"Failed to write managed wiring files: {error}"
     return True, "Managed wiring files regenerated"

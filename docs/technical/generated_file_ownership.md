@@ -37,6 +37,18 @@ by the beta-migration tool, with the donor's other settings carried unchanged;
 an inline copy whose shape the rewrite cannot preserve is refused before any
 mutation.  This changes what those files contain, not who owns them.
 
+### Managed theme seam declaration (SA276)
+
+``frontend/src/quickscaleSeam.d.ts`` is the theme's managed seam declaration:
+it carries the seam's module-key types, rendered from the shipped module set
+by ``quickscale apply``/``quickscale update`` under the managed-file hash
+guard.  It is classified as a recipient-managed protected root file
+(``FRESH_FIRST_PROTECTED_ROOT_FILES``): the migration preserves the recipient's
+copy and never writes donor content over it, and a project does not hand-edit
+the file because the next apply that regenerates the managed files overwrites
+it (``quickscale apply --confirm-contract-adoption`` does so without a
+configuration change; a plain no-delta apply reports nothing to do).
+
 ## Categories
 
 ### Category U1 — Project-level user-owned files (root-level generated config/docs)

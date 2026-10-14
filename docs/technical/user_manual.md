@@ -222,7 +222,7 @@ quickscale plan myapp
 # → Generates quickscale.yml with theme: showcase_react
 ```
 
-**Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization. The backend-managed social transport remains theme-agnostic, but only fresh `showcase_react` auto-generates the public page files; existing projects must adopt those public pages manually if they want them.
+**Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization, except the QuickScale-managed files (`<package>/settings/modules.py`, `<package>/urls_modules.py`, and `frontend/src/quickscaleSeam.d.ts`), which apply, update, and remove regenerate. The backend-managed social transport remains theme-agnostic, but only fresh `showcase_react` auto-generates the public page files; existing projects must adopt those public pages manually if they want them.
 
 **Typical flow** to create and run a generated project:
 
@@ -345,14 +345,14 @@ See [decisions.md: CLI Command Matrix](./decisions.md#cli-command-matrix) for th
 #### What `quickscale update` changes, and what stays yours
 
 `quickscale update` pulls module code into `modules/<name>/` through `git subtree` and regenerates
-the QuickScale-managed wiring files. It never rewrites the rest of what generation copied into your
+the QuickScale-managed files. It never rewrites the rest of what generation copied into your
 project.
 
 | Project part | Changed by `quickscale update`? | Notes |
 | --- | --- | --- |
 | `modules/<name>/` — module code, including its Django templates and static files | Yes | Local edits here are unsupported and must be reconciled by hand on every update. |
-| Managed wiring — `<package>/settings/modules.py` and `<package>/urls_modules.py` | Yes | QuickScale-owned; never edit them. |
-| `frontend/` — the React app | Never | Copied once at generation. New theme features reach existing projects only by manual adoption or migration. |
+| Managed wiring — `<package>/settings/modules.py`, `<package>/urls_modules.py`, and `frontend/src/quickscaleSeam.d.ts` | Yes | QuickScale-owned; never edit them. |
+| `frontend/` — the React app | Never, except the managed `frontend/src/quickscaleSeam.d.ts` above | Copied once at generation. New theme features reach existing projects only by manual adoption or migration. |
 | `templates/` — generated `base.html`, error pages, and any overrides of module templates | Never | Module pages extend your `base.html`, which loads the token source from Vite in DEBUG and the compiled React stylesheet otherwise; shell changes in new releases arrive as manual adoption steps. An override hides every later change to the module template it replaces. |
 | Other generated files (`settings/base.py`, `Dockerfile`, `start.sh`, CI) | Never | Changes arrive as documented adoption steps; `quickscale status` reports contract-vintage gaps. |
 | Project-owned apps (for example a `properties` app) | Never | Yours entirely. |
@@ -369,8 +369,8 @@ After completing every named adoption step, repeat the command with
 `--confirm-contract-adoption` to record the adopted vintage in `.quickscale/state.yml`, or with
 `--acknowledge-contract-vintage` to proceed for that invocation only. Neither flag rewrites the
 user-owned generated files an adoption step names, but for `quickscale update` and `quickscale
-apply` the confirming option also regenerates the QuickScale-managed wiring (`<package>/settings/modules.py`
-and `<package>/urls_modules.py`) from the installed modules — which is how an adoption step whose
+apply` the confirming option also regenerates the QuickScale-managed files (`<package>/settings/modules.py`,
+`<package>/urls_modules.py`, and `frontend/src/quickscaleSeam.d.ts`) from the installed modules — which is how an adoption step whose
 deliverable is managed wiring, such as the SA217 settings schema, completes. Such a step therefore
 runs in this order: make and commit the manual edit (`quickscale update` refuses a dirty tree),
 then run `quickscale update --confirm-contract-adoption`, which updates the embedded modules,
@@ -435,7 +435,8 @@ origin when the browser reaches Vite through another hostname or an HTTPS develo
 a canonical HTTP(S) origin with no path, query, fragment, or user information.
 
 **Keeping the frontend separate from updates.** It already is: `frontend/` is your code and no
-QuickScale command rewrites it. What can still change under it is the backend it calls — module API
+QuickScale command rewrites it, except the managed `frontend/src/quickscaleSeam.d.ts` that apply,
+update, and remove regenerate. What can still change under it is the backend it calls — module API
 responses such as `/orgs/api/`, `/forms/api/<slug>/`, and the CRM API, and the page configuration
 Django passes to the React bundle through `window.__QUICKSCALE__`. Keep the frontend in the same
 repository and deploy: the Dockerfile builds it into `static/frontend/` and Django serves it on the
@@ -524,18 +525,16 @@ For `notifications`, local development keeps the default placeholder sender
 API-key env-var reference before re-running `quickscale apply`; otherwise apply
 stops instead of leaving a live-delivery target on the console backend.
 
-In the current release line, `backups` is the admin/ops-first safety option in that set: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, and CLI restore keeps its existing syntax. Restore compatibility includes the recorded module vintage as well as the PostgreSQL 18 majors: a recorded artifact whose `module_versions` differ from the installed modules — or that records none — is refused before `pg_restore` runs, naming each differing module with both versions, and the DR snapshot route applies the same comparison to the vintage recorded with the snapshot's authoritative dump. Backup and restore connect under the active Django connection's TLS settings — `sslmode`, `sslrootcert`, `sslcert`, `sslkey`, and `connect_timeout` reach `pg_dump` and `pg_restore` as libpq environment variables — so a deployment that requires verified TLS fails its backup instead of silently completing it in plaintext; when serving, that is the `RUNTIME_DATABASE_URL` role connection, so TLS parameters must be carried there rather than only on `DATABASE_URL`, and on a CLI-managed Railway service that URL must be re-checked after `quickscale deploy railway`, which rewrites it without query parameters.
+In the current release line, `backups` is the admin/ops-first safety option in that set: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, and CLI restore keeps its existing syntax. Restore compatibility uses the recorded migration content identity, not a version label: every capture records the hashes of each installed module's applied migration files, a recorded artifact whose migration file is missing or has changed content — or that records no identity — is refused before `pg_restore` runs, and a backup that is behind the installed modules restores and migrates forward through the DR snapshot route because the direct restore surfaces do not run migrations. Backup and restore connect under the active Django connection's TLS settings — `sslmode`, `sslrootcert`, `sslcert`, `sslkey`, and `connect_timeout` reach `pg_dump` and `pg_restore` as libpq environment variables — so a deployment that requires verified TLS fails its backup instead of silently completing it in plaintext; when serving, that is the `RUNTIME_DATABASE_URL` role connection, so TLS parameters must be carried there rather than only on `DATABASE_URL`, and on a CLI-managed Railway service that URL must be re-checked after `quickscale deploy railway`, which rewrites it without query parameters.
 
-If you enable `backups` in a generated PostgreSQL project, you can restore a row-backed local artifact from the BackupPolicy admin page under those same confirmation and environment guards, or use the CLI when you need artifact-id or operator-supplied file-path restore:
+If you enable `backups` in a generated PostgreSQL project, you can restore a row-backed local artifact from the BackupPolicy admin page under those same confirmation and environment guards, or use the CLI when you need a stored artifact id restore:
 
 ```bash
 poetry run python manage.py backups_create
 poetry run python manage.py backups_restore 12 --confirm BACKUP_FILENAME.dump --dry-run
-poetry run python manage.py backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump --dry-run
 
 export QUICKSCALE_BACKUPS_ALLOW_RESTORE=true
 poetry run python manage.py backups_restore 12 --confirm BACKUP_FILENAME.dump
-poetry run python manage.py backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump
 ```
 
 JSON artifacts remain export-only, not restore inputs. Existing generated projects must manually adopt later Docker/CI/E2E PostgreSQL 18 tooling updates because `quickscale apply` does not rewrite those user-owned files.

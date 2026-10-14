@@ -129,10 +129,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `connect_timeout` through libpq environment variables, so a deployment that verifies the server
     certificate keeps verifying it while the database is moved and a strict-TLS deployment whose
     server cannot satisfy the request now fails its backup instead of completing it in plaintext.
-  - **Restore refuses a schema the running modules cannot read.** A recorded backup artifact whose
-    metadata module versions differ from the installed modules — or that records none — is refused
-    before `pg_restore` runs, naming each differing module with both versions, and the DR snapshot
-    route compares the vintage recorded with the snapshot's authoritative dump.
+  - **Restores check migration content instead of version labels.** Every backup records the
+    hashes of each installed module's applied migration files; a restore refuses a changed,
+    missing, or unrecorded identity before `pg_restore` runs, while a backup whose recorded files
+    are still installed byte-identical restores and `migrate` applies the newer migrations. The DR
+    snapshot route compares the identity recorded with the snapshot's authoritative dump.
   - **The generator fails closed on undefined template context.** A missing or renamed context key
     raises during generation instead of rendering empty text, and the release lane boots a freshly
     generated project through its shipped `start.sh` and asserts `/healthcheck/` answers `OK`.
@@ -747,6 +748,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     validates the `whsec_` value with the decoder the webhook endpoint uses, so a missing prefix,
     a non-base64 remainder, or an empty decoded key refuses startup instead of failing every
     webhook at request time.
+  - **A refused invitation send spends neither throttle budget.** The sender and organization
+    invitation buckets are inspected before either is charged, so an organization rate refusal
+    leaves the sender's remaining sends intact.
   - **Checkout reconciliation waits out Stripe's Search indexing lag.** A customer-search miss
     counts as absence only once the organization's latest customer-resolution attempt completed
     and is older than Stripe's documented indexing lag, and a reference that resolves to two
@@ -763,6 +767,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **A failed media-sync publish leaves no staging file.** When a disaster-recovery media sync
     fails while applying the destination's permissions or renaming the staged download into
     place, its `.part` staging file is removed instead of being left behind.
+  - **The theme's seam types ship in a generated declaration.** `frontend/src/quickscaleSeam.d.ts`
+    carries the module-key types derived from the shipped module set; `quickscale apply`,
+    `quickscale update`, and `quickscale remove` regenerate it, and `quickscale status` reports a
+    local edit as managed-file drift.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

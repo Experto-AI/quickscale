@@ -201,6 +201,21 @@ class InvitationNotificationMixin:
 
         return invitation
 
+    def charge_invitation_throttles(self) -> bool:
+        """Charge both invitation buckets, or neither (rule 32).
+
+        DRF records a hit as it checks its window, so charging the sender
+        bucket before the organization bucket is known to pass would spend
+        the sender's budget on an organization refusal.  Every bucket is
+        checked first; only an all-pass set is charged.
+        """
+        throttles = (OrgInviteThrottle(), OrgInviteOrganizationThrottle())
+        if not all(throttle.check(self.request, self) for throttle in throttles):
+            return False
+        for throttle in throttles:
+            throttle.charge()
+        return True
+
     def get_notification_context(
         self,
         invitation: OrganizationInvitation,
@@ -290,20 +305,15 @@ class InviteView(
 
     def form_valid(self, form: InviteForm) -> HttpResponse:
         # Rule 32: the invitation send is throttled per sender and per target
-        # organization.  Both buckets are charged only after the form's locked
-        # eligibility checks pass: an attempt the pending cap or duplicate
-        # guard refuses never spends a budget, and a refused throttle rolls
-        # the just-written invitation back so no email is sent.
+        # organization.  Both buckets are checked before either is charged, so
+        # a refusal by either spends neither budget; a throttle refusal rolls
+        # the just-written invitation back, so no email is sent.
         try:
             with transaction.atomic():
                 invitation = self.save_invitation_form(form)
                 if invitation is None:
                     return self.form_invalid(form)
-                if not OrgInviteThrottle().allow_request(
-                    self.request, self
-                ) or not OrgInviteOrganizationThrottle().allow_request(
-                    self.request, self
-                ):
+                if not self.charge_invitation_throttles():
                     raise Throttled()
         except Throttled:
             return HttpResponse(
@@ -379,12 +389,13 @@ class OrgApiInviteView(
     """Create an organization invitation from a JSON payload."""
 
     min_org_role = OrgRole.ADMIN
-    # Both buckets are charged manually after the form's locked eligibility
-    # checks (below), exactly like the HTML path, so an attempt the role gate,
-    # the pending cap, or the duplicate guard refuses never spends a budget.
-    # The view declares no throttle class or scope of its own (rule 32): the
-    # generated settings' default throttle classes still apply their
-    # conservative anon/user rates on top of the manual buckets.
+    # Both buckets are checked manually before either is charged, after the
+    # form's locked eligibility checks (below), exactly like the HTML path, so
+    # an attempt the role gate, the pending cap, the duplicate guard, or
+    # either throttle refuses spends neither budget.  The view declares no
+    # throttle class or scope of its own (rule 32): the generated settings'
+    # default throttle classes still apply their conservative anon/user rates
+    # on top of the manual buckets.
 
     def post(
         self,
@@ -405,9 +416,7 @@ class OrgApiInviteView(
             invitation = self.save_invitation_form(form)
             if invitation is None:
                 raise DRFValidationError(_view_serialization._form_error_data(form))
-            if not OrgInviteThrottle().allow_request(
-                request, self
-            ) or not OrgInviteOrganizationThrottle().allow_request(request, self):
+            if not self.charge_invitation_throttles():
                 raise Throttled()
 
         return Response(

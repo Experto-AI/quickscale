@@ -143,7 +143,12 @@ class TestBuildDatabasePlan:
             "full_backup": {
                 "provenance": {
                     "authoritative_dump": {
-                        "module_versions": {"quickscale_modules_backups": "0.89.0"}
+                        "module_versions": {"quickscale_modules_backups": "0.89.0"},
+                        "migration_hashes": {
+                            "quickscale_modules_backups": {
+                                "0001_initial.py": "hash-1",
+                            },
+                        },
                     },
                     "release": {
                         "module_versions": {"quickscale_modules_backups": "0.89.0"}
@@ -205,10 +210,13 @@ class TestBuildDatabasePlan:
             file_path="/tmp/dumps/snap-001.dump",
             confirmation="snap-001",
             dry_run=True,
-            recorded_module_versions={"quickscale_modules_backups": "0.89.0"},
+            recorded_migration_hashes={
+                "quickscale_modules_backups": {"0001_initial.py": "hash-1"},
+            },
+            allow_forward=True,
         )
 
-    def test_report_without_recorded_vintage_passes_empty_mapping(
+    def test_report_without_recorded_hashes_passes_empty_mapping(
         self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
         mock_orch, _, _ = _mock_orch_and_backups
@@ -220,11 +228,13 @@ class TestBuildDatabasePlan:
         build_database_plan(report)
 
         assert (
-            mock_orch.restore_backup_source.call_args.kwargs["recorded_module_versions"]
+            mock_orch.restore_backup_source.call_args.kwargs[
+                "recorded_migration_hashes"
+            ]
             == {}
         )
 
-    def test_report_prefers_dump_vintage_over_recaptured_sidecar(
+    def test_report_prefers_dump_hashes_over_recaptured_sidecar(
         self, _mock_orch_and_backups: tuple[MagicMock, MagicMock, MagicMock]
     ) -> None:
         mock_orch, _, _ = _mock_orch_and_backups
@@ -232,16 +242,16 @@ class TestBuildDatabasePlan:
 
         report = self._valid_report()
         provenance = report["full_backup"]["provenance"]
-        provenance["authoritative_dump"]["module_versions"] = {
-            "quickscale_modules_backups": "1.0"
+        provenance["authoritative_dump"]["migration_hashes"] = {
+            "quickscale_modules_backups": {"0001_initial.py": "hash-dump"}
         }
         provenance["release"]["module_versions"] = {"quickscale_modules_backups": "2.0"}
 
         build_database_plan(report)
 
         assert mock_orch.restore_backup_source.call_args.kwargs[
-            "recorded_module_versions"
-        ] == {"quickscale_modules_backups": "1.0"}
+            "recorded_migration_hashes"
+        ] == {"quickscale_modules_backups": {"0001_initial.py": "hash-dump"}}
 
 
 # ===================================================================

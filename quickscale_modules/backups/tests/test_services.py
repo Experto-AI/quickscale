@@ -102,6 +102,17 @@ def _mock_postgresql_18_contract(
     )
 
 
+def _installed_migration_hashes() -> dict[str, dict[str, str]]:
+    """Return the running modules' migration content identity.
+
+    Operator-file restores carry no artifact metadata, so the recorded
+    identity is supplied explicitly, as the snapshot-report route does.
+    """
+    from quickscale_core.runtime import _collect_module_migration_hashes
+
+    return _collect_module_migration_hashes()
+
+
 def _private_remote_policy_snapshot(
     *,
     local_directory: str = ".quickscale/backups",
@@ -2250,7 +2261,7 @@ class TestBackupLifecycle:
         assert "artifact database engine" in str(exc_info.value)
         assert "artifact backup format 'pg_dump_custom'" in str(exc_info.value)
 
-    def test_restore_rejects_artifact_recording_a_different_module_vintage(
+    def test_restore_rejects_artifact_recording_different_migration_content(
         self,
         postgresql_backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
@@ -2258,7 +2269,9 @@ class TestBackupLifecycle:
         _set_postgresql_default_connection(monkeypatch)
         postgresql_backup_artifact.metadata_json = {
             **postgresql_backup_artifact.metadata_json,
-            "module_versions": {"quickscale_modules_backups": "0.0.1"},
+            "migration_hashes": {
+                "quickscale_modules_backups": {"0001_initial.py": "changed-digest"}
+            },
         }
         postgresql_backup_artifact.save(update_fields=["metadata_json", "updated_at"])
         runner_calls: list[list[str]] = []
@@ -2270,7 +2283,7 @@ class TestBackupLifecycle:
 
         with pytest.raises(
             BackupRestoreBlocked,
-            match="module vintage differs from the installed modules",
+            match="migration content cannot advance",
         ) as exc_info:
             restore_backup_artifact(
                 postgresql_backup_artifact,
@@ -2280,30 +2293,62 @@ class TestBackupLifecycle:
             )
 
         message = str(exc_info.value)
-        assert "quickscale_modules_backups recorded '0.0.1'" in message
-        assert "but installed '" in message
+        assert (
+            "quickscale_modules_backups migration '0001_initial.py' changed" in message
+        )
         assert runner_calls == []
 
-    def test_restore_rejects_artifact_recording_no_module_vintage(
+    def test_restore_rejects_artifact_recording_no_migration_hashes(
         self,
         postgresql_backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         _set_postgresql_default_connection(monkeypatch)
-        metadata_without_vintage = dict(postgresql_backup_artifact.metadata_json)
-        metadata_without_vintage.pop("module_versions", None)
-        postgresql_backup_artifact.metadata_json = metadata_without_vintage
+        metadata_without_hashes = dict(postgresql_backup_artifact.metadata_json)
+        metadata_without_hashes.pop("migration_hashes", None)
+        postgresql_backup_artifact.metadata_json = metadata_without_hashes
         postgresql_backup_artifact.save(update_fields=["metadata_json", "updated_at"])
 
         with pytest.raises(
             BackupRestoreBlocked,
-            match="records no module vintage",
+            match="records no migration content identity",
         ):
             restore_backup_artifact(
                 postgresql_backup_artifact,
                 confirmation=postgresql_backup_artifact.filename,
                 dry_run=True,
             )
+
+    def test_restore_refuses_forward_content_without_a_migrating_workflow(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # The direct restore surfaces do not run migrations, so a backup that
+        # is behind the installed modules is refused here rather than restored
+        # into an inconsistent serving state.
+        _set_postgresql_default_connection(monkeypatch)
+        installed = _installed_migration_hashes()
+        newer = {
+            module: {**files, "0002_add_table.py": "newer-digest"}
+            for module, files in installed.items()
+        }
+        monkeypatch.setattr(
+            "quickscale_core.dr_engine._metadata._collect_module_migration_hashes",
+            lambda: newer,
+        )
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="does not complete the forward migration",
+        ) as exc_info:
+            restore_backup_artifact(
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=True,
+            )
+
+        assert "0002_add_table.py" in str(exc_info.value)
 
     def test_restore_dry_run_requires_postgresql_18_server(
         self,
@@ -2887,6 +2932,26 @@ class TestBackupLifecycle:
                 file_path=invalid_file,
                 confirmation=invalid_file.name,
                 dry_run=True,
+                recorded_migration_hashes=_installed_migration_hashes(),
+            )
+
+    def test_restore_file_mode_refuses_bare_file_without_recorded_identity(
+        self,
+        postgresql_artifact_file: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        postgresql_artifact_file.write_bytes(b"PGDMP\x01\x0e\x00sample archive bytes")
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="records no migration content identity",
+        ):
+            restore_backup_source(
+                file_path=postgresql_artifact_file,
+                confirmation=postgresql_artifact_file.name,
+                dry_run=True,
             )
 
     def test_restore_file_mode_executes_pg_restore_for_operator_dump(
@@ -2910,6 +2975,7 @@ class TestBackupLifecycle:
             confirmation=postgresql_artifact_file.name,
             dry_run=False,
             shell_runner=cast(ShellCommandRunner, fake_runner),
+            recorded_migration_hashes=_installed_migration_hashes(),
         )
 
         assert result.executed is True
