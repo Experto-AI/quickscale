@@ -15,8 +15,8 @@ their value.
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
 with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#11-watchlist-and-accepted-trade-offs)).
-One ticket is a release requirement and lands before the tag: SA271 (the last of the 2026-10-13
-tech-audit S3s, all introduced since 0.88.0).
+SA271, the last of the 2026-10-13 tech-audit S3s, has landed; no open ticket is a release
+requirement for 0.89.0.
 Publication remains a maintainer action.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
@@ -40,11 +40,10 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | SA271 | Optional |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA275 | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA271 | Stream disaster-recovery objects instead of spooling them | 2 | — | Required |
 | SA275 | Derive gate wiring from the registry instead of holding copies equal | 2 | — | Optional |
 | SA278 | Retire the gate-script frozen surfaces and scan `scripts/` for quality | 2 | — | Optional |
 | SA273 | Harden the editor upload and the CLI's `pyproject.toml` write | 2 | — | Optional |
@@ -61,9 +60,9 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
-Track 2: SA271 ──► SA275 ──► SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
+Track 2: SA275 ──► SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
 Track 3: SA276 ──► SA274 ──► SA283 ──► SA279 ──► SA281
-     release path:  SA271 ──► publish 0.89.0 ──► SA191 repin
+     release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA275 ──► SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
 
@@ -73,7 +72,7 @@ its freeze gate costs one registry row instead of about eight hand stations (arc
 SA279 waits on SA278, whose guard test it extends; SA277 waits on SA191's cutover, which decides
 which upgrade mechanism proved itself.
 
-**Parallel start.** SA204 (a), SA271, SA275, and SA276 have no unmet
+**Parallel start.** SA204 (a), SA275, and SA276 have no unmet
 dependency and touch disjoint files, so all three tracks start at once. SA204 (a), (b), (d), and
 (e) do not wait on SA275; only (c) adds a gate row.
 
@@ -98,7 +97,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (c) | no | no | yes | no | yes |
-| 2 | SA271 | yes | yes | yes | no | yes |
+| 2 | SA275 | yes | yes | yes | no | yes |
 | 3 | SA276 | yes | yes | yes | no | no |
 
 ### Ownership and merge coordination
@@ -166,30 +165,6 @@ reset/checkout destructively. Merge `v89` into the worktree, resolve there, run 
 suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
-
-### Release requirements for 0.89.0
-
-- [ ] **SA271 — Stream disaster-recovery objects instead of spooling them.**
-
-  Closes tech `dr-private-remote-restore-whole-object-in-memory` (S3) and
-  `dr-media-part-file-leak-on-publish-failure` (S4), the audit's DR batch.
-
-  **Context:** `_materialize_private_remote_key` (`dr_engine/_remote.py:90–93`) copies through
-  `S3Storage.open()`, which spools the whole object in memory (`AWS_S3_MAX_MEMORY_SIZE` is
-  unbounded), so a dump larger than the container's memory OOM-kills the restore. It is the
-  unfixed sibling of SA256's media fix. In `_media.py:153–179`, `chmod` and `replace` run outside
-  the cleanup `try`, so a failure there leaves a `.part` file behind.
-
-  **Acceptance:** the private-remote restore streams through the boto3 client's
-  `download_fileobj`, the idiom `_media.py` uses, and a test proves the object is never read whole
-  (a bounded-memory or chunked-read assertion). A failure in `chmod` or `replace` removes the
-  `.part` file, with a test. A test or harness clause rejects `storage.open()` on a remote object
-  in `dr_engine` (the audit's lint tooling gap), inside existing suites.
-
-  **Slices:**
-  - [ ] (a) Streaming private-remote restore with its bounded-read test and the `storage.open()`
-    guard (Tier 2-fast).
-  - [ ] (b) `.part` cleanup on publish failure, with its test (Tier 1).
 
 ### Track 1 — migration history and the property portal
 
@@ -273,7 +248,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   rehearsed on scratch. The cutover rebuilds a fresh database and reseeds the catalog under the
   restricted runtime role; billing stays disabled.
 
-  **Remaining:** after 0.89.0 is published (its release requirements are SA271), repin
+  **Remaining:** after 0.89.0 is published, repin
   `bap-web-new` to it and re-run the rehearsal
   (agent); then the maintainer runs the Railway cutover, carries media, re-invites users, and
   archives the old repository. The pre-cutover database is retained until the reseeded site is
@@ -606,6 +581,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [x] **SA269 — Make the release pipeline run hosted E2E and pin its Poetry retry.**
 
 - [x] **SA270 — Keep checkout reconciliation fail-closed across Stripe Search lag.**
+
+- [x] **SA271 — Stream disaster-recovery objects instead of spooling them.**
 
 - [x] **SA272 — Harden the notifications webhook and the orgs invite throttle.**
 

@@ -8,7 +8,7 @@ import json
 import os
 import shutil
 from datetime import datetime, timedelta, timezone
-from io import BytesIO, StringIO
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -3361,19 +3361,35 @@ class TestBackupServiceHelpers:
 
         uploaded: list[tuple[dict[str, object], str, bytes]] = []
         deleted: list[tuple[dict[str, object], str]] = []
+        downloaded: list[tuple[dict[str, object], str, str]] = []
         remote_payloads = {"ops/backups/artifact.dump": b"remote-artifact"}
+
+        class FakeClient:
+            def __init__(self, options: dict[str, object]) -> None:
+                self.options = options
+
+            def download_fileobj(
+                self, bucket_name: str, remote_key: str, handle: Any
+            ) -> None:
+                downloaded.append((self.options, bucket_name, remote_key))
+                handle.write(remote_payloads[remote_key])
 
         class FakeStorage:
             def __init__(self, **options: object) -> None:
                 self.options = options
+                self.connection = SimpleNamespace(
+                    meta=SimpleNamespace(client=FakeClient(options))
+                )
+
+            def _normalize_name(self, name: str) -> str:
+                return name
 
             def save(self, remote_key: str, handle: Any) -> str:
                 uploaded.append((self.options, remote_key, handle.read()))
                 return remote_key
 
-            def open(self, remote_key: str, mode: str = "rb") -> BytesIO:
-                assert mode == "rb"
-                return BytesIO(remote_payloads[remote_key])
+            def open(self, remote_key: str, mode: str = "rb") -> Any:
+                raise AssertionError("storage.open() must not read remote objects")
 
             def delete(self, remote_key: str) -> None:
                 deleted.append((self.options, remote_key))
@@ -3398,6 +3414,7 @@ class TestBackupServiceHelpers:
         }
         assert remote_key == "ops/backups/artifact.dump"
         assert uploaded == [(expected_options, remote_key, b"backup-bytes")]
+        assert downloaded == [(expected_options, "private-backups", remote_key)]
         assert destination.read_bytes() == b"remote-artifact"
         assert deleted == [(expected_options, remote_key)]
 
