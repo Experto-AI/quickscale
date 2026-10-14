@@ -261,16 +261,64 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
     ).stdout.split()
     assert "myapp/settings/modules.py" in committed_paths
     assert "myapp/urls_modules.py" in committed_paths
+    assert "frontend/src/quickscaleSeam.d.ts" in committed_paths
 
     state = StateManager(project).load()
     assert state is not None
-    for relative in ("settings/modules.py", "urls_modules.py"):
-        path_str = f"myapp/{relative}"
+    for path_str in (
+        "myapp/settings/modules.py",
+        "myapp/urls_modules.py",
+        "frontend/src/quickscaleSeam.d.ts",
+    ):
         assert path_str in state.managed_files
         assert state.managed_files[path_str].hash == hash_managed_file(
             project / path_str
         )
     assert ProjectStateManager(project).detect_managed_file_drift() == []
+
+
+def test_record_managed_hashes_keeps_pre_consolidation_tracking(
+    tmp_path: Path,
+) -> None:
+    """Recording wiring hashes imports legacy tracking before it saves state.
+
+    A pre-consolidation state.yml carries no branch/prefix/installed_at; those
+    live in the legacy config.yml, and the save that materializes the
+    managed_files section must not make them unreadable first.
+    """
+    project = _write_project(tmp_path)
+    state_path = project / ".quickscale" / "state.yml"
+    raw_state = yaml.safe_load(state_path.read_text())
+    raw_state.pop("managed_files", None)
+    for module_entry in raw_state["modules"].values():
+        for tracking_key in ("prefix", "branch", "installed_at"):
+            module_entry.pop(tracking_key, None)
+    state_path.write_text(yaml.dump(raw_state, sort_keys=False))
+    # A parseable pre-consolidation legacy config carries the tracking data.
+    (project / ".quickscale" / "config.yml").write_text(
+        yaml.safe_dump(
+            {
+                "default_remote": "https://github.com/Experto-AI/quickscale.git",
+                "modules": {
+                    name: {
+                        "prefix": f"modules/{name}",
+                        "branch": f"splits/{name}-module",
+                        "installed_version": "0.88.0",
+                        "installed_at": "2024-01-01",
+                    }
+                    for name in _FIXTURE_MODULES
+                },
+            },
+            sort_keys=False,
+        )
+    )
+
+    _module_update_io._record_managed_wiring_hashes(project, "myapp")
+
+    refreshed = ProjectStateManager(project).load_state()
+    assert refreshed is not None
+    assert refreshed.modules["billing"].branch == "splits/billing-module"
+    assert refreshed.modules["billing"].prefix == "modules/billing"
 
 
 def test_update_refuses_a_set_missing_a_requirement(

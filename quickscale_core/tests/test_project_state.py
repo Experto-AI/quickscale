@@ -26,6 +26,10 @@ from quickscale_core.project_state import (
     compute_file_hashes,
     hash_managed_file,
 )
+from quickscale_core.project_state_hashes import (
+    DEFAULT_MANAGED_PROJECT_PATHS,
+    resolve_managed_file_paths,
+)
 from quickscale_core.schema.state_schema import (
     ModuleState,
     ProjectState,
@@ -537,6 +541,23 @@ class TestDefaultManagedWiringPaths:
             assert "\\" not in path
             assert not path.startswith("/")
             assert path.endswith(".py")
+
+
+class TestDefaultManagedProjectPaths:
+    """The managed project paths are repo-relative and resolve from the root."""
+
+    def test_default_project_paths_are_repo_relative(self) -> None:
+        for path in DEFAULT_MANAGED_PROJECT_PATHS:
+            assert "\\" not in path
+            assert not path.startswith("/")
+
+    def test_resolve_managed_file_paths_combines_both_sets(self) -> None:
+        paths = resolve_managed_file_paths("myapp")
+
+        assert "myapp/settings/modules.py" in paths
+        assert "myapp/urls_modules.py" in paths
+        for relative in DEFAULT_MANAGED_PROJECT_PATHS:
+            assert relative in paths
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 """Constants, path inventories, and static grammars for beta migration."""
 
+from quickscale_core.runtime.seam import SEAM_DECLARATION_RELATIVE_PATH
+
 from .model import BetaMigrationMode, RequiredPathSpec, VerificationCommandSpec
 import re
 
@@ -168,7 +170,15 @@ FRESH_FIRST_PROTECTED_PACKAGE_FILES = (
 )
 
 
-FRESH_FIRST_PROTECTED_ROOT_FILES = ("railway.json",)
+# Recipient-managed files the fresh-first path preserves without donor
+# overwrite.  ``railway.json`` carries deploy configuration; the theme's
+# managed seam declaration is regenerated in the recipient by
+# ``quickscale apply``/``quickscale update``, so donor content never belongs
+# over it.
+FRESH_FIRST_PROTECTED_ROOT_FILES = (
+    "railway.json",
+    SEAM_DECLARATION_RELATIVE_PATH,
+)
 
 
 # ---- Donor-file classification inventory (SA214 slice b) ----

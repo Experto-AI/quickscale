@@ -1,6 +1,6 @@
 """Managed-file hashing and legacy ledger I/O for project state.
 
-Owns the managed wiring constants, the SHA-256 helpers, and the
+Owns the managed-file path constants, the SHA-256 helpers, and the
 ``file_hashes.yml`` compatibility ledger that the unified
 :class:`~quickscale_core.project_state.ProjectStateManager` reads and writes.
 The unified owner stays importable from ``quickscale_core.project_state``.
@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from quickscale_core.project_state_records import ManagedFileHash
+from quickscale_core.runtime.seam import SEAM_DECLARATION_RELATIVE_PATH
 from quickscale_core.schema.state_schema import StateError
 
 if TYPE_CHECKING:
@@ -35,6 +36,23 @@ DEFAULT_MANAGED_WIRING_PATHS: tuple[str, ...] = (
     "settings/modules.py",
     "urls_modules.py",
 )
+
+# Default managed project files that ``quickscale apply`` regenerates outside
+# the Python package, so they resolve against the project root rather than the
+# package directory.  The theme's seam declaration renders from the shipped
+# module set (SA276).
+DEFAULT_MANAGED_PROJECT_PATHS: tuple[str, ...] = (SEAM_DECLARATION_RELATIVE_PATH,)
+
+
+def resolve_managed_file_paths(package_name: str) -> list[str]:
+    """Return the repo-relative managed file paths of a generated project.
+
+    The managed wiring files are package-relative; the managed project files
+    are rooted at the project itself.
+    """
+    return [
+        f"{package_name}/{relative}" for relative in DEFAULT_MANAGED_WIRING_PATHS
+    ] + list(DEFAULT_MANAGED_PROJECT_PATHS)
 
 
 def hash_managed_file(file_path: Path) -> str:

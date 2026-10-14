@@ -540,6 +540,13 @@ class ProjectGenerator:
         output_path: Path,
     ) -> None:
         """Generate project structure in specified directory"""
+        # The managed theme seam declaration (SA276) renders from the shipped
+        # module tables the runtime seam owns — the same content ``apply`` and
+        # ``update`` write under the managed-file hash guard.  Imported here,
+        # not at module scope, so the emission-mapping path stays free of the
+        # runtime package.
+        from quickscale_core.runtime.seam import render_seam_declaration
+
         # Context for template rendering
         context = {
             "project_name": project_slug,
@@ -561,6 +568,8 @@ class ProjectGenerator:
             "quickscale_core_pin": QUICKSCALE_CORE_PIN,
             # Runtime DB role (RLS enforcement — NOSUPERUSER, NOBYPASSRLS)
             **runtime_db_template_context(package_name),
+            # Managed theme seam declaration (SA276).
+            "seam_declaration": render_seam_declaration(),
         }
 
         # Known executable files (emitted paths that should be executable)

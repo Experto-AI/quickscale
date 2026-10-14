@@ -51,20 +51,17 @@ import quickscale_cli.commands.contract_vintage as _contract_vintage
 def _resolve_managed_wiring_paths(
     qs_config: QuickScaleConfig,
 ) -> list[str]:
-    """Return the managed wiring file paths that apply should track.
+    """Return the managed file paths that apply should track.
 
     Paths are repo-relative (forward slashes) so they match the keys
     written by :func:`compute_file_hashes`. The returned list always
-    includes the default managed wiring files; module-specific managed
-    files inside ``<package>/quickscale_managed/`` are not enumerated
-    here because they are owned by individual modules and may be
-    introduced or removed without breaking the drift signal.
+    includes the default managed wiring files and the managed project files
+    outside the package; module-specific managed files inside
+    ``<package>/quickscale_managed/`` are not enumerated here because they
+    are owned by individual modules and may be introduced or removed
+    without breaking the drift signal.
     """
-    package = qs_config.project.package
-    return [
-        f"{package}/{relative}"
-        for relative in _project_state_hashes.DEFAULT_MANAGED_WIRING_PATHS
-    ]
+    return _project_state_hashes.resolve_managed_file_paths(qs_config.project.package)
 
 
 def _warn_version_drift_for_apply(
