@@ -493,20 +493,11 @@ items:
   - **SA259 (gate wiring):**
     1. **Mechanism:** partly removed. `gates.mk`, the `ci.yml`, `publish.yml`, and `e2e.yml`
        regions, and the `validation_policy.md` table are generated, and the parity checker
-       shrank from 2,887 to 769 lines. **But the generator re-holds the registry's gate lists
-       by hand:**
-       - `HOSTED_GATE_ORDER` (`sync_ci_gate_jobs.py:89–107`) and `PUBLISH_GATE_ORDER`
-         (`:273–290`) restate which gates run where.
-       - The generator refuses to run unless the copies equal the registry
-         (`:498–501`: `if hosted_ids != HOSTED_GATE_ORDER: raise GeneratorError(...)`;
-         `:1029–1036`).
-       - The per-gate catalogs (`HOSTED_JOB_CATALOG :185`, `PUBLISH_STEP_CATALOG :292`, the
-         help-text map around `:385–420`) hold data the registry could carry.
-       - `check_ci_locally.sh:532–533` (a hand-written `case` arm per gate) and the
-         `Makefile:354` help line remain.
+       shrank from 2,887 to 769 lines. Gate order and the hosted, publish, and help metadata are
+       now registry fields with no copy-equality refusals. **Still open:** the hand stations
+       `check_ci_locally.sh` (a hand-written `case` arm per gate) and the `Makefile` gate help
+       line (SA275 (b)).
 
-       That is parity relocated into the generator. The prior pass's rejected candidate "Gate
-       wiring held by parity" is **reversed**.
     2. **Sound decisions:** preserved.
     3. **New commitment:** none beyond the relocation.
   - **SA267 and SA268 (`scripts/` under the quality lines):**
@@ -632,18 +623,17 @@ items:
   3. **Accept with a budget.** Parity scaffolding is deleted at slice close, there is no new
      gate without retiring one, and `scripts/` comes under `check_quality.sh`. Effort S.
 - **Recommendation:**
-  - Fold option 1's remaining items into **SA267 slice (a)**, which already owns
-    `sync_ci_gate_jobs.py`: delete the hand lists rather than split the file.
-  - Add to SA267 and SA268 acceptance that `FROZEN_SURFACE` name lists are deleted when the
-    family's slice closes. The exact-findings corpora may stay as behavioral tests.
-  - Apply option 2 to SA263's hook signature.
+  - Option 1's gate items are **SA275**; the product copies are **SA280**.
+  - Delete the `FROZEN_SURFACE` name lists (**SA278** for `scripts/`, **SA279** for the
+    harness); the exact-findings corpora may stay as behavioral tests.
+  - Apply option 2 to SA263's hook signature (**SA281**).
   - **Size:** M.
   - **Reversibility:** `two-way door`.
   - **Guard:** one "generated files are current" check with no copy-equality refusals in the
     generator; `check_quality.sh` scanning `scripts/`; and a test that no `test_*_parity.py`
     survives a closed slice.
-  - **First step:** move gate order into the registry and delete `HOSTED_GATE_ORDER` and
-    `PUBLISH_GATE_ORDER`.
+  - **First step:** generate `check_ci_locally.sh`'s gate arms and the Makefile gate help from
+    the registry.
 
 ---
 
@@ -667,8 +657,8 @@ items:
   SA204. The addition in this pass (compare migration content, not labels) belongs inside
   SA204(b) and (c) and adds no ticket.
 - **Finding 3's remaining option 1 before SA204(c).** SA204(c) adds a gate row (a cross-track
-  edit into Track 2's registry). If SA267(a) first moves gate order and metadata into the
-  registry, the freeze gate costs one station instead of about eight.
+  edit into Track 2's registry). Once SA275 (b) generates the last hand stations, the freeze
+  gate costs one station instead of about eight.
 - **Finding 2 interacts with SA191's repin.** Each Finding 2 piece landed before the repin is
   one more step `bap-web-new` applies once. Each piece landed after is a step applied on a
   live site. Finish the theme-type generation before the repin if it fits.

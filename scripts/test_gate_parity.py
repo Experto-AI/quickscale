@@ -43,13 +43,10 @@ from sync_ci_gate_jobs import (
     HAND_OWNED_MAKE_TARGETS,
     JOB_BEGIN,
     JOB_END,
-    MAKE_TARGET_COMMENTS,
     NEEDS_BEGIN,
     NEEDS_END,
     PUBLISH_BEGIN,
     PUBLISH_END,
-    PUBLISH_GATE_ORDER,
-    PUBLISH_STEP_CATALOG,
     UNOWNED_JOB_IDS,
     GeneratorError,
     _atomic_write,
@@ -62,8 +59,8 @@ from sync_ci_gate_jobs import (
 )
 
 
-def test_markerless_bootstrap_without_catalog_owned_jobs_fails_cleanly() -> None:
-    """A markerless workflow with no hosted catalog job raises GeneratorError, not IndexError."""
+def test_markerless_bootstrap_without_registry_owned_jobs_fails_cleanly() -> None:
+    """A markerless workflow with no hosted registry job raises GeneratorError, not IndexError."""
     gates = sync_ci_gate_jobs_module._parse_registry(sync_ci_gate_jobs_module.DEFAULT_REGISTRY)
     lines = [
         "name: CI\n",
@@ -74,7 +71,7 @@ def test_markerless_bootstrap_without_catalog_owned_jobs_fails_cleanly() -> None
 
     with pytest.raises(
         sync_ci_gate_jobs_module.GeneratorError,
-        match="no catalog-owned jobs were found",
+        match="no registry-owned jobs were found",
     ):
         sync_ci_gate_jobs_module._bootstrap_job_markers(lines, gates)
 
@@ -786,18 +783,22 @@ class TestSchemaValidationDirect:
         """Two gates with same ci_job is rejected."""
         gate_a = dict(_MINIMAL_VALID_GATE)
         gate_a["id"] = "gate-a"
+        gate_a["required_contexts"] = ["hosted"]
         gate_a["bindings"] = {
             "make_target": "target-a",
             "ci_job": "shared-job",
-            "local_ci_stage": 3,
+            "local_ci_stage": None,
         }
+        gate_a["hosted"] = {"order": 1, "display_name": "Gate A", "check_step_name": "Run gate a"}
         gate_b = dict(_MINIMAL_VALID_GATE)
         gate_b["id"] = "gate-b"
+        gate_b["required_contexts"] = ["hosted"]
         gate_b["bindings"] = {
             "make_target": "target-b",
             "ci_job": "shared-job",
-            "local_ci_stage": 3,
+            "local_ci_stage": None,
         }
+        gate_b["hosted"] = {"order": 2, "display_name": "Gate B", "check_step_name": "Run gate b"}
         data = dict(_MINIMAL_REGISTRY)
         data["gates"] = [gate_a, gate_b]
         with pytest.raises(SchemaValidationError, match="already used"):
@@ -872,6 +873,187 @@ class TestSchemaValidationDirect:
         data["gates"] = [gate]
         with pytest.raises(SchemaValidationError, match="no Make target"):
             _validate_registry(data)
+
+
+class TestRegistryMetadataFields:
+    """The registry-owned hosted/publish/help fields are enforced fail-closed."""
+
+    @staticmethod
+    def _hosted_gate(**over: Any) -> dict[str, Any]:
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["required_contexts"] = ["hosted"]
+        gate["bindings"] = {
+            "make_target": "test-gate",
+            "ci_job": "test-job",
+            "local_ci_stage": None,
+        }
+        gate["hosted"] = {
+            "order": 1,
+            "display_name": "Test Gate",
+            "check_step_name": "Run test gate",
+        }
+        gate.update(over)
+        return gate
+
+    @staticmethod
+    def _publish_gate(**over: Any) -> dict[str, Any]:
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["required_contexts"] = ["publish"]
+        gate["bindings"] = {"make_target": "test-gate", "ci_job": None, "local_ci_stage": None}
+        gate["publish"] = {"order": 1, "step_name": "Run test gate"}
+        gate.update(over)
+        return gate
+
+    @staticmethod
+    def _registry_with(gates: list[dict[str, Any]]) -> dict[str, Any]:
+        data = dict(_MINIMAL_REGISTRY)
+        data["gates"] = gates
+        return data
+
+    def test_valid_metadata_is_accepted(self) -> None:
+        """Hosted, publish, and multi-line help metadata are all valid."""
+        assert _validate_registry(self._registry_with([self._hosted_gate()]))
+        assert _validate_registry(self._registry_with([self._publish_gate()]))
+        helped = dict(_MINIMAL_VALID_GATE)
+        helped["help"] = "First line\nSecond line"
+        assert _validate_registry(self._registry_with([helped]))
+
+    def test_hosted_context_requires_hosted_metadata(self) -> None:
+        """A hosted-context gate without its display metadata cannot be projected."""
+        gate = self._hosted_gate()
+        gate.pop("hosted")
+        with pytest.raises(SchemaValidationError, match="hosted is required"):
+            _validate_registry(self._registry_with([gate]))
+
+    def test_hosted_metadata_requires_hosted_context(self) -> None:
+        """Hosted metadata without the declared context would never be projected."""
+        gate = self._hosted_gate()
+        gate["required_contexts"] = ["local-serial"]
+        gate["bindings"] = {"make_target": "test-gate", "ci_job": None, "local_ci_stage": 3}
+        with pytest.raises(SchemaValidationError, match="requires the hosted context"):
+            _validate_registry(self._registry_with([gate]))
+
+    def test_ci_job_requires_hosted_context(self) -> None:
+        """A ci_job binding no hosted projection consumes is dead metadata."""
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["bindings"] = {
+            "make_target": "test-gate",
+            "ci_job": "orphan-job",
+            "local_ci_stage": 3,
+        }
+        with pytest.raises(SchemaValidationError, match="ci_job requires the hosted context"):
+            _validate_registry(self._registry_with([gate]))
+
+    def test_hosted_metadata_shape_is_rejected(self) -> None:
+        """Missing keys, unknown keys, bad orders, and a bad label all fail closed."""
+        missing = self._hosted_gate()
+        missing["hosted"] = {"order": 1, "display_name": "Test Gate"}
+        with pytest.raises(SchemaValidationError, match="missing required key"):
+            _validate_registry(self._registry_with([missing]))
+
+        unknown = self._hosted_gate()
+        unknown["hosted"]["extra"] = True
+        with pytest.raises(SchemaValidationError, match="unknown key"):
+            _validate_registry(self._registry_with([unknown]))
+
+        for order in (0, True, "first"):
+            bad_order = self._hosted_gate()
+            bad_order["hosted"]["order"] = order
+            with pytest.raises(SchemaValidationError, match="positive integer"):
+                _validate_registry(self._registry_with([bad_order]))
+
+        multiline = self._hosted_gate()
+        multiline["hosted"]["display_name"] = "Two\nLines"
+        with pytest.raises(SchemaValidationError, match="single line"):
+            _validate_registry(self._registry_with([multiline]))
+
+        bad_history = self._hosted_gate()
+        bad_history["hosted"]["full_history"] = "yes"
+        with pytest.raises(SchemaValidationError, match="must be a boolean"):
+            _validate_registry(self._registry_with([bad_history]))
+
+        null_history = self._hosted_gate()
+        null_history["hosted"]["full_history"] = None
+        with pytest.raises(SchemaValidationError, match="must be a boolean"):
+            _validate_registry(self._registry_with([null_history]))
+
+        null_object = self._hosted_gate()
+        null_object["hosted"] = None
+        with pytest.raises(SchemaValidationError, match="must be a dict"):
+            _validate_registry(self._registry_with([null_object]))
+
+    def test_duplicate_hosted_order_is_rejected(self) -> None:
+        """Two hosted gates cannot claim the same execution order."""
+        first = self._hosted_gate()
+        second = self._hosted_gate(id="second-gate")
+        second["bindings"] = {
+            "make_target": "check-second",
+            "ci_job": "job-second",
+            "local_ci_stage": None,
+        }
+        with pytest.raises(SchemaValidationError, match="already used"):
+            _validate_registry(self._registry_with([first, second]))
+
+    def test_publish_context_requires_publish_metadata(self) -> None:
+        """A publish-context gate without its step metadata cannot be projected."""
+        gate = self._publish_gate()
+        gate.pop("publish")
+        with pytest.raises(SchemaValidationError, match="publish is required"):
+            _validate_registry(self._registry_with([gate]))
+
+    def test_publish_metadata_requires_publish_context(self) -> None:
+        """Publish metadata without the declared context would never be projected."""
+        gate = self._publish_gate()
+        gate["required_contexts"] = ["e2e-trigger"]
+        with pytest.raises(SchemaValidationError, match="requires the publish context"):
+            _validate_registry(self._registry_with([gate]))
+
+    def test_publish_metadata_shape_is_rejected(self) -> None:
+        """Missing keys, unknown keys, and bad orders fail closed."""
+        missing = self._publish_gate()
+        missing["publish"] = {"order": 1}
+        with pytest.raises(SchemaValidationError, match="missing required key"):
+            _validate_registry(self._registry_with([missing]))
+
+        unknown = self._publish_gate()
+        unknown["publish"]["extra"] = True
+        with pytest.raises(SchemaValidationError, match="unknown key"):
+            _validate_registry(self._registry_with([unknown]))
+
+        bad_order = self._publish_gate()
+        bad_order["publish"]["order"] = False
+        with pytest.raises(SchemaValidationError, match="positive integer"):
+            _validate_registry(self._registry_with([bad_order]))
+
+        null_prefix = self._publish_gate()
+        null_prefix["publish"]["command_prefix"] = None
+        with pytest.raises(SchemaValidationError, match="non-empty string"):
+            _validate_registry(self._registry_with([null_prefix]))
+
+        null_object = self._publish_gate()
+        null_object["publish"] = None
+        with pytest.raises(SchemaValidationError, match="must be a dict"):
+            _validate_registry(self._registry_with([null_object]))
+
+    def test_duplicate_publish_order_is_rejected(self) -> None:
+        """Two publish gates cannot claim the same execution order."""
+        first = self._publish_gate()
+        second = self._publish_gate(id="second-gate")
+        second["bindings"] = {"make_target": "check-second", "ci_job": None, "local_ci_stage": None}
+        with pytest.raises(SchemaValidationError, match="already used"):
+            _validate_registry(self._registry_with([first, second]))
+
+    def test_help_metadata_must_be_a_trimmed_nonempty_string(self) -> None:
+        """An empty, untrimmed, null, or non-string curated comment is rejected."""
+        for value in ("", "   ", "trailing space  ", None):
+            gate = dict(_MINIMAL_VALID_GATE)
+            gate["help"] = value
+            with pytest.raises(SchemaValidationError, match="non-empty trimmed string"):
+                _validate_registry(self._registry_with([gate]))
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["help"] = 42
+        with pytest.raises(SchemaValidationError, match="non-empty trimmed string"):
+            _validate_registry(self._registry_with([gate]))
 
 
 class TestDependencyGraphValidation:
@@ -1365,7 +1547,7 @@ class TestHostedCiGateGeneration:
         assert self._projection(generated) == self._projection(workflow_text)
 
     def test_stale_action_pin_is_projected_by_generation(self) -> None:
-        """A pin one release behind the catalog is regenerated, not rejected."""
+        """A pin one release behind the pinned refs is regenerated, not rejected."""
         workflow_text = DEFAULT_WORKFLOW.read_text(encoding="utf-8")
         registry = _parse_registry(DEFAULT_REGISTRY)
         marker = workflow_text.index(JOB_BEGIN)
@@ -1411,13 +1593,13 @@ class TestHostedCiGateGeneration:
         with pytest.raises(GeneratorError, match="Duplicate YAML key"):
             expected_workflow_text(malformed, registry)
 
-    def test_unsupported_hosted_registry_fails_closed(self, tmp_path: Path) -> None:
-        """A registry hosted set outside the supported static catalog is rejected."""
+    def test_dropped_hosted_registry_gate_fails_closed(self, tmp_path: Path) -> None:
+        """A hosted gate dropped from the registry leaves an unowned workflow job."""
         registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
         registry_data["gates"] = registry_data["gates"][:4] + registry_data["gates"][5:]
         registry_path = tmp_path / "registry.json"
         registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
-        with pytest.raises(GeneratorError, match="unsupported hosted gate set"):
+        with pytest.raises(GeneratorError, match="unsupported hosted job set"):
             expected_workflow_text(
                 DEFAULT_WORKFLOW.read_text(encoding="utf-8"), _parse_registry(registry_path)
             )
@@ -2075,11 +2257,25 @@ class TestMakeIncludeGeneration:
             assert f"\n{target}:\n" not in expected
         assert f".PHONY: {' '.join(generated_targets)}\n" in expected
 
-    def test_comment_catalog_only_names_registry_gates(self) -> None:
-        """A stale curated comment cannot survive a gate's removal."""
-        registry = _parse_registry(DEFAULT_REGISTRY)
-        registry_ids = {gate["id"] for gate in registry}
-        assert set(MAKE_TARGET_COMMENTS) <= registry_ids
+    def test_help_metadata_is_the_include_comment_with_description_fallback(self) -> None:
+        """Curated comments live on their registry gates; a gate without one falls back."""
+        gates = _parse_registry(DEFAULT_REGISTRY)
+        include = sync_ci_gate_jobs_module._render_make_include(gates)
+        helped = [gate for gate in gates if "help" in gate]
+        fallback = [
+            gate
+            for gate in gates
+            if "help" not in gate
+            and gate.get("make_recipe")
+            and gate["id"] not in HAND_OWNED_MAKE_TARGETS
+        ]
+        assert helped and fallback
+        for gate in helped:
+            comment = "\n".join(f"# {line}" for line in gate["help"].splitlines())
+            assert comment in include, gate["id"]
+        for gate in fallback:
+            comment = "\n".join(f"# {line}" for line in gate["description"].splitlines())
+            assert comment in include, gate["id"]
 
     def test_makefile_defines_no_generated_recipe(self) -> None:
         """The Makefile includes the fragment instead of holding the recipes."""
@@ -2255,8 +2451,8 @@ class TestPublishWorkflowGeneration:
         assert drift is False
         assert expected == DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
 
-    def test_generation_is_idempotent_and_names_every_catalog_step(self) -> None:
-        """A generated workflow is stable and carries one step per catalog gate."""
+    def test_generation_is_idempotent_and_names_every_publish_gate(self) -> None:
+        """A generated workflow is stable and carries one step per publish gate in order."""
         registry = _parse_registry(DEFAULT_REGISTRY)
         current = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
         generated = expected_publish_workflow_text(current, registry)
@@ -2266,9 +2462,14 @@ class TestPublishWorkflowGeneration:
         workflow = _parse_workflow(generated, "fixture publish.yml")
         steps = workflow["jobs"]["test"]["steps"]
         names = [step.get("name") for step in steps if isinstance(step, dict)]
-        for gate_id in PUBLISH_GATE_ORDER:
-            name = PUBLISH_STEP_CATALOG[gate_id].step_name
+        publish_gates = sorted(
+            (gate for gate in registry if "publish" in gate["required_contexts"]),
+            key=lambda gate: gate["publish"]["order"],
+        )
+        expected_names = [gate["publish"]["step_name"] for gate in publish_gates]
+        for name in expected_names:
             assert names.count(name) == 1, f"expected exactly one {name!r} step"
+        assert [name for name in names if name in set(expected_names)] == expected_names
 
     def test_registry_make_target_edit_projects_into_publish_region(self, tmp_path: Path) -> None:
         """A registry target edit propagates into its owned publish step."""
@@ -2394,17 +2595,18 @@ class TestPublishWorkflowGeneration:
             expected_publish_workflow_text(mutation(valid), registry)
 
     def test_registry_publish_set_mismatch_fails_closed(self, tmp_path: Path) -> None:
-        """A publish-context change the catalog cannot project fails closed."""
+        """A publish-context change the file does not project fails closed."""
         registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
         for gate in registry_data["gates"]:
             if gate["id"] == "check-split-facade-imports":
                 gate["required_contexts"] = [
                     context for context in gate["required_contexts"] if context != "publish"
                 ]
+                gate.pop("publish", None)
         removed_path = tmp_path / "removed.json"
         removed_path.write_text(json.dumps(registry_data), encoding="utf-8")
         current = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
-        with pytest.raises(GeneratorError, match="unsupported publish gate set"):
+        with pytest.raises(GeneratorError, match="contains non-gate steps"):
             expected_publish_workflow_text(current, _parse_registry(removed_path))
 
         registry_data["gates"].append(
@@ -2417,13 +2619,14 @@ class TestPublishWorkflowGeneration:
                     "ci_job": None,
                     "local_ci_stage": None,
                 },
+                "publish": {"order": 17, "step_name": "Run fake publish gate"},
                 "depends_on": [],
                 "trigger_inputs": [],
             }
         )
         added_path = tmp_path / "added.json"
         added_path.write_text(json.dumps(registry_data), encoding="utf-8")
-        with pytest.raises(GeneratorError, match="unsupported publish gate set"):
+        with pytest.raises(GeneratorError, match="generated region is missing gate step"):
             expected_publish_workflow_text(current, _parse_registry(added_path))
 
     def test_cli_check_write_and_clean_exit_contract(self, tmp_path: Path) -> None:

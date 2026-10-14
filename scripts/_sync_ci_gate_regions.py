@@ -14,6 +14,7 @@ from _sync_ci_gate_catalog import JOB_BEGIN, JOB_END, NEEDS_BEGIN, NEEDS_END
 from _sync_ci_gate_core import (
     GeneratorError,
     _all_markers_present,
+    _hosted_gates,
     _line_index,
     _locate_hosted_job_headers,
     _top_level_job_headers,
@@ -26,15 +27,16 @@ def _validate_hosted_marker_region(
     header_locations: dict[str, int],
     job_begin: int,
     job_end: int,
+    hosted_gates: list[dict[str, Any]],
 ) -> None:
     """
     Prove the hosted-job marker region owns exactly the named top-level jobs.
 
     The region's job IDs may be stale (registry ci_job rename, F-005);
-    display-name ownership keeps the marked-region checks independent of
+    registry-owned display names keep the marked-region checks independent of
     generated job text while still requiring exactly the hosted jobs.
     """
-    located_starts = _locate_hosted_job_headers(lines, allow_missing=True)
+    located_starts = _locate_hosted_job_headers(lines, hosted_gates, allow_missing=True)
     located_by_index = {index: job_id for index, job_id in headers}
     located_ids = tuple(located_by_index[position] for position in located_starts)
     enclosed_jobs = tuple(job_id for index, job_id in headers if job_begin < index < job_end)
@@ -93,5 +95,7 @@ def _validate_marked_regions(lines: list[str], gates: list[dict[str, Any]]) -> N
     job_end = _line_index(lines, JOB_END)[0]
     if not jobs_lines[0] < job_begin < job_end:
         raise GeneratorError("ci.yml: hosted job markers are not owned by the jobs section")
-    _validate_hosted_marker_region(lines, headers, header_locations, job_begin, job_end)
+    _validate_hosted_marker_region(
+        lines, headers, header_locations, job_begin, job_end, _hosted_gates(gates)
+    )
     _validate_needs_marker_regions(lines, headers, header_locations)

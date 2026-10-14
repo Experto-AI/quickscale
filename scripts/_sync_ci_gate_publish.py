@@ -3,7 +3,9 @@
 Private sibling: the publish workflow projection for ``sync_ci_gate_jobs``.
 
 The publish gate-step region is rendered from the registry's ``publish``
-membership through the catalog; the facade re-exports this module's names.
+context membership and each gate's registry-owned ``publish`` metadata
+(order, step label, optional command prefix); the facade re-exports this
+module's names.
 """
 
 from __future__ import annotations
@@ -11,12 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from _sync_ci_gate_catalog import (
-    PUBLISH_BEGIN,
-    PUBLISH_END,
-    PUBLISH_GATE_ORDER,
-    PUBLISH_STEP_CATALOG,
-)
+from _sync_ci_gate_catalog import PUBLISH_BEGIN, PUBLISH_END
 from _sync_ci_gate_core import (
     DEFAULT_PUBLISH_WORKFLOW,
     DEFAULT_REGISTRY,
@@ -30,59 +27,59 @@ from _sync_ci_gate_core import (
 )
 
 
-def _publish_gate_bindings(gates: list[dict[str, Any]]) -> dict[str, str]:
+def _publish_entries(gates: list[dict[str, Any]]) -> list[tuple[dict[str, Any], str]]:
     """
-    Validate and return the publish-context gate Make targets.
+    Validate and return the publish-context gates in registry-declared order.
 
-    The registry's ``publish`` context membership must equal the helper-owned
-    catalog exactly: a publish-bound gate without a catalog step, or a catalog
-    step for a gate outside the publish context, fails closed so the generated
-    workflow cannot silently drift from the registry.
+    Each entry pairs the gate with its Make target.  A publish-context gate
+    without registry-owned ``publish`` metadata, or without a Make target,
+    fails closed: the generated workflow cannot silently drift from the
+    registry, and generation refuses to project a gate it cannot render.
     """
     publish_gates = [gate for gate in gates if "publish" in gate["required_contexts"]]
-    publish_ids = tuple(gate["id"] for gate in publish_gates)
-    expected = frozenset(PUBLISH_GATE_ORDER)
-    if frozenset(publish_ids) != expected or len(publish_ids) != len(PUBLISH_GATE_ORDER):
-        raise GeneratorError(
-            "unsupported publish gate set: "
-            f"expected {list(PUBLISH_GATE_ORDER)!r}, got {list(publish_ids)!r}"
-        )
-    if set(PUBLISH_STEP_CATALOG) != expected:
-        raise GeneratorError("publish step catalog does not match the supported gate set")
-    bindings: dict[str, str] = {}
+    entries: list[tuple[dict[str, Any], str]] = []
     for gate in publish_gates:
+        metadata = gate.get("publish")
+        if not isinstance(metadata, dict):
+            raise GeneratorError(f"publish gate {gate['id']!r} has no publish metadata")
+        order = metadata.get("order")
+        if not isinstance(order, int) or isinstance(order, bool):
+            raise GeneratorError(f"publish gate {gate['id']!r} has no publish metadata order")
         make_target = gate["bindings"].get("make_target")
         if not isinstance(make_target, str):
             raise GeneratorError(f"publish gate {gate['id']!r} has no Make target")
-        bindings[gate["id"]] = make_target
-    return bindings
+        entries.append((gate, make_target))
+    return sorted(entries, key=lambda entry: entry[0]["publish"]["order"])
 
 
-def _publish_run_lines(gate_id: str, bindings: dict[str, str]) -> tuple[str, ...]:
+def _publish_step_name(gate: dict[str, Any]) -> str:
+    """Return one gate's registry-owned publish step label."""
+    return gate["publish"]["step_name"]
+
+
+def _publish_run_lines(gate: dict[str, Any], make_target: str) -> tuple[str, ...]:
     """Return the shell lines of one publish gate step."""
-    spec = PUBLISH_STEP_CATALOG[gate_id]
-    command = f"make {bindings[gate_id]}"
-    if spec.command_prefix is not None:
-        command = f"{spec.command_prefix} {command}"
+    command = f"make {make_target}"
+    command_prefix = gate["publish"].get("command_prefix")
+    if command_prefix is not None:
+        command = f"{command_prefix} {command}"
     return (command,)
 
 
-def _publish_expected_run(gate_id: str, bindings: dict[str, str]) -> str:
+def _publish_expected_run(gate: dict[str, Any], make_target: str) -> str:
     """Return the exact YAML-parsed ``run`` value of one publish gate step."""
-    return "".join(f"{line}\n" for line in _publish_run_lines(gate_id, bindings))
+    return "".join(f"{line}\n" for line in _publish_run_lines(gate, make_target))
 
 
 def _render_publish_steps(gates: list[dict[str, Any]]) -> list[str]:
-    """Render the owned publish gate-step lines in catalog order."""
-    bindings = _publish_gate_bindings(gates)
+    """Render the owned publish gate-step lines in registry-declared order."""
     rendered: list[str] = []
-    for index, gate_id in enumerate(PUBLISH_GATE_ORDER):
-        spec = PUBLISH_STEP_CATALOG[gate_id]
+    for index, (gate, make_target) in enumerate(_publish_entries(gates)):
         if index:
             rendered.append("\n")
-        rendered.append(f"      - name: {spec.step_name}\n")
+        rendered.append(f"      - name: {_publish_step_name(gate)}\n")
         rendered.append("        run: |\n")
-        for line in _publish_run_lines(gate_id, bindings):
+        for line in _publish_run_lines(gate, make_target):
             rendered.append(f"          {line}\n")
     return rendered
 
@@ -126,18 +123,20 @@ def _publish_entry_content_end(lines: list[str], start: int, end: int) -> int:
 
 
 def _match_publish_entries(
-    lines: list[str], entries: list[tuple[int, int]]
+    lines: list[str],
+    entries: list[tuple[int, int]],
+    publish_entries: list[tuple[dict[str, Any], str]],
 ) -> dict[str, tuple[int, int]]:
-    """Locate catalog-owned step entries by their exact catalog name line."""
+    """Locate registry-owned step entries by their exact registry step-name line."""
     located: dict[str, tuple[int, int]] = {}
-    for gate_id in PUBLISH_GATE_ORDER:
-        name = PUBLISH_STEP_CATALOG[gate_id].step_name
+    for gate, _make_target in publish_entries:
+        name = _publish_step_name(gate)
         needle = f"      - name: {name}\n"
         matches = [entry for entry in entries if needle in "".join(lines[entry[0] : entry[1]])]
         if len(matches) > 1:
             raise GeneratorError(f"publish.yml: duplicate gate step named {name!r}")
         if matches:
-            located[gate_id] = matches[0]
+            located[gate["id"]] = matches[0]
     return located
 
 
@@ -160,9 +159,9 @@ def _publish_marker_bounds(lines: list[str]) -> tuple[int, int, int, int]:
     return begin, end, steps_line, span_end
 
 
-def _validate_publish_markers(lines: list[str]) -> None:
+def _validate_publish_markers(lines: list[str], gates: list[dict[str, Any]]) -> None:
     """
-    Prove the publish marker pair owns exactly the catalog-owned gate steps.
+    Prove the publish marker pair owns exactly the registry-owned gate steps.
 
     Line matching alone is insufficient: a marker pair moved into another job,
     or stretched over a sibling step, must not authorize rewriting those bytes.
@@ -170,17 +169,18 @@ def _validate_publish_markers(lines: list[str]) -> None:
     begin, end, steps_line, span_end = _publish_marker_bounds(lines)
     if not lines[begin + 1].startswith("      - "):
         raise GeneratorError("publish.yml: begin marker is not adjacent to a gate step")
+    publish_entries = _publish_entries(gates)
     entries = _publish_step_entries(lines, steps_line, span_end)
-    located = _match_publish_entries(lines, entries)
-    missing = [gate_id for gate_id in PUBLISH_GATE_ORDER if gate_id not in located]
+    located = _match_publish_entries(lines, entries, publish_entries)
+    missing = [gate["id"] for gate, _make_target in publish_entries if gate["id"] not in located]
     if missing:
         raise GeneratorError(
             "publish.yml: generated region is missing gate step(s): " + ", ".join(missing)
         )
-    starts = [located[gate_id][0] for gate_id in PUBLISH_GATE_ORDER]
+    starts = [located[gate["id"]][0] for gate, _make_target in publish_entries]
     if begin + 1 != starts[0]:
         raise GeneratorError("publish.yml: begin marker is not adjacent to the first gate step")
-    last_start, last_end = located[PUBLISH_GATE_ORDER[-1]]
+    last_start, last_end = located[publish_entries[-1][0]["id"]]
     if not last_start < end < last_end:
         raise GeneratorError("publish.yml: end marker is not at the gate-step region boundary")
     inside = [start for start, _ in entries if begin < start < end]
@@ -202,18 +202,18 @@ def _validate_publish_markers(lines: list[str]) -> None:
 
 
 def _bootstrap_publish_markers(lines: list[str], gates: list[dict[str, Any]]) -> list[str]:
-    """Wrap the existing catalog-owned gate steps in the generated marker pair."""
-    _publish_gate_bindings(gates)
+    """Wrap the existing registry-owned gate steps in the generated marker pair."""
+    publish_entries = _publish_entries(gates)
     steps_line, span_end = _publish_test_steps_span(lines)
     entries = _publish_step_entries(lines, steps_line, span_end)
-    located = _match_publish_entries(lines, entries)
+    located = _match_publish_entries(lines, entries, publish_entries)
     if not located:
-        raise GeneratorError("publish.yml: no catalog-owned gate steps were found")
-    order = [gate_id for gate_id in PUBLISH_GATE_ORDER if gate_id in located]
+        raise GeneratorError("publish.yml: no registry-owned gate steps were found")
+    order = [gate["id"] for gate, _make_target in publish_entries if gate["id"] in located]
     entry_index = {entry: index for index, entry in enumerate(entries)}
     indices = [entry_index[located[gate_id]] for gate_id in order]
     if indices != list(range(indices[0], indices[0] + len(indices))):
-        raise GeneratorError("publish.yml: catalog-owned gate steps are not one contiguous region")
+        raise GeneratorError("publish.yml: registry-owned gate steps are not one contiguous region")
     region_start = located[order[0]][0]
     region_end = _publish_entry_content_end(lines, *located[order[-1]])
     replacement = [PUBLISH_BEGIN + "\n", *_render_publish_steps(gates), PUBLISH_END + "\n"]
@@ -221,10 +221,10 @@ def _bootstrap_publish_markers(lines: list[str], gates: list[dict[str, Any]]) ->
 
 
 def _collect_publish_occurrences(
-    jobs: dict[str, Any], catalog_names: set[str]
+    jobs: dict[str, Any], step_names: set[str]
 ) -> dict[str, list[tuple[str, int]]]:
-    """Return every catalog-named step occurrence, keyed by step name."""
-    occurrences: dict[str, list[tuple[str, int]]] = {name: [] for name in catalog_names}
+    """Return every registry-named step occurrence, keyed by step name."""
+    occurrences: dict[str, list[tuple[str, int]]] = {name: [] for name in step_names}
     for job_id, job_value in jobs.items():
         if not isinstance(job_value, dict):
             continue
@@ -232,40 +232,38 @@ def _collect_publish_occurrences(
         if not isinstance(job_steps, list):
             continue
         for index, step in enumerate(job_steps):
-            if isinstance(step, dict) and step.get("name") in catalog_names:
+            if isinstance(step, dict) and step.get("name") in step_names:
                 occurrences[step["name"]].append((job_id, index))
     return occurrences
 
 
-def _validate_catalog_steps(
+def _validate_publish_steps(
     steps: list[dict[str, Any]],
     occurrences: dict[str, list[tuple[str, int]]],
-    bindings: dict[str, str],
+    publish_entries: list[tuple[dict[str, Any], str]],
     *,
     strict: bool,
 ) -> list[tuple[int, str]]:
-    """Validate every catalog-owned step and return its ``(index, gate_id)`` rows."""
+    """Validate every registry-owned step and return its ``(index, gate_id)`` rows."""
     located: list[tuple[int, str]] = []
-    for gate_id in PUBLISH_GATE_ORDER:
-        spec = PUBLISH_STEP_CATALOG[gate_id]
-        matches = occurrences[spec.step_name]
+    for gate, make_target in publish_entries:
+        step_name = _publish_step_name(gate)
+        matches = occurrences[step_name]
         if len(matches) > 1:
-            raise GeneratorError(f"publish.yml: duplicate gate step named {spec.step_name!r}")
+            raise GeneratorError(f"publish.yml: duplicate gate step named {step_name!r}")
         if not matches:
             if strict:
-                raise GeneratorError(f"publish.yml: gate step named {spec.step_name!r} is missing")
+                raise GeneratorError(f"publish.yml: gate step named {step_name!r} is missing")
             continue
         job_id, index = matches[0]
         if job_id != "test":
-            raise GeneratorError(
-                f"publish.yml: gate step {spec.step_name!r} is outside the test job"
-            )
+            raise GeneratorError(f"publish.yml: gate step {step_name!r} is outside the test job")
         run = steps[index].get("run")
         if not isinstance(run, str):
-            raise GeneratorError(f"publish.yml: gate step {spec.step_name!r} has no run block")
-        if strict and run != _publish_expected_run(gate_id, bindings):
-            raise GeneratorError(f"publish.yml: gate step {spec.step_name!r} run drifted")
-        located.append((index, gate_id))
+            raise GeneratorError(f"publish.yml: gate step {step_name!r} has no run block")
+        if strict and run != _publish_expected_run(gate, make_target):
+            raise GeneratorError(f"publish.yml: gate step {step_name!r} run drifted")
+        located.append((index, gate["id"]))
     return located
 
 
@@ -273,10 +271,11 @@ def _validate_publish_projection(text: str, gates: list[dict[str, Any]], *, stri
     """
     Validate the publish gate-step projection.
 
-    ``strict=True`` (post-generation) requires every catalog step, its exact
-    order, and its exact registry-derived run value.  ``strict=False``
-    (pre-edit) locates the steps by their catalog names so a stale owned run
-    value can be projected by ``--write``, exactly like the hosted region.
+    ``strict=True`` (post-generation) requires every registry-owned step, its
+    exact order, and its exact registry-derived run value.  ``strict=False``
+    (pre-edit) locates the steps by their registry-owned names so a stale
+    owned run value can be projected by ``--write``, exactly like the hosted
+    region.
     """
     workflow = _parse_workflow(text, "publish.yml")
     jobs = workflow.get("jobs")
@@ -286,13 +285,13 @@ def _validate_publish_projection(text: str, gates: list[dict[str, Any]], *, stri
     if not isinstance(job, dict):
         raise GeneratorError("publish.yml: jobs.test must be a mapping")
     steps = _job_steps(job, "test")
-    bindings = _publish_gate_bindings(gates)
-    catalog_names = {PUBLISH_STEP_CATALOG[gate_id].step_name for gate_id in PUBLISH_GATE_ORDER}
-    occurrences = _collect_publish_occurrences(jobs, catalog_names)
-    located = _validate_catalog_steps(steps, occurrences, bindings, strict=strict)
+    publish_entries = _publish_entries(gates)
+    step_names = {_publish_step_name(gate) for gate, _make_target in publish_entries}
+    occurrences = _collect_publish_occurrences(jobs, step_names)
+    located = _validate_publish_steps(steps, occurrences, publish_entries, strict=strict)
     indices = [index for index, _ in located]
     if indices != sorted(indices):
-        raise GeneratorError("publish.yml: catalog-owned gate steps are out of order")
+        raise GeneratorError("publish.yml: registry-owned gate steps are out of order")
 
 
 def expected_publish_workflow_text(text: str, gates: list[dict[str, Any]]) -> str:
@@ -300,7 +299,7 @@ def expected_publish_workflow_text(text: str, gates: list[dict[str, Any]]) -> st
     _validate_publish_projection(text, gates, strict=False)
     lines = text.splitlines(keepends=True)
     if _any_publish_marker_present(lines):
-        _validate_publish_markers(lines)
+        _validate_publish_markers(lines, gates)
         lines = _replace_marked_region(
             lines,
             PUBLISH_BEGIN,
@@ -312,7 +311,7 @@ def expected_publish_workflow_text(text: str, gates: list[dict[str, Any]]) -> st
         lines = _bootstrap_publish_markers(lines, gates)
     result = "".join(lines)
     _validate_publish_projection(result, gates, strict=True)
-    _validate_publish_markers(result.splitlines(keepends=True))
+    _validate_publish_markers(result.splitlines(keepends=True), gates)
     return result
 
 
