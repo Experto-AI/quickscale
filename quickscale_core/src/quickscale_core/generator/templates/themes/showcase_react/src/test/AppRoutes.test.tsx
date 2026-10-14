@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../App'
 import type { QuickScaleConfig } from '@/hooks/useModules'
+import { moduleFlags, moduleFlagsOn, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
 
 // Lazy route modules resolve to synchronous stubs so every route decision in
 // App.tsx executes without pulling the real pages into the test.
@@ -32,49 +33,16 @@ vi.stubGlobal('fetch', fetchMock)
 function buildConfig(overrides: Partial<QuickScaleConfig> = {}): QuickScaleConfig {
   return {
     projectName: 'QuickScale Test Project',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: false,
-    },
-    modulePaths: {
-      crm: '/crm',
-      social: '/social',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags(),
+    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
     ...overrides,
   }
 }
 
 function allModulesOn(): QuickScaleConfig['modules'] {
-  return {
-    auth: true,
-    blog: true,
-    listings: true,
-    crm: true,
-    forms: true,
-    storage: true,
-    backups: true,
-    notifications: true,
-    analytics: true,
-    billing: true,
-    social: true,
-  }
+  return moduleFlagsOn()
 }
 
 function LocationProbe() {

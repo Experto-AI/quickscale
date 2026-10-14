@@ -1,6 +1,9 @@
 """Constants, path inventories, and static grammars for beta migration."""
 
-from quickscale_core.runtime.seam import SEAM_DECLARATION_RELATIVE_PATH
+from quickscale_core.runtime.seam import (
+    SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_KEY_MANIFEST_RELATIVE_PATH,
+)
 
 from .model import BetaMigrationMode, RequiredPathSpec, VerificationCommandSpec
 import re
@@ -172,12 +175,13 @@ FRESH_FIRST_PROTECTED_PACKAGE_FILES = (
 
 # Recipient-managed files the fresh-first path preserves without donor
 # overwrite.  ``railway.json`` carries deploy configuration; the theme's
-# managed seam declaration is regenerated in the recipient by
-# ``quickscale apply``/``quickscale update``, so donor content never belongs
-# over it.
+# managed seam declaration and key manifest are regenerated in the recipient
+# by ``quickscale apply``/``quickscale update``, so donor content never
+# belongs over them.
 FRESH_FIRST_PROTECTED_ROOT_FILES = (
     "railway.json",
     SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_KEY_MANIFEST_RELATIVE_PATH,
 )
 
 
@@ -334,6 +338,7 @@ INTENTIONALLY_UNMANAGED: tuple[str, ...] = (
     # (generated_file_ownership.md). Fresh-first does not replace or merge
     # them; enumerate each path so new test artifacts still require review.
     "frontend/src/test/setup.ts",
+    "frontend/src/test/seamFixtures.ts",
     "frontend/src/test/App.test.tsx",
     "frontend/src/test/AppRoutes.test.tsx",
     "frontend/src/test/analytics.test.ts",

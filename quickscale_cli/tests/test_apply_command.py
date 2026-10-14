@@ -1462,6 +1462,9 @@ class TestApplyDriftDetection:
         (project / "myapp" / "urls_modules.py").write_text("URLS = []\n")
         (project / "frontend" / "src").mkdir(parents=True)
         (project / "frontend" / "src" / "quickscaleSeam.d.ts").write_text("// seam\n")
+        (project / "frontend" / "src" / "quickscaleSeam.keys.ts").write_text(
+            "// keys\n"
+        )
 
         config = SimpleNamespace(project=SimpleNamespace(package="myapp"))
         state = QuickScaleState(
@@ -1476,6 +1479,7 @@ class TestApplyDriftDetection:
         assert "myapp/settings/modules.py" in state.managed_files
         assert "myapp/urls_modules.py" in state.managed_files
         assert "frontend/src/quickscaleSeam.d.ts" in state.managed_files
+        assert "frontend/src/quickscaleSeam.keys.ts" in state.managed_files
 
         captured = capsys.readouterr().out
         assert "Tracked managed file hashes" in captured
@@ -1490,6 +1494,7 @@ class TestApplyDriftDetection:
         assert "myapp/settings/modules.py" in paths
         assert "myapp/urls_modules.py" in paths
         assert "frontend/src/quickscaleSeam.d.ts" in paths
+        assert "frontend/src/quickscaleSeam.keys.ts" in paths
         assert all("\\" not in p for p in paths)
 
 

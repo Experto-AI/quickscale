@@ -1188,9 +1188,12 @@ class TestReactThemeModuleActivationMatrix:
         # D1 Option B: modulePaths.billing removed from the QuickScaleModulePaths contract
         assert "billing: '/billing/pricing/'" not in app_test
         assert "billing: '/billing/pricing/'" not in social_test
-        # Module flag should still be present in both test fixtures
-        assert "billing: false" in app_test
-        assert "billing: false" in social_test
+        # SA276: the module flags derive from the generated key manifest, so
+        # neither fixture lists the billing flag.
+        assert "from '@/test/seamFixtures'" in app_test
+        assert "from '@/test/seamFixtures'" in social_test
+        assert "billing:" not in app_test
+        assert "billing:" not in social_test
 
     def test_react_theme_billing_dashboard_card(self, tmp_path):
         """Generated React dashboard should not surface a billing card (D1 Option B)."""
@@ -1241,26 +1244,29 @@ class TestReactThemeModuleActivationMatrix:
         assert 'path="/billing/dashboard"' not in app_tsx
 
     def test_react_theme_billing_modules_hook_interface(self, tmp_path):
-        """Generated modules hook should expose billing module flag without a module path (D1 Option B)."""
+        """Generated seam declaration exposes billing's flag and API base, never a module path (D1 Option B)."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_billing_modules_hook"
         generator.generate("react_billing_modules_hook", output_path)
 
+        declaration = (
+            output_path / "frontend" / "src" / "quickscaleSeam.d.ts"
+        ).read_text()
         use_modules = (
             output_path / "frontend" / "src" / "hooks" / "useModules.ts"
         ).read_text()
-        modules_interface = use_modules.split("interface QuickScaleModules {", 1)[
-            1
-        ].split(
-            "\n}\n\ninterface QuickScaleModulePaths",
+        modules_interface = declaration.split(
+            "export interface QuickScaleModules {", 1
+        )[1].split(
+            "\n}\n\nexport interface QuickScaleModulePaths",
             1,
         )[0]
-        module_paths_interface = use_modules.split(
-            "interface QuickScaleModulePaths {", 1
-        )[1].split("\n}\n\ninterface QuickScaleModuleApiPaths", 1)[0]
-        module_api_paths_interface = use_modules.split(
-            "interface QuickScaleModuleApiPaths {", 1
-        )[1].split("\n}\n\ninterface QuickScaleOwnerConfig", 1)[0]
+        module_paths_interface = declaration.split(
+            "export interface QuickScaleModulePaths {", 1
+        )[1].split("\n}\n\nexport interface QuickScaleModuleApiPaths", 1)[0]
+        module_api_paths_interface = declaration.split(
+            "export interface QuickScaleModuleApiPaths {", 1
+        )[1]
         owner_interface = use_modules.split("interface QuickScaleOwnerConfig {", 1)[
             1
         ].split("\n}\n\nexport type PublicSocialSurface", 1)[0]
@@ -1272,9 +1278,10 @@ class TestReactThemeModuleActivationMatrix:
         assert "billing: string" in module_api_paths_interface
         assert "mode: QuickScaleOwnerMode" in owner_interface
         assert "currentOrgSlug: string | null" in owner_interface
-        # SA113 refactored useModules.ts to use validateQuickScaleConfig() for
-        # runtime resolution; the const defaultConfig block no longer exists.
-        # Module-flag defaults are resolved at runtime, not emitted as constants.
+        # SA276: the hook imports the declaration's types instead of naming
+        # modules; module-flag defaults are resolved at runtime, not emitted
+        # as constants.
+        assert "from '@/quickscaleSeam'" in use_modules
 
     def test_react_theme_storage_module_appears_in_frontend_config_and_dashboard(
         self, tmp_path
@@ -1284,14 +1291,14 @@ class TestReactThemeModuleActivationMatrix:
         output_path = tmp_path / "react_storage_visibility"
         generator.generate("react_storage_visibility", output_path)
 
-        use_modules = (
-            output_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        declaration = (
+            output_path / "frontend" / "src" / "quickscaleSeam.d.ts"
         ).read_text()
         dashboard = (
             output_path / "frontend" / "src" / "pages" / "Dashboard.tsx"
         ).read_text()
 
-        assert "storage: boolean" in use_modules
+        assert "storage: boolean" in declaration
         assert "key: 'storage'" in dashboard
         assert "name: 'Storage'" in dashboard
         assert "href: '/settings'" in dashboard
@@ -1306,6 +1313,9 @@ class TestReactThemeModuleActivationMatrix:
 
         use_modules = (
             output_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        ).read_text()
+        declaration = (
+            output_path / "frontend" / "src" / "quickscaleSeam.d.ts"
         ).read_text()
         index_html = (output_path / "templates" / "index.html").read_text()
         dashboard = (
@@ -1323,25 +1333,28 @@ class TestReactThemeModuleActivationMatrix:
         ).read_text()
         normalized_crm_page = " ".join(crm_page.split())
 
-        assert "backups: boolean" in use_modules
-        assert "notifications: boolean" in use_modules
-        assert "billing: boolean" in use_modules
-        assert "social: boolean" in use_modules
-        assert "teams: boolean" not in use_modules
+        assert "backups: boolean" in declaration
+        assert "notifications: boolean" in declaration
+        assert "billing: boolean" in declaration
+        assert "social: boolean" in declaration
+        assert "teams: boolean" not in declaration
         assert "modulePaths" in use_modules
         assert "owner:" in use_modules
-        assert "crm: string" in use_modules
-        # SA113 refactored useModules.ts to use validateQuickScaleConfig() for
-        # runtime resolution; module-path default values are no longer emitted
-        # as constants.  Check the interface types instead.
+        assert "crm: string" in declaration
+        # SA276: the hook imports the declaration's types; module-path default
+        # values are not emitted as constants.
+        assert "from '@/quickscaleSeam'" in use_modules
         # D1 Option B: billing path removed from module paths until session-sync contract exists
-        module_paths_interface = use_modules.split(
-            "interface QuickScaleModulePaths {", 1
-        )[1].split("\n}\n\ninterface QuickScaleModuleApiPaths", 1)[0]
+        module_paths_interface = declaration.split(
+            "export interface QuickScaleModulePaths {", 1
+        )[1].split("\n}\n\nexport interface QuickScaleModuleApiPaths", 1)[0]
         assert "billing: string" not in module_paths_interface
         # Rule 41: the seam's moduleApiPaths carries the billing API base.
-        assert "billing: string" in use_modules
-        assert "social: string" in use_modules
+        module_api_paths_interface = declaration.split(
+            "export interface QuickScaleModuleApiPaths {", 1
+        )[1]
+        assert "billing: string" in module_api_paths_interface
+        assert "social: string" in declaration
         assert "QuickScaleOwnerMode" in use_modules
         assert (
             "mode: \"{% if settings.QUICKSCALE_ORGS_MODE == 'saas' %}saas{% else %}solo{% endif %}\""

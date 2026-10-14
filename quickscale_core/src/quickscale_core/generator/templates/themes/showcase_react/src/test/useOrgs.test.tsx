@@ -14,6 +14,7 @@ import {
   useUpdateOrgMemberRole,
   useUpdateOrgSettings,
 } from '@/hooks/useOrgs'
+import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
 
 const fetchMock = vi.fn()
 
@@ -22,26 +23,9 @@ vi.stubGlobal('fetch', fetchMock)
 beforeEach(() => {
   window.__QUICKSCALE__ = {
     projectName: 'useOrgs Test',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: true,
-      social: false,
-    },
-    modulePaths: { crm: '/crm', social: '/social', analytics: '/analytics/' },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags({ billing: true }),
+    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
   }
 })

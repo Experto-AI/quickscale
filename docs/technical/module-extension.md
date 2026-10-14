@@ -660,7 +660,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 
 **5. Template Integration (showcase_react theme):**
 - [ ] The seam's producer (the `quickscale_seam` runtime tag) renders from the discovered module set, so the module's `window.__QUICKSCALE__` flag (installed and `QUICKSCALE_<MODULE>_ENABLED`) and its path (from its URL names) need no hand-written line; nor does any list in core, the CLI, or `scripts/`, which derive the module set from discovery (Module Conventions rules 31 and 37)
-- [ ] A module with a React surface adds its page, its `QuickScaleModules` key, and its seam-validator key in the theme ([frontend.md § Module frontend surfaces](frontend.md#module-frontend-surfaces))
+- [ ] A module with a React surface adds its page and any presentation entry in the theme; its `modules` flag, path, and API-base keys are generated into the managed seam declaration and key manifest from the shipped set, so the type and the validator's key list need no hand edit ([frontend.md § Module frontend surfaces](frontend.md#module-frontend-surfaces))
 
 **6. Testing:**
 - [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)

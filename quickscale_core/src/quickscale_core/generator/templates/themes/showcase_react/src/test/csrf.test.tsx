@@ -5,6 +5,7 @@ import { FormRenderer } from '@/components/forms/FormRenderer'
 import { getCsrfToken } from '@/lib/csrf'
 import { apiRequest } from '@/hooks/useApi'
 import type { FormSchema } from '@/hooks/useFormSchema'
+import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
 
 const { useFormSchemaMock } = vi.hoisted(() => ({ useFormSchemaMock: vi.fn() }))
 
@@ -32,26 +33,9 @@ const { createRoot } = await import(/* @vite-ignore */ new URL(localDependencyPa
 function setRuntimeSeam() {
   window.__QUICKSCALE__ = {
     projectName: 'CSRF Test',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: true,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: false,
-    },
-    modulePaths: { crm: '/crm', social: '/social', analytics: '/analytics/' },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags({ forms: true }),
+    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
   }
 }

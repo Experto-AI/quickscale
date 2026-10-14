@@ -109,9 +109,9 @@ social condition before hydrating or linking. The three-place rule below is unch
 
 **Rules for changing the seam:**
 
-1. A new field is added in **three** places together: `index.html.j2` (producer), `hooks/useModules.ts` (type), `lib/validateQuickScaleSeam.ts` (validator). A field added to fewer than all three is a defect.
-2. Required fields fail hard. Optional fields are validated strictly *when present* (see `publicPage`).
-3. `modules` keys are checked as **own** boolean properties, so a prototype-inherited or string-typed value is rejected, not coerced.
+1. A new field is added in **three** places together: the seam tables in `quickscale_core.runtime.seam` and their `index.html.j2` producer (producer), the generated `frontend/src/quickscaleSeam.d.ts` (type) and `frontend/src/quickscaleSeam.keys.ts` (runtime key manifest), and `lib/validateQuickScaleSeam.ts` (validator). A field added to fewer than all three is a defect. The generated files render from the same seam tables (SA276), so the type place is generated, never hand-typed in a user-owned file.
+2. Required fields fail hard. The validator requires every key of the generated key manifest: an own boolean per module flag, a non-empty string per path and API base. Optional fields are validated strictly *when present* (see `publicPage`).
+3. `modules` must carry each required flag as an **own** boolean property, so a prototype-inherited or string-typed value is rejected, not coerced.
 4. Do not read `window.__QUICKSCALE__` directly. Go through `useProjectConfig()` / `useModules()` / `useOwnerMode()` / `useCurrentOrgSlug()`.
 
 ### React → Django
@@ -255,7 +255,7 @@ The authoritative statement of both rules is [decisions.md § Module Implementat
 
 ## Module frontend surfaces
 
-Modules are pluggable on the backend and **hard-wired on the frontend**. No module ships TSX. All SPA pages for module surfaces live in the theme (`src/pages/BlogPage.tsx`, `CrmPage.tsx`, `ListingsPage.tsx`, `FormsPage.tsx`, `src/pages/orgs/*`), and the module name list is declared in the theme's TypeScript (`useModules.ts`, `validateQuickScaleSeam.ts`). The producer no longer repeats it: `templates/index.html.j2` renders the runtime seam tag (rule 31), which carries a key for every shipped module.
+Modules are pluggable on the backend and **hard-wired on the frontend**. No module ships TSX. All SPA pages for module surfaces live in the theme (`src/pages/BlogPage.tsx`, `CrmPage.tsx`, `ListingsPage.tsx`, `FormsPage.tsx`, `src/pages/orgs/*`), and the module name list lives in the generated managed `frontend/src/quickscaleSeam.d.ts`, whose types the theme's hooks import (SA276); the validator requires its keys from the generated `frontend/src/quickscaleSeam.keys.ts`. The producer reuses the same seam tables: `templates/index.html.j2` renders the runtime seam tag (rule 31), which carries a key for every shipped module.
 
 Adding a module with a React surface therefore touches the theme. That is the current design, consistent with [module-extension.md](module-extension.md)'s "Theme/frontend → user-owned generated code" classification: modules own backend contracts, the theme owns presentation.
 
@@ -310,7 +310,6 @@ Public pages that must reach crawlers running no JavaScript go one step further:
 Recorded so they are not rediscovered as surprises. None of these are settled decisions; they are the current state.
 
 - **Two presentations for one module.** `blog` and `listings` have both a React launcher page and a server-rendered UI, even though they now share design tokens.
-- **The seam validator's module list is ungated.** `validateQuickScaleSeam.ts` declares its required module keys separately, and no gate binds that list to the shipped inventory or to `useModules.ts`. The producer is no longer a third copy — `templates/index.html.j2` renders the runtime seam tag (rule 31) — and `test_module_manifest_contract.py` binds the rendered set to `useModules.ts`.
 - **Vite dev proxy duplicates the URL-ownership table** with no gate binding them together.
 - **`manifest: true` is emitted but unused**, leaving the unhashed-filename convention as the only thing keeping `{% static %}` references valid.
 - **Theme frontend internals are explicitly out of scope** for [arch-audit.md](../others/arch-audit.md), so none of the above appears in the structural findings.

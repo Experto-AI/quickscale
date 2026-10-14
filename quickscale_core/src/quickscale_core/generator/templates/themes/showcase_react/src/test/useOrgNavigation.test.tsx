@@ -3,34 +3,14 @@ import { renderHook } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { useOrgNavigation } from '@/hooks/useOrgNavigation'
 import type { QuickScaleConfig } from '@/hooks/useModules'
+import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
 
 function buildConfig(overrides: Partial<QuickScaleConfig> = {}): QuickScaleConfig {
   return {
     projectName: 'QuickScale Test Project',
-    modules: {
-      auth: false,
-      blog: true,
-      listings: true,
-      crm: false,
-      forms: true,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: false,
-    },
-    modulePaths: {
-      crm: '/crm',
-      social: '/social',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags({ blog: true, listings: true, forms: true }),
+    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,

@@ -1,29 +1,8 @@
-interface QuickScaleModules {
-  auth: boolean
-  blog: boolean
-  listings: boolean
-  crm: boolean
-  forms: boolean
-  storage: boolean
-  backups: boolean
-  notifications: boolean
-  analytics: boolean
-  billing: boolean
-  social: boolean
-}
-
-interface QuickScaleModulePaths {
-  crm: string
-  social: string
-  analytics: string
-}
-
-interface QuickScaleModuleApiPaths {
-  orgs: string
-  billing: string
-  crm: string
-  forms: string
-}
+import type {
+  QuickScaleModuleApiPaths,
+  QuickScaleModulePaths,
+  QuickScaleModules,
+} from '@/quickscaleSeam'
 
 export type QuickScaleOwnerMode = 'solo' | 'saas'
 
@@ -64,32 +43,13 @@ declare global {
   }
 }
 
-function inferCurrentOrgSlug(config: QuickScaleConfig): string | null {
-  if (config.owner.currentOrgSlug) {
-    return config.owner.currentOrgSlug
-  }
-
-  const crmPath = (config.modulePaths as { crm?: string }).crm
-  if (crmPath) {
-    const match = crmPath.match(/^\/orgs\/([^/]+)\/crm(\/|$)/)
-    if (match) {
-      return decodeURIComponent(match[1])
-    }
-  }
-
-  return null
-}
-
 function resolveProjectConfig(): QuickScaleConfig {
+  // The producer resolves the owner's org slug server-side and renders it into
+  // the seam, so the theme reads the validated seam value instead of inferring
+  // a slug from a module path (SA276).
   const config = validateQuickScaleConfig()
 
-  return {
-    ...config,
-    owner: {
-      ...config.owner,
-      currentOrgSlug: inferCurrentOrgSlug(config),
-    },
-  }
+  return { ...config, owner: { ...config.owner } }
 }
 
 export function useModules(): QuickScaleModules {
