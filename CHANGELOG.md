@@ -747,6 +747,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     validates the `whsec_` value with the decoder the webhook endpoint uses, so a missing prefix,
     a non-base64 remainder, or an empty decoded key refuses startup instead of failing every
     webhook at request time.
+  - **A refused invitation send spends neither throttle budget.** The sender and organization
+    invitation buckets are inspected before either is charged, so an organization rate refusal
+    leaves the sender's remaining sends intact.
   - **Checkout reconciliation waits out Stripe's Search indexing lag.** A customer-search miss
     counts as absence only once the organization's latest customer-resolution attempt completed
     and is older than Stripe's documented indexing lag, and a reference that resolves to two
