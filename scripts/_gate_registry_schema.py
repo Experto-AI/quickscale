@@ -43,6 +43,9 @@ _GATE_KEYS: frozenset[str] = frozenset(
         "description",
         "required_contexts",
         "bindings",
+        "hosted",
+        "publish",
+        "help",
         "make_recipe",
         "depends_on",
         "trigger_inputs",
@@ -50,6 +53,12 @@ _GATE_KEYS: frozenset[str] = frozenset(
 )
 
 _BINDING_KEYS: frozenset[str] = frozenset({"make_target", "ci_job", "local_ci_stage"})
+
+_HOSTED_METADATA_KEYS: frozenset[str] = frozenset(
+    {"order", "display_name", "check_step_name", "full_history"}
+)
+
+_PUBLISH_METADATA_KEYS: frozenset[str] = frozenset({"order", "step_name", "command_prefix"})
 
 _ID_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
 _PATH_SAFE_RE = re.compile(r"^(?!.*\.\.)[a-zA-Z0-9_./*-]+$")
@@ -124,6 +133,8 @@ class _RegistryIndex:
     seen_ids: set[str] = field(default_factory=set)
     seen_make_targets: dict[str, str] = field(default_factory=dict)
     seen_ci_jobs: dict[str, str] = field(default_factory=dict)
+    seen_hosted_orders: dict[int, str] = field(default_factory=dict)
+    seen_publish_orders: dict[int, str] = field(default_factory=dict)
 
 
 def _validate_top_level_keys(data: dict[str, Any]) -> None:
@@ -225,7 +236,7 @@ def _require_gates(gates: Any) -> list[dict[str, Any]]:
 
 
 def _require_gate_keys(gate: dict[str, Any], i: int) -> None:
-    """Reject unknown gate keys, then missing required ones (make_recipe optional)."""
+    """Reject unknown gate keys, then missing required ones (metadata optional)."""
     gate_unknown = set(gate.keys()) - _GATE_KEYS
     if gate_unknown:
         raise SchemaValidationError(
@@ -233,7 +244,7 @@ def _require_gate_keys(gate: dict[str, Any], i: int) -> None:
             f"gates[{i}]",
             f"unknown key(s) in gate[{i}]: {', '.join(sorted(gate_unknown))}",
         )
-    gate_missing = (_GATE_KEYS - {"make_recipe"}) - set(gate.keys())
+    gate_missing = (_GATE_KEYS - {"make_recipe", "hosted", "publish", "help"}) - set(gate.keys())
     if gate_missing:
         raise SchemaValidationError(
             "registry",
@@ -518,6 +529,194 @@ def _validate_trigger_inputs(gate: dict[str, Any], i: int, gid: str) -> None:
         seen_ti.add(pp)
 
 
+def _require_metadata_mapping(
+    gate: dict[str, Any],
+    i: int,
+    gid: str,
+    key: str,
+    allowed: frozenset[str],
+    *,
+    required: tuple[str, ...],
+) -> dict[str, Any]:
+    """Validate one per-gate metadata object's shape and required keys."""
+    metadata = gate.get(key)
+    if not isinstance(metadata, dict):
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].{key}",
+            f"gate[{i}] ({gid}).{key} must be a dict",
+        )
+    unknown = set(metadata.keys()) - allowed
+    if unknown:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].{key}",
+            f"gate[{i}] ({gid}).{key} contains unknown key(s): {', '.join(sorted(unknown))}",
+        )
+    missing = [name for name in required if name not in metadata]
+    if missing:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].{key}",
+            f"gate[{i}] ({gid}).{key} is missing required key(s): {', '.join(missing)}",
+        )
+    return metadata
+
+
+def _require_single_line_text(value: Any, i: int, gid: str, path: str, label: str) -> None:
+    """Require one non-empty, newline-free string emitted into generated text."""
+    if not isinstance(value, str) or not value:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].{path}",
+            f"gate[{i}] ({gid}).{label} must be a non-empty string",
+        )
+    if "\n" in value or "\r" in value:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].{path}",
+            f"gate[{i}] ({gid}).{label} must be a single line",
+        )
+
+
+def _require_positive_order(value: Any, i: int, gid: str, path: str, label: str) -> int:
+    """Require a strict positive integer order for one generated station."""
+    if not _is_strict_int(value) or value < 1:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].{path}",
+            f"gate[{i}] ({gid}).{label} must be a positive integer",
+        )
+    return value
+
+
+def _validate_hosted_metadata(
+    gate: dict[str, Any], i: int, gid: str, rc: list[str], index: _RegistryIndex
+) -> None:
+    """
+    Validate the hosted presentation metadata and its context pairing.
+
+    A hosted-context gate must carry the display name, check-step label, and
+    execution order the generator projects into ``ci.yml``; metadata without
+    the declared context, and a ``ci_job`` binding no hosted projection would
+    consume, fail closed too.  Every field is optional only by absence: a
+    present ``hosted``/``full_history`` value must be valid, so JSON null
+    cannot silently stand in for omission.
+    """
+    hosted_declared = "hosted" in rc
+    ci_job = gate["bindings"].get("ci_job")
+    if ci_job is not None and not hosted_declared:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].bindings.ci_job",
+            f"gate[{i}] ({gid}).bindings.ci_job requires the hosted context",
+        )
+    if "hosted" not in gate:
+        if hosted_declared:
+            raise SchemaValidationError(
+                "registry",
+                f"gates[{i}].hosted",
+                f"gate[{i}] ({gid}).hosted is required when the hosted context is declared",
+            )
+        return
+    metadata = _require_metadata_mapping(
+        gate,
+        i,
+        gid,
+        "hosted",
+        _HOSTED_METADATA_KEYS,
+        required=("order", "display_name", "check_step_name"),
+    )
+    if not hosted_declared:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].hosted",
+            f"gate[{i}] ({gid}).hosted metadata requires the hosted context",
+        )
+    order = _require_positive_order(metadata["order"], i, gid, "hosted.order", "hosted.order")
+    _require_single_line_text(
+        metadata["display_name"], i, gid, "hosted.display_name", "hosted.display_name"
+    )
+    _require_single_line_text(
+        metadata["check_step_name"], i, gid, "hosted.check_step_name", "hosted.check_step_name"
+    )
+    if "full_history" in metadata and not isinstance(metadata["full_history"], bool):
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].hosted.full_history",
+            f"gate[{i}] ({gid}).hosted.full_history must be a boolean",
+        )
+    if order in index.seen_hosted_orders:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].hosted.order",
+            f"hosted order {order} already used by gate {index.seen_hosted_orders[order]!r}",
+        )
+    index.seen_hosted_orders[order] = gid
+
+
+def _validate_publish_metadata(
+    gate: dict[str, Any], i: int, gid: str, rc: list[str], index: _RegistryIndex
+) -> None:
+    """Validate the publish step metadata and its context pairing."""
+    publish_declared = "publish" in rc
+    if "publish" not in gate:
+        if publish_declared:
+            raise SchemaValidationError(
+                "registry",
+                f"gates[{i}].publish",
+                f"gate[{i}] ({gid}).publish is required when the publish context is declared",
+            )
+        return
+    metadata = _require_metadata_mapping(
+        gate,
+        i,
+        gid,
+        "publish",
+        _PUBLISH_METADATA_KEYS,
+        required=("order", "step_name"),
+    )
+    if not publish_declared:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].publish",
+            f"gate[{i}] ({gid}).publish metadata requires the publish context",
+        )
+    order = _require_positive_order(metadata["order"], i, gid, "publish.order", "publish.order")
+    _require_single_line_text(
+        metadata["step_name"], i, gid, "publish.step_name", "publish.step_name"
+    )
+    if "command_prefix" in metadata:
+        _require_single_line_text(
+            metadata["command_prefix"], i, gid, "publish.command_prefix", "publish.command_prefix"
+        )
+    if order in index.seen_publish_orders:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].publish.order",
+            f"publish order {order} already used by gate {index.seen_publish_orders[order]!r}",
+        )
+    index.seen_publish_orders[order] = gid
+
+
+def _validate_help_metadata(gate: dict[str, Any], i: int, gid: str) -> None:
+    """Validate the optional curated Make-target comment (absent, or non-empty)."""
+    if "help" not in gate:
+        return
+    help_text = gate["help"]
+    if (
+        not isinstance(help_text, str)
+        or not help_text.strip()
+        or help_text != help_text.rstrip()
+        or "\r" in help_text
+    ):
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].help",
+            f"gate[{i}] ({gid}).help must be a non-empty trimmed string",
+        )
+
+
 def _validate_gate_entry(
     gate: dict[str, Any], i: int, known_contexts: frozenset[str], index: _RegistryIndex
 ) -> None:
@@ -538,6 +737,9 @@ def _validate_gate_entry(
     _validate_local_membership(rc, bindings, i, gid)
     _validate_depends_on(gate, i, gid)
     _validate_trigger_inputs(gate, i, gid)
+    _validate_hosted_metadata(gate, i, gid, rc, index)
+    _validate_publish_metadata(gate, i, gid, rc, index)
+    _validate_help_metadata(gate, i, gid)
 
 
 def _validate_gate_entries(gates: list[dict[str, Any]], known_contexts: frozenset[str]) -> set[str]:
