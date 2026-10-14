@@ -34,15 +34,23 @@ from quickscale_core._dr_remote_storage import (
 @pytest.fixture(autouse=True)
 def _patch_s3storage() -> MagicMock:
     """Install a mock ``S3Storage`` so tests do not require django-storages."""
-    # Ensure the module hierarchy exists so the function-local import resolves
+    # Ensure the module hierarchy exists so the function-local import resolves.
+    # Track exactly what this fixture fabricates: leaving a fake ``storages``
+    # package behind (a namespace module with an empty ``__path__``) breaks the
+    # ``from storages.backends.s3 import S3Storage`` import of every later test
+    # that shares the same xdist worker.
+    created: dict[str, types.ModuleType] = {}
     for mod_name in ("storages", "storages.backends", "storages.backends.s3"):
         if mod_name not in sys.modules:
-            sys.modules[mod_name] = types.ModuleType(mod_name)
+            created[mod_name] = types.ModuleType(mod_name)
+            sys.modules[mod_name] = created[mod_name]
     s3_mod = sys.modules["storages.backends.s3"]
-    if not hasattr(sys.modules.get("storages", None), "__path__"):
-        sys.modules["storages"].__path__ = []  # type: ignore[attr-defined]
-    if not hasattr(sys.modules.get("storages.backends", None), "__path__"):
-        sys.modules["storages.backends"].__path__ = []  # type: ignore[attr-defined]
+    added_paths: list[types.ModuleType] = []
+    for mod_name in ("storages", "storages.backends"):
+        module = sys.modules[mod_name]
+        if not hasattr(module, "__path__"):
+            module.__path__ = []  # type: ignore[attr-defined]
+            added_paths.append(module)
 
     # Directly set S3Storage as a module attribute so the function-local
     # ``from storages.backends.s3 import S3Storage`` resolves to our mock.
@@ -57,6 +65,11 @@ def _patch_s3storage() -> MagicMock:
         s3_mod.S3Storage = original  # type: ignore[attr-defined]
     else:
         del s3_mod.S3Storage
+    for module in added_paths:
+        del module.__path__
+    for mod_name, module in created.items():
+        if sys.modules.get(mod_name) is module:
+            del sys.modules[mod_name]
 
 
 # ===================================================================
