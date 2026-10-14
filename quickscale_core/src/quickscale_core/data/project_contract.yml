@@ -297,3 +297,9 @@ steps:
     title: "Adopt the theme's declaration-consuming hooks and validator"
     adoption_steps:
       - "Compare and manually adopt the current frontend/src/hooks/useModules.ts, frontend/src/lib/validateQuickScaleSeam.ts, and their tests: the hook imports the seam's type tables (QuickScaleModules, QuickScaleModulePaths, QuickScaleModuleApiPaths) from the managed frontend/src/quickscaleSeam.d.ts and reads the producer-resolved owner slug instead of inferring one from the crm module path, and the validator requires every key of the managed frontend/src/quickscaleSeam.keys.ts manifest — an own boolean per module flag, a non-empty string per path and API base — instead of holding its own module-key list, with the theme's tests building their seam fixtures from the generated key manifest. Adopting the current files satisfies the `sa261-seam-module-api-paths` step's comparison for these two files; the managed seam files themselves arrive through the `sa276-managed-seam-types` step. Rebuild the frontend (`pnpm build`) after adopting."
+
+  - id: sa276-seam-manifest-rendering
+    minimum: "0.89.0"
+    title: "Adopt the theme seam key manifest's rendered bytes"
+    adoption_steps:
+      - "The managed frontend/src/quickscaleSeam.keys.ts that the `sa276-managed-seam-types` step lists is emitted byte-identical to the runtime renderer (`quickscale_core.runtime.seam.render_seam_key_manifest`), including its template's whitespace control, so generation and `quickscale apply`/`quickscale update` agree on one content; a project that generated the file before this fix re-runs `quickscale apply --confirm-contract-adoption` to rewrite it."
