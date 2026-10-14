@@ -771,6 +771,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     carries the module-key types derived from the shipped module set; `quickscale apply`,
     `quickscale update`, and `quickscale remove` regenerate it, and `quickscale status` reports a
     local edit as managed-file drift.
+  - **The theme's seam consumers read the generated seam files.** The theme's hooks import the
+    seam's module-key types from the managed `frontend/src/quickscaleSeam.d.ts`, the validator
+    requires every seam entry from the managed `frontend/src/quickscaleSeam.keys.ts`, the
+    crm-path org inference is gone (the producer resolves the owner slug), and the theme's tests
+    build their seam fixtures from the generated key manifest. The closed-world emission test now
+    covers the theme's TypeScript: no user-owned emitted TypeScript file declares the module set
+    or names a module route, while single references remain the theme's own surfaces.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

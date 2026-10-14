@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SocialLinkTreePublicPage } from '@/pages/SocialLinkTreePublicPage'
 import type { QuickScaleConfig } from '@/hooks/useModules'
 import type { SocialLinkTreePayload } from '@/hooks/usePublicSocialSurface'
+import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
 
 const analyticsMock = vi.hoisted(() => ({ trackSocialLinkClick: vi.fn() }))
 
@@ -18,30 +19,9 @@ vi.stubGlobal('fetch', fetchMock)
 function buildProjectConfig(): QuickScaleConfig {
   return {
     projectName: 'Public Social Demo',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: true,
-    },
-    modulePaths: {
-      crm: '/crm',
-      social: '/social',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags({ social: true }),
+    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
     publicPage: {
       module: 'social',

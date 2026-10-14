@@ -50,7 +50,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA282 | One organization-selector flag and a required contract-vintage id | 2 | — | Optional |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | SA275 | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
-| SA276 | Generate the theme's seam types from the manifest set | 3 | — | Optional |
 | SA274 | Show real counts on the theme's CRM stat cards | 3 | — | Optional |
 | SA283 | Manifest-read startup checks, one capability collector, one `--cov` form | 3 | — | Optional |
 | SA279 | Retire the conformance harness's frozen surfaces | 3 | SA278 | Optional |
@@ -61,7 +60,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
 Track 2: SA275 ──► SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
-Track 3: SA276 ──► SA274 ──► SA283 ──► SA279 ──► SA281
+Track 3: SA274 ──► SA283 ──► SA279 ──► SA281
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA275 ──► SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
@@ -72,8 +71,8 @@ its freeze gate costs one registry row instead of about eight hand stations (arc
 SA279 waits on SA278, whose guard test it extends; SA277 waits on SA191's cutover, which decides
 which upgrade mechanism proved itself.
 
-**Parallel start.** SA204 (a), SA275, and SA276 have no unmet
-dependency and touch disjoint files, so all three tracks start at once. SA204 (a), (b), (d), and
+**Parallel start.** SA204 (a) and SA275 have no unmet
+dependency and touch disjoint files, so both tracks start at once. SA204 (a), (b), (d), and
 (e) do not wait on SA275; only (c) adds a gate row.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -86,8 +85,8 @@ migration history, and SA204 lands before SA153 slice (a), whose schema work is 
 start. None of the new tickets changes a module schema except SA270's additive reservation
 attempt timestamps, which its Search-lag window reads; SA274's count endpoint is code-only.
 SA154 is an inventory, not work. SA191's agent work is done; its
-remaining repin waits for the 0.89.0 publication, and SA204 proceeds alongside it. SA276 should
-land before 0.89.0 is tagged if it fits, so `bap-web-new` adopts its step once at the repin
+remaining repin waits for the 0.89.0 publication, and SA204 proceeds alongside it. SA276 has
+landed, so `bap-web-new` adopts its steps once at the repin
 instead of on a live site (arch audit §7); it is not a release requirement.
 
 ### Track states
@@ -98,7 +97,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA204 (c) | no | no | yes | no | yes |
 | 2 | SA275 | yes | yes | yes | no | yes |
-| 3 | SA276 | yes | yes | yes | no | no |
+| 3 | SA274 | yes | yes | yes | no | no |
 
 ### Ownership and merge coordination
 
@@ -475,33 +474,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 3 — Track 3 hardening, theme seam types, and harness by construction
 
-- [ ] **SA276 — Generate the theme's seam types from the manifest set.**
-
-  Closes the theme half of arch `generated-file-ownership-unmodeled` (Finding 2, option 2) and
-  the arch coherence hand-off on `useModules.ts`.
-
-  **Context:** SA258 and SA261 moved the Django side of the seam into the runtime, but
-  `useModules.ts:1–27` still types 11 module names (`QuickScaleModules`), per-module path maps
-  (`QuickScaleModulePaths`, `QuickScaleModuleApiPaths`), and a crm path parse in
-  `inferCurrentOrgSlug`, in a user-owned file. Only `settings/modules.py` and `urls_modules.py` are
-  managed (`project_state_hashes.py:34–37`), so every theme contract change becomes a hand-applied
-  adoption step.
-
-  **Acceptance:** generation and `update` emit a managed `quickscaleSeam.d.ts` from the manifest
-  set, covered by the managed hash guard; `useModules.ts` and the other hooks import its types and
-  name no module; `inferCurrentOrgSlug` reads the seam instead of parsing a crm path. The
-  closed-world emission test extends to the theme: no user-owned emitted TS file names a module
-  except the generated declaration. One `project_contract.yml` step covers the adoption. Land it
-  before 0.89.0 is tagged if it fits (see **Order**).
-
-  **Slices:**
-  - [x] (a) The generated, managed `quickscaleSeam.d.ts` and its hash-guard entry (Tier 2-fast).
-    Landed as `runtime.seam.render_seam_declaration` and its theme template, with
-    `DEFAULT_MANAGED_PROJECT_PATHS` covering the declaration in apply, update, remove, and drift;
-    the vintage gate required the `sa276-managed-seam-types` adoption step here. Next: (b), the
-    hooks that import the declaration, the theme emission test, and its adoption step.
-  - [ ] (b) Hooks consume it, the theme emission test, and the adoption step (Tier 2-fast).
-
 - [ ] **SA274 — Show real counts on the theme's CRM stat cards.**
 
   Closes tech `crm-theme-stats-always-zero` (S4) and its theme-to-API contract tooling gap.
@@ -593,6 +565,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [x] **SA271 — Stream disaster-recovery objects instead of spooling them.**
 
 - [x] **SA272 — Harden the notifications webhook and the orgs invite throttle.**
+
+- [x] **SA276 — Generate the theme's seam types from the manifest set.**
 
 ## Deferred constraints and references
 

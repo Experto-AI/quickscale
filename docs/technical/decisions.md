@@ -1116,15 +1116,20 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
   theme's API clients — `moduleApiPaths` (rule 41) through
   `quickscale_core.runtime`'s `quickscale_seam` template tag, resolved at request time from the
   discovered module set (rule 37) and the live settings, so `modules` carries a key for every
-  shipped module, as the seam validator requires. A key is `true` only when the module is installed
+  shipped module, as the seam validator requires through the generated key manifest
+  (`frontend/src/quickscaleSeam.keys.ts`, SA276). A key is `true` only when the module is installed
   and its `QUICKSCALE_<MODULE>_ENABLED` is on (rule 1). A `modulePaths` entry is resolved from the
   module's URL names when it is installed, never written as a literal (rule 7), and no
   hand-written per-module line or `INSTALLED_APPS` test lives in `index.html.j2` (the two public
   social pages keep their installed-and-enabled hydration guards). The seam itself is unchanged
   (§[Frontend Theme Source De-Specialization](#frontend-theme-despecialization-dormant-files)).
-- ✅ The theme's TypeScript (the `QuickScaleModules` type, the seam validator, the SPA pages) still
-  names the modules that have React surfaces, as [frontend.md](frontend.md) § Module frontend
-  surfaces records; a module with a React surface adds itself there.
+- ✅ The theme's module-set type and validator key list are generated: the managed
+  `frontend/src/quickscaleSeam.d.ts` renders the `QuickScaleModules`/`QuickScaleModulePaths`/
+  `QuickScaleModuleApiPaths` interfaces and the managed `frontend/src/quickscaleSeam.keys.ts`
+  renders the validator's required key manifest, both from the shipped set (SA276), so a module
+  that joins the set changes no user-owned theme file. The theme's SPA pages and presentation
+  tables still name the modules that have React surfaces, as [frontend.md](frontend.md) § Module
+  frontend surfaces records; a module with a React surface adds itself there.
 - ✅ The generated `templates/index.html` is user-owned (U3), so the change reaches new projects and
   the release notes carry the step for existing ones.
 - ❌ Hand-written per-module lines or `INSTALLED_APPS` tests in `index.html.j2`, or mount paths

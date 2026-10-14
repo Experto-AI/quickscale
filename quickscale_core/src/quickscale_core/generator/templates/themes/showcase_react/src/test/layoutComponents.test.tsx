@@ -7,6 +7,7 @@ import { Header } from '@/components/layout/Header'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useThemeStore } from '@/stores/themeStore'
 import type { QuickScaleConfig } from '@/hooks/useModules'
+import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
 
 const fetchMock = vi.fn()
 
@@ -15,30 +16,9 @@ vi.stubGlobal('fetch', fetchMock)
 function buildConfig(overrides: Partial<QuickScaleConfig> = {}): QuickScaleConfig {
   return {
     projectName: 'QuickScale Test Project',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: false,
-    },
-    modulePaths: {
-      crm: '/crm',
-      social: '/social',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags(),
+    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
     ...overrides,
   }
@@ -91,19 +71,7 @@ describe('Header', () => {
 describe('Sidebar', () => {
   it('shows every enabled module link in solo mode', () => {
     window.__QUICKSCALE__ = buildConfig({
-      modules: {
-        auth: true,
-        blog: true,
-        listings: true,
-        crm: true,
-        forms: true,
-        storage: false,
-        backups: false,
-        notifications: false,
-        analytics: false,
-        billing: false,
-        social: true,
-      },
+      modules: moduleFlags({ auth: true, blog: true, listings: true, crm: true, forms: true, social: true }),
     })
     fetchMock.mockReturnValue(new Promise(() => {}))
     renderSidebar('/')
@@ -127,19 +95,7 @@ describe('Sidebar', () => {
 
   it('keeps the org-scoped workspace links while an org context is active', () => {
     window.__QUICKSCALE__ = buildConfig({
-      modules: {
-        auth: true,
-        blog: true,
-        listings: true,
-        crm: false,
-        forms: true,
-        storage: false,
-        backups: false,
-        notifications: false,
-        analytics: false,
-        billing: false,
-        social: false,
-      },
+      modules: moduleFlags({ auth: true, blog: true, listings: true, forms: true }),
       owner: { mode: 'saas', currentOrgSlug: 'acme' },
     })
     fetchMock.mockReturnValue(new Promise(() => {}))
@@ -167,19 +123,7 @@ describe('Sidebar', () => {
 
   it('hides module links until an org context exists in saas mode', () => {
     window.__QUICKSCALE__ = buildConfig({
-      modules: {
-        auth: true,
-        blog: true,
-        listings: true,
-        crm: true,
-        forms: true,
-        storage: false,
-        backups: false,
-        notifications: false,
-        analytics: false,
-        billing: false,
-        social: true,
-      },
+      modules: moduleFlags({ auth: true, blog: true, listings: true, crm: true, forms: true, social: true }),
       owner: { mode: 'saas', currentOrgSlug: null },
     })
     fetchMock.mockReturnValue(new Promise(() => {}))

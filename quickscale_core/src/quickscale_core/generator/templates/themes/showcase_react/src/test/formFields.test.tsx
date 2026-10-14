@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FormRenderer } from '@/components/forms/FormRenderer'
 import type { FormFieldSchema, FormSchema } from '@/hooks/useFormSchema'
+import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
 
 const fetchMock = vi.fn()
 
@@ -12,26 +13,9 @@ vi.stubGlobal('fetch', fetchMock)
 beforeEach(() => {
   window.__QUICKSCALE__ = {
     projectName: 'formFields Test',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: true,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: false,
-    },
-    modulePaths: { crm: '/crm', social: '/social', analytics: '/analytics/' },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags({ forms: true }),
+    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
   }
 })

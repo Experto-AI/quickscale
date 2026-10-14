@@ -15,7 +15,10 @@ from typing import TYPE_CHECKING
 import yaml
 
 from quickscale_core.project_state_records import ManagedFileHash
-from quickscale_core.runtime.seam import SEAM_DECLARATION_RELATIVE_PATH
+from quickscale_core.runtime.seam import (
+    SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_KEY_MANIFEST_RELATIVE_PATH,
+)
 from quickscale_core.schema.state_schema import StateError
 
 if TYPE_CHECKING:
@@ -39,9 +42,12 @@ DEFAULT_MANAGED_WIRING_PATHS: tuple[str, ...] = (
 
 # Default managed project files that ``quickscale apply`` regenerates outside
 # the Python package, so they resolve against the project root rather than the
-# package directory.  The theme's seam declaration renders from the shipped
-# module set (SA276).
-DEFAULT_MANAGED_PROJECT_PATHS: tuple[str, ...] = (SEAM_DECLARATION_RELATIVE_PATH,)
+# package directory.  The theme's seam declaration and its key manifest render
+# from the shipped module set (SA276).
+DEFAULT_MANAGED_PROJECT_PATHS: tuple[str, ...] = (
+    SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_KEY_MANIFEST_RELATIVE_PATH,
+)
 
 
 def resolve_managed_file_paths(package_name: str) -> list[str]:

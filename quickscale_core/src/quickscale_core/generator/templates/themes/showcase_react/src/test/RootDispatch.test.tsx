@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
 
 // Mock lazy-loaded social page modules so they resolve synchronously in tests.
 vi.mock('@/pages/SocialEmbedsPublicPage', () => ({
@@ -23,30 +24,9 @@ import { renderQuickScaleRoot } from '../renderQuickScaleRoot'
 function applyConfig(overrides?: Record<string, unknown>) {
   window.__QUICKSCALE__ = {
     projectName: 'QuickScale Test Project',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: false,
-    },
-    modulePaths: {
-      crm: '/crm',
-      social: '/social',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags(),
+    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -63,30 +43,9 @@ function applyConfig(overrides?: Record<string, unknown>) {
 function applyPublicInjectorConfig(surface: 'link_tree' | 'embeds') {
   window.__QUICKSCALE__ = {
     projectName: 'Public Social Demo',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: true,
-    },
-    modulePaths: {
-      crm: '/crm/',
-      social: surface === 'link_tree' ? '/social' : '/social/embeds',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags({ social: true }),
+    modulePaths: modulePaths({ crm: '/crm/', social: surface === 'link_tree' ? '/social' : '/social/embeds', analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -132,7 +91,7 @@ describe('renderQuickScaleRoot', () => {
   })
 
   it('throws when required module keys are absent from config', () => {
-    // With all-keys-required validation, a sparse modules object must throw
+    // With declaration-backed validation, a sparse modules object must throw
     applyConfig({ modules: { auth: true } as unknown as Record<string, unknown> })
     expect(() => renderWithProviders(renderQuickScaleRoot('link_tree'))).toThrow(/modules\.blog/)
   })

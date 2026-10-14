@@ -262,6 +262,7 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
     assert "myapp/settings/modules.py" in committed_paths
     assert "myapp/urls_modules.py" in committed_paths
     assert "frontend/src/quickscaleSeam.d.ts" in committed_paths
+    assert "frontend/src/quickscaleSeam.keys.ts" in committed_paths
 
     state = StateManager(project).load()
     assert state is not None
@@ -269,6 +270,7 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
         "myapp/settings/modules.py",
         "myapp/urls_modules.py",
         "frontend/src/quickscaleSeam.d.ts",
+        "frontend/src/quickscaleSeam.keys.ts",
     ):
         assert path_str in state.managed_files
         assert state.managed_files[path_str].hash == hash_managed_file(

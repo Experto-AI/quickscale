@@ -1,34 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { validateQuickScaleConfig } from '@/lib/validateQuickScaleSeam'
 import type { QuickScaleConfig } from '@/hooks/useModules'
+import {
+  SEAM_MODULE_API_PATH_KEYS,
+  SEAM_MODULE_FLAG_KEYS,
+  SEAM_MODULE_PATH_KEYS,
+} from '@/quickscaleSeam.keys'
+import { moduleApiPaths, moduleFlags, modulePaths } from '@/test/seamFixtures'
 
 function buildValidConfig(): QuickScaleConfig {
   return {
     projectName: 'QuickScale Test Project',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: false,
-    },
-    modulePaths: {
-      crm: '/crm',
-      social: '/social',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags(),
+    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -44,30 +29,9 @@ function buildValidConfig(): QuickScaleConfig {
 function buildPublicInjectorLinkTree(): QuickScaleConfig {
   return {
     projectName: 'Public Social Demo',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: true,
-    },
-    modulePaths: {
-      crm: '/crm/',
-      social: '/social',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags({ social: true }),
+    modulePaths: modulePaths({ crm: '/crm/', analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -92,30 +56,9 @@ function buildPublicInjectorLinkTree(): QuickScaleConfig {
 function buildPublicInjectorEmbeds(): QuickScaleConfig {
   return {
     projectName: 'Public Social Demo',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: true,
-    },
-    modulePaths: {
-      crm: '/crm/',
-      social: '/social/embeds',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags({ social: true }),
+    modulePaths: modulePaths({ crm: '/crm/', social: '/social/embeds', analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -232,20 +175,18 @@ describe('validateQuickScaleConfig', () => {
     expect(() => validateQuickScaleConfig()).toThrow(/modules\.blog/)
   })
 
-  // ── Required module keys (SA107-CR-002) ───────────────────────────
+  // ── Required module keys, from the generated key manifest (SA276) ─
 
-  const REQUIRED_KEYS = [
-    'auth', 'blog', 'listings', 'crm', 'forms', 'storage',
-    'backups', 'notifications', 'analytics', 'billing', 'social',
-  ] as const
-
-  it.each(REQUIRED_KEYS)('throws when required module key "%s" is missing', (missingKey) => {
-    const config: Record<string, unknown> = JSON.parse(JSON.stringify(buildValidConfig()))
-    const modules = config.modules as Record<string, unknown>
-    delete modules[missingKey]
-    window.__QUICKSCALE__ = config as unknown as QuickScaleConfig
-    expect(() => validateQuickScaleConfig()).toThrow(new RegExp(`modules\\.${missingKey}`))
-  })
+  it.each([...SEAM_MODULE_FLAG_KEYS])(
+    'throws when required module key "%s" is missing',
+    (missingKey) => {
+      const config: Record<string, unknown> = JSON.parse(JSON.stringify(buildValidConfig()))
+      const modules = config.modules as Record<string, unknown>
+      delete modules[missingKey]
+      window.__QUICKSCALE__ = config as unknown as QuickScaleConfig
+      expect(() => validateQuickScaleConfig()).toThrow(new RegExp(`modules\\.${missingKey}`))
+    },
+  )
 
   it('throws when modules has only a subset of required keys', () => {
     window.__QUICKSCALE__ = {
@@ -260,9 +201,9 @@ describe('validateQuickScaleConfig', () => {
   it('throws when a required module key is inherited from prototype with non-boolean value', () => {
     const proto = { auth: 'not-a-boolean' }
     const inheritedModules = Object.create(proto)
-    // Set all other 10 required keys as own booleans
-    for (const key of ['blog', 'listings', 'crm', 'forms', 'storage', 'backups', 'notifications', 'analytics', 'billing', 'social']) {
-      inheritedModules[key] = false
+    // Set all other required keys as own booleans
+    for (const key of SEAM_MODULE_FLAG_KEYS) {
+      if (key !== 'auth') inheritedModules[key] = false
     }
     window.__QUICKSCALE__ = {
       ...buildValidConfig(),
@@ -272,10 +213,9 @@ describe('validateQuickScaleConfig', () => {
   })
 
   it('throws when a required module key is inherited (no match in own or inherited value)', () => {
-    const proto = {}
-    const missingModules = Object.create(proto)
-    for (const key of ['blog', 'listings', 'crm', 'forms', 'storage', 'backups', 'notifications', 'analytics', 'billing', 'social']) {
-      missingModules[key] = false
+    const missingModules = Object.create({})
+    for (const key of SEAM_MODULE_FLAG_KEYS) {
+      if (key !== 'auth') missingModules[key] = false
     }
     window.__QUICKSCALE__ = {
       ...buildValidConfig(),
@@ -284,24 +224,27 @@ describe('validateQuickScaleConfig', () => {
     expect(() => validateQuickScaleConfig()).toThrow(/modules\.auth/)
   })
 
-  it.each([true, false])('throws when a required module key is inherited from prototype with boolean value %s', (authValue) => {
-    const proto = { auth: authValue }
-    const inheritedModules = Object.create(proto)
-    for (const key of ['blog', 'listings', 'crm', 'forms', 'storage', 'backups', 'notifications', 'analytics', 'billing', 'social']) {
-      inheritedModules[key] = false
-    }
-    window.__QUICKSCALE__ = {
-      ...buildValidConfig(),
-      modules: inheritedModules as unknown as QuickScaleConfig['modules'],
-    }
-    expect(() => validateQuickScaleConfig()).toThrow(/modules\.auth/)
-  })
+  it.each([true, false])(
+    'throws when a required module key is inherited from prototype with boolean value %s',
+    (authValue) => {
+      const proto = { auth: authValue }
+      const inheritedModules = Object.create(proto)
+      for (const key of SEAM_MODULE_FLAG_KEYS) {
+        if (key !== 'auth') inheritedModules[key] = false
+      }
+      window.__QUICKSCALE__ = {
+        ...buildValidConfig(),
+        modules: inheritedModules as unknown as QuickScaleConfig['modules'],
+      }
+      expect(() => validateQuickScaleConfig()).toThrow(/modules\.auth/)
+    },
+  )
 
   it('throws when a required module key is own but non-enumerable with non-boolean value', () => {
     const modules: Record<string, unknown> = {}
     // Set all other required keys normally first
-    for (const key of ['blog', 'listings', 'crm', 'forms', 'storage', 'backups', 'notifications', 'analytics', 'billing', 'social']) {
-      modules[key] = false
+    for (const key of SEAM_MODULE_FLAG_KEYS) {
+      if (key !== 'auth') modules[key] = false
     }
     // Set auth as non-enumerable non-boolean — preserves hasOwnProperty but hides from Object.entries
     Object.defineProperty(modules, 'auth', {
@@ -319,8 +262,8 @@ describe('validateQuickScaleConfig', () => {
 
   it('throws when a required module key is own but non-enumerable with non-boolean value (number)', () => {
     const modules: Record<string, unknown> = {}
-    for (const key of ['blog', 'listings', 'crm', 'forms', 'storage', 'backups', 'notifications', 'analytics', 'billing', 'social']) {
-      modules[key] = false
+    for (const key of SEAM_MODULE_FLAG_KEYS) {
+      if (key !== 'auth') modules[key] = false
     }
     Object.defineProperty(modules, 'auth', {
       value: 42,
@@ -387,19 +330,24 @@ describe('validateQuickScaleConfig', () => {
     expect(() => validateQuickScaleConfig()).toThrow(/modulePaths/)
   })
 
-  it('throws when modulePaths.crm is missing', () => {
-    const mp = { social: '/social', analytics: '/analytics/' }
-    window.__QUICKSCALE__ = { ...buildValidConfig(), modulePaths: mp as QuickScaleConfig['modulePaths'] }
-    expect(() => validateQuickScaleConfig()).toThrow(/modulePaths\.crm/)
-  })
+  it.each([...SEAM_MODULE_PATH_KEYS])(
+    'throws when modulePaths.%s is missing',
+    (missingKey) => {
+      const config: Record<string, unknown> = JSON.parse(JSON.stringify(buildValidConfig()))
+      const paths = config.modulePaths as Record<string, unknown>
+      delete paths[missingKey]
+      window.__QUICKSCALE__ = config as unknown as QuickScaleConfig
+      expect(() => validateQuickScaleConfig()).toThrow(new RegExp(`modulePaths\\.${missingKey}`))
+    },
+  )
 
   it('throws when modulePaths.crm is empty string', () => {
-    window.__QUICKSCALE__ = { ...buildValidConfig(), modulePaths: { crm: '', social: '/social', analytics: '/analytics/' } as QuickScaleConfig['modulePaths'] }
+    window.__QUICKSCALE__ = { ...buildValidConfig(), modulePaths: modulePaths({ crm: '', analytics: '/analytics/' }) as QuickScaleConfig['modulePaths'] }
     expect(() => validateQuickScaleConfig()).toThrow(/modulePaths\.crm/)
   })
 
   it('throws when modulePaths.social is a number', () => {
-    window.__QUICKSCALE__ = { ...buildValidConfig(), modulePaths: { crm: '/crm', social: 42, analytics: '/analytics/' } as unknown as QuickScaleConfig['modulePaths'] }
+    window.__QUICKSCALE__ = { ...buildValidConfig(), modulePaths: { ...modulePaths(), social: 42 } as unknown as QuickScaleConfig['modulePaths'] }
     expect(() => validateQuickScaleConfig()).toThrow(/modulePaths\.social/)
   })
 
@@ -417,19 +365,24 @@ describe('validateQuickScaleConfig', () => {
     expect(() => validateQuickScaleConfig()).toThrow(/moduleApiPaths/)
   })
 
-  it('throws when moduleApiPaths.forms is missing', () => {
-    const paths = { orgs: '/orgs/api/', billing: '/billing/api/', crm: '/crm/api/' }
-    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleApiPaths: paths as QuickScaleConfig['moduleApiPaths'] }
-    expect(() => validateQuickScaleConfig()).toThrow(/moduleApiPaths\.forms/)
-  })
+  it.each([...SEAM_MODULE_API_PATH_KEYS])(
+    'throws when moduleApiPaths.%s is missing',
+    (missingKey) => {
+      const config: Record<string, unknown> = JSON.parse(JSON.stringify(buildValidConfig()))
+      const paths = config.moduleApiPaths as Record<string, unknown>
+      delete paths[missingKey]
+      window.__QUICKSCALE__ = config as unknown as QuickScaleConfig
+      expect(() => validateQuickScaleConfig()).toThrow(new RegExp(`moduleApiPaths\\.${missingKey}`))
+    },
+  )
 
   it('throws when moduleApiPaths.orgs is empty string', () => {
-    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleApiPaths: { orgs: '', billing: '/billing/api/', crm: '/crm/api/', forms: '/forms/api/' } as QuickScaleConfig['moduleApiPaths'] }
+    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleApiPaths: moduleApiPaths({ orgs: '' }) as QuickScaleConfig['moduleApiPaths'] }
     expect(() => validateQuickScaleConfig()).toThrow(/moduleApiPaths\.orgs/)
   })
 
   it('throws when moduleApiPaths.billing is a number', () => {
-    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleApiPaths: { orgs: '/orgs/api/', billing: 42, crm: '/crm/api/', forms: '/forms/api/' } as unknown as QuickScaleConfig['moduleApiPaths'] }
+    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleApiPaths: { ...moduleApiPaths(), billing: 42 } as unknown as QuickScaleConfig['moduleApiPaths'] }
     expect(() => validateQuickScaleConfig()).toThrow(/moduleApiPaths\.billing/)
   })
 

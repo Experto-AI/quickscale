@@ -5,6 +5,7 @@ import { SocialEmbedsPublicPage } from '@/pages/SocialEmbedsPublicPage'
 import { SocialLinkTreePublicPage } from '@/pages/SocialLinkTreePublicPage'
 import type { QuickScaleConfig } from '@/hooks/useModules'
 import type { SocialEmbedsPayload, SocialLinkTreePayload } from '@/hooks/usePublicSocialSurface'
+import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
 
 const fetchMock = vi.fn()
 
@@ -13,30 +14,9 @@ vi.stubGlobal('fetch', fetchMock)
 function buildProjectConfig(surface: 'link_tree' | 'embeds'): QuickScaleConfig {
   return {
     projectName: 'Public Social Demo',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: true,
-    },
-    modulePaths: {
-      crm: '/crm',
-      social: surface === 'link_tree' ? '/social' : '/social/embeds',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags({ social: true }),
+    modulePaths: modulePaths({ social: surface === 'link_tree' ? '/social' : '/social/embeds', analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,

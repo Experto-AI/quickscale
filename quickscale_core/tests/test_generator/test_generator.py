@@ -1032,38 +1032,47 @@ class TestSa90MappingDrivenGeneration:
         assert "frontend/design/fonts/README.md" in react_map
         assert "frontend/design/brand/README.md" in react_map
 
-        # Managed theme seam declaration (SA276)
+        # Managed theme seam declaration and key manifest (SA276)
         assert "frontend/src/quickscaleSeam.d.ts" in react_map
+        assert "frontend/src/quickscaleSeam.keys.ts" in react_map
 
         # Shared files should be present
         assert "Makefile" in react_map
 
-    def test_managed_seam_declaration_is_emitted_verbatim(self, tmp_path: Path) -> None:
-        """Generation emits the managed seam declaration byte-for-byte (SA276).
+    def test_managed_seam_files_are_emitted_verbatim(self, tmp_path: Path) -> None:
+        """Generation emits the managed seam files byte-for-byte (SA276).
 
-        The emitted file carries the runtime seam's rendered declaration, and
-        its path is the managed project path the hash guard records, so
-        generation and ``apply``/``update`` agree on one content and one
-        location.
+        The emitted files carry the runtime seam's rendered declaration and
+        key manifest, and their paths are the managed project paths the hash
+        guard records, so generation and ``apply``/``update`` agree on one
+        content and one location per file.
         """
         from quickscale_core.project_state_hashes import DEFAULT_MANAGED_PROJECT_PATHS
         from quickscale_core.runtime.seam import (
             SEAM_DECLARATION_RELATIVE_PATH,
+            SEAM_KEY_MANIFEST_RELATIVE_PATH,
             render_seam_declaration,
+            render_seam_key_manifest,
         )
 
         mapping = get_generator_emission_mapping(
             self._get_template_dir(), theme="showcase_react"
         )
         assert SEAM_DECLARATION_RELATIVE_PATH in mapping
-        assert DEFAULT_MANAGED_PROJECT_PATHS == (SEAM_DECLARATION_RELATIVE_PATH,)
+        assert SEAM_KEY_MANIFEST_RELATIVE_PATH in mapping
+        assert DEFAULT_MANAGED_PROJECT_PATHS == (
+            SEAM_DECLARATION_RELATIVE_PATH,
+            SEAM_KEY_MANIFEST_RELATIVE_PATH,
+        )
 
         gen = ProjectGenerator(theme="showcase_react")
         output = tmp_path / "seam_declaration"
         gen.generate("validname", output)
 
-        emitted = output / SEAM_DECLARATION_RELATIVE_PATH
-        assert emitted.read_text() == render_seam_declaration()
+        emitted_declaration = output / SEAM_DECLARATION_RELATIVE_PATH
+        assert emitted_declaration.read_text() == render_seam_declaration()
+        emitted_manifest = output / SEAM_KEY_MANIFEST_RELATIVE_PATH
+        assert emitted_manifest.read_text() == render_seam_key_manifest()
 
 
 class TestSa90ExactManifestParity:
