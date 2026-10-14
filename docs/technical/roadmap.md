@@ -15,8 +15,8 @@ their value.
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
 with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#11-watchlist-and-accepted-trade-offs)).
-One ticket is a release requirement and lands before the tag: SA271 (the last of the 2026-10-13
-tech-audit S3s, all introduced since 0.88.0).
+SA271, the last of the 2026-10-13 tech-audit S3s, has landed; no open ticket is a release
+requirement for 0.89.0.
 Publication remains a maintainer action.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
@@ -40,21 +40,19 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | SA271 | Optional |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA275 | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA271 | Stream disaster-recovery objects instead of spooling them | 2 | — | Required |
 | SA275 | Derive gate wiring from the registry instead of holding copies equal | 2 | — | Optional |
 | SA278 | Retire the gate-script frozen surfaces and scan `scripts/` for quality | 2 | — | Optional |
 | SA273 | Harden the editor upload and the CLI's `pyproject.toml` write | 2 | — | Optional |
 | SA282 | One organization-selector flag and a required contract-vintage id | 2 | — | Optional |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | SA275 | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
-| SA272 | Harden the notifications webhook and the orgs invite throttle | 3 | — | Optional |
 | SA276 | Generate the theme's seam types from the manifest set | 3 | — | Optional |
 | SA274 | Show real counts on the theme's CRM stat cards | 3 | — | Optional |
-| SA283 | Manifest-read startup checks, one capability collector, one `--cov` form | 3 | SA272 | Optional |
+| SA283 | Manifest-read startup checks, one capability collector, one `--cov` form | 3 | — | Optional |
 | SA279 | Retire the conformance harness's frozen surfaces | 3 | SA278 | Optional |
 | SA281 | Hand adapter hooks typed resolved options and delete the dataflow detector | 3 | SA279 | Optional |
 
@@ -62,9 +60,9 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
-Track 2: SA271 ──► SA275 ──► SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
-Track 3: SA272 ──► SA276 ──► SA274 ──► SA283 ──► SA279 ──► SA281
-     release path:  SA271 ──► publish 0.89.0 ──► SA191 repin
+Track 2: SA275 ──► SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
+Track 3: SA276 ──► SA274 ──► SA283 ──► SA279 ──► SA281
+     release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA275 ──► SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
 
@@ -74,7 +72,7 @@ its freeze gate costs one registry row instead of about eight hand stations (arc
 SA279 waits on SA278, whose guard test it extends; SA277 waits on SA191's cutover, which decides
 which upgrade mechanism proved itself.
 
-**Parallel start.** SA204 (a), SA271, SA275, SA272, and SA276 have no unmet
+**Parallel start.** SA204 (a), SA275, and SA276 have no unmet
 dependency and touch disjoint files, so all three tracks start at once. SA204 (a), (b), (d), and
 (e) do not wait on SA275; only (c) adds a gate row.
 
@@ -86,8 +84,8 @@ when its last slice lands; slices are not scheduled.
 **Order.** Every change to a shipped module `0001_initial` lands before SA204 freezes
 migration history, and SA204 lands before SA153 slice (a), whose schema work is `0002+` from the
 start. None of the new tickets changes a module schema except SA270's additive reservation
-attempt timestamps, which its Search-lag window reads; SA274's count endpoint and SA272's
-status ranking are code-only. SA154 is an inventory, not work. SA191's agent work is done; its
+attempt timestamps, which its Search-lag window reads; SA274's count endpoint is code-only.
+SA154 is an inventory, not work. SA191's agent work is done; its
 remaining repin waits for the 0.89.0 publication, and SA204 proceeds alongside it. SA276 should
 land before 0.89.0 is tagged if it fits, so `bap-web-new` adopts its step once at the repin
 instead of on a live site (arch audit §7); it is not a release requirement.
@@ -99,8 +97,8 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (c) | no | no | yes | no | yes |
-| 2 | SA271 (b) | yes | yes | yes | no | yes |
-| 3 | SA272 | yes | yes | yes | no | no |
+| 2 | SA275 | yes | yes | yes | no | yes |
+| 3 | SA276 | yes | yes | yes | no | no |
 
 ### Ownership and merge coordination
 
@@ -167,33 +165,6 @@ reset/checkout destructively. Merge `v89` into the worktree, resolve there, run 
 suite, and merge only the reviewed delivery through the serialized queue.
 
 ## Work
-
-### Release requirements for 0.89.0
-
-- [ ] **SA271 — Stream disaster-recovery objects instead of spooling them.**
-
-  Closes tech `dr-private-remote-restore-whole-object-in-memory` (S3) and
-  `dr-media-part-file-leak-on-publish-failure` (S4), the audit's DR batch.
-
-  **Context:** `_materialize_private_remote_key` (`dr_engine/_remote.py`) copied through
-  `S3Storage.open()`, which spools the whole object in memory (`AWS_S3_MAX_MEMORY_SIZE` is
-  unbounded), so a dump larger than the container's memory OOM-killed the restore; slice (a)
-  streams it through the provider client instead. The remaining defect is in `_media.py:153–179`,
-  where `chmod` and `replace` run outside the cleanup `try`, so a failure there leaves a `.part`
-  file behind.
-
-  **Acceptance:** the private-remote restore streams through the boto3 client's
-  `download_fileobj`, the idiom `_media.py` uses, and a test proves the object is never read whole
-  (a bounded-memory or chunked-read assertion). A failure in `chmod` or `replace` removes the
-  `.part` file, with a test. A test or harness clause rejects `storage.open()` on a remote object
-  in `dr_engine` (the audit's lint tooling gap), inside existing suites.
-
-  **Slices:**
-  - [x] (a) Streaming private-remote restore with its bounded-read test and the `storage.open()`
-    guard (Tier 2-fast). `_materialize_private_remote_key` downloads through the provider
-    client's `download_fileobj`, a bounded-read test pins the chunked path, and a `dr_engine`
-    source scan fails on any `storage.open()` call. Next: (b), the `.part` cleanup and its test.
-  - [ ] (b) `.part` cleanup on publish failure, with its test (Tier 1).
 
 ### Track 1 — migration history and the property portal
 
@@ -281,7 +252,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   rehearsed on scratch. The cutover rebuilds a fresh database and reseeds the catalog under the
   restricted runtime role; billing stays disabled.
 
-  **Remaining:** after 0.89.0 is published (its release requirements are SA271), repin
+  **Remaining:** after 0.89.0 is published, repin
   `bap-web-new` to it and re-run the rehearsal
   (agent); then the maintainer runs the Railway cutover, carries media, re-invites users, and
   archives the old repository. The pre-cutover database is retained until the reseeded site is
@@ -504,40 +475,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 3 — Track 3 hardening, theme seam types, and harness by construction
 
-- [ ] **SA272 — Harden the notifications webhook and the orgs invite throttle.**
-
-  Closes tech `notifications-webhook-status-regresses-out-of-order`,
-  `notifications-webhook-secret-format-unchecked-at-startup`, and
-  `orgs-invite-throttle-partial-charge` (S4).
-
-  **Context:** `_apply_delivery_event` (`notifications/_webhooks.py`) overwrote the status
-  with no ordering check and no row lock, so a late `email.sent` regressed a `delivered` or
-  `bounced` row; slice (a) delivers the ranking and the row lock.
-  `notifications/checks.py` (E003) refused only an empty secret until slice (b) extended it to
-  every value the webhook endpoint's decoder refuses. In `orgs/views.py:184` and
-  `OrgApiInviteView.post`, a per-org refusal after a passing per-sender check still costs the
-  sender a token.
-
-  **Acceptance:** delivery statuses are ranked and updated only forward under
-  `select_for_update`, with an out-of-order test. E003 also refuses a value without the `whsec_`
-  prefix or whose remainder is not valid base64, with tests. Both invite throttles are checked
-  before either is charged, in the HTML and JSON views, with a test that a per-org refusal leaves
-  the sender's bucket unchanged.
-
-  **Slices:**
-  - [x] (a) Forward-only delivery status under a row lock (Tier 2-fast). The
-    reconciliation ranks the delivery statuses and applies an event only when it
-    outranks the recorded one, re-reading the delivery under `select_for_update`;
-    the out-of-order controls prove a late `email.sent` leaves delivered and
-    bounced rows, their timestamps, and the parent message's derived status
-    unchanged while the receipt is still recorded.
-  - [x] (b) The `whsec_` format check in E003 (Tier 1). E003 validates the secret through the
-    webhook endpoint's own decoder, so a missing `whsec_` prefix, a non-base64 remainder, and an
-    empty decoded key all refuse startup; the generated CI placeholder, the module and
-    generated-project fixtures, and the beta-migration smoke assertion carry conforming
-    synthetic secrets.
-  - [ ] (c) Check-then-charge for both invite throttles (Tier 1).
-
 - [ ] **SA276 — Generate the theme's seam types from the manifest set.**
 
   Closes the theme half of arch `generated-file-ownership-unmodeled` (Finding 2, option 2) and
@@ -596,8 +533,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   name (control: a path form).
 
   **Slices:**
-  - [ ] (a) Manifest-read startup checks in analytics, billing, and notifications, after SA272 (b)
-    lands in the same `checks.py` (Tier 2-fast).
+  - [ ] (a) Manifest-read startup checks in analytics, billing, and notifications, on the same
+    `checks.py` SA272 (b) extended (Tier 2-fast).
   - [ ] (b) The purge command's hook through `collect_capabilities` (Tier 1).
   - [ ] (c) The `--cov` form in auth and blog with its harness check (Tier 1).
 
@@ -648,6 +585,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [x] **SA269 — Make the release pipeline run hosted E2E and pin its Poetry retry.**
 
 - [x] **SA270 — Keep checkout reconciliation fail-closed across Stripe Search lag.**
+
+- [x] **SA271 — Stream disaster-recovery objects instead of spooling them.**
+
+- [x] **SA272 — Harden the notifications webhook and the orgs invite throttle.**
 
 ## Deferred constraints and references
 

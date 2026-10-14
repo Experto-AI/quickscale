@@ -479,6 +479,111 @@ class TestMediaRuntimeAndCopy:
             "video.mp4.part",
         ]
 
+    def test_copy_media_s3_to_local_removes_staging_file_when_copymode_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """A failure applying the destination's mode must remove the staging file."""
+        target_root = tmp_path / "target"
+        target_path = target_root / "video.mp4"
+        target_path.parent.mkdir(parents=True)
+        target_path.write_bytes(b"previous good bytes")
+
+        def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+            fileobj.write(b"downloaded bytes")
+
+        client = MagicMock()
+        client.download_fileobj.side_effect = _download_fileobj
+        source_storage = MagicMock()
+        source_storage.location = ""
+        source_storage.connection.meta.client = client
+
+        with patch("shutil.copymode", side_effect=OSError("copymode failed")):
+            with pytest.raises(OSError, match="copymode failed"):
+                _media._copy_media_item(
+                    relative_path="video.mp4",
+                    source_runtime={
+                        "use_s3_compatible": True,
+                        "storage": source_storage,
+                        "bucket_name": "source-bucket",
+                    },
+                    target_runtime={
+                        "use_s3_compatible": False,
+                        "media_root": target_root,
+                    },
+                )
+
+        assert target_path.read_bytes() == b"previous good bytes"
+        assert sorted(path.name for path in target_root.iterdir()) == ["video.mp4"]
+
+    def test_copy_media_s3_to_local_removes_staging_file_when_chmod_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """A failure setting the umask default must remove the staging file."""
+        target_root = tmp_path / "target"
+
+        def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+            fileobj.write(b"downloaded bytes")
+
+        client = MagicMock()
+        client.download_fileobj.side_effect = _download_fileobj
+        source_storage = MagicMock()
+        source_storage.location = ""
+        source_storage.connection.meta.client = client
+
+        with patch("os.chmod", side_effect=OSError("chmod failed")):
+            with pytest.raises(OSError, match="chmod failed"):
+                _media._copy_media_item(
+                    relative_path="video.mp4",
+                    source_runtime={
+                        "use_s3_compatible": True,
+                        "storage": source_storage,
+                        "bucket_name": "source-bucket",
+                    },
+                    target_runtime={
+                        "use_s3_compatible": False,
+                        "media_root": target_root,
+                    },
+                )
+
+        assert not (target_root / "video.mp4").exists()
+        assert list(target_root.iterdir()) == []
+
+    def test_copy_media_s3_to_local_removes_staging_file_when_replace_fails(
+        self, tmp_path: Path
+    ) -> None:
+        """A failed publish rename must remove the staging file, keeping the target."""
+        target_root = tmp_path / "target"
+        target_path = target_root / "video.mp4"
+        target_path.parent.mkdir(parents=True)
+        target_path.write_bytes(b"previous good bytes")
+
+        def _download_fileobj(bucket: str, key: str, fileobj: IO[bytes]) -> None:
+            fileobj.write(b"downloaded bytes")
+
+        client = MagicMock()
+        client.download_fileobj.side_effect = _download_fileobj
+        source_storage = MagicMock()
+        source_storage.location = ""
+        source_storage.connection.meta.client = client
+
+        with patch("os.replace", side_effect=OSError("replace failed")):
+            with pytest.raises(OSError, match="replace failed"):
+                _media._copy_media_item(
+                    relative_path="video.mp4",
+                    source_runtime={
+                        "use_s3_compatible": True,
+                        "storage": source_storage,
+                        "bucket_name": "source-bucket",
+                    },
+                    target_runtime={
+                        "use_s3_compatible": False,
+                        "media_root": target_root,
+                    },
+                )
+
+        assert target_path.read_bytes() == b"previous good bytes"
+        assert sorted(path.name for path in target_root.iterdir()) == ["video.mp4"]
+
     def test_copy_media_s3_to_local_keeps_existing_destination_permissions(
         self, tmp_path: Path
     ) -> None:

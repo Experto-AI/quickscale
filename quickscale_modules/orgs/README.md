@@ -36,11 +36,12 @@ Both invite paths (the HTML members surface and the JSON API) are throttled thro
 fed by `invite_rate_limit`: the sender bucket does not reset on revoke and re-invite and spans
 every organization, and the organization bucket aggregates every sender of one organization, so
 neither adding admins nor creating organizations multiplies the budget. Both buckets are charged
-only after the invitation passes its role and eligibility checks, so an attempt refused by the
-role gate, validation, the pending cap, or the duplicate guard spends neither budget; a throttle
-refusal rolls the invitation back, so no invitation and no email result. The per-organization
-pending cap is enforced under the organization row lock, and the invitation email's sender-chosen
-text (organization and inviter names) is bounded by its stored fields and rendered escaped.
+only after the invitation passes its role and eligibility checks and only when both allow, so an
+attempt refused by the role gate, validation, the pending cap, the duplicate guard, or either
+throttle spends neither budget; a throttle refusal rolls the invitation back, so no invitation
+and no email result. The per-organization pending cap is enforced under the organization row
+lock, and the invitation email's sender-chosen text (organization and inviter names) is bounded
+by its stored fields and rendered escaped.
 
 In `solo` mode the module creates and serves each user's personal organization; the
 organization API and the leaf organization pages answer `404`. In `saas` mode organizations are
