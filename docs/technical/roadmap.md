@@ -236,8 +236,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
     when the recorded migration files are still installed byte-identical (newer installed
     migrations apply forward), and refuses a changed, missing, or unrecorded identity. Next:
     (e), with (c) still waiting on SA275.
-  - [ ] (e) `quickscale update` compares applied migration hashes and refuses an equal-label
-    mismatch, with tests (Tier 2-fast; Track 2 reviews).
+  - [x] (e) `quickscale update` refuses a same-label rewrite of an applied migration file and
+    restores the pre-update content; an added migration file still applies forward, and a
+    version-label change keeps the upgrade path.
   - [ ] (f) The restored-`bap-web` proof: `migrate` from the frozen `0001` reproduces the
     FORCE-RLS parity baseline, and no schema change shipped between SA191's rebuild and the freeze
     (Tier 2-full; environment-sensitive, read-mostly).

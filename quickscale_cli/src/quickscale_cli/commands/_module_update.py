@@ -7,6 +7,7 @@ rule 28), so existing import paths and test patch targets keep working.
 
 import shutil
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -19,6 +20,7 @@ import quickscale_core.project_state_manager as _project_state_manager
 import quickscale_core.apply as _apply
 import quickscale_cli.commands.module_output as _module_output
 import quickscale_cli.commands._module_update_io as _module_update_io
+import quickscale_core.migration_hashes as _migration_hashes
 import quickscale_core.schema.state_schema as _state_schema
 import quickscale_core.manifest.loader_errors as _loader_errors
 import quickscale_core.utils.git_errors as _git_errors
@@ -30,6 +32,10 @@ import quickscale_core.advisory_lock as _advisory_lock
 import quickscale_core.utils.git_repo as _git_repo
 import quickscale_core.utils.git_subtree as _git_subtree
 import quickscale_cli.commands._module_embed as _module_embed
+
+
+class _UpdateMigrationIdentityError(RuntimeError):
+    """An equal-label update would replace applied migration content."""
 
 
 def _ensure_authoritative_state_for_update(
@@ -95,6 +101,50 @@ def _load_update_recovery_state(project_path: Path) -> Any | None:
     if ledger is None:
         return None
     return ledger.applied_state
+
+
+def _collect_update_migration_identity(
+    project_path: Path, module_prefix: str
+) -> dict[str, str] | None:
+    """Return a module tree's migration content identity, or ``None``.
+
+    ``None`` marks content this check cannot identify (a missing source
+    package or an unreadable migrations package), so the caller skips the
+    comparison instead of reading it as a removal; an empty mapping stays
+    reserved for a module that ships no migrations.
+    """
+    try:
+        return _migration_hashes.compute_module_migration_hashes(
+            project_path / module_prefix
+        )
+    except _migration_hashes.MigrationHashError, OSError:
+        return None
+
+
+def _get_update_migration_issues(
+    applied_migration_hashes: Mapping[str, str] | None,
+    embedded_migration_hashes: Mapping[str, str] | None,
+) -> list[str]:
+    """Return refusal issues for an applied migration content mismatch.
+
+    Under an equal version label the update must keep every applied migration
+    file byte-identical in the updated module; the pulled content may only add
+    newer migrations for ``migrate`` to apply forward.  An unidentifiable
+    applied identity leaves nothing to compare, while an updated module whose
+    content cannot be identified is refused rather than read as empty.
+    """
+    if not applied_migration_hashes:
+        return []
+    if embedded_migration_hashes is None:
+        return ["the updated module's migration content could not be identified"]
+    issues: list[str] = []
+    for filename in sorted(applied_migration_hashes):
+        embedded_digest = embedded_migration_hashes.get(filename)
+        if embedded_digest is None:
+            issues.append(f"migration '{filename}' is no longer present")
+        elif embedded_digest != applied_migration_hashes[filename]:
+            issues.append(f"migration '{filename}' changed content")
+    return issues
 
 
 def _check_local_pre_pull_guard(
@@ -236,6 +286,14 @@ def _report_module_update_error(name: str, error: Exception) -> None:
             "\n💡 Update QuickScale to the latest version before updating modules.",
             err=True,
         )
+    elif isinstance(error, _UpdateMigrationIdentityError):
+        click.echo(
+            "\n💡 An equal-label update must keep every applied migration "
+            "byte-identical: replacing it would leave the database's applied "
+            "schema unidentified. Reconcile the embedded module content before "
+            "updating, or move to the new content through a fresh database.",
+            err=True,
+        )
 
 
 def _update_single_module(
@@ -269,6 +327,21 @@ def _update_single_module(
 
         if not _check_local_pre_pull_guard(project_path, name, applied_state):
             return False
+
+        # SA204(e): capture the applied migration content identity before the
+        # pull so an equal version label cannot replace it.  A label change is
+        # a release upgrade, whose database handling is the documented
+        # fresh-database path, so only an equal label compares content.
+        applied_version = (
+            applied_state.modules[name].version
+            if applied_state is not None and name in applied_state.modules
+            else None
+        )
+        applied_migrations = (
+            _collect_update_migration_identity(project_path, info.prefix)
+            if applied_version is not None
+            else None
+        )
 
         # Phase 2.3b: resolve the source ref once and reuse it for both
         # the subtree pull and state persistence (CR-PLAN-004).
@@ -330,6 +403,21 @@ def _update_single_module(
                 installed_version = _module_shared._read_embedded_module_version(
                     project_path, name
                 )
+
+                # SA204(e): an equal version label must not replace applied
+                # migration content; a same-label rewrite would leave the
+                # database's applied schema unidentified.
+                if installed_version == applied_version:
+                    migration_issues = _get_update_migration_issues(
+                        applied_migrations,
+                        _collect_update_migration_identity(project_path, info.prefix),
+                    )
+                    if migration_issues:
+                        raise _UpdateMigrationIdentityError(
+                            "applied migration content changed under the equal "
+                            f"version label '{installed_version}': "
+                            + "; ".join(migration_issues)
+                        )
 
                 # Sync generated-project dependencies after subtree pull so
                 # the pinned compatible version range travels with the
@@ -562,13 +650,16 @@ def _run_update_under_lock(
 
         if failed_modules or wiring_failed:
             # A post-pull failure must not leave the modules committed before
-            # it paired with the pre-update managed wiring.  The rollback runs
-            # under the same advisory lock that protects the update, so a
-            # concurrent update cannot interleave with it.
+            # it paired with the pre-update managed wiring.  The failed
+            # module's own pull is restored too: its subtree pull committed
+            # before the failure, so a refusal must not leave the rejected
+            # content as the effective HEAD.  The rollback runs under the same
+            # advisory lock that protects the update, so a concurrent update
+            # cannot interleave with it.
             _module_update_io._roll_back_partial_module_update(
                 project_path,
                 pre_update_head,
-                updated_modules,
+                [*updated_modules, *failed_modules],
                 state.project.package,
             )
     finally:

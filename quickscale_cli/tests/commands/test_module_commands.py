@@ -2359,7 +2359,9 @@ class TestUpdateCommand:
         assert "Module update stopped due to failure" in result.output
         assert "Unexpected error" not in result.output
         mock_rollback.assert_called_once()
-        assert mock_rollback.call_args.args[2] == ["auth"]
+        # The failing module's own pull may have committed before its
+        # failure, so the rollback covers it too.
+        assert mock_rollback.call_args.args[2] == ["auth", "listings"]
 
     @patch("quickscale_core.project_state_manager.ProjectStateManager")
     @patch("quickscale_cli.commands._module_shared._validate_update_environment")
