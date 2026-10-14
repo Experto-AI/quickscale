@@ -229,9 +229,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [ ] (c) The freeze gate as one registry row (after SA275), with controls for an in-place
     edit, a deletion, a new `0002`, and a `_`-symbol import, and the topology test's chain and
     inverted canary (Tier 2-fast).
-  - [ ] (d) Restore-forward in `dr_engine/recovery.py` keyed on the hash manifest: forward
+  - [x] (d) Restore-forward in `dr_engine/recovery.py` keyed on the hash manifest: forward
     migration from N to N+1, the bare-file refusal, and the equal-label hash-mismatch refusal,
-    with tests (Tier 2-fast; Track 2 reviews).
+    with tests (Tier 2-fast; Track 2 reviews). Landed as per-module `migration_hashes` recorded
+    in every backup's metadata and content-identity checks in recovery.py: a restore proceeds
+    when the recorded migration files are still installed byte-identical (newer installed
+    migrations apply forward), and refuses a changed, missing, or unrecorded identity. Next:
+    (e), with (c) still waiting on SA275.
   - [ ] (e) `quickscale update` compares applied migration hashes and refuses an equal-label
     mismatch, with tests (Tier 2-fast; Track 2 reviews).
   - [ ] (f) The restored-`bap-web` proof: `migrate` from the frozen `0001` reproduces the

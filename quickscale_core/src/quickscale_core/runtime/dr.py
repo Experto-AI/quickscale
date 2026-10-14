@@ -47,6 +47,7 @@ from quickscale_core.dr_engine._policy import (
 )
 from quickscale_core.dr_engine._metadata import (
     _build_release_metadata as _build_release_metadata,
+    _collect_module_migration_hashes as _collect_module_migration_hashes,
     _collect_module_versions as _collect_module_versions,
     _database_server_version_query as _database_server_version_query,
     _get_git_revision as _get_git_revision,

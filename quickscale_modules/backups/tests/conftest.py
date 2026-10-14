@@ -74,6 +74,13 @@ def _recorded_module_versions() -> dict[str, str]:
     return _collect_module_versions()
 
 
+def _recorded_migration_hashes() -> dict[str, dict[str, str]]:
+    """Return the migration content identity a backup captured here would record."""
+    from quickscale_core.runtime import _collect_module_migration_hashes
+
+    return _collect_module_migration_hashes()
+
+
 @pytest.fixture
 def postgresql_artifact_file(tmp_path: Path) -> Path:
     """Return a filesystem path with sample pg_dump-style artifact content."""
@@ -98,6 +105,7 @@ def backup_artifact(db, artifact_file: Path, superuser) -> "BackupArtifact":
         metadata_json={
             "environment": "test",
             "module_versions": _recorded_module_versions(),
+            "migration_hashes": _recorded_migration_hashes(),
         },
         initiated_by=superuser,
     )
@@ -132,6 +140,7 @@ def postgresql_backup_artifact(
             "pg_dump_version": "pg_dump (PostgreSQL) 18.4",
             "dump_client_major": 18,
             "module_versions": _recorded_module_versions(),
+            "migration_hashes": _recorded_migration_hashes(),
         },
         initiated_by=superuser,
     )
