@@ -134,6 +134,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     missing, or unrecorded identity before `pg_restore` runs, while a backup whose recorded files
     are still installed byte-identical restores and `migrate` applies the newer migrations. The DR
     snapshot route compares the identity recorded with the snapshot's authoritative dump.
+  - **Module updates refuse a same-label migration rewrite.** An update that would replace an
+    applied migration file while the module's version label is unchanged is refused and the
+    pre-update content is restored, because the database's applied schema would no longer be
+    identifiable; a migration file the pull adds is still applied forward on the next `migrate`.
   - **The generator fails closed on undefined template context.** A missing or renamed context key
     raises during generation instead of rendering empty text, and the release lane boots a freshly
     generated project through its shipped `start.sh` and asserts `/healthcheck/` answers `OK`.
@@ -771,6 +775,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     carries the module-key types derived from the shipped module set; `quickscale apply`,
     `quickscale update`, and `quickscale remove` regenerate it, and `quickscale status` reports a
     local edit as managed-file drift.
+  - **The theme's seam consumers read the generated seam files.** The theme's hooks import the
+    seam's module-key types from the managed `frontend/src/quickscaleSeam.d.ts`, the validator
+    requires every seam entry from the managed `frontend/src/quickscaleSeam.keys.ts`, the
+    crm-path org inference is gone (the producer resolves the owner slug), and the theme's tests
+    build their seam fixtures from the generated key manifest. The closed-world emission test now
+    covers the theme's TypeScript: no user-owned emitted TypeScript file declares the module set
+    or names a module route, while single references remain the theme's own surfaces.
   - **Gate wiring derives from one registry row.** The local runner's per-gate display text and
     the `Makefile` gate help are generated from each gate's `scripts/gate_registry.json` entry,
     like the workflows and the generated Make include, so adding a gate is one registry edit and

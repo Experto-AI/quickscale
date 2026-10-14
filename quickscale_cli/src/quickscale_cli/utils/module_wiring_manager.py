@@ -33,7 +33,9 @@ from quickscale_core.manifest.settings_schema import compile_settings_schema
 from quickscale_core.module_wiring import ModuleWiringSpec
 from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_KEY_MANIFEST_RELATIVE_PATH,
     render_seam_declaration,
+    render_seam_key_manifest,
 )
 from quickscale_core.schema.config_schema import validate_config
 from quickscale_core.schema.state_schema import StateManager
@@ -272,17 +274,22 @@ def _build_wiring_specs(
     return specs, None
 
 
-def _write_seam_declaration(project_path: Path) -> None:
-    """Write the managed theme seam declaration (SA276).
+def _write_seam_files(project_path: Path) -> None:
+    """Write the managed theme seam files (SA276).
 
-    The declaration carries the theme's module-key types, rendered from the
-    shipped module set; apply, embed, update, and remove all regenerate it
-    alongside the managed wiring files, so it never drifts from the shipped
-    set on its own.
+    The declaration carries the theme's module-key types and the key manifest
+    carries the same tables as runtime arrays, rendered from the shipped
+    module set; apply, embed, update, and remove all regenerate them alongside
+    the managed wiring files, so they never drift from the shipped set on
+    their own.
     """
-    target_path = project_path / SEAM_DECLARATION_RELATIVE_PATH
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    target_path.write_text(render_seam_declaration())
+    for relative, render in (
+        (SEAM_DECLARATION_RELATIVE_PATH, render_seam_declaration),
+        (SEAM_KEY_MANIFEST_RELATIVE_PATH, render_seam_key_manifest),
+    ):
+        target_path = project_path / relative
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(render())
 
 
 def _write_wiring_files(
@@ -296,7 +303,7 @@ def _write_wiring_files(
 
     try:
         write_managed_wiring(package_dir, specs)
-        _write_seam_declaration(project_path)
+        _write_seam_files(project_path)
     except Exception as error:
         return False, f"Failed to write managed wiring files: {error}"
     return True, "Managed wiring files regenerated"

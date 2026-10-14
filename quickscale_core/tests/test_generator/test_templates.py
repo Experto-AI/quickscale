@@ -4448,20 +4448,18 @@ class TestSelectedModulesTemplateSafety:
 
         return Path(quickscale_core.__file__).parent / "generator" / "templates"
 
-    def test_app_test_tsx_always_has_all_module_flags(self) -> None:
-        """After SA105, App.test.tsx always includes all module flags."""
+    def test_app_test_tsx_builds_the_full_seam_from_the_key_manifest(self) -> None:
+        """After SA276, App.test.tsx derives its seam fixtures from the generated key manifest."""
         template_dir = self._get_template_dir()
         app_test_path = (
             template_dir / "themes" / "showcase_react" / "src" / "test" / "App.test.tsx"
         )
         assert app_test_path.exists(), "Static App.test.tsx not found"
         content = app_test_path.read_text()
-        assert "auth: false" in content
-        assert "blog: false" in content
-        assert "social: false" in content
-        assert "crm: '/crm'" in content
-        assert "social: '/social'" in content
-        assert "analytics: '/analytics/'" in content
+        assert "from '@/test/seamFixtures'" in content
+        assert "moduleFlags(" in content
+        assert "modulePaths(" in content
+        assert "moduleApiPaths(" in content
         assert "renders dashboard heading" in content
         assert "renders the org list shell in saas mode" in content
 
@@ -4481,11 +4479,11 @@ class TestSelectedModulesTemplateSafety:
         assert "import { SocialEmbedsPublicPage }" in content
         assert "import { SocialLinkTreePublicPage }" in content
         assert "describe('public social pages'" in content
-        assert "social: true" in content
-        assert "auth: false" in content
-        # All module paths are always present
-        assert "crm:" in content
-        assert "analytics:" in content
+        # SA276: the seam fixtures derive from the generated key manifest.
+        assert "from '@/test/seamFixtures'" in content
+        assert "moduleFlags({ social: true })" in content
+        assert "modulePaths(" in content
+        assert "moduleApiPaths(" in content
 
 
 class TestLauncherOneShotCommandContract:

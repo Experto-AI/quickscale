@@ -28,7 +28,7 @@ Short answers: **no** and **no**. The longer answer is that the gap is narrower 
 
 ### 2.2 Layer B is stronger than expected
 
-`src/test/App.test.tsx` already asserts, in jsdom, that: the org list shell mounts in saas mode; module routes do **not** mount when their flag is false; `blog`/`crm` mount only when enabled; unselected module routes fall through to the not-found fallback; `/settings` and `/profile` mount unconditionally. `RootDispatch.test.tsx` covers the public-surface injector shapes including a hard failure when required module keys are absent.
+`src/test/App.test.tsx` already asserts, in jsdom, that: the org list shell mounts in saas mode; module routes do **not** mount when their flag is false; `blog`/`crm` mount only when enabled; unselected module routes fall through to the not-found fallback; `/settings` and `/profile` mount unconditionally. `RootDispatch.test.tsx` covers the public-surface injector shapes including a hard failure when a sparse modules object cannot cover the seam's paths.
 
 This matters for scoping: **route-mounting logic is already covered.** Duplicating it in Playwright buys little. The uncovered thing is whether a mounted page *survives contact with a real API response*.
 

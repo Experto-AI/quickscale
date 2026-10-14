@@ -12,16 +12,19 @@ from __future__ import annotations
 
 import types
 import ast
+import re
 from pathlib import Path
 from typing import Any
 
 from quickscale_core.contracts.module_catalog import MODULE_CATALOG
 from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_KEY_MANIFEST_RELATIVE_PATH,
     render_module_api_paths,
     render_module_flags,
     render_module_paths,
     render_seam_declaration,
+    render_seam_key_manifest,
     seam_api_path_names,
     seam_module_api_paths,
     seam_module_flags,
@@ -405,6 +408,38 @@ class TestSeamDeclaration:
         assert declaration.endswith("}\n")
         assert not SEAM_DECLARATION_RELATIVE_PATH.startswith("/")
         assert SEAM_DECLARATION_RELATIVE_PATH.endswith("quickscaleSeam.d.ts")
+
+
+def _key_array(manifest: str, name: str) -> list[str]:
+    """Return the string array *name* declares in the key manifest."""
+    body = manifest.split(f"export const {name} = [", 1)[1].split("]", 1)[0]
+    return re.findall(r"'([^']*)'", body)
+
+
+class TestSeamKeyManifest:
+    """The managed seam key manifest renders from the shipped seam tables (SA276)."""
+
+    def test_manifest_carries_exactly_the_seam_tables(self) -> None:
+        """Every declared array holds exactly its table's names."""
+        manifest = render_seam_key_manifest()
+
+        assert _key_array(manifest, "SEAM_MODULE_FLAG_KEYS") == [
+            module.name for module in seam_modules()
+        ]
+        assert _key_array(manifest, "SEAM_MODULE_PATH_KEYS") == list(seam_path_names())
+        assert _key_array(manifest, "SEAM_MODULE_API_PATH_KEYS") == list(
+            seam_api_path_names()
+        )
+
+    def test_manifest_states_the_regenerate_contract(self) -> None:
+        """It states the regenerate contract and lives at a project-relative path."""
+        manifest = render_seam_key_manifest()
+
+        assert manifest.startswith("// QuickScale managed seam key manifest.")
+        assert "DO NOT EDIT MANUALLY" in manifest
+        assert manifest.endswith("as const\n")
+        assert not SEAM_KEY_MANIFEST_RELATIVE_PATH.startswith("/")
+        assert SEAM_KEY_MANIFEST_RELATIVE_PATH.endswith("quickscaleSeam.keys.ts")
 
 
 class TestSeamTemplateTags:

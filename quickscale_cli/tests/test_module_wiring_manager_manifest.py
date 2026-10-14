@@ -1574,12 +1574,20 @@ class TestRegenerateManagedWiringEmptySelection:
                 in urls_content
             )
 
-            # The managed theme seam declaration is regenerated too (SA276).
-            from quickscale_core.runtime.seam import render_seam_declaration
+            # The managed theme seam declaration and key manifest are
+            # regenerated too (SA276).
+            from quickscale_core.runtime.seam import (
+                render_seam_declaration,
+                render_seam_key_manifest,
+            )
 
             seam_file = project / "frontend" / "src" / "quickscaleSeam.d.ts"
             assert seam_file.exists()
             assert seam_file.read_text() == render_seam_declaration()
+
+            seam_keys_file = project / "frontend" / "src" / "quickscaleSeam.keys.ts"
+            assert seam_keys_file.exists()
+            assert seam_keys_file.read_text() == render_seam_key_manifest()
 
             # No managed files when no module specs exist.
             managed_init = project / "myapp" / "quickscale_managed" / "__init__.py"

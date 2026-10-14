@@ -1,30 +1,43 @@
-"""Closed-world emission test: user-owned Django-side files carry no module wiring.
+"""Closed-world emission test: user-owned emitted files carry no module wiring.
 
 Module Conventions rule 37's literal-list check, applied to the generator's
 emission mapping: no Django-side user-owned emitted file may enumerate module
 names or name a module URL (a namespaced route name, a module-stemmed flat
-name, or a mount/route alternation).  Module wiring (URL includes, shell
-routes, template URLs) reaches a project only through the versioned
+name, or a mount/route alternation), and no user-owned emitted TypeScript file
+may declare the shipped module set (a typed key block, a quoted name list, a
+union, or a complete flag object) or name a module route — the set lives in
+the generated managed seam declaration and key manifest
+(``frontend/src/quickscaleSeam.d.ts`` and ``frontend/src/quickscaleSeam.keys.ts``),
+and the theme's hooks import its types from there (SA276).  A single module
+reference — a gate, a card entry, a navigation key — is rule 37's allowed
+theme surface and is not flagged.  Module wiring (URL includes, shell routes,
+template URLs) reaches a project only through the versioned
 ``quickscale_core.runtime`` library and the managed ``urls_modules.py`` /
 ``settings/modules.py`` files that ``apply`` regenerates, so a module release
 changes no user-owned file.
 
-The scanned set is derived from ``get_generator_emission_mapping`` (the
-closed world), not a hand-maintained path list; the managed wiring files and
-the frontend theme sources are the documented exclusions.  Each detector has
-a control case below proving it rejects the wiring shapes it exists to catch.
+The scanned set is derived from ``get_generator_emission_mapping`` (the closed
+world), not a hand-maintained path list; the managed wiring files and the
+generated seam files are the documented exclusions.  Each detector has a
+control case below proving it rejects the wiring shapes it exists to catch.
 """
 
 from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from quickscale_core.contracts.module_catalog import MODULE_CATALOG
 from quickscale_core.generator import ProjectGenerator, get_generator_emission_mapping
+from quickscale_core.runtime.seam import (
+    SEAM_DECLARATION_RELATIVE_PATH,
+    SEAM_KEY_MANIFEST_RELATIVE_PATH,
+    seam_modules,
+)
 
 _PROJECT_NAME = "emission_closed_world"
 _TEMPLATE_ROOT = (
@@ -41,6 +54,15 @@ _MANAGED_PACKAGE_PATHS = frozenset({"settings/modules.py", "urls_modules.py"})
 
 _MODULE_NAMES = frozenset(entry.name for entry in MODULE_CATALOG)
 
+#: The shipped module flag set: every catalog module the seam reports as a
+#: boolean flag (``orgs`` carries none; rule 31).
+_MODULE_FLAG_KEYS = frozenset(module.name for module in seam_modules())
+
+#: The generated managed seam files: the module set lives there by design.
+_MANAGED_SEAM_PATHS = frozenset(
+    {SEAM_DECLARATION_RELATIVE_PATH, SEAM_KEY_MANIFEST_RELATIVE_PATH}
+)
+
 #: A module's namespaced URL name (``quickscale_billing:pricing_page``).
 _MODULE_URL_NAME = re.compile(
     r"quickscale_(?:modules_)?(?:" + "|".join(sorted(_MODULE_NAMES)) + r"):"
@@ -56,23 +78,55 @@ _TEMPLATE_BRACKET_LITERAL = re.compile(r"[\[(]([^\])]*)[\])]")
 _TEMPLATE_QUOTED_NAME = re.compile(r"['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]")
 _TEMPLATE_PIPE_GROUP = re.compile(r"\((?:\?:)?([A-Za-z0-9_|]+)\)")
 
+#: A TypeScript type declaration whose body can enumerate module keys
+#: (``interface QuickScaleModules {``, ``type Seam = {``).
+_TS_TYPE_BLOCK = re.compile(r"(?:interface|type)\s+\w+(?:\s*=\s*)?\s*\{")
 
-def _is_scanned(emitted_path: str, package_name: str) -> bool:
-    """Return whether an emitted path is Django-side and user-owned.
+#: One typed module-key member inside such a block (``auth: boolean``).
+_TS_MEMBER = re.compile(
+    r"^\s*(?:readonly\s+)?(" + "|".join(sorted(_MODULE_NAMES)) + r")\s*\??\s*:\s*"
+    r"(?:boolean|string)\b",
+    re.MULTILINE,
+)
+
+#: Two or more quoted module names joined by commas or pipes in one literal
+#: run (``['auth', 'blog']``, ``'crm' | 'forms'``).
+_TS_QUOTED_NAME = "['\"](?:" + "|".join(sorted(_MODULE_NAMES)) + ")['\"]"
+_TS_NAME_RUN = re.compile(_TS_QUOTED_NAME + r"(?:\s*[,|]\s*" + _TS_QUOTED_NAME + r")+")
+
+#: A key in a TypeScript object or type literal (``auth: false``,
+#: ``'crm': '/crm'``), including members that open a line.
+_TS_LITERAL_KEY = re.compile(
+    r"(?:^|[,{;])\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?\s*[?:]",
+    re.MULTILINE,
+)
+
+
+def _scan_kind(emitted_path: str, package_name: str) -> str | None:
+    """Return the detector kind for an emitted path, or ``None`` when unscanned.
 
     Django-side Python means every emitted ``.py`` file outside the two
     managed wiring files: the project package, ``manage.py``, and the test
     scaffold all count.  Django-side templates are the emitted HTML under
-    ``templates/``.  The frontend theme sources are rule 31's named
-    exception and stay out.
+    ``templates/``.  User-owned TypeScript is every emitted ``.ts``/``.tsx``
+    file under ``frontend/`` except the generated managed seam files, which
+    carry the module set by design (SA276).
     """
+    if emitted_path in _MANAGED_SEAM_PATHS:
+        return None
+    if emitted_path.endswith((".ts", ".tsx")):
+        return "typescript" if emitted_path.startswith("frontend/") else None
     if emitted_path.endswith(".py"):
         if emitted_path.startswith("frontend/"):
-            return False
-        return emitted_path not in {
+            return None
+        if emitted_path in {
             f"{package_name}/{relative}" for relative in _MANAGED_PACKAGE_PATHS
-        }
-    return emitted_path.startswith("templates/") and emitted_path.endswith(".html")
+        }:
+            return None
+        return "python"
+    if emitted_path.startswith("templates/") and emitted_path.endswith(".html"):
+        return "template"
+    return None
 
 
 def _line_number(text: str, index: int) -> int:
@@ -173,6 +227,76 @@ def _template_violations(text: str) -> list[str]:
     return violations
 
 
+def _strip_ts_comments(text: str) -> str:
+    """Return *text* with line and block comments removed.
+
+    The detector reads declarations, not prose: a control documents the
+    ignored comment shapes.  The heuristic is deliberately simple — it can
+    strip the tail of a string literal containing ``//``, which only removes
+    text from the scan, never adds any.
+    """
+    without_line_comments = re.sub(r"//[^\n]*", "", text)
+    return re.sub(r"/\*.*?\*/", "", without_line_comments, flags=re.DOTALL)
+
+
+def _ts_type_blocks(text: str) -> Iterator[str]:
+    """Yield each ``interface``/``type`` brace block's full text."""
+    for match in _TS_TYPE_BLOCK.finditer(text):
+        depth = 0
+        for index in range(match.end() - 1, len(text)):
+            if text[index] == "{":
+                depth += 1
+            elif text[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    yield text[match.start() : index + 1]
+                    break
+
+
+def _ts_brace_spans(text: str) -> Iterator[tuple[int, str]]:
+    """Yield ``(offset, span_text)`` for every brace span, nested included."""
+    stack: list[int] = []
+    for index, char in enumerate(text):
+        if char == "{":
+            stack.append(index)
+        elif char == "}" and stack:
+            start = stack.pop()
+            yield start, text[start : index + 1]
+
+
+def _typescript_violations(text: str) -> list[str]:
+    """Return module-wiring violations in one TypeScript source file."""
+    violations: list[str] = []
+    clean = _strip_ts_comments(text)
+    for match in _MODULE_URL_NAME.finditer(clean):
+        violations.append(
+            f"line {_line_number(clean, match.start())}: module URL name "
+            f"{match.group(0)!r}"
+        )
+    for match in _MODULE_FLAT_NAME.finditer(clean):
+        violations.append(
+            f"line {_line_number(clean, match.start())}: module-stemmed name "
+            f"{match.group(0)!r}"
+        )
+    for match in _TS_NAME_RUN.finditer(clean):
+        violations.append(
+            f"line {_line_number(clean, match.start())}: literal list "
+            f"enumerates module names: {match.group(0)!r}"
+        )
+    for block in _ts_type_blocks(clean):
+        names = sorted({member.group(1) for member in _TS_MEMBER.finditer(block)})
+        if len(names) >= 2:
+            violations.append("type block enumerates module names: " + ", ".join(names))
+    for offset, span in _ts_brace_spans(clean):
+        keys = {match.group(1) for match in _TS_LITERAL_KEY.finditer(span)}
+        if _MODULE_FLAG_KEYS <= keys:
+            violations.append(
+                f"line {_line_number(clean, offset)}: literal duplicates the "
+                "shipped module flag set"
+            )
+    return violations
+
+
 # ---------------------------------------------------------------------------
 # Controls: each detector rejects the wiring shape it exists to catch.
 # ---------------------------------------------------------------------------
@@ -229,15 +353,54 @@ def test_template_detector_accepts_single_references() -> None:
     )
 
 
+def test_typescript_detector_rejects_a_module_name_list() -> None:
+    assert _typescript_violations("const KEYS = ['auth', 'blog']\n")
+
+
+def test_typescript_detector_rejects_a_module_name_union() -> None:
+    assert _typescript_violations("type SeamName = 'crm' | 'forms'\n")
+
+
+def test_typescript_detector_rejects_a_typed_module_key_block() -> None:
+    assert _typescript_violations(
+        "interface QuickScaleModules {\n  auth: boolean\n  blog: boolean\n}\n"
+    )
+
+
+def test_typescript_detector_rejects_a_module_url_name() -> None:
+    assert _typescript_violations("const route = 'quickscale_billing:pricing_page'\n")
+    assert _typescript_violations("const shell = 'quickscale_crm_shell'\n")
+
+
+def test_typescript_detector_rejects_a_complete_flag_object() -> None:
+    body = "\n".join(f"    {name}: false," for name in sorted(_MODULE_FLAG_KEYS))
+    assert _typescript_violations("const config = {\n" + body + "\n}\n")
+
+
+def test_typescript_detector_accepts_single_references() -> None:
+    # One module named at a time is a reference — a gate, a card entry, or a
+    # query key — not a seam enumeration.
+    assert not _typescript_violations("const card = { key: 'auth', label: 'Auth' }\n")
+    assert not _typescript_violations("if (modules.crm) { openCrm() }\n")
+    assert not _typescript_violations("const flags = { auth: false, blog: false }\n")
+    # A path table's value overrides carry entries, not the module flag set.
+    assert not _typescript_violations(
+        "const paths = modulePaths({ crm: '/crm/', social: '/social',"
+        " analytics: '/analytics/' })\n"
+    )
+
+
+def test_typescript_detector_ignores_comments() -> None:
+    assert not _typescript_violations("// ['auth', 'blog']\n/* 'crm' | 'forms' */\n")
+
+
 # ---------------------------------------------------------------------------
 # The closed-world emission check.
 # ---------------------------------------------------------------------------
 
 
-def test_user_owned_django_side_emissions_carry_no_module_wiring(
-    tmp_path: Path,
-) -> None:
-    """No user-owned Django-side emitted file enumerates or names modules."""
+def test_user_owned_emissions_carry_no_module_wiring(tmp_path: Path) -> None:
+    """No user-owned emitted file enumerates or names modules."""
     mapping = get_generator_emission_mapping(
         _TEMPLATE_ROOT, theme="showcase_react", package_name=_PROJECT_NAME
     )
@@ -246,49 +409,58 @@ def test_user_owned_django_side_emissions_carry_no_module_wiring(
     output_path = tmp_path / _PROJECT_NAME
     ProjectGenerator(theme="showcase_react").generate(_PROJECT_NAME, output_path)
 
+    detectors = {
+        "python": _python_violations,
+        "template": _template_violations,
+        "typescript": _typescript_violations,
+    }
     scanned: list[str] = []
     missing: list[str] = []
     violations: list[str] = []
     for emitted_path in sorted(mapping):
-        if not _is_scanned(emitted_path, _PROJECT_NAME):
+        kind = _scan_kind(emitted_path, _PROJECT_NAME)
+        if kind is None:
             continue
         scanned.append(emitted_path)
         file_path = output_path / emitted_path
         if not file_path.exists():
             missing.append(emitted_path)
             continue
-        text = file_path.read_text()
-        found = (
-            _python_violations(text)
-            if emitted_path.endswith(".py")
-            else _template_violations(text)
-        )
+        found = detectors[kind](file_path.read_text())
         violations.extend(f"{emitted_path}: {violation}" for violation in found)
 
     assert not missing, f"emitted files missing from the generated tree: {missing}"
-    assert scanned, "the Django-side user-owned scan set must be non-empty"
+    assert scanned, "the user-owned scan set must be non-empty"
     assert not violations, (
         "module wiring leaked into user-owned emissions:\n" + "\n".join(violations)
     )
 
 
-def test_scan_set_excludes_managed_wiring_and_frontend() -> None:
-    """The scan covers Django-side user-owned Python and templates only."""
+def test_scan_set_excludes_only_the_managed_files() -> None:
+    """The scan covers user-owned emissions; managed files stay out."""
     mapping = get_generator_emission_mapping(
         _TEMPLATE_ROOT, theme="showcase_react", package_name=_PROJECT_NAME
     )
-    scanned = {path for path in mapping if _is_scanned(path, _PROJECT_NAME)}
+    kinds = {path: _scan_kind(path, _PROJECT_NAME) for path in mapping}
 
-    assert f"{_PROJECT_NAME}/urls_modules.py" not in scanned
-    assert f"{_PROJECT_NAME}/settings/modules.py" not in scanned
-    assert not any(path.startswith("frontend/") for path in scanned)
-    assert f"{_PROJECT_NAME}/urls.py" in scanned
-    assert f"{_PROJECT_NAME}/context_processors.py" in scanned
-    assert "templates/index.html" in scanned
+    assert kinds.get(f"{_PROJECT_NAME}/urls_modules.py") is None
+    assert kinds.get(f"{_PROJECT_NAME}/settings/modules.py") is None
+    assert kinds.get(SEAM_DECLARATION_RELATIVE_PATH) is None
+    assert kinds.get(SEAM_KEY_MANIFEST_RELATIVE_PATH) is None
+    assert SEAM_DECLARATION_RELATIVE_PATH in mapping
+    assert SEAM_KEY_MANIFEST_RELATIVE_PATH in mapping
+
+    assert kinds.get(f"{_PROJECT_NAME}/urls.py") == "python"
+    assert kinds.get(f"{_PROJECT_NAME}/context_processors.py") == "python"
+    assert kinds.get("templates/index.html") == "template"
     # Root and test-scaffold Python are Django-side user-owned too.
-    assert "manage.py" in scanned
-    assert "tests/conftest.py" in scanned
-    assert "tests/test_example.py" in scanned
+    assert kinds.get("manage.py") == "python"
+    assert kinds.get("tests/conftest.py") == "python"
+    assert kinds.get("tests/test_example.py") == "python"
+    # The theme's TypeScript is user-owned and scanned, tests included.
+    assert kinds.get("frontend/src/hooks/useModules.ts") == "typescript"
+    assert kinds.get("frontend/src/lib/validateQuickScaleSeam.ts") == "typescript"
+    assert kinds.get("frontend/src/test/useModules.test.tsx") == "typescript"
 
 
 @pytest.mark.parametrize("module_name", sorted(_MODULE_NAMES))

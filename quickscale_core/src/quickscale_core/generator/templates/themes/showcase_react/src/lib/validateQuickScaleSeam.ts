@@ -1,4 +1,9 @@
 import type { QuickScaleConfig } from '@/hooks/useModules'
+import {
+  SEAM_MODULE_API_PATH_KEYS,
+  SEAM_MODULE_FLAG_KEYS,
+  SEAM_MODULE_PATH_KEYS,
+} from '@/quickscaleSeam.keys'
 
 /**
  * Validate the window.__QUICKSCALE__ runtime seam and return the parsed config.
@@ -10,10 +15,16 @@ import type { QuickScaleConfig } from '@/hooks/useModules'
  * Required fields validated:
  *   - window.__QUICKSCALE__ must exist
  *   - projectName must be a non-empty string
- *   - modules must be an object whose 11 required keys are own boolean properties
- *   - modulePaths must be an object with crm, social, analytics as non-empty strings
- *   - moduleApiPaths must be an object with orgs, billing, crm, forms as non-empty strings
+ *   - modules must carry an own boolean flag for every module key
+ *   - modulePaths must carry a non-empty string for every module path key
+ *   - moduleApiPaths must carry a non-empty string for every API-base key
  *   - owner must be an object with mode ('solo'|'saas') and currentOrgSlug (string|null)
+ *
+ * The key sets are the generated seam key manifest's
+ * (`frontend/src/quickscaleSeam.keys.ts`), rendered from the shipped module
+ * set beside the generated declaration (`frontend/src/quickscaleSeam.d.ts`),
+ * so this validator requires every entry without holding a module list of its
+ * own (SA276).
  *
  * Optional fields validated when present:
  *   - publicPage must be a well-formed object with required children;
@@ -44,15 +55,10 @@ export function validateQuickScaleConfig(): QuickScaleConfig {
     )
   }
 
-  // ── All required module keys must be own boolean properties ──────
-  const REQUIRED_MODULE_KEYS = [
-    'auth', 'blog', 'listings', 'crm', 'forms', 'storage',
-    'backups', 'notifications', 'analytics', 'billing', 'social',
-  ] as const
-
+  // ── All required module flags must be own boolean properties ────
   const mods = seam.modules as unknown as Record<string, unknown>
 
-  for (const key of REQUIRED_MODULE_KEYS) {
+  for (const key of SEAM_MODULE_FLAG_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(mods, key)) {
       throw new Error(
         `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.modules.${key} ` +
@@ -75,10 +81,9 @@ export function validateQuickScaleConfig(): QuickScaleConfig {
     )
   }
 
-  const requiredModulePathFields = ['crm', 'social', 'analytics'] as const
-  for (const field of requiredModulePathFields) {
+  for (const field of SEAM_MODULE_PATH_KEYS) {
     const value = (seam.modulePaths as unknown as Record<string, unknown>)[field]
-    if (typeof value !== 'string' || (value as string).trim() === '') {
+    if (typeof value !== 'string' || value.trim() === '') {
       throw new Error(
         `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.modulePaths.${field} ` +
         `must be a non-empty string.`,
@@ -98,10 +103,9 @@ export function validateQuickScaleConfig(): QuickScaleConfig {
     )
   }
 
-  const requiredModuleApiPathFields = ['orgs', 'billing', 'crm', 'forms'] as const
-  for (const field of requiredModuleApiPathFields) {
+  for (const field of SEAM_MODULE_API_PATH_KEYS) {
     const value = (seam.moduleApiPaths as unknown as Record<string, unknown>)[field]
-    if (typeof value !== 'string' || (value as string).trim() === '') {
+    if (typeof value !== 'string' || value.trim() === '') {
       throw new Error(
         `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.moduleApiPaths.${field} ` +
         `must be a non-empty string.`,

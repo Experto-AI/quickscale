@@ -47,7 +47,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA282 | One organization-selector flag and a required contract-vintage id | 2 | — | Optional |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | — | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
-| SA276 | Generate the theme's seam types from the manifest set | 3 | — | Optional |
 | SA274 | Show real counts on the theme's CRM stat cards | 3 | — | Optional |
 | SA283 | Manifest-read startup checks, one capability collector, one `--cov` form | 3 | — | Optional |
 | SA279 | Retire the conformance harness's frozen surfaces | 3 | SA278 | Optional |
@@ -58,7 +57,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
 Track 2: SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
-Track 3: SA276 ──► SA274 ──► SA283 ──► SA279 ──► SA281
+Track 3: SA274 ──► SA283 ──► SA279 ──► SA281
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
@@ -69,7 +68,8 @@ costs one registry row now that SA275 has landed (arch audit §7); SA279 waits o
 guard test it extends; SA277 waits on SA191's cutover, which decides which upgrade mechanism
 proved itself.
 
-**Parallel start.** SA204 (e) and SA276 (b) have no unmet dependency and touch disjoint files.
+**Parallel start.** SA204 (c), SA278, and SA274 have no unmet dependency and touch disjoint
+files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
 with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
@@ -79,9 +79,9 @@ when its last slice lands; slices are not scheduled.
 **Order.** Every change to a shipped module `0001_initial` lands before SA204 freezes
 migration history, and SA204 lands before SA153 slice (a), whose schema work is `0002+` from the
 start. No open ticket changes a module schema; SA274's count endpoint is code-only.
-SA154 is an inventory, not work. SA191's remaining repin waits for the 0.89.0 publication, and SA204 proceeds alongside it. SA276 should
-land before 0.89.0 is tagged if it fits, so `bap-web-new` adopts its step once at the repin
-instead of on a live site (arch audit §7); it is not a release requirement.
+SA154 is an inventory, not work. SA191's remaining repin waits for the 0.89.0 publication, and SA204 proceeds alongside it. SA276 has
+landed, so `bap-web-new` adopts its steps once at the repin instead of on a live site
+(arch audit §7); it is not a release requirement.
 
 ### Track states
 
@@ -89,9 +89,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA204 (e) | yes | no | yes | no | yes |
+| 1 | SA204 (c) | yes | no | yes | no | yes |
 | 2 | SA278 | yes | yes | yes | yes | no |
-| 3 | SA276 (b) | yes | yes | yes | yes | no |
+| 3 | SA274 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -220,10 +220,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     with tests (Tier 2-fast; Track 2 reviews). Landed as per-module `migration_hashes` recorded
     in every backup's metadata and content-identity checks in recovery.py: a restore proceeds
     when the recorded migration files are still installed byte-identical (newer installed
-    migrations apply forward), and refuses a changed, missing, or unrecorded identity. Next:
-    (e); (c) is unblocked now that SA275 has landed.
-  - [ ] (e) `quickscale update` compares applied migration hashes and refuses an equal-label
-    mismatch, with tests (Tier 2-fast; Track 2 reviews).
+    migrations apply forward), and refuses a changed, missing, or unrecorded identity. (c) is
+    unblocked now that SA275 has landed.
+  - [x] (e) `quickscale update` refuses a same-label rewrite of an applied migration file and
+    restores the pre-update content; an added migration file still applies forward, and a
+    version-label change keeps the upgrade path.
   - [ ] (f) The restored-`bap-web` proof: `migrate` from the frozen `0001` reproduces the
     FORCE-RLS parity baseline, and no schema change shipped between SA191's rebuild and the freeze
     (Tier 2-full; environment-sensitive, read-mostly).
@@ -437,29 +438,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 3 — Track 3 hardening, theme seam types, and harness by construction
 
-- [ ] **SA276 — Generate the theme's seam types from the manifest set.**
-
-  Closes the theme half of arch `generated-file-ownership-unmodeled` (Finding 2, option 2) and
-  the arch coherence hand-off on `useModules.ts`.
-
-  **Context:** SA258 and SA261 moved the Django side of the seam into the runtime, but
-  `useModules.ts:1–27` still types 11 module names (`QuickScaleModules`), per-module path maps
-  (`QuickScaleModulePaths`, `QuickScaleModuleApiPaths`), and a crm path parse in
-  `inferCurrentOrgSlug`, in a user-owned file. Only `settings/modules.py` and `urls_modules.py` are
-  managed (`project_state_hashes.py:34–37`), so every theme contract change becomes a hand-applied
-  adoption step.
-
-  **Acceptance:** generation and `update` emit a managed `quickscaleSeam.d.ts` from the manifest
-  set, covered by the managed hash guard; `useModules.ts` and the other hooks import its types and
-  name no module; `inferCurrentOrgSlug` reads the seam instead of parsing a crm path. The
-  closed-world emission test extends to the theme: no user-owned emitted TS file names a module
-  except the generated declaration. One `project_contract.yml` step covers the adoption. Land it
-  before 0.89.0 is tagged if it fits (see **Order**).
-
-  **Slices:**
-  - [x] (a) Managed `quickscaleSeam.d.ts` (`runtime.seam.render_seam_declaration`) in the hash
-    guard, with the `sa276-managed-seam-types` adoption step.
-  - [ ] (b) Hooks consume it, the theme emission test, and the adoption step (Tier 2-fast).
+- [x] **SA276 — Generate the theme's seam types from the manifest set.**
 
 - [ ] **SA274 — Show real counts on the theme's CRM stat cards.**
 

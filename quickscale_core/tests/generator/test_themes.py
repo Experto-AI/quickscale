@@ -358,25 +358,31 @@ class TestSelectedModulesReactTheme:
                 "selected_modules is empty after SA105."
             )
 
-        # All modules appear in the QuickScaleModules interface
-        use_modules = (
-            output_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        # All modules appear in the generated seam declaration
+        declaration = (
+            output_path / "frontend" / "src" / "quickscaleSeam.d.ts"
         ).read_text()
-        modules_interface = use_modules.split("interface QuickScaleModules {", 1)[
-            1
-        ].split("\n}", 1)[0]
+        modules_interface = declaration.split(
+            "export interface QuickScaleModules {", 1
+        )[1].split("\n}", 1)[0]
         for module_key in ("auth", "blog", "crm", "listings", "social", "analytics"):
             assert f"{module_key}: boolean" in modules_interface, (
                 f"Module '{module_key}' must appear in QuickScaleModules after SA105."
             )
 
-        # QuickScaleModulePaths includes all known paths
-        module_paths_interface = use_modules.split(
-            "interface QuickScaleModulePaths {", 1
+        # The declaration's paths interface includes all known paths
+        module_paths_interface = declaration.split(
+            "export interface QuickScaleModulePaths {", 1
         )[1].split("\n}", 1)[0]
         assert "crm: string" in module_paths_interface
         assert "social: string" in module_paths_interface
         assert "analytics: string" in module_paths_interface
+
+        # The hook imports the declaration's types instead of naming modules
+        use_modules = (
+            output_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        ).read_text()
+        assert "from '@/quickscaleSeam'" in use_modules
 
         # Core pages are always generated
         for rel_path in (
@@ -407,24 +413,24 @@ class TestSelectedModulesReactTheme:
                 "regardless of selected_modules after SA105."
             )
 
-    def test_use_modules_interface_always_all_modules(self, tmp_path: Path) -> None:
-        """After SA105, QuickScaleModules always includes every module."""
+    def test_seam_declaration_always_types_all_modules(self, tmp_path: Path) -> None:
+        """After SA105, the generated seam declaration types every module."""
         generator = ProjectGenerator(
             theme="showcase_react", selected_modules=["blog", "crm", "billing"]
         )
         output_path = tmp_path / "react_use_modules"
         generator.generate("react_use_modules", output_path)
 
-        use_modules = (
-            output_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        declaration = (
+            output_path / "frontend" / "src" / "quickscaleSeam.d.ts"
         ).read_text()
 
-        modules_block = use_modules.split("interface QuickScaleModules {", 1)[1].split(
-            "\n}", 1
-        )[0]
-        module_paths_block = use_modules.split("interface QuickScaleModulePaths {", 1)[
+        modules_block = declaration.split("export interface QuickScaleModules {", 1)[
             1
         ].split("\n}", 1)[0]
+        module_paths_block = declaration.split(
+            "export interface QuickScaleModulePaths {", 1
+        )[1].split("\n}", 1)[0]
 
         # All modules always present in the interface
         for module_key in (
@@ -451,20 +457,18 @@ class TestSelectedModulesReactTheme:
         # D1 Option B: billing path removed from module paths until session-sync contract exists
         assert "billing: string" not in module_paths_block
 
-    def test_always_all_modules_in_default_config_and_interface(
-        self, tmp_path: Path
-    ) -> None:
-        """After SA105, all modules are unconditionally typed and defaulted."""
+    def test_always_all_modules_in_the_seam_declaration(self, tmp_path: Path) -> None:
+        """After SA105, all modules are unconditionally typed in the declaration."""
         # --- Empty selection ---
         empty_gen = ProjectGenerator(theme="showcase_react", selected_modules=[])
         empty_out = tmp_path / "react_all_modules_empty"
         empty_gen.generate("react_all_modules_empty", empty_out)
 
-        empty_modules = (
-            empty_out / "frontend" / "src" / "hooks" / "useModules.ts"
+        declaration = (
+            empty_out / "frontend" / "src" / "quickscaleSeam.d.ts"
         ).read_text()
 
-        modules_iface = empty_modules.split("interface QuickScaleModules {", 1)[
+        modules_iface = declaration.split("export interface QuickScaleModules {", 1)[
             1
         ].split("\n}", 1)[0]
         for module_key in ("auth", "blog", "crm", "listings", "analytics"):

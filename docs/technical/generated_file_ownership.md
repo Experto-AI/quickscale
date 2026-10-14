@@ -37,17 +37,22 @@ by the beta-migration tool, with the donor's other settings carried unchanged;
 an inline copy whose shape the rewrite cannot preserve is refused before any
 mutation.  This changes what those files contain, not who owns them.
 
-### Managed theme seam declaration (SA276)
+### Managed theme seam files (SA276)
 
 ``frontend/src/quickscaleSeam.d.ts`` is the theme's managed seam declaration:
 it carries the seam's module-key types, rendered from the shipped module set
 by ``quickscale apply``/``quickscale update`` under the managed-file hash
-guard.  It is classified as a recipient-managed protected root file
+guard.  ``frontend/src/quickscaleSeam.keys.ts`` is its generated runtime
+companion: the same tables as key arrays, which the theme's seam validator
+requires every seam entry against and the theme's tests build their fixtures
+from, so the module set has one generated home and a module that joins the set
+changes no user-owned theme file (SA276).  Both are classified as
+recipient-managed protected root files
 (``FRESH_FIRST_PROTECTED_ROOT_FILES``): the migration preserves the recipient's
-copy and never writes donor content over it, and a project does not hand-edit
-the file because the next apply that regenerates the managed files overwrites
-it (``quickscale apply --confirm-contract-adoption`` does so without a
-configuration change; a plain no-delta apply reports nothing to do).
+copies and never writes donor content over them, and a project does not
+hand-edit the files because the next apply that regenerates the managed files
+overwrites them (``quickscale apply --confirm-contract-adoption`` does so
+without a configuration change; a plain no-delta apply reports nothing to do).
 
 ## Categories
 
@@ -126,6 +131,7 @@ classified through ``FRESH_FIRST_IDENTITY_ROOT_FILES`` instead.
  ``frontend/src/lib/utils.ts``, ``frontend/src/lib/analytics.ts``,
  ``frontend/src/lib/csrf.ts``, ``frontend/src/lib/validateQuickScaleSeam.ts``,
   ``frontend/src/test/setup.ts``,
+  ``frontend/src/test/seamFixtures.ts``,
   ``frontend/src/test/App.test.tsx``,
   ``frontend/src/test/AppRoutes.test.tsx``,
   ``frontend/src/test/analytics.test.ts``,

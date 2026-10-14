@@ -343,13 +343,15 @@ def _roll_back_partial_module_update(
     updated_modules: list[str],
     project_package: str | None = None,
 ) -> None:
-    """Restore already-committed pulls and wiring after a post-pull failure.
+    """Restore committed module pulls and wiring after a failed update.
 
-    ``update`` commits each successful module pull before continuing, so a
-    later failure would otherwise leave the earlier modules' new code paired
-    with the pre-update managed wiring.  Restoring the updated module trees,
-    the managed wiring, and the tracking files the update touched from the
-    commit that preceded the update keeps the project coherent; the
+    ``update`` commits each module pull before continuing, so a later failure
+    would otherwise leave the earlier modules' new code paired with the
+    pre-update managed wiring.  The failing module's own pull committed too
+    and is passed in with the earlier ones, so a refusal does not leave the
+    rejected content as the effective HEAD.  Restoring the updated module
+    trees, the managed wiring, and the tracking files the update touched from
+    the commit that preceded the update keeps the project coherent; the
     restoration is committed so the tree stays clean for the operator's next
     command.
     """

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../App'
+import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
 
 const fetchMock = vi.fn()
 
@@ -16,31 +17,9 @@ function applyRuntimeConfig(
 ) {
   window.__QUICKSCALE__ = {
     projectName: 'QuickScale Test Project',
-    modules: {
-      auth: false,
-      blog: false,
-      listings: false,
-      crm: false,
-      forms: false,
-      storage: false,
-      backups: false,
-      notifications: false,
-      analytics: false,
-      billing: false,
-      social: false,
-      ...config.modules,
-    },
-    modulePaths: {
-      crm: '/crm',
-      social: '/social',
-      analytics: '/analytics/',
-    },
-    moduleApiPaths: {
-      orgs: '/orgs/api/',
-      billing: '/billing/api/',
-      crm: '/crm/api/',
-      forms: '/forms/api/',
-    },
+    modules: moduleFlags({ ...config.modules }),
+    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    moduleApiPaths: moduleApiPaths(),
     owner: config.owner ?? {
       mode: 'solo',
       currentOrgSlug: null,

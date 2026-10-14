@@ -21,6 +21,7 @@ from quickscale_core.manifest.entry_point import (
 )
 from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.runtime.seam import (
+    render_seam_declaration,
     seam_modules,
     seam_path_names,
 )
@@ -390,8 +391,8 @@ def test_all_catalog_modules_have_manifest_adapter() -> None:
 # React showcase coverage contracts
 #
 # _REACT_UI_EXCLUDED_MODULES – modules that must NOT appear in
-#     window.__QUICKSCALE__.modules (index.html.j2) or the QuickScaleModules
-#     TypeScript interface (useModules.ts.j2).
+#     window.__QUICKSCALE__.modules (index.html.j2) or the generated
+#     QuickScaleModules declaration (frontend/src/quickscaleSeam.d.ts).
 # ---------------------------------------------------------------------------
 
 _REACT_UI_EXCLUDED_MODULES: frozenset[str] = frozenset(
@@ -412,7 +413,8 @@ def test_all_catalog_modules_in_react_index_html_modules_block() -> None:
     React component that gates on modules.{name} silently never activates.
 
     When adding a new module: it joins the catalog and the seam renders its
-    key; also add it to the QuickScaleModules interface and the seam validator.
+    key; the generated declaration and key manifest derive its key for the
+    theme, so no user-owned file names it.
     """
     index_html = (REACT_TEMPLATES_DIR / "templates" / "index.html.j2").read_text()
     modules_block = index_html.split("modules: {")[1].split("owner: {")[0]
@@ -434,21 +436,24 @@ def test_all_catalog_modules_in_react_index_html_modules_block() -> None:
     )
 
 
-def test_all_catalog_modules_in_react_typescript_interface() -> None:
-    """Every UI-visible catalog module must appear in the QuickScaleModules
-    TypeScript interface in useModules.ts (static, no .j2 after SA106).
+def test_all_catalog_modules_in_the_seam_declaration() -> None:
+    """Every UI-visible catalog module must appear in the generated seam
+    declaration (frontend/src/quickscaleSeam.d.ts).
 
-    A missing field means TypeScript does not know the module flag exists, so
-    reading modules.{name} in any React component is a compile-time type error.
+    The declaration renders from the shipped module set (SA276), and the
+    theme's hooks import its types, so the theme no longer types the set
+    itself. A missing field means TypeScript does not know the module flag
+    exists, so reading modules.{name} in any React component is a
+    compile-time type error.
 
-    When adding a new module: add a '{name}: boolean' line to the
-    QuickScaleModules interface, or add the name to _REACT_UI_EXCLUDED_MODULES.
+    When adding a new module: it joins the catalog and the declaration
+    renders its key; no user-owned file names it.
     """
-    use_modules = (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts").read_text()
+    declaration = render_seam_declaration()
     # Extract only the QuickScaleModules interface body
-    interface_block = use_modules.split("interface QuickScaleModules {")[1].split("}")[
-        0
-    ]
+    interface_block = declaration.split("export interface QuickScaleModules {")[
+        1
+    ].split("}")[0]
 
     missing = [
         entry.name
@@ -457,51 +462,66 @@ def test_all_catalog_modules_in_react_typescript_interface() -> None:
         and f"{entry.name}: boolean" not in interface_block
     ]
     assert not missing, (
-        f"Modules missing from QuickScaleModules interface in useModules.ts: {missing!r}. "
-        "Add the field or add the name to _REACT_UI_EXCLUDED_MODULES."
+        f"Modules missing from QuickScaleModules in the seam declaration: {missing!r}. "
+        "The declaration renders one flag per shipped module."
     )
 
 
-def test_react_index_html_and_typescript_interface_module_sets_are_symmetric() -> None:
-    """The seam's module keys and useModules.ts must be identical.
+def test_theme_hooks_import_the_seam_declaration() -> None:
+    """The theme's hooks consume the generated declaration's types (SA276)."""
+    use_modules = (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts").read_text()
+
+    assert "from '@/quickscaleSeam'" in use_modules
+    for name in (
+        "QuickScaleModules",
+        "QuickScaleModulePaths",
+        "QuickScaleModuleApiPaths",
+    ):
+        assert name in use_modules, (
+            f"useModules.ts must import {name} from the managed seam declaration."
+        )
+
+
+def test_react_index_html_and_seam_declaration_module_sets_are_symmetric() -> None:
+    """The seam's module keys and the generated declaration must be identical.
 
     Asymmetry means the rendered React runtime config and the TypeScript type
     declarations disagree: either a runtime key has no matching type or a typed
     field is never set at runtime.
     """
-    use_modules = (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts").read_text()
+    declaration = render_seam_declaration()
 
     seam_module_names = {module.name for module in seam_modules()}
 
-    interface_block = use_modules.split("interface QuickScaleModules {")[1].split("}")[
-        0
-    ]
+    interface_block = declaration.split("export interface QuickScaleModules {")[
+        1
+    ].split("}")[0]
     ts_modules = set(re.findall(r"^\s+(\w+):\s+boolean", interface_block, re.MULTILINE))
 
     assert seam_module_names == ts_modules, (
-        "The rendered seam module set and useModules.ts diverge.\n"
+        "The rendered seam module set and the seam declaration diverge.\n"
         f"  In the seam only: {sorted(seam_module_names - ts_modules)}\n"
-        f"  In useModules.ts only: {sorted(ts_modules - seam_module_names)}"
+        f"  In the declaration only: {sorted(ts_modules - seam_module_names)}"
     )
 
 
-def test_react_seam_module_paths_match_typescript_interface() -> None:
-    """The seam's modulePaths keys and QuickScaleModulePaths must be identical.
+def test_react_seam_module_paths_match_seam_declaration() -> None:
+    """The seam's modulePaths keys and the declaration's must be identical.
 
     The producer names the theme's path-bearing module surfaces (rule 31);
     asymmetry means the rendered seam and the TypeScript contract disagree.
     """
     seam_path_keys = set(seam_path_names())
-    use_modules = (REACT_TEMPLATES_DIR / "src" / "hooks" / "useModules.ts").read_text()
-    interface_block = use_modules.split("interface QuickScaleModulePaths {")[1].split(
-        "}"
-    )[0]
+    declaration = render_seam_declaration()
+    interface_block = declaration.split("export interface QuickScaleModulePaths {")[
+        1
+    ].split("}")[0]
     ts_paths = set(re.findall(r"^\s+(\w+):\s+string", interface_block, re.MULTILINE))
 
     assert seam_path_keys == ts_paths, (
-        "The rendered seam modulePaths and QuickScaleModulePaths diverge.\n"
+        "The rendered seam modulePaths and the seam declaration diverge.\n"
         f"  In the seam only: {sorted(seam_path_keys - ts_paths)}\n"
-        f"  In useModules.ts only: {sorted(ts_paths - seam_path_keys)}"
+        f"  In the declaration only: {sorted(ts_paths - seam_path_keys)}"
     )
 
 
