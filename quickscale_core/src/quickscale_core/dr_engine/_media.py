@@ -164,19 +164,21 @@ def _copy_media_item(
                     _storage_object_key(source_storage, relative_path),
                     download_handle,
                 )
+            # The staging file was created private; publish it with the mode the
+            # destination had, or the umask default a plain create would get.
+            if target_path.exists():
+                shutil.copymode(target_path, download_path)
+            else:
+                current_umask = os.umask(0)
+                os.umask(current_umask)
+                os.chmod(download_path, 0o666 & ~current_umask)
+            download_path.replace(target_path)
         except Exception:
+            # Any failure after staging begins — the download, the mode apply,
+            # or the publish rename — removes the staging file.
             if download_path is not None:
                 download_path.unlink(missing_ok=True)
             raise
-        # The staging file was created private; publish it with the mode the
-        # destination had, or the umask default a plain create would get.
-        if target_path.exists():
-            shutil.copymode(target_path, download_path)
-        else:
-            current_umask = os.umask(0)
-            os.umask(current_umask)
-            os.chmod(download_path, 0o666 & ~current_umask)
-        download_path.replace(target_path)
         return True
 
     target_storage = target_runtime["storage"]

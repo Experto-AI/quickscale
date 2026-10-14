@@ -155,11 +155,6 @@ Silence on skipped areas licenses no conclusion.
 schema: tech-audit/v6
 audited: 7d9782a99a6606853c2299170489fe291acc6a10
 items:
-  - {id: dr-private-remote-restore-whole-object-in-memory, status: open, severity: S3, category: IV,
-     title: "Private-remote restore reads the whole dump into memory", effort: Small,
-     confidence: High, reality: generated-app,
-     anchors: [quickscale_core/src/quickscale_core/dr_engine/_remote.py], depends_on: [],
-     first_seen: 2026-10-13, last_verified: 2026-10-13}
   - {id: e2e-release-tag-trigger-never-matches, status: open, severity: S3, category: VII,
      title: "Hosted E2E never runs on a release tag", effort: Trivial, confidence: High,
      reality: release-pipeline, anchors: [.github/workflows/e2e.yml], depends_on: [],
@@ -183,10 +178,6 @@ items:
   - {id: markdownx-upload-client-extension-and-content-type, status: open, severity: S4,
      category: III, effort: Small, confidence: Medium, reality: generated-app,
      anchors: [quickscale_modules/storage/src/quickscale_modules_storage/markdownx_urls.py],
-     first_seen: 2026-10-13, last_verified: 2026-10-13}
-  - {id: dr-media-part-file-leak-on-publish-failure, status: open, severity: S4, category: IV,
-     effort: Trivial, confidence: High, reality: generated-app,
-     anchors: [quickscale_core/src/quickscale_core/dr_engine/_media.py],
      first_seen: 2026-10-13, last_verified: 2026-10-13}
   - {id: pyproject-write-not-atomic, status: open, severity: S4, category: IV, effort: Trivial,
      confidence: Medium, reality: cli,
@@ -251,21 +242,19 @@ items:
 ## 3. Summary table
 
 **Counts:**
-- **Open:** 10 in total: S1 — 0 · S2 — 0 · S3 — 2 · S4 — 8.
+- **Open:** 8 in total: S1 — 0 · S2 — 0 · S3 — 1 · S4 — 7.
 - **Watchlist:** 16.
 - **This pass:** prior open `forms-notification-status-misreported` resolved; 11 findings new, 0
   carried, 0 regressed.
 
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
-| `dr-private-remote-restore-whole-object-in-memory` | S3 | IV | Private-remote restore reads the whole dump into memory | Small | High | new |
 | `e2e-release-tag-trigger-never-matches` | S3 | VII | Hosted E2E never runs on a release tag | Trivial | High | new (**quick win**) |
 | `crm-theme-stats-always-zero` | S4 | IX | Theme CRM stat cards always show 0 | Trivial | High | new |
 | `notifications-webhook-status-regresses-out-of-order` | S4 | II | A late delivery event overwrites a terminal status | Small | Medium | new |
 | `notifications-webhook-secret-format-unchecked-at-startup` | S4 | VI | A malformed `whsec_` secret passes the startup check | Trivial | High | new |
 | `orgs-invite-throttle-partial-charge` | S4 | I | The per-sender bucket is charged when the per-org throttle refuses | Small | Medium | new |
 | `markdownx-upload-client-extension-and-content-type` | S4 | III | The staff editor upload trusts the client's extension and type | Small | Medium | new |
-| `dr-media-part-file-leak-on-publish-failure` | S4 | IV | A `.part` file is left behind when publish fails | Trivial | High | new |
 | `pyproject-write-not-atomic` | S4 | IV | The CLI rewrites `pyproject.toml` in place | Trivial | Medium | new |
 | `ci-poetry-retry-curl-pipe-python` | S4 | VII | The CI retry path pipes an unpinned installer into Python | Trivial | High | new |
 
@@ -274,19 +263,6 @@ items:
 ## 4. Findings
 
 ### S3 findings (compact)
-
-- **`dr-private-remote-restore-whole-object-in-memory`**
-  - **Severity:** S3. Moderate impact (a restore OOM-killed during disaster recovery) × Rare
-    (operator restore). The deviation is one step up because it fails at the worst moment.
-  - **Location:** `dr_engine/_remote.py:90-93` (`_materialize_private_remote_key`).
-  - **Defect:** the private-remote restore copies through `S3Storage.open()`, which spools the
-    whole object in memory (`AWS_S3_MAX_MEMORY_SIZE` defaults to unbounded). This is the unfixed
-    sibling of SA256's media fix, whose comment at `_media.py:148` names the same cause.
-  - **Failure scenario:** a database dump larger than the container's memory limit is
-    materialized from a private remote, the process is OOM-killed, and the restore fails.
-  - **Fix (Small):** stream with the boto3 client's `download_fileobj` into the destination, the
-    same way `_media.py` does.
-  - **Confidence:** High. Introduced in `04d896d8`.
 
 - **`e2e-release-tag-trigger-never-matches`** (quick win)
   - **Severity:** S3. Moderate impact (releases ship without the hosted E2E run the workflow
@@ -324,10 +300,6 @@ items:
     the site's origin.
   - **Fix:** wrap the vendor form with the SA239 format-derived extension, and drop SVG from
     `MARKDOWNX_UPLOAD_CONTENT_TYPES`.
-- `dr-media-part-file-leak-on-publish-failure` · `dr_engine/_media.py:153-179`
-  - **Defect:** `chmod` and `replace` run outside the cleanup `try`, so a failure there (for
-    example, the target is a directory) leaves a stray `.part` file.
-  - **Fix:** move them inside the `try`.
 - `pyproject-write-not-atomic` · `quickscale_cli/utils/_dependency_write.py:65-74`
   - **Defect:** `_write_validated_toml` truncates the file and writes in place, so an interrupted
     write leaves a corrupt `pyproject.toml`.
@@ -355,7 +327,7 @@ the delta touched. Changed cells:
 | Social payload views (core-rendered) | DRF `AllowAny`, `SocialPayloadUnavailable` 503 with no exception text. The `status=error` branch is unreachable (watch: `social-config-error-served-200`). |
 | CRM lists | Bare-list pagination, page size fixed by setting, no client override (`crm-theme-stats-always-zero` is on the theme side). |
 | React seam (`quickscale_seam` tags) | Output from the catalog and `reverse()` only; `currentOrgSlug` through `escapejs`. Probe-verified. |
-| DR restore (private remote) | `dr-private-remote-restore-whole-object-in-memory`. |
+| DR restore (private remote) | Streams through the provider client's chunked transfer, and a failed media publish removes its staging `.part` file. |
 | Release E2E | `e2e-release-tag-trigger-never-matches`. |
 
 All other rows are unchanged, and their cells were re-verified where the delta touched their
@@ -369,8 +341,9 @@ All batches are independent of each other.
 1. **Pipeline batch (Trivial):** `e2e-release-tag-trigger-never-matches` and
    `ci-poetry-retry-curl-pipe-python`. Land them before tagging 0.89.0 so the release gets its
    hosted E2E run.
-2. **DR batch:** `dr-private-remote-restore-whole-object-in-memory` and
-   `dr-media-part-file-leak-on-publish-failure`. They share the streaming idiom in `_media.py`.
+2. **DR batch (landed):** `dr-private-remote-restore-whole-object-in-memory` and
+   `dr-media-part-file-leak-on-publish-failure` — every DR object path streams through the
+   provider client, and a failed media publish removes its staging file.
 3. **Billing (landed):** `stripe-customer-search-lag-resolves-absent` — reconciliation waits out
    Stripe's Search indexing lag, and the auth deletion test asserts the block again.
 4. **Notifications:** the two webhook S4s (`_webhooks.py`, `checks.py`).
@@ -397,7 +370,7 @@ All batches are independent of each other.
 | backups | clean. The `--scheduled` removal and the prune default are documented (release notes, `decisions.md:946`). | Diff in full. |
 | core runtime / templates | clean. Seam, DRF admission, error shape, URL ownership, and the blank `__QS_ENV__` marker (now renders `''`) are all verified. | New runtime files in full. |
 | CLI / manifest | `pyproject-write-not-atomic`; one watch item. The SA256 and SA260 closures hold. | Delta in full. |
-| DR engine | two findings. | `_media.py` in full, `_remote.py` (variant sweep). |
+| DR engine | clean. The streaming restore and the `.part` publish cleanup are verified. | `_media.py` in full, `_remote.py` (variant sweep). |
 | gates + pipeline | two S4/S3 findings; two watch items. No gate dropped, no detector weakened (differential replay). | Workflows, `gates.mk`, security gates in full. |
 | devtools | clean (diff only). | Beta-migration delta. |
 
@@ -465,9 +438,9 @@ Carried:
 - `TenantMiddleware` declares path ownership twice.
 
 Added:
-- **Two S3 streaming idioms.** DR materializes objects through two different S3 paths: the
-  storage API, which spools in memory, and the boto3 client, which streams. Only one is safe for
-  large objects. That is the root of `dr-private-remote-restore-whole-object-in-memory`.
+- **Two S3 streaming idioms.** DR materialized objects through two different S3 paths: the
+  storage API, which spooled in memory, and the boto3 client, which streams. Every DR object path
+  now streams through the client, and a `dr_engine` source scan rejects `storage.open()`.
 - **Clean-break schema edits with no data path.** `0001_initial` is edited in place across
   versions (SA265a moved `stripe_customer_id`). The architectural audit owns this as
   `clean-break-schema-no-data-path`.
@@ -476,8 +449,9 @@ Added:
 
 ## 10. Tooling gaps
 
-- **A lint rule rejecting `S3Storage.open()` / `storage.open()` in `dr_engine`.** It would have
-  prevented `dr-private-remote-restore-whole-object-in-memory`.
+- **A lint rule rejecting `S3Storage.open()` / `storage.open()` in `dr_engine`.** Delivered with
+  SA271 as an in-suite source scan: any `storage.open()` call among the `dr_engine` sources fails
+  the test that carries it.
 - **A workflow-trigger consistency check:** every workflow that claims to run on release tags uses
   `publish.yml`'s tag pattern. It would have prevented `e2e-release-tag-trigger-never-matches`.
 - **A theme-to-API contract test:** a theme hook's expected response shape is checked against a
@@ -829,6 +803,7 @@ Added:
 - 2026-10-13 — re-run at `7d9782a9` (delta `2fd8637f..7d9782a9`, 104 non-merge commits; prompt v7). Every closure claimed since the prior pass (SA251 a/b/c, SA252, SA253, SA254, SA255, SA256, SA262 social) was re-verified in code and passed the fix-regression pass. None regressed.
 - 2026-10-13 — `forms-notification-status-misreported`: **resolved** (`a6b58799`, SA265b). Verified at `forms/_email.py:44-53`: notifications off returns `"skipped"`, and the submit view surfaces it as `notification_status`.
 - 2026-10-13 — `stripe-customer-search-lag-resolves-absent`: **resolved** (SA270). Verified at `billing/_customers.py`: a customer-search miss counts as absence only once the organization's latest customer-resolution attempt completed and is older than Stripe's documented Search indexing lag (up to an hour behind during outages), two matches fail closed, the search requests `limit=2`, and `auth/tests/test_views.py` asserts an unknown outcome blocks deletion again. Dropped from the index and summary.
+- 2026-10-14 — `dr-private-remote-restore-whole-object-in-memory`, `dr-media-part-file-leak-on-publish-failure`: **resolved** (SA271). Verified at `dr_engine/_remote.py` and `_media.py`: every DR object path streams through the provider client's chunked transfers (`download_fileobj`, and `upload_fileobj` for the s3→s3 relay), `_media.py`'s s3→local publish applies the destination mode and renames inside the cleanup `try` so any failure there removes its staging `.part` file, and an in-suite source scan rejects `storage.open()` in `dr_engine`. Dropped from the index and summary; the §10 tooling gap closes with it.
 - 2026-10-13 — `dr-restore-vintage-exact-match`, `orgs-provider-id-check-blocks-migrate`, `crm-stage-seed-lost-on-commit-failure`, `backups-upload-restore-by-model-permission`, `single-sync-worker-vendor-calls`, `allow-bypassrls-serving-undetected`, `migrate-runs-per-replica`, `development-workflow-intermittent-root-500`, `core-e2e-poetry-cache-install-candidates`: carried (triggers not fired; evidence in §11).
 - 2026-10-13 — new open: `stripe-customer-search-lag-resolves-absent`, `dr-private-remote-restore-whole-object-in-memory`, `e2e-release-tag-trigger-never-matches` (S3); `crm-theme-stats-always-zero`, `notifications-webhook-status-regresses-out-of-order`, `notifications-webhook-secret-format-unchecked-at-startup`, `orgs-invite-throttle-partial-charge`, `markdownx-upload-client-extension-and-content-type`, `dr-media-part-file-leak-on-publish-failure`, `pyproject-write-not-atomic`, `ci-poetry-retry-curl-pipe-python` (S4).
 - 2026-10-13 — new watchlist: `orgs-role-mixin-checks-request-org`, `social-config-error-served-200`, `deploy-existing-settings-module-never-corrected`, `account-deletion-hook-exception-text`, `security-suppressions-uniform-expiry`, `generated-project-automation-local-only`, `initial-migration-edited-in-place`.
