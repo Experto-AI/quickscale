@@ -165,6 +165,10 @@ def _validate_publish_markers(lines: list[str], gates: list[dict[str, Any]]) -> 
 
     Line matching alone is insufficient: a marker pair moved into another job,
     or stretched over a sibling step, must not authorize rewriting those bytes.
+    The pre-edit region may be a subsequence of the registry's publish steps, so
+    a registry-only addition projects from its row alone; a step that is not a
+    registry gate (a removed gate's leftover step included) still fails closed
+    through the exact inside-region comparison.
     """
     begin, end, steps_line, span_end = _publish_marker_bounds(lines)
     if not lines[begin + 1].startswith("      - "):
@@ -172,15 +176,13 @@ def _validate_publish_markers(lines: list[str], gates: list[dict[str, Any]]) -> 
     publish_entries = _publish_entries(gates)
     entries = _publish_step_entries(lines, steps_line, span_end)
     located = _match_publish_entries(lines, entries, publish_entries)
-    missing = [gate["id"] for gate, _make_target in publish_entries if gate["id"] not in located]
-    if missing:
-        raise GeneratorError(
-            "publish.yml: generated region is missing gate step(s): " + ", ".join(missing)
-        )
-    starts = [located[gate["id"]][0] for gate, _make_target in publish_entries]
+    located_entries = [entry for entry in publish_entries if entry[0]["id"] in located]
+    if not located_entries:
+        raise GeneratorError("publish.yml: generated region holds no registry-owned gate step")
+    starts = [located[gate["id"]][0] for gate, _make_target in located_entries]
     if begin + 1 != starts[0]:
         raise GeneratorError("publish.yml: begin marker is not adjacent to the first gate step")
-    last_start, last_end = located[publish_entries[-1][0]["id"]]
+    last_start, last_end = located[located_entries[-1][0]["id"]]
     if not last_start < end < last_end:
         raise GeneratorError("publish.yml: end marker is not at the gate-step region boundary")
     inside = [start for start, _ in entries if begin < start < end]

@@ -34,6 +34,16 @@
                 "step_name": "Run core compatibility gate"
             },
             "help": "Check each module's quickscale_core imports against the current core API.\nThis verifies that every import from quickscale_core in a module's source\nresolves to an existing symbol, and that the module's quickscale-core\nspecifier is exactly the lockstep pin derived from VERSION.",
+            "local": {
+                "order": 1,
+                "description": "Running module-vs-core compatibility check...",
+                "success": "\u2713 Module-to-core compatibility passed",
+                "failure_label": "Module-Core Compatibility"
+            },
+            "makefile_help": {
+                "order": 1,
+                "text": "make check-core-compat            - Module core imports resolve, and the lockstep pin matches VERSION"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_module_core_compatibility.py"
             ],
@@ -67,6 +77,16 @@
                 "step_name": "Run module core imports gate"
             },
             "help": "Check that module code only imports from quickscale_core.runtime\n(not from internal subpackages like dr_engine, contracts, manifest, etc.).\nPer-module legacy exceptions exist for billing/crm adapter seams only.",
+            "local": {
+                "order": 2,
+                "description": "Running module-core import linter...",
+                "success": "\u2713 Module-core import linter passed",
+                "failure_label": "Module-Core Import Linter"
+            },
+            "makefile_help": {
+                "order": 2,
+                "text": "make check-module-core-imports    - Module code imports only from quickscale_core.runtime"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_module_core_imports.py"
             ],
@@ -104,6 +124,16 @@
                 "step_name": "Run manifest sync gate"
             },
             "help": "Verify that every module-owned module.yml matches its core snapshot.\nFails CI if drift is introduced.  Run ``make manifest-sync`` to\nresync snapshots after intentionally updating a module manifest.",
+            "local": {
+                "order": 3,
+                "description": "Running manifest sync gate...",
+                "success": "\u2713 Manifest snapshots in sync",
+                "failure_label": "Manifest Sync Gate"
+            },
+            "makefile_help": {
+                "order": 3,
+                "text": "make check-manifest-sync          - Module-owned module.yml files match their core snapshots"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/sync_module_manifests.py"
             ],
@@ -134,6 +164,16 @@
                 "check_step_name": "Verify evidence-bearing modules declare Django apps wiring"
             },
             "help": "Verify that evidence-bearing modules declare exactly one valid Django apps\nwiring projection in their authoritative source manifest.",
+            "local": {
+                "order": 4,
+                "description": "Running module app declaration gate...",
+                "success": "\u2713 Evidence-bearing module app declarations are valid",
+                "failure_label": "Module App Declaration Gate"
+            },
+            "makefile_help": {
+                "order": 4,
+                "text": "make check-module-app-declaration - Evidence-bearing modules declare Django apps wiring"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_module_app_declaration.py"
             ],
@@ -165,6 +205,16 @@
                 "step_name": "Run org context primitives gate"
             },
             "help": "Hard-fail lint gate for direct external use of the three privatized\norg-context primitives.  Exits 1 on any violation \u2014 all SA13.2/SA13.3\nmigrations are complete.  AF9 None-path hardening deferred;\ncompatibility aliases remain but trigger the gate.",
+            "local": {
+                "order": 5,
+                "description": "Running org-context primitives gate...",
+                "success": "\u2713 No direct external use of privatized org-context primitives",
+                "failure_label": "Org-Context Primitives Gate"
+            },
+            "makefile_help": {
+                "order": 5,
+                "text": "make check-org-context-primitives - No external use of privatized org-context primitives"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_org_context_primitives.py"
             ],
@@ -199,6 +249,16 @@
                 "step_name": "Run CSRF exempt gate"
             },
             "help": "Hard-fail AST gate that requires every csrf_exempt callsite to pair\nwith _enforce_csrf or cryptographic signature verification.\nExits 1 on any unprotected csrf_exempt usage.",
+            "local": {
+                "order": 6,
+                "description": "Running CSRF-exempt gate...",
+                "success": "\u2713 All csrf_exempt callsites are protected",
+                "failure_label": "CSRF-Exempt Gate"
+            },
+            "makefile_help": {
+                "order": 6,
+                "text": "make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_csrf_exempt_gate.py"
             ],
@@ -233,6 +293,16 @@
                 "full_history": true
             },
             "help": "Inspect every non-merge commit in the selected base-to-head range. Changes\nto workflows, the gate registry, or PostgreSQL provisioning stations require\na vNN roadmap reference in the commit message, bare (v88) or dotted\n(v0.88.0). No ticket form or changelog entry substitutes for it.",
+            "local": {
+                "order": 7,
+                "description": "Running behavioural commit testimony gate...",
+                "success": "\u2713 Behavioural commits carry required testimony",
+                "failure_label": "Commit Testimony Gate"
+            },
+            "makefile_help": {
+                "order": 7,
+                "text": "make check-commit-testimony       - Behavioural commits carry a vNN or vN.NN.N roadmap reference"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_commit_testimony.py"
             ],
@@ -265,6 +335,16 @@
                 "command_prefix": "PROJECT_VINTAGE_BASE_REF=\"$(git describe --tags --abbrev=0 'HEAD^' 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n 1)\""
             },
             "help": "Inspect every non-merge commit in the selected base-to-head range.  A change\nto any template the generator emits (the watched set derives from the\ngenerator's emission mapping), a generator change that alters the emitted\nfile set, or a module manifest step whose text changes without a new id\nrequires a fresh adoption step id in the same commit (the project\ndeclaration or the module manifest), so a generated-project contract change\ncannot ship without its adoption steps.",
+            "local": {
+                "order": 8,
+                "description": "Running project contract vintage gate...",
+                "success": "\u2713 Generated-project contract changes declare an adoption step id",
+                "failure_label": "Project Contract Vintage Gate"
+            },
+            "makefile_help": {
+                "order": 8,
+                "text": "make check-project-contract-vintage - Generated-project contract changes declare a fresh adoption step id"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_project_contract_vintage.py"
             ],
@@ -350,6 +430,16 @@
                 "display_name": "Registered Script Gate Suites",
                 "check_step_name": "Run registered scripts test suites"
             },
+            "local": {
+                "order": 11,
+                "description": "Running registered scripts test suites...",
+                "success": "\u2713 Registered scripts test suites passed",
+                "failure_label": "Registered Script Test Suites"
+            },
+            "makefile_help": {
+                "order": 17,
+                "text": "make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
+            },
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -378,6 +468,16 @@
                 "step_name": "Run dependency vulnerability gate"
             },
             "help": "Public Make callers for the registry-bound scanner wrapper. Scanner\nacquisition, invocation, and suppression adjudication remain owned by the\nwrapper rather than being duplicated in Make recipes.",
+            "local": {
+                "order": 9,
+                "description": "Running dependency vulnerability gate...",
+                "success": "\u2713 Dependency vulnerability gate passed",
+                "failure_label": "Dependency Vulnerability Gate"
+            },
+            "makefile_help": {
+                "order": 9,
+                "text": "make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability and generated Dockerfile misconfiguration scan"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_security_gates.py dependency-vulnerabilities"
             ],
@@ -413,6 +513,16 @@
                 "step_name": "Run security static-analysis gate"
             },
             "help": "Public Make callers for the registry-bound scanner wrapper. Scanner\nacquisition, invocation, and suppression adjudication remain owned by the\nwrapper rather than being duplicated in Make recipes.",
+            "local": {
+                "order": 10,
+                "description": "Running security static-analysis gate...",
+                "success": "\u2713 Security static-analysis gate passed",
+                "failure_label": "Security Static-Analysis Gate"
+            },
+            "makefile_help": {
+                "order": 10,
+                "text": "make check-security-static-analysis  - Blocking Bandit static security scan"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_security_gates.py security-static-analysis"
             ],
@@ -453,6 +563,10 @@
                 "step_name": "Run beta migration smoke gate"
             },
             "help": "Exercise fresh-first migration behavior against isolated\ngenerated fixtures without touching a real project or database.",
+            "makefile_help": {
+                "order": 11,
+                "text": "make check-beta-migration-smoke      - Exercise fresh-first beta migration on isolated generated fixtures"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_beta_migration_smoke.py"
             ],
@@ -483,6 +597,10 @@
                 "step_name": "Run generated deploy posture gate"
             },
             "help": "Render one fresh generated project and run Django's deployment checks in the\nproxied and single-host forwarding cells.  A new deploy warning, or an\nungated SECURE_PROXY_SSL_HEADER in the single-host cell, fails the gate.",
+            "makefile_help": {
+                "order": 12,
+                "text": "make check-generated-deploy-posture  - Run Django's deployment checks on a freshly generated project in both forwarding cells"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_generated_deploy_posture.py"
             ],
@@ -500,6 +618,12 @@
                 "make_target": "check-generated-project-automation",
                 "ci_job": null,
                 "local_ci_stage": 7
+            },
+            "local": {
+                "order": 12,
+                "description": "Running generated-project automation gate...",
+                "success": "\u2713 Generated-project CI test, migrate, and healthcheck executed cleanly",
+                "failure_label": "Generated-Project Automation Gate"
             },
             "make_recipe": [
                 "@if [ -n \"$${QUICKSCALE_POSTGRES_LEASE:-}\" ]; then scripts/provision_ci_postgres.sh run --profile restricted -- $(PYTHON) scripts/check_generated_project_automation.py; else QS_PROVISION_SCOPE= scripts/provision_ci_postgres.sh run --profile restricted -- $(PYTHON) scripts/check_generated_project_automation.py; fi"
@@ -531,6 +655,16 @@
                 "step_name": "Run workflow security gate"
             },
             "help": "Fail on any zizmor finding at medium severity and confidence or above: an\nunpinned third-party `uses:` ref, or a workflow with no top-level\n`permissions:` block.",
+            "local": {
+                "order": 13,
+                "description": "Running workflow security gate...",
+                "success": "\u2713 Workflow actions are pinned and permissions are declared",
+                "failure_label": "Workflow Security Gate"
+            },
+            "makefile_help": {
+                "order": 13,
+                "text": "make check-workflow-security      - Blocking zizmor scan: action pinning and top-level workflow permissions"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_workflow_security.py --generated-template"
             ],
@@ -561,6 +695,16 @@
                 "step_name": "Run secret scanning gate"
             },
             "help": "Fail on any committed secret gitleaks reports after applying the reasoned\nallowlists in scripts/gitleaks.toml.",
+            "local": {
+                "order": 14,
+                "description": "Running secret scanning gate...",
+                "success": "\u2713 No committed secrets found",
+                "failure_label": "Secret Scanning Gate"
+            },
+            "makefile_help": {
+                "order": 14,
+                "text": "make check-secret-scanning        - Blocking gitleaks secret scan with reasoned allowlists"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_secret_scanning.py"
             ],
@@ -591,6 +735,16 @@
                 "step_name": "Run module conventions conformance check"
             },
             "help": "Run the rule 40 conformance check over every module manifest and module\nsource tree.  Every covered rule's detector has a control case under\nscripts/tests_module_conventions/; the detectors live by rule theme under\nscripts/module_conventions/.  Rules whose owning convention ticket has not\nlanded are recorded in the check's OPEN_RULES mapping.",
+            "local": {
+                "order": 15,
+                "description": "Running module conventions conformance check...",
+                "success": "\u2713 Every covered Module Conventions rule passes",
+                "failure_label": "Module Conventions Gate"
+            },
+            "makefile_help": {
+                "order": 15,
+                "text": "make check-module-conventions     - Module Conventions rule 40 conformance check over every manifest and module source"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_module_conventions.py"
             ],
@@ -621,6 +775,16 @@
                 "step_name": "Run split-facade import gate"
             },
             "help": "Reject a private module importing a facade in its distribution (SA234).",
+            "local": {
+                "order": 16,
+                "description": "Running split-facade import gate...",
+                "success": "\u2713 No private module imports its package's facade",
+                "failure_label": "Split-Facade Import Gate"
+            },
+            "makefile_help": {
+                "order": 16,
+                "text": "make check-split-facade-imports   - Reject a private module importing a facade in its distribution (SA234)"
+            },
             "make_recipe": [
                 "@$(PYTHON) scripts/check_split_facade_imports.py"
             ],
@@ -640,6 +804,12 @@
                 "local_ci_stage": 7
             },
             "help": "Full code quality analysis: dead code (vulture), complexity (radon), duplication (pylint)\nReports saved to .quickscale/quality_report.{json,md}",
+            "local": {
+                "order": 17,
+                "description": "Running quality thresholds gate...",
+                "success": "\u2713 Quality thresholds gate passed",
+                "failure_label": "Quality Thresholds Gate"
+            },
             "make_recipe": [
                 "@scripts/check_quality.sh"
             ],

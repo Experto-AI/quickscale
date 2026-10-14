@@ -454,6 +454,7 @@ describe_local_conformance_gate() {
     local target="$1"
 
     case "$target" in
+        # BEGIN GENERATED: local-gate-arms
         check-core-compat)
             LOCAL_GATE_DESCRIPTION="Running module-vs-core compatibility check..."
             LOCAL_GATE_SUCCESS="✓ Module-to-core compatibility passed"
@@ -539,6 +540,7 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ Quality thresholds gate passed"
             LOCAL_GATE_FAILURE_LABEL="Quality Thresholds Gate"
             ;;
+        # END GENERATED: local-gate-arms
         *)
             LOCAL_GATE_DESCRIPTION="Running $target..."
             LOCAL_GATE_SUCCESS="✓ $target passed"

@@ -217,6 +217,7 @@ SPLIT_SIBLINGS = {
     "_sync_ci_gate_core": "sync_ci_gate_jobs",
     "_sync_ci_gate_docs": "sync_ci_gate_jobs",
     "_sync_ci_gate_e2e": "sync_ci_gate_jobs",
+    "_sync_ci_gate_help": "sync_ci_gate_jobs",
     "_sync_ci_gate_make": "sync_ci_gate_jobs",
     "_sync_ci_gate_publish": "sync_ci_gate_jobs",
     "_sync_ci_gate_regions": "sync_ci_gate_jobs",
@@ -859,6 +860,13 @@ def test_helpers_keep_their_homes() -> None:
         assert getattr(sync_ci_gate_jobs, name).__module__ == "_sync_ci_gate_make", name
     for name in ("expected_docs_text", "sync_docs_table"):
         assert getattr(sync_ci_gate_jobs, name).__module__ == "_sync_ci_gate_docs", name
+    for name in (
+        "expected_local_arms_text",
+        "expected_makefile_help_text",
+        "sync_local_arms",
+        "sync_makefile_help",
+    ):
+        assert getattr(sync_ci_gate_jobs, name).__module__ == "_sync_ci_gate_help", name
     assert (
         getattr(sync_ci_gate_jobs, "_validate_marked_regions").__module__ == "_sync_ci_gate_regions"
     )
@@ -1062,6 +1070,8 @@ def test_e2e_duplicate_path_claim_diagnostic_is_exact(tmp_path: Path) -> None:
     duplicate["required_contexts"] = ["e2e-trigger"]
     duplicate.pop("hosted", None)
     duplicate.pop("publish", None)
+    duplicate.pop("local", None)
+    duplicate.pop("makefile_help", None)
     duplicate["depends_on"] = []
     duplicate["trigger_inputs"] = [owner["trigger_inputs"][0]]
     data["gates"].append(duplicate)

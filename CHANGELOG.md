@@ -771,6 +771,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     carries the module-key types derived from the shipped module set; `quickscale apply`,
     `quickscale update`, and `quickscale remove` regenerate it, and `quickscale status` reports a
     local edit as managed-file drift.
+  - **Gate wiring derives from one registry row.** The local runner's per-gate display text and
+    the `Makefile` gate help are generated from each gate's `scripts/gate_registry.json` entry,
+    like the workflows and the generated Make include, so adding a gate is one registry edit and
+    `make check` fails when any generated station is stale.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

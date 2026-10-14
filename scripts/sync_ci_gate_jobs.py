@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """
-Synchronize registry-bound gates across workflows and the generated Make include.
+Synchronize registry-bound gates across every generated station.
 
-The registry owns gate membership, gate order, hosted and publish presentation
-metadata, curated Make-target comments, hosted job IDs, Make targets, publish
-gate membership, and each gate's generated Make recipe (``make_recipe``).
+The registry owns gate membership, gate order, hosted, publish, and local
+display metadata, curated Make-target comments, hosted job IDs, Make targets,
+publish gate membership, and each gate's generated Make recipe (``make_recipe``).
 Only the marked hosted-job, consumer-``needs``, E2E path, and
 publish gate-step regions are generated in the workflows, plus the fully
-generated ``scripts/gates.mk`` include and the gate-roster table in
-``docs/technical/validation_policy.md``; all other workflow and document
-text remains byte-for-byte untouched.
+generated ``scripts/gates.mk`` include, the gate-roster table in
+``docs/technical/validation_policy.md``, ``scripts/check_ci_locally.sh``'s
+display arms, and the marked gate-help region of the ``Makefile`` help block;
+all other workflow, document, script, and Makefile text remains byte-for-byte
+untouched.
 
-The catalog, shared loaders, and the E2E, publish, Make-include, docs, and
-marked-region projections live in private ``_sync_ci_gate_*`` siblings
-(SA267) and are re-exported here; this facade keeps the action pins, the
-hosted-workflow projection they feed, and the CLI.
+The catalog, shared loaders, and the E2E, publish, Make-include, docs,
+local-arm, Makefile-help, and marked-region projections live in private
+``_sync_ci_gate_*`` siblings (SA267, SA275b) and are re-exported here; this
+facade keeps the action pins, the hosted-workflow projection they feed, and
+the CLI.
 
 A registry gate with a ``make_target`` must either carry a ``make_recipe`` or
 be declared in ``HAND_OWNED_MAKE_TARGETS`` (the recipe is a large inline shell
@@ -67,6 +70,10 @@ from _sync_ci_gate_catalog import (
     HAND_OWNED_MAKE_TARGETS,
     JOB_BEGIN,
     JOB_END,
+    LOCAL_ARMS_BEGIN,
+    LOCAL_ARMS_END,
+    MAKEFILE_HELP_BEGIN,
+    MAKEFILE_HELP_END,
     NEEDS_BEGIN,
     NEEDS_END,
     NEEDS_GATE_IDS,
@@ -78,7 +85,9 @@ from _sync_ci_gate_catalog import (
 from _sync_ci_gate_core import (
     DEFAULT_DOCS,
     DEFAULT_E2E_WORKFLOW,
+    DEFAULT_LOCAL_SCRIPT,
     DEFAULT_MAKE_INCLUDE,
+    DEFAULT_MAKEFILE,
     DEFAULT_PUBLISH_WORKFLOW,
     DEFAULT_REGISTRY,
     DEFAULT_WORKFLOW,
@@ -108,6 +117,12 @@ from _sync_ci_gate_e2e import (
     expected_e2e_workflow_text,
     sync_e2e_workflow,
 )
+from _sync_ci_gate_help import (
+    expected_local_arms_text,
+    expected_makefile_help_text,
+    sync_local_arms,
+    sync_makefile_help,
+)
 from _sync_ci_gate_make import (
     MAKE_INCLUDE_HEADER,
     _generated_make_targets,
@@ -129,7 +144,9 @@ __all__ = [
     "CHECKOUT_REF",
     "DEFAULT_DOCS",
     "DEFAULT_E2E_WORKFLOW",
+    "DEFAULT_LOCAL_SCRIPT",
     "DEFAULT_MAKE_INCLUDE",
+    "DEFAULT_MAKEFILE",
     "DEFAULT_PUBLISH_WORKFLOW",
     "DEFAULT_REGISTRY",
     "DEFAULT_WORKFLOW",
@@ -145,7 +162,11 @@ __all__ = [
     "INSTALL_POETRY_REF",
     "JOB_BEGIN",
     "JOB_END",
+    "LOCAL_ARMS_BEGIN",
+    "LOCAL_ARMS_END",
     "MAKE_INCLUDE_HEADER",
+    "MAKEFILE_HELP_BEGIN",
+    "MAKEFILE_HELP_END",
     "NEEDS_BEGIN",
     "NEEDS_END",
     "NEEDS_GATE_IDS",
@@ -166,12 +187,16 @@ __all__ = [
     "_render_make_include",
     "expected_docs_text",
     "expected_e2e_workflow_text",
+    "expected_local_arms_text",
+    "expected_makefile_help_text",
     "expected_publish_workflow_text",
     "expected_workflow_text",
     "main",
     "sync_docs_table",
     "sync_e2e_workflow",
+    "sync_local_arms",
     "sync_make_include",
+    "sync_makefile_help",
     "sync_publish_workflow",
     "sync_workflow",
 ]
@@ -549,6 +574,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="gate-roster table in docs/technical/validation_policy.md "
         "(explicit selection stays docs-only)",
     )
+    parser.add_argument(
+        "--local-script",
+        type=Path,
+        default=None,
+        help="local CI runner whose gate display arms are generated "
+        "(explicit selection stays local-script-only)",
+    )
+    parser.add_argument(
+        "--makefile",
+        type=Path,
+        default=None,
+        help="Makefile whose gate-help region is generated "
+        "(explicit selection stays Makefile-only)",
+    )
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY)
     return parser.parse_args(argv)
 
@@ -598,6 +637,24 @@ def main(argv: list[str] | None = None) -> int:
                     *sync_docs_table(args.docs, args.registry),
                 )
             )
+        if args.local_script is not None:
+            explicit = True
+            selected.append(
+                (
+                    "scripts/check_ci_locally.sh",
+                    args.local_script,
+                    *sync_local_arms(args.local_script, args.registry),
+                )
+            )
+        if args.makefile is not None:
+            explicit = True
+            selected.append(
+                (
+                    "Makefile",
+                    args.makefile,
+                    *sync_makefile_help(args.makefile, args.registry),
+                )
+            )
         if not explicit:
             selected.append(
                 ("ci.yml", DEFAULT_WORKFLOW, *sync_workflow(DEFAULT_WORKFLOW, args.registry))
@@ -628,6 +685,20 @@ def main(argv: list[str] | None = None) -> int:
                     "docs/technical/validation_policy.md",
                     DEFAULT_DOCS,
                     *sync_docs_table(DEFAULT_DOCS, args.registry),
+                )
+            )
+            selected.append(
+                (
+                    "scripts/check_ci_locally.sh",
+                    DEFAULT_LOCAL_SCRIPT,
+                    *sync_local_arms(DEFAULT_LOCAL_SCRIPT, args.registry),
+                )
+            )
+            selected.append(
+                (
+                    "Makefile",
+                    DEFAULT_MAKEFILE,
+                    *sync_makefile_help(DEFAULT_MAKEFILE, args.registry),
                 )
             )
         drifted = [(label, path, expected) for label, path, drift, expected in selected if drift]

@@ -33,8 +33,11 @@ from check_gate_parity import (
 )
 from sync_ci_gate_jobs import (
     CHECKOUT_REF,
+    DEFAULT_DOCS,
     DEFAULT_E2E_WORKFLOW,
+    DEFAULT_LOCAL_SCRIPT,
     DEFAULT_MAKE_INCLUDE,
+    DEFAULT_MAKEFILE,
     DEFAULT_PUBLISH_WORKFLOW,
     DEFAULT_REGISTRY,
     DEFAULT_WORKFLOW,
@@ -43,6 +46,10 @@ from sync_ci_gate_jobs import (
     HAND_OWNED_MAKE_TARGETS,
     JOB_BEGIN,
     JOB_END,
+    LOCAL_ARMS_BEGIN,
+    LOCAL_ARMS_END,
+    MAKEFILE_HELP_BEGIN,
+    MAKEFILE_HELP_END,
     NEEDS_BEGIN,
     NEEDS_END,
     PUBLISH_BEGIN,
@@ -53,10 +60,29 @@ from sync_ci_gate_jobs import (
     _expected_e2e_paths,
     _parse_registry,
     _parse_workflow,
+    expected_docs_text,
     expected_e2e_workflow_text,
     expected_publish_workflow_text,
     expected_workflow_text,
 )
+
+
+def _rename_make_target(registry_data: dict[str, Any], gate_id: str, target: str) -> None:
+    """
+    Rename one gate's Make target, keeping its registry-owned help line in step.
+
+    A ``makefile_help`` line must name its own target, so a target rename is
+    authored in the same registry row rather than left for the schema to reject.
+    """
+    for gate in registry_data["gates"]:
+        if gate["id"] != gate_id:
+            continue
+        previous = gate["bindings"]["make_target"]
+        gate["bindings"]["make_target"] = target
+        if "makefile_help" in gate:
+            gate["makefile_help"]["text"] = gate["makefile_help"]["text"].replace(previous, target)
+        return
+    raise AssertionError(gate_id)
 
 
 def test_markerless_bootstrap_without_registry_owned_jobs_fails_cleanly() -> None:
@@ -1056,6 +1082,119 @@ class TestRegistryMetadataFields:
             _validate_registry(self._registry_with([gate]))
 
 
+class TestLocalAndMakefileHelpMetadata:
+    """The local-arm and Makefile-help metadata are enforced fail-closed."""
+
+    @staticmethod
+    def _local_gate(**over: Any) -> dict[str, Any]:
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["local"] = {
+            "order": 1,
+            "description": "Running test gate...",
+            "success": "✓ Test gate passed",
+            "failure_label": "Test Gate",
+        }
+        gate.update(over)
+        return gate
+
+    @staticmethod
+    def _makefile_gate(**over: Any) -> dict[str, Any]:
+        gate = dict(_MINIMAL_VALID_GATE)
+        gate["makefile_help"] = {"order": 1, "text": "make test-gate - Test gate help line"}
+        gate.update(over)
+        return gate
+
+    @staticmethod
+    def _registry_with(gates: list[dict[str, Any]]) -> dict[str, Any]:
+        data = dict(_MINIMAL_REGISTRY)
+        data["gates"] = gates
+        return data
+
+    def test_valid_metadata_is_accepted(self) -> None:
+        """Local arms and Makefile help lines validate on a local gate."""
+        assert _validate_registry(self._registry_with([self._local_gate()]))
+        assert _validate_registry(self._registry_with([self._makefile_gate()]))
+
+    def test_metadata_requires_a_string_make_target(self) -> None:
+        """Metadata no generated station could address fails closed."""
+        for build in (self._local_gate, self._makefile_gate):
+            gate = build()
+            gate["required_contexts"] = ["e2e-trigger"]
+            gate["bindings"] = {"make_target": None, "ci_job": None, "local_ci_stage": None}
+            with pytest.raises(SchemaValidationError, match="requires a string make_target"):
+                _validate_registry(self._registry_with([gate]))
+
+    def test_metadata_shape_is_rejected(self) -> None:
+        """Missing keys, unknown keys, bad orders, and null objects fail closed."""
+        missing = self._local_gate()
+        missing["local"] = {"order": 1, "description": "Running test gate..."}
+        with pytest.raises(SchemaValidationError, match="missing required key"):
+            _validate_registry(self._registry_with([missing]))
+
+        unknown = self._makefile_gate()
+        unknown["makefile_help"]["extra"] = True
+        with pytest.raises(SchemaValidationError, match="unknown key"):
+            _validate_registry(self._registry_with([unknown]))
+
+        for order in (0, True, "first"):
+            bad_order = self._local_gate()
+            bad_order["local"]["order"] = order
+            with pytest.raises(SchemaValidationError, match="positive integer"):
+                _validate_registry(self._registry_with([bad_order]))
+
+        null_local = self._local_gate()
+        null_local["local"] = None
+        with pytest.raises(SchemaValidationError, match="must be a dict"):
+            _validate_registry(self._registry_with([null_local]))
+
+        null_help = self._makefile_gate()
+        null_help["makefile_help"] = None
+        with pytest.raises(SchemaValidationError, match="must be a dict"):
+            _validate_registry(self._registry_with([null_help]))
+
+    def test_unsafe_text_is_rejected(self) -> None:
+        """Emitted text cannot carry newlines or shell metacharacters."""
+        for value, pattern in (
+            ("two\nlines", "single line"),
+            ('quote " inside', "must not contain"),
+            ("dollar $ inside", "must not contain"),
+            ("backslash \\ inside", "must not contain"),
+            ("backtick ` inside", "must not contain"),
+            ("  padded", "whitespace-trimmed"),
+        ):
+            gate = self._local_gate()
+            gate["local"]["description"] = value
+            with pytest.raises(SchemaValidationError, match=pattern):
+                _validate_registry(self._registry_with([gate]))
+
+        trailing = self._makefile_gate()
+        trailing["makefile_help"]["text"] = "make test-gate - trailing  "
+        with pytest.raises(SchemaValidationError, match="whitespace-trimmed"):
+            _validate_registry(self._registry_with([trailing]))
+
+    def test_help_line_must_name_its_own_make_target(self) -> None:
+        """A help line naming another target would render a stale station."""
+        gate = self._makefile_gate()
+        gate["makefile_help"]["text"] = "make some-other-target - Test gate help line"
+        with pytest.raises(SchemaValidationError, match="must name its own Make target"):
+            _validate_registry(self._registry_with([gate]))
+
+    def test_duplicate_orders_are_rejected(self) -> None:
+        """Two local arms or Makefile help lines cannot share a position."""
+        first = self._local_gate()
+        second = self._local_gate(id="second-gate")
+        second["bindings"] = {"make_target": "check-second", "ci_job": None, "local_ci_stage": 3}
+        with pytest.raises(SchemaValidationError, match="already used"):
+            _validate_registry(self._registry_with([first, second]))
+
+        first = self._makefile_gate()
+        second = self._makefile_gate(id="second-gate")
+        second["bindings"] = {"make_target": "check-second", "ci_job": None, "local_ci_stage": 3}
+        second["makefile_help"]["text"] = "make check-second - Second gate help line"
+        with pytest.raises(SchemaValidationError, match="already used"):
+            _validate_registry(self._registry_with([first, second]))
+
+
 class TestDependencyGraphValidation:
     """Dependency validation accepts arbitrary DAGs and rejects every cycle."""
 
@@ -1607,7 +1746,7 @@ class TestHostedCiGateGeneration:
     def test_registry_make_target_propagates_to_hosted_job(self, tmp_path: Path) -> None:
         """A registry target edit propagates only to its owned hosted run value."""
         registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
-        registry_data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
+        _rename_make_target(registry_data, "check-core-compat", "check-core-compat-renamed")
         registry_path = tmp_path / "registry.json"
         registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
         gates = _parse_registry(registry_path)
@@ -1758,7 +1897,7 @@ class TestHostedCiGateGeneration:
     def test_unowned_workflow_bytes_are_preserved_exactly(self, tmp_path: Path) -> None:
         """Generation preserves every byte outside the owned marker regions."""
         registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
-        registry_data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
+        _rename_make_target(registry_data, "check-core-compat", "check-core-compat-renamed")
         registry_path = tmp_path / "registry.json"
         registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
         gates = _parse_registry(registry_path)
@@ -1818,7 +1957,7 @@ class TestHostedCiGateGeneration:
             encoding="utf-8",
         )
         registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
-        registry_data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
+        _rename_make_target(registry_data, "check-core-compat", "check-core-compat-renamed")
         registry_path = tmp_path / "registry.json"
         registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
 
@@ -2180,12 +2319,22 @@ class TestE2eWorkflowGeneration:
             calls.append(("docs", path))
             return False, ""
 
+        def fake_local(path: Path, _registry: Path) -> tuple[bool, str]:
+            calls.append(("local", path))
+            return False, ""
+
+        def fake_makefile(path: Path, _registry: Path) -> tuple[bool, str]:
+            calls.append(("makefile", path))
+            return False, ""
+
         monkeypatch.setattr(sync_ci_gate_jobs_module, "_parse_registry", fake_registry)
         monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_workflow", fake_hosted)
         monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_e2e_workflow", fake_e2e)
         monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_make_include", fake_make_include)
         monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_publish_workflow", fake_publish)
         monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_docs_table", fake_docs)
+        monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_local_arms", fake_local)
+        monkeypatch.setattr(sync_ci_gate_jobs_module, "sync_makefile_help", fake_makefile)
         assert sync_ci_gate_jobs_module.main(["--check", "--e2e-workflow", "custom-e2e.yml"]) == 0
         assert calls == [("e2e", Path("custom-e2e.yml"))]
         calls.clear()
@@ -2204,6 +2353,12 @@ class TestE2eWorkflowGeneration:
         )
         assert calls == [("publish", Path("custom-publish.yml"))]
         calls.clear()
+        assert sync_ci_gate_jobs_module.main(["--check", "--local-script", "custom-ci.sh"]) == 0
+        assert calls == [("local", Path("custom-ci.sh"))]
+        calls.clear()
+        assert sync_ci_gate_jobs_module.main(["--check", "--makefile", "custom-Makefile"]) == 0
+        assert calls == [("makefile", Path("custom-Makefile"))]
+        calls.clear()
         assert (
             sync_ci_gate_jobs_module.main(
                 ["--check", "--workflow", "custom-ci.yml", "--e2e-workflow", "custom-e2e.yml"]
@@ -2219,6 +2374,8 @@ class TestE2eWorkflowGeneration:
             ("publish", DEFAULT_PUBLISH_WORKFLOW),
             ("make", DEFAULT_MAKE_INCLUDE),
             ("docs", sync_ci_gate_jobs_module.DEFAULT_DOCS),
+            ("local", sync_ci_gate_jobs_module.DEFAULT_LOCAL_SCRIPT),
+            ("makefile", sync_ci_gate_jobs_module.DEFAULT_MAKEFILE),
         ]
 
 
@@ -2436,6 +2593,249 @@ class TestMakeIncludeGeneration:
 
 
 # =========================================================================
+# SA275b — generated local-CI arms and Makefile gate help
+# =========================================================================
+
+
+class TestLocalArmGeneration:
+    """The local runner's display arms are projected from the registry."""
+
+    def test_real_arm_region_is_current(self) -> None:
+        """The committed local-CI script matches the arm renderer."""
+        drift, expected = sync_ci_gate_jobs_module.sync_local_arms(
+            DEFAULT_LOCAL_SCRIPT, DEFAULT_REGISTRY
+        )
+        assert drift is False
+        assert expected == DEFAULT_LOCAL_SCRIPT.read_text(encoding="utf-8")
+
+    def test_every_arm_projects_its_registry_row(self) -> None:
+        """Each gate carrying local metadata renders its exact arm lines."""
+        gates = _parse_registry(DEFAULT_REGISTRY)
+        rendered = sync_ci_gate_jobs_module.expected_local_arms_text(
+            DEFAULT_LOCAL_SCRIPT.read_text(encoding="utf-8"), gates
+        )
+        displayed = [gate for gate in gates if "local" in gate]
+        assert displayed
+        generated_arms = rendered.split(LOCAL_ARMS_BEGIN + "\n", 1)[1].split(
+            LOCAL_ARMS_END + "\n", 1
+        )[0]
+        assert generated_arms.count("LOCAL_GATE_DESCRIPTION=") == len(displayed)
+        for gate in displayed:
+            metadata = gate["local"]
+            assert f"        {gate['bindings']['make_target']})\n" in rendered
+            assert f'            LOCAL_GATE_DESCRIPTION="{metadata["description"]}"\n' in rendered
+            assert f'            LOCAL_GATE_SUCCESS="{metadata["success"]}"\n' in rendered
+            assert (
+                f'            LOCAL_GATE_FAILURE_LABEL="{metadata["failure_label"]}"\n' in rendered
+            )
+
+    def test_gate_without_local_metadata_keeps_the_generic_fallback(self) -> None:
+        """A gate without local metadata stays addressable through the fallback arm."""
+        gates = _parse_registry(DEFAULT_REGISTRY)
+        fallback = [
+            gate for gate in gates if "local" not in gate and gate["bindings"].get("make_target")
+        ]
+        assert fallback
+        rendered = sync_ci_gate_jobs_module.expected_local_arms_text(
+            DEFAULT_LOCAL_SCRIPT.read_text(encoding="utf-8"), gates
+        )
+        generated_arms = rendered.split(LOCAL_ARMS_BEGIN + "\n", 1)[1].split(
+            LOCAL_ARMS_END + "\n", 1
+        )[0]
+        for gate in fallback:
+            assert f"        {gate['bindings']['make_target']})\n" not in generated_arms
+        assert '            LOCAL_GATE_DESCRIPTION="Running $target..."\n' in rendered
+
+    def test_malformed_arm_markers_fail_closed(self) -> None:
+        """Missing pairs and markers outside the describe case are invalid input."""
+        current = DEFAULT_LOCAL_SCRIPT.read_text(encoding="utf-8")
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        partial = current.replace(LOCAL_ARMS_BEGIN + "\n", "", 1)
+        with pytest.raises(GeneratorError, match="incomplete or duplicated"):
+            sync_ci_gate_jobs_module.expected_local_arms_text(partial, registry)
+        relocated = current.replace(LOCAL_ARMS_BEGIN + "\n", "", 1)
+        relocated = relocated.replace(
+            '    case "$target" in\n', LOCAL_ARMS_BEGIN + '\n    case "$target" in\n', 1
+        )
+        with pytest.raises(GeneratorError, match="not owned by the describe case"):
+            sync_ci_gate_jobs_module.expected_local_arms_text(relocated, registry)
+
+
+class TestMakefileHelpGeneration:
+    """The Makefile's gate-help region is projected from the registry."""
+
+    def test_real_makefile_help_is_current(self) -> None:
+        """The committed Makefile matches the help renderer."""
+        drift, expected = sync_ci_gate_jobs_module.sync_makefile_help(
+            DEFAULT_MAKEFILE, DEFAULT_REGISTRY
+        )
+        assert drift is False
+        assert expected == DEFAULT_MAKEFILE.read_text(encoding="utf-8")
+
+    def test_every_help_line_projects_its_registry_row(self) -> None:
+        """Each gate carrying help metadata renders its exact line, in order."""
+        gates = _parse_registry(DEFAULT_REGISTRY)
+        rendered = sync_ci_gate_jobs_module.expected_makefile_help_text(
+            DEFAULT_MAKEFILE.read_text(encoding="utf-8"), gates
+        )
+        helped = [gate for gate in gates if "makefile_help" in gate]
+        assert helped
+        orders = sorted(gate["makefile_help"]["order"] for gate in helped)
+        assert orders == list(range(1, len(helped) + 1))
+        positions = []
+        ordered = sorted(helped, key=lambda gate: gate["makefile_help"]["order"])
+        for gate in ordered:
+            line = f'\t@echo "  {gate["makefile_help"]["text"]}"\n'
+            assert line in rendered
+            positions.append(rendered.index(line))
+        assert positions == sorted(positions)
+
+    def test_help_recipe_emits_no_generated_markers(self) -> None:
+        """The silenced marker lines never leak into ordinary `make help` output."""
+        result = subprocess.run(
+            ["make", "help"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "GENERATED" not in result.stdout
+        assert "make check-core-compat" in result.stdout
+
+    def test_malformed_help_markers_fail_closed(self) -> None:
+        """Missing pairs and markers outside the help recipe are invalid input."""
+        current = DEFAULT_MAKEFILE.read_text(encoding="utf-8")
+        registry = _parse_registry(DEFAULT_REGISTRY)
+        partial = current.replace(MAKEFILE_HELP_END + "\n", "", 1)
+        with pytest.raises(GeneratorError, match="incomplete or duplicated"):
+            sync_ci_gate_jobs_module.expected_makefile_help_text(partial, registry)
+        relocated = current.replace(MAKEFILE_HELP_BEGIN + "\n", "", 1)
+        relocated = relocated.replace("help:\n", MAKEFILE_HELP_BEGIN + "\nhelp:\n", 1)
+        with pytest.raises(GeneratorError, match="not owned by the help recipe"):
+            sync_ci_gate_jobs_module.expected_makefile_help_text(relocated, registry)
+
+
+class TestOneStationFixtureProjection:
+    """A fixture gate added to the registry alone reaches every generated station."""
+
+    @staticmethod
+    def _fixture_gates() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        gates: list[dict[str, Any]] = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))[
+            "gates"
+        ]
+
+        def next_order(key: str) -> int:
+            return 1 + max((gate[key]["order"] for gate in gates if key in gate), default=0)
+
+        fixture = {
+            "id": "check-fixture-gate",
+            "description": "One-station fixture gate",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish",
+                "e2e-trigger",
+            ],
+            "bindings": {
+                "make_target": "check-fixture-gate",
+                "ci_job": "fixture-gate",
+                "local_ci_stage": 7,
+            },
+            "hosted": {
+                "order": next_order("hosted"),
+                "display_name": "Fixture Gate",
+                "check_step_name": "Run fixture gate",
+            },
+            "publish": {"order": next_order("publish"), "step_name": "Run fixture gate step"},
+            "help": "Fixture gate comment",
+            "local": {
+                "order": next_order("local"),
+                "description": "Running fixture gate...",
+                "success": "✓ Fixture gate passed",
+                "failure_label": "Fixture Gate",
+            },
+            "makefile_help": {
+                "order": next_order("makefile_help"),
+                "text": "make check-fixture-gate - Fixture gate help line",
+            },
+            "make_recipe": ["@$(PYTHON) scripts/check_fixture_gate.py"],
+            "depends_on": [],
+            "trigger_inputs": ["scripts/check_fixture_gate.py"],
+        }
+        gates.append(fixture)
+        return gates, fixture
+
+    def test_fixture_gate_projects_into_every_generated_station(self) -> None:
+        """
+        One registry row projects into every generated station.
+
+        The row is the only hand station a gate costs: the hosted job and the
+        consumer needs, the E2E allowlist, the publish step, the generated Make
+        include, the docs table, the local runner's display arm, and the
+        Makefile help line all render from it.
+        """
+        gates, fixture = self._fixture_gates()
+        target = fixture["bindings"]["make_target"]
+
+        workflow = expected_workflow_text(DEFAULT_WORKFLOW.read_text(encoding="utf-8"), gates)
+        assert "  fixture-gate:\n" in workflow
+        assert "name: Fixture Gate\n" in workflow
+        assert f"make {target}\n" in workflow
+        parsed = _parse_workflow(workflow, "fixture ci.yml")
+        assert "fixture-gate" in parsed["jobs"]["test"]["needs"]
+
+        e2e = expected_e2e_workflow_text(DEFAULT_E2E_WORKFLOW.read_text(encoding="utf-8"), gates)
+        assert "      - 'scripts/check_fixture_gate.py'\n" in e2e
+
+        publish = expected_publish_workflow_text(
+            DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8"), gates
+        )
+        assert "      - name: Run fixture gate step\n" in publish
+        assert f"make {target}\n" in publish
+
+        include = sync_ci_gate_jobs_module._render_make_include(gates)
+        assert f"\n{target}:\n" in include
+        assert "# Fixture gate comment\n" in include
+
+        docs = expected_docs_text(DEFAULT_DOCS.read_text(encoding="utf-8"), gates)
+        assert f"| `{fixture['id']}` | `make {target}` |" in docs
+
+        arms = sync_ci_gate_jobs_module.expected_local_arms_text(
+            DEFAULT_LOCAL_SCRIPT.read_text(encoding="utf-8"), gates
+        )
+        assert f"        {target})\n" in arms
+        assert '            LOCAL_GATE_DESCRIPTION="Running fixture gate..."\n' in arms
+
+        help_text = sync_ci_gate_jobs_module.expected_makefile_help_text(
+            DEFAULT_MAKEFILE.read_text(encoding="utf-8"), gates
+        )
+        assert f"  make {target} - Fixture gate help line" in help_text
+
+    def test_fixture_registry_passes_schema_validation(self) -> None:
+        """The fixture row is self-sufficient: no station needs a companion edit."""
+        gates, _fixture = self._fixture_gates()
+        assert _validate_registry(
+            {
+                "schema_version": 1,
+                "description": "fixture registry",
+                "contexts": {
+                    name: f"{name} context"
+                    for name in (
+                        "local-serial",
+                        "local-parallel",
+                        "hosted",
+                        "publish",
+                        "e2e-trigger",
+                    )
+                },
+                "gates": gates,
+            }
+        )
+
+
+# =========================================================================
 # SA259 — generated publish workflow gate steps
 # =========================================================================
 
@@ -2474,7 +2874,7 @@ class TestPublishWorkflowGeneration:
     def test_registry_make_target_edit_projects_into_publish_region(self, tmp_path: Path) -> None:
         """A registry target edit propagates into its owned publish step."""
         registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
-        registry_data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
+        _rename_make_target(registry_data, "check-core-compat", "check-core-compat-renamed")
         registry_path = tmp_path / "registry.json"
         registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
         gates = _parse_registry(registry_path)
@@ -2562,9 +2962,11 @@ class TestPublishWorkflowGeneration:
     def test_vintage_step_derives_its_target_from_the_registry(self, tmp_path: Path) -> None:
         """The vintage step keeps its env prefix while projecting the registry target."""
         registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
-        for gate in registry_data["gates"]:
-            if gate["id"] == "check-project-contract-vintage":
-                gate["bindings"]["make_target"] = "check-project-contract-vintage-renamed"
+        _rename_make_target(
+            registry_data,
+            "check-project-contract-vintage",
+            "check-project-contract-vintage-renamed",
+        )
         registry_path = tmp_path / "registry.json"
         registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
         gates = _parse_registry(registry_path)
@@ -2594,8 +2996,8 @@ class TestPublishWorkflowGeneration:
         with pytest.raises(GeneratorError, match="marker"):
             expected_publish_workflow_text(mutation(valid), registry)
 
-    def test_registry_publish_set_mismatch_fails_closed(self, tmp_path: Path) -> None:
-        """A publish-context change the file does not project fails closed."""
+    def test_registry_publish_removal_fails_closed(self, tmp_path: Path) -> None:
+        """A publish-context removal the file does not project fails closed."""
         registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
         for gate in registry_data["gates"]:
             if gate["id"] == "check-split-facade-imports":
@@ -2609,6 +3011,9 @@ class TestPublishWorkflowGeneration:
         with pytest.raises(GeneratorError, match="contains non-gate steps"):
             expected_publish_workflow_text(current, _parse_registry(removed_path))
 
+    def test_registry_publish_addition_projects_from_its_row_alone(self, tmp_path: Path) -> None:
+        """A registry-only publish gate projects into the marked region in order."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
         registry_data["gates"].append(
             {
                 "id": "fake-publish-gate",
@@ -2626,8 +3031,16 @@ class TestPublishWorkflowGeneration:
         )
         added_path = tmp_path / "added.json"
         added_path.write_text(json.dumps(registry_data), encoding="utf-8")
-        with pytest.raises(GeneratorError, match="generated region is missing gate step"):
-            expected_publish_workflow_text(current, _parse_registry(added_path))
+        current = DEFAULT_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+        gates = _parse_registry(added_path)
+
+        generated = expected_publish_workflow_text(current, gates)
+
+        assert "      - name: Run fake publish gate\n" in generated
+        assert "make check-fake-publish\n" in generated
+        assert generated.index(PUBLISH_BEGIN) < generated.index("Run fake publish gate")
+        assert generated.index("Run fake publish gate") < generated.index(PUBLISH_END)
+        assert expected_publish_workflow_text(generated, gates) == generated
 
     def test_cli_check_write_and_clean_exit_contract(self, tmp_path: Path) -> None:
         """Drift is reported, written, and then checks clean through the CLI."""
@@ -2750,7 +3163,7 @@ class TestGenerationGateRegistryParity:
         """Write a pytest-managed registry fixture, optionally with a run drift."""
         data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
         if renamed:
-            data["gates"][0]["bindings"]["make_target"] = "check-core-compat-renamed"
+            _rename_make_target(data, "check-core-compat", "check-core-compat-renamed")
         fixture_dir = tmp_path / ("renamed" if renamed else "clean")
         fixture_dir.mkdir()
         path = fixture_dir / "custom_registry.json"

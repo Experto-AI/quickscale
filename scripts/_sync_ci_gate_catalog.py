@@ -30,6 +30,10 @@ PUBLISH_BEGIN = "      # BEGIN GENERATED: publish-gate-steps"
 PUBLISH_END = "      # END GENERATED: publish-gate-steps"
 DOCS_TABLE_BEGIN = "<!-- BEGIN GENERATED: gate-registry-table -->"
 DOCS_TABLE_END = "<!-- END GENERATED: gate-registry-table -->"
+LOCAL_ARMS_BEGIN = "        # BEGIN GENERATED: local-gate-arms"
+LOCAL_ARMS_END = "        # END GENERATED: local-gate-arms"
+MAKEFILE_HELP_BEGIN = "\t@# BEGIN GENERATED: makefile-gate-help"
+MAKEFILE_HELP_END = "\t@# END GENERATED: makefile-gate-help"
 
 UNOWNED_JOB_RATIONALES = {
     "bypassrls": (

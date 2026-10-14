@@ -47,6 +47,8 @@ DEFAULT_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "publish.yml"
 DEFAULT_REGISTRY = REPO_ROOT / "scripts" / "gate_registry.json"
 DEFAULT_MAKE_INCLUDE = REPO_ROOT / "scripts" / "gates.mk"
 DEFAULT_DOCS = REPO_ROOT / "docs" / "technical" / "validation_policy.md"
+DEFAULT_LOCAL_SCRIPT = REPO_ROOT / "scripts" / "check_ci_locally.sh"
+DEFAULT_MAKEFILE = REPO_ROOT / "Makefile"
 
 
 class GeneratorError(ValueError):

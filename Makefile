@@ -335,10 +335,10 @@ help:
 	@echo "  make legacy-status        - Show legacy symlink status"
 	@echo ""
 	@echo "Repository gates (auto-run by \`make check\` — run solo only to debug drift):"
+	@# BEGIN GENERATED: makefile-gate-help
 	@echo "  make check-core-compat            - Module core imports resolve, and the lockstep pin matches VERSION"
 	@echo "  make check-module-core-imports    - Module code imports only from quickscale_core.runtime"
 	@echo "  make check-manifest-sync          - Module-owned module.yml files match their core snapshots"
-	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
 	@echo "  make check-module-app-declaration - Evidence-bearing modules declare Django apps wiring"
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
@@ -352,12 +352,14 @@ help:
 	@echo "  make check-secret-scanning        - Blocking gitleaks secret scan with reasoned allowlists"
 	@echo "  make check-module-conventions     - Module Conventions rule 40 conformance check over every manifest and module source"
 	@echo "  make check-split-facade-imports   - Reject a private module importing a facade in its distribution (SA234)"
+	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
+	@# END GENERATED: makefile-gate-help
+	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts and the known-bad Dockerfile gate control"
 	@echo "  make refresh-action-pins          - Operator: refresh SHA-pinned actions to their latest releases (CHECK=1 reports only)"
-	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
 	@echo "  make isolation-conformance         - Run the PostgreSQL isolation-conformance suite"
 	@echo "  make check-gate-parity            - SA259: verify every generated gate-wiring file is current (exit 0 = current, 1 = drift)"
-	@echo "  make check-ci-gate-generation     - SA122b: verify registry-bound generated wiring is current (workflows, gates.mk, docs table)"
+	@echo "  make check-ci-gate-generation     - SA122b: verify registry-bound generated wiring is current (workflows, gates.mk, docs table, local arms, Makefile help)"
 	@echo ""
 	@echo "Release-only tooling (maintainers):"
 	@echo "  make help-release         - SA117 scope, publication, and module-apply gates"
@@ -1127,7 +1129,8 @@ isolation-conformance:
 
 # Verify that every file generated from scripts/gate_registry.json is current:
 # the generated gates.mk include, the hosted-job/E2E/publish workflow regions,
-# and the gate-roster table in docs/technical/validation_policy.md.  Exits 0
+# the gate-roster table in docs/technical/validation_policy.md, the local
+# runner's display arms, and this Makefile's gate-help region.  Exits 0
 # when all generated files match; exits 1 with a unified diff per stale file.
 # This is a blocking diagnostic and is also invoked directly by make check.
 check-gate-parity:

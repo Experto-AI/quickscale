@@ -5,8 +5,9 @@ SA259 — Gate wiring currency checker.
 ``gate_registry.json`` is the only gate list.  The generated Make include
 (``scripts/gates.mk``), the hosted-job regions and consumer ``needs`` lists in
 ``ci.yml``, the E2E allowlist in ``e2e.yml``, the publish workflow's
-gate-step region, and the gate-roster table in
-``docs/technical/validation_policy.md`` are all rendered from it by
+gate-step region, the gate-roster table in
+``docs/technical/validation_policy.md``, ``scripts/check_ci_locally.sh``'s
+display arms, and the ``Makefile`` gate-help region are all rendered from it by
 ``sync_ci_gate_jobs.py``.  This checker loads the registry through the
 authoritative strict-JSON schema (duplicate-key rejection, binding collisions,
 dependency-cycle detection) that the generator shares, then proves every
@@ -127,6 +128,8 @@ def _generated_drift(registry_path: Path) -> list[tuple[str, str, str]]:
             generator.DEFAULT_DOCS,
             generator.sync_docs_table,
         ),
+        ("scripts/check_ci_locally.sh", generator.DEFAULT_LOCAL_SCRIPT, generator.sync_local_arms),
+        ("Makefile", generator.DEFAULT_MAKEFILE, generator.sync_makefile_help),
     )
     drifted: list[tuple[str, str, str]] = []
     for label, path, render in surfaces:

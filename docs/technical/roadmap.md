@@ -39,14 +39,13 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
 | SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
-| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | SA275 | Optional |
+| SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA275 | Derive gate wiring from the registry instead of holding copies equal | 2 | — | Optional |
 | SA278 | Retire the gate-script frozen surfaces and scan `scripts/` for quality | 2 | — | Optional |
 | SA273 | Harden the editor upload and the CLI's `pyproject.toml` write | 2 | — | Optional |
 | SA282 | One organization-selector flag and a required contract-vintage id | 2 | — | Optional |
-| SA280 | One source for the Stripe API version and the bundled manifests | 2 | SA275 | Optional |
+| SA280 | One source for the Stripe API version and the bundled manifests | 2 | — | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
 | SA276 | Generate the theme's seam types from the manifest set | 3 | — | Optional |
 | SA274 | Show real counts on the theme's CRM stat cards | 3 | — | Optional |
@@ -58,20 +57,19 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
-Track 2: SA275 ──► SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
+Track 2: SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
 Track 3: SA276 ──► SA274 ──► SA283 ──► SA279 ──► SA281
      release path:  publish 0.89.0 ──► SA191 repin
-     critical path: SA275 (b) ──► SA204 (c) ──► SA204 (g) ──► SA153 (a)
+     critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Cross-track edges:
-SA191 waits on Track 2's release fixes (through the 0.89.0 publication); SA204 waits on SA275 so
-its freeze gate costs one registry row instead of about eight hand stations (arch audit §7);
-SA279 waits on SA278, whose guard test it extends; SA277 waits on SA191's cutover, which decides
-which upgrade mechanism proved itself.
+SA191 waits on Track 2's release fixes (through the 0.89.0 publication); SA204's freeze gate
+costs one registry row now that SA275 has landed (arch audit §7); SA279 waits on SA278, whose
+guard test it extends; SA277 waits on SA191's cutover, which decides which upgrade mechanism
+proved itself.
 
-**Parallel start.** SA204 (e), SA275 (b), and SA276 (b) have no unmet dependency and touch
-disjoint files. Of SA204's slices only (c) waits on SA275.
+**Parallel start.** SA204 (e) and SA276 (b) have no unmet dependency and touch disjoint files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
 with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
@@ -92,7 +90,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (e) | yes | no | yes | no | yes |
-| 2 | SA275 (b) | yes | yes | yes | yes | yes |
+| 2 | SA278 | yes | yes | yes | yes | no |
 | 3 | SA276 (b) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -223,7 +221,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     in every backup's metadata and content-identity checks in recovery.py: a restore proceeds
     when the recorded migration files are still installed byte-identical (newer installed
     migrations apply forward), and refuses a changed, missing, or unrecorded identity. Next:
-    (e), with (c) still waiting on SA275.
+    (e); (c) is unblocked now that SA275 has landed.
   - [ ] (e) `quickscale update` compares applied migration hashes and refuses an equal-label
     mismatch, with tests (Tier 2-fast; Track 2 reviews).
   - [ ] (f) The restored-`bap-web` proof: `migrate` from the frozen `0001` reproduces the
@@ -323,31 +321,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 ### Track 2 — gate derivation, upgrade path, and Track 2 hardening
 
-- [ ] **SA275 — Derive gate wiring from the registry instead of holding copies equal.**
-
-  Closes the gate part of arch `rules-held-by-parity-not-derivation` (Finding 3, option 1).
-
-  **Context:** SA259 generated `gates.mk`, the workflow regions, and the docs table, but
-  `sync_ci_gate_jobs.py` re-held the registry by hand — `HOSTED_GATE_ORDER`, `PUBLISH_GATE_ORDER`,
-  `HOSTED_JOB_CATALOG`, `PUBLISH_STEP_CATALOG`, and the help-text map; slice (a) moved that data
-  into registry fields. `check_ci_locally.sh`
-  keeps a hand-written `case` arm per gate, and the `Makefile` help line names gates; those remain
-  the hand stations. SA204 (c) adds the next gate row.
-
-  **Acceptance:** gate order and the hosted, publish, and help metadata are fields of
-  `gate_registry.json`; the order tuples and catalogs are deleted, and the generator raises no
-  copy-equality error. `check_ci_locally.sh`'s gate arms and the Makefile gate help are generated
-  by the same sync (or read the registry at run time), and the existing "generated files are
-  current" check covers them. A fixture gate added to the registry alone appears in every
-  generated station: one hand station per gate. Emitted output is byte-identical for today's
-  gates.
-
-  **Slices:**
-  - [x] (a) Order and hosted/publish/help metadata are registry fields. Watch: an existing
-    gate's edited labels/order, or a publish-bound addition, still fails until the workflow's old
-    value is hand-replaced; the fixture test decides what (b) must project.
-  - [ ] (b) Generate `check_ci_locally.sh`'s gate arms and the Makefile gate help, with the
-    one-station fixture test (Tier 2-fast).
+- [x] **SA275 — Derive gate wiring from the registry instead of holding copies equal.**
 
 - [ ] **SA278 — Retire the gate-script frozen surfaces and scan `scripts/` for quality.**
 

@@ -46,6 +46,8 @@ _GATE_KEYS: frozenset[str] = frozenset(
         "hosted",
         "publish",
         "help",
+        "local",
+        "makefile_help",
         "make_recipe",
         "depends_on",
         "trigger_inputs",
@@ -59,6 +61,14 @@ _HOSTED_METADATA_KEYS: frozenset[str] = frozenset(
 )
 
 _PUBLISH_METADATA_KEYS: frozenset[str] = frozenset({"order", "step_name", "command_prefix"})
+
+_LOCAL_METADATA_KEYS: frozenset[str] = frozenset(
+    {"order", "description", "success", "failure_label"}
+)
+
+_MAKEFILE_HELP_METADATA_KEYS: frozenset[str] = frozenset({"order", "text"})
+
+_REGEN_CHARS = ('"', "\\", "$", "`")
 
 _ID_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
 _PATH_SAFE_RE = re.compile(r"^(?!.*\.\.)[a-zA-Z0-9_./*-]+$")
@@ -135,6 +145,8 @@ class _RegistryIndex:
     seen_ci_jobs: dict[str, str] = field(default_factory=dict)
     seen_hosted_orders: dict[int, str] = field(default_factory=dict)
     seen_publish_orders: dict[int, str] = field(default_factory=dict)
+    seen_local_orders: dict[int, str] = field(default_factory=dict)
+    seen_makefile_help_orders: dict[int, str] = field(default_factory=dict)
 
 
 def _validate_top_level_keys(data: dict[str, Any]) -> None:
@@ -244,7 +256,9 @@ def _require_gate_keys(gate: dict[str, Any], i: int) -> None:
             f"gates[{i}]",
             f"unknown key(s) in gate[{i}]: {', '.join(sorted(gate_unknown))}",
         )
-    gate_missing = (_GATE_KEYS - {"make_recipe", "hosted", "publish", "help"}) - set(gate.keys())
+    gate_missing = (
+        _GATE_KEYS - {"make_recipe", "hosted", "publish", "help", "local", "makefile_help"}
+    ) - set(gate.keys())
     if gate_missing:
         raise SchemaValidationError(
             "registry",
@@ -717,6 +731,124 @@ def _validate_help_metadata(gate: dict[str, Any], i: int, gid: str) -> None:
         )
 
 
+def _require_echo_safe_text(value: Any, i: int, gid: str, path: str, label: str) -> None:
+    """
+    Require one literal line emitted inside generated double-quoted shell text.
+
+    A local-CI arm assignment or a Makefile help line is emitted verbatim, so a
+    double quote, backslash, dollar sign, or backtick would change the generated
+    file's meaning; fail closed instead of escaping registry-owned text.
+    """
+    if not isinstance(value, str) or not value:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].{path}",
+            f"gate[{i}] ({gid}).{label} must be a non-empty string",
+        )
+    if "\n" in value or "\r" in value:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].{path}",
+            f"gate[{i}] ({gid}).{label} must be a single line",
+        )
+    if value != value.strip():
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].{path}",
+            f"gate[{i}] ({gid}).{label} must be one whitespace-trimmed line",
+        )
+    if any(character in value for character in _REGEN_CHARS):
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].{path}",
+            f"gate[{i}] ({gid}).{label} must not contain a double quote, backslash, "
+            "dollar sign, or backtick",
+        )
+
+
+def _validate_local_metadata(gate: dict[str, Any], i: int, gid: str, index: _RegistryIndex) -> None:
+    """
+    Validate the optional local-CI display metadata and its unique order.
+
+    The local runner's display arms key on the Make target, so metadata without
+    one would never be projected and fails closed instead.  A gate without the
+    metadata keeps the runner's generic fallback text.
+    """
+    if "local" not in gate:
+        return
+    metadata = _require_metadata_mapping(
+        gate,
+        i,
+        gid,
+        "local",
+        _LOCAL_METADATA_KEYS,
+        required=("order", "description", "success", "failure_label"),
+    )
+    if not isinstance(gate["bindings"].get("make_target"), str):
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].local",
+            f"gate[{i}] ({gid}).local requires a string make_target binding",
+        )
+    order = _require_positive_order(metadata["order"], i, gid, "local.order", "local.order")
+    for key in ("description", "success", "failure_label"):
+        _require_echo_safe_text(metadata[key], i, gid, f"local.{key}", f"local.{key}")
+    if order in index.seen_local_orders:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].local.order",
+            f"local order {order} already used by gate {index.seen_local_orders[order]!r}",
+        )
+    index.seen_local_orders[order] = gid
+
+
+def _validate_makefile_help_metadata(
+    gate: dict[str, Any], i: int, gid: str, index: _RegistryIndex
+) -> None:
+    """
+    Validate the optional Makefile help line and its unique order.
+
+    The line is emitted verbatim inside the generated help block, so it must
+    name the gate's own Make target; a gate without the metadata keeps its help
+    line hand-written outside the generated region.
+    """
+    if "makefile_help" not in gate:
+        return
+    metadata = _require_metadata_mapping(
+        gate,
+        i,
+        gid,
+        "makefile_help",
+        _MAKEFILE_HELP_METADATA_KEYS,
+        required=("order", "text"),
+    )
+    target = gate["bindings"].get("make_target")
+    if not isinstance(target, str):
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].makefile_help",
+            f"gate[{i}] ({gid}).makefile_help requires a string make_target binding",
+        )
+    order = _require_positive_order(
+        metadata["order"], i, gid, "makefile_help.order", "makefile_help.order"
+    )
+    _require_echo_safe_text(metadata["text"], i, gid, "makefile_help.text", "makefile_help.text")
+    if not metadata["text"].startswith(f"make {target} "):
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].makefile_help.text",
+            f"gate[{i}] ({gid}).makefile_help.text must name its own Make target {target!r}",
+        )
+    if order in index.seen_makefile_help_orders:
+        raise SchemaValidationError(
+            "registry",
+            f"gates[{i}].makefile_help.order",
+            f"makefile help order {order} already used by gate "
+            f"{index.seen_makefile_help_orders[order]!r}",
+        )
+    index.seen_makefile_help_orders[order] = gid
+
+
 def _validate_gate_entry(
     gate: dict[str, Any], i: int, known_contexts: frozenset[str], index: _RegistryIndex
 ) -> None:
@@ -740,6 +872,8 @@ def _validate_gate_entry(
     _validate_hosted_metadata(gate, i, gid, rc, index)
     _validate_publish_metadata(gate, i, gid, rc, index)
     _validate_help_metadata(gate, i, gid)
+    _validate_local_metadata(gate, i, gid, index)
+    _validate_makefile_help_metadata(gate, i, gid, index)
 
 
 def _validate_gate_entries(gates: list[dict[str, Any]], known_contexts: frozenset[str]) -> set[str]:
