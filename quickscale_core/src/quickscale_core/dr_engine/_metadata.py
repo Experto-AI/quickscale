@@ -22,6 +22,8 @@ import quickscale_core.dr_engine.primitives as _primitives
 import django.conf as _conf
 import importlib as _importlib
 import quickscale_core.dr_engine._paths as _paths
+import quickscale_core.migration_hashes as _migration_hashes
+import stat
 import subprocess
 import django
 
@@ -50,6 +52,46 @@ def _collect_module_versions() -> dict[str, str]:
             continue
         versions[app_config.name] = str(getattr(package, "__version__", "unknown"))
     return versions
+
+
+def _collect_module_migration_hashes() -> dict[str, dict[str, str]]:
+    """Return each installed module's applied-migration content identity.
+
+    One key per installed QuickScale module, mirroring
+    :func:`_collect_module_versions`, so a service module's empty mapping stays
+    distinguishable from a module the backup does not record.  A module whose
+    migration files cannot be hashed fails the capture rather than recording a
+    weaker identity.
+    """
+    hashes: dict[str, dict[str, str]] = {}
+    for app_config in apps.get_app_configs():
+        if not app_config.name.startswith("quickscale_modules_"):
+            continue
+        migrations_dir = Path(app_config.path) / "migrations"
+        try:
+            is_directory = stat.S_ISDIR(migrations_dir.stat().st_mode)
+        except FileNotFoundError:
+            hashes[app_config.name] = {}
+            continue
+        except OSError as exc:
+            raise _primitives.BackupConfigurationError(
+                "Unable to inspect the migrations package for module "
+                f"'{app_config.name}': {exc}"
+            ) from exc
+        if not is_directory:
+            raise _primitives.BackupConfigurationError(
+                f"Module '{app_config.name}' has a migrations path that is not a directory"
+            )
+        try:
+            hashes[app_config.name] = _migration_hashes.compute_migration_hashes(
+                migrations_dir
+            )
+        except (_migration_hashes.MigrationHashError, OSError) as exc:
+            raise _primitives.BackupConfigurationError(
+                "Unable to record the migration content identity for module "
+                f"'{app_config.name}': {exc}"
+            ) from exc
+    return hashes
 
 
 def _get_git_revision() -> str | None:
@@ -199,6 +241,7 @@ def _build_backup_metadata(
         "environment": os.getenv("QUICKSCALE_ENVIRONMENT", "local") or "local",
         "target_mode": target_mode,
         "module_versions": _collect_module_versions(),
+        "migration_hashes": _collect_module_migration_hashes(),
         "app_version": str(
             getattr(_conf.settings, "QUICKSCALE_APP_VERSION", "unknown")
         ),

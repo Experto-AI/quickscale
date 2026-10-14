@@ -84,8 +84,10 @@ class TestRestoreResolutionAndGuards:
                 ),
             ),
             patch(
-                "quickscale_core.dr_engine._metadata._collect_module_versions",
-                return_value={"quickscale_modules_auth": "2.0"},
+                "quickscale_core.dr_engine._metadata._collect_module_migration_hashes",
+                return_value={
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
             ),
             patch(
                 "quickscale_core.dr_engine.recovery._get_restore_compatibility_issues",
@@ -97,7 +99,9 @@ class TestRestoreResolutionAndGuards:
         checker.assert_called_once_with(
             artifact,
             "sqlite",
-            installed_module_versions={"quickscale_modules_auth": "2.0"},
+            installed_migration_hashes={
+                "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+            },
         )
 
     @pytest.mark.parametrize(
@@ -194,7 +198,7 @@ class TestRestoreResolutionAndGuards:
             ),
             patch("django.conf.settings", SimpleNamespace(DEBUG=True)),
             patch(
-                "quickscale_core.dr_engine._metadata._collect_module_versions",
+                "quickscale_core.dr_engine._metadata._collect_module_migration_hashes",
                 return_value={},
             ),
             patch(
@@ -236,7 +240,7 @@ class TestRestoreResolutionAndGuards:
             ),
             patch("django.conf.settings", SimpleNamespace(DEBUG=True)),
             patch(
-                "quickscale_core.dr_engine._metadata._collect_module_versions",
+                "quickscale_core.dr_engine._metadata._collect_module_migration_hashes",
                 return_value={},
             ),
             patch(
@@ -259,7 +263,7 @@ class TestRestoreResolutionAndGuards:
             )
         persist.assert_not_called()
 
-    def test_execute_restore_wrapper_supplies_installed_module_versions(
+    def test_execute_restore_wrapper_supplies_installed_migration_hashes(
         self, tmp_path: Path
     ) -> None:
         source = _source(tmp_path / "trusted.dump", _artifact())
@@ -275,8 +279,10 @@ class TestRestoreResolutionAndGuards:
             ),
             patch("django.conf.settings", SimpleNamespace(DEBUG=True)),
             patch(
-                "quickscale_core.dr_engine._metadata._collect_module_versions",
-                return_value={"quickscale_modules_auth": "2.0"},
+                "quickscale_core.dr_engine._metadata._collect_module_migration_hashes",
+                return_value={
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
             ),
             patch(
                 "quickscale_core.dr_engine.recovery._execute_restore_for_resolved_source",
@@ -290,8 +296,8 @@ class TestRestoreResolutionAndGuards:
                 allow_production=False,
                 shell_runner=None,
             )
-        assert core.call_args.kwargs["installed_module_versions"] == {
-            "quickscale_modules_auth": "2.0"
+        assert core.call_args.kwargs["installed_migration_hashes"] == {
+            "quickscale_modules_auth": {"0001_initial.py": "hash-1"}
         }
 
     def test_restore_backup_source_resolves_then_executes_in_order(self) -> None:
@@ -324,10 +330,11 @@ class TestRestoreResolutionAndGuards:
             dry_run=True,
             allow_production=False,
             shell_runner="runner",
-            recorded_module_versions=None,
+            recorded_migration_hashes=None,
+            allow_forward=False,
         )
 
-    def test_restore_backup_source_passes_recorded_module_versions(self) -> None:
+    def test_restore_backup_source_passes_recorded_migration_hashes(self) -> None:
         source = _source(Path("/tmp/file.dump"))
         result = RestoreResult(executed=False, dry_run=True, message="ok")
         with (
@@ -345,10 +352,12 @@ class TestRestoreResolutionAndGuards:
                 file_path="/tmp/file.dump",
                 confirmation="file.dump",
                 dry_run=True,
-                recorded_module_versions={"quickscale_modules_auth": "2.0"},
+                recorded_migration_hashes={
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
             )
-        assert execute.call_args.kwargs["recorded_module_versions"] == {
-            "quickscale_modules_auth": "2.0"
+        assert execute.call_args.kwargs["recorded_migration_hashes"] == {
+            "quickscale_modules_auth": {"0001_initial.py": "hash-1"}
         }
 
     def test_restore_backup_artifact_is_thin_source_wrapper(self) -> None:

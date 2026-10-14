@@ -13,6 +13,7 @@ import quickscale_core.dr_engine._capture as _capture
 import quickscale_core.dr_engine._prune as _prune
 
 import json
+import os
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,6 +23,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from quickscale_core.dr_engine.primitives import (
+    BackupConfigurationError,
     BackupError,
     BackupPolicySnapshot,
 )
@@ -147,6 +149,12 @@ class TestMetadataOrchestration:
                 return_value={},
             ),
             patch(
+                "quickscale_core.dr_engine._metadata._collect_module_migration_hashes",
+                return_value={
+                    "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+                },
+            ),
+            patch(
                 "quickscale_core.dr_engine._metadata._get_database_server_version",
                 return_value="3.45",
             ),
@@ -170,6 +178,81 @@ class TestMetadataOrchestration:
         assert result["database_server_major"] == 3
         assert result["pg_dump_version"] == "unused"
         assert result["dump_client_major"] == 18
+        assert result["migration_hashes"] == {
+            "quickscale_modules_auth": {"0001_initial.py": "hash-1"},
+        }
+
+    def test_module_migration_hash_collection_hashes_numbered_migrations(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        migrations = tmp_path / "auth" / "migrations"
+        migrations.mkdir(parents=True)
+        (migrations / "0001_initial.py").write_text("x = 1\n", encoding="utf-8")
+        (migrations / "__init__.py").write_text("", encoding="utf-8")
+        app_configs = [
+            SimpleNamespace(
+                name="quickscale_modules_auth", path=str(tmp_path / "auth")
+            ),
+            SimpleNamespace(
+                name="quickscale_modules_analytics",
+                path=str(tmp_path / "analytics"),
+            ),
+        ]
+        monkeypatch.setattr(_metadata.apps, "get_app_configs", lambda: app_configs)
+
+        hashes = _metadata._collect_module_migration_hashes()
+
+        assert set(hashes) == {
+            "quickscale_modules_auth",
+            "quickscale_modules_analytics",
+        }
+        assert set(hashes["quickscale_modules_auth"]) == {"0001_initial.py"}
+        assert hashes["quickscale_modules_analytics"] == {}
+
+    def test_module_migration_hash_collection_fails_closed_on_empty_package(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        migrations = tmp_path / "auth" / "migrations"
+        migrations.mkdir(parents=True)
+        (migrations / "__init__.py").write_text("", encoding="utf-8")
+        monkeypatch.setattr(
+            _metadata.apps,
+            "get_app_configs",
+            lambda: [
+                SimpleNamespace(
+                    name="quickscale_modules_auth", path=str(tmp_path / "auth")
+                )
+            ],
+        )
+
+        with pytest.raises(BackupConfigurationError, match="content identity"):
+            _metadata._collect_module_migration_hashes()
+
+    def test_module_migration_hash_collection_raises_on_inspect_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        migrations = tmp_path / "auth" / "migrations"
+        migrations.mkdir(parents=True)
+        monkeypatch.setattr(
+            _metadata.apps,
+            "get_app_configs",
+            lambda: [
+                SimpleNamespace(
+                    name="quickscale_modules_auth", path=str(tmp_path / "auth")
+                )
+            ],
+        )
+        real_stat = os.stat
+
+        def failing_stat(path: object, *args: object, **kwargs: object) -> object:
+            if str(path).endswith("migrations"):
+                raise PermissionError("denied")
+            return real_stat(path, *args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(os, "stat", failing_stat)
+
+        with pytest.raises(BackupConfigurationError, match="inspect"):
+            _metadata._collect_module_migration_hashes()
 
     def test_json_dump_creation_returns_expected_artifact_metadata(
         self, tmp_path: Path
@@ -351,6 +434,76 @@ class TestCaptureResumeOrchestration:
         assert not root.exists()
         assert snapshot.status == "failed"
         assert "snapshot preparation failed" in snapshot.failure_note
+        save_snapshot.assert_called_once()
+
+    def test_create_backup_metadata_failure_cleans_snapshot_root_and_marks_state(
+        self, tmp_path: Path
+    ) -> None:
+        snapshot = _snapshot(status="pending", local_root_path=str(tmp_path / "snap"))
+        root = tmp_path / "snap"
+        dump_path = root / "database" / "dump.json"
+        dump_path.parent.mkdir(parents=True)
+        dump_path.write_text("{}")
+        dump_result = (dump_path, "json", dump_path.name, None, None, None, None)
+        with (
+            patch(
+                "quickscale_core.dr_engine._policy._validate_policy_snapshot_internal",
+                return_value=[],
+            ),
+            patch(
+                "quickscale_core.dr_engine._paths.get_local_backup_directory",
+                return_value=tmp_path,
+            ),
+            patch(
+                "quickscale_core.dr_engine._lock._backup_creation_lock",
+                return_value=nullcontext(),
+            ),
+            patch("django.db", _db()),
+            patch(
+                "quickscale_core.dr_engine.primitives._mint_snapshot_id",
+                return_value="snap-001",
+            ),
+            patch(
+                "quickscale_core.dr_engine._paths._build_snapshot_local_root",
+                return_value=root,
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._create_database_dump",
+                return_value=dump_result,
+            ),
+            patch(
+                "quickscale_core.dr_engine.primitives._compute_sha256",
+                return_value="checksum",
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._collect_module_versions",
+                return_value={},
+            ),
+            patch(
+                "quickscale_core.dr_engine._metadata._collect_module_migration_hashes",
+                side_effect=BackupConfigurationError("hash unavailable"),
+            ),
+            patch(
+                "django.conf.settings", SimpleNamespace(QUICKSCALE_APP_VERSION="dev")
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.create_snapshot",
+                return_value=snapshot,
+            ),
+            patch(
+                "quickscale_core.dr_engine.persistence.create_artifact"
+            ) as create_artifact,
+            patch(
+                "quickscale_core.dr_engine.persistence.save_snapshot"
+            ) as save_snapshot,
+        ):
+            with pytest.raises(BackupError, match="Snapshot capture failed"):
+                _capture.create_backup(policy=_policy(), now=_NOW)
+
+        assert not root.exists()
+        assert snapshot.status == "failed"
+        assert "snapshot preparation failed" in snapshot.failure_note
+        create_artifact.assert_not_called()
         save_snapshot.assert_called_once()
 
     def test_resume_success_reuses_valid_dump_and_clears_failure_state(
@@ -628,7 +781,10 @@ class TestReportsAndProvenance:
         # records the vintage its schema was captured under.
         snapshot = self._complete_snapshot(tmp_path)
         snapshot.authoritative_dump.metadata_json = {
-            "module_versions": {"quickscale_modules_backups": "1.0"}
+            "module_versions": {"quickscale_modules_backups": "1.0"},
+            "migration_hashes": {
+                "quickscale_modules_backups": {"0001_initial.py": "hash-dump"},
+            },
         }
         (tmp_path / "release-metadata.json").write_text(
             json.dumps(
@@ -649,6 +805,9 @@ class TestReportsAndProvenance:
 
         assert contract["provenance"]["authoritative_dump"]["module_versions"] == {
             "quickscale_modules_backups": "1.0"
+        }
+        assert contract["provenance"]["authoritative_dump"]["migration_hashes"] == {
+            "quickscale_modules_backups": {"0001_initial.py": "hash-dump"}
         }
         assert contract["provenance"]["release"]["module_versions"] == {
             "quickscale_modules_backups": "2.0"

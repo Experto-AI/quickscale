@@ -52,7 +52,7 @@ def _get_restore_compatibility_issues(artifact: Any) -> list[str]:
     return _recovery._get_restore_compatibility_issues(
         artifact,
         current_engine,
-        installed_module_versions=_metadata._collect_module_versions(),
+        installed_migration_hashes=_metadata._collect_module_migration_hashes(),
     )
 
 
@@ -132,7 +132,8 @@ def _execute_restore_for_resolved_source(
     dry_run: bool,
     allow_production: bool,
     shell_runner: ShellCommandRunner | None,
-    recorded_module_versions: Mapping[str, str] | None = None,
+    recorded_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    allow_forward: bool = False,
 ) -> RestoreResult:
     """Run the guarded restore pipeline — Django-backed wrapper around core."""
     current_engine = str(
@@ -150,8 +151,9 @@ def _execute_restore_for_resolved_source(
         connection_settings=connection_settings,
         is_debug=_conf.settings.DEBUG,
         pg_contract_checker=_metadata._require_postgresql_18_contract,
-        installed_module_versions=_metadata._collect_module_versions(),
-        recorded_module_versions=recorded_module_versions,
+        installed_migration_hashes=_metadata._collect_module_migration_hashes(),
+        recorded_migration_hashes=recorded_migration_hashes,
+        allow_forward=allow_forward,
     )
 
     if result.executed and restore_source.artifact is not None:
@@ -179,13 +181,17 @@ def restore_backup_source(
     shell_runner: ShellCommandRunner | None = None,
     policy: BackupPolicySnapshot | None = None,
     remote_materializer: RemoteMaterializer | None = None,
-    recorded_module_versions: Mapping[str, str] | None = None,
+    recorded_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    allow_forward: bool = False,
 ) -> RestoreResult:
     """Run guarded restore validation or execution for one restore source.
 
-    *recorded_module_versions* carries the module vintage for a source that has
-    no artifact row, such as a snapshot report restored by file path; the
-    Django-backed restore path compares it with the installed modules.
+    *recorded_migration_hashes* carries the migration content identity for a
+    source that has no artifact row, such as a snapshot report restored by file
+    path; a bare file that records none is refused.  The Django-backed restore
+    path compares the identity with the installed modules.  Pass
+    *allow_forward* only when the caller completes the forward migration after
+    the restore (the DR snapshot route does).
     """
     with _resolve_restore_source(
         artifact=artifact,
@@ -201,7 +207,8 @@ def restore_backup_source(
             dry_run=dry_run,
             allow_production=allow_production,
             shell_runner=shell_runner,
-            recorded_module_versions=recorded_module_versions,
+            recorded_migration_hashes=recorded_migration_hashes,
+            allow_forward=allow_forward,
         )
 
 

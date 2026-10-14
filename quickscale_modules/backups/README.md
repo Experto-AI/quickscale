@@ -123,9 +123,10 @@ backup filename or the supplied file basename.
 `quickscale_backups_restore` requires exactly one restore source: either the positional
 `artifact_id`, `--snapshot-id SNAPSHOT_ID`, or `--file PATH`. The guarded restore surfaces
 include the `BackupPolicy` admin for row-backed local artifacts already present on disk or a
-staff-uploaded PostgreSQL custom dump, and the CLI entrypoint for a stored artifact id, a
-snapshot id, or an operator-supplied dump file path. JSON artifacts remain export-only and are
-not a supported restore input for generated PostgreSQL projects.
+staff-uploaded PostgreSQL custom dump, and the CLI entrypoint for a stored artifact id or a
+snapshot id. An operator-supplied `--file` restore records no capture identity and is refused.
+JSON artifacts remain export-only and are not a supported restore input for generated
+PostgreSQL projects.
 
 ```bash
 python manage.py quickscale_backups_create
@@ -134,7 +135,6 @@ python manage.py quickscale_backups_validate 12
 python manage.py quickscale_backups_prune
 python manage.py quickscale_backups_restore 12 --confirm BACKUP_FILENAME.dump --dry-run
 python manage.py quickscale_backups_restore --snapshot-id snap-restore-123 --confirm BACKUP_FILENAME.dump --dry-run
-python manage.py quickscale_backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump --dry-run
 ```
 
 Production-style restores, including the `BackupPolicy` admin action, require an explicit
@@ -144,7 +144,6 @@ environment gate:
 export QUICKSCALE_BACKUPS_ALLOW_RESTORE=true
 python manage.py quickscale_backups_restore 12 --confirm BACKUP_FILENAME.dump
 python manage.py quickscale_backups_restore --snapshot-id snap-restore-123 --confirm BACKUP_FILENAME.dump
-python manage.py quickscale_backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump
 ```
 
 With a generated Docker project, the `quickscale manage` wrapper runs the same commands inside
@@ -189,13 +188,16 @@ Guardrails:
   dump that first resolves through quarantined trusted-match validation; it never materializes
   remote-only artifacts and requires exact filename confirmation plus the existing environment
   gate.
-- Restore compatibility includes the recorded module vintage as well as the two PostgreSQL
-  majors: a recorded artifact whose `module_versions` differ from the installed modules — or
-  that records none — is refused before `pg_restore` runs, naming each differing module with
-  both versions. The DR snapshot route compares the vintage recorded with the snapshot's
-  authoritative dump, so a resumed snapshot is judged by the dump it restores rather than by
-  recaptured sidecars; an operator-supplied `--file` restore records no vintage and is not
-  compared.
+- Restore compatibility uses the recorded migration content identity, not a version label:
+  every capture records the SHA-256 hashes of each installed module's applied migration files,
+  and a restore refuses a backup whose recorded migration file is missing or has changed
+  content — naming each differing module migration — before `pg_restore` runs, as well as a
+  source that records no identity at all. A backup whose recorded files are still installed
+  byte-identical restores; one that is behind the installed modules (newer installed
+  migrations) restores and migrates forward through the DR snapshot route, while the direct
+  restore surfaces refuse it because they do not run migrations. The DR snapshot route compares
+  the identity recorded with the snapshot's authoritative dump, so a resumed snapshot is judged
+  by the dump it restores rather than by recaptured sidecars.
 - Repo-relative `local_directory` values are added to `.gitignore` during `quickscale apply`;
   absolute paths are left to operator-managed ignore policy.
 - Already-generated projects do not get Docker/CI/E2E PostgreSQL 18 tooling rewrites from
