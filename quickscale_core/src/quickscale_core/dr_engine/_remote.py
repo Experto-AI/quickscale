@@ -70,6 +70,7 @@ def _materialize_private_remote_key(
     destination: Path,
 ) -> None:
     from storages.backends.s3 import S3Storage
+    from storages.utils import clean_name
 
     access_key_id, secret_access_key = _resolve_private_remote_credentials(policy)
 
@@ -88,9 +89,19 @@ def _materialize_private_remote_key(
     storage = S3Storage(**options)
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with storage.open(remote_key, mode="rb") as source_handle:
-            with destination.open("wb") as destination_handle:
-                shutil.copyfileobj(source_handle, destination_handle)
+        # The storage API's ``open()`` spools each whole object in memory
+        # (``AWS_S3_MAX_MEMORY_SIZE`` defaults to unbounded), so stream
+        # through the provider client's chunked download instead, the same
+        # idiom the media paths use. The object key goes through the storage's
+        # own normalization, exactly as its read and write paths do, so an
+        # ``AWS_LOCATION`` prefix applies to the download as well.
+        provider_key = storage._normalize_name(clean_name(remote_key))
+        with destination.open("wb") as destination_handle:
+            storage.connection.meta.client.download_fileobj(
+                policy.remote_bucket_name,
+                provider_key,
+                destination_handle,
+            )
     except Exception as exc:
         cleanup_error = _lock._cleanup_local_backup_file(destination)
         details = f"Private remote materialization failed for {remote_key}: {exc}"

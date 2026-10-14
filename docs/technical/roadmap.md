@@ -99,7 +99,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (c) | no | no | yes | no | yes |
-| 2 | SA271 | yes | yes | yes | no | yes |
+| 2 | SA271 (b) | yes | yes | yes | no | yes |
 | 3 | SA272 | yes | yes | yes | no | no |
 
 ### Ownership and merge coordination
@@ -175,11 +175,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Closes tech `dr-private-remote-restore-whole-object-in-memory` (S3) and
   `dr-media-part-file-leak-on-publish-failure` (S4), the audit's DR batch.
 
-  **Context:** `_materialize_private_remote_key` (`dr_engine/_remote.py:90–93`) copies through
+  **Context:** `_materialize_private_remote_key` (`dr_engine/_remote.py`) copied through
   `S3Storage.open()`, which spools the whole object in memory (`AWS_S3_MAX_MEMORY_SIZE` is
-  unbounded), so a dump larger than the container's memory OOM-kills the restore. It is the
-  unfixed sibling of SA256's media fix. In `_media.py:153–179`, `chmod` and `replace` run outside
-  the cleanup `try`, so a failure there leaves a `.part` file behind.
+  unbounded), so a dump larger than the container's memory OOM-killed the restore; slice (a)
+  streams it through the provider client instead. The remaining defect is in `_media.py:153–179`,
+  where `chmod` and `replace` run outside the cleanup `try`, so a failure there leaves a `.part`
+  file behind.
 
   **Acceptance:** the private-remote restore streams through the boto3 client's
   `download_fileobj`, the idiom `_media.py` uses, and a test proves the object is never read whole
@@ -188,8 +189,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   in `dr_engine` (the audit's lint tooling gap), inside existing suites.
 
   **Slices:**
-  - [ ] (a) Streaming private-remote restore with its bounded-read test and the `storage.open()`
-    guard (Tier 2-fast).
+  - [x] (a) Streaming private-remote restore with its bounded-read test and the `storage.open()`
+    guard (Tier 2-fast). `_materialize_private_remote_key` downloads through the provider
+    client's `download_fileobj`, a bounded-read test pins the chunked path, and a `dr_engine`
+    source scan fails on any `storage.open()` call. Next: (b), the `.part` cleanup and its test.
   - [ ] (b) `.part` cleanup on publish failure, with its test (Tier 1).
 
 ### Track 1 — migration history and the property portal
