@@ -50,7 +50,8 @@
       "v88-privileged-command": "Regenerated 2026-09-13 \u2014 the generated start.sh and production.py privileged-command contract now includes the one-shot migrate_billing_to_orgs command. Only these two generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "v88-runtime-role": "Regenerated 2026-09-14 \u2014 Dockerfile creates the django user with a home directory (useradd -m) so gunicorn's control socket can be written; start.sh gains a runtime-database-role step that creates or updates the restricted role from RUNTIME_DB_ROLE/RUNTIME_DB_PASSWORD with the superuser DATABASE_URL before migrating, renumbering its steps to eight; OPERATIONS.md documents that automatic path ahead of the manual role setup. Only these three generated paths changed in react_default, react_empty, and react_selected; all unrelated paths, hashes, and modes remain authoritative.",
       "sa261": "Regenerated 2026-10-10 \u2014 SA261 moves the theme's module API bases into the runtime seam's moduleApiPaths (rule 41), the seam producers render the new key, the org help copy that spelled the API mount is rewritten, and the theme's tests pin the key. 27 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useOrgs.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, frontend/src/test/App.test.tsx, frontend/src/test/AppRoutes.test.tsx, frontend/src/test/FormRenderer.test.tsx, frontend/src/test/PublicSocialPages.test.tsx, frontend/src/test/RootDispatch.test.tsx, frontend/src/test/csrf.test.tsx, frontend/src/test/formFields.test.tsx, frontend/src/test/layoutComponents.test.tsx, frontend/src/test/orgComponents.test.tsx, frontend/src/test/orgListPage.test.tsx, frontend/src/test/settingsPage.test.tsx, frontend/src/test/socialLinkTreeStates.test.tsx, frontend/src/test/useModules.test.tsx, frontend/src/test/useOrgNavigation.test.tsx, frontend/src/test/useOrgs.test.tsx, frontend/src/test/validateQuickScaleSeam.test.ts, templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa272b": "Regenerated 2026-10-13 \u2014 the generated CI notifications webhook placeholder is a decodable Svix signing secret (SA272 slice b), so the notifications E003 startup check passes in CI. 1 fixture hash updated: react_default .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative."
+      "sa272b": "Regenerated 2026-10-13 \u2014 the generated CI notifications webhook placeholder is a decodable Svix signing secret (SA272 slice b), so the notifications E003 startup check passes in CI. 1 fixture hash updated: react_default .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa276-a-managed-seam-declaration": "Regenerated 2026-10-14 \u2014 the theme's seam types become a generated, managed file (SA276 slice a): frontend/src/quickscaleSeam.d.ts renders from the shipped module set (the 11 module flags, the crm/social/analytics path names, and the orgs/billing/crm/forms API-base names), generation emits it, and quickscale apply/update regenerate it under the managed-file hash guard. New generated path in all three variants: frontend/src/quickscaleSeam.d.ts. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -403,6 +404,10 @@
     "frontend/src/posthog-js.d.ts": {
       "mode": "644",
       "sha256": "6cd1a256be9f15d8ee20a7e9e3c3fe6328d2bd86caa1e8f479f32b3052e42837"
+    },
+    "frontend/src/quickscaleSeam.d.ts": {
+      "mode": "644",
+      "sha256": "53ad6ec36a755d41cc7a49e7bd25fdffa2c1abf751a9b8a0fca4141f4ad76531"
     },
     "frontend/src/renderQuickScaleRoot.tsx": {
       "mode": "644",
@@ -954,6 +959,10 @@
       "mode": "644",
       "sha256": "6cd1a256be9f15d8ee20a7e9e3c3fe6328d2bd86caa1e8f479f32b3052e42837"
     },
+    "frontend/src/quickscaleSeam.d.ts": {
+      "mode": "644",
+      "sha256": "53ad6ec36a755d41cc7a49e7bd25fdffa2c1abf751a9b8a0fca4141f4ad76531"
+    },
     "frontend/src/renderQuickScaleRoot.tsx": {
       "mode": "644",
       "sha256": "874f03abb14b02762ec5172df5bcbba4319952a0e0171135548beffe8f2f35a5"
@@ -1503,6 +1512,10 @@
     "frontend/src/posthog-js.d.ts": {
       "mode": "644",
       "sha256": "6cd1a256be9f15d8ee20a7e9e3c3fe6328d2bd86caa1e8f479f32b3052e42837"
+    },
+    "frontend/src/quickscaleSeam.d.ts": {
+      "mode": "644",
+      "sha256": "53ad6ec36a755d41cc7a49e7bd25fdffa2c1abf751a9b8a0fca4141f4ad76531"
     },
     "frontend/src/renderQuickScaleRoot.tsx": {
       "mode": "644",

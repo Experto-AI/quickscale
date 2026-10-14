@@ -495,7 +495,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   before 0.89.0 is tagged if it fits (see **Order**).
 
   **Slices:**
-  - [ ] (a) The generated, managed `quickscaleSeam.d.ts` and its hash-guard entry (Tier 2-fast).
+  - [x] (a) The generated, managed `quickscaleSeam.d.ts` and its hash-guard entry (Tier 2-fast).
+    Landed as `runtime.seam.render_seam_declaration` and its theme template, with
+    `DEFAULT_MANAGED_PROJECT_PATHS` covering the declaration in apply, update, remove, and drift;
+    the vintage gate required the `sa276-managed-seam-types` adoption step here. Next: (b), the
+    hooks that import the declaration, the theme emission test, and its adoption step.
   - [ ] (b) Hooks consume it, the theme emission test, and the adoption step (Tier 2-fast).
 
 - [ ] **SA274 — Show real counts on the theme's CRM stat cards.**

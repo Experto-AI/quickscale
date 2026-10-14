@@ -16,6 +16,7 @@ from quickscale_cli.commands._module_shared import _UpdatePathSnapshot
 
 import quickscale_core.schema.state_schema as _state_schema
 import quickscale_core.project_state_hashes as _project_state_hashes
+import quickscale_core.project_state_manager as _project_state_manager
 import quickscale_core.utils.git_errors as _git_errors
 import quickscale_cli.utils.module_wiring_manager as _module_wiring_manager
 
@@ -200,6 +201,10 @@ def _regenerate_and_record_managed_wiring(
         package_root / "settings" / "modules.py",
         package_root / "urls_modules.py",
         package_root / "quickscale_managed",
+        *(
+            project_path / relative
+            for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS
+        ),
     )
     with TemporaryDirectory(prefix="quickscale-update-wiring-") as backup_dir:
         snapshots = [
@@ -225,16 +230,20 @@ def _record_managed_wiring_hashes(
     project_path: Path,
     project_package: str,
 ) -> None:
-    """Record the regenerated wiring's hashes in the authoritative state."""
-    state_manager = _state_schema.StateManager(project_path)
-    state = state_manager.load()
+    """Record the regenerated wiring's hashes in the authoritative state.
+
+    State is loaded through :class:`ProjectStateManager` so a
+    pre-consolidation project's legacy tracking metadata and hash records are
+    imported before this save materializes the consolidated sections; the
+    save itself would otherwise make the legacy files unreadable while their
+    metadata is still missing from state.
+    """
+    state_manager = _project_state_manager.ProjectStateManager(project_path)
+    state = state_manager.load_state()
     if state is None:
         return
 
-    managed_paths = [
-        f"{project_package}/{relative}"
-        for relative in _project_state_hashes.DEFAULT_MANAGED_WIRING_PATHS
-    ]
+    managed_paths = _project_state_hashes.resolve_managed_file_paths(project_package)
     for path_str, digest in _project_state_hashes.compute_file_hashes(
         project_path, managed_paths
     ).items():
@@ -242,7 +251,7 @@ def _record_managed_wiring_hashes(
             path=path_str,
             hash=digest,
         )
-    state_manager.save(state)
+    state_manager.save_state(state)
 
 
 def _git_tracks_path(path: Path) -> bool:
@@ -276,6 +285,10 @@ def _commit_regenerated_managed_wiring(project_package: str) -> None:
         package_root / "settings" / "modules.py",
         package_root / "urls_modules.py",
         package_root / "quickscale_managed",
+        *(
+            Path(relative)
+            for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS
+        ),
     ):
         # A path that no longer exists but is tracked must be staged so a
         # regeneration that removes a managed file commits its deletion.
@@ -350,6 +363,7 @@ def _roll_back_partial_module_update(
                 f"{project_package}/settings/modules.py",
                 f"{project_package}/urls_modules.py",
                 f"{project_package}/quickscale_managed",
+                *_project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS,
             ]
         )
     restore_paths.extend(
@@ -361,6 +375,14 @@ def _roll_back_partial_module_update(
     )
 
     try:
+        # A failed wiring regeneration can leave a managed file the pre-update
+        # commit does not track (the theme seam declaration):
+        # ``git rm --ignore-unmatch`` leaves an untracked file in the worktree,
+        # so clear the managed project paths first.  Paths the pre-update
+        # commit does track are restored by the checkout below.
+        for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS:
+            _remove_update_path(project_path / relative)
+
         # Remove every path a successful pull or a failed wiring commit may
         # have added or staged, then restore the pre-update content: a plain
         # checkout keeps files that exist only in the newer commit, and a

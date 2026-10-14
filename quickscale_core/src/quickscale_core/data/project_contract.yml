@@ -285,3 +285,9 @@ steps:
     title: "Adopt a decodable notifications webhook secret in the generated CI workflow"
     adoption_steps:
       - "Compare and manually adopt the current .github/workflows/ci.yml job environment: replace the notifications signing-secret placeholder (`whsec_test_ci`) with a `whsec_`-prefixed value whose remainder is valid base64 (for example `whsec_YWFhYWFhYWFhYWFhYWFhYQ==`), because the notifications module's startup check now refuses a malformed signing secret and would fail the workflow's pytest and migrate steps. A project that renamed the variable through `webhook_secret_env_var` updates that name instead."
+
+  - id: sa276-managed-seam-types
+    minimum: "0.89.0"
+    title: "Adopt the managed theme seam declaration"
+    adoption_steps:
+      - "From a clean tree, run `quickscale apply --confirm-contract-adoption`: the confirmed command regenerates the managed frontend/src/quickscaleSeam.d.ts from the shipped module set and records this step's adoption, so the theme's seam types arrive without a hand edit. A project with embedded modules can run `quickscale update --confirm-contract-adoption` instead; a project with none cannot, because `update` has nothing to pull. The file is hash-tracked, so a local edit is reported as managed-file drift and is overwritten by the next apply that regenerates the managed files — `quickscale apply --confirm-contract-adoption` again when the configuration has no changes (a plain no-delta apply reports nothing to do instead). Rebuild the frontend (`pnpm build`) after adopting."

@@ -16,7 +16,12 @@ from quickscale_core.schema.config_schema import (
     generate_yaml,
     validate_config,
 )
-from quickscale_core.schema.state_schema import QuickScaleState, StateManager
+from quickscale_core.schema.state_schema import (
+    ManagedFileRecord,
+    QuickScaleState,
+    StateManager,
+)
+import quickscale_core.project_state_hashes as _project_state_hashes
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_core.apply import LedgerError, LedgerManager, RecoveryLedger
 from quickscale_core.config.module_config import (
@@ -271,6 +276,10 @@ def _managed_wiring_paths(project_path: Path, project_package: str) -> list[Path
         package_dir / "settings" / "modules.py",
         package_dir / "urls_modules.py",
         package_dir / "quickscale_managed",
+        *(
+            project_path / relative
+            for relative in _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS
+        ),
     ]
 
 
@@ -345,6 +354,12 @@ def _record_mutation_snapshots(
             project_path / plan.project_package / "urls_modules.py",
         ),
         ("managed-package", project_path / plan.project_package / "quickscale_managed"),
+        *(
+            (f"managed-project-{index}", project_path / relative)
+            for index, relative in enumerate(
+                _project_state_hashes.DEFAULT_MANAGED_PROJECT_PATHS
+            )
+        ),
     ]
 
     if plan.config_needs_update:
@@ -462,6 +477,41 @@ def _regenerate_managed_wiring_after_removal(
     if success:
         return True, "Regenerated managed module wiring files"
     return False, f"Failed to regenerate managed wiring files: {message}"
+
+
+def _record_regenerated_managed_hashes(
+    project_path: Path,
+    project_package: str,
+) -> None:
+    """Record the regenerated managed files' hashes in applied state.
+
+    ``remove`` rewrites the managed wiring files and the theme seam
+    declaration; without refreshing their hash records, ``quickscale status``
+    would report QuickScale's own regeneration as drift, and a managed file
+    the project did not previously carry (the seam declaration in a project
+    that predates it) would stay outside drift detection entirely.  The save
+    is atomic and runs last in the removal transaction, so a failure leaves
+    the prior state file intact.
+
+    State is loaded through :class:`ProjectStateManager` so a pre-consolidation
+    project's legacy tracking metadata and hash records are imported before
+    this save materializes the consolidated sections, exactly as the removal
+    plan's own state read does.
+    """
+    project_state_manager = ProjectStateManager(project_path)
+    state = project_state_manager.load_state()
+    if state is None:
+        return
+
+    managed_paths = _project_state_hashes.resolve_managed_file_paths(project_package)
+    for path_str, digest in _project_state_hashes.compute_file_hashes(
+        project_path, managed_paths
+    ).items():
+        state.managed_files[path_str] = ManagedFileRecord(
+            path=path_str,
+            hash=digest,
+        )
+    project_state_manager.save_state(state)
 
 
 def _check_module_exists(
@@ -631,6 +681,13 @@ def _perform_removal_steps(
             if not success:
                 raise RuntimeError(message)
             _log_step_result(True, message, is_error=True)
+
+            _record_regenerated_managed_hashes(project_path, plan.project_package)
+            _log_step_result(
+                True,
+                "Recorded regenerated managed file hashes",
+                is_error=True,
+            )
         except Exception as error:
             raise _rollback_failed_removal(snapshots, error) from error
 

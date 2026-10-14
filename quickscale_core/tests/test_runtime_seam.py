@@ -17,9 +17,11 @@ from typing import Any
 
 from quickscale_core.contracts.module_catalog import MODULE_CATALOG
 from quickscale_core.runtime.seam import (
+    SEAM_DECLARATION_RELATIVE_PATH,
     render_module_api_paths,
     render_module_flags,
     render_module_paths,
+    render_seam_declaration,
     seam_api_path_names,
     seam_module_api_paths,
     seam_module_flags,
@@ -354,6 +356,55 @@ class TestSeamRendering:
         assert rendered == (
             '          orgs: "/orgs/api/",\n          billing: "/billing/api/"'
         )
+
+
+def _interface_property_names(declaration: str, interface_name: str) -> set[str]:
+    """Return the property names of one exported interface in *declaration*."""
+    body = declaration.split(f"export interface {interface_name} {{", 1)[1]
+    return {
+        line.strip().split(":", 1)[0]
+        for line in body.split("}", 1)[0].splitlines()
+        if line.strip()
+    }
+
+
+class TestSeamDeclaration:
+    """The managed seam declaration renders from the shipped seam tables (SA276)."""
+
+    def test_declaration_carries_exactly_the_seam_tables(self) -> None:
+        """Each interface holds exactly its table's names, one per line."""
+        declaration = render_seam_declaration()
+
+        assert _interface_property_names(declaration, "QuickScaleModules") == {
+            module.name for module in seam_modules()
+        }
+        assert _interface_property_names(declaration, "QuickScaleModulePaths") == set(
+            seam_path_names()
+        )
+        assert _interface_property_names(
+            declaration, "QuickScaleModuleApiPaths"
+        ) == set(seam_api_path_names())
+
+    def test_declaration_types_each_table(self) -> None:
+        """Flags are booleans; both path tables are strings."""
+        declaration = render_seam_declaration()
+
+        for module in seam_modules():
+            assert f"  {module.name}: boolean" in declaration
+        for name in seam_path_names():
+            assert f"  {name}: string" in declaration
+        for name in seam_api_path_names():
+            assert f"  {name}: string" in declaration
+
+    def test_declaration_is_a_replaced_managed_file(self) -> None:
+        """It states the regenerate contract and lives at a project-relative path."""
+        declaration = render_seam_declaration()
+
+        assert declaration.startswith("// QuickScale managed seam declaration.")
+        assert "DO NOT EDIT MANUALLY" in declaration
+        assert declaration.endswith("}\n")
+        assert not SEAM_DECLARATION_RELATIVE_PATH.startswith("/")
+        assert SEAM_DECLARATION_RELATIVE_PATH.endswith("quickscaleSeam.d.ts")
 
 
 class TestSeamTemplateTags:

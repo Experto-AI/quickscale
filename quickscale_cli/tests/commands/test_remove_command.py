@@ -311,6 +311,92 @@ class TestRemoveCommand:
         assert result.exit_code != 0
         assert "Unable to resolve project identity" in result.output
 
+    def test_remove_records_regenerated_managed_hashes(
+        self,
+        cli_runner: CliRunner,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A removal refreshes the managed-file hashes, seam declaration included.
+
+        The removal's regeneration creates the theme seam declaration in a
+        project that predates it; without a hash record that managed file
+        would stay invisible to drift detection, and the regenerated wiring
+        files would read as drift instead.
+        """
+        from quickscale_core.project_state import (
+            ProjectStateManager,
+            hash_managed_file,
+        )
+        from quickscale_core.schema.state_schema import StateManager
+
+        project_path = tmp_path / "myproject"
+        project_path.mkdir()
+        _write_project_with_modules(project_path, ("auth",))
+        monkeypatch.chdir(project_path)
+
+        result = cli_runner.invoke(
+            remove,
+            ["auth", "--force"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0, result.output
+        seam_relative = "frontend/src/quickscaleSeam.d.ts"
+        state = StateManager(project_path).load()
+        assert state is not None
+        for relative in (
+            "myproject/settings/modules.py",
+            "myproject/urls_modules.py",
+            seam_relative,
+        ):
+            assert relative in state.managed_files
+            assert state.managed_files[relative].hash == hash_managed_file(
+                project_path / relative
+            )
+        assert ProjectStateManager(project_path).detect_managed_file_drift() == []
+
+        # A later edit of the regenerated declaration is detected.
+        (project_path / seam_relative).write_text("// edited\n")
+        drift = ProjectStateManager(project_path).detect_managed_file_drift()
+        assert any(record.path == seam_relative for record in drift)
+
+    def test_remove_orphan_keeps_survivor_legacy_tracking(
+        self,
+        cli_runner: CliRunner,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Removing a filesystem-only orphan keeps the survivor's legacy tracking.
+
+        The survivor's branch, prefix, and installed_at live only in the
+        legacy config.yml, and the removal's hash refresh materializes the
+        consolidated state; the legacy read-through must run before that save,
+        or the survivor's update and push tracking is lost.
+        """
+        from quickscale_core.project_state import ProjectStateManager
+
+        project_path = tmp_path / "myproject"
+        project_path.mkdir()
+        _write_project_with_modules(project_path, ("storage",))
+        orphan_dir = project_path / "modules" / "orphan"
+        orphan_dir.mkdir(parents=True)
+        (orphan_dir / "__init__.py").write_text("")
+        monkeypatch.chdir(project_path)
+
+        result = cli_runner.invoke(
+            remove,
+            ["orphan", "--force"],
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0, result.output
+        state = ProjectStateManager(project_path).load_state()
+        assert state is not None
+        assert state.modules["storage"].branch == "splits/storage-module"
+        assert state.modules["storage"].prefix == "modules/storage"
+        assert state.modules["storage"].installed_at == "2024-01-01"
+
     def test_remove_preserves_other_legacy_tracking(
         self,
         cli_runner: CliRunner,
