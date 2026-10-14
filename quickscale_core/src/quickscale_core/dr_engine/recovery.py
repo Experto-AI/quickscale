@@ -206,89 +206,95 @@ def _get_restore_source_validation_issues(
 # ---------------------------------------------------------------------------
 
 
-def _collect_artifact_module_versions(artifact: ArtifactLike) -> dict[str, str] | None:
-    """Return the module versions recorded in the artifact's metadata, if any.
+def _collect_artifact_migration_hashes(
+    artifact: ArtifactLike,
+) -> dict[str, dict[str, str]] | None:
+    """Return the artifact's recorded migration content identity, if any.
 
-    Backup capture records the module vintage under
-    ``metadata_json["module_versions"]``.  An artifact that records none —
-    missing capture metadata, a missing key, or an empty mapping — returns
-    ``None`` so the restore guard can fail closed instead of treating the
-    artifact as compatible.
+    Absent, empty, or malformed capture metadata returns ``None`` so the
+    restore guard fails closed on a version label alone.
     """
     metadata = getattr(artifact, "metadata_json", None)
-    if not isinstance(metadata, dict):
+    recorded_hashes = (
+        metadata.get("migration_hashes") if isinstance(metadata, dict) else None
+    )
+    if not isinstance(recorded_hashes, dict) or not recorded_hashes:
         return None
-    recorded_versions = metadata.get("module_versions")
-    if not isinstance(recorded_versions, dict) or not recorded_versions:
+    if any(not isinstance(files, dict) for files in recorded_hashes.values()):
         return None
-    return {str(name): str(version) for name, version in recorded_versions.items()}
+    return {
+        str(name): {str(filename): str(digest) for filename, digest in files.items()}
+        for name, files in recorded_hashes.items()
+    }
 
 
-def _get_module_vintage_issues(
-    recorded_module_versions: Mapping[str, str] | None,
-    installed_module_versions: Mapping[str, str],
+def _get_migration_content_issues(
+    recorded_migration_hashes: Mapping[str, Mapping[str, str]] | None,
+    installed_migration_hashes: Mapping[str, Mapping[str, str]],
+    *,
+    allow_forward: bool = False,
 ) -> list[str]:
-    """Return refusal issues for a recorded module-vintage mismatch.
+    """Return refusal issues for a recorded migration content identity.
 
-    The clean-break migration history means a restored schema is only runnable
-    by the module versions that recorded it, so a differing or absent recorded
-    vintage is refused.  Each differing module is named with both versions.
+    Every recorded migration file must still be installed byte-identical;
+    installed modules may carry newer migrations for ``migrate`` to apply,
+    which only a caller passing *allow_forward* may accept.  An identity
+    holding no file hashes at all is always refused.
     """
-    if not recorded_module_versions:
-        return [
-            "backup records no module vintage; restore requires a recorded "
-            "module vintage that matches the installed modules"
-        ]
-
-    recorded_versions = {
-        str(name): str(version) for name, version in recorded_module_versions.items()
-    }
-    installed_versions = {
-        str(name): str(version) for name, version in installed_module_versions.items()
-    }
-    if recorded_versions == installed_versions:
-        return []
+    if not recorded_migration_hashes or not any(recorded_migration_hashes.values()):
+        return ["backup records no migration content identity"]
 
     differences: list[str] = []
-    for name in sorted(set(recorded_versions) | set(installed_versions)):
-        recorded_version = recorded_versions.get(name)
-        installed_version = installed_versions.get(name)
-        if recorded_version == installed_version:
-            continue
-        differences.append(
-            f"{name} recorded '{recorded_version or 'none'}' but installed "
-            f"'{installed_version or 'none'}'"
-        )
-    return [
-        "backup module vintage differs from the installed modules: "
-        + "; ".join(differences)
-    ]
+    forward_differences: list[str] = []
+    module_names = set(recorded_migration_hashes) | set(installed_migration_hashes)
+    for module_name in sorted(module_names):
+        recorded_files = recorded_migration_hashes.get(module_name, {})
+        installed_files = installed_migration_hashes.get(module_name, {})
+        for filename in sorted(set(recorded_files) | set(installed_files)):
+            recorded_digest = recorded_files.get(filename)
+            installed_digest = installed_files.get(filename)
+            if recorded_digest is None:
+                forward_differences.append(
+                    f"{module_name} installed migration '{filename}' is newer"
+                )
+            elif installed_digest is None:
+                differences.append(
+                    f"{module_name} recorded migration '{filename}' is not installed"
+                )
+            elif installed_digest != recorded_digest:
+                differences.append(f"{module_name} migration '{filename}' changed")
+    if differences:
+        return ["backup migration content cannot advance: " + "; ".join(differences)]
+    if forward_differences and not allow_forward:
+        return [
+            "backup migration content is behind the installed modules and this"
+            " restore does not complete the forward migration: "
+            + "; ".join(forward_differences)
+        ]
+    return []
 
 
-def _get_restore_source_vintage_issues(
+def _get_restore_source_migration_issues(
     restore_source: ResolvedRestoreSource,
-    installed_module_versions: Mapping[str, str],
+    installed_migration_hashes: Mapping[str, Mapping[str, str]],
     *,
-    recorded_module_versions: Mapping[str, str] | None = None,
+    recorded_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    allow_forward: bool = False,
 ) -> list[str]:
-    """Return vintage refusal issues for the resolved restore source.
+    """Return migration-content refusal issues for the resolved restore source.
 
-    Artifact-backed sources compare the artifact's recorded metadata, and an
-    artifact that records none is refused.  A source with no artifact row — a
-    snapshot report restored by file path — is compared only when the caller
-    carries the recorded vintage in; an operator-supplied file that records
-    none has nothing to compare.
+    Artifact-backed sources compare the artifact's recorded capture metadata; a
+    source with no artifact row is compared only when the caller carries the
+    recorded hashes in — a bare file that records none is refused.
     """
     if restore_source.artifact is not None:
-        return _get_module_vintage_issues(
-            _collect_artifact_module_versions(restore_source.artifact),
-            installed_module_versions,
+        recorded_migration_hashes = _collect_artifact_migration_hashes(
+            restore_source.artifact
         )
-    if recorded_module_versions is None:
-        return []
-    return _get_module_vintage_issues(
-        recorded_module_versions,
-        installed_module_versions,
+    return _get_migration_content_issues(
+        recorded_migration_hashes,
+        installed_migration_hashes,
+        allow_forward=allow_forward,
     )
 
 
@@ -296,14 +302,14 @@ def _get_restore_compatibility_issues(
     artifact: ArtifactLike,
     current_engine: str,
     *,
-    installed_module_versions: Mapping[str, str] | None = None,
+    installed_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    allow_forward: bool = False,
 ) -> list[str]:
     """Return restore guardrail issues for current database engine compatibility.
 
-    When *installed_module_versions* is provided, the artifact's recorded module
-    vintage must match it exactly; a mismatch, or an artifact that records none,
-    is refused.  Pass *None* only where no installed-module registry is
-    available; the Django-backed restore path always supplies it.
+    With *installed_migration_hashes* the recorded migration content identity
+    must be able to advance under it; a changed, missing, or unrecorded entry
+    is refused.  The Django-backed restore path always supplies it.
     """
     issues: list[str] = []
     current_engine_family = _database_engine_family(current_engine)
@@ -347,11 +353,12 @@ def _get_restore_compatibility_issues(
                 f"PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} restore contract"
             )
 
-    if installed_module_versions is not None:
+    if installed_migration_hashes is not None:
         issues.extend(
-            _get_module_vintage_issues(
-                _collect_artifact_module_versions(artifact),
-                installed_module_versions,
+            _get_migration_content_issues(
+                _collect_artifact_migration_hashes(artifact),
+                installed_migration_hashes,
+                allow_forward=allow_forward,
             )
         )
 
@@ -362,15 +369,15 @@ def _get_restore_source_compatibility_issues(
     restore_source: ResolvedRestoreSource,
     current_engine: str,
     *,
-    installed_module_versions: Mapping[str, str] | None = None,
-    recorded_module_versions: Mapping[str, str] | None = None,
+    installed_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    recorded_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    allow_forward: bool = False,
 ) -> list[str]:
     """Return compatibility issues for artifact and operator-supplied sources.
 
-    When *installed_module_versions* is provided the source's recorded module
-    vintage must match it; *recorded_module_versions* carries the vintage for a
-    source that has no artifact row, such as a snapshot report restored by file
-    path.
+    With *installed_migration_hashes* the source's recorded migration content
+    identity must be able to advance under it; *recorded_migration_hashes*
+    carries that identity for a source that has no artifact row.
     """
     issues: list[str] = []
     if restore_source.artifact is not None:
@@ -382,12 +389,13 @@ def _get_restore_source_compatibility_issues(
             "operator-supplied restore files require a PostgreSQL target database"
         )
 
-    if installed_module_versions is not None:
+    if installed_migration_hashes is not None:
         issues.extend(
-            _get_restore_source_vintage_issues(
+            _get_restore_source_migration_issues(
                 restore_source,
-                installed_module_versions,
-                recorded_module_versions=recorded_module_versions,
+                installed_migration_hashes,
+                recorded_migration_hashes=recorded_migration_hashes,
+                allow_forward=allow_forward,
             )
         )
     return issues
@@ -631,8 +639,9 @@ def _execute_restore_for_resolved_source(
     connection_settings: dict[str, Any] | None = None,
     is_debug: bool = False,
     pg_contract_checker: Callable[..., Any] | None = None,
-    installed_module_versions: Mapping[str, str] | None = None,
-    recorded_module_versions: Mapping[str, str] | None = None,
+    installed_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    recorded_migration_hashes: Mapping[str, Mapping[str, str]] | None = None,
+    allow_forward: bool = False,
 ) -> RestoreResult:
     """Run the guarded restore pipeline for one resolved restore source.
 
@@ -670,15 +679,18 @@ def _execute_restore_for_resolved_source(
         Django-backed caller should provide
         ``_require_postgresql_18_contract`` to enforce full version
         requirements.
-    installed_module_versions:
-        Module vintage of the running code.  When provided, an artifact whose
-        recorded ``module_versions`` differ — or that records none — is refused
-        before any destructive step, whether or not *current_engine* is known.
-        The Django-backed restore path always supplies it.
-    recorded_module_versions:
-        Module vintage recorded for a source that has no artifact row, such as
-        a snapshot report restored by file path.  Ignored for artifact-backed
-        sources, which use the artifact's own recorded metadata.
+    installed_migration_hashes:
+        Migration content identity of the running code, per module.  When
+        provided, an artifact whose recorded migration hashes cannot advance
+        under it — or that records none — is refused before any destructive
+        step.  The Django-backed restore path always supplies it.
+    recorded_migration_hashes:
+        Migration content identity recorded for a source that has no artifact
+        row, such as a snapshot report restored by file path; a bare file that
+        records none is refused.  Ignored for artifact-backed sources.
+    allow_forward:
+        When *True* the caller completes the forward migration after the
+        restore (the DR snapshot route); *False* requires exact content.
     """
     if confirmation.strip() != restore_source.confirmation_value:
         raise BackupRestoreBlocked(
@@ -709,14 +721,16 @@ def _execute_restore_for_resolved_source(
         compatibility_issues = _get_restore_source_compatibility_issues(
             restore_source,
             resolved_engine,
-            installed_module_versions=installed_module_versions,
-            recorded_module_versions=recorded_module_versions,
+            installed_migration_hashes=installed_migration_hashes,
+            recorded_migration_hashes=recorded_migration_hashes,
+            allow_forward=allow_forward,
         )
-    elif installed_module_versions is not None:
-        compatibility_issues = _get_restore_source_vintage_issues(
+    elif installed_migration_hashes is not None:
+        compatibility_issues = _get_restore_source_migration_issues(
             restore_source,
-            installed_module_versions,
-            recorded_module_versions=recorded_module_versions,
+            installed_migration_hashes,
+            recorded_migration_hashes=recorded_migration_hashes,
+            allow_forward=allow_forward,
         )
     if compatibility_issues:
         compatibility_prefix = (

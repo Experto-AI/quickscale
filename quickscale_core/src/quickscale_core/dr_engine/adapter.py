@@ -145,15 +145,15 @@ def set_rollback_pin(
 # ---------------------------------------------------------------------------
 
 
-def _recorded_module_versions_from_report(
+def _recorded_migration_hashes_from_report(
     snapshot_report: dict[str, Any],
-) -> dict[str, str]:
-    """Return the module vintage recorded for the snapshot's authoritative dump.
+) -> dict[str, dict[str, str]]:
+    """Return the migration content identity recorded for the snapshot's dump.
 
-    The vintage is read from the dump artifact's own capture metadata, which is
-    the schema actually restored: a snapshot resume recaptures the release
+    The identity is read from the dump artifact's own capture metadata, which
+    is the schema actually restored: a snapshot resume recaptures the release
     sidecar under the then-current modules while reusing the original dump, so
-    the sidecar's vintage can differ from the dump's.  A report that records
+    the sidecar's record can differ from the dump's.  A report that records
     none returns an empty mapping so the restore guard fails closed.
     """
     full_backup = snapshot_report.get("full_backup")
@@ -165,10 +165,17 @@ def _recorded_module_versions_from_report(
     authoritative_dump = provenance.get("authoritative_dump")
     if not isinstance(authoritative_dump, dict):
         return {}
-    recorded_versions = authoritative_dump.get("module_versions")
-    if not isinstance(recorded_versions, dict):
+    recorded_hashes = authoritative_dump.get("migration_hashes")
+    if not isinstance(recorded_hashes, dict):
         return {}
-    return {str(name): str(version) for name, version in recorded_versions.items()}
+    collected: dict[str, dict[str, str]] = {}
+    for module_name, module_hashes in recorded_hashes.items():
+        if not isinstance(module_hashes, dict):
+            return {}
+        collected[str(module_name)] = {
+            str(filename): str(digest) for filename, digest in module_hashes.items()
+        }
+    return collected
 
 
 @_register
@@ -195,7 +202,10 @@ def build_database_plan(
         file_path=restore_file,
         confirmation=confirmation_value,
         dry_run=True,
-        recorded_module_versions=_recorded_module_versions_from_report(snapshot_report),
+        recorded_migration_hashes=_recorded_migration_hashes_from_report(
+            snapshot_report
+        ),
+        allow_forward=True,
     )
 
     return {
@@ -241,7 +251,10 @@ def execute_database_restore(
         confirmation=confirmation_value,
         dry_run=False,
         allow_production=allow_production,
-        recorded_module_versions=_recorded_module_versions_from_report(snapshot_report),
+        recorded_migration_hashes=_recorded_migration_hashes_from_report(
+            snapshot_report
+        ),
+        allow_forward=True,
     )
 
     # Run post-restore migration and health check.

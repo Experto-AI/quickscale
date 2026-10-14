@@ -576,20 +576,31 @@ def create_backup(
                 f"Snapshot capture failed for snapshot '{snapshot.snapshot_id}': {exc}"
             ) from exc
 
-        metadata = _metadata._build_backup_metadata(
-            created_at=backup_started_at,
-            backup_format=backup_format,
-            database_engine=engine,
-            database_name=database_name,
-            target_mode=resolved_policy.target_mode,
-            database_server_version=database_server_version,
-            database_server_major=database_server_major,
-            dump_client_version=dump_client_version,
-            dump_client_major=dump_client_major,
-        )
-        metadata["snapshot_id"] = snapshot.snapshot_id
-        if snapshot.remote_root_key:
-            metadata["snapshot_remote_root_key"] = snapshot.remote_root_key
+        try:
+            metadata = _metadata._build_backup_metadata(
+                created_at=backup_started_at,
+                backup_format=backup_format,
+                database_engine=engine,
+                database_name=database_name,
+                target_mode=resolved_policy.target_mode,
+                database_server_version=database_server_version,
+                database_server_major=database_server_major,
+                dump_client_version=dump_client_version,
+                dump_client_major=dump_client_major,
+            )
+            metadata["snapshot_id"] = snapshot.snapshot_id
+            if snapshot.remote_root_key:
+                metadata["snapshot_remote_root_key"] = snapshot.remote_root_key
+        except Exception as exc:
+            if snapshot_root.exists():
+                shutil.rmtree(snapshot_root)
+            _state._mark_snapshot_failed(
+                snapshot,
+                failure_note=f"snapshot preparation failed: {exc}",
+            )
+            raise _primitives.BackupError(
+                f"Snapshot capture failed for snapshot '{snapshot.snapshot_id}': {exc}"
+            ) from exc
 
         artifact = _persistence.create_artifact(
             filename=filename,

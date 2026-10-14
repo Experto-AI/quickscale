@@ -24,6 +24,17 @@ import django.utils.timezone as _django_timezone
 import quickscale_core.dr_engine._metadata as _metadata
 
 
+def _collect_artifact_module_versions(artifact: Any) -> dict[str, str] | None:
+    """Return the module versions recorded in the artifact's metadata, if any."""
+    metadata = getattr(artifact, "metadata_json", None)
+    if not isinstance(metadata, dict):
+        return None
+    recorded_versions = metadata.get("module_versions")
+    if not isinstance(recorded_versions, dict) or not recorded_versions:
+        return None
+    return {str(name): str(version) for name, version in recorded_versions.items()}
+
+
 def _resolve_snapshot_provenance_value(
     *,
     field_name: str,
@@ -103,7 +114,9 @@ def _snapshot_database_contract(
             "database_name": authoritative_dump.database_name,
             "checksum_sha256": authoritative_dump.checksum_sha256,
             "size_bytes": authoritative_dump.size_bytes,
-            "module_versions": _recovery._collect_artifact_module_versions(
+            "module_versions": _collect_artifact_module_versions(authoritative_dump)
+            or {},
+            "migration_hashes": _recovery._collect_artifact_migration_hashes(
                 authoritative_dump
             )
             or {},
@@ -386,7 +399,9 @@ def build_backup_snapshot_report(
             "remote_key": authoritative_dump.remote_key,
             "checksum_sha256": authoritative_dump.checksum_sha256,
             "size_bytes": authoritative_dump.size_bytes,
-            "module_versions": _recovery._collect_artifact_module_versions(
+            "module_versions": _collect_artifact_module_versions(authoritative_dump)
+            or {},
+            "migration_hashes": _recovery._collect_artifact_migration_hashes(
                 authoritative_dump
             )
             or {},
