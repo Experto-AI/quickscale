@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from _sync_ci_gate_catalog import HAND_OWNED_MAKE_TARGETS, MAKE_TARGET_COMMENTS
+from _sync_ci_gate_catalog import HAND_OWNED_MAKE_TARGETS
 from _sync_ci_gate_core import (
     DEFAULT_MAKE_INCLUDE,
     DEFAULT_REGISTRY,
@@ -74,12 +74,13 @@ def _generated_make_targets(
 def _render_make_include(gates: list[dict[str, Any]]) -> str:
     """Render the generated ``scripts/gates.mk`` include from the registry."""
     generated = _generated_make_targets(gates)
+    help_by_id = {gate["id"]: gate.get("help") for gate in gates}
     sections = [
         MAKE_INCLUDE_HEADER,
         ".PHONY: " + " ".join(target for _, target, _, _ in generated),
     ]
     for gate_id, target, recipe, description in generated:
-        comment = MAKE_TARGET_COMMENTS.get(gate_id, description)
+        comment = help_by_id.get(gate_id) or description
         comment_block = "\n".join(f"# {line}" for line in comment.splitlines())
         recipe_block = "\n".join(f"\t{line}" for line in recipe)
         sections.append(f"{comment_block}\n{target}:\n{recipe_block}")

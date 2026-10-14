@@ -24,6 +24,16 @@
                 "ci_job": "module-core-compat",
                 "local_ci_stage": 3
             },
+            "hosted": {
+                "order": 1,
+                "display_name": "Module-vs-Oldest-Core Compatibility",
+                "check_step_name": "Run module-vs-core compatibility check (static analysis + install/import probe)"
+            },
+            "publish": {
+                "order": 1,
+                "step_name": "Run core compatibility gate"
+            },
+            "help": "Check each module's quickscale_core imports against the current core API.\nThis verifies that every import from quickscale_core in a module's source\nresolves to an existing symbol, and that the module's quickscale-core\nspecifier is exactly the lockstep pin derived from VERSION.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_module_core_compatibility.py"
             ],
@@ -47,6 +57,16 @@
                 "ci_job": "module-core-import-linter",
                 "local_ci_stage": 4
             },
+            "hosted": {
+                "order": 2,
+                "display_name": "Module-Core Import Linter",
+                "check_step_name": "Run module-core import linter"
+            },
+            "publish": {
+                "order": 2,
+                "step_name": "Run module core imports gate"
+            },
+            "help": "Check that module code only imports from quickscale_core.runtime\n(not from internal subpackages like dr_engine, contracts, manifest, etc.).\nPer-module legacy exceptions exist for billing/crm adapter seams only.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_module_core_imports.py"
             ],
@@ -74,6 +94,16 @@
                 "ci_job": "manifest-sync-gate",
                 "local_ci_stage": 5
             },
+            "hosted": {
+                "order": 3,
+                "display_name": "Manifest Sync Gate (SA16.1)",
+                "check_step_name": "Verify module manifests match core snapshots"
+            },
+            "publish": {
+                "order": 3,
+                "step_name": "Run manifest sync gate"
+            },
+            "help": "Verify that every module-owned module.yml matches its core snapshot.\nFails CI if drift is introduced.  Run ``make manifest-sync`` to\nresync snapshots after intentionally updating a module manifest.",
             "make_recipe": [
                 "@$(PYTHON) scripts/sync_module_manifests.py"
             ],
@@ -98,6 +128,12 @@
                 "ci_job": "module-app-declaration-gate",
                 "local_ci_stage": 6
             },
+            "hosted": {
+                "order": 4,
+                "display_name": "Module App Declaration Gate (SA167c)",
+                "check_step_name": "Verify evidence-bearing modules declare Django apps wiring"
+            },
+            "help": "Verify that evidence-bearing modules declare exactly one valid Django apps\nwiring projection in their authoritative source manifest.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_module_app_declaration.py"
             ],
@@ -119,6 +155,16 @@
                 "ci_job": "org-context-primitives-gate",
                 "local_ci_stage": 6
             },
+            "hosted": {
+                "order": 5,
+                "display_name": "Org-Context Primitives Gate (SA13.4)",
+                "check_step_name": "Verify no external use of privatized org-context primitives"
+            },
+            "publish": {
+                "order": 4,
+                "step_name": "Run org context primitives gate"
+            },
+            "help": "Hard-fail lint gate for direct external use of the three privatized\norg-context primitives.  Exits 1 on any violation \u2014 all SA13.2/SA13.3\nmigrations are complete.  AF9 None-path hardening deferred;\ncompatibility aliases remain but trigger the gate.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_org_context_primitives.py"
             ],
@@ -143,6 +189,16 @@
                 "ci_job": "csrf-exempt-gate",
                 "local_ci_stage": 7
             },
+            "hosted": {
+                "order": 6,
+                "display_name": "CSRF-Exempt Gate (SA46)",
+                "check_step_name": "Verify every csrf_exempt callsite pairs with _enforce_csrf or signature verification"
+            },
+            "publish": {
+                "order": 5,
+                "step_name": "Run CSRF exempt gate"
+            },
+            "help": "Hard-fail AST gate that requires every csrf_exempt callsite to pair\nwith _enforce_csrf or cryptographic signature verification.\nExits 1 on any unprotected csrf_exempt usage.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_csrf_exempt_gate.py"
             ],
@@ -170,6 +226,13 @@
                 "ci_job": "commit-testimony-gate",
                 "local_ci_stage": null
             },
+            "hosted": {
+                "order": 7,
+                "display_name": "Behavioural Commit Testimony Gate (SA166)",
+                "check_step_name": "Verify behavioural commits carry a vNN roadmap reference",
+                "full_history": true
+            },
+            "help": "Inspect every non-merge commit in the selected base-to-head range. Changes\nto workflows, the gate registry, or PostgreSQL provisioning stations require\na vNN roadmap reference in the commit message, bare (v88) or dotted\n(v0.88.0). No ticket form or changelog entry substitutes for it.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_commit_testimony.py"
             ],
@@ -190,6 +253,18 @@
                 "ci_job": "project-contract-vintage-gate",
                 "local_ci_stage": 6
             },
+            "hosted": {
+                "order": 8,
+                "display_name": "Project Contract Vintage Gate (SA207)",
+                "check_step_name": "Verify generated-template and module-manifest contract changes declare a new step id",
+                "full_history": true
+            },
+            "publish": {
+                "order": 6,
+                "step_name": "Run project contract vintage gate",
+                "command_prefix": "PROJECT_VINTAGE_BASE_REF=\"$(git describe --tags --abbrev=0 'HEAD^' 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n 1)\""
+            },
+            "help": "Inspect every non-merge commit in the selected base-to-head range.  A change\nto any template the generator emits (the watched set derives from the\ngenerator's emission mapping), a generator change that alters the emitted\nfile set, or a module manifest step whose text changes without a new id\nrequires a fresh adoption step id in the same commit (the project\ndeclaration or the module manifest), so a generated-project contract change\ncannot ship without its adoption steps.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_project_contract_vintage.py"
             ],
@@ -208,6 +283,11 @@
                 "ci_job": null,
                 "local_ci_stage": null
             },
+            "publish": {
+                "order": 15,
+                "step_name": "Run rendered frontend proof"
+            },
+            "help": "Render showcase_react and prove the generated frontend toolchain without Docker",
             "make_recipe": [
                 "@scripts/frontend_proof.sh"
             ],
@@ -238,6 +318,11 @@
                 "ci_job": null,
                 "local_ci_stage": null
             },
+            "publish": {
+                "order": 16,
+                "step_name": "Run installed-artifact smoke gate (SA110)"
+            },
+            "help": "Build wheels, install into throwaway venv outside source tree, and run\nnon-mutating CLI smoke tests (SA110 installed-artifact smoke gate).\nMust run from the repository root with Poetry and a compatible Python.",
             "make_recipe": [
                 "@scripts/smoke_install.sh"
             ],
@@ -260,6 +345,11 @@
                 "ci_job": "check-gate-suites",
                 "local_ci_stage": 7
             },
+            "hosted": {
+                "order": 9,
+                "display_name": "Registered Script Gate Suites",
+                "check_step_name": "Run registered scripts test suites"
+            },
             "depends_on": [],
             "trigger_inputs": []
         },
@@ -278,6 +368,16 @@
                 "ci_job": "dependency-vulnerabilities-gate",
                 "local_ci_stage": 7
             },
+            "hosted": {
+                "order": 10,
+                "display_name": "Dependency Vulnerability Gate (SA123)",
+                "check_step_name": "Run dependency vulnerability gate"
+            },
+            "publish": {
+                "order": 7,
+                "step_name": "Run dependency vulnerability gate"
+            },
+            "help": "Public Make callers for the registry-bound scanner wrapper. Scanner\nacquisition, invocation, and suppression adjudication remain owned by the\nwrapper rather than being duplicated in Make recipes.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_security_gates.py dependency-vulnerabilities"
             ],
@@ -303,6 +403,16 @@
                 "ci_job": "security-static-analysis-gate",
                 "local_ci_stage": 7
             },
+            "hosted": {
+                "order": 11,
+                "display_name": "Security Static Analysis Gate (SA123)",
+                "check_step_name": "Run security static-analysis gate"
+            },
+            "publish": {
+                "order": 8,
+                "step_name": "Run security static-analysis gate"
+            },
+            "help": "Public Make callers for the registry-bound scanner wrapper. Scanner\nacquisition, invocation, and suppression adjudication remain owned by the\nwrapper rather than being duplicated in Make recipes.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_security_gates.py security-static-analysis"
             ],
@@ -333,6 +443,16 @@
                 "ci_job": "beta-migration-smoke-gate",
                 "local_ci_stage": 7
             },
+            "hosted": {
+                "order": 12,
+                "display_name": "Beta Migration Smoke Gate (SA152)",
+                "check_step_name": "Run beta migration smoke gate"
+            },
+            "publish": {
+                "order": 9,
+                "step_name": "Run beta migration smoke gate"
+            },
+            "help": "Exercise fresh-first migration behavior against isolated\ngenerated fixtures without touching a real project or database.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_beta_migration_smoke.py"
             ],
@@ -353,6 +473,16 @@
                 "ci_job": "generated-deploy-posture-gate",
                 "local_ci_stage": 7
             },
+            "hosted": {
+                "order": 13,
+                "display_name": "Generated Deploy Posture Gate (SA200)",
+                "check_step_name": "Run generated-project deploy posture gate"
+            },
+            "publish": {
+                "order": 10,
+                "step_name": "Run generated deploy posture gate"
+            },
+            "help": "Render one fresh generated project and run Django's deployment checks in the\nproxied and single-host forwarding cells.  A new deploy warning, or an\nungated SECURE_PROXY_SSL_HEADER in the single-host cell, fails the gate.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_generated_deploy_posture.py"
             ],
@@ -391,6 +521,16 @@
                 "ci_job": "workflow-security-gate",
                 "local_ci_stage": 7
             },
+            "hosted": {
+                "order": 14,
+                "display_name": "Workflow Security Gate (SA202)",
+                "check_step_name": "Run workflow security gate"
+            },
+            "publish": {
+                "order": 11,
+                "step_name": "Run workflow security gate"
+            },
+            "help": "Fail on any zizmor finding at medium severity and confidence or above: an\nunpinned third-party `uses:` ref, or a workflow with no top-level\n`permissions:` block.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_workflow_security.py --generated-template"
             ],
@@ -411,6 +551,16 @@
                 "ci_job": "secret-scanning-gate",
                 "local_ci_stage": 7
             },
+            "hosted": {
+                "order": 15,
+                "display_name": "Secret Scanning Gate (SA202)",
+                "check_step_name": "Run secret scanning gate"
+            },
+            "publish": {
+                "order": 12,
+                "step_name": "Run secret scanning gate"
+            },
+            "help": "Fail on any committed secret gitleaks reports after applying the reasoned\nallowlists in scripts/gitleaks.toml.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_secret_scanning.py"
             ],
@@ -431,6 +581,16 @@
                 "ci_job": "module-conventions-gate",
                 "local_ci_stage": 7
             },
+            "hosted": {
+                "order": 16,
+                "display_name": "Module Conventions Gate (rule 40)",
+                "check_step_name": "Run module conventions conformance check"
+            },
+            "publish": {
+                "order": 13,
+                "step_name": "Run module conventions conformance check"
+            },
+            "help": "Run the rule 40 conformance check over every module manifest and module\nsource tree.  Every covered rule's detector has a control case under\nscripts/tests_module_conventions/; the detectors live by rule theme under\nscripts/module_conventions/.  Rules whose owning convention ticket has not\nlanded are recorded in the check's OPEN_RULES mapping.",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_module_conventions.py"
             ],
@@ -451,6 +611,16 @@
                 "ci_job": "split-facade-gate",
                 "local_ci_stage": 7
             },
+            "hosted": {
+                "order": 17,
+                "display_name": "Split-Facade Import Gate (SA234)",
+                "check_step_name": "Reject a private module importing a facade in its distribution"
+            },
+            "publish": {
+                "order": 14,
+                "step_name": "Run split-facade import gate"
+            },
+            "help": "Reject a private module importing a facade in its distribution (SA234).",
             "make_recipe": [
                 "@$(PYTHON) scripts/check_split_facade_imports.py"
             ],
@@ -459,7 +629,7 @@
         },
         {
             "id": "quality",
-            "description": "Quality thresholds: fixed fail/warn lines (no baseline or waiver) — a function at CC >= 21, a Python file at or above 800 lines, a duplication block of >= 20 similar lines, or a 100%-confidence dead-code finding fails make quality; the 11-20 CC, 500-799 line, 6-19 similar-line, and 80-99% confidence bands warn only",
+            "description": "Quality thresholds: fixed fail/warn lines (no baseline or waiver) \u2014 a function at CC >= 21, a Python file at or above 800 lines, a duplication block of >= 20 similar lines, or a 100%-confidence dead-code finding fails make quality; the 11-20 CC, 500-799 line, 6-19 similar-line, and 80-99% confidence bands warn only",
             "required_contexts": [
                 "local-serial",
                 "local-parallel"
@@ -469,6 +639,7 @@
                 "ci_job": null,
                 "local_ci_stage": 7
             },
+            "help": "Full code quality analysis: dead code (vulture), complexity (radon), duplication (pylint)\nReports saved to .quickscale/quality_report.{json,md}",
             "make_recipe": [
                 "@scripts/check_quality.sh"
             ],

@@ -15,9 +15,7 @@ their value.
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
 with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#11-watchlist-and-accepted-trade-offs)).
-SA271, the last of the 2026-10-13 tech-audit S3s, has landed; no open ticket is a release
-requirement for 0.89.0.
-Publication remains a maintainer action.
+No open ticket is a release requirement for 0.89.0. Publication remains a maintainer action.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -63,7 +61,7 @@ Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA15
 Track 2: SA275 ──► SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
 Track 3: SA276 ──► SA274 ──► SA283 ──► SA279 ──► SA281
      release path:  publish 0.89.0 ──► SA191 repin
-     critical path: SA275 ──► SA204 (c) ──► SA204 (g) ──► SA153 (a)
+     critical path: SA275 (b) ──► SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Cross-track edges:
@@ -72,9 +70,8 @@ its freeze gate costs one registry row instead of about eight hand stations (arc
 SA279 waits on SA278, whose guard test it extends; SA277 waits on SA191's cutover, which decides
 which upgrade mechanism proved itself.
 
-**Parallel start.** SA204 (a), SA275, and SA276 have no unmet
-dependency and touch disjoint files, so all three tracks start at once. SA204 (a), (b), (d), and
-(e) do not wait on SA275; only (c) adds a gate row.
+**Parallel start.** SA204 (e), SA275 (b), and SA276 (b) have no unmet dependency and touch
+disjoint files. Of SA204's slices only (c) waits on SA275.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
 with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
@@ -83,10 +80,8 @@ when its last slice lands; slices are not scheduled.
 
 **Order.** Every change to a shipped module `0001_initial` lands before SA204 freezes
 migration history, and SA204 lands before SA153 slice (a), whose schema work is `0002+` from the
-start. None of the new tickets changes a module schema except SA270's additive reservation
-attempt timestamps, which its Search-lag window reads; SA274's count endpoint is code-only.
-SA154 is an inventory, not work. SA191's agent work is done; its
-remaining repin waits for the 0.89.0 publication, and SA204 proceeds alongside it. SA276 should
+start. No open ticket changes a module schema; SA274's count endpoint is code-only.
+SA154 is an inventory, not work. SA191's remaining repin waits for the 0.89.0 publication, and SA204 proceeds alongside it. SA276 should
 land before 0.89.0 is tagged if it fits, so `bap-web-new` adopts its step once at the repin
 instead of on a live site (arch audit §7); it is not a release requirement.
 
@@ -96,9 +91,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA204 (c) | no | no | yes | no | yes |
-| 2 | SA275 | yes | yes | yes | no | yes |
-| 3 | SA276 | yes | yes | yes | no | no |
+| 1 | SA204 (e) | yes | no | yes | no | yes |
+| 2 | SA275 (b) | yes | yes | yes | yes | yes |
+| 3 | SA276 (b) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -217,15 +212,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   whose applied migration hashes differ from the embedded files under an equal version label.
 
   **Slices** (in order; the one-way door is isolated in (g), behind the proof in (f)):
-  - [x] (a) Promote or replace `blog`'s `_BlogMediaAssetImageField` (Tier 1). Promoted as the
-    public, documented `BlogMediaAssetImageField`; `0001_initial` now names only
-    stability-promised symbols, and the blog README lists the field in its public surface.
-    Next: (b), the migration hash manifest and its helper (no gate yet).
-  - [x] (b) The migration hash manifest: its generator, the checked-in manifest, and the helper
-    that hashes a module's applied migrations; no gate yet (Tier 2-fast). Landed as
-    `quickscale_core.migration_hashes`, `scripts/sync_migration_hashes.py`, and the checked-in
-    `scripts/migration_hashes.json` (per-module SHA-256 of each migration file, all twelve
-    modules). Next: (c), the freeze gate row, still waiting on SA275.
+  - [x] (a), (b), (d): landed (`BlogMediaAssetImageField` public; `quickscale_core.migration_hashes`
+    with `scripts/migration_hashes.json`; hash-keyed restore-forward in `recovery.py`).
   - [ ] (c) The freeze gate as one registry row (after SA275), with controls for an in-place
     edit, a deletion, a new `0002`, and a `_`-symbol import, and the topology test's chain and
     inverted canary (Tier 2-fast).
@@ -338,15 +326,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA275 — Derive gate wiring from the registry instead of holding copies equal.**
 
-  Closes the gate part of arch `rules-held-by-parity-not-derivation` (Finding 3, option 1). The
-  recommendation folded it into SA267 (a), which landed as a file split instead.
+  Closes the gate part of arch `rules-held-by-parity-not-derivation` (Finding 3, option 1).
 
   **Context:** SA259 generated `gates.mk`, the workflow regions, and the docs table, but
-  `sync_ci_gate_jobs.py` re-holds the registry by hand: `HOSTED_GATE_ORDER` (`:89–107`),
-  `PUBLISH_GATE_ORDER` (`:273–290`), `HOSTED_JOB_CATALOG`, `PUBLISH_STEP_CATALOG`, and the help-text
-  map, and it refuses to run unless they equal the registry. `check_ci_locally.sh` keeps a
-  hand-written `case` arm per gate, and the `Makefile` help line names gates. A new gate costs
-  about eight hand stations; SA204 (c) adds the next one.
+  `sync_ci_gate_jobs.py` re-held the registry by hand — `HOSTED_GATE_ORDER`, `PUBLISH_GATE_ORDER`,
+  `HOSTED_JOB_CATALOG`, `PUBLISH_STEP_CATALOG`, and the help-text map; slice (a) moved that data
+  into registry fields. `check_ci_locally.sh`
+  keeps a hand-written `case` arm per gate, and the `Makefile` help line names gates; those remain
+  the hand stations. SA204 (c) adds the next gate row.
 
   **Acceptance:** gate order and the hosted, publish, and help metadata are fields of
   `gate_registry.json`; the order tuples and catalogs are deleted, and the generator raises no
@@ -357,8 +344,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   gates.
 
   **Slices:**
-  - [ ] (a) Registry fields for order and hosted/publish/help metadata; delete the order tuples,
-    catalogs, and equality refusals (Tier 2-fast).
+  - [x] (a) Order and hosted/publish/help metadata are registry fields. Watch: an existing
+    gate's edited labels/order, or a publish-bound addition, still fails until the workflow's old
+    value is hand-replaced; the fixture test decides what (b) must project.
   - [ ] (b) Generate `check_ci_locally.sh`'s gate arms and the Makefile gate help, with the
     one-station fixture test (Tier 2-fast).
 
@@ -496,11 +484,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   before 0.89.0 is tagged if it fits (see **Order**).
 
   **Slices:**
-  - [x] (a) The generated, managed `quickscaleSeam.d.ts` and its hash-guard entry (Tier 2-fast).
-    Landed as `runtime.seam.render_seam_declaration` and its theme template, with
-    `DEFAULT_MANAGED_PROJECT_PATHS` covering the declaration in apply, update, remove, and drift;
-    the vintage gate required the `sa276-managed-seam-types` adoption step here. Next: (b), the
-    hooks that import the declaration, the theme emission test, and its adoption step.
+  - [x] (a) Managed `quickscaleSeam.d.ts` (`runtime.seam.render_seam_declaration`) in the hash
+    guard, with the `sa276-managed-seam-types` adoption step.
   - [ ] (b) Hooks consume it, the theme emission test, and the adoption step (Tier 2-fast).
 
 - [ ] **SA274 — Show real counts on the theme's CRM stat cards.**
@@ -580,20 +565,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
     byte-identical settings test (Tier 2-full; the object's shape and the hook signature are
     settled in planning, consumers enumerated).
   - [ ] (b) Delete the dataflow detector and its controls, and amend the rule (Tier 2-fast).
-
-### Closed
-
-- [x] **SA267 — Bring the gate scripts under the quality thresholds.**
-
-- [x] **SA268 — Bring the conformance harness under the quality thresholds.**
-
-- [x] **SA269 — Make the release pipeline run hosted E2E and pin its Poetry retry.**
-
-- [x] **SA270 — Keep checkout reconciliation fail-closed across Stripe Search lag.**
-
-- [x] **SA271 — Stream disaster-recovery objects instead of spooling them.**
-
-- [x] **SA272 — Harden the notifications webhook and the orgs invite throttle.**
 
 ## Deferred constraints and references
 
