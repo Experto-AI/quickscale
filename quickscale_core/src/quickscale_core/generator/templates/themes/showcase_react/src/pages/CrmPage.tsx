@@ -5,31 +5,24 @@ import { useApiData } from '@/hooks/useApi'
 import { useOrgNavigation } from '@/hooks/useOrgNavigation'
 import { Briefcase, Building2, UserCircle, Tag, ExternalLink, ArrowUpRight } from 'lucide-react'
 
-interface ApiListResponse {
-  count?: number
-  results?: unknown[]
+interface CrmStats {
+  contacts: number
+  companies: number
+  deals: number
+  tags: number
 }
 
 function useCrmStats(crmApiBase: string) {
-  const contacts = useApiData<ApiListResponse>(`${crmApiBase}contacts/`, [
-    'crm',
-    crmApiBase,
-    'contacts',
-  ])
-  const companies = useApiData<ApiListResponse>(`${crmApiBase}companies/`, [
-    'crm',
-    crmApiBase,
-    'companies',
-  ])
-  const deals = useApiData<ApiListResponse>(`${crmApiBase}deals/`, ['crm', crmApiBase, 'deals'])
-  const tags = useApiData<ApiListResponse>(`${crmApiBase}tags/`, ['crm', crmApiBase, 'tags'])
+  const stats = useApiData<CrmStats>(`${crmApiBase}stats/`, ['crm', crmApiBase, 'stats'])
 
   return {
-    contacts: contacts.data?.count ?? contacts.data?.results?.length ?? 0,
-    companies: companies.data?.count ?? companies.data?.results?.length ?? 0,
-    deals: deals.data?.count ?? deals.data?.results?.length ?? 0,
-    tags: tags.data?.count ?? tags.data?.results?.length ?? 0,
-    isLoading: contacts.isLoading || companies.isLoading || deals.isLoading || tags.isLoading,
+    contacts: stats.data?.contacts ?? 0,
+    companies: stats.data?.companies ?? 0,
+    deals: stats.data?.deals ?? 0,
+    tags: stats.data?.tags ?? 0,
+    // Without data there is no total to show: the cards render '—' while the
+    // request is pending or has failed instead of a false 0.
+    isLoading: stats.isPending || stats.isError,
   }
 }
 

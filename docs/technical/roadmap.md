@@ -47,7 +47,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA282 | One organization-selector flag and a required contract-vintage id | 2 | — | Optional |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | — | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
-| SA274 | Show real counts on the theme's CRM stat cards | 3 | — | Optional |
 | SA283 | Manifest-read startup checks, one capability collector, one `--cov` form | 3 | — | Optional |
 | SA279 | Retire the conformance harness's frozen surfaces | 3 | SA278 | Optional |
 | SA281 | Hand adapter hooks typed resolved options and delete the dataflow detector | 3 | SA279 | Optional |
@@ -57,7 +56,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
 Track 2: SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
-Track 3: SA274 ──► SA283 ──► SA279 ──► SA281
+Track 3: SA283 ──► SA279 ──► SA281
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
@@ -68,7 +67,7 @@ costs one registry row now that SA275 has landed (arch audit §7); SA279 waits o
 guard test it extends; SA277 waits on SA191's cutover, which decides which upgrade mechanism
 proved itself.
 
-**Parallel start.** SA204 (c), SA278, and SA274 have no unmet dependency and touch disjoint
+**Parallel start.** SA204 (c), SA278, and SA283 have no unmet dependency and touch disjoint
 files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -78,7 +77,7 @@ when its last slice lands; slices are not scheduled.
 
 **Order.** Every change to a shipped module `0001_initial` lands before SA204 freezes
 migration history, and SA204 lands before SA153 slice (a), whose schema work is `0002+` from the
-start. No open ticket changes a module schema; SA274's count endpoint is code-only.
+start. No open ticket changes a module schema.
 SA154 is an inventory, not work. SA191's remaining repin waits for the 0.89.0 publication, and SA204 proceeds alongside it. SA276 has
 landed, so `bap-web-new` adopts its steps once at the repin instead of on a live site
 (arch audit §7); it is not a release requirement.
@@ -91,7 +90,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA204 (c) | yes | no | yes | no | yes |
 | 2 | SA278 | yes | yes | yes | yes | no |
-| 3 | SA274 | yes | yes | yes | yes | no |
+| 3 | SA283 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -443,20 +442,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA276 — Generate the theme's seam types from the manifest set.**
 
-- [ ] **SA274 — Show real counts on the theme's CRM stat cards.**
-
-  Closes tech `crm-theme-stats-always-zero` (S4) and its theme-to-API contract tooling gap.
-
-  **Context:** `CrmPage.tsx:28–31` reads `.count`, then `.results.length`, but the CRM lists return
-  a bare array (`runtime/drf.py:75–77`, `PlainListPagination`), so every card shows 0; even
-  `.length` would count one page.
-
-  **Acceptance:** the CRM API exposes totals (a count endpoint or a count header, chosen under
-  rule 9's list shape and recorded in the CRM README), the theme reads them, and a test checks the
-  theme's expected response shape against a rendered DRF response. One `project_contract.yml` step
-  covers the theme change.
-
-  **Tier:** 2-full (the count mechanism is the open decision; module API plus theme).
+- [x] **SA274 — Show real counts on the theme's CRM stat cards.**
 
 - [ ] **SA283 — Manifest-read startup checks, one capability collector, one `--cov` form.**
 
