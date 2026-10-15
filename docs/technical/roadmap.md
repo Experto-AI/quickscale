@@ -62,7 +62,7 @@ SA191 waits on Track 2's release fixes (through the 0.89.0 publication); SA204's
 costs one registry row now that SA275 has landed (arch audit §7); SA277 waits on SA191's cutover,
 which decides which upgrade mechanism proved itself.
 
-**Parallel start.** SA204 (f) and SA282 have no unmet dependency and touch disjoint files.
+**Parallel start.** SA204 (g) and SA282 have no unmet dependency and touch disjoint files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
 with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
@@ -82,7 +82,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA204 (f) | yes | no | yes | no | yes |
+| 1 | SA204 (g) | yes | no | yes | no | yes |
 | 2 | SA282 | yes | yes | yes | yes | no |
 | 3 | SA281 | yes | yes | yes | yes | no |
 
@@ -207,7 +207,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     with `scripts/migration_hashes.json`; hash-keyed restore-forward in `recovery.py`).
   - [x] (c): landed as `scripts/check_migration_freeze.py`, one registry row (`check-migration-freeze`)
     with controls for an in-place edit, a deletion, a new `0002`, and a `_`-symbol reference; the
-    topology guard accepts an ordered chain and its `0002` canary is inverted. (f) and (g) are next.
+    topology guard accepts an ordered chain and its `0002` canary is inverted. (g) is next.
   - [x] (d) Restore-forward in `dr_engine/recovery.py` keyed on the hash manifest: forward
     migration from N to N+1, the bare-file refusal, and the equal-label hash-mismatch refusal,
     with tests (Tier 2-fast; Track 2 reviews). Landed as per-module `migration_hashes` recorded
@@ -218,9 +218,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [x] (e) `quickscale update` refuses a same-label rewrite of an applied migration file and
     restores the pre-update content; an added migration file still applies forward, and a
     version-label change keeps the upgrade path.
-  - [ ] (f) The restored-`bap-web` proof: `migrate` from the frozen `0001` reproduces the
-    FORCE-RLS parity baseline, and no schema change shipped between SA191's rebuild and the freeze
-    (Tier 2-full; environment-sensitive, read-mostly).
+  - [x] (f): landed as a rehearsal on a bap-web copy carrying the frozen content, migrated into a
+    fresh database (`bap_freeze_proof`) on the retained scratch PostgreSQL: `migrate` exit 0
+    (`--skip-checks`: the copy's Oct-9 project admin predates SA266's listings field rename); the
+    FORCE-RLS surface 6 tables / 12 policies (5 / 10 module-only, the delta being
+    `properties_propertylisting`'s canonical pair); tenant isolation 6/6, no `W004`/`W007`, only the
+    two known `W006` properties warnings — matching the SA191 baseline; no carried module's
+    migration changed since the rebuild (SA270's billing and SA204(a)'s blog are not carried).
+    (g) is next.
   - [ ] (g) The decision record lifting rule 1 and the freeze commit of the manifest, after (f)
     passes and with the maintainer's sign-off (Tier 2-fast; the one-way step, kept to docs and
     the manifest).
