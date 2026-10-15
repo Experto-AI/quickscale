@@ -971,8 +971,11 @@ public surface is `services.py` (rule 4).
 
 **18. Package tooling.**
 - ✅ Every module's `pyproject.toml` has `[tool.pytest.ini_options]` (with `--cov-fail-under=90`)
-  and `[tool.ruff]`; the test compares section keys, not values. Type checking is configured in the
-  root `mypy.ini` only (rule 36).
+  and `[tool.ruff]`; these checks read section presence, with the coverage target the one value
+  they compare. Type checking is configured in the root `mypy.ini` only (rule 36).
+- ✅ `--cov` names the module's import package (`quickscale_modules_<name>`), never a path into
+  `src/`, so a module's own test run measures the package it ships under the name it is imported by.
+- ❌ A `--cov` target spelled as a `src/` path, and a module pyproject declaring no `--cov` target.
 - ✅ Test settings are `tests/settings.py`; an additional file is `tests/settings_<purpose>.py`.
 - ✅ Every directory under `quickscale_modules/` is a module with a `module.yml`; there are no
   placeholder directories. The `teams` placeholder is deleted, its README moved to

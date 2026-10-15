@@ -40,6 +40,7 @@ from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FI
 from scripts.tests_module_conventions._support import (
     _corpus,
     _golden_module,
+    _with_addopts,
     _with_files,
 )
 
@@ -482,6 +483,12 @@ CASE_BUILDERS = {
             root_files={**_golden_module().root_files, "pyproject.toml": "[project]\n"},
         )
     ),
+    "coverage_path_form": lambda: _corpus(
+        _with_addopts(_golden_module(), "-v --cov=src/quickscale_modules_demo")
+    ),
+    "coverage_targetless": lambda: _corpus(
+        _with_addopts(_golden_module(), "-v --cov=quickscale_modules_demo --cov")
+    ),
 }
 
 #: (case, detector, expected findings) captured from the pre-split module; the
@@ -680,6 +687,22 @@ EXACT_FINDINGS = (
         (
             "rule 18: demo: pyproject has no pytest ini_options",
             "rule 18: demo: pyproject has no [tool.ruff]",
+        ),
+    ),
+    (
+        "coverage_path_form",
+        "rule_18_package_tooling",
+        (
+            "rule 18: demo: pyproject --cov target 'src/quickscale_modules_demo' does not "
+            "name the import package 'quickscale_modules_demo'",
+        ),
+    ),
+    (
+        "coverage_targetless",
+        "rule_18_package_tooling",
+        (
+            "rule 18: demo: pyproject --cov takes no target; name the import package "
+            "'quickscale_modules_demo'",
         ),
     ),
 )

@@ -46,7 +46,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA282 | One organization-selector flag and a required contract-vintage id | 2 | — | Optional |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | — | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
-| SA283 | Manifest-read startup checks, one capability collector, one `--cov` form | 3 | — | Optional |
 | SA279 | Retire the conformance harness's frozen surfaces | 3 | — | Optional |
 | SA281 | Hand adapter hooks typed resolved options and delete the dataflow detector | 3 | SA279 | Optional |
 
@@ -55,7 +54,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
 Track 2: SA273 ──► SA282 ──► SA280 ──► SA277
-Track 3: SA283 ──► SA279 ──► SA281
+Track 3: SA279 ──► SA281
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
@@ -66,7 +65,7 @@ costs one registry row now that SA275 has landed (arch audit §7); SA279 extends
 test to the conformance harness; SA277 waits on SA191's cutover, which decides which upgrade
 mechanism proved itself.
 
-**Parallel start.** SA204 (c), SA273, and SA283 have no unmet dependency and touch disjoint
+**Parallel start.** SA204 (c), SA273, and SA279 have no unmet dependency and touch disjoint
 files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -89,7 +88,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA204 (f) | yes | no | yes | no | yes |
 | 2 | SA273 | yes | yes | yes | yes | no |
-| 3 | SA283 | yes | yes | yes | yes | no |
+| 3 | SA279 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -421,36 +420,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA274 — Show real counts on the theme's CRM stat cards.**
 
-- [ ] **SA283 — Manifest-read startup checks, one capability collector, one `--cov` form.**
-
-  Closes coherence `startup-checks-and-errors` (narrowed), `capability-collection` (narrowed), and
-  `dependency-spec-sources`, with gaps 6 and the rule-6 literal scan from coherence §7.
-
-  **Context:** the `checks.py` of analytics, billing, and notifications hand-list setting and
-  secret names their manifests already project, so a rename is made twice. The orgs purge command
-  walks `getattr(app_config, "invalidate_organization_cache", None)`
-  (`quickscale_orgs_purge_organization.py:533`) outside `collect_capabilities`. auth and blog run
-  `--cov=src/<pkg>` while the other ten run `--cov=<pkg>`.
-
-  **Acceptance:** each slice merges its coherence §6 rule into decisions with a harness clause and
-  a control. Startup checks read required names from the manifest projection, and harness rule 6
-  flags a `<MODULE>_*` literal in `checks.py` (control: a fixture re-listing a setting). The
-  invalidation hook is a listed `CAPABILITIES` name collected by `collect_capabilities`, and the
-  harness bans `getattr(app_config, ...)` outside core (control: orgs' former walk). auth and blog
-  use `--cov=<import package>`, and the harness compares each pyproject's `--cov` with the package
-  name (control: a path form).
-
-  **Slices:**
-  - [x] (a) Manifest-read startup checks in analytics, billing, and notifications, on the same
-    `checks.py` SA272 (b) extended (Tier 2-fast). Landed: `quickscale_core.runtime` gains
-    `projected_setting_names`, the three checks read it, and harness rule 6 refuses a `checks.py`
-    that re-lists its setting names literally, controls included. (b) is next.
-  - [x] (b) The purge command's hook through `collect_capabilities` (Tier 1). Landed: the purge
-    collects the `organization_cache_invalidation_hooks` capability, the declaration validation
-    refuses an INVALIDATE executor not declared through it, and harness rule 4 refuses a
-    `getattr(app_config, ...)` walk outside core, control included; auth's undeclared-reconcile
-    fallback is the one recorded seam. (c) is next.
-  - [ ] (c) The `--cov` form in auth and blog with its harness check (Tier 1).
+- [x] **SA283 — Manifest-read startup checks, one capability collector, one `--cov` form.**
 
 - [ ] **SA279 — Retire the conformance harness's frozen surfaces.**
 
