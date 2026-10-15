@@ -342,8 +342,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `project_contract.yml:188` describes the SA258 runtime seam.
 
   **Slices:**
-  - [ ] (a) The `--organization-id` rename, the rule 17 clause, and the harness ban with its
-    control (Tier 1).
+  - [x] (a) The `--organization-id` rename, the rule 17 clause, and the harness ban with its
+    control (Tier 1). Landed: the billing command selects with `--organization-id`; decisions
+    rule 17 names the one selector spelling and refuses the rest, and harness rule 17 bans
+    `--organization`, `--org`, and slug selectors declared without `--organization-id`, controls
+    included. (b) is next.
   - [ ] (b) The required vintage `id`: the loader refusal and control, ids for backups and social,
     one CLI mechanism, the decision text, and the stale step prose (Tier 2-fast).
 

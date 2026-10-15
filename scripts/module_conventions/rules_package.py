@@ -22,6 +22,7 @@ from typing import Any as Any
 from scripts.module_conventions._package_commands import (
     CONFIRM_COMMAND_KEYWORDS,
     DESTRUCTIVE_COMMAND_KEYWORDS,
+    ORGANIZATION_SELECTOR_FLAG,
     _command_findings,
     _command_flags,
     _constant_string,
@@ -141,6 +142,7 @@ from scripts.module_conventions.core import (
 __all__ = (
     "CONFIRM_COMMAND_KEYWORDS",
     "DESTRUCTIVE_COMMAND_KEYWORDS",
+    "ORGANIZATION_SELECTOR_FLAG",
     "RETIRED_SETTINGS_NAME",
     "RULE_11_ONE_OFF_FILES",
     "RULE_11_REQUIRED_FILES",

@@ -57,6 +57,26 @@ DESTRUCTIVE_COMMAND_KEYWORDS = (
     "promote",
 )
 
+#: Rule 17: the one organization-selector spelling.  A command that selects a
+#: single organization declares ``--organization-id`` and validates the value
+#: as a UUID; any other ``--org``/``--organization`` spelling of that selector
+#: — ``--organization``, ``--org``, or a slug selector such as
+#: ``--organization-slug`` — is refused.  A bare ``--slug`` serves a
+#: non-destructive preflight lookup only: a command that offers one also
+#: declares ``--organization-id``, and an invocation passes either the selector
+#: or the slug, never both (orgs' shape).  The ban is a spelling list, so a
+#: synonym it does not name stays open-world.
+ORGANIZATION_SELECTOR_FLAG = "--organization-id"
+
+
+def _banned_organization_selector(flag: str) -> bool:
+    """Return True when a declared flag is a refused organization-selector spelling."""
+    if flag == ORGANIZATION_SELECTOR_FLAG:
+        return False
+    normalized = flag.lstrip("-").replace("_", "-")
+    stem = "organization" if normalized.startswith("organization") else "org"
+    return normalized == stem or normalized.startswith(f"{stem}-")
+
 
 def _flag_findings(module_name: str, command: str, flags: dict[str, ast.Call]) -> list[str]:
     """Return the rule 17 findings for a command's declared flags."""
@@ -84,6 +104,17 @@ def _flag_findings(module_name: str, command: str, flags: dict[str, ast.Call]) -
             violations.append(f"rule 17: {module_name}: {command} --trigger must default to manual")
     if any(keyword in command for keyword in CONFIRM_COMMAND_KEYWORDS) and "--confirm" not in flags:
         violations.append(f"rule 17: {module_name}: {command} deletes data and takes no --confirm")
+    for flag in sorted(flags):
+        if _banned_organization_selector(flag):
+            violations.append(
+                f"rule 17: {module_name}: {command} spells an organization selector "
+                f"{flag}; use --organization-id <uuid>"
+            )
+    if "--slug" in flags and ORGANIZATION_SELECTOR_FLAG not in flags:
+        violations.append(
+            f"rule 17: {module_name}: {command} offers --slug without "
+            f"{ORGANIZATION_SELECTOR_FLAG}; a slug lookup is non-destructive preflight"
+        )
     return violations
 
 

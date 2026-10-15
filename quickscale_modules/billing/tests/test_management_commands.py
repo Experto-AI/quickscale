@@ -207,7 +207,7 @@ def test_reconcile_checkouts_limits_to_the_requested_organization(
     organization,
     org_context,
 ) -> None:
-    """``--organization`` leaves other organizations untouched."""
+    """``--organization-id`` leaves other organizations untouched."""
     targeted = PurchaseCheckout.all_objects.create(
         user=user,
         organization=organization,
@@ -228,7 +228,7 @@ def test_reconcile_checkouts_limits_to_the_requested_organization(
 
     _stdout, _stderr = _run_command(
         _FakeReconciliationClient(),
-        organization=str(organization.pk),
+        organization_id=str(organization.pk),
     )
 
     targeted.refresh_from_db()
@@ -441,7 +441,7 @@ def test_reconcile_checkouts_holds_the_provider_mutation_lock(
 
 @pytest.mark.django_db
 def test_reconcile_checkouts_rejects_unknown_and_malformed_organizations() -> None:
-    """A missing or malformed ``--organization`` fails before any lookup."""
+    """A missing or malformed ``--organization-id`` fails before any lookup."""
     fake_client = _FakeReconciliationClient()
     with patch(
         "quickscale_modules_billing._stripe_client.get_stripe_client",
@@ -450,14 +450,14 @@ def test_reconcile_checkouts_rejects_unknown_and_malformed_organizations() -> No
         with pytest.raises(CommandError, match="No organization found"):
             call_command(
                 "quickscale_billing_reconcile_checkouts",
-                organization=str(uuid4()),
+                organization_id=str(uuid4()),
                 stdout=StringIO(),
                 stderr=StringIO(),
             )
         with pytest.raises(CommandError, match="Invalid organization primary key"):
             call_command(
                 "quickscale_billing_reconcile_checkouts",
-                organization="not-a-uuid",
+                organization_id="not-a-uuid",
                 stdout=StringIO(),
                 stderr=StringIO(),
             )
