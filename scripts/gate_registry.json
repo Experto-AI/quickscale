@@ -96,7 +96,10 @@
                 "quickscale_cli/src/quickscale_cli/commands/apply_command.py",
                 "quickscale_cli/src/quickscale_cli/commands/development_commands.py",
                 "quickscale_cli/src/quickscale_cli/utils/docker_utils.py",
-                "quickscale_cli/tests/test_apply_command_extended.py"
+                "quickscale_cli/tests/test_apply_command_extended.py",
+                "quickscale_cli/tests/test_module_lifecycle_cycle.py",
+                "quickscale_cli/tests/test_e2e_development_workflow.py",
+                "quickscale_cli/tests/test_react_theme_e2e.py"
             ]
         },
         {

@@ -257,7 +257,7 @@ def _incomplete_records(presence: list[Any]) -> list[Any]:
 
 
 def _validate_managed_presence(
-    presence: list[Any], bundled_module_names: list[str]
+    presence: list[Any], release_names: list[str]
 ) -> set[str]:
     """Validate one presence snapshot and return its active module names."""
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
@@ -277,7 +277,7 @@ def _validate_managed_presence(
     active_module_names = {
         record.name for record in presence if record.state is ModulePresenceState.ACTIVE
     }
-    validate_active_module_subset(active_module_names, bundled_module_names)
+    validate_active_module_subset(active_module_names, release_names)
     return active_module_names
 
 
@@ -285,23 +285,23 @@ def refresh_managed_adapters() -> None:
     """Atomically refresh every adapter in the active module subset.
 
     Presence discovery is performed exactly once per refresh.  A generated
-    project's embedded modules may be a strict subset of the authoritative
-    bundled inventory; only active adapters are loaded.  Incomplete module
+    project's embedded modules may be a strict subset of the release
+    inventory; only active adapters are loaded.  Incomplete module
     directories fail before any adapter import.  All
     sentinels are resolved before the live registry or origins are changed,
     preserving registry identity, custom entries, and prior state on failure.
     """
     from quickscale_core.contracts.module_discovery import (  # noqa: PLC0415
-        discover_bundled_module_names,
         discover_module_presence,
+        release_module_names,
     )
 
-    bundled_module_names = discover_bundled_module_names()
+    release_names = release_module_names()
     presence = discover_module_presence(
         base_path=get_modules_base_path(),
-        expected_names=bundled_module_names,
+        expected_names=release_names,
     )
-    active_module_names = _validate_managed_presence(presence, bundled_module_names)
+    active_module_names = _validate_managed_presence(presence, release_names)
 
     loaded_adapters: dict[str, Callable[..., ModuleWiringSpec]] = {}
     # Resolve every adapter before mutating the live registry.  A failed

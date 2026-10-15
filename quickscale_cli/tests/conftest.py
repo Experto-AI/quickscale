@@ -33,6 +33,33 @@ for _module_entry in sorted((_REPO_ROOT / "quickscale_modules").iterdir()):
             sys.path.insert(0, _src_str)
 
 
+def _materialize_bundled_manifests() -> None:
+    """Derive the bundled manifests before CLI tests read them (SA280 (b)).
+
+    A fresh clone does not track ``quickscale_core/data/manifests/``; the CLI
+    suites exercise managed-wiring regeneration and wheel builds that read the
+    bundled inventory, so the repository materializes it here exactly as a
+    build does.  Runs at conftest import time.
+    """
+    script = _REPO_ROOT / "scripts" / "sync_module_manifests.py"
+    if not (_REPO_ROOT / "quickscale_modules").is_dir() or not script.is_file():
+        return
+    result = subprocess.run(  # noqa: S603 - fixed argv list, shell disabled
+        [sys.executable, str(script), str(_REPO_ROOT)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "failed to materialize the bundled module manifests:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+
+_materialize_bundled_manifests()
+
+
 @pytest.fixture(scope="session")
 def local_core_wheelhouse(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Return a wheelhouse holding the repository's own quickscale-core wheel.

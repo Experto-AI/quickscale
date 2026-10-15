@@ -6,12 +6,15 @@ tracked sources; the wheel build materializes them from
 repository tree and inspects its members, so a build that stops materializing
 them (or ships a stale set) fails here instead of at a generated project's
 startup retired-setting refusal.
+
+The build deliberately runs inside the repository's Git work tree: Poetry
+applies the repository's VCS ignore rules to wheel contents, so a source copy
+outside Git would not exercise the same filtering a maintainer's build sees.
 """
 
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 import zipfile
@@ -24,16 +27,6 @@ _MATERIALIZER = _REPO_ROOT / "scripts" / "sync_module_manifests.py"
 
 #: Wheel member prefix for the bundled package data.
 _MEMBER_PREFIX = "quickscale_core/data/manifests/"
-
-_IGNORED_ARTIFACTS = (
-    "dist",
-    ".venv",
-    "__pycache__",
-    "*.pyc",
-    ".mypy_cache",
-    ".ruff_cache",
-    ".pytest_cache",
-)
 
 
 def _materialize_bundled_manifests() -> None:
@@ -49,31 +42,26 @@ def _materialize_bundled_manifests() -> None:
     )
 
 
-def _build_core_wheel(tmp_path: Path) -> Path:
-    """Build one real wheel from a clean temporary source copy."""
-    source_copy = tmp_path / "quickscale_core"
-    shutil.copytree(
-        _PACKAGE_DIR,
-        source_copy,
-        ignore=shutil.ignore_patterns(*_IGNORED_ARTIFACTS),
-    )
+def _build_core_wheel(output_dir: Path) -> Path:
+    """Build one real wheel of the repository package as it stands."""
+    output_dir.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ)
     environment.pop("PYTHONPATH", None)
     result = subprocess.run(
-        ["poetry", "build", "--format", "wheel"],
-        cwd=source_copy,
+        ["poetry", "build", "--format", "wheel", "--output", str(output_dir)],
+        cwd=_PACKAGE_DIR,
         capture_output=True,
         text=True,
         timeout=180,
         env=environment,
     )
     assert result.returncode == 0, (
-        "temporary quickscale-core wheel build failed:\n"
+        "quickscale-core wheel build failed:\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
-    wheels = sorted((source_copy / "dist").glob("quickscale_core-*.whl"))
+    wheels = sorted(output_dir.glob("quickscale_core-*.whl"))
     assert len(wheels) == 1, (
-        "expected exactly one temporary quickscale-core wheel, got "
+        "expected exactly one quickscale-core wheel, got "
         f"{[wheel.name for wheel in wheels]}"
     )
     return wheels[0]
@@ -82,7 +70,7 @@ def _build_core_wheel(tmp_path: Path) -> Path:
 def test_built_wheel_carries_the_materialized_manifests(tmp_path: Path) -> None:
     """The wheel's bundled manifests equal the module manifests at build time."""
     _materialize_bundled_manifests()
-    wheel = _build_core_wheel(tmp_path)
+    wheel = _build_core_wheel(tmp_path / "wheelhouse")
 
     with zipfile.ZipFile(wheel) as archive:
         members = {

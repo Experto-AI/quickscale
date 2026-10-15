@@ -561,9 +561,8 @@ poetry run pytest -vv
 ### Building Distribution Packages
 
 ```bash
-# Build wheels for both packages
-cd quickscale_core && poetry build && cd ..
-cd quickscale_cli && poetry build && cd ..
+# Build every distribution package (materializes the bundled module manifests)
+make build
 
 # Test installation from wheel
 python -m venv test_venv
