@@ -519,7 +519,7 @@ DJANGO_SETTINGS_MODULE = "tests.settings"
 pythonpath = ["."]
 python_files = ["test_*.py"]
 testpaths = ["tests"]
-addopts = "-v --cov=src/quickscale_modules_<name> --cov-report=html --cov-report=term-missing --cov-fail-under=90"
+addopts = "-v --cov=quickscale_modules_<name> --cov-report=html --cov-report=term-missing --cov-fail-under=90"
 ```
 
 **1.2. Register Module in Root pyproject.toml:**

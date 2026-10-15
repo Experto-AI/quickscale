@@ -204,8 +204,11 @@ def _golden_module(name: str = "demo") -> Module:
                 "python = '>=3.14,<3.15'\n"
                 "Django = '>=6.0.7,<6.1.0'\n"
                 "quickscale-core = {path = '../../quickscale_core', develop = true}\n"
-                "[tool.pytest.ini_options]\naddopts = ''\n[tool.ruff]\n"
-            ),
+                "[tool.pytest.ini_options]\n"
+                "addopts = '-v --cov=quickscale_modules_demo --cov-report=html "
+                "--cov-report=term-missing --cov-fail-under=90'\n"
+                "[tool.ruff]\n"
+            ).replace("demo", name),
             "README.md": GOLDEN_README.replace("demo", name),
             "poetry.toml": "[virtualenvs]\nin-project = true\n",
         },
@@ -265,6 +268,21 @@ def _with_files(module: Module, **files: str) -> Module:
             key = f"{key}.py"
         updated[key] = value
     return replace(module, files=updated)
+
+
+def _with_addopts(module: Module, addopts: str) -> Module:
+    """Replace the golden pyproject's pytest addopts value."""
+    pyproject = module.root_files["pyproject.toml"]
+    head, marker, tail = pyproject.partition("addopts = '")
+    assert marker, "golden fixture pyproject has no addopts"
+    _, _, rest = tail.partition("'")
+    return replace(
+        module,
+        root_files={
+            **module.root_files,
+            "pyproject.toml": f"{head}addopts = '{addopts}'{rest}",
+        },
+    )
 
 
 def _violations(detector, *modules: Module, extra_dirs: tuple[str, ...] = ()) -> list[str]:

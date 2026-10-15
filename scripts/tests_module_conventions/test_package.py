@@ -10,6 +10,7 @@ from scripts.tests_module_conventions._support import (
     _corpus,
     _golden_module,
     _violations,
+    _with_addopts,
     _with_files,
 )
 
@@ -79,6 +80,42 @@ def test_malformed_tool_shape_is_a_violation() -> None:
     )
     assert any(
         "pytest" in violation for violation in _violations(checker.rule_18_package_tooling, broken)
+    )
+
+
+def test_coverage_target_control() -> None:
+    """Rule 18: --cov names the module's import package, never a src/ path."""
+    module = _golden_module()
+    assert _violations(checker.rule_18_package_tooling, module) == []
+    assert _violations(checker.rule_18_package_tooling, _golden_module("blog")) == []
+    space_form = _with_addopts(module, "-v --cov quickscale_modules_demo --cov-fail-under=90")
+    assert _violations(checker.rule_18_package_tooling, space_form) == []
+    path_form = _with_addopts(module, "-v --cov=src/quickscale_modules_demo --cov-fail-under=90")
+    assert any(
+        "pyproject --cov target 'src/quickscale_modules_demo' does not name "
+        "the import package 'quickscale_modules_demo'" in violation
+        for violation in _violations(checker.rule_18_package_tooling, path_form)
+    )
+    other_package = _with_addopts(module, "-v --cov=quickscale_modules_orgs")
+    assert any(
+        "pyproject --cov target 'quickscale_modules_orgs' does not name "
+        "the import package 'quickscale_modules_demo'" in violation
+        for violation in _violations(checker.rule_18_package_tooling, other_package)
+    )
+    report_flag_only = _with_addopts(module, "-v --cov-report=html")
+    assert any(
+        "pyproject addopts declares no --cov target" in violation
+        for violation in _violations(checker.rule_18_package_tooling, report_flag_only)
+    )
+    trailing_bare = _with_addopts(module, "-v --cov=quickscale_modules_demo --cov")
+    assert any(
+        "pyproject --cov takes no target" in violation
+        for violation in _violations(checker.rule_18_package_tooling, trailing_bare)
+    )
+    option_after_bare = _with_addopts(module, "-v --cov --cov-report=html")
+    assert any(
+        "pyproject --cov takes no target" in violation
+        for violation in _violations(checker.rule_18_package_tooling, option_after_bare)
     )
 
 

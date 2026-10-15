@@ -808,6 +808,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Dependency-file rewrites are atomic.** The CLI's module dependency sync writes the validated
     `pyproject.toml` through a sibling temp file and an atomic replace, so an interrupted write
     leaves the original file intact.
+  - **Module test runs measure the package they ship.** Every module's `pyproject.toml` runs pytest
+    coverage against its import package (`quickscale_modules_<name>`) instead of a `src/` path, and
+    the module-conventions gate refuses any other `--cov` target.
   - **One organization-selector spelling.** A command that selects a single organization names it
     `--organization-id <uuid>`, and the module-conventions gate refuses `--organization`, `--org`,
     and slug selectors declared without it.
