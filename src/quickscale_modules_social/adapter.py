@@ -18,6 +18,7 @@ from typing import Any
 
 from quickscale_core.runtime.manifest import (
     ModuleWiringSpec,
+    ResolvedOptions,
     build_generic_manifest_spec,
     render_social_managed_init_module,
     render_social_managed_urls_module,
@@ -95,9 +96,9 @@ def _build_social_post_hook(project_package: str) -> Any:
     """
 
     def _social_post_hook(
-        spec: ModuleWiringSpec, resolved: dict[str, Any]
+        spec: ModuleWiringSpec, resolved: ResolvedOptions
     ) -> ModuleWiringSpec:
-        provider_allowlist = list(resolved["provider_allowlist"])
+        provider_allowlist = list(resolved.provider_allowlist)
         embed_provider_allowlist = [
             provider
             for provider in provider_allowlist
@@ -109,7 +110,7 @@ def _build_social_post_hook(project_package: str) -> Any:
             embed_provider_allowlist
         )
 
-        if resolved["enabled"]:
+        if resolved.enabled:
             url_includes = _qualify_managed_url_includes(
                 spec.url_includes,
                 project_package,
@@ -124,10 +125,10 @@ def _build_social_post_hook(project_package: str) -> Any:
             "social.managed_views": render_social_managed_views_module(
                 provider_allowlist,
                 embed_provider_allowlist,
-                layout_variant=resolved["layout_variant"],
-                cache_ttl_seconds=resolved["cache_ttl_seconds"],
-                links_per_page=resolved["links_per_page"],
-                embeds_per_page=resolved["embeds_per_page"],
+                layout_variant=resolved.layout_variant,
+                cache_ttl_seconds=resolved.cache_ttl_seconds,
+                links_per_page=resolved.links_per_page,
+                embeds_per_page=resolved.embeds_per_page,
             ),
         }
 
