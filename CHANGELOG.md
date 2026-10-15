@@ -796,6 +796,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     runtime for the secret and derived settings `apply` writes instead of holding its own list, so a
     renamed setting lands once in `module.yml`; the module-conventions gate refuses a `checks.py`
     that re-lists a setting name.
+  - **The purge boundary runs only declared cache-invalidation hooks.** The purge command collects
+    each installed app's `organization_cache_invalidation_hooks` capability instead of reading an
+    `invalidate_organization_cache` attribute off every app config, a declared `INVALIDATE`
+    obligation whose executor is not collected is refused, and the module-conventions gate refuses
+    a `getattr(app_config, ...)` walk outside core.
   - **Editor uploads store the decoded image's identity.** The shared staff Markdownx upload takes
     its stored extension and content type from the image the server decoded, never from the
     client's filename or media type, and SVG is no longer an accepted upload type, so an HTML or

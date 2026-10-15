@@ -181,6 +181,19 @@ class QuickscaleOrgsConfig(AppConfig):
             ),
         }
 
+    def organization_cache_invalidation_hooks(
+        self,
+    ) -> tuple[Callable[[object], None], ...]:
+        """Declare orgs' organization-cache invalidation hook (Module Conventions rule 4).
+
+        The purge boundary collects every installed app's declared hook
+        through the shared core helper, so it runs each declaring app's own
+        invalidation without reading a hook attribute off every app config.
+        orgs' hook clears the keys installed modules declare through the
+        ``organization_cache_keys`` capability.
+        """
+        return (self.invalidate_organization_cache,)
+
     def invalidate_organization_cache(self, organization_id: object) -> None:
         """Invalidate every installed app's declared organization-scoped keys.
 

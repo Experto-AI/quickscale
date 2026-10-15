@@ -389,13 +389,61 @@ def test_declared_obligations_accept_an_app_owned_stage_with_its_hook() -> None:
         anonymize_action=RemovalAction.SKIP,
         anonymize_skip_reason="Retained.",
     )
+
+    def invalidate_organization_cache(organization_id: object) -> None:
+        del organization_id
+
+    config = SimpleNamespace(
+        label="acme_app",
+        removal_obligations=(obligation,),
+        invalidate_organization_cache=invalidate_organization_cache,
+        organization_cache_invalidation_hooks=lambda: (invalidate_organization_cache,),
+    )
+
+    assert _declared(config) == (obligation,)
+
+
+def test_declared_obligations_require_the_declared_invalidation_hook() -> None:
+    """An INVALIDATE executor the purge cannot collect is refused."""
+    obligation = OrganizationRemovalObligation(
+        name="acme-cache-state",
+        purge_action=RemovalAction.INVALIDATE,
+        anonymize_action=RemovalAction.SKIP,
+        anonymize_skip_reason="Retained.",
+    )
     config = SimpleNamespace(
         label="acme_app",
         removal_obligations=(obligation,),
         invalidate_organization_cache=lambda organization_id: None,
     )
 
-    assert _declared(config) == (obligation,)
+    with pytest.raises(ValueError, match="organization_cache_invalidation_hooks"):
+        _declared(config)
+
+
+def test_declared_obligations_reject_a_one_shot_hook_declaration() -> None:
+    """A declaration the collector cannot read fails validation, not purge time."""
+
+    def invalidate_organization_cache(organization_id: object) -> None:
+        del organization_id
+
+    obligation = OrganizationRemovalObligation(
+        name="acme-cache-state",
+        purge_action=RemovalAction.INVALIDATE,
+        anonymize_action=RemovalAction.SKIP,
+        anonymize_skip_reason="Retained.",
+    )
+    config = SimpleNamespace(
+        label="acme_app",
+        removal_obligations=(obligation,),
+        invalidate_organization_cache=invalidate_organization_cache,
+        organization_cache_invalidation_hooks=lambda: (
+            hook for hook in (invalidate_organization_cache,)
+        ),
+    )
+
+    with pytest.raises(ValueError, match="one-shot iterator"):
+        _declared(config)
 
 
 def test_declared_obligations_reject_provider_fields_without_refusal() -> None:

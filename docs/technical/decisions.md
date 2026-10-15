@@ -667,6 +667,14 @@ Each interaction uses the mechanism that fits it:
   collector of them.
 - ❌ A capability collector other than `collect_capabilities`, or a `collect_capabilities`
   call naming a capability outside `CAPABILITIES`.
+- ✅ Every cross-app hook lookup goes through `collect_capabilities`: a module that needs a hook
+  from every installed app declares it as a listed capability on the providing app's `AppConfig`
+  and collects it, so no module walks the installed app configs reading a hook with
+  `getattr(app_config, ...)`. Core is the one place that reads an app config's attribute by name.
+- ❌ `getattr(app_config, ...)` over `apps.get_app_configs()` (or a direct `apps.get_app_config`)
+  outside `quickscale_core`. The one recorded seam is auth's undeclared-reconcile fallback
+  (technical audit `account-deletion-hook-exception-text`), which retires when that watch item's
+  trigger fires.
 - This narrows the "no service registries" prohibition: `AppConfig`-declared capabilities collected
   by one helper, and the listed core ports (rule 10), are allowed; a general registry,
   lookup-by-name, or DI container stays forbidden.

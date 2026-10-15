@@ -183,6 +183,7 @@ CAPABILITIES: Mapping[str, CapabilityShape] = MappingProxyType(
         "account_deletion_handlers": CapabilityShape.ITERABLE,
         "anonymize_handlers": CapabilityShape.ITERABLE,
         "notification_templates": CapabilityShape.MAPPING,
+        "organization_cache_invalidation_hooks": CapabilityShape.ITERABLE,
         "organization_cache_keys": CapabilityShape.ITERABLE,
         "organization_pricing_url_hooks": CapabilityShape.ITERABLE,
         "personal_data_declarations": CapabilityShape.ITERABLE,

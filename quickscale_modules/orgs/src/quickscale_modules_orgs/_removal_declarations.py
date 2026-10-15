@@ -56,6 +56,33 @@ def _validate_obligation_identity(
     return obligation
 
 
+#: AppConfig attribute through which an app declares the purge boundary's
+#: organization-cache invalidation hooks — the rule 4 capability the purge
+#: command collects instead of reading a hook attribute off every app config.
+INVALIDATION_HOOKS_ATTRIBUTE = "organization_cache_invalidation_hooks"
+
+
+def _declared_invalidation_hooks(app_config: AppConfig) -> tuple[object, ...]:
+    """Return the app's declared purge-boundary invalidation hooks (rule 4).
+
+    An app declares them through ``organization_cache_invalidation_hooks``,
+    and the declaration is read through the same shared core helper the purge
+    command collects with, so a declaration this validation accepts is one the
+    purge can collect: the collector's shape rules and error messages stay the
+    single authoritative behavior, and a malformed declaration fails the
+    obligation validation before any destructive work instead of after the
+    purge transaction commits.
+    """
+    declared: list[object] = []
+
+    def _observe(config: AppConfig, entries: tuple[object, ...]) -> None:
+        if config is app_config:
+            declared.extend(entries)
+
+    collect_capabilities(INVALIDATION_HOOKS_ATTRIBUTE, on_declared=_observe)
+    return tuple(declared)
+
+
 def _validate_obligation_actions(
     obligation: OrganizationRemovalObligation,
     owner: str,
@@ -92,11 +119,24 @@ def _validate_obligation_actions(
         hook = STAGE_EXECUTOR_HOOKS.get(action)
         if hook is None:
             continue
-        if not callable(getattr(app_config, hook, None)):
+        executor = getattr(app_config, hook, None)
+        if not callable(executor):
             raise ValueError(
                 f"{owner} declares {obligation.name!r} with the "
                 f"{action.value!r} action for the {boundary.value!r} boundary "
                 f"but exposes no {hook!r} hook to execute it."
+            )
+        if (
+            boundary is RemovalBoundary.PURGE
+            and action is RemovalAction.INVALIDATE
+            and executor not in _declared_invalidation_hooks(app_config)
+        ):
+            raise ValueError(
+                f"{owner} declares {obligation.name!r} with the "
+                f"{action.value!r} action for the {boundary.value!r} boundary "
+                f"but does not declare {hook!r} through the "
+                f"{INVALIDATION_HOOKS_ATTRIBUTE!r} capability the purge "
+                "collects; the purge runs only declared hooks."
             )
 
 

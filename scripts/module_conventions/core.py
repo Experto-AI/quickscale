@@ -321,6 +321,7 @@ CAPABILITY_NAMES: frozenset[str] = frozenset(
         "account_deletion_handlers",
         "anonymize_handlers",
         "notification_templates",
+        "organization_cache_invalidation_hooks",
         "organization_cache_keys",
         "organization_pricing_url_hooks",
         "personal_data_declarations",
@@ -329,6 +330,22 @@ CAPABILITY_NAMES: frozenset[str] = frozenset(
         "removal_boundary_implementations",
         "removal_label_prefix",
         "removal_obligations",
+    }
+)
+
+# Rule 4's one recorded exception to the app-config-walk ban: auth's
+# undeclared-reconcile fallback, kept because deleting it changes which
+# installed apps the anonymize boundary serves.  The technical audit tracks it
+# (``account-deletion-hook-exception-text``); it retires on that watch item's
+# trigger, and any second entry is a decision edit.  Each entry is
+# ``(module, package file, attribute)``.
+APP_CONFIG_WALK_SEAMS: frozenset[tuple[str, str, str]] = frozenset(
+    {
+        (
+            "auth",
+            "_account_deletion_providers.py",
+            "reconcile_account_deletion_provider_state",
+        ),
     }
 )
 

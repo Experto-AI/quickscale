@@ -340,7 +340,7 @@ DECLARED_CACHE_OBLIGATION = OrganizationRemovalObligation(
 
 @pytest.fixture
 def declared_cache_hook(monkeypatch: pytest.MonkeyPatch) -> list:
-    """Declare a cache obligation and provide its executor hook."""
+    """Declare a cache obligation and expose its executor through the capability."""
     calls: list = []
     config = apps.get_app_config("provider_id_app")
     monkeypatch.setattr(
@@ -353,6 +353,12 @@ def declared_cache_hook(monkeypatch: pytest.MonkeyPatch) -> list:
         config,
         "invalidate_organization_cache",
         calls.append,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        config,
+        "organization_cache_invalidation_hooks",
+        lambda: (calls.append,),
         raising=False,
     )
     return calls
@@ -377,6 +383,59 @@ def test_purge_runs_a_declared_cache_hook(declared_cache_hook: list) -> None:
     )
 
     assert declared_cache_hook == [org_id]
+
+
+@pytest.fixture
+def one_shot_cache_hook(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Declare a cache obligation whose hook capability is a one-shot iterator."""
+    config = apps.get_app_config("provider_id_app")
+    monkeypatch.setattr(
+        config,
+        "removal_obligations",
+        lambda: (DECLARED_CACHE_OBLIGATION,),
+        raising=False,
+    )
+
+    def invalidate_organization_cache(organization_id: object) -> None:
+        del organization_id
+
+    monkeypatch.setattr(
+        config,
+        "invalidate_organization_cache",
+        invalidate_organization_cache,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        config,
+        "organization_cache_invalidation_hooks",
+        lambda: (hook for hook in (invalidate_organization_cache,)),
+        raising=False,
+    )
+
+
+@pytest.mark.django_db
+def test_purge_refuses_a_one_shot_hook_declaration_before_deleting(
+    one_shot_cache_hook: None,
+) -> None:
+    """The collector's refusal reaches the purge before any destruction."""
+    org = Organization.objects.create(
+        name="SA283 One-shot Hook",
+        slug="sa283-one-shot-hook",
+    )
+    org_id = org.pk
+
+    with pytest.raises(ValueError, match="one-shot iterator"):
+        call_command(
+            "quickscale_orgs_purge_organization",
+            organization_id=str(org_id),
+            confirm=str(org_id),
+            stdout=StringIO(),
+            stderr=StringIO(),
+            verbosity=0,
+        )
+
+    assert Organization.objects.filter(pk=org_id).exists()
+    assert OrganizationTombstone.objects.filter(organization_id=org_id).count() == 0
 
 
 DECLARED_UNKNOWN_LABEL_OBLIGATION = OrganizationRemovalObligation(

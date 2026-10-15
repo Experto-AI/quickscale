@@ -267,6 +267,54 @@ CASE_BUILDERS = {
             ),
         )
     ),
+    "app_config_walk": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            views=(
+                "from django.apps import apps\n\n\n"
+                "def invalidate(org_id):\n"
+                "    for app_config in sorted(apps.get_app_configs(), "
+                "key=lambda c: c.label):\n"
+                "        hook = getattr(app_config, 'invalidate_organization_cache', None)\n"
+                "        if callable(hook):\n"
+                "            hook(org_id)\n"
+            ),
+        )
+    ),
+    "app_config_walk_seam": lambda: _corpus(
+        _with_files(
+            _golden_module("auth"),
+            **{
+                "_account_deletion_providers.py": (
+                    "from django.apps import apps\n\n\n"
+                    "def discover():\n"
+                    "    hooks = []\n"
+                    "    for app_config in sorted(apps.get_app_configs(), "
+                    "key=lambda c: c.label):\n"
+                    "        hook = getattr(\n"
+                    "            app_config, 'reconcile_account_deletion_provider_state', None\n"
+                    "        )\n"
+                    "        if callable(hook):\n"
+                    "            hooks.append(hook)\n"
+                    "    return hooks\n"
+                )
+            },
+        )
+    ),
+    "app_config_walk_aliased": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            views=(
+                "from django.apps import apps\n\n\n"
+                "def invalidate(org_id):\n"
+                "    configs = sorted(apps.get_app_configs(), key=lambda c: c.label)\n"
+                "    for app_config in configs:\n"
+                "        hook = getattr(app_config, 'invalidate_organization_cache', None)\n"
+                "        if callable(hook):\n"
+                "            hook(org_id)\n"
+            ),
+        )
+    ),
     "clean_retired": lambda: _corpus(_retired_manifest(_golden_module())),
     "python_retired": lambda: _corpus(
         _with_files(
@@ -472,6 +520,23 @@ EXACT_FINDINGS = (
         "constructed_capability",
         "rule_4_public_surface",
         ("rule 4: demo: views.py:5 collects an unresolved name, which is not in CAPABILITIES",),
+    ),
+    (
+        "app_config_walk",
+        "rule_4_public_surface",
+        (
+            "rule 4: demo: views.py:6 reads an app config through getattr(); "
+            "collect the capability through collect_capabilities",
+        ),
+    ),
+    ("app_config_walk_seam", "rule_4_public_surface", ()),
+    (
+        "app_config_walk_aliased",
+        "rule_4_public_surface",
+        (
+            "rule 4: demo: views.py:7 reads an app config through getattr(); "
+            "collect the capability through collect_capabilities",
+        ),
     ),
     ("clean_retired", "rule_6_no_legacy_names", ()),
     (
