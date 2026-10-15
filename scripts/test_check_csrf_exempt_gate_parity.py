@@ -1,80 +1,19 @@
 """
-Parity controls for the SA267(c) ``check_csrf_exempt_gate`` refactor.
+Behavioral controls for the SA267(c) ``check_csrf_exempt_gate`` refactor.
 
-The module keeps its pre-split surface; the literal-truthiness fold was
-decomposed into private helpers without moving any name.  These controls pin
-the preserved surface, the callable homes and signatures, the exact
-truthiness verdicts captured from the pre-split fold, and the gate's exact
-findings output, so a later slice cannot silently drop, relocate, or reword
-them.
+SA267 has closed, so SA278 retired the pre-split surface pins; these controls
+keep the exact truthiness verdicts captured from the pre-split fold and the
+gate's exact findings output as behavioral tests, so a later change cannot
+silently drop, relocate, or reword them.
 """
 
 from __future__ import annotations
 
 import ast
-import inspect
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import check_csrf_exempt_gate as gate
 import pytest
-
-#: Every pre-split name consumers reach through the module.  The refactor must
-#: keep every one of them.
-FROZEN_SURFACE = (
-    "APPROVED_VERIFICATION_HELPERS",
-    "CSRF_EXEMPT_DECORATOR_NAMES",
-    "EXEMPT_MODULES",
-    "METHOD_DECORATOR_NAME",
-    "MODULES_DIR_RELATIVE",
-    "Path",
-    "REPO_ROOT_ENV",
-    "_CsrfExemptVisitor",
-    "_HTTP_HANDLER_NAMES",
-    "_body_always_exits",
-    "_body_contains_helper_call",
-    "_check_module_source",
-    "_extract_http_method_names",
-    "_extract_method_decorator_name",
-    "_has_reachable_helper_in_body",
-    "_is_csrf_exempt_decorator",
-    "_literal_truthiness",
-    "_node_walks_helper_call",
-    "ast",
-    "main",
-    "os",
-    "sys",
-)
-
-#: Every pre-split callable; the in-place refactor moves none of them.
-FROZEN_CALLABLE_SURFACE = (
-    "_CsrfExemptVisitor",
-    "_body_always_exits",
-    "_body_contains_helper_call",
-    "_check_module_source",
-    "_extract_http_method_names",
-    "_extract_method_decorator_name",
-    "_has_reachable_helper_in_body",
-    "_is_csrf_exempt_decorator",
-    "_literal_truthiness",
-    "_node_walks_helper_call",
-    "main",
-)
-
-#: The pre-split signature of every callable consumers invoke.
-FROZEN_SIGNATURES = {
-    "_is_csrf_exempt_decorator": "(decorator: 'ast.expr') -> 'bool'",
-    "_body_contains_helper_call": "(body: 'list[ast.stmt]') -> 'bool'",
-    "_node_walks_helper_call": "(node: 'ast.AST') -> 'bool'",
-    "_extract_method_decorator_name": "(decorator: 'ast.AST') -> 'str | None'",
-    "_literal_truthiness": "(node: 'ast.expr') -> 'bool | None'",
-    "_body_always_exits": "(body: 'list[ast.stmt]') -> 'bool'",
-    "_has_reachable_helper_in_body": "(body: 'list[ast.stmt]') -> 'bool'",
-    "_extract_http_method_names": "(body: 'list[ast.stmt]') -> 'set[str] | None'",
-    "_check_module_source": "(source_dir: 'Path') -> 'dict[Path, list[tuple[int, str]]]'",
-    "main": "(argv: 'list[str] | None' = None) -> 'int'",
-}
 
 #: ``(expression source, verdict)`` captured from the pre-split fold.  The
 #: corpus covers every documented fold family, the unpack-uncertainty
@@ -141,28 +80,6 @@ VIOLATING_SOURCE = (
     "def get(request):\n"
     "    return None\n"
 )
-
-
-def _normalized_signature(function: Callable[..., Any]) -> str:
-    return str(inspect.signature(function))
-
-
-def test_module_surface_is_preserved() -> None:
-    """Every pre-split name stays reachable on the module."""
-    missing = [name for name in FROZEN_SURFACE if not hasattr(gate, name)]
-    assert missing == []
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each callable consumers invoke keeps its pre-split signature."""
-    observed = {name: _normalized_signature(getattr(gate, name)) for name in FROZEN_SIGNATURES}
-    assert observed == FROZEN_SIGNATURES
-
-
-def test_pre_split_callables_stay_in_the_module() -> None:
-    """The in-place refactor relocates no callable to another module."""
-    observed = {name: getattr(gate, name).__module__ for name in FROZEN_CALLABLE_SURFACE}
-    assert observed == dict.fromkeys(FROZEN_CALLABLE_SURFACE, "check_csrf_exempt_gate")
 
 
 @pytest.mark.parametrize(

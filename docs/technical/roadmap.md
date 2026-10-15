@@ -340,8 +340,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `FROZEN_SURFACE` exists under `scripts/` (SA279 extends it to the harness).
 
   **Slices:**
-  - [ ] (a) Delete the gate-script frozen surfaces, keeping behavioral corpora, and add the
-    no-frozen-surface test (Tier 2-fast).
+  - [x] (a) Delete the gate-script frozen surfaces, keeping behavioral corpora, and add the
+    no-frozen-surface test (Tier 2-fast). Landed: the 11 gate-parity files under `scripts/`
+    keep their behavioral corpora and structural invariants, and
+    `scripts/test_no_frozen_surface.py` fails a top-level `test_*_parity.py` that defines a
+    module-level `FROZEN_*` name. (b) is next.
   - [ ] (b) `check_quality.sh` scans `scripts/` (Tier 1).
 
 - [ ] **SA273 — Harden the editor upload and the CLI's `pyproject.toml` write.**
