@@ -571,6 +571,55 @@ def test_legacy_name_controls() -> None:
     )
 
 
+def test_checks_setting_relist_control() -> None:
+    module = _golden_module()
+    relisted = _with_files(
+        module,
+        checks=(
+            "def check_demo() -> list[str]:\n"
+            "    return []\n\n\n"
+            "_PROJECTED_SECRETS = ('QUICKSCALE_DEMO_SECRET_KEY',)\n"
+        ),
+    )
+    assert any(
+        "names setting QUICKSCALE_DEMO_SECRET_KEY" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, relisted)
+    )
+    hand_authored = _with_files(
+        module,
+        checks=(
+            "from django.conf import settings\n\n\n"
+            "def check_demo() -> list[str]:\n"
+            '    if not hasattr(settings, "QUICKSCALE_DEMO_SECRET_KEY"):\n'
+            '        return ["QUICKSCALE_DEMO_SECRET_KEY is not set."]\n'
+            "    return []\n"
+        ),
+    )
+    assert any(
+        "names setting QUICKSCALE_DEMO_SECRET_KEY" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, hand_authored)
+    )
+    message_argument = _with_files(
+        module,
+        checks=(
+            "def check_demo() -> list[str]:\n"
+            '    return [Error("QUICKSCALE_DEMO_SECRET_KEY is not set.")]\n'
+        ),
+    )
+    assert _violations(checker.rule_6_no_legacy_names, message_argument) == []
+    retired_mapping = _with_files(
+        module,
+        checks=(
+            "RETIRED_SETTINGS = {\n"
+            '    "QUICKSCALE_DEMO_MODE": "Use QUICKSCALE_DEMO_ENABLED instead.",\n'
+            "}\n"
+        ),
+    )
+    violations = _violations(checker.rule_6_no_legacy_names, retired_mapping)
+    assert any("declare them in module.yml" in violation for violation in violations)
+    assert not any("names setting" in violation for violation in violations)
+
+
 def test_package_file_controls() -> None:
     module = _golden_module()
     assert _violations(checker.rule_11_package_files, module) == []

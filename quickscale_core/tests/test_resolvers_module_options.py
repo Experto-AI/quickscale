@@ -18,8 +18,10 @@ import pytest
 from quickscale_core.contracts.module_discovery import ImproperlyConfigured
 from quickscale_core.contracts.resolvers import (
     load_module_manifest_with_fallback,
+    projected_setting_names,
     resolve_manifest_module_options,
 )
+from quickscale_core.manifest.loader import load_manifest
 from quickscale_core.manifest.option_validation import validate_module_options
 from quickscale_core.manifest.resolver import ResolverResult
 from quickscale_core.manifest.schema import ModuleManifest
@@ -389,3 +391,109 @@ class TestSocialManifest:
         assert spec.apps == ("quickscale_modules_social",)
         assert spec.settings["QUICKSCALE_SOCIAL_LAYOUT_VARIANT"] == "list"
         assert spec.settings["QUICKSCALE_SOCIAL_LINK_TREE_ENABLED"] is True
+
+
+# ===================================================================
+# projected_setting_names — the names-only manifest projection
+# ===================================================================
+
+_DEMO_PROJECTION_MANIFEST = """\
+name: demo
+version: "1.0.0"
+description: "Demo module for the projection control."
+config:
+  mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_DEMO_ENABLED
+      description: "Enable the demo module."
+      validation: {}
+    api_key_env_var:
+      type: string
+      default: "DEMO_API_KEY"
+      django_setting: QUICKSCALE_DEMO_API_KEY_ENV_VAR
+      description: "Environment-variable name holding the demo API key."
+      validation: {}
+  immutable: {}
+dependencies:
+  - quickscale-core
+required_modules: []
+derivation:
+  derived_settings:
+    - setting_key: DEMO_UNCONDITIONAL_SETTING
+      derivation_type: direct
+      expression:
+        option: enabled
+      description: "Written whenever the module is applied."
+    - setting_key: DEMO_CONDITIONAL_SETTING
+      derivation_type: computed
+      expression:
+        when:
+          enabled:
+            - true
+        template: "on"
+      description: "Written only while the gate holds."
+"""
+
+
+class TestProjectedSettingNames:
+    """A startup check's required names come from the module's manifest projection."""
+
+    @pytest.mark.parametrize(
+        ("module_name", "expected"),
+        [
+            (
+                "analytics",
+                (
+                    "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY",
+                    "QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE",
+                ),
+            ),
+            (
+                "billing",
+                (
+                    "QUICKSCALE_BILLING_PUBLISHABLE_KEY",
+                    "QUICKSCALE_BILLING_SECRET_KEY",
+                    "QUICKSCALE_BILLING_WEBHOOK_SECRET",
+                ),
+            ),
+            (
+                "notifications",
+                (
+                    "DEFAULT_FROM_EMAIL",
+                    "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY",
+                    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
+                    "SERVER_EMAIL",
+                ),
+            ),
+        ],
+    )
+    def test_shipped_module_projections_are_exact(
+        self, module_name: str, expected: tuple[str, ...]
+    ) -> None:
+        assert projected_setting_names(module_name) == expected
+
+    def test_declared_option_setting_is_owned_by_the_generic_check(self) -> None:
+        """A stripped name a declared option's setting already covers stays out."""
+        assert "QUICKSCALE_ANALYTICS_POSTHOG_HOST" not in (
+            projected_setting_names("analytics")
+        )
+
+    def test_control_conditional_derivation_is_not_projected(self) -> None:
+        with patch(
+            "quickscale_core.contracts.resolvers.load_module_manifest_with_fallback"
+        ) as mock_load:
+            mock_load.return_value = load_manifest(_DEMO_PROJECTION_MANIFEST)
+
+            assert projected_setting_names("demo") == (
+                "DEMO_UNCONDITIONAL_SETTING",
+                "QUICKSCALE_DEMO_API_KEY",
+            )
+
+    @pytest.mark.parametrize("module_name", ["", None, 7])
+    def test_control_invalid_module_name_fails_loudly(
+        self, module_name: object
+    ) -> None:
+        with pytest.raises(ValueError, match="non-empty module name"):
+            projected_setting_names(module_name)  # type: ignore[arg-type]

@@ -9,6 +9,7 @@ keep working.
 from __future__ import annotations
 
 import ast
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -119,6 +120,45 @@ def _module_legacy_findings(module: Module) -> list[str]:
                     f"rule 6: {module.name}: retired option {key!r} is still accepted"
                 )
     return violations
+
+
+#: The character set a setting-name suffix uses after ``QUICKSCALE_<MODULE>_``.
+_SETTING_NAME_SUFFIX = re.compile(r"[A-Z0-9_]+")
+
+
+def _setting_relist_findings(module: Module) -> list[str]:
+    """
+    Return findings for a checks.py naming the module's settings literally.
+
+    Rule 6's no-re-listing clause: a startup check reads the setting names it
+    requires from the module's manifest projection, so a literal copy of one
+    of the module's own ``QUICKSCALE_<MODULE>_*`` setting names in
+    ``checks.py`` — a collection entry, a ``hasattr`` argument, a mapping key —
+    is a second home for a rename.  A string that merely carries the name in
+    prose stays allowed, and a ``RETIRED_SETTINGS`` mapping keeps its own
+    refusal clause and is exempt here.
+    """
+    text = module.files.get("checks.py")
+    if text is None:
+        return []
+    prefix = f"QUICKSCALE_{module.name.upper()}_"
+    tree = _parse(text)
+    allowed = {id(key) for key in _retired_declaration_keys(tree)}
+    docstrings = _docstring_nodes(tree)
+    findings: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        suffix = node.value[len(prefix) :] if node.value.startswith(prefix) else ""
+        if not suffix or _SETTING_NAME_SUFFIX.fullmatch(suffix) is None:
+            continue
+        if id(node) in allowed or id(node) in docstrings:
+            continue
+        findings.append(
+            f"rule 6: {module.name}: checks.py:{node.lineno} names setting "
+            f"{node.value}; read it from the manifest projection"
+        )
+    return findings
 
 
 def _retired_name_reads(

@@ -46,6 +46,7 @@ from scripts.module_conventions._package_legacy import (
     _module_legacy_findings,
     _retired_declaration_keys,
     _retired_name_reads,
+    _setting_relist_findings,
     _settings_attribute_names,
 )
 from scripts.module_conventions._package_services import (
@@ -191,15 +192,17 @@ def rule_6_no_legacy_names(corpus: Corpus) -> list[str]:
     ``legacy_aliases`` entry (the loader refuses authoring; the
     derivation-schema ``LegacyKeyAlias`` type stays a retained API), a retired
     option key is not also accepted as a live option, retired setting names
-    live in the manifest (never a Python ``RETIRED_SETTINGS`` mapping), and a
+    live in the manifest (never a Python ``RETIRED_SETTINGS`` mapping), a
     module's declared retired setting names are read nowhere in shipped source
-    outside their refusal declaration.
+    outside their refusal declaration, and a module's ``checks.py`` reads its
+    setting names from the manifest projection instead of re-listing them.
     """
     violations: list[str] = []
     retired: set[str] = set()
     for module in corpus.modules:
         retired.update(_manifest_retired_settings(module))
         violations.extend(_module_legacy_findings(module))
+        violations.extend(_setting_relist_findings(module))
     if not retired:
         return violations
     populations: list[tuple[str, Mapping[str, str]]] = [

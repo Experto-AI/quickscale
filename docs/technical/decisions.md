@@ -705,6 +705,11 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   `retired_options`, and the generic startup check reads it from the shipped manifest: a project
   setting that still carries the name is refused before the project is re-applied, naming its
   replacement.
+- ✅ A module check reads the setting names it requires from the module's manifest projection — the
+  secret and derived settings `apply` writes beyond the declared options — never a hand-written
+  copy, so a renamed setting lands once, in `module.yml`.
+- ❌ A module check re-listing its own setting names (`QUICKSCALE_<MODULE>_*`) instead of reading
+  them from the manifest projection.
 
 **7. URLs.**
 - ✅ The manifest's `url_includes` sets a module's mount (`blog/`, `accounts/` for auth, `orgs/`

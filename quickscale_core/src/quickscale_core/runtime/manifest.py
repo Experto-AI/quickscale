@@ -37,6 +37,9 @@ from quickscale_core.contracts.module_options import (
 # Manifest resolution surface
 # ---------------------------------------------------------------------------
 from quickscale_core.contracts.resolvers import (
+    projected_setting_names as projected_setting_names,
+)
+from quickscale_core.contracts.resolvers import (
     resolve_manifest_module_options as resolve_manifest_module_options,
 )
 
