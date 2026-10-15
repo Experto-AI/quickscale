@@ -1,30 +1,25 @@
 """
-Parity controls for the ``rules_package`` split (SA267).
+Behavioral controls for the ``rules_package`` split (SA267).
 
 The public-surface scan, the legacy-name checks, the management-command
 analysis, the service-surface scan, and rules 11/15/16/18 live in private
 siblings (``_package_surfaces``, ``_package_legacy``, ``_package_commands``,
-``_package_services``, ``_package_files``) behind the ``rules_package``
-facade.  These controls pin the facade's preserved surface, the split's
-structural invariants, and the exact ordered findings of representative
-corpora captured from the pre-split module, so a later slice cannot silently
-drop, reorder, or reword them.
+``_package_services``, ``_package_files``) behind the ``rules_package`` facade.
+SA267 has closed, so SA279 retired the pre-split surface pins; these controls
+keep the split's structural invariants and the exact ordered findings of
+representative corpora captured from the pre-split module, so a later change
+cannot silently drop, reorder, or reword them.
 """
 
 from __future__ import annotations
 
 import ast
 import copy
-import inspect
-import tomllib
-from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Module
 from scripts.module_conventions import (
     _package_commands,
@@ -32,8 +27,6 @@ from scripts.module_conventions import (
     _package_legacy,
     _package_services,
     _package_surfaces,
-    core,
-    registry,
     rules_package,
 )
 from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FILES
@@ -50,137 +43,6 @@ SPLIT_SIBLINGS = {
     "_package_legacy": _package_legacy,
     "_package_services": _package_services,
     "_package_surfaces": _package_surfaces,
-}
-
-FROZEN_SURFACE = (
-    "CONFIRM_COMMAND_KEYWORDS",
-    "DESTRUCTIVE_COMMAND_KEYWORDS",
-    "RETIRED_SETTINGS_NAME",
-    "RULE_11_ONE_OFF_FILES",
-    "RULE_11_REQUIRED_FILES",
-    "RULE_11_REQUIRED_ROOT_FILES",
-    "RULE_11_REQUIRED_TESTS",
-    "_all_option_keys",
-    "_capability_arguments",
-    "_command_flags",
-    "_constant_string",
-    "_has_tenant_model",
-    "_literal_strings",
-    "_manifest_retired_settings",
-    "_mapping_entries",
-    "_module_bindings",
-    "_module_member_bindings",
-    "_module_string_constants",
-    "_private_member_accesses",
-    "_public_surface",
-    "_retired_declaration_keys",
-    "_service_functions",
-    "_settings_attribute_names",
-    "rule_11_package_files",
-    "rule_15_package_root",
-    "rule_16_signals",
-    "rule_17_management_commands",
-    "rule_18_package_tooling",
-    "rule_23_service_surface",
-    "rule_4_public_surface",
-    "rule_6_no_legacy_names",
-)
-
-#: The pre-split module's own imports, which it exposed as module attributes;
-#: the facade keeps every one importable through its redundant aliases.
-FROZEN_IMPORTED_BINDINGS = (
-    "Any",
-    "CAPABILITY_NAMES",
-    "Corpus",
-    "MODULE_ABSTRACT_BASES",
-    "MODULE_IMPORT_PREFIX",
-    "Mapping",
-    "Module",
-    "ORG_PUBLIC_SURFACE",
-    "Path",
-    "ast",
-    "tomllib",
-    "_ancestors",
-    "_attribute_chain",
-    "_call_func_name",
-    "_class_names",
-    "_cross_module_imports",
-    "_declared_exports",
-    "_docstring_nodes",
-    "_is_settings_receiver",
-    "_keyword",
-    "_model_classes",
-    "_module_target",
-    "_parse",
-    "_service_module_bindings",
-    "_setting_name_module",
-    "_settings_attribute_reads",
-    "_settings_bindings",
-    "_string_assignments",
-    "_string_list",
-)
-
-FROZEN_CORE_HELPERS = (
-    "CAPABILITY_NAMES",
-    "Corpus",
-    "MODULE_ABSTRACT_BASES",
-    "MODULE_IMPORT_PREFIX",
-    "Module",
-    "ORG_PUBLIC_SURFACE",
-    "_ancestors",
-    "_attribute_chain",
-    "_call_func_name",
-    "_class_names",
-    "_cross_module_imports",
-    "_declared_exports",
-    "_docstring_nodes",
-    "_is_settings_receiver",
-    "_keyword",
-    "_model_classes",
-    "_module_target",
-    "_parse",
-    "_service_module_bindings",
-    "_setting_name_module",
-    "_settings_attribute_reads",
-    "_settings_bindings",
-    "_string_assignments",
-    "_string_list",
-)
-
-FROZEN_SIGNATURES = {
-    "_all_option_keys": "(module: 'Module') -> 'set[str]'",
-    "_capability_arguments": (
-        "(tree: 'ast.Module', module: 'Module') -> 'list[tuple[str | None, int]]'"
-    ),
-    "_command_flags": "(tree: 'ast.Module') -> 'dict[str, ast.Call]'",
-    "_constant_string": "(node: 'ast.expr | None') -> 'str | None'",
-    "_has_tenant_model": "(text: 'str') -> 'bool'",
-    "_literal_strings": "(node: 'ast.expr | None') -> 'set[str]'",
-    "_manifest_retired_settings": "(module: 'Module') -> 'set[str]'",
-    "_mapping_entries": "(node: 'Any') -> 'list[tuple[Any, Any]]'",
-    "_module_bindings": "(tree: 'ast.Module') -> 'set[str]'",
-    "_module_member_bindings": (
-        "(tree: 'ast.Module', module_name: 'str') -> 'dict[str, tuple[str, tuple[str, ...]]]'"
-    ),
-    "_module_string_constants": "(module: 'Module') -> 'dict[str, str]'",
-    "_private_member_accesses": (
-        "(tree: 'ast.Module', module_name: 'str') -> 'list[tuple[int, str, str]]'"
-    ),
-    "_public_surface": "(module_name: 'str') -> 'tuple[str, ...]'",
-    "_retired_declaration_keys": "(tree: 'ast.Module') -> 'list[ast.Constant]'",
-    "_service_functions": (
-        "(module: 'Module', tree: 'ast.Module') -> "
-        "'dict[str, ast.FunctionDef | ast.AsyncFunctionDef]'"
-    ),
-    "_settings_attribute_names": "(tree: 'ast.Module') -> 'list[tuple[str, int]]'",
-    "rule_11_package_files": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_15_package_root": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_16_signals": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_17_management_commands": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_18_package_tooling": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_23_service_surface": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_4_public_surface": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_6_no_legacy_names": "(corpus: 'Corpus') -> 'list[str]'",
 }
 
 
@@ -708,33 +570,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rules_package.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rules_package, name) is not None
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split module's own imports stay importable through the facade."""
-    assert rules_package.ast is ast
-    assert rules_package.tomllib is tomllib
-    assert rules_package.Mapping is Mapping
-    assert rules_package.Path is Path
-    assert rules_package.Any is Any
-    for name in FROZEN_IMPORTED_BINDINGS:
-        assert getattr(rules_package, name) is not None
-    for name in FROZEN_CORE_HELPERS:
-        assert getattr(rules_package, name) is getattr(core, name)
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each pre-split callable keeps its pre-split signature through the facade."""
-    assert {
-        name: str(inspect.signature(getattr(rules_package, name))) for name in FROZEN_SIGNATURES
-    } == FROZEN_SIGNATURES
-
-
 def test_rule_37_exempts_only_the_facade() -> None:
     """The split siblings stay inside rule 37's closed world."""
     assert ("scripts", "module_conventions/rules_package.py") in RULE_37_ALLOWED_LITERAL_FILES
@@ -761,74 +596,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                         name,
                         node.lineno,
                     )
-
-
-def test_orchestrators_and_entrypoints_keep_their_homes() -> None:
-    """Rules 4, 6, 17, and 23 stay orchestrated by the facade."""
-    for name in (
-        "rule_4_public_surface",
-        "rule_6_no_legacy_names",
-        "rule_17_management_commands",
-        "rule_23_service_surface",
-    ):
-        assert getattr(rules_package, name).__module__ == (
-            "scripts.module_conventions.rules_package"
-        )
-    for name in (
-        "rule_11_package_files",
-        "rule_15_package_root",
-        "rule_16_signals",
-        "rule_18_package_tooling",
-        "_has_tenant_model",
-    ):
-        assert getattr(rules_package, name).__module__ == (
-            "scripts.module_conventions._package_files"
-        )
-    for name in (
-        "_public_surface",
-        "_module_member_bindings",
-        "_private_member_accesses",
-        "_module_string_constants",
-        "_capability_arguments",
-    ):
-        assert getattr(rules_package, name).__module__ == (
-            "scripts.module_conventions._package_surfaces"
-        )
-    for name in (
-        "_settings_attribute_names",
-        "_mapping_entries",
-        "_retired_declaration_keys",
-        "_manifest_retired_settings",
-        "_all_option_keys",
-    ):
-        assert getattr(rules_package, name).__module__ == (
-            "scripts.module_conventions._package_legacy"
-        )
-    for name in ("_command_flags", "_literal_strings", "_constant_string"):
-        assert getattr(rules_package, name).__module__ == (
-            "scripts.module_conventions._package_commands"
-        )
-    for name in ("_service_functions", "_module_bindings"):
-        assert getattr(rules_package, name).__module__ == (
-            "scripts.module_conventions._package_services"
-        )
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detectors are the facade callables, not siblings."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    for number, name in (
-        (4, "rule_4_public_surface"),
-        (6, "rule_6_no_legacy_names"),
-        (11, "rule_11_package_files"),
-        (15, "rule_15_package_root"),
-        (16, "rule_16_signals"),
-        (17, "rule_17_management_commands"),
-        (18, "rule_18_package_tooling"),
-        (23, "rule_23_service_surface"),
-    ):
-        assert detectors[number] is getattr(rules_package, name)
-        assert getattr(checker, name) is getattr(rules_package, name)
 
 
 @pytest.mark.parametrize(

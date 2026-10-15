@@ -1,29 +1,25 @@
 """
-Parity controls for the ``rules_settings`` split (SA267).
+Behavioral controls for the ``rules_settings`` split (SA267).
 
 Rule 1's settings-name clauses, rule 3's read scan, rule 12's manifest-option
 schema, rule 42's snapshot location scan, and rule 43's optional-sender scans
 live in private siblings (``_settings_names``, ``_settings_reads``,
 ``_settings_manifest``, ``_settings_snapshots``, ``_settings_senders``) behind
-the ``rules_settings`` facade.  These controls pin the facade's preserved
-surface, the split's structural invariants, and the exact ordered findings of
-representative corpora captured from the pre-split module, so a later slice
-cannot silently drop, reorder, or reword them.
+the ``rules_settings`` facade.  SA267 has closed, so SA279 retired the pre-split
+surface pins; these controls keep the split's structural invariants and the
+exact ordered findings of representative corpora captured from the pre-split
+module, so a later change cannot silently drop, reorder, or reword them.
 """
 
 from __future__ import annotations
 
 import ast
 import copy
-import inspect
-import re
-from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Module
 from scripts.module_conventions import (
     _settings_manifest,
@@ -31,8 +27,6 @@ from scripts.module_conventions import (
     _settings_reads,
     _settings_senders,
     _settings_snapshots,
-    core,
-    registry,
     rules_settings,
 )
 from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FILES
@@ -50,160 +44,6 @@ SPLIT_SIBLINGS = {
     "_settings_reads": _settings_reads,
     "_settings_senders": _settings_senders,
     "_settings_snapshots": _settings_snapshots,
-}
-
-FROZEN_SURFACE = (
-    "ENV_VAR_NAME",
-    "OPTION_TYPES",
-    "OPTION_VALIDATION_KEYS",
-    "SETTING_SUFFIX_TYPES",
-    "_COERCION_BUILTINS",
-    "_RULE_42_EXPORTED_SNAPSHOT",
-    "_RULE_43_BEST_EFFORT_MODULES",
-    "_RULE_43_SETTINGS_ATTRIBUTE",
-    "_attribute_binding_module",
-    "_call_builds_settings_snapshot",
-    "_call_other_module_service",
-    "_check_vendor_default",
-    "_class_defines_from_settings",
-    "_contains_key",
-    "_declared_settings",
-    "_getattr_service_owner",
-    "_guarded_module_name",
-    "_import_module_service_bindings",
-    "_intra_module_import_names",
-    "_is_direct_setting_read",
-    "_manifest_declared_settings",
-    "_module_level_targets",
-    "_option_settings",
-    "_other_module_service_imports",
-    "_reference_module_name",
-    "_returns_settings_snapshot",
-    "_settings_snapshot_names",
-    "rule_12_manifest_and_adapter_options",
-    "rule_12_manifest_options",
-    "rule_1_settings_names",
-    "rule_3_settings_reads",
-    "rule_42_settings_snapshots",
-    "rule_43_optional_senders",
-)
-
-
-FROZEN_IMPORTED_BINDINGS = (
-    "Any",
-    "CREDENTIAL_REFERENCE_NAMES",
-    "Corpus",
-    "ENV_VAR_NAME_PATTERN",
-    "MODULE_IMPORT_PREFIX",
-    "MODULE_LAYERS",
-    "Mapping",
-    "Module",
-    "QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS",
-    "SETTING_NAME_EXCEPTIONS",
-    "SNAKE_CASE",
-    "VENDOR_CREDENTIAL_DEFAULTS",
-    "_attribute_chain",
-    "_body_nodes",
-    "_bound_names",
-    "_call_func_name",
-    "_credential_reference_options",
-    "_declared_exports",
-    "_is_settings_receiver",
-    "_keyword",
-    "_module_target",
-    "_parse",
-    "_required_modules",
-    "_scope_nodes",
-    "_service_module_bindings",
-    "_setting_name_module",
-    "_settings_attribute_reads",
-    "_settings_bindings",
-    "_string_assignments",
-    "ast",
-    "check_url_normalization",
-    "re",
-    "rule_12_adapter_duplicate_logic",
-)
-
-
-FROZEN_CORE_HELPERS = (
-    "CREDENTIAL_REFERENCE_NAMES",
-    "Corpus",
-    "ENV_VAR_NAME_PATTERN",
-    "MODULE_IMPORT_PREFIX",
-    "MODULE_LAYERS",
-    "Module",
-    "QUICKSCALE_ENV_VAR_DEFAULT_EXCEPTIONS",
-    "SETTING_NAME_EXCEPTIONS",
-    "SNAKE_CASE",
-    "VENDOR_CREDENTIAL_DEFAULTS",
-    "_attribute_chain",
-    "_body_nodes",
-    "_bound_names",
-    "_call_func_name",
-    "_credential_reference_options",
-    "_declared_exports",
-    "_is_settings_receiver",
-    "_keyword",
-    "_module_target",
-    "_parse",
-    "_required_modules",
-    "_scope_nodes",
-    "_service_module_bindings",
-    "_setting_name_module",
-    "_settings_attribute_reads",
-    "_settings_bindings",
-    "_string_assignments",
-)
-
-
-FROZEN_SIGNATURES = {
-    "_attribute_binding_module": (
-        "(chain: 'tuple[str, ...]', service_bindings: 'dict[tuple[str, ...], str]', "
-        "import_module_bindings: 'dict[str, str]') -> 'str | None'"
-    ),
-    "_call_builds_settings_snapshot": (
-        "(call: 'ast.Call', names: 'set[str]', modules: 'set[tuple[str, ...]]') -> 'bool'"
-    ),
-    "_call_other_module_service": (
-        "(call: 'ast.Call', service_names: 'dict[str, str]', service_bindings: 'dict[tuple[str, "
-        "...], str]', import_module_bindings: 'dict[str, str]') -> 'tuple[str, str] | None'"
-    ),
-    "_check_vendor_default": (
-        "(module_name: 'str', key: 'str', default: 'str', violations: 'list[str]') -> 'None'"
-    ),
-    "_class_defines_from_settings": "(node: 'ast.ClassDef') -> 'bool'",
-    "_contains_key": "(node: 'Any', key: 'str') -> 'bool'",
-    "_declared_settings": "(module: 'Module') -> 'set[str]'",
-    "_getattr_service_owner": (
-        "(target: 'ast.expr', service_names: 'Mapping[str, str]', service_bindings: "
-        "'Mapping[tuple[str, ...], str]', import_module_bindings: 'Mapping[str, str]') -> 'str | "
-        "None'"
-    ),
-    "_guarded_module_name": (
-        "(node: 'ast.expr | None', constants: 'Mapping[str, str]') -> 'str | None'"
-    ),
-    "_import_module_service_bindings": "(tree: 'ast.Module') -> 'dict[str, str]'",
-    "_intra_module_import_names": "(tree: 'ast.Module', module: 'Module') -> 'dict[str, str]'",
-    "_is_direct_setting_read": (
-        "(node: 'ast.expr', names: 'set[str]', modules: 'set[tuple[str, ...]]') -> 'bool'"
-    ),
-    "_manifest_declared_settings": "(module: 'Module') -> 'set[str]'",
-    "_module_level_targets": "(statements: 'list[ast.stmt]') -> 'set[str]'",
-    "_option_settings": "(module: 'Module') -> 'set[str]'",
-    "_other_module_service_imports": "(tree: 'ast.Module', module_name: 'str') -> 'dict[str, str]'",
-    "_reference_module_name": "(value: 'str') -> 'str | None'",
-    "_returns_settings_snapshot": (
-        "(node: 'ast.FunctionDef | ast.AsyncFunctionDef', names: 'set[str]', modules: "
-        "'set[tuple[str, ...]]') -> 'int | None'"
-    ),
-    "_settings_snapshot_names": "(module: 'Module') -> 'set[str]'",
-    "rule_12_manifest_and_adapter_options": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_12_manifest_options": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_1_settings_names": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_3_settings_reads": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_42_settings_snapshots": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_43_optional_senders": "(corpus: 'Corpus') -> 'list[str]'",
 }
 
 
@@ -1246,32 +1086,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rules_settings.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rules_settings, name) is not None
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split module's own imports stay importable through the facade."""
-    assert rules_settings.ast is ast
-    assert rules_settings.re is re
-    assert rules_settings.Mapping is Mapping
-    assert rules_settings.Corpus is core.Corpus
-    for name in FROZEN_IMPORTED_BINDINGS:
-        assert getattr(rules_settings, name) is not None
-    for name in FROZEN_CORE_HELPERS:
-        assert getattr(rules_settings, name) is getattr(core, name)
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each pre-split callable keeps its pre-split signature through the facade."""
-    assert {
-        name: str(inspect.signature(getattr(rules_settings, name))) for name in FROZEN_SIGNATURES
-    } == FROZEN_SIGNATURES
-
-
 def test_rule_3_keeps_the_pre_split_syntax_error_precedence() -> None:
     """A malformed adapter.py is parsed before tests/settings.py, as pre-split."""
     module = _with_files(_golden_module(), adapter="def broken(\n")
@@ -1318,111 +1132,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                         name,
                         node.lineno,
                     )
-
-
-def test_moved_constants_keep_their_sibling_identity() -> None:
-    """The facade's constants are the sibling objects, not copies."""
-    for sibling, name in (
-        (_settings_names, "ENV_VAR_NAME"),
-        (_settings_names, "SETTING_SUFFIX_TYPES"),
-        (_settings_manifest, "OPTION_TYPES"),
-        (_settings_manifest, "OPTION_VALIDATION_KEYS"),
-        (_settings_snapshots, "_COERCION_BUILTINS"),
-        (_settings_snapshots, "_RULE_42_EXPORTED_SNAPSHOT"),
-        (_settings_senders, "_RULE_43_SETTINGS_ATTRIBUTE"),
-    ):
-        assert getattr(rules_settings, name) is getattr(sibling, name)
-
-
-def test_orchestrators_and_helpers_keep_their_homes() -> None:
-    """Rules 1, 3, 12, 42, and 43 stay orchestrated by the facade."""
-    for name in (
-        "rule_1_settings_names",
-        "rule_3_settings_reads",
-        "rule_12_manifest_options",
-        "rule_12_manifest_and_adapter_options",
-        "rule_42_settings_snapshots",
-        "rule_43_optional_senders",
-    ):
-        assert getattr(rules_settings, name).__module__ == (
-            "scripts.module_conventions.rules_settings"
-        )
-    for sibling, names in (
-        (
-            "_settings_names",
-            (
-                "_check_vendor_default",
-                "_enabled_switch_violations",
-                "_option_name_violations",
-                "_settings_options",
-            ),
-        ),
-        (
-            "_settings_reads",
-            (
-                "_declared_settings",
-                "_manifest_declared_settings",
-                "_module_level_targets",
-                "_option_settings",
-                "_read_violations",
-                "_tests_settings_violations",
-            ),
-        ),
-        (
-            "_settings_manifest",
-            (
-                "_contains_key",
-                "_declares_option_blocks",
-                "_manifest_key_violations",
-                "_option_schema_violations",
-            ),
-        ),
-        (
-            "_settings_snapshots",
-            (
-                "_call_builds_settings_snapshot",
-                "_class_defines_from_settings",
-                "_intra_module_import_names",
-                "_is_direct_setting_read",
-                "_returns_settings_snapshot",
-                "_settings_snapshot_names",
-                "_snapshot_scan_violations",
-            ),
-        ),
-        (
-            "_settings_senders",
-            (
-                "_attribute_binding_module",
-                "_broad_except_violations",
-                "_call_other_module_service",
-                "_cross_attribute_violations",
-                "_getattr_service_owner",
-                "_guard_call_violations",
-                "_guarded_module_name",
-                "_import_module_service_bindings",
-                "_other_module_service_imports",
-                "_reference_module_name",
-            ),
-        ),
-    ):
-        for name in names:
-            assert getattr(rules_settings, name).__module__ == (
-                f"scripts.module_conventions.{sibling}"
-            ), name
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detectors are the facade callables, not siblings."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    for number, name in (
-        (1, "rule_1_settings_names"),
-        (3, "rule_3_settings_reads"),
-        (12, "rule_12_manifest_and_adapter_options"),
-        (42, "rule_42_settings_snapshots"),
-        (43, "rule_43_optional_senders"),
-    ):
-        assert detectors[number] is getattr(rules_settings, name)
-        assert getattr(checker, name) is getattr(rules_settings, name)
 
 
 @pytest.mark.parametrize(

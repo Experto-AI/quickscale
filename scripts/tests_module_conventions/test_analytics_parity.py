@@ -1,32 +1,27 @@
 """
-Parity controls for the ``rules_analytics`` split (SA267).
+Behavioral controls for the ``rules_analytics`` split (SA267).
 
 The capture-surface and event-stem mechanics and the session-credential scan
 live in private siblings (``_analytics_events`` and
-``_analytics_session_keys``) behind the ``rules_analytics`` facade.  These
-controls pin the facade's preserved surface, the split's structural
-invariants, and the exact ordered findings of representative corpora captured
-from the pre-split module, so a later slice cannot silently drop, reorder, or
-reword them.
+``_analytics_session_keys``) behind the ``rules_analytics`` facade.  SA267 has
+closed, so SA279 retired the pre-split surface pins; these controls keep the
+split's structural invariants and the exact ordered findings of representative
+corpora captured from the pre-split module, so a later change cannot silently
+drop, reorder, or reword them.
 """
 
 from __future__ import annotations
 
 import ast
-import inspect
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Module
 from scripts.module_conventions import (
     _analytics_events,
     _analytics_session_keys,
-    core,
-    registry,
     rules_analytics,
 )
 from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FILES
@@ -41,47 +36,6 @@ SPLIT_SIBLINGS = {
     "_analytics_session_keys": _analytics_session_keys,
 }
 
-FROZEN_SURFACE = (
-    "_names_session_key",
-    "_session_key_violations",
-    "rule_22_analytics_events",
-)
-
-#: The pre-split module's own imports, which it exposed as module attributes;
-#: the facade keeps every one importable through its redundant aliases.
-FROZEN_IMPORTED_BINDINGS = (
-    "Any",
-    "Corpus",
-    "Module",
-    "_call_func_name",
-    "_docstring_nodes",
-    "_keyword",
-    "_literal",
-    "_parse",
-    "_string_assignments",
-    "_string_list",
-    "ast",
-)
-
-FROZEN_CORE_HELPERS = (
-    "Corpus",
-    "Module",
-    "_call_func_name",
-    "_docstring_nodes",
-    "_keyword",
-    "_literal",
-    "_parse",
-    "_string_assignments",
-    "_string_list",
-)
-
-FROZEN_SIGNATURES = {
-    "_names_session_key": "(node: 'ast.AST') -> 'bool'",
-    "_session_key_violations": (
-        "(module: 'Module', tree: 'ast.Module', rel: 'str') -> 'list[str]'"
-    ),
-    "rule_22_analytics_events": "(corpus: 'Corpus') -> 'list[str]'",
-}
 
 ANALYTICS_GOOD_SERVICES = (
     "def capture_event(**kwargs):\n    return None\n\n__all__ = ['capture_event']\n"
@@ -386,30 +340,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rules_analytics.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rules_analytics, name) is not None
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split module's own imports stay importable through the facade."""
-    assert rules_analytics.ast is ast
-    assert rules_analytics.Any is Any
-    for name in FROZEN_IMPORTED_BINDINGS:
-        assert getattr(rules_analytics, name) is not None
-    for name in FROZEN_CORE_HELPERS:
-        assert getattr(rules_analytics, name) is getattr(core, name)
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each pre-split callable keeps its pre-split signature through the facade."""
-    assert {
-        name: str(inspect.signature(getattr(rules_analytics, name))) for name in FROZEN_SIGNATURES
-    } == FROZEN_SIGNATURES
-
-
 def test_rule_37_exempts_only_the_facade() -> None:
     """The split siblings stay inside rule 37's closed world."""
     assert (
@@ -439,45 +369,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                         name,
                         node.lineno,
                     )
-
-
-def test_orchestrators_and_helpers_keep_their_homes() -> None:
-    """Rule 22 stays orchestrated by the facade; the mechanics move out."""
-    assert rules_analytics.rule_22_analytics_events.__module__ == (
-        "scripts.module_conventions.rules_analytics"
-    )
-    assert rules_analytics._names_session_key is _analytics_session_keys._names_session_key
-    assert (
-        rules_analytics._session_key_violations is _analytics_session_keys._session_key_violations
-    )
-    for name in (
-        "_analytics_module",
-        "_capture_surface_violations",
-        "_event_argument",
-        "_event_constants",
-        "_event_stem_findings",
-        "_event_stem_scan_violations",
-        "_module_event_violations",
-        "_resolved_event",
-    ):
-        assert getattr(_analytics_events, name).__module__ == (
-            "scripts.module_conventions._analytics_events"
-        ), name
-    for name in (
-        "_names_session_key",
-        "_session_key_scan_violations",
-        "_session_key_violations",
-    ):
-        assert getattr(_analytics_session_keys, name).__module__ == (
-            "scripts.module_conventions._analytics_session_keys"
-        ), name
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detector is the facade callable, not a sibling."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    assert detectors[22] is rules_analytics.rule_22_analytics_events
-    assert checker.rule_22_analytics_events is rules_analytics.rule_22_analytics_events
 
 
 @pytest.mark.parametrize(

@@ -1,33 +1,27 @@
 """
-Parity controls for the ``rules_models`` split (SA267).
+Behavioral controls for the ``rules_models`` split (SA267).
 
 Rule 13's tenancy scan, rule 14's model-basics clauses, and rule 25's
 constraint-name mechanics live in private siblings (``_models_tenancy``,
 ``_models_basics``, ``_models_constraints``) behind the ``rules_models``
-facade.  These controls pin the facade's preserved surface, the split's
-structural invariants, and the exact ordered findings of representative
-corpora captured from the pre-split module, so a later slice cannot silently
-drop, reorder, or reword them.
+facade.  SA267 has closed, so SA279 retired the pre-split surface pins; these
+controls keep the split's structural invariants and the exact ordered findings
+of representative corpora captured from the pre-split module, so a later change
+cannot silently drop, reorder, or reword them.
 """
 
 from __future__ import annotations
 
 import ast
-import inspect
-import re
-from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Module
 from scripts.module_conventions import (
     _models_basics,
     _models_constraints,
     _models_tenancy,
-    core,
-    registry,
     rules_models,
 )
 from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FILES
@@ -41,129 +35,6 @@ SPLIT_SIBLINGS = {
     "_models_basics": _models_basics,
     "_models_constraints": _models_constraints,
     "_models_tenancy": _models_tenancy,
-}
-
-
-FROZEN_SURFACE = (
-    "ALLOWED_DERIVED_CHOICE_NAMES",
-    "SINGLETON_ORDERING_EXEMPTIONS",
-    "_AUTH_MODEL_BASES",
-    "_CAMEL_TO_SPACES",
-    "_abstract_meta_calls",
-    "_assignment_targets",
-    "_builder_bindings",
-    "_check_constraint_names_checked_field",
-    "_check_purpose_names_fields",
-    "_condition_tokens",
-    "_constraint_owners",
-    "_defines_ordering",
-    "_defines_str",
-    "_django_default_verbose_name",
-    "_file_field_class_names",
-    "_inherits_ordering",
-    "_inherits_str",
-    "_is_abstract",
-    "_literal_field_tokens",
-    "_model_basics_classes",
-    "_module_file",
-    "_path_suffix_reads",
-    "_resolve_upload_to_builder",
-    "_token_matches",
-    "_upload_to_builders",
-    "rule_13_tenant_models",
-    "rule_14_model_basics",
-    "rule_25_constraint_names",
-)
-
-FROZEN_IMPORTED_BINDINGS = (
-    "Corpus",
-    "MODULE_ABSTRACT_BASES",
-    "Mapping",
-    "Module",
-    "_ancestors",
-    "_attribute_chain",
-    "_call_func_name",
-    "_class_names",
-    "_import_package_parts",
-    "_keyword",
-    "_literal",
-    "_meta_class",
-    "_model_classes",
-    "_parse",
-    "_uses_name",
-    "ast",
-    "re",
-)
-
-
-FROZEN_CORE_HELPERS = (
-    "Corpus",
-    "MODULE_ABSTRACT_BASES",
-    "Module",
-    "_ancestors",
-    "_attribute_chain",
-    "_call_func_name",
-    "_class_names",
-    "_import_package_parts",
-    "_keyword",
-    "_literal",
-    "_meta_class",
-    "_model_classes",
-    "_parse",
-    "_uses_name",
-)
-
-
-FROZEN_SIGNATURES = {
-    "_abstract_meta_calls": "(tree: 'ast.Module') -> 'set[int]'",
-    "_assignment_targets": "(statement: 'ast.stmt') -> 'list[ast.Name]'",
-    "_builder_bindings": (
-        "(tree: 'ast.Module', module_name: 'str', package_files: 'Mapping[str, str]') -> "
-        "'dict[str, tuple[str, str | None]]'"
-    ),
-    "_check_constraint_names_checked_field": (
-        "(module_name: 'str', rel: 'str', node: 'ast.Call', name: 'str', purpose_tokens: "
-        "'list[str]', violations: 'list[str]') -> 'bool'"
-    ),
-    "_check_purpose_names_fields": (
-        "(module_name: 'str', rel: 'str', node: 'ast.Call', name: 'str', purpose_tokens: "
-        "'list[str]', violations: 'list[str]') -> 'None'"
-    ),
-    "_condition_tokens": "(call: 'ast.Call') -> 'set[str] | None'",
-    "_constraint_owners": "(tree: 'ast.Module') -> 'dict[int, str]'",
-    "_defines_ordering": "(node: 'ast.ClassDef') -> 'bool'",
-    "_defines_str": "(node: 'ast.ClassDef') -> 'bool'",
-    "_django_default_verbose_name": "(class_name: 'str') -> 'str'",
-    "_file_field_class_names": "(module: 'Module') -> 'set[str]'",
-    "_inherits_ordering": (
-        "(node: 'ast.ClassDef', classes: 'Mapping[str, ast.ClassDef]', seen: 'frozenset[str]' = "
-        "frozenset()) -> 'bool'"
-    ),
-    "_inherits_str": (
-        "(node: 'ast.ClassDef', classes: 'Mapping[str, ast.ClassDef]', seen: 'frozenset[str]' = "
-        "frozenset()) -> 'bool'"
-    ),
-    "_is_abstract": "(node: 'ast.ClassDef') -> 'bool'",
-    "_literal_field_tokens": "(call: 'ast.Call') -> 'set[str] | None'",
-    "_model_basics_classes": "(tree: 'ast.Module') -> 'list[ast.ClassDef]'",
-    "_module_file": (
-        "(parts: 'tuple[str, ...]', module_name: 'str', package_files: 'Mapping[str, str]') -> "
-        "'str | None'"
-    ),
-    "_path_suffix_reads": "(node: 'ast.AST') -> 'list[ast.Attribute]'",
-    "_resolve_upload_to_builder": (
-        "(target: 'ast.expr | None', local_functions: 'Mapping[str, ast.FunctionDef]', bindings: "
-        "'Mapping[str, tuple[str, str | None]]', module_name: 'str', package_files: 'Mapping[str, "
-        "str]') -> 'tuple[str, str] | None'"
-    ),
-    "_token_matches": "(token: 'str', candidates: 'set[str]') -> 'bool'",
-    "_upload_to_builders": (
-        "(module: 'Module', tree: 'ast.Module', field_class_names: 'set[str]') -> 'list[tuple[str, "
-        "str]]'"
-    ),
-    "rule_13_tenant_models": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_14_model_basics": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_25_constraint_names": "(corpus: 'Corpus') -> 'list[str]'",
 }
 
 
@@ -701,32 +572,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rules_models.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rules_models, name) is not None
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split module's own imports stay importable through the facade."""
-    assert rules_models.ast is ast
-    assert rules_models.re is re
-    assert rules_models.Mapping is Mapping
-    assert rules_models.Corpus is core.Corpus
-    for name in FROZEN_IMPORTED_BINDINGS:
-        assert getattr(rules_models, name) is not None
-    for name in FROZEN_CORE_HELPERS:
-        assert getattr(rules_models, name) is getattr(core, name)
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each pre-split callable keeps its pre-split signature through the facade."""
-    assert {
-        name: str(inspect.signature(getattr(rules_models, name))) for name in FROZEN_SIGNATURES
-    } == FROZEN_SIGNATURES
-
-
 def test_rule_37_exempts_only_the_facade() -> None:
     """The split siblings stay inside rule 37's closed world."""
     assert ("scripts", "module_conventions/rules_models.py") in RULE_37_ALLOWED_LITERAL_FILES
@@ -753,86 +598,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                         name,
                         node.lineno,
                     )
-
-
-def test_moved_constants_keep_their_sibling_identity() -> None:
-    """The facade's constants are the sibling objects, not copies."""
-    for name in (
-        "ALLOWED_DERIVED_CHOICE_NAMES",
-        "SINGLETON_ORDERING_EXEMPTIONS",
-        "_AUTH_MODEL_BASES",
-        "_CAMEL_TO_SPACES",
-    ):
-        assert getattr(rules_models, name) is getattr(_models_basics, name)
-
-
-def test_orchestrators_and_helpers_keep_their_homes() -> None:
-    """Rules 13, 14, and 25 stay orchestrated by the facade."""
-    for name in (
-        "rule_13_tenant_models",
-        "rule_14_model_basics",
-        "rule_25_constraint_names",
-    ):
-        assert getattr(rules_models, name).__module__ == ("scripts.module_conventions.rules_models")
-    for name in (
-        "_tenant_reference_violations",
-        "_tenant_meta_violations",
-    ):
-        assert getattr(rules_models, name).__module__ == (
-            "scripts.module_conventions._models_tenancy"
-        )
-    for name in (
-        "_django_default_verbose_name",
-        "_assignment_targets",
-        "_model_basics_classes",
-        "_is_abstract",
-        "_file_field_class_names",
-        "_module_file",
-        "_builder_bindings",
-        "_resolve_upload_to_builder",
-        "_upload_to_builders",
-        "_path_suffix_reads",
-        "_defines_str",
-        "_inherits_str",
-        "_defines_ordering",
-        "_inherits_ordering",
-        "_gettext_violations",
-        "_upload_extension_violations",
-        "_choice_list_violations",
-        "_user_relation_violations",
-        "_uuid_primary_key_violations",
-        "_model_meta_violations",
-        "_model_presentation_violations",
-    ):
-        assert getattr(rules_models, name).__module__ == (
-            "scripts.module_conventions._models_basics"
-        )
-    for name in (
-        "_literal_field_tokens",
-        "_condition_tokens",
-        "_constraint_owners",
-        "_abstract_meta_calls",
-        "_token_matches",
-        "_check_purpose_names_fields",
-        "_check_constraint_names_checked_field",
-        "_duplicate_keyword_violations",
-        "_constraint_call_violations",
-    ):
-        assert getattr(rules_models, name).__module__ == (
-            "scripts.module_conventions._models_constraints"
-        )
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detectors are the facade callables, not siblings."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    for number, name in (
-        (13, "rule_13_tenant_models"),
-        (14, "rule_14_model_basics"),
-        (25, "rule_25_constraint_names"),
-    ):
-        assert detectors[number] is getattr(rules_models, name)
-        assert getattr(checker, name) is getattr(rules_models, name)
 
 
 @pytest.mark.parametrize(

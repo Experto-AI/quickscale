@@ -1,29 +1,27 @@
 """
-Parity controls for the ``rule_44`` split (SA268).
+Behavioral controls for the ``rule_44`` split (SA268).
 
 Rule 44's membership environment, expression scanner, and statement scanner
 live in the private siblings (``_rule44_names``, ``_rule44_expressions``,
-``_rule44_statements``) behind the ``rule_44`` facade.  These controls pin the
-facade's preserved surface, the split's structural invariants, and the exact
-ordered findings of representative corpora captured from the pre-split
-module, so a later slice cannot silently drop, reorder, or reword them.
+``_rule44_statements``) behind the ``rule_44`` facade.  SA268 has closed, so
+SA279 retired the pre-split surface pins; these controls keep the split's
+structural invariants and the exact ordered findings of representative corpora
+captured from the pre-split module, so a later change cannot silently drop,
+reorder, or reword them.
 """
 
 from __future__ import annotations
 
 import ast
-import inspect
 from pathlib import Path
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.module_conventions import (
     _rule44_expressions,
     _rule44_names,
     _rule44_statements,
     core,
-    registry,
     rule_44,
 )
 from scripts.module_conventions._identity_module_lists import _module_list_violations
@@ -41,161 +39,6 @@ SPLIT_SIBLINGS = {
     "_rule44_statements": _rule44_statements,
 }
 
-#: Every module-level name the pre-split ``rule_44`` published, from its own
-#: ``def``/``class``/assignment statements.  The facade must keep exposing all
-#: of them, private helpers, classes, and the type aliases included.
-FROZEN_SURFACE = (
-    "RULE_44_MEMBERSHIP_APP",
-    "RULE_44_MEMBERSHIP_MODEL",
-    "RULE_44_MEMBERSHIP_SOURCE",
-    "RULE_44_QUERY_METHODS",
-    "_RULE_44_ALIAS_PATHS",
-    "_RULE_44_SOURCE_PARTS",
-    "_Rule44DeferredBodies",
-    "_Rule44Environment",
-    "_Rule44Scope",
-    "_rule_44_argument_names",
-    "_rule_44_bind",
-    "_rule_44_block_bindings",
-    "_rule_44_bound_names",
-    "_rule_44_call_violation",
-    "_rule_44_definition_expressions",
-    "_rule_44_expression_bindings",
-    "_rule_44_membership_receiver",
-    "_rule_44_names_membership_model",
-    "_rule_44_pattern_names",
-    "_rule_44_qualified_membership",
-    "_rule_44_scan_block",
-    "_rule_44_scan_expression",
-    "_rule_44_scan_function",
-    "_rule_44_scan_statement",
-    "_rule_44_scope_declarations",
-    "rule_44_role_checks",
-)
-
-#: The pre-split module's own imports, which it exposed as module attributes;
-#: the facade keeps every one importable through its redundant aliases.
-FROZEN_IMPORTED_BINDINGS = (
-    "Corpus",
-    "Mapping",
-    "_attribute_chain",
-    "_bound_names",
-    "_call_func_name",
-    "_keyword",
-    "_literal",
-    "_parse",
-)
-
-FROZEN_CORE_HELPERS = (
-    "Corpus",
-    "_attribute_chain",
-    "_bound_names",
-    "_call_func_name",
-    "_keyword",
-    "_literal",
-    "_parse",
-)
-
-#: The pre-split signature of every callable the pre-split module published.
-FROZEN_SIGNATURES = {
-    "_Rule44Environment": (
-        "(names: 'set[str] | None' = None, "
-        "aliases: 'dict[str, frozenset[tuple[str, ...]]] | None' = None) -> 'None'"
-    ),
-    "_rule_44_argument_names": "(arguments: 'ast.arguments') -> 'set[str]'",
-    "_rule_44_bind": (
-        "(targets: 'list[ast.expr]', value: 'ast.expr', environment: '_Rule44Environment')"
-        " -> 'None'"
-    ),
-    "_rule_44_block_bindings": "(statements: 'list[ast.stmt]') -> 'set[str]'",
-    "_rule_44_bound_names": (
-        "(function: 'ast.FunctionDef | ast.AsyncFunctionDef') -> 'frozenset[str]'"
-    ),
-    "_rule_44_call_violation": (
-        "(call: 'ast.Call', environment: '_Rule44Environment', module_name: 'str', rel: 'str')"
-        " -> 'str | None'"
-    ),
-    "_rule_44_definition_expressions": (
-        "(node: 'ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef') -> 'list[ast.expr]'"
-    ),
-    "_rule_44_expression_bindings": "(expression: 'ast.expr') -> 'set[str]'",
-    "_rule_44_membership_receiver": (
-        "(node: 'ast.expr', environment: '_Rule44Environment') -> 'bool'"
-    ),
-    "_rule_44_names_membership_model": "(call: 'ast.Call') -> 'bool'",
-    "_rule_44_pattern_names": "(pattern: 'ast.pattern') -> 'set[str]'",
-    "_rule_44_qualified_membership": (
-        "(chain: 'tuple[str, ...]', aliases: 'Mapping[str, frozenset[tuple[str, ...]]]') -> 'bool'"
-    ),
-    "_rule_44_scan_block": (
-        "(statements: 'list[ast.stmt]', environment: '_Rule44Environment',"
-        " module_environment: '_Rule44Environment',"
-        " enclosing_functions: 'tuple[_Rule44Scope, ...]',"
-        " scope_environment: '_Rule44Environment', module_name: 'str', rel: 'str',"
-        " violations: 'list[str]', deferred: '_Rule44DeferredBodies | None' = None,"
-        " intermediates: '_Rule44Environment | None' = None,"
-        " skip_first_intermediate: 'bool' = False) -> 'None'"
-    ),
-    "_rule_44_scan_expression": (
-        "(node: 'ast.expr', environment: '_Rule44Environment', module_name: 'str',"
-        " rel: 'str', violations: 'list[str]',"
-        " walrus_environment: '_Rule44Environment | None' = None,"
-        " conditional: 'bool' = False, short_circuited: 'bool' = False) -> 'None'"
-    ),
-    "_rule_44_scan_function": (
-        "(function: 'ast.FunctionDef | ast.AsyncFunctionDef',"
-        " defining_environment: '_Rule44Environment',"
-        " module_environment: '_Rule44Environment',"
-        " enclosing_functions: 'tuple[_Rule44Scope, ...]', module_name: 'str', rel: 'str',"
-        " violations: 'list[str]') -> 'None'"
-    ),
-    "_rule_44_scan_statement": (
-        "(statement: 'ast.stmt', environment: '_Rule44Environment',"
-        " module_environment: '_Rule44Environment',"
-        " enclosing_functions: 'tuple[_Rule44Scope, ...]',"
-        " scope_environment: '_Rule44Environment', module_name: 'str', rel: 'str',"
-        " violations: 'list[str]', deferred: '_Rule44DeferredBodies',"
-        " intermediates: '_Rule44Environment | None') -> 'None'"
-    ),
-    "_rule_44_scope_declarations": ("(body: 'list[ast.stmt]') -> 'tuple[set[str], set[str]]'"),
-    "rule_44_role_checks": "(corpus: 'Corpus') -> 'list[str]'",
-}
-
-#: Each pre-split name's private sibling home; the facade re-exports the very
-#: object its home defines.
-FROZEN_HOMES = {
-    "_rule44_names": (
-        "RULE_44_MEMBERSHIP_APP",
-        "RULE_44_MEMBERSHIP_MODEL",
-        "RULE_44_MEMBERSHIP_SOURCE",
-        "RULE_44_QUERY_METHODS",
-        "_RULE_44_ALIAS_PATHS",
-        "_RULE_44_SOURCE_PARTS",
-        "_Rule44DeferredBodies",
-        "_Rule44Environment",
-        "_Rule44Scope",
-        "_rule_44_argument_names",
-        "_rule_44_block_bindings",
-        "_rule_44_bound_names",
-        "_rule_44_definition_expressions",
-        "_rule_44_expression_bindings",
-        "_rule_44_membership_receiver",
-        "_rule_44_names_membership_model",
-        "_rule_44_pattern_names",
-        "_rule_44_qualified_membership",
-        "_rule_44_scope_declarations",
-    ),
-    "_rule44_expressions": (
-        "_rule_44_bind",
-        "_rule_44_call_violation",
-        "_rule_44_scan_expression",
-    ),
-    "_rule44_statements": (
-        "_rule_44_scan_block",
-        "_rule_44_scan_function",
-        "_rule_44_scan_statement",
-    ),
-}
 
 #: The corpora sources, one ``services.py`` per case; each is the same shape
 #: the rule-44 control suite exercises.
@@ -713,44 +556,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rule_44.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rule_44, name) is not None
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split module's own imports stay importable through the facade."""
-    assert rule_44.ast is ast
-    assert rule_44.Mapping is not None
-    for name in FROZEN_IMPORTED_BINDINGS:
-        assert getattr(rule_44, name) is not None
-    for name in FROZEN_CORE_HELPERS:
-        assert getattr(rule_44, name) is getattr(core, name)
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each pre-split callable keeps its pre-split signature through the facade."""
-    assert {
-        name: str(inspect.signature(getattr(rule_44, name))) for name in FROZEN_SIGNATURES
-    } == FROZEN_SIGNATURES
-
-
-def test_frozen_type_aliases_are_unchanged() -> None:
-    """The two pre-split type aliases keep their pre-split structure."""
-    scope = rule_44._Rule44Scope
-    assert scope.__origin__ is tuple
-    assert scope.__args__ == ("_Rule44Environment", frozenset[str])
-    deferred = rule_44._Rule44DeferredBodies
-    assert deferred.__origin__ is list
-    (body,) = deferred.__args__
-    assert body.__origin__ is tuple
-    assert body.__args__[0] == ast.FunctionDef | ast.AsyncFunctionDef
-    assert body.__args__[1] == "_Rule44Environment"
-    assert body.__args__[2] == tuple[scope, ...]
-
-
 def test_rule_37_keeps_only_the_facade_exempt() -> None:
     """The split keeps the tables in the exempt facade; siblings stay closed."""
     assert (
@@ -798,45 +603,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                         name,
                         node.lineno,
                     )
-
-
-def test_orchestrators_and_helpers_keep_their_homes() -> None:
-    """Rule 44 stays orchestrated by the facade; the mechanics move out."""
-    assert rule_44.rule_44_role_checks.__module__ == "scripts.module_conventions.rule_44"
-    for sibling, names in FROZEN_HOMES.items():
-        for name in names:
-            assert getattr(rule_44, name) is getattr(SPLIT_SIBLINGS[sibling], name), name
-    for name in (
-        "_rule_44_scan_comprehension",
-        "_rule_44_scan_lambda",
-        "_rule_44_scan_bool_op",
-        "_rule_44_scan_if_expression",
-        "_rule_44_scan_walrus",
-        "_rule_44_scan_expression_children",
-    ):
-        assert getattr(_rule44_expressions, name).__module__ == (
-            "scripts.module_conventions._rule44_expressions"
-        ), name
-    for name in (
-        "_rule_44_scan_definition",
-        "_rule_44_scan_assignment",
-        "_rule_44_scan_import",
-        "_rule_44_scan_loop",
-        "_rule_44_scan_with",
-        "_rule_44_scan_conditional",
-        "_rule_44_scan_try",
-        "_rule_44_scan_match",
-    ):
-        assert getattr(_rule44_statements, name).__module__ == (
-            "scripts.module_conventions._rule44_statements"
-        ), name
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detector is the facade callable, not a sibling."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    assert detectors[44] is rule_44.rule_44_role_checks
-    assert checker.rule_44_role_checks is rule_44.rule_44_role_checks
 
 
 @pytest.mark.parametrize(
