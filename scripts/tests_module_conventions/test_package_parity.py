@@ -54,6 +54,7 @@ SPLIT_SIBLINGS = {
 FROZEN_SURFACE = (
     "CONFIRM_COMMAND_KEYWORDS",
     "DESTRUCTIVE_COMMAND_KEYWORDS",
+    "ORGANIZATION_SELECTOR_FLAG",
     "RETIRED_SETTINGS_NAME",
     "RULE_11_ONE_OFF_FILES",
     "RULE_11_REQUIRED_FILES",
@@ -382,6 +383,40 @@ CASE_BUILDERS = {
             "        parser.add_argument('--dry-run', action='store_true')\n",
         )
     ),
+    "organization_flag": lambda: _corpus(
+        _command_module(
+            "report",
+            "class Command:\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('--organization')\n",
+        )
+    ),
+    "org_flag": lambda: _corpus(
+        _command_module(
+            "report",
+            "class Command:\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('--org')\n",
+        )
+    ),
+    "organization_slug_flag": lambda: _corpus(
+        _command_module(
+            "report",
+            "class Command:\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('--organization-slug')\n",
+        )
+    ),
+    "slug_without_selector": lambda: _corpus(
+        _command_module(
+            "purge",
+            "class Command:\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('--slug')\n"
+            "        parser.add_argument('--confirm')\n"
+            "        parser.add_argument('--dry-run', action='store_true')\n",
+        )
+    ),
     "print_call": lambda: _corpus(
         _command_module(
             "run",
@@ -403,6 +438,8 @@ CASE_BUILDERS = {
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--confirm')\n"
             "        parser.add_argument('--dry-run', action='store_true')\n"
+            "        parser.add_argument('--organization-id')\n"
+            "        parser.add_argument('--slug')\n"
             "        parser.add_argument('--trigger', choices=['manual', 'scheduled'], "
             "default='manual')\n"
             "        parser.add_argument('--json', action='store_true')\n",
@@ -600,6 +637,38 @@ EXACT_FINDINGS = (
         "purge_no_confirm",
         "rule_17_management_commands",
         ("rule 17: demo: quickscale_demo_purge deletes data and takes no --confirm",),
+    ),
+    (
+        "organization_flag",
+        "rule_17_management_commands",
+        (
+            "rule 17: demo: quickscale_demo_report spells an organization selector "
+            "--organization; use --organization-id <uuid>",
+        ),
+    ),
+    (
+        "org_flag",
+        "rule_17_management_commands",
+        (
+            "rule 17: demo: quickscale_demo_report spells an organization selector "
+            "--org; use --organization-id <uuid>",
+        ),
+    ),
+    (
+        "organization_slug_flag",
+        "rule_17_management_commands",
+        (
+            "rule 17: demo: quickscale_demo_report spells an organization selector "
+            "--organization-slug; use --organization-id <uuid>",
+        ),
+    ),
+    (
+        "slug_without_selector",
+        "rule_17_management_commands",
+        (
+            "rule 17: demo: quickscale_demo_purge offers --slug without --organization-id; "
+            "a slug lookup is non-destructive preflight",
+        ),
     ),
     (
         "print_call",

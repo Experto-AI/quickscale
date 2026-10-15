@@ -352,7 +352,9 @@ with this release:
   the organization's slug or UUID, while dry runs and `--slug` preflight do not;
   `quickscale_forms_anonymize_submissions` takes `--trigger {manual,scheduled}`, defaults to
   `manual`, and refuses only a scheduled run while the module is switched off, so an existing
-  cron job names `--trigger scheduled`.
+  cron job names `--trigger scheduled`. `quickscale_billing_reconcile_checkouts` selects with
+  `--organization-id <uuid>` instead of `--organization`, so an operator script or runbook
+  updates its selector.
 - Module session APIs authenticate through one class: generated settings install
   `QuickscaleSessionAuthentication` as `DEFAULT_AUTHENTICATION_CLASSES`, so an unauthenticated
   call answers `401` uniformly — the CRM and forms APIs answer `401` where they answered `403`.

@@ -12,7 +12,7 @@ account removal or purge reports a reservation that cannot be resolved:
 
     python manage.py quickscale_billing_reconcile_checkouts
 
-``--organization`` limits the pass to one organization and ``--dry-run``
+``--organization-id`` limits the pass to one organization and ``--dry-run``
 reports without writing local state.
 """
 
@@ -49,10 +49,10 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument(
-            "--organization",
+            "--organization-id",
             dest="organization_id",
             default="",
-            help="Reconcile only the organization with this primary key.",
+            help="Reconcile only the organization with this UUID.",
         )
         parser.add_argument(
             "--dry-run",

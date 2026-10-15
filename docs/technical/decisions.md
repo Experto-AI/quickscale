@@ -959,6 +959,11 @@ public surface is `services.py` (rule 4).
   `--scheduled` alias is not kept.
 - ✅ A command that deletes another tenant's or the whole database's data takes
   `--confirm <identifier>`, which must match the targeted object before the deletion proceeds.
+- ✅ An organization selector is `--organization-id <uuid>`, validated as a UUID. A slug serves a
+  non-destructive preflight lookup only: a command that offers one declares `--organization-id`
+  beside it, and an invocation passes either the selector or the slug, never both.
+- ❌ `--organization`, `--org`, a slug spelling of the organization selector, or a `--slug`
+  lookup without `--organization-id`; the module-conventions gate refuses these spellings.
 - ✅ A command that deletes, anonymizes, or overwrites data takes `--dry-run`, which reports what
   would change and writes nothing; database-only work runs in `transaction.atomic()`.
 - ✅ Modules ship no scheduler. A command a site should run periodically is listed under the

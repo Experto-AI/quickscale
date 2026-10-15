@@ -821,6 +821,64 @@ def test_command_flag_conventions_controls() -> None:
         "--confirm" in violation
         for violation in _violations(checker.rule_17_management_commands, purge_without_confirm)
     )
+    organization_flag = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_report.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('--organization')\n"
+            )
+        },
+    )
+    assert any(
+        "--organization; use --organization-id <uuid>" in violation
+        for violation in _violations(checker.rule_17_management_commands, organization_flag)
+    )
+    org_flag = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_report.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('--org')\n"
+            )
+        },
+    )
+    assert any(
+        "--org; use --organization-id <uuid>" in violation
+        for violation in _violations(checker.rule_17_management_commands, org_flag)
+    )
+    slug_selector = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_report.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('--organization-slug')\n"
+            )
+        },
+    )
+    assert any(
+        "--organization-slug; use --organization-id <uuid>" in violation
+        for violation in _violations(checker.rule_17_management_commands, slug_selector)
+    )
+    slug_without_selector = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_purge.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('--slug')\n"
+                "        parser.add_argument('--confirm')\n"
+                "        parser.add_argument('--dry-run', action='store_true')\n"
+            )
+        },
+    )
+    assert any(
+        "offers --slug without --organization-id" in violation
+        for violation in _violations(checker.rule_17_management_commands, slug_without_selector)
+    )
     conforming = _with_files(
         module,
         **{
@@ -829,6 +887,8 @@ def test_command_flag_conventions_controls() -> None:
                 "    def add_arguments(self, parser):\n"
                 "        parser.add_argument('--confirm')\n"
                 "        parser.add_argument('--dry-run', action='store_true')\n"
+                "        parser.add_argument('--organization-id')\n"
+                "        parser.add_argument('--slug')\n"
                 "        parser.add_argument('--trigger', choices=['manual', 'scheduled'], "
                 "default='manual')\n"
                 "        parser.add_argument('--json', action='store_true')\n"
