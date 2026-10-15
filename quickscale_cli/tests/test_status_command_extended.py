@@ -974,6 +974,25 @@ class TestCheckContractVintage:
         assert result["modules_behind_count"] == 1
         assert result["modules_behind"][0]["module"] == "social"
 
+    def test_id_less_vintage_is_never_satisfied(self) -> None:
+        """An id-less vintage stays behind at any project version.
+
+        The loader refuses an id-less authored vintage, but a caller-built
+        one must not slip through on a version comparison: it is never
+        recorded, so it remains behind even when the project contract is
+        newer than its declared minimum.
+        """
+        from unittest.mock import Mock
+        from quickscale_core.manifest.schema import ContractVintage
+
+        vintage = ContractVintage(minimum="0.87.0")
+        manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
+        manifests = {"social": manifest}
+        result = _check_contract_vintage("0.99.0", manifests)
+        assert result["module_count"] == 1
+        assert result["modules_behind_count"] == 1
+        assert result["modules_behind"][0]["module"] == "social"
+
     def test_module_behind_reports_the_declared_minimum_and_steps(self) -> None:
         """A behind module reports its minimum and its manual adoption steps."""
         from unittest.mock import Mock

@@ -31,7 +31,9 @@ import sys
 from typing import Any, cast
 
 from quickscale_core.contracts.module_discovery import (
+    ModuleResolutionSource,
     get_modules_base_path,
+    get_resolution_source,
 )
 from quickscale_core.manifest.assembler import (
     PostResolutionHook,
@@ -52,29 +54,37 @@ from quickscale_core.module_wiring import ModuleWiringSpec
 # be overridden via module_discovery.set_modules_base_path() for installed
 # or embedded-project contexts.
 
-#: Weak cache of loaded manifests keyed by ``(module_name, base_path)`` so
-#: changing the modules base path at runtime does not return stale entries.
-_manifest_cache: dict[tuple[str, str], Any] = {}
+#: Weak cache of loaded manifests keyed by ``(module_name, base_path,
+#: require_vintage_id)`` so changing the modules base path or the active
+#: resolution source at runtime does not return stale entries.
+_manifest_cache: dict[tuple[str, str, bool], Any] = {}
 
 
 def load_module_manifest(module_name: str) -> Any:
     """Load and cache the ``module.yml`` manifest for *module_name*.
 
-    The active module base is the maintainer workspace, the bundled
-    snapshots, or — during ``apply``/``update`` — a generated project's
-    embedded tree.  Embedded copies are historical, so this load does not
-    require the contract-vintage ``id``; the authored shipped manifests
-    are read strictly by ``load_module_manifest_with_fallback`` and the
-    project-contract guard.
+    A runtime override names a caller-supplied base — in the product flow
+    a generated project's embedded ``modules/`` tree during ``apply`` and
+    ``update`` — whose copies are historical, so a read from an override
+    does not require the contract-vintage ``id``.  Every authored source
+    is read strictly: a monorepo or bundled read refuses a vintage
+    without an id here, and the shipped manifests read by
+    ``load_module_manifest_with_fallback`` and the project-contract guard
+    stay strict as well.
     """
     base_path = get_modules_base_path()
-    cache_key = (module_name, str(base_path))
+    # An embedded copy may predate the id requirement; the authored
+    # sources are the ones held to it.
+    require_vintage_id = get_resolution_source() is not ModuleResolutionSource.OVERRIDE
+    cache_key = (module_name, str(base_path), require_vintage_id)
     cached = _manifest_cache.get(cache_key)
     if cached is not None:
         return cached
 
     manifest_path = base_path / module_name / "module.yml"
-    manifest = load_manifest_from_path(manifest_path, require_vintage_id=False)
+    manifest = load_manifest_from_path(
+        manifest_path, require_vintage_id=require_vintage_id
+    )
     _manifest_cache[cache_key] = manifest
     return manifest
 

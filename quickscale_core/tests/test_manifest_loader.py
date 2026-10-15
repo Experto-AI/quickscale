@@ -2825,6 +2825,23 @@ contract_vintage:
         with pytest.raises(ManifestError, match="contract_vintage.id"):
             load_manifest(yaml_content, "mymod", require_vintage_id=False)
 
+    def test_contract_vintage_tolerant_mode_still_refuses_a_null_id(self) -> None:
+        """A present-but-null id is malformed even for a historical copy.
+
+        Only an absent ``id`` key can be a pre-id copy; an ``id:`` key the
+        author left null is a malformed declaration, so the tolerant read
+        refuses it exactly as the strict one does.
+        """
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  id:
+  minimum: "0.87.0"
+"""
+        with pytest.raises(ManifestError, match="contract_vintage.id"):
+            load_manifest(yaml_content, "mymod", require_vintage_id=False)
+
     def test_get_manifest_for_module_tolerates_a_pre_id_embedded_vintage(
         self, tmp_path: Path
     ) -> None:

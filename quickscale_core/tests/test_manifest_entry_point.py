@@ -2969,3 +2969,107 @@ class TestGenericMappedEnvVarSecretCollision:
             "https://fallback.example"
         )
         assert spec.settings["COLLIDING_SECRETS_DEMO_HOST_ENV_VAR"] == "DEMO_HOST"
+
+
+# ---------------------------------------------------------------------------
+# SA282: the contract-vintage id requirement is scoped by resolution
+# provenance — authored sources refuse a missing id, a caller-supplied
+# embedded base tolerates a historical copy.
+# ---------------------------------------------------------------------------
+
+
+class TestLoadModuleManifestVintageIdProvenance:
+    """The vintage-id opt-out is scoped to caller-supplied bases."""
+
+    @staticmethod
+    def _write_id_less_manifest(base: Path, module: str) -> None:
+        """Write a pre-id vintage manifest at ``base/<module>/module.yml``."""
+        module_dir = base / module
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text(
+            f"name: {module}\n"
+            "version: '0.1.0'\n"
+            "contract_vintage:\n"
+            "  minimum: '0.87.0'\n"
+            "  manual_adoption_steps:\n"
+            "    - 'Adopt the tooling'\n"
+        )
+
+    def test_authored_monorepo_base_refuses_an_id_less_manifest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A monorepo (authored) read refuses a vintage without an id."""
+        from quickscale_core.contracts.module_discovery import ModuleResolutionSource
+
+        base = tmp_path / "modules"
+        self._write_id_less_manifest(base, "_test_authored_vintage_mod")
+        monkeypatch.setattr(entry_point_module, "get_modules_base_path", lambda: base)
+        monkeypatch.setattr(
+            entry_point_module,
+            "get_resolution_source",
+            lambda: ModuleResolutionSource.MONOREPO,
+        )
+
+        with pytest.raises(ManifestError, match="contract_vintage.id"):
+            load_module_manifest("_test_authored_vintage_mod")
+
+    def test_bundled_base_refuses_an_id_less_manifest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A bundled (authored) read refuses a vintage without an id."""
+        from quickscale_core.contracts.module_discovery import ModuleResolutionSource
+
+        base = tmp_path / "manifests"
+        self._write_id_less_manifest(base, "_test_bundled_vintage_mod")
+        monkeypatch.setattr(entry_point_module, "get_modules_base_path", lambda: base)
+        monkeypatch.setattr(
+            entry_point_module,
+            "get_resolution_source",
+            lambda: ModuleResolutionSource.BUNDLED,
+        )
+
+        with pytest.raises(ManifestError, match="contract_vintage.id"):
+            load_module_manifest("_test_bundled_vintage_mod")
+
+    def test_override_base_tolerates_a_pre_id_manifest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A caller-supplied base reads a historical embedded copy."""
+        from quickscale_core.contracts.module_discovery import ModuleResolutionSource
+
+        base = tmp_path / "project" / "modules"
+        self._write_id_less_manifest(base, "_test_embedded_vintage_mod")
+        monkeypatch.setattr(entry_point_module, "get_modules_base_path", lambda: base)
+        monkeypatch.setattr(
+            entry_point_module,
+            "get_resolution_source",
+            lambda: ModuleResolutionSource.OVERRIDE,
+        )
+
+        manifest = load_module_manifest("_test_embedded_vintage_mod")
+
+        assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.id is None
+        assert manifest.contract_vintage.minimum == "0.87.0"
+
+    def test_override_seam_marks_the_base_as_historical(self, tmp_path: Path) -> None:
+        """The public override is the explicit historical-base signal."""
+        from quickscale_core.contracts import module_discovery
+        from quickscale_core.contracts.module_discovery import (
+            ModuleResolutionSource,
+            get_resolution_source,
+            set_modules_base_path,
+        )
+
+        base = tmp_path / "modules"
+        self._write_id_less_manifest(base, "_test_seam_vintage_mod")
+        original_override = module_discovery._modules_base_path
+        try:
+            set_modules_base_path(base)
+
+            assert get_resolution_source() is ModuleResolutionSource.OVERRIDE
+            manifest = load_module_manifest("_test_seam_vintage_mod")
+            assert manifest.contract_vintage is not None
+            assert manifest.contract_vintage.id is None
+        finally:
+            module_discovery._modules_base_path = original_override

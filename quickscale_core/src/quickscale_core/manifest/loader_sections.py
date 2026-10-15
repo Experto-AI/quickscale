@@ -196,8 +196,9 @@ def _parse_contract_vintage(
     (Module Manifest Architecture), so an authored vintage without one is
     refused.  ``require_id=False`` is the explicit opt-out for a historical
     embedded copy (a generated project's installed manifest), which may
-    predate the id requirement and must stay readable for inspection and
-    upgrade; a present-but-empty ``id`` is refused either way.
+    predate the id requirement by omitting the key and must stay readable
+    for inspection and upgrade; a present ``id`` that is null, empty, or
+    not a string is refused either way.
 
     Args:
         data: The full parsed YAML data dictionary.
@@ -208,8 +209,8 @@ def _parse_contract_vintage(
         :class:`ContractVintage` or ``None``.
 
     Raises:
-        ManifestError: If the section is malformed, declares no ``id``, or
-            declares an empty one.
+        ManifestError: If the section is malformed, omits ``id`` while one
+            is required, or declares a null, non-string, or empty one.
     """
     raw = data.get("contract_vintage")
     if raw is None:
@@ -230,8 +231,10 @@ def _parse_contract_vintage(
     )
 
     vintage_id = raw.get("id")
-    if vintage_id is None and not require_id:
-        # A historical embedded copy may predate the id requirement.
+    if vintage_id is None and "id" not in raw and not require_id:
+        # A historical embedded copy may predate the id requirement by
+        # omitting the ``id`` key entirely; a present-but-null ``id`` is
+        # malformed, not historical, and falls through to the refusal.
         pass
     elif not isinstance(vintage_id, str) or not vintage_id:
         raise ManifestError(

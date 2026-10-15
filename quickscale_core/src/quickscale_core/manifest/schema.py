@@ -109,9 +109,11 @@ class ContractVintage:
             project must follow to catch up to the module's current
             contract.  Empty when no specific manual action is required.
         id: The step's stable identity in the one adopted-step namespace.
-            A declared vintage must carry one (the loader refuses a
-            missing or empty id), and the step is satisfied only while the
-            id is recorded in the project's ``adopted_contract_steps``.
+            A declared vintage must carry one: the loader refuses a
+            missing id (only an embedded historical copy may omit the
+            key) and any present id that is not a non-empty string.  The
+            step is satisfied only while the id is recorded in the
+            project's ``adopted_contract_steps``.
     """
 
     minimum: str
@@ -224,8 +226,9 @@ class ModuleManifest:
     # must follow when its generation contract predates the module's
     # current vintage.  Populated when the loader encounters a
     # ``contract_vintage`` section in the manifest YAML; a shipped section
-    # must carry a non-empty ``id``, and the loader refuses one without
-    # (an embedded historical copy is read through an explicit opt-out).
+    # must carry a non-empty ``id`` — the loader refuses a missing one
+    # unless the read is the explicit embedded-historical-copy opt-out,
+    # and refuses any present id that is null, empty, or not a string.
     # Existing ``module.yml`` files without that section leave this field
     # as ``None``.
     # ------------------------------------------------------------------ #
