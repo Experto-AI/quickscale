@@ -441,8 +441,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   name (control: a path form).
 
   **Slices:**
-  - [ ] (a) Manifest-read startup checks in analytics, billing, and notifications, on the same
-    `checks.py` SA272 (b) extended (Tier 2-fast).
+  - [x] (a) Manifest-read startup checks in analytics, billing, and notifications, on the same
+    `checks.py` SA272 (b) extended (Tier 2-fast). Landed: `quickscale_core.runtime` gains
+    `projected_setting_names`, the three checks read it, and harness rule 6 refuses a `checks.py`
+    that re-lists its setting names literally, controls included. (b) is next.
   - [ ] (b) The purge command's hook through `collect_capabilities` (Tier 1).
   - [ ] (c) The `--cov` form in auth and blog with its harness check (Tier 1).
 

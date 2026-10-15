@@ -295,6 +295,12 @@ CASE_BUILDERS = {
             ),
         )
     ),
+    "checks_relist": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            checks="_PROJECTED_SECRETS = ('QUICKSCALE_DEMO_SECRET_KEY',)\n",
+        )
+    ),
     "format_flag": lambda: _corpus(
         _command_module(
             "report",
@@ -495,6 +501,14 @@ EXACT_FINDINGS = (
         "retired_string",
         "rule_6_no_legacy_names",
         ("rule 6: demo: views.py:3 names retired setting QUICKSCALE_DEMO_MODE",),
+    ),
+    (
+        "checks_relist",
+        "rule_6_no_legacy_names",
+        (
+            "rule 6: demo: checks.py:1 names setting QUICKSCALE_DEMO_SECRET_KEY; "
+            "read it from the manifest projection",
+        ),
     ),
     (
         "format_flag",

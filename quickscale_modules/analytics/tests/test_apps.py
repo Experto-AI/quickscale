@@ -168,6 +168,25 @@ def test_check_reports_missing_projected_settings_when_debug_is_excluded(
     assert "quickscale apply" in messages[0].msg
 
 
+@patch(
+    "quickscale_modules_analytics.checks.projected_setting_names",
+    return_value=("QUICKSCALE_ANALYTICS_RENAMED_PROJECTION",),
+)
+def test_check_reads_projected_names_from_the_manifest(
+    mock_projected_setting_names, settings
+) -> None:
+    """E001's names come from the manifest projection, never a hand-written list."""
+    settings.DEBUG = False
+    settings.QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG = False
+
+    messages = check_analytics_settings()
+
+    assert len(messages) == 1
+    assert messages[0].id == "quickscale_analytics.E001"
+    assert "QUICKSCALE_ANALYTICS_RENAMED_PROJECTION" in messages[0].msg
+    mock_projected_setting_names.assert_called_once_with("analytics")
+
+
 @pytest.mark.django_db
 @override_settings()
 def test_missing_enabled_setting_fails_check_migrate_and_runserver(settings) -> None:

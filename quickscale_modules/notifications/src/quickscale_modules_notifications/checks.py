@@ -13,7 +13,10 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.checks import CheckMessage, Error
 
-from quickscale_core.runtime import module_settings_are_supplied
+from quickscale_core.runtime import (
+    module_settings_are_supplied,
+    projected_setting_names,
+)
 from quickscale_modules_notifications._webhooks import (
     _WH_SEC_PREFIX,
     _decode_svix_secret,
@@ -23,14 +26,12 @@ from quickscale_modules_notifications.exceptions import (
 )
 from quickscale_modules_notifications.services import NotificationSettingsSnapshot
 
-#: The projected secret settings apply writes from the `_ENV_VAR` options
-#: (rule 35).  They are not manifest options, so the generic settings check
-#: does not report them; a missing one is reported here instead of raising
-#: while resolving.
-_PROJECTED_SECRETS = (
-    "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY",
-    "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
-)
+# The projected settings apply writes beyond the declared options — the
+# `_ENV_VAR` secret settings (rule 35) and the manifest's derived settings — are
+# read from the module's manifest projection (rule 6), so a rename lands once,
+# in `module.yml`.  They are not manifest options, so the generic settings check
+# does not report them; a missing one is reported below instead of raising
+# while resolving.
 
 #: E003's wording for a secret that is neither empty nor a usable Svix value.
 _SVIX_SHAPE_PROBLEM = (
@@ -81,7 +82,9 @@ def check_vendor_secrets(
         return []
 
     missing_projected = [
-        name for name in _PROJECTED_SECRETS if not hasattr(settings, name)
+        name
+        for name in projected_setting_names("notifications")
+        if not hasattr(settings, name)
     ]
     if missing_projected:
         return [

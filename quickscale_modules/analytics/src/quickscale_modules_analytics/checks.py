@@ -22,19 +22,20 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.core.checks import CheckMessage, Error
 
-from quickscale_core.runtime import module_settings_are_supplied
+from quickscale_core.runtime import (
+    module_settings_are_supplied,
+    projected_setting_names,
+)
 from quickscale_modules_analytics._settings import (
     AnalyticsRuntimeSettingsSnapshot,
 )
 
-#: The projected secret settings apply writes from the `_ENV_VAR` options
-#: (rule 35).  They are not manifest options, so the generic settings check
-#: does not report them; a missing one is reported here instead of raising
-#: while resolving.
-_PROJECTED_SETTINGS = (
-    "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY",
-    "QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE",
-)
+# The projected settings apply writes beyond the declared options — the
+# `_ENV_VAR` secret settings (rule 35) and the manifest's derived settings — are
+# read from the module's manifest projection (rule 6), so a rename lands once,
+# in `module.yml`.  They are not manifest options, so the generic settings check
+# does not report them; a missing one is reported below instead of raising
+# while resolving.
 
 
 def check_analytics_settings(
@@ -64,7 +65,9 @@ def check_analytics_settings(
     # because the dashboard view and the public template tags resolve the
     # host outside the capture path.
     missing_projected = [
-        name for name in _PROJECTED_SETTINGS if not hasattr(settings, name)
+        name
+        for name in projected_setting_names("analytics")
+        if not hasattr(settings, name)
     ]
     if missing_projected:
         return [

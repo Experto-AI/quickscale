@@ -195,6 +195,7 @@ __all__ = [
     "load_module_manifest",
     "validate_module_options",
     "ManifestError",
+    "projected_setting_names",
     "resolve_manifest_module_options",
     # Social-manifest path constants
     "SOCIAL_EMBEDS_PATH",

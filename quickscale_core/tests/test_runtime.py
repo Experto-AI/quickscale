@@ -211,6 +211,7 @@ class TestRuntimeAllExport:
             "load_module_manifest",
             "load_social_manifest",
             "module_settings_are_supplied",
+            "projected_setting_names",
             "prune_expired_backups",
             "redact_names",
             "refresh_snapshot",
@@ -331,6 +332,9 @@ class TestRuntimeSymbolTypes:
 
     def test_resolve_manifest_module_options_is_callable(self) -> None:
         assert callable(runtime.resolve_manifest_module_options)
+
+    def test_projected_setting_names_is_callable(self) -> None:
+        assert callable(runtime.projected_setting_names)
 
     def test_manifest_adapter_contracts_are_callable(self) -> None:
         for name in (
