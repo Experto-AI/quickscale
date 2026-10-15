@@ -1664,6 +1664,7 @@ class TestHostedCiGateGeneration:
             "secret-scanning-gate",
             "module-conventions-gate",
             "split-facade-gate",
+            "migration-freeze-gate",
         )
         for consumer in ("isolation-conformance", "lint-cli"):
             assert needs[consumer] == (
@@ -1782,7 +1783,7 @@ class TestHostedCiGateGeneration:
             "security-static-analysis-gate, beta-migration-smoke-gate, "
             "generated-deploy-posture-gate, workflow-security-gate, "
             "secret-scanning-gate, module-conventions-gate, "
-            "split-facade-gate]" in generated
+            "split-facade-gate, migration-freeze-gate]" in generated
         )
         assert expected_workflow_text(generated, gates) == generated
 
@@ -1839,7 +1840,7 @@ class TestHostedCiGateGeneration:
             "security-static-analysis-gate, beta-migration-smoke-gate, "
             "generated-deploy-posture-gate, workflow-security-gate, "
             "secret-scanning-gate, module-conventions-gate, "
-            "split-facade-gate]" in generated
+            "split-facade-gate, migration-freeze-gate]" in generated
         )
         assert expected_workflow_text(generated, gates) == generated
 
@@ -1883,7 +1884,7 @@ class TestHostedCiGateGeneration:
             "security-static-analysis-gate, beta-migration-smoke-gate, "
             "generated-deploy-posture-gate, workflow-security-gate, "
             "secret-scanning-gate, module-conventions-gate, "
-            "split-facade-gate]" in written
+            "split-facade-gate, migration-freeze-gate]" in written
         )
 
         clean = subprocess.run(
@@ -3024,7 +3025,7 @@ class TestPublishWorkflowGeneration:
                     "ci_job": None,
                     "local_ci_stage": None,
                 },
-                "publish": {"order": 17, "step_name": "Run fake publish gate"},
+                "publish": {"order": 18, "step_name": "Run fake publish gate"},
                 "depends_on": [],
                 "trigger_inputs": [],
             }

@@ -411,6 +411,7 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
         "check-secret-scanning": "Running secret scanning gate",
         "check-module-conventions": "Running module conventions conformance check",
         "check-split-facade-imports": "Running split-facade import gate",
+        "check-migration-freeze": "Running migration freeze",
         "quality": "Running quality thresholds gate",
     }
     replay_markers = [

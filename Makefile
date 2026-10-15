@@ -353,6 +353,7 @@ help:
 	@echo "  make check-module-conventions     - Module Conventions rule 40 conformance check over every manifest and module source"
 	@echo "  make check-split-facade-imports   - Reject a private module importing a facade in its distribution (SA234)"
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
+	@echo "  make check-migration-freeze      - Frozen module migrations keep their recorded content identity"
 	@# END GENERATED: makefile-gate-help
 	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts and the known-bad Dockerfile gate control"

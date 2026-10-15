@@ -658,6 +658,7 @@ class TestMakefileGateTargetDerivation:
         "check-secret-scanning",
         "check-module-conventions",
         "check-split-facade-imports",
+        "check-migration-freeze",
     )
 
     def _derive_targets(self, cwd: Path, *, registry: Path | None = None) -> str:

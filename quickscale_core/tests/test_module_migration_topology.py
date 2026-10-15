@@ -33,7 +33,7 @@ _DIAGNOSTIC_UNEXPECTED_SERVICE_MIGRATION = "unexpected-service-migration"
 _DIAGNOSTIC_AMBIGUOUS_MODEL_DEFINITION = "ambiguous-model-definition"
 _DIAGNOSTIC_INVALID_MODEL_DEFINITION = "invalid-model-definition"
 _DIAGNOSTIC_MISSING_INITIAL = "missing-initial"
-_DIAGNOSTIC_EXTRA_NUMBERED_MIGRATION = "extra-numbered-migration"
+_DIAGNOSTIC_UNORDERED_MIGRATION_CHAIN = "unordered-migration-chain"
 _DIAGNOSTIC_UNEXPECTED_MIGRATION_FILE = "unexpected-migration-file"
 _DIAGNOSTIC_INCOMPLETE_MIGRATION_PACKAGE = "incomplete-migration-package"
 _DIAGNOSTIC_INITIAL_LOAD_ERROR = "initial-load-error"
@@ -570,6 +570,24 @@ def _module_package_path(module_name: str, module_path: Path) -> Path:
     return module_path / "src" / f"quickscale_modules_{module_name}"
 
 
+def _ordered_chain_violation(numbered_files: list[str]) -> str | None:
+    """Require ``0001_initial.py`` first, then uniquely increasing numbers."""
+    if not numbered_files:
+        return None
+    if numbered_files[0] != _INITIAL_MIGRATION_FILENAME:
+        return (
+            "numbered migrations must begin with 0001_initial.py; found "
+            f"{numbered_files[0]} first"
+        )
+    prefixes = [filename[:4] for filename in numbered_files]
+    duplicates = sorted({prefix for prefix in prefixes if prefixes.count(prefix) > 1})
+    if duplicates:
+        return "migration numbers must be unique and ordered; duplicated " + ", ".join(
+            duplicates
+        )
+    return None
+
+
 def _migration_topology_diagnostics(
     module_paths: Mapping[str, Path], names: tuple[str, ...]
 ) -> list[TopologyDiagnostic]:
@@ -673,29 +691,29 @@ def _migration_topology_diagnostics(
                 )
             )
 
-        extra_numbered = sorted(
+        numbered_files = sorted(
             filename
-            for filename in actual_files - expected_files
+            for filename in actual_files
             if _NUMBERED_MIGRATION_PATTERN.match(filename)
         )
-        if extra_numbered:
+        chain_detail = _ordered_chain_violation(numbered_files)
+        if chain_detail is not None:
             diagnostics.append(
                 TopologyDiagnostic(
                     module_name,
-                    _DIAGNOSTIC_EXTRA_NUMBERED_MIGRATION,
-                    "exact-ten topology permits no numbered migrations beyond "
-                    f"0001_initial.py; found {', '.join(extra_numbered)}",
+                    _DIAGNOSTIC_UNORDERED_MIGRATION_CHAIN,
+                    chain_detail,
                 )
             )
 
-        unexpected_files = sorted(actual_files - expected_files - set(extra_numbered))
+        unexpected_files = sorted(actual_files - expected_files - set(numbered_files))
         if unexpected_files:
             diagnostics.append(
                 TopologyDiagnostic(
                     module_name,
                     _DIAGNOSTIC_UNEXPECTED_MIGRATION_FILE,
-                    "migration Python files must be exactly __init__.py and "
-                    f"0001_initial.py; found {', '.join(unexpected_files)}",
+                    "migration Python files must be __init__.py plus numbered "
+                    f"migrations; found {', '.join(unexpected_files)}",
                 )
             )
         missing_files = sorted(expected_files - actual_files)
@@ -823,7 +841,7 @@ def _assert_canary_detected(
 
 
 def test_repository_module_migration_topology() -> None:
-    """Enforce the source-derived twelve-module, exact-ten topology."""
+    """Enforce the source-derived twelve-module, ten-model topology."""
     inventory = _bind_module_inventory()
 
     assert set(inventory.paths) == set(inventory.names), (
@@ -905,18 +923,50 @@ def test_irregular_model_definition_canary(tmp_path: Path) -> None:
     )
 
 
-def test_extra_numbered_migration_canary(tmp_path: Path) -> None:
-    """A model module with 0002 must fail the exact-ten guard."""
+def test_numbered_migration_chain_canary(tmp_path: Path) -> None:
+    """A model module may add 0002 as the next ordered migration."""
     inventory = _bind_module_inventory()
     module_name = inventory.model_modules[0]
     module_path = _copy_module_tree(tmp_path, inventory, module_name)
     migrations_path = (
         module_path / "src" / f"quickscale_modules_{module_name}" / "migrations"
     )
-    (migrations_path / "0002_auto.py").write_text("# injected canary\n")
+    (migrations_path / "0002_auto.py").write_text("# injected chain canary\n")
+
+    diagnostics = _migration_topology_diagnostics(
+        {module_name: module_path}, (module_name,)
+    )
+    assert diagnostics == [], "\n".join(map(str, diagnostics))
+
+
+def test_duplicate_migration_number_canary(tmp_path: Path) -> None:
+    """Two migrations sharing one number must fail the ordered-chain guard."""
+    inventory = _bind_module_inventory()
+    module_name = inventory.model_modules[0]
+    module_path = _copy_module_tree(tmp_path, inventory, module_name)
+    migrations_path = (
+        module_path / "src" / f"quickscale_modules_{module_name}" / "migrations"
+    )
+    (migrations_path / "0002_first.py").write_text("# injected canary\n")
+    (migrations_path / "0002_second.py").write_text("# injected canary\n")
 
     _assert_canary_detected(
-        module_name, module_path, _DIAGNOSTIC_EXTRA_NUMBERED_MIGRATION
+        module_name, module_path, _DIAGNOSTIC_UNORDERED_MIGRATION_CHAIN
+    )
+
+
+def test_zero_prefixed_migration_canary(tmp_path: Path) -> None:
+    """A migration numbered before 0001_initial must fail the chain guard."""
+    inventory = _bind_module_inventory()
+    module_name = inventory.model_modules[0]
+    module_path = _copy_module_tree(tmp_path, inventory, module_name)
+    migrations_path = (
+        module_path / "src" / f"quickscale_modules_{module_name}" / "migrations"
+    )
+    (migrations_path / "0000_early.py").write_text("# injected canary\n")
+
+    _assert_canary_detected(
+        module_name, module_path, _DIAGNOSTIC_UNORDERED_MIGRATION_CHAIN
     )
 
 

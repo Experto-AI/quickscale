@@ -90,9 +90,12 @@ def _is_strict_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def _load_checked_manifest(manifest_path: Path) -> None:
+def load_manifest_modules(manifest_path: Path) -> dict[str, dict[str, str]]:
     """
-    Validate the checked-in manifest as a schema-v1 document.
+    Validate the checked-in manifest and return its ``modules`` mapping.
+
+    The check gate (``scripts/check_migration_freeze.py``) consumes this
+    loader, so generation and verification share one manifest schema.
 
     Raises:
         ManifestError: If the file is not a strict JSON object with the
@@ -122,6 +125,7 @@ def _load_checked_manifest(manifest_path: Path) -> None:
                 raise ManifestError(
                     f"{manifest_path}: module '{module_name}' has a non-string entry"
                 )
+    return modules
 
 
 def _expected_manifest_text() -> str:
@@ -161,7 +165,7 @@ def _check_manifest(manifest_path: Path) -> int:
     expected_text = _expected_manifest_text()
     if not manifest_path.is_file():
         raise FileNotFoundError(manifest_path)
-    _load_checked_manifest(manifest_path)
+    load_manifest_modules(manifest_path)
     current_text = manifest_path.read_text(encoding="utf-8")
     if current_text == expected_text:
         print(f"Migration hash manifest is current: {manifest_path}")

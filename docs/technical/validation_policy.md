@@ -238,6 +238,7 @@ Every listed gate runs in each of its declared contexts.
 | `check-module-conventions` | `make check-module-conventions` | local-serial, local-parallel, hosted, publish | 7 | `module-conventions-gate` |
 | `check-split-facade-imports` | `make check-split-facade-imports` | local-serial, local-parallel, hosted, publish | 7 | `split-facade-gate` |
 | `quality` | `make quality` | local-serial, local-parallel | 7 | — |
+| `check-migration-freeze` | `make check-migration-freeze` | local-serial, local-parallel, hosted, publish | 7 | `migration-freeze-gate` |
 <!-- END GENERATED: gate-registry-table -->
 
 `make check-gate-suites` is the owning execution context for all current
@@ -249,7 +250,7 @@ $(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
 
 The scripts directory remains outside `.coveragerc`; the product coverage source list
 and `fail_under = 90` are unchanged. The hosted CI job set also contains seven
-separately justified unowned jobs, for twenty-four jobs total. Eighteen registered gates run
+separately justified unowned jobs, for twenty-five jobs total. Nineteen registered gates run
 locally across stages 3–7. `isolation-conformance`
 and the reusable `bypassrls` suite are hosted-unowned jobs: Make exposes both runners for local verification,
 but local execution uses the owned PostgreSQL 18 lifecycle described by

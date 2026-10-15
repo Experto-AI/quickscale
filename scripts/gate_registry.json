@@ -815,6 +815,46 @@
             ],
             "depends_on": [],
             "trigger_inputs": []
+        },
+        {
+            "id": "check-migration-freeze",
+            "description": "Frozen module migration files keep their recorded content identity and name no private symbols",
+            "required_contexts": [
+                "local-serial",
+                "local-parallel",
+                "hosted",
+                "publish"
+            ],
+            "bindings": {
+                "make_target": "check-migration-freeze",
+                "ci_job": "migration-freeze-gate",
+                "local_ci_stage": 7
+            },
+            "hosted": {
+                "order": 18,
+                "display_name": "Migration Freeze Gate (SA204)",
+                "check_step_name": "Verify frozen module migrations keep their recorded content identity"
+            },
+            "publish": {
+                "order": 17,
+                "step_name": "Run migration freeze gate"
+            },
+            "help": "Verify every frozen module migration file is still byte-identical to its\nrecorded SHA-256 in scripts/migration_hashes.json, that no recorded file is\nmissing, and that no numbered migration of a shipped module names a private\n(_-prefixed) symbol.  A new numbered migration is accepted; the next manifest\nregeneration freezes it.",
+            "local": {
+                "order": 18,
+                "description": "Running migration freeze gate...",
+                "success": "\u2713 Frozen module migrations match their recorded content identity",
+                "failure_label": "Migration Freeze Gate"
+            },
+            "makefile_help": {
+                "order": 18,
+                "text": "make check-migration-freeze      - Frozen module migrations keep their recorded content identity"
+            },
+            "make_recipe": [
+                "@$(PYTHON) scripts/check_migration_freeze.py"
+            ],
+            "depends_on": [],
+            "trigger_inputs": []
         }
     ]
 }
