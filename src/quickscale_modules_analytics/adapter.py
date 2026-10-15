@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec
+from quickscale_core.runtime import (
+    ModuleWiringSpec,
+    ResolvedOptions,
+    build_generic_manifest_spec,
+)
 
 
 def _analytics_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
+    spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
     """Apply analytics' off-switch transformation.
 
@@ -20,7 +24,7 @@ def _analytics_post_hook(
     before this hook runs, so the settings surface does not change with the
     switch.
     """
-    if resolved["enabled"]:
+    if resolved.enabled:
         return spec
     return ModuleWiringSpec(
         apps=spec.apps,

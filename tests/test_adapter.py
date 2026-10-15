@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quickscale_core.manifest import ManifestError
+from quickscale_core.manifest import ManifestError, ResolvedOptions
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_analytics.adapter import (
@@ -108,7 +108,7 @@ def test_post_hook_only_transforms_when_disabled() -> None:
         settings={"QUICKSCALE_ANALYTICS_ENABLED": True},
     )
 
-    assert _analytics_post_hook(spec, {"enabled": True}) is spec
+    assert _analytics_post_hook(spec, ResolvedOptions({"enabled": True})) is spec
 
 
 @patch("quickscale_modules_analytics.adapter.build_generic_manifest_spec")
