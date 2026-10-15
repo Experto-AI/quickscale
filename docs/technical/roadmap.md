@@ -212,9 +212,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Slices** (in order; the one-way door is isolated in (g), behind the proof in (f)):
   - [x] (a), (b), (d): landed (`BlogMediaAssetImageField` public; `quickscale_core.migration_hashes`
     with `scripts/migration_hashes.json`; hash-keyed restore-forward in `recovery.py`).
-  - [ ] (c) The freeze gate as one registry row (after SA275), with controls for an in-place
-    edit, a deletion, a new `0002`, and a `_`-symbol import, and the topology test's chain and
-    inverted canary (Tier 2-fast).
+  - [x] (c): landed as `scripts/check_migration_freeze.py`, one registry row (`check-migration-freeze`)
+    with controls for an in-place edit, a deletion, a new `0002`, and a `_`-symbol reference; the
+    topology guard accepts an ordered chain and its `0002` canary is inverted. (f) and (g) are next.
   - [x] (d) Restore-forward in `dr_engine/recovery.py` keyed on the hash manifest: forward
     migration from N to N+1, the bare-file refusal, and the equal-label hash-mismatch refusal,
     with tests (Tier 2-fast; Track 2 reviews). Landed as per-module `migration_hashes` recorded
