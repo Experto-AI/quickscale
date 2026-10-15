@@ -2,7 +2,7 @@
 # Do not edit by hand; `make check` fails when this file is not current.
 # Refresh with `poetry run python scripts/sync_ci_gate_jobs.py --write`.
 
-.PHONY: check-core-compat check-module-core-imports check-manifest-sync check-module-app-declaration check-org-context-primitives check-csrf-exempt check-commit-testimony check-project-contract-vintage frontend-proof smoke-install check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture check-generated-project-automation check-workflow-security check-secret-scanning check-module-conventions check-split-facade-imports quality
+.PHONY: check-core-compat check-module-core-imports check-manifest-sync check-module-app-declaration check-org-context-primitives check-csrf-exempt check-commit-testimony check-project-contract-vintage frontend-proof smoke-install check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture check-generated-project-automation check-workflow-security check-secret-scanning check-module-conventions check-split-facade-imports quality check-migration-freeze
 
 # Check each module's quickscale_core imports against the current core API.
 # This verifies that every import from quickscale_core in a module's source
@@ -122,3 +122,11 @@ check-split-facade-imports:
 # Reports saved to .quickscale/quality_report.{json,md}
 quality:
 	@scripts/check_quality.sh
+
+# Verify every frozen module migration file is still byte-identical to its
+# recorded SHA-256 in scripts/migration_hashes.json, that no recorded file is
+# missing, and that no numbered migration of a shipped module names a private
+# (_-prefixed) symbol.  A new numbered migration is accepted; the next manifest
+# regeneration freezes it.
+check-migration-freeze:
+	@$(PYTHON) scripts/check_migration_freeze.py

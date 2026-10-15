@@ -187,6 +187,10 @@ jobs:
       - name: Run installed-artifact smoke gate (SA110)
         run: |
           make smoke-install
+
+      - name: Run migration freeze gate
+        run: |
+          make check-migration-freeze
       # END GENERATED: publish-gate-steps
 
       - name: Run linting (ruff)

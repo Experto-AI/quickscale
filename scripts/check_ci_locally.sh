@@ -540,6 +540,11 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ Quality thresholds gate passed"
             LOCAL_GATE_FAILURE_LABEL="Quality Thresholds Gate"
             ;;
+        check-migration-freeze)
+            LOCAL_GATE_DESCRIPTION="Running migration freeze gate..."
+            LOCAL_GATE_SUCCESS="✓ Frozen module migrations match their recorded content identity"
+            LOCAL_GATE_FAILURE_LABEL="Migration Freeze Gate"
+            ;;
         # END GENERATED: local-gate-arms
         *)
             LOCAL_GATE_DESCRIPTION="Running $target..."
