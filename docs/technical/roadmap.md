@@ -88,7 +88,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA204 (c) | yes | no | yes | no | yes |
+| 1 | SA204 (f) | yes | no | yes | no | yes |
 | 2 | SA278 | yes | yes | yes | yes | no |
 | 3 | SA283 | yes | yes | yes | yes | no |
 
