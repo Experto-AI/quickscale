@@ -592,6 +592,108 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _selected_explicit_targets(args: argparse.Namespace) -> list[tuple[str, Path, bool, str]]:
+    """Return the projections the caller selected explicitly; empty means all."""
+    selected: list[tuple[str, Path, bool, str]] = []
+    if args.workflow is not None:
+        selected.append(("ci.yml", args.workflow, *sync_workflow(args.workflow, args.registry)))
+    if args.e2e_workflow is not None:
+        selected.append(
+            ("e2e.yml", args.e2e_workflow, *sync_e2e_workflow(args.e2e_workflow, args.registry))
+        )
+    if args.publish_workflow is not None:
+        selected.append(
+            (
+                "publish.yml",
+                args.publish_workflow,
+                *sync_publish_workflow(args.publish_workflow, args.registry),
+            )
+        )
+    if args.make_include is not None:
+        selected.append(
+            (
+                "scripts/gates.mk",
+                args.make_include,
+                *sync_make_include(args.make_include, args.registry),
+            )
+        )
+    if args.docs is not None:
+        selected.append(
+            (
+                "docs/technical/validation_policy.md",
+                args.docs,
+                *sync_docs_table(args.docs, args.registry),
+            )
+        )
+    if args.local_script is not None:
+        selected.append(
+            (
+                "scripts/check_ci_locally.sh",
+                args.local_script,
+                *sync_local_arms(args.local_script, args.registry),
+            )
+        )
+    if args.makefile is not None:
+        selected.append(
+            (
+                "Makefile",
+                args.makefile,
+                *sync_makefile_help(args.makefile, args.registry),
+            )
+        )
+    return selected
+
+
+def _default_targets(args: argparse.Namespace) -> list[tuple[str, Path, bool, str]]:
+    """Return every default projection, in the pre-split selection order."""
+    return [
+        ("ci.yml", DEFAULT_WORKFLOW, *sync_workflow(DEFAULT_WORKFLOW, args.registry)),
+        ("e2e.yml", DEFAULT_E2E_WORKFLOW, *sync_e2e_workflow(DEFAULT_E2E_WORKFLOW, args.registry)),
+        (
+            "publish.yml",
+            DEFAULT_PUBLISH_WORKFLOW,
+            *sync_publish_workflow(DEFAULT_PUBLISH_WORKFLOW, args.registry),
+        ),
+        (
+            "scripts/gates.mk",
+            DEFAULT_MAKE_INCLUDE,
+            *sync_make_include(DEFAULT_MAKE_INCLUDE, args.registry),
+        ),
+        (
+            "docs/technical/validation_policy.md",
+            DEFAULT_DOCS,
+            *sync_docs_table(DEFAULT_DOCS, args.registry),
+        ),
+        (
+            "scripts/check_ci_locally.sh",
+            DEFAULT_LOCAL_SCRIPT,
+            *sync_local_arms(DEFAULT_LOCAL_SCRIPT, args.registry),
+        ),
+        ("Makefile", DEFAULT_MAKEFILE, *sync_makefile_help(DEFAULT_MAKEFILE, args.registry)),
+    ]
+
+
+def _print_drifted_targets(drifted: list[tuple[str, Path, str]]) -> None:
+    """Print one unified diff per drifted target, in selection order."""
+    for label, path, expected in drifted:
+        try:
+            current = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            current = ""
+        _print_drift(current, expected, label)
+
+
+def _write_targets(selected: list[tuple[str, Path, bool, str]]) -> None:
+    """Write every selected target whose on-disk text differs from the expected text."""
+    for _label, path, _drift, expected in selected:
+        try:
+            current = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            current = None
+        if current != expected:
+            _atomic_write(path, expected)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
@@ -600,125 +702,16 @@ def main(argv: list[str] | None = None) -> int:
             print(_check_gate_targets(gates))
             return 0
 
-        selected: list[tuple[str, Path, bool, str]] = []
-        explicit = False
-        if args.workflow is not None:
-            explicit = True
-            selected.append(("ci.yml", args.workflow, *sync_workflow(args.workflow, args.registry)))
-        if args.e2e_workflow is not None:
-            explicit = True
-            selected.append(
-                ("e2e.yml", args.e2e_workflow, *sync_e2e_workflow(args.e2e_workflow, args.registry))
-            )
-        if args.publish_workflow is not None:
-            explicit = True
-            selected.append(
-                (
-                    "publish.yml",
-                    args.publish_workflow,
-                    *sync_publish_workflow(args.publish_workflow, args.registry),
-                )
-            )
-        if args.make_include is not None:
-            explicit = True
-            selected.append(
-                (
-                    "scripts/gates.mk",
-                    args.make_include,
-                    *sync_make_include(args.make_include, args.registry),
-                )
-            )
-        if args.docs is not None:
-            explicit = True
-            selected.append(
-                (
-                    "docs/technical/validation_policy.md",
-                    args.docs,
-                    *sync_docs_table(args.docs, args.registry),
-                )
-            )
-        if args.local_script is not None:
-            explicit = True
-            selected.append(
-                (
-                    "scripts/check_ci_locally.sh",
-                    args.local_script,
-                    *sync_local_arms(args.local_script, args.registry),
-                )
-            )
-        if args.makefile is not None:
-            explicit = True
-            selected.append(
-                (
-                    "Makefile",
-                    args.makefile,
-                    *sync_makefile_help(args.makefile, args.registry),
-                )
-            )
-        if not explicit:
-            selected.append(
-                ("ci.yml", DEFAULT_WORKFLOW, *sync_workflow(DEFAULT_WORKFLOW, args.registry))
-            )
-            selected.append(
-                (
-                    "e2e.yml",
-                    DEFAULT_E2E_WORKFLOW,
-                    *sync_e2e_workflow(DEFAULT_E2E_WORKFLOW, args.registry),
-                )
-            )
-            selected.append(
-                (
-                    "publish.yml",
-                    DEFAULT_PUBLISH_WORKFLOW,
-                    *sync_publish_workflow(DEFAULT_PUBLISH_WORKFLOW, args.registry),
-                )
-            )
-            selected.append(
-                (
-                    "scripts/gates.mk",
-                    DEFAULT_MAKE_INCLUDE,
-                    *sync_make_include(DEFAULT_MAKE_INCLUDE, args.registry),
-                )
-            )
-            selected.append(
-                (
-                    "docs/technical/validation_policy.md",
-                    DEFAULT_DOCS,
-                    *sync_docs_table(DEFAULT_DOCS, args.registry),
-                )
-            )
-            selected.append(
-                (
-                    "scripts/check_ci_locally.sh",
-                    DEFAULT_LOCAL_SCRIPT,
-                    *sync_local_arms(DEFAULT_LOCAL_SCRIPT, args.registry),
-                )
-            )
-            selected.append(
-                (
-                    "Makefile",
-                    DEFAULT_MAKEFILE,
-                    *sync_makefile_help(DEFAULT_MAKEFILE, args.registry),
-                )
-            )
+        selected = _selected_explicit_targets(args)
+        if not selected:
+            selected = _default_targets(args)
         drifted = [(label, path, expected) for label, path, drift, expected in selected if drift]
         if not drifted and not args.write:
             return 0
         if args.check:
-            for label, path, expected in drifted:
-                try:
-                    current = path.read_text(encoding="utf-8")
-                except FileNotFoundError:
-                    current = ""
-                _print_drift(current, expected, label)
+            _print_drifted_targets(drifted)
             return 1
-        for _label, path, _drift, expected in selected:
-            try:
-                current = path.read_text(encoding="utf-8")
-            except FileNotFoundError:
-                current = None
-            if current != expected:
-                _atomic_write(path, expected)
+        _write_targets(selected)
         return 0
     except (GeneratorError, OSError) as exc:
         print(f"ERROR: [CI_GATE_GENERATION] {exc}", file=sys.stderr)

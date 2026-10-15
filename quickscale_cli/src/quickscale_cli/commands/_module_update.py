@@ -7,7 +7,6 @@ rule 28), so existing import paths and test patch targets keep working.
 
 import shutil
 import subprocess
-from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -15,12 +14,16 @@ from typing import Any
 import click
 
 from quickscale_cli.commands._module_shared import _UpdatePathSnapshot
+from quickscale_cli.commands._module_update_identity import (
+    _collect_update_migration_identity,
+    _get_update_migration_issues,
+    _UpdateMigrationIdentityError,
+)
 
 import quickscale_core.project_state_manager as _project_state_manager
 import quickscale_core.apply as _apply
 import quickscale_cli.commands.module_output as _module_output
 import quickscale_cli.commands._module_update_io as _module_update_io
-import quickscale_core.migration_hashes as _migration_hashes
 import quickscale_core.schema.state_schema as _state_schema
 import quickscale_core.manifest.loader_errors as _loader_errors
 import quickscale_core.utils.git_errors as _git_errors
@@ -32,10 +35,6 @@ import quickscale_core.advisory_lock as _advisory_lock
 import quickscale_core.utils.git_repo as _git_repo
 import quickscale_core.utils.git_subtree as _git_subtree
 import quickscale_cli.commands._module_embed as _module_embed
-
-
-class _UpdateMigrationIdentityError(RuntimeError):
-    """An equal-label update would replace applied migration content."""
 
 
 def _ensure_authoritative_state_for_update(
@@ -101,50 +100,6 @@ def _load_update_recovery_state(project_path: Path) -> Any | None:
     if ledger is None:
         return None
     return ledger.applied_state
-
-
-def _collect_update_migration_identity(
-    project_path: Path, module_prefix: str
-) -> dict[str, str] | None:
-    """Return a module tree's migration content identity, or ``None``.
-
-    ``None`` marks content this check cannot identify (a missing source
-    package or an unreadable migrations package), so the caller skips the
-    comparison instead of reading it as a removal; an empty mapping stays
-    reserved for a module that ships no migrations.
-    """
-    try:
-        return _migration_hashes.compute_module_migration_hashes(
-            project_path / module_prefix
-        )
-    except _migration_hashes.MigrationHashError, OSError:
-        return None
-
-
-def _get_update_migration_issues(
-    applied_migration_hashes: Mapping[str, str] | None,
-    embedded_migration_hashes: Mapping[str, str] | None,
-) -> list[str]:
-    """Return refusal issues for an applied migration content mismatch.
-
-    Under an equal version label the update must keep every applied migration
-    file byte-identical in the updated module; the pulled content may only add
-    newer migrations for ``migrate`` to apply forward.  An unidentifiable
-    applied identity leaves nothing to compare, while an updated module whose
-    content cannot be identified is refused rather than read as empty.
-    """
-    if not applied_migration_hashes:
-        return []
-    if embedded_migration_hashes is None:
-        return ["the updated module's migration content could not be identified"]
-    issues: list[str] = []
-    for filename in sorted(applied_migration_hashes):
-        embedded_digest = embedded_migration_hashes.get(filename)
-        if embedded_digest is None:
-            issues.append(f"migration '{filename}' is no longer present")
-        elif embedded_digest != applied_migration_hashes[filename]:
-            issues.append(f"migration '{filename}' changed content")
-    return issues
 
 
 def _check_local_pre_pull_guard(

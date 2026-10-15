@@ -789,6 +789,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **CRM stat cards show organization totals.** The React CRM workspace reads its contact,
     company, deal, and tag totals from the module's `crm/api/stats/` endpoint instead of
     inferring them from a paginated list page, so the cards no longer show 0.
+  - **Quality thresholds cover the gate scripts.** The quality scan also analyzes the non-test
+    Python under `scripts/`, so the gate scripts and the module-conventions harness meet the same
+    fixed thresholds as package source.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

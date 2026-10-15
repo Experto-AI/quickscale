@@ -8,6 +8,9 @@
 #   - file size: >= 800 lines fails; 500-799 warns
 #   - pylint duplication: blocks of >= 20 similar lines fail; 6-19 lines warn
 # A warn-column finding prints and still exits 0; a fail-column finding exits 1.
+# Scope: every package src/ tree plus the governance Python under scripts/
+# that is not a test file (test_*.py), so the gate scripts and module
+# conventions meet the same bar as product source (SA278b).
 
 set -euo pipefail
 
@@ -130,8 +133,9 @@ check_dependencies() {
 }
 
 discover_python_modules() {
-    # Auto-discover Python packages with pyproject.toml and src/ directory
-    # Returns: Space-separated list of src/ paths to analyze
+    # Auto-discover Python packages with pyproject.toml and src/ directory,
+    # plus the governance code under scripts/.
+    # Returns: Space-separated list of paths to analyze
 
     local modules=()
 
@@ -148,6 +152,20 @@ discover_python_modules() {
             fi
         fi
     done < <(find "$ROOT" -name "pyproject.toml" -type f ! -path "$ROOT/pyproject.toml" 2>/dev/null)
+
+    # SA278(b): the governance code under scripts/ meets the same quality bar
+    # as package source.  Its test files stay out, named the way this
+    # repository names test code everywhere else (test_*.py): package tests
+    # live outside the scanned src/ trees, and the scripts tests are the same
+    # kind of code.  Everything else under scripts/, the conformance harness's
+    # support module included, is scanned.
+    while IFS= read -r script_file; do
+        local script_name="${script_file##*/}"
+        case "$script_name" in
+            test_*) continue ;;
+        esac
+        modules+=("$script_file")
+    done < <(find "$ROOT/scripts" -type f -name "*.py" 2>/dev/null)
 
     # Sort modules for consistent ordering
     IFS=$'\n' sorted_modules=($(sort <<<"${modules[*]}"))

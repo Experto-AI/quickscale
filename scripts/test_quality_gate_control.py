@@ -7,6 +7,11 @@ matching warn-column fixture must print and still exit 0.  Synthetic analyzer
 output is injected through stub analyzers controlled by ``QS_*_FIXTURE``
 environment variables, so no real source tree is measured.
 
+The gate's scan scope is pinned too (SA278b): the discovery under test reaches
+the governance scripts tree through a ``find`` call the stub delegates, and the
+stub ``poetry`` records the analyzer arguments, so a control can assert that
+non-test files under ``scripts/`` are analyzed while their test files are not.
+
 Every run writes its artifacts under a per-test ``QUALITY_OUTPUT_DIR`` so the
 repository's ``.quickscale`` directory is never touched.
 """
@@ -40,6 +45,11 @@ import sys
 
 def main() -> int:
     args = sys.argv[1:]
+
+    recorder = os.environ.get("QS_POETRY_RECORD", "")
+    if recorder:
+        with open(recorder, "a", encoding="utf-8") as handle:
+            handle.write(" ".join(args) + "\\n")
 
     if len(args) >= 2 and args[0] == "run":
         tool = args[1]
@@ -149,6 +159,7 @@ class TestQualityGateThresholds:
         content: str = _FIND_CLEAN,
         *,
         delegate_discovery: bool = True,
+        delegate_scripts: bool = False,
     ) -> Path:
         """
         Create a stub ``find`` script reporting the controlled file sizes.
@@ -156,7 +167,9 @@ class TestQualityGateThresholds:
         Module discovery invokes ``find`` for ``pyproject.toml`` files; when
         ``delegate_discovery`` is true those calls exec the real ``find`` so
         the gate discovers the actual repository packages, while every other
-        invocation returns the controlled fixture output.
+        invocation returns the controlled fixture output.  ``delegate_scripts``
+        additionally delegates the governance-tree discovery call, whose only
+        path argument is the repository's ``scripts`` directory.
         """
         bin_dir = tmp_path / "findbin"
         bin_dir.mkdir(parents=True, exist_ok=True)
@@ -165,10 +178,14 @@ class TestQualityGateThresholds:
         if delegate_discovery:
             real_find = shutil.which("find")
             assert real_find is not None, "test environment must provide find"
+            conditions = ['"$stub_arg" = "pyproject.toml"']
+            if delegate_scripts:
+                conditions.append(f'"$stub_arg" = "{_REPO_ROOT / "scripts"}"')
+            condition_text = " || ".join(f"[ {condition} ]" for condition in conditions)
             delegation = (
                 "# Delegate module discovery to the real find; stub only scans.\n"
                 'for stub_arg in "$@"; do\n'
-                '    if [ "$stub_arg" = "pyproject.toml" ]; then\n'
+                f"    if {condition_text}; then\n"
                 f'        exec "{real_find}" "$@"\n'
                 "    fi\n"
                 "done\n"
@@ -192,15 +209,22 @@ class TestQualityGateThresholds:
         pylint_exit: int = 8,
         find_content: str = _FIND_CLEAN,
         delegate_discovery: bool = True,
+        delegate_scripts: bool = False,
+        record_args: Path | None = None,
     ) -> subprocess.CompletedProcess:
         """Run the real ``check_quality.sh`` with controlled analyzer output."""
         env = os.environ.copy()
         stub_bin = self._stub_bin(tmp_path)
         find_bin = self._find_stub_bin(
-            tmp_path, find_content, delegate_discovery=delegate_discovery
+            tmp_path,
+            find_content,
+            delegate_discovery=delegate_discovery,
+            delegate_scripts=delegate_scripts,
         )
         env["PATH"] = f"{stub_bin}:{find_bin}:{env.get('PATH', '')}"
         env["QUALITY_OUTPUT_DIR"] = str(quality_output_dir)
+        if record_args is not None:
+            env["QS_POETRY_RECORD"] = str(record_args)
         env["QS_VULTURE_FIXTURE"] = vulture
         env["QS_VULTURE_EXIT"] = str(vulture_exit)
         env["QS_RADON_CC_FIXTURE"] = json.dumps(radon_cc or {})
@@ -525,6 +549,28 @@ class TestQualityGateThresholds:
         assert result.returncode == 1, result.stdout + result.stderr
         assert "Auto-discovery found no modules" in result.stdout + result.stderr
         assert not (quality_output_dir / "quality_gate_status.json").exists()
+
+    # ------------------------------------------------------------------
+    # SA278(b): the governance scripts tree is scanned, minus its tests
+    # ------------------------------------------------------------------
+
+    def test_scan_includes_scripts_code_and_excludes_script_tests(
+        self, tmp_path: Path, quality_output_dir: Path
+    ) -> None:
+        """Discovery hands non-test scripts code to the analyzers, not tests."""
+        args_log = tmp_path / "poetry-arguments.txt"
+        result = self._run_shell(
+            tmp_path,
+            quality_output_dir,
+            delegate_scripts=True,
+            record_args=args_log,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        analyzed = args_log.read_text(encoding="utf-8")
+        assert "scripts/check_gate_parity.py" in analyzed
+        assert "scripts/module_conventions/core.py" in analyzed
+        assert "scripts/test_gate_parity.py" not in analyzed
+        assert "scripts/tests_module_conventions/test_routes.py" not in analyzed
 
     # ------------------------------------------------------------------
     # SA242: physical-line counting and the exact 799/800 boundary
