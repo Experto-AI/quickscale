@@ -52,7 +52,8 @@
       "sa261": "Regenerated 2026-10-10 \u2014 SA261 moves the theme's module API bases into the runtime seam's moduleApiPaths (rule 41), the seam producers render the new key, the org help copy that spelled the API mount is rewritten, and the theme's tests pin the key. 27 fixture hashes updated per variant: frontend/src/components/forms/FormRenderer.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/useOrgs.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/orgs/OrgCreatePage.tsx, frontend/src/pages/orgs/OrgSettingsPage.tsx, frontend/src/test/App.test.tsx, frontend/src/test/AppRoutes.test.tsx, frontend/src/test/FormRenderer.test.tsx, frontend/src/test/PublicSocialPages.test.tsx, frontend/src/test/RootDispatch.test.tsx, frontend/src/test/csrf.test.tsx, frontend/src/test/formFields.test.tsx, frontend/src/test/layoutComponents.test.tsx, frontend/src/test/orgComponents.test.tsx, frontend/src/test/orgListPage.test.tsx, frontend/src/test/settingsPage.test.tsx, frontend/src/test/socialLinkTreeStates.test.tsx, frontend/src/test/useModules.test.tsx, frontend/src/test/useOrgNavigation.test.tsx, frontend/src/test/useOrgs.test.tsx, frontend/src/test/validateQuickScaleSeam.test.ts, templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative.",
       "sa272b": "Regenerated 2026-10-13 \u2014 the generated CI notifications webhook placeholder is a decodable Svix signing secret (SA272 slice b), so the notifications E003 startup check passes in CI. 1 fixture hash updated: react_default .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
       "sa276-a-managed-seam-declaration": "Regenerated 2026-10-14 \u2014 the theme's seam types become a generated, managed file (SA276 slice a): frontend/src/quickscaleSeam.d.ts renders from the shipped module set (the 11 module flags, the crm/social/analytics path names, and the orgs/billing/crm/forms API-base names), generation emits it, and quickscale apply/update regenerate it under the managed-file hash guard. New generated path in all three variants: frontend/src/quickscaleSeam.d.ts. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa276-b-theme-seam-consumers": "Regenerated 2026-10-14 \u2014 the theme's seam consumers read the generated seam files (SA276 slice b): frontend/src/hooks/useModules.ts imports the QuickScaleModules/QuickScaleModulePaths/QuickScaleModuleApiPaths types from the managed frontend/src/quickscaleSeam.d.ts instead of declaring them and reads the producer-resolved owner slug instead of inferring one from a crm path; frontend/src/lib/validateQuickScaleSeam.ts requires every entry of the new managed frontend/src/quickscaleSeam.keys.ts key manifest; and the theme's tests build their seam fixtures from the new frontend/src/test/seamFixtures.ts helper. New generated paths in all three variants: frontend/src/quickscaleSeam.keys.ts and frontend/src/test/seamFixtures.ts; the theme's seam-consuming hooks, validator, and test files were re-hashed. All unrelated paths, hashes, and modes remain authoritative."
+      "sa276-b-theme-seam-consumers": "Regenerated 2026-10-14 \u2014 the theme's seam consumers read the generated seam files (SA276 slice b): frontend/src/hooks/useModules.ts imports the QuickScaleModules/QuickScaleModulePaths/QuickScaleModuleApiPaths types from the managed frontend/src/quickscaleSeam.d.ts instead of declaring them and reads the producer-resolved owner slug instead of inferring one from a crm path; frontend/src/lib/validateQuickScaleSeam.ts requires every entry of the new managed frontend/src/quickscaleSeam.keys.ts key manifest; and the theme's tests build their seam fixtures from the new frontend/src/test/seamFixtures.ts helper. New generated paths in all three variants: frontend/src/quickscaleSeam.keys.ts and frontend/src/test/seamFixtures.ts; the theme's seam-consuming hooks, validator, and test files were re-hashed. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa274-crm-theme-stats": "Regenerated 2026-10-15 \u2014 the showcase_react CRM workspace's stat cards read the CRM stats endpoint (SA274): frontend/src/pages/CrmPage.tsx fetches `crm/api/stats/` through useApiData and reads the four organization totals instead of inferring counts from the bare-list responses, which always yielded 0. 1 fixture hash updated per variant: frontend/src/pages/CrmPage.tsx. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -344,7 +345,7 @@
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "644",
-      "sha256": "aed1f88402dfff19f660a1073e2401dd0fe8eadd455e4f184317c101abe058a6"
+      "sha256": "054f78f1b224ebc2a604eb69aff2768da324a0c4d56726248004b426c90844f5"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "644",
@@ -906,7 +907,7 @@
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "644",
-      "sha256": "aed1f88402dfff19f660a1073e2401dd0fe8eadd455e4f184317c101abe058a6"
+      "sha256": "054f78f1b224ebc2a604eb69aff2768da324a0c4d56726248004b426c90844f5"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "644",
@@ -1468,7 +1469,7 @@
     },
     "frontend/src/pages/CrmPage.tsx": {
       "mode": "644",
-      "sha256": "aed1f88402dfff19f660a1073e2401dd0fe8eadd455e4f184317c101abe058a6"
+      "sha256": "054f78f1b224ebc2a604eb69aff2768da324a0c4d56726248004b426c90844f5"
     },
     "frontend/src/pages/Dashboard.tsx": {
       "mode": "644",

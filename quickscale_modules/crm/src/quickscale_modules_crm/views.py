@@ -307,6 +307,36 @@ class CRMApiRootView(CRMApiEnabledMixin, APIRootView):
     permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.VIEWER)]
 
 
+class CRMStatsView(CRMApiEnabledMixin, APIView):
+    """Organization totals for the CRM workspace's stat cards.
+
+    One count endpoint beside the bare-list resources (rule 9): every list
+    keeps its page-shaped bare array, and the theme reads the four
+    organization-wide totals here instead of inferring them from one page.
+    """
+
+    authentication_classes = [QuickscaleSessionAuthentication]
+    permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.VIEWER)]
+
+    def get(self, request: Request) -> Response:
+        """Return the active organization's row count per CRM resource."""
+        organization_id = _resolve_active_org(request).id
+        return Response(
+            {
+                "contacts": Contact.all_objects.filter(
+                    organization_id=organization_id
+                ).count(),
+                "companies": Company.all_objects.filter(
+                    organization_id=organization_id
+                ).count(),
+                "deals": Deal.all_objects.filter(
+                    organization_id=organization_id
+                ).count(),
+                "tags": Tag.all_objects.filter(organization_id=organization_id).count(),
+            }
+        )
+
+
 class TagViewSet(OrgScopedReadMixin):
     """ViewSet for Tag model"""
 
