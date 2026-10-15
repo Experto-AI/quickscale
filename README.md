@@ -62,6 +62,7 @@ All member-authenticated API endpoints are available under `crm/api/` when
 | Endpoint | Methods | Description |
 |----------|---------|-------------|
 | `crm/api/` | GET | API root with CRM endpoint links (viewer role) |
+| `crm/api/stats/` | GET | Organization totals for the stat cards (viewer role) |
 | `crm/api/tags/` | GET, POST | List/create tags |
 | `crm/api/tags/{id}/` | GET, PUT, PATCH, DELETE | Tag detail |
 | `crm/api/companies/` | GET, POST | List/create companies |
@@ -93,6 +94,11 @@ the configured login entry, an authenticated caller below `viewer` receives `403
 `QUICKSCALE_CRM_API_ENABLED` is `false`, the
 `crm/api/` routes remain hidden and return `404`.
 
+The list endpoints keep rule 9's bare-list shape — a page is the whole response body — so the
+React workspace's stat cards take their totals from `crm/api/stats/` instead: it answers
+`{"contacts": <int>, "companies": <int>, "deals": <int>, "tags": <int>}` for the active
+organization, counting every row of each resource in that organization.
+
 Filtering:
 
 - Contacts by `status`, `company`, and `tags`.
@@ -112,6 +118,7 @@ module's paths are:
 |----------|------|------|
 | `quickscale_crm:dashboard` | `crm/dashboard/` | CRM dashboard (viewer role) |
 | `quickscale_crm:api_root` | `crm/api/` | API root with endpoint links (viewer role) |
+| `quickscale_crm:stats` | `crm/api/stats/` | Organization totals for the stat cards (viewer role) |
 | `quickscale_crm:tag_list`, `quickscale_crm:tag_detail` | `crm/api/tags/` and `crm/api/tags/<id>/` | Tag API |
 | `quickscale_crm:company_list`, `quickscale_crm:company_detail` | `crm/api/companies/` and detail | Company API |
 | `quickscale_crm:contact_list`, `quickscale_crm:contact_detail`, `quickscale_crm:contact_notes` | `crm/api/contacts/`, detail, and `crm/api/contacts/<id>/notes/` | Contact API |

@@ -1636,3 +1636,116 @@ class TestF1110StandaloneNoteSoloParentValidation:
         with org_scope(personal_org):
             created = DealNote.all_objects.get(pk=response.data["id"])
         assert created.deal_id == deal.id
+
+
+@pytest.mark.django_db
+class TestCRMStatsView:
+    """Tests for the CRM stats count endpoint (the theme's stat-card totals)."""
+
+    def test_stats_denies_anonymous_and_orgless_callers(
+        self,
+        api_client,
+        orgless_authenticated_client,
+        authenticated_client,
+    ):
+        """The stats endpoint refuses anonymous and orgless callers."""
+        _assert_org_role_route(
+            api_client,
+            orgless_authenticated_client,
+            authenticated_client,
+            "get",
+            reverse("quickscale_crm:stats"),
+            status.HTTP_200_OK,
+        )
+
+    @override_settings(QUICKSCALE_CRM_API_ENABLED=False, REST_FRAMEWORK={})
+    def test_stats_returns_404_when_api_disabled(
+        self,
+        api_client,
+        orgless_authenticated_client,
+        authenticated_client,
+    ):
+        """The stats endpoint stays hidden when the API toggle is off."""
+        _assert_api_hidden_for_all_callers(
+            api_client,
+            orgless_authenticated_client,
+            authenticated_client,
+            "get",
+            reverse("quickscale_crm:stats"),
+        )
+
+    def test_stats_answers_the_four_totals_to_a_viewer(self, viewer_client):
+        """A viewer-role caller reads exactly the four org totals."""
+        response = viewer_client.get(reverse("quickscale_crm:stats"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert set(response.json()) == {"contacts", "companies", "deals", "tags"}
+        assert all(type(value) is int for value in response.json().values())
+
+    def test_stats_counts_only_the_active_organization(self, viewer_client, org_a):
+        """The endpoint counts the viewer's organization, never another tenant's."""
+        from quickscale_modules_crm.models import Company, Contact, Deal, Stage, Tag
+
+        viewer_org = viewer_client._personal_org
+        with org_scope(viewer_org):
+            company = Company.objects.create(name="Viewer Co", organization=viewer_org)
+            contact = Contact.objects.create(
+                first_name="Viewer",
+                last_name="Owner",
+                email="viewer-stats@example.com",
+                company=company,
+                organization=viewer_org,
+            )
+            Contact.objects.create(
+                first_name="Second",
+                last_name="Viewer",
+                email="viewer-stats-2@example.com",
+                company=company,
+                organization=viewer_org,
+            )
+            stage = Stage.objects.create(
+                name="Viewer Stage", order=1, organization=viewer_org
+            )
+            Deal.objects.create(
+                title="Viewer Deal",
+                contact=contact,
+                amount="1000.00",
+                stage=stage,
+                organization=viewer_org,
+            )
+            Tag.objects.create(name="Viewer One", organization=viewer_org)
+            Tag.objects.create(name="Viewer Two", organization=viewer_org)
+            Tag.objects.create(name="Viewer Three", organization=viewer_org)
+
+        with org_scope(org_a):
+            foreign_company = Company.objects.create(
+                name="Foreign Co", organization=org_a
+            )
+            foreign_contact = Contact.objects.create(
+                first_name="Foreign",
+                last_name="Contact",
+                email="foreign-stats@example.com",
+                company=foreign_company,
+                organization=org_a,
+            )
+            foreign_stage = Stage.objects.create(
+                name="Foreign Stage", order=1, organization=org_a
+            )
+            Deal.objects.create(
+                title="Foreign Deal",
+                contact=foreign_contact,
+                amount="2000.00",
+                stage=foreign_stage,
+                organization=org_a,
+            )
+            Tag.objects.create(name="Foreign Tag", organization=org_a)
+
+        response = viewer_client.get(reverse("quickscale_crm:stats"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {
+            "contacts": 2,
+            "companies": 1,
+            "deals": 1,
+            "tags": 3,
+        }
