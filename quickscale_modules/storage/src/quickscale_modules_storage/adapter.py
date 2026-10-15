@@ -6,11 +6,12 @@ from typing import Any
 
 from quickscale_core.runtime.manifest import (
     ModuleWiringSpec,
+    ResolvedOptions,
     build_generic_manifest_spec,
 )
 
 
-def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
+def _cloud_storage_settings(resolved: ResolvedOptions) -> dict[str, Any]:
     """Project the ordered S3-compatible settings for cloud backends.
 
     Every value arrives canonical from the manifest boundary: optional
@@ -18,16 +19,16 @@ def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
     projected by the manifest and are not manufactured by this composite. The
     hook neither re-coerces nor re-reads a raw option.
     """
-    querystring_auth = resolved["querystring_auth"]
+    querystring_auth = resolved.querystring_auth
     optional_options = {
-        option_name: resolved[option_name]
-        for option_name in (
-            "bucket_name",
-            "endpoint_url",
-            "region_name",
-            "default_acl",
+        option_name: option_value
+        for option_name, option_value in (
+            ("bucket_name", resolved.bucket_name),
+            ("endpoint_url", resolved.endpoint_url),
+            ("region_name", resolved.region_name),
+            ("default_acl", resolved.default_acl),
         )
-        if resolved[option_name]
+        if option_value
     }
     storage_options: dict[str, Any] = {
         "querystring_auth": querystring_auth,
@@ -61,7 +62,7 @@ def _cloud_storage_settings(resolved: dict[str, Any]) -> dict[str, Any]:
 
 
 def _storage_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
+    spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
     """Project storage's cloud-backend settings from canonical values.
 
@@ -73,7 +74,7 @@ def _storage_post_hook(
     and provider filtering. The manifest owns cloud-only scalar aliases.
     """
     settings = dict(spec.settings)
-    if resolved["backend"] in {"s3", "r2"}:
+    if resolved.backend in {"s3", "r2"}:
         settings.update(_cloud_storage_settings(resolved))
 
     # Rule 41: storage owns the one shared Markdownx editor mount, so its
@@ -94,7 +95,7 @@ def _storage_post_hook(
         "image/gif",
     ]
 
-    if not resolved["enabled"]:
+    if not resolved.enabled:
         # Rule 1 (D3): off keeps the module installed — app, migrations,
         # admin, and settings — and mounts none of its public URLs.  The
         # retained admin editors keep the shared staff-guarded Markdownx

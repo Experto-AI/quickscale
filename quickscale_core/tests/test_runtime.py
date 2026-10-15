@@ -164,6 +164,7 @@ class TestRuntimeAllExport:
             "PersonalDataField",
             "PersonalDataTreatment",
             "RemoteMaterializer",
+            "ResolvedOptions",
             "ResolverResult",
             "ManifestError",
             "ReadOnlyAdminMixin",

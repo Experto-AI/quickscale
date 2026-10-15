@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec
+from quickscale_core.runtime import (
+    ModuleWiringSpec,
+    ResolvedOptions,
+    build_generic_manifest_spec,
+)
 
 
 def _listings_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
+    spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
     """Contribute listings' throttle scope and apply its off-switch transformation.
 
@@ -25,7 +29,7 @@ def _listings_post_hook(
             "quickscale_listings_api": settings["QUICKSCALE_LISTINGS_API_RATE_LIMIT"],
         },
     }
-    if not resolved["enabled"]:
+    if not resolved.enabled:
         # Rule 1 (D3): off keeps the module installed — app, migrations,
         # admin, and settings — and mounts none of its public URLs; the one
         # shared staff-guarded Markdownx editor mount is storage's (rule 41).

@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec
+from quickscale_core.runtime import (
+    ModuleWiringSpec,
+    ResolvedOptions,
+    build_generic_manifest_spec,
+)
 
 
 def _auth_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
+    spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
     """Project auth's login/signup composites and off-switch transformation.
 
@@ -22,7 +26,7 @@ def _auth_post_hook(
     middleware, settings, and the retained admin — and mounts none of its
     public account URLs.
     """
-    authentication_method = resolved["authentication_method"]
+    authentication_method = resolved.authentication_method
     if authentication_method == "username":
         login_methods: set[str] = {"username"}
         signup_fields = ["username*", "password1*", "password2*"]
@@ -37,7 +41,7 @@ def _auth_post_hook(
     settings["ACCOUNT_LOGIN_METHODS"] = login_methods
     settings["ACCOUNT_SIGNUP_FIELDS"] = signup_fields
 
-    if resolved["enabled"]:
+    if resolved.enabled:
         url_includes = spec.url_includes
     else:
         url_includes = ()

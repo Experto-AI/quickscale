@@ -817,6 +817,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **One organization-selector spelling.** A command that selects a single organization names it
     `--organization-id <uuid>`, and the module-conventions gate refuses `--organization`, `--org`,
     and slug selectors declared without it.
+  - **Adapter hooks receive frozen resolved options.** A module's post-resolution hook reads each
+    resolved option as a read-only attribute of `quickscale_core.runtime.ResolvedOptions` instead
+    of indexing a mutable options dict, and a hook that reads an option through a raw container
+    fails with a type or attribute error.
   - **Contract vintages carry a step id.** Every module manifest's `contract_vintage` declares an
     `sa<NNN>-<slug>` id, the loader refuses a shipped vintage without one while a project's
     embedded copy of an older release still loads, and the CLI satisfies a module's vintage only

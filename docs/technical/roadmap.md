@@ -61,7 +61,7 @@ SA191 waits on Track 2's release fixes (through the 0.89.0 publication); SA204's
 costs one registry row now that SA275 has landed (arch audit §7); SA277 waits on SA191's cutover,
 which decides which upgrade mechanism proved itself.
 
-**Parallel start.** SA204 (f), SA280, and SA281 have no unmet dependency and touch disjoint
+**Parallel start.** SA204 (g), SA280, and SA281 have no unmet dependency and touch disjoint
 files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -82,7 +82,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA204 (f) | yes | no | yes | no | yes |
+| 1 | SA204 (g) | yes | no | yes | no | yes |
 | 2 | SA280 | yes | yes | yes | yes | no |
 | 3 | SA281 | yes | yes | yes | yes | no |
 
@@ -207,7 +207,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     with `scripts/migration_hashes.json`; hash-keyed restore-forward in `recovery.py`).
   - [x] (c): landed as `scripts/check_migration_freeze.py`, one registry row (`check-migration-freeze`)
     with controls for an in-place edit, a deletion, a new `0002`, and a `_`-symbol reference; the
-    topology guard accepts an ordered chain and its `0002` canary is inverted. (f) and (g) are next.
+    topology guard accepts an ordered chain and its `0002` canary is inverted. (g) is next.
   - [x] (d) Restore-forward in `dr_engine/recovery.py` keyed on the hash manifest: forward
     migration from N to N+1, the bare-file refusal, and the equal-label hash-mismatch refusal,
     with tests (Tier 2-fast; Track 2 reviews). Landed as per-module `migration_hashes` recorded
@@ -218,9 +218,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [x] (e) `quickscale update` refuses a same-label rewrite of an applied migration file and
     restores the pre-update content; an added migration file still applies forward, and a
     version-label change keeps the upgrade path.
-  - [ ] (f) The restored-`bap-web` proof: `migrate` from the frozen `0001` reproduces the
-    FORCE-RLS parity baseline, and no schema change shipped between SA191's rebuild and the freeze
-    (Tier 2-full; environment-sensitive, read-mostly).
+  - [x] (f): landed as a rehearsal on a bap-web copy carrying the frozen content, migrated into a
+    fresh database (`bap_freeze_proof`) on the retained scratch PostgreSQL: `migrate` exit 0
+    (`--skip-checks`: the copy's Oct-9 project admin predates SA266's listings field rename); the
+    FORCE-RLS surface 6 tables / 12 policies (5 / 10 module-only, the delta being
+    `properties_propertylisting`'s canonical pair); tenant isolation 6/6, no `W004`/`W007`, only the
+    two known `W006` properties warnings — matching the SA191 baseline; no carried module's
+    migration changed since the rebuild (SA270's billing and SA204(a)'s blog are not carried).
+    (g) is next.
   - [ ] (g) The decision record lifting rule 1 and the freeze commit of the manifest, after (f)
     passes and with the maintainer's sign-off (Tier 2-fast; the one-way step, kept to docs and
     the manifest).
@@ -382,10 +387,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Closes the construction part of arch `rules-held-by-parity-not-derivation` (Finding 3,
   option 2, applied to SA263's hook signature).
 
-  **Context:** SA263 made the engine validate, coerce, and default options, but hooks still
-  receive a mutable settings dict holding the raw values, so "a hook never re-coerces or re-reads a
-  raw option" is policed by a bounded inter-procedural dataflow analyzer (`adapter_flow.py` 697
-  lines, `adapter_options.py` 353, `url_options.py` 99, and about 1.4k lines of controls).
+  **Context:** SA263 made the engine validate, coerce, and default options; slice (a) replaced
+  the mutable resolved-options dict its hooks received with a frozen, typed object, so "a hook
+  never re-coerces or re-reads a raw option" holds by construction for the hook bodies. Until
+  slice (b) deletes it, a bounded inter-procedural dataflow analyzer (`adapter_flow.py`,
+  `adapter_options.py`, `url_options.py`, and their controls) still polices the adapter sources.
 
   **Acceptance:** every adapter hook receives a frozen, typed resolved-options object and no raw
   option values; the 12 adapters are migrated; a hook that tries to read a raw option fails by
@@ -394,9 +400,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   settings are byte-identical for every module's fixture options.
 
   **Slices:**
-  - [ ] (a) The resolved-options object in core's hook contract and the 12 adapters, with the
-    byte-identical settings test (Tier 2-full; the object's shape and the hook signature are
-    settled in planning, consumers enumerated).
+  - [x] (a) The resolved-options object in core's hook contract and the 12 adapters, with the
+    byte-identical settings test (Tier 2-full). Landed: `ResolvedOptions`
+    (`quickscale_core.manifest.resolved_options`) exposes frozen attribute-only reads and fails
+    raw container idioms by construction, all 11 hooks read attributes, and per-module goldens
+    pin the generated settings bytes. (b) is next.
   - [ ] (b) Delete the dataflow detector and its controls, and amend the rule (Tier 2-fast).
 
 ## Deferred constraints and references

@@ -49,6 +49,9 @@ from quickscale_core.contracts.resolvers import (
 from quickscale_core.manifest.assembler import (
     assemble_wiring_spec as assemble_wiring_spec,
 )
+from quickscale_core.manifest.assembler import (
+    ResolvedOptions as ResolvedOptions,
+)
 from quickscale_core.manifest.entry_point import (
     build_generic_manifest_spec as build_generic_manifest_spec,
     load_module_manifest as load_module_manifest,
