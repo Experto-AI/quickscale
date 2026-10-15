@@ -294,9 +294,10 @@ items:
   - {id: capability-collection, status: open, aspect: D, cost: [ambiguity, tax],
      members_diverging: [orgs], population: appconfig-capabilities(13), rule: "rule 4 (one core helper)",
      check: none, closed_world: false, handoff: [arch], first_seen: 2026-10-08, last_verified: 2026-10-13}
-  - {id: command-flag-conventions, status: open, regressed: true, aspect: J, cost: [ambiguity, tax],
-     members_diverging: [backups, forms, orgs], population: commands(15), rule: "rules 1, 17 (silent)",
-     check: none, closed_world: false, handoff: [], first_seen: 2026-10-08, last_verified: 2026-10-13}
+  - {id: command-flag-conventions, status: resolved, regressed: false, aspect: J, cost: [ambiguity, tax],
+     members_diverging: [], population: commands(16), rule: "rule 17 (one selector spelling)",
+     check: "harness rule 17 (spelling ban with controls)", closed_world: false, handoff: [],
+     first_seen: 2026-10-08, last_verified: 2026-10-15}
   - {id: dependency-spec-sources, status: open, aspect: N, cost: [ambiguity, tax],
      members_diverging: [backups, storage, orgs], population: modules(12),
      rule: "Module Manifest Architecture (names only)", check: none, closed_world: false, handoff: [],
@@ -333,9 +334,11 @@ items:
      members_diverging: [orgs, billing, forms, social], population: theme-module-api-clients(5),
      rule: "rule 41 (no literal module path in theme templates)", check: "harness rules 7 (theme TypeScript), 31, 37 (seam producer)",
      closed_world: false, handoff: [], first_seen: 2026-10-03, last_verified: 2026-10-10}
-  - {id: contract-vintage-identity, status: open, aspect: B, cost: [ambiguity],
-     members_diverging: [backups, social], population: contract-vintage-manifests(4), rule: none,
-     check: none, closed_world: false, handoff: [], first_seen: 2026-10-13, last_verified: 2026-10-13}
+  - {id: contract-vintage-identity, status: resolved, aspect: B, cost: [ambiguity],
+     members_diverging: [], population: contract-vintage-manifests(4),
+     rule: "Module Manifest Architecture (every contract_vintage carries an sa<NNN>-<slug> id)",
+     check: "the loader refuses a missing id (control manifest); the CLI tracks every declared vintage by adoption",
+     closed_world: true, handoff: [], first_seen: 2026-10-13, last_verified: 2026-10-15}
   # ---- resolved: re-verified by the harness run at 2fd8637f (43 rules pass); see §12 ----
   # write-effects-on-commit, settings-snapshot-readers, org-role-check-copies, mypy-overrides-unread,
   # split-facade-conventions, theme-module-presence, module-lists-outside-members, shared-setting-writes,
@@ -375,7 +378,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 13 | `optional-sender-guard` | C | ambiguity, tax | 2 / 4 call edges | resolved (2026-10-13) |
 | 14 | `module-dependency-direction` | C | ambiguity, tax | 3 / 8 | resolved (2026-10-13) |
 | 15 | `capability-collection` | D | ambiguity, tax | 1 owner / 13 names | open (2026-10-13) |
-| 16 | `command-flag-conventions` | J | ambiguity, tax | 3 / 3 command-shipping modules | open (2026-10-13) |
+| 16 | `command-flag-conventions` | J | ambiguity, tax | 0 / 3 command-shipping modules | resolved (SA282) |
 | 17 | `dependency-spec-sources` | N | ambiguity, tax | 3 / 12 | open (2026-10-13) |
 | 18 | `mount-path-copies` | P | ambiguity, tax | 4 / 5 theme API clients | resolved (SA261) |
 | 19 | `secret-env-var-names` | A | ambiguity | 0 / 5 | resolved (SA263) |
@@ -385,7 +388,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 23 | `test-file-names` | M | tax | 6 / 12 | resolved (2026-10-13) |
 | 24 | `ticket-ids-in-shipped-source` | O | tax | 10 / 12 | resolved (2026-10-13) |
 | 25 | `constraint-purpose-tokens` | A | tax | 4 / 9 | resolved (2026-10-13) |
-| 26 | `contract-vintage-identity` | B | ambiguity | 2 / 4 vintage manifests | open (new 2026-10-13) |
+| 26 | `contract-vintage-identity` | B | ambiguity | 0 / 4 vintage manifests | resolved (SA282) |
 
 ---
 
@@ -482,6 +485,15 @@ adapter provenance through scalar/container aliases and loops. Storage's scalar 
 are now manifest-owned computed settings with cloud/blank presence guards. The frozen media
 oracle is reused through persistence, serialized state, and reapply, including changed-default
 parity. Correction validation and the next independent review, not these claims, grade closure.
+
+*SA282 note (2026-10-15):* item 26's identity drift is closed. Every `contract_vintage` carries
+an `sa<NNN>-<slug>` id — backups and social gained theirs in both the module manifest and the
+core snapshot, as new keys, so no persisted adoption key changed — the loader
+(`loader_sections._parse_contract_vintage`) refuses a vintage without one (control manifest in
+the loader suite; an embedded historical copy is the explicit, documented opt-out so an older
+project stays upgradable), and the CLI's mechanism selection is gone: every declared vintage is
+satisfied by its recorded adoption id alone, with no version-comparison fallback. Decisions
+record the rule under § Module Manifest Architecture.
 
 ### C. Dependencies, layering, and vocabulary ownership
 
@@ -600,6 +612,12 @@ consistent, though worth a deliberate rule. No drift passes §0.
 destructive work (harness rule 17).
 
 *Drift:* Item 16.
+
+*SA282 note (2026-10-15):* item 16 is closed. `quickscale_billing_reconcile_checkouts` selects
+with `--organization-id <uuid>`, decisions rule 17 carries the one-spelling clause, and harness
+rule 17 refuses `--organization`, `--org`, and any other `--org*`/`--organization*` spelling
+except exactly `--organization-id`, plus a bare `--slug` declared without it; fixture controls
+and exact-findings rows pin both refusals.
 
 ### K. Observability — quiet
 
@@ -1448,7 +1466,9 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
    module model.
 10. **Rule 17 — command flags** [Item 16]. ✅ `--json` for machine output. ✅ `--trigger
     {manual,scheduled}` defaulting to `manual` on schedulable commands. ✅ `--confirm
-    <identifier>` on commands that delete a tenant's or the database's data.
+    <identifier>` on commands that delete a tenant's or the database's data. ✅ **Merged
+    (SA282):** decisions rule 17 names the one organization-selector spelling, and harness
+    rule 17 refuses the other spellings with controls.
 11. **Rule 19 — guards** [Item 3]. ✅ Every module view declares its guard: permission classes
     or `min_org_role` for APIs, a mixin for pages, an explicit public declaration otherwise.
     ✅ Every README lists minimum roles. ❌ `AllowAny` plus a hand-written user check, or a page
@@ -2193,3 +2213,5 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-13 — `constraint-purpose-tokens`: resolved (SA266 — verified; amended rule 25).
 - 2026-10-13 — `contract-vintage-identity`: **new**, open.
 - 2026-10-13 — Prior resolved IDs (`markdownx-shared-mount`, `tenant-authorization`, `option-schema-and-validation`, `unauthenticated-status-code`, `http-api-shape`, `throttle-attachment`, `mount-path-copies`, `secret-env-var-names`, and the 43 listed in §2): still resolved (harness pass at HEAD; no regression found by the delta sweep).
+- 2026-10-15 — `command-flag-conventions`: resolved (SA282 — the billing reconcile command selects with `--organization-id`, decisions rule 17 names the one spelling, and harness rule 17 bans `--organization`, `--org`, and slug declarations without `--organization-id`, with controls and exact-findings rows).
+- 2026-10-15 — `contract-vintage-identity`: resolved (SA282 — every `contract_vintage` carries an `sa<NNN>-<slug>` id, the loader refuses a missing one with a control manifest, backups and social gained new ids in both manifest copies, and the CLI's version-comparison fallback is deleted so recorded adoption is the one mechanism).

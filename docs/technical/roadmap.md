@@ -42,7 +42,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA282 | One organization-selector flag and a required contract-vintage id | 2 | — | Optional |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | — | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
 | SA279 | Retire the conformance harness's frozen surfaces | 3 | — | Optional |
@@ -52,7 +51,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
-Track 2: SA282 ──► SA280 ──► SA277
+Track 2: SA280 ──► SA277
 Track 3: SA279 ──► SA281
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
@@ -64,7 +63,7 @@ costs one registry row now that SA275 has landed (arch audit §7); SA279 extends
 test to the conformance harness; SA277 waits on SA191's cutover, which decides which upgrade
 mechanism proved itself.
 
-**Parallel start.** SA204 (f), SA282, and SA279 have no unmet dependency and touch disjoint
+**Parallel start.** SA204 (f), SA280, and SA279 have no unmet dependency and touch disjoint
 files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -86,7 +85,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (f) | yes | no | yes | no | yes |
-| 2 | SA282 | yes | yes | yes | yes | no |
+| 2 | SA280 | yes | yes | yes | yes | no |
 | 3 | SA279 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -324,34 +323,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA273 — Harden the editor upload and the CLI's `pyproject.toml` write.**
 
-- [ ] **SA282 — One organization-selector flag and a required contract-vintage id.**
-
-  Closes coherence `command-flag-conventions` (regressed) and `contract-vintage-identity`, and
-  the tech coherence hand-off on `project_contract.yml:188`'s stale prose.
-
-  **Context:** two commands take an organization selector and spell it two ways:
-  `quickscale_billing_reconcile_checkouts --organization` and
-  `quickscale_orgs_purge_organization --organization-id <uuid>`. `contract_vintage.id` is optional
-  (`manifest/loader_sections.py:222`), and its presence picks the mechanism
-  (`contract_vintage.py:108–110`): billing and orgs are tracked by adoption, while backups and
-  social are compared by version and cannot be marked adopted.
-
-  **Acceptance:** decisions rule 17 says an organization selector is `--organization-id <uuid>`,
-  validated as a UUID, and harness rule 17 bans `--organization`, `--org`, and slug selectors with
-  a fixture control; the billing command is renamed, with a release note for operator scripts.
-  Decisions say every `contract_vintage` carries an `sa<NNN>-<slug>` `id`; the loader refuses a
-  missing one with a control manifest; backups and social gain ids (new keys, so no persisted
-  adoption key changes), and the CLI keeps one adoption mechanism. The stale step text at
-  `project_contract.yml:188` describes the SA258 runtime seam.
-
-  **Slices:**
-  - [x] (a) The `--organization-id` rename, the rule 17 clause, and the harness ban with its
-    control (Tier 1). Landed: the billing command selects with `--organization-id`; decisions
-    rule 17 names the one selector spelling and refuses the rest, and harness rule 17 bans
-    `--organization`, `--org`, and slug selectors declared without `--organization-id`, controls
-    included. (b) is next.
-  - [ ] (b) The required vintage `id`: the loader refusal and control, ids for backups and social,
-    one CLI mechanism, the decision text, and the stale step prose (Tier 2-fast).
+- [x] **SA282 — One organization-selector flag and a required contract-vintage id.**
 
 - [ ] **SA280 — One source for the Stripe API version and the bundled manifests.**
 

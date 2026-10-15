@@ -185,21 +185,31 @@ def _validate_declared_minimum(
 def _parse_contract_vintage(
     data: dict[str, Any],
     module_name: str | None,
+    *,
+    require_id: bool = True,
 ) -> ContractVintage | None:
     """Parse the optional ``contract_vintage`` section from manifest data.
 
     Returns a :class:`ContractVintage` instance when the section is present,
-    or ``None`` when absent.
+    or ``None`` when absent.  A present section must declare a non-empty
+    ``id``: the id is the step's identity in the one adopted-step namespace
+    (Module Manifest Architecture), so an authored vintage without one is
+    refused.  ``require_id=False`` is the explicit opt-out for a historical
+    embedded copy (a generated project's installed manifest), which may
+    predate the id requirement and must stay readable for inspection and
+    upgrade; a present-but-empty ``id`` is refused either way.
 
     Args:
         data: The full parsed YAML data dictionary.
         module_name: Optional module name for error messages.
+        require_id: When true (the default), refuse a missing ``id``.
 
     Returns:
         :class:`ContractVintage` or ``None``.
 
     Raises:
-        ManifestError: If the section is malformed.
+        ManifestError: If the section is malformed, declares no ``id``, or
+            declares an empty one.
     """
     raw = data.get("contract_vintage")
     if raw is None:
@@ -220,9 +230,12 @@ def _parse_contract_vintage(
     )
 
     vintage_id = raw.get("id")
-    if vintage_id is not None and (not isinstance(vintage_id, str) or not vintage_id):
+    if vintage_id is None and not require_id:
+        # A historical embedded copy may predate the id requirement.
+        pass
+    elif not isinstance(vintage_id, str) or not vintage_id:
         raise ManifestError(
-            "'contract_vintage.id' must be a non-empty string",
+            "'contract_vintage.id' is required and must be a non-empty string",
             module_name,
         )
 

@@ -814,6 +814,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **One organization-selector spelling.** A command that selects a single organization names it
     `--organization-id <uuid>`, and the module-conventions gate refuses `--organization`, `--org`,
     and slug selectors declared without it.
+  - **Contract vintages carry a step id.** Every module manifest's `contract_vintage` declares an
+    `sa<NNN>-<slug>` id, the loader refuses a shipped vintage without one while a project's
+    embedded copy of an older release still loads, and the CLI satisfies a module's vintage only
+    while the project records that id; a project with `backups` or `social` installed records the
+    module's declared id with `--confirm-contract-adoption`.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

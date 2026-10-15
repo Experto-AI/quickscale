@@ -5,9 +5,9 @@ SA207 declares generated-project contract changes once in the packaged
 copying adoption prose into every module manifest.  The project-level steps
 and the remaining module-specific vintages are enforced together here.
 
-A step that declares an ``id`` is satisfied only while the project records
-that id in ``adopted_contract_steps``; a step without an id keeps the version
-comparison, which is sound for boundaries that landed at a release.
+Every declared step carries an ``id`` — the loader refuses a
+``contract_vintage`` without one — and is satisfied only while the project
+records that id in ``adopted_contract_steps``; adoption is the one mechanism.
 """
 
 from __future__ import annotations
@@ -89,8 +89,6 @@ def check_contract_vintage(
             declared[module_name] = manifest.contract_vintage
     declared.update(requirements or {})
 
-    project_tuple = parse_version_tuple(project_contract) if project_contract else (0,)
-
     project_steps_behind: list[dict[str, object]] = []
     for step in project_steps:
         if step.id not in adopted:
@@ -105,11 +103,11 @@ def check_contract_vintage(
 
     consumers_behind: list[dict[str, object]] = []
     for consumer, vintage in declared.items():
-        if vintage.id is not None:
-            behind = vintage.id not in adopted
-        else:
-            behind = project_tuple < parse_version_tuple(vintage.minimum)
-        if behind:
+        # Every declared vintage carries an id; it is satisfied only while
+        # the project records that id.  An id-less vintage (refused by the
+        # loader, constructible only by a caller) is never recorded and so
+        # stays behind instead of passing on a version comparison.
+        if vintage.id not in adopted:
             consumers_behind.append(
                 {
                     "module": consumer,

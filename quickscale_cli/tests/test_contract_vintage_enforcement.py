@@ -5,6 +5,7 @@ import quickscale_cli.commands._deploy_steps as _deploy_steps
 import quickscale_cli.commands._deploy_service_config as _deploy_service_config
 import quickscale_cli.commands._module_shared as _module_shared
 import quickscale_core.project_state_manager as _project_state_manager
+import quickscale_cli.commands._module_embed as _module_embed
 import quickscale_cli.commands._module_update as _module_update
 import quickscale_cli.commands._module_update_io as _module_update_io
 import quickscale_core.advisory_lock as _advisory_lock
@@ -95,6 +96,7 @@ def _orgs_manifest() -> ModuleManifest:
         name="orgs",
         version="0.89.0",
         contract_vintage=ContractVintage(
+            id="sa221-orgs-check-id",
             minimum="0.89.0",
             manual_adoption_steps=[
                 "Adopt settings/production.py",
@@ -405,6 +407,102 @@ def test_update_records_adoption_after_module_mutations(
         text=True,
     )
     assert log.stdout.strip() == "chore: record generated-project contract adoption"
+
+
+def test_confirmed_update_completes_with_two_pre_id_embedded_vintages(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """F-001 regression: a batch update over base-revision copies must not abort.
+
+    Both embedded manifests predate the vintage-id requirement, and the
+    update path's dependency sync reads every installed module's manifest
+    after each pull; the sync must tolerate the not-yet-updated copies so
+    the confirmed update completes and records both new ids.
+    """
+    project = tmp_path / "example"
+    project.mkdir()
+    state = _state("0.87.0", modules=("backups", "social"))
+    StateManager(project).save(state)
+    (project / "pyproject.toml").write_text(
+        '[tool.poetry.dependencies]\npython = "^3.14"\n'
+    )
+    for module in ("backups", "social"):
+        module_dir = project / "modules" / module
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text(
+            f"name: {module}\n"
+            "version: '0.88.0'\n"
+            "contract_vintage:\n"
+            "  minimum: '0.87.0'\n"
+            "  manual_adoption_steps:\n"
+            "    - 'Adopt the tooling'\n"
+            "dependencies:\n"
+            "  - quickscale-core\n"
+        )
+        (module_dir / "pyproject.toml").write_text(
+            f'[project]\nname = "quickscale-modules-{module}"\n\n'
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+            'quickscale-core = ">=0.89.0,<0.90.0"\n'
+        )
+    for command in (
+        ["git", "init", "-q"],
+        ["git", "config", "user.name", "Test User"],
+        ["git", "config", "user.email", "test@example.invalid"],
+        ["git", "add", "-A"],
+        ["git", "commit", "-qm", "baseline"],
+    ):
+        subprocess.run(command, cwd=project, check=True, capture_output=True, text=True)
+
+    sync_results: list[bool] = []
+
+    def _update(name: str, module_state: object, remote: str, no_preview: bool) -> bool:
+        del module_state, remote, no_preview
+        # Mirror the real update sequence: after each pull the dependency
+        # sync reads every installed module's embedded manifest.
+        sync_results.append(
+            _module_embed._sync_module_dependencies(
+                project, {"backups": {}, "social": {}}
+            )
+        )
+        return True
+
+    manager = Mock()
+    manager.load_state.return_value = state
+
+    monkeypatch.chdir(project)
+    monkeypatch.setattr(_module_shared, "_validate_update_environment", Mock())
+    monkeypatch.setattr(
+        _project_state_manager, "ProjectStateManager", Mock(return_value=manager)
+    )
+    monkeypatch.setattr(_module_shared, "_warn_version_drift_for_update", Mock())
+    monkeypatch.setattr(
+        _module_shared, "_validate_module_readiness", Mock(return_value=True)
+    )
+    monkeypatch.setattr(_module_update, "_update_single_module", _update)
+    monkeypatch.setattr(
+        _module_update_io,
+        "_regenerate_and_record_managed_wiring",
+        lambda *args, **kwargs: (True, "regenerated"),
+    )
+    monkeypatch.setattr(
+        _module_update_io,
+        "_commit_regenerated_managed_wiring",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(_advisory_lock, "AdvisoryLock", Mock(return_value=Mock()))
+    monkeypatch.setattr("click.confirm", Mock(return_value=True))
+
+    result = CliRunner().invoke(
+        _module_update.update, ["--no-preview", "--confirm-contract-adoption"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert sync_results == [True, True]
+    reloaded = ProjectStateManager(project).load_state()
+    assert reloaded is not None
+    recorded = set(reloaded.project.adopted_contract_steps or ())
+    assert {"sa282-backups-pg18-tooling", "sa282-social-public-pages"} <= recorded
 
 
 def test_update_billing_names_the_sa201_throttling_step(
@@ -1060,7 +1158,8 @@ def test_status_keeps_unknown_orphan_as_drift(
         ("0.87.0", (), True, 0),
         # A mid-cycle generation shares 0.89.0 but never adopted the steps.
         ("0.89.0", (), False, 1),
-        ("0.89.0", _DECLARED_STEP_IDS, False, 0),
+        # The recorded confirmation covers the project steps and orgs' id.
+        ("0.89.0", _RECORDED_STEP_IDS, False, 0),
     ],
 )
 def test_update_enforces_vintage_before_module_mutation(
@@ -1127,7 +1226,7 @@ def test_update_enforces_vintage_before_module_mutation(
         (None, (), True, False, 1),
         ("0.87.0", (), True, True, 0),
         ("0.89.0", (), True, False, 1),
-        ("0.89.0", _DECLARED_STEP_IDS, True, False, 0),
+        ("0.89.0", _RECORDED_STEP_IDS, True, False, 0),
         (None, (), False, False, 0),
     ],
 )

@@ -363,6 +363,14 @@ Engine boundary: §[DR Engine Boundary Contract](#disaster-recovery-engine-bound
 - ✅ Module code MUST read configurable values from settings (not hardcoded)
 - ✅ Backward compatible: modules without manifest treated as all-immutable
 - ✅ Options that would require rewriting generated theme-owned frontend routes, navigation, or page registries are not valid mutable plan/apply config; use fixed built-in routes or treat the frontend change as fresh-generation/manual-adoption work
+- ✅ Every `contract_vintage` carries an `sa<NNN>-<slug>` `id`, its identity in the one
+  adopted-step namespace: the loader refuses a vintage without one, and the CLI satisfies a
+  declared vintage only while the project records its id — adoption is the one mechanism
+- ✅ A generated project's embedded manifest is a historical copy: it is read through an explicit
+  opt-out of the id requirement so a project installed before the requirement stays upgradable,
+  while shipped manifests are the ones read strictly
+- ❌ An id-less `contract_vintage` in a shipped manifest, or a version comparison standing in
+  for a recorded id
 
 **Tie-Breaker:** For config option disputes, default to **immutable** (safer) unless explicit `django_setting` mapping exists.
 

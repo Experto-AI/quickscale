@@ -322,12 +322,21 @@ def load_project_contract_vintage(
     return _parse_project_contract_vintage(data)
 
 
-def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleManifest:
+def load_manifest(
+    yaml_content: str,
+    module_name: str | None = None,
+    *,
+    require_vintage_id: bool = True,
+) -> ModuleManifest:
     """Load and validate a module manifest from YAML content
 
     Args:
         yaml_content: Raw YAML string
         module_name: Optional module name for error messages
+        require_vintage_id: When true (the default), a declared
+            ``contract_vintage`` must carry a non-empty ``id``.  Embedded
+            historical copies opt out explicitly (see
+            :func:`get_manifest_for_module`).
 
     Returns:
         ModuleManifest: Validated manifest object
@@ -381,7 +390,9 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     )
 
     # Parse contract-vintage section (SA10.2; additive; None when absent)
-    contract_vintage = _parse_contract_vintage(data, module_name)
+    contract_vintage = _parse_contract_vintage(
+        data, module_name, require_id=require_vintage_id
+    )
 
     return ModuleManifest(
         name=name,
@@ -404,11 +415,18 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
     )
 
 
-def load_manifest_from_path(manifest_path: Path) -> ModuleManifest:
+def load_manifest_from_path(
+    manifest_path: Path,
+    *,
+    require_vintage_id: bool = True,
+) -> ModuleManifest:
     """Load a module manifest from a file path
 
     Args:
         manifest_path: Path to module.yml file
+        require_vintage_id: When true (the default), a declared
+            ``contract_vintage`` must carry a non-empty ``id``; embedded
+            historical copies pass false.
 
     Returns:
         ModuleManifest: Validated manifest object
@@ -428,13 +446,22 @@ def load_manifest_from_path(manifest_path: Path) -> ModuleManifest:
     # Extract module name from path (parent directory name)
     module_name = manifest_path.parent.name
 
-    return load_manifest(yaml_content, module_name)
+    return load_manifest(
+        yaml_content, module_name, require_vintage_id=require_vintage_id
+    )
 
 
 def get_manifest_for_module(
     project_path: Path, module_name: str, *, strict: bool = False
 ) -> ModuleManifest | None:
     """Get manifest for an embedded module in a project
+
+    An embedded manifest is a historical copy of the module's manifest at
+    its installed release, so it is read with ``require_vintage_id=False``:
+    a project installed before the contract-vintage id requirement must
+    stay readable for inspection, status, and upgrade.  The authored
+    shipped manifests are read strictly (``load_module_manifest_with_fallback``
+    and the project-contract guard enforce the id there).
 
     Args:
         project_path: Path to the project root
@@ -471,7 +498,7 @@ def get_manifest_for_module(
     # A present manifest is an active module state.  Structural errors must
     # remain visible in both strict and best-effort callers; only an absent
     # module directory may use the non-strict ``None`` result.
-    return load_manifest_from_path(manifest_path)
+    return load_manifest_from_path(manifest_path, require_vintage_id=False)
 
 
 __all__ = [

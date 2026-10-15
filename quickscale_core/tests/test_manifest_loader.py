@@ -2718,7 +2718,12 @@ derivation:
 
 
 class TestLoadManifestContractVintage:
-    """Tests for the optional contract_vintage section in load_manifest."""
+    """Tests for the contract_vintage section in load_manifest.
+
+    The section itself is optional; a declared section must carry a
+    non-empty ``id``, so the refusal control here is a manifest that
+    declares a vintage without one.
+    """
 
     def test_no_contract_vintage_section(self) -> None:
         """Manifests without a contract_vintage section produce None."""
@@ -2727,15 +2732,17 @@ class TestLoadManifestContractVintage:
         assert manifest.contract_vintage is None
 
     def test_contract_vintage_with_minimum_only(self) -> None:
-        """A contract_vintage section with just minimum is parsed."""
+        """A contract_vintage section with an id and just minimum is parsed."""
         yaml_content = """
 name: mymod
 version: '1.0.0'
 contract_vintage:
+  id: sa999-step
   minimum: "0.87.0"
 """
         manifest = load_manifest(yaml_content, "mymod")
         assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.id == "sa999-step"
         assert manifest.contract_vintage.minimum == "0.87.0"
         assert manifest.contract_vintage.manual_adoption_steps == []
 
@@ -2745,6 +2752,7 @@ contract_vintage:
 name: mymod
 version: '1.0.0'
 contract_vintage:
+  id: sa999-step
   minimum: "0.87.0"
   manual_adoption_steps:
     - "Step one: do this"
@@ -2758,7 +2766,7 @@ contract_vintage:
         assert manifest.contract_vintage.manual_adoption_steps[1] == "Step two: do that"
 
     def test_contract_vintage_with_id(self) -> None:
-        """An optional step id is parsed for exact adoption tracking."""
+        """The step id is parsed for exact adoption tracking."""
         yaml_content = """
 name: mymod
 version: '1.0.0'
@@ -2771,6 +2779,78 @@ contract_vintage:
         manifest = load_manifest(yaml_content, "mymod")
         assert manifest.contract_vintage is not None
         assert manifest.contract_vintage.id == "sa999-step"
+
+    def test_contract_vintage_without_id_raises(self) -> None:
+        """A declared vintage without an id fails closed (control manifest).
+
+        The id is the step's identity in the one adopted-step namespace, so
+        an id-less vintage would leave the step untrackable; the loader
+        refuses it instead of silently loading an adoption-less step.
+        """
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: "0.87.0"
+  manual_adoption_steps:
+    - "Step one: do this"
+"""
+        with pytest.raises(ManifestError, match="contract_vintage.id"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_contract_vintage_tolerant_mode_loads_a_pre_id_copy(self) -> None:
+        """The embedded-copy opt-out loads a vintage that predates the id."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  minimum: "0.87.0"
+  manual_adoption_steps:
+    - "Step one: do this"
+"""
+        manifest = load_manifest(yaml_content, "mymod", require_vintage_id=False)
+        assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.id is None
+        assert manifest.contract_vintage.minimum == "0.87.0"
+
+    def test_contract_vintage_tolerant_mode_still_refuses_an_empty_id(self) -> None:
+        """A present-but-empty id is malformed even for a historical copy."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  id: ""
+  minimum: "0.87.0"
+"""
+        with pytest.raises(ManifestError, match="contract_vintage.id"):
+            load_manifest(yaml_content, "mymod", require_vintage_id=False)
+
+    def test_get_manifest_for_module_tolerates_a_pre_id_embedded_vintage(
+        self, tmp_path: Path
+    ) -> None:
+        """An embedded historical copy without an id still loads.
+
+        A project installed before the id requirement must stay readable
+        for status and upgrade, so the embedded reader opts out of the
+        authored-manifest id requirement.
+        """
+        module_dir = tmp_path / "modules" / "backups"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text(
+            "name: backups\n"
+            "version: '0.88.0'\n"
+            "contract_vintage:\n"
+            "  minimum: '0.87.0'\n"
+            "  manual_adoption_steps:\n"
+            "    - 'Update the Dockerfile and CI tooling'\n"
+        )
+
+        manifest = get_manifest_for_module(tmp_path, "backups", strict=True)
+
+        assert manifest is not None
+        assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.id is None
+        assert manifest.contract_vintage.minimum == "0.87.0"
 
     def test_contract_vintage_empty_id_raises(self) -> None:
         """An empty step id fails closed instead of tracking nothing."""
@@ -2876,6 +2956,7 @@ contract_vintage:
 name: mymod
 version: '1.0.0'
 contract_vintage:
+  id: sa999-step
   minimum: "0.87.0-alpha"
 """
         manifest = load_manifest(yaml_content, "mymod")
@@ -2888,6 +2969,7 @@ contract_vintage:
 name: mymod
 version: '1.0.0'
 contract_vintage:
+  id: sa999-step
   minimum: "0"
 """
         manifest = load_manifest(yaml_content, "mymod")

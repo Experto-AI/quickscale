@@ -362,7 +362,7 @@ the pre-update content; a migration file the pull adds is applied forward on the
 **Contract-vintage enforcement.** Before `quickscale update`, an existing-project `quickscale
 apply`, or `quickscale deploy railway` can combine current code with generated files, QuickScale
 compares the adopted contract steps recorded in `.quickscale/state.yml` with the current
-generated-project declaration and each installed module's declared step or minimum. An old or
+generated-project declaration and each installed module's declared step id. An old or
 unknown legacy project stops before mutation and names each outstanding generated-project step and
 each incompatible module or command, with its minimum and manual adoption steps. Fresh projects
 without state keep the normal generation flow.

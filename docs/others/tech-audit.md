@@ -488,8 +488,6 @@ Added:
 
 ## 12. Coherence hand-offs
 
-- The `project_contract.yml:188` step text still describes the pre-SA258 generation-time seam
-  mechanism. It is stale prose, not a defect.
 - The blog and listings API throttle identity moved from per-IP to per-user while forms stays
   per-IP. This is declared, but it is divergent across siblings.
 
@@ -795,6 +793,12 @@ Added:
   stored identity), while the CLI writes the validated document through a fresh sibling temp file
   and an `os.replace`, with tests proving an interrupted write and an interrupted replace leave
   the original `pyproject.toml` intact. Dropped from the index and summary.
+- 2026-10-15 — coherence hand-off `project_contract.yml:188` stale step prose: fixed (SA282).
+  Verified at `quickscale_core/src/quickscale_core/data/project_contract.yml`: the
+  sa235-module-shell-routes step's seam description now names the `quickscale_seam` runtime
+  template tag the pages actually render through, and the sa258-runtime-seam-tag step's
+  supersession sentence reads as history of the retired `generator/seam.py` description. The
+  hand-off bullet is dropped from §12.
 - 2026-10-13 — `dr-restore-vintage-exact-match`, `orgs-provider-id-check-blocks-migrate`, `crm-stage-seed-lost-on-commit-failure`, `backups-upload-restore-by-model-permission`, `single-sync-worker-vendor-calls`, `allow-bypassrls-serving-undetected`, `migrate-runs-per-replica`, `development-workflow-intermittent-root-500`, `core-e2e-poetry-cache-install-candidates`: carried (triggers not fired; evidence in §11).
 - 2026-10-13 — new open: `stripe-customer-search-lag-resolves-absent`, `dr-private-remote-restore-whole-object-in-memory`, `e2e-release-tag-trigger-never-matches` (S3); `crm-theme-stats-always-zero`, `notifications-webhook-status-regresses-out-of-order`, `notifications-webhook-secret-format-unchecked-at-startup`, `orgs-invite-throttle-partial-charge`, `markdownx-upload-client-extension-and-content-type`, `dr-media-part-file-leak-on-publish-failure`, `pyproject-write-not-atomic`, `ci-poetry-retry-curl-pipe-python` (S4).
 - 2026-10-13 — new watchlist: `orgs-role-mixin-checks-request-org`, `social-config-error-served-200`, `deploy-existing-settings-module-never-corrected`, `account-deletion-hook-exception-text`, `security-suppressions-uniform-expiry`, `generated-project-automation-local-only`, `initial-migration-edited-in-place`.

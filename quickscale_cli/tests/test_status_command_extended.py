@@ -931,11 +931,12 @@ class TestCheckContractVintage:
         assert result["modules_behind_count"] == 0
 
     def test_module_behind_unknown_contract(self) -> None:
-        """Legacy project (project_contract=None) is behind any minimum."""
+        """A step id no recorded state carries is behind."""
         from unittest.mock import Mock
         from quickscale_core.manifest.schema import ContractVintage
 
         vintage = ContractVintage(
+            id="sa999-backups-step",
             minimum="0.87.0",
             manual_adoption_steps=["Step one: update Docker"],
         )
@@ -947,37 +948,41 @@ class TestCheckContractVintage:
         assert result["modules_behind"][0]["module"] == "backups"
 
     def test_module_meets_requirement(self) -> None:
-        """Project with sufficient contract version is not behind."""
+        """A recorded step id satisfies the module requirement."""
         from unittest.mock import Mock
         from quickscale_core.manifest.schema import ContractVintage
 
-        vintage = ContractVintage(minimum="0.87.0")
+        vintage = ContractVintage(id="sa999-social-step", minimum="0.87.0")
         manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
         manifests = {"social": manifest}
-        # project_contract >= minimum
-        result = _check_contract_vintage("0.87.0", manifests)
+        result = _check_contract_vintage(
+            "0.87.0", manifests, adopted_steps=["sa999-social-step"]
+        )
         assert result["module_count"] == 1
         assert result["modules_behind_count"] == 0
 
-    def test_module_strictly_ahead(self) -> None:
-        """Project contract > minimum is fine (ahead of requirement)."""
+    def test_version_alone_does_not_satisfy_a_vintage(self) -> None:
+        """A current project_contract cannot stand in for the recorded id."""
         from unittest.mock import Mock
         from quickscale_core.manifest.schema import ContractVintage
 
-        vintage = ContractVintage(minimum="0.86.0")
+        vintage = ContractVintage(id="sa999-social-step", minimum="0.87.0")
         manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
         manifests = {"social": manifest}
-        result = _check_contract_vintage("0.87.0", manifests)
+        result = _check_contract_vintage("0.89.0", manifests)
         assert result["module_count"] == 1
-        assert result["modules_behind_count"] == 0
+        assert result["modules_behind_count"] == 1
+        assert result["modules_behind"][0]["module"] == "social"
 
-    def test_module_behind_exact_version(self) -> None:
-        """Project behind minimum is flagged with correct steps."""
+    def test_module_behind_reports_the_declared_minimum_and_steps(self) -> None:
+        """A behind module reports its minimum and its manual adoption steps."""
         from unittest.mock import Mock
         from quickscale_core.manifest.schema import ContractVintage
 
         steps = ["Manual step A", "Manual step B"]
-        vintage = ContractVintage(minimum="0.88.0", manual_adoption_steps=steps)
+        vintage = ContractVintage(
+            id="sa999-billing-step", minimum="0.88.0", manual_adoption_steps=steps
+        )
         manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
         manifests = {"billing": manifest}
         result = _check_contract_vintage("0.87.0", manifests)
@@ -989,12 +994,12 @@ class TestCheckContractVintage:
         assert entry["manual_adoption_steps"] == steps
 
     def test_multiple_modules_mixed(self) -> None:
-        """Mixed state: some satisfied, some behind."""
+        """Mixed state: recorded ids are satisfied, unrecorded ones behind."""
         from unittest.mock import Mock
         from quickscale_core.manifest.schema import ContractVintage
 
-        social_vintage = ContractVintage(minimum="0.86.0")
-        billing_vintage = ContractVintage(minimum="0.88.0")
+        social_vintage = ContractVintage(id="sa999-social-step", minimum="0.86.0")
+        billing_vintage = ContractVintage(id="sa999-billing-step", minimum="0.88.0")
         social = Mock(spec=["contract_vintage"], contract_vintage=social_vintage)
         billing = Mock(spec=["contract_vintage"], contract_vintage=billing_vintage)
         no_vintage = Mock(spec=["contract_vintage"], contract_vintage=None)
@@ -1003,7 +1008,9 @@ class TestCheckContractVintage:
             "billing": billing,
             "auth": no_vintage,
         }
-        result = _check_contract_vintage("0.87.0", manifests)
+        result = _check_contract_vintage(
+            "0.87.0", manifests, adopted_steps=["sa999-social-step"]
+        )
         assert result["module_count"] == 2  # social + billing
         assert result["modules_behind_count"] == 1
         assert result["modules_behind"][0]["module"] == "billing"
@@ -1018,7 +1025,7 @@ class TestCheckContractVintage:
         from unittest.mock import Mock
         from quickscale_core.manifest.schema import ContractVintage
 
-        vintage = ContractVintage(minimum="0.87.0")
+        vintage = ContractVintage(id="sa999-social-step", minimum="0.87.0")
         manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
         manifests = {"social": manifest}
 
@@ -1048,11 +1055,13 @@ class TestCheckContractVintage:
         from unittest.mock import Mock
         from quickscale_core.manifest.schema import ContractVintage
 
-        vintage = ContractVintage(minimum="0.87.0")
+        vintage = ContractVintage(id="sa999-social-step", minimum="0.87.0")
         manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
         manifests = {"social": manifest}
 
-        result = _check_contract_vintage("0.87.0", manifests)
+        result = _check_contract_vintage(
+            "0.87.0", manifests, adopted_steps=["sa999-social-step"]
+        )
         result["has_state"] = True
 
         assert result["has_state"] is True
@@ -1084,7 +1093,9 @@ class TestContractVintageInDiagnostics:
         psm = ProjectStateManager(tmp_path)
         state = sm.load()
 
-        vintage = ContractVintage(minimum="0.87.0", manual_adoption_steps=["Do X"])
+        vintage = ContractVintage(
+            id="sa999-social-step", minimum="0.87.0", manual_adoption_steps=["Do X"]
+        )
         mock_manifest = Mock(spec=["contract_vintage"], contract_vintage=vintage)
         manifests = {"social": mock_manifest}
 

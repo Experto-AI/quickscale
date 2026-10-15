@@ -171,6 +171,13 @@ old names, so affected users re-select an organization, re-enter VIEW-AS, and re
 invitation link; project-owned code or tests that write a session key as a literal string must
 use the new names.
 
+**Module vintage ids.** Every module manifest's `contract_vintage` now carries a step id, and the
+CLI satisfies a module's vintage only while the project records that id — the named manual steps
+are unchanged. A project with `backups` or `social` installed updates its embedded modules to this
+release from a clean tree with `quickscale update --confirm-contract-adoption`, which records the
+module's declared id; an unflagged `quickscale update` or `quickscale apply` is refused while the
+id is pending, and a shipped manifest whose `contract_vintage` declares no id is refused at load.
+
 ## Compatibility
 
 The validation-source changes affect repository tests only. The tenant-enrollment capability keeps

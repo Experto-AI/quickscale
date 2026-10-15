@@ -87,29 +87,31 @@ def parse_version_tuple(version_str: str) -> tuple[int, ...]:
 
 @dataclass
 class ContractVintage:
-    """Declares a module's minimum project-contract requirement.
+    """Declares a module's contract-vintage step and adoption boundary.
 
-    When the project's recorded ``project_contract`` (from ``state.yml``)
-    is less than ``minimum``, the project is behind the module's contract
-    and should follow ``manual_adoption_steps`` before the module is fully
-    supported.
+    Every declared vintage carries an ``id`` — the loader refuses a
+    shipped vintage without one; a generated project's embedded copy of an
+    older release is the explicit exception — and the step is satisfied
+    only while the project records that id in its
+    ``adopted_contract_steps``.  A project that has not recorded it is
+    behind the module's contract and should follow
+    ``manual_adoption_steps`` before the module is fully supported.
 
     This is the additive metadata block that powers SA10.2 detection:
-    ``quickscale status`` compares each installed module's vintage
-    declaration against the project's generation contract and surfaces
-    the gap.
+    ``quickscale status`` compares each installed module's declared step
+    id against the project's recorded ids and surfaces the gap.
 
     Attributes:
-        minimum: Minimum ``project_contract`` version the module expects.
-            Projects with a lower (or unknown/``None``) contract value
-            are flagged as behind.
+        minimum: The QuickScale release that introduced the contract.
+            Projects behind the declared step are flagged with it so the
+            operator can place the change in a release.
         manual_adoption_steps: Human-readable list of steps an existing
             project must follow to catch up to the module's current
             contract.  Empty when no specific manual action is required.
-        id: Optional stable step id (SA207).  When declared, the step is
-            satisfied only while the id is recorded in the project's
-            ``adopted_contract_steps``; the version comparison stays the
-            fallback for boundaries that landed at a release.
+        id: The step's stable identity in the one adopted-step namespace.
+            A declared vintage must carry one (the loader refuses a
+            missing or empty id), and the step is satisfied only while the
+            id is recorded in the project's ``adopted_contract_steps``.
     """
 
     minimum: str
@@ -217,17 +219,20 @@ class ModuleManifest:
     # ------------------------------------------------------------------ #
     # Contract-vintage metadata (SA10.2)
     #
-    # This optional field carries the module's minimum project-contract
-    # requirement and the manual-adoption steps an existing project must
-    # follow when its generation contract predates the module's current
-    # vintage.  Populated when the loader encounters a
-    # ``contract_vintage`` section in the manifest YAML.  Existing
-    # ``module.yml`` files without that section leave this field as
-    # ``None``.
+    # This optional field carries the module's contract-vintage step —
+    # its id, minimum, and the manual-adoption steps an existing project
+    # must follow when its generation contract predates the module's
+    # current vintage.  Populated when the loader encounters a
+    # ``contract_vintage`` section in the manifest YAML; a shipped section
+    # must carry a non-empty ``id``, and the loader refuses one without
+    # (an embedded historical copy is read through an explicit opt-out).
+    # Existing ``module.yml`` files without that section leave this field
+    # as ``None``.
     # ------------------------------------------------------------------ #
     contract_vintage: ContractVintage | None = None
-    """Optional contract-vintage requirement for this module.
-    ``None`` when the module has not declared a vintage boundary."""
+    """Optional contract-vintage declaration for this module.
+    ``None`` when the module has not declared a vintage boundary; a
+    shipped section must carry a non-empty id."""
 
     # ------------------------------------------------------------------ #
     # Readiness / lifecycle metadata

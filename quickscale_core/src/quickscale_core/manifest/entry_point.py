@@ -58,7 +58,15 @@ _manifest_cache: dict[tuple[str, str], Any] = {}
 
 
 def load_module_manifest(module_name: str) -> Any:
-    """Load and cache the ``module.yml`` manifest for *module_name*."""
+    """Load and cache the ``module.yml`` manifest for *module_name*.
+
+    The active module base is the maintainer workspace, the bundled
+    snapshots, or — during ``apply``/``update`` — a generated project's
+    embedded tree.  Embedded copies are historical, so this load does not
+    require the contract-vintage ``id``; the authored shipped manifests
+    are read strictly by ``load_module_manifest_with_fallback`` and the
+    project-contract guard.
+    """
     base_path = get_modules_base_path()
     cache_key = (module_name, str(base_path))
     cached = _manifest_cache.get(cache_key)
@@ -66,7 +74,7 @@ def load_module_manifest(module_name: str) -> Any:
         return cached
 
     manifest_path = base_path / module_name / "module.yml"
-    manifest = load_manifest_from_path(manifest_path)
+    manifest = load_manifest_from_path(manifest_path, require_vintage_id=False)
     _manifest_cache[cache_key] = manifest
     return manifest
 
