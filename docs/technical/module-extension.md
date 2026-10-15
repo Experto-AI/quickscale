@@ -610,9 +610,9 @@ Conventions rule 37):
       the module contributes a managed `.env.example` block: its title, prose, and `_ENV_VAR`
       option names. The block catalog is presentation data pinned by the env-example
       conformance suite
-- [ ] `make manifest-sync` — regenerate the bundled manifests under
+- [ ] `make manifest-sync` — materialize the bundled manifests under
       `quickscale_core/src/quickscale_core/data/manifests/` from the new module's root
-      `module.yml`; `check-manifest-sync` verifies they match
+      `module.yml`; the wheel build derives them from the module manifests
 
 Every other per-module constant or module-name branch in core or the CLI is rejected by the
 conformance harness; the recorded exceptions are each listed with their reason in

@@ -836,6 +836,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     operations guide, and the apply next-steps read or render the one core constant, and the
     billing manifest's adoption step resolves it, so bumping the pinned version edits a single
     value instead of five hand-synced copies.
+  - **The bundled manifests are built, not tracked.** A `quickscale-core` wheel materializes its
+    bundled `module.yml` files from the module manifests during the build, so a manifest edit
+    cannot ship a stale copy and the gate that compared the two copies is retired.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -100,52 +100,6 @@
             ]
         },
         {
-            "id": "check-manifest-sync",
-            "description": "Module-owned module.yml files match their core snapshots",
-            "required_contexts": [
-                "local-serial",
-                "local-parallel",
-                "hosted",
-                "publish",
-                "e2e-trigger"
-            ],
-            "bindings": {
-                "make_target": "check-manifest-sync",
-                "ci_job": "manifest-sync-gate",
-                "local_ci_stage": 5
-            },
-            "hosted": {
-                "order": 3,
-                "display_name": "Manifest Sync Gate (SA16.1)",
-                "check_step_name": "Verify module manifests match core snapshots"
-            },
-            "publish": {
-                "order": 3,
-                "step_name": "Run manifest sync gate"
-            },
-            "help": "Verify that every module-owned module.yml matches its core snapshot.\nFails CI if drift is introduced.  Run ``make manifest-sync`` to\nresync snapshots after intentionally updating a module manifest.",
-            "local": {
-                "order": 3,
-                "description": "Running manifest sync gate...",
-                "success": "\u2713 Manifest snapshots in sync",
-                "failure_label": "Manifest Sync Gate"
-            },
-            "makefile_help": {
-                "order": 3,
-                "text": "make check-manifest-sync          - Module-owned module.yml files match their core snapshots"
-            },
-            "make_recipe": [
-                "@$(PYTHON) scripts/sync_module_manifests.py"
-            ],
-            "depends_on": [],
-            "trigger_inputs": [
-                "quickscale_core/src/quickscale_core/generator/**",
-                "quickscale_cli/tests/test_module_lifecycle_cycle.py",
-                "quickscale_cli/tests/test_e2e_development_workflow.py",
-                "quickscale_cli/tests/test_react_theme_e2e.py"
-            ]
-        },
-        {
             "id": "check-module-app-declaration",
             "description": "Evidence-bearing modules declare Django apps wiring",
             "required_contexts": [
@@ -171,7 +125,7 @@
                 "failure_label": "Module App Declaration Gate"
             },
             "makefile_help": {
-                "order": 4,
+                "order": 3,
                 "text": "make check-module-app-declaration - Evidence-bearing modules declare Django apps wiring"
             },
             "make_recipe": [
@@ -212,7 +166,7 @@
                 "failure_label": "Org-Context Primitives Gate"
             },
             "makefile_help": {
-                "order": 5,
+                "order": 4,
                 "text": "make check-org-context-primitives - No external use of privatized org-context primitives"
             },
             "make_recipe": [
@@ -256,7 +210,7 @@
                 "failure_label": "CSRF-Exempt Gate"
             },
             "makefile_help": {
-                "order": 6,
+                "order": 5,
                 "text": "make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
             },
             "make_recipe": [
@@ -300,7 +254,7 @@
                 "failure_label": "Commit Testimony Gate"
             },
             "makefile_help": {
-                "order": 7,
+                "order": 6,
                 "text": "make check-commit-testimony       - Behavioural commits carry a vNN or vN.NN.N roadmap reference"
             },
             "make_recipe": [
@@ -342,7 +296,7 @@
                 "failure_label": "Project Contract Vintage Gate"
             },
             "makefile_help": {
-                "order": 8,
+                "order": 7,
                 "text": "make check-project-contract-vintage - Generated-project contract changes declare a fresh adoption step id"
             },
             "make_recipe": [
@@ -437,7 +391,7 @@
                 "failure_label": "Registered Script Test Suites"
             },
             "makefile_help": {
-                "order": 17,
+                "order": 16,
                 "text": "make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
             },
             "depends_on": [],
@@ -475,7 +429,7 @@
                 "failure_label": "Dependency Vulnerability Gate"
             },
             "makefile_help": {
-                "order": 9,
+                "order": 8,
                 "text": "make check-dependency-vulnerabilities - Blocking Trivy dependency vulnerability and generated Dockerfile misconfiguration scan"
             },
             "make_recipe": [
@@ -520,7 +474,7 @@
                 "failure_label": "Security Static-Analysis Gate"
             },
             "makefile_help": {
-                "order": 10,
+                "order": 9,
                 "text": "make check-security-static-analysis  - Blocking Bandit static security scan"
             },
             "make_recipe": [
@@ -564,7 +518,7 @@
             },
             "help": "Exercise fresh-first migration behavior against isolated\ngenerated fixtures without touching a real project or database.",
             "makefile_help": {
-                "order": 11,
+                "order": 10,
                 "text": "make check-beta-migration-smoke      - Exercise fresh-first beta migration on isolated generated fixtures"
             },
             "make_recipe": [
@@ -598,7 +552,7 @@
             },
             "help": "Render one fresh generated project and run Django's deployment checks in the\nproxied and single-host forwarding cells.  A new deploy warning, or an\nungated SECURE_PROXY_SSL_HEADER in the single-host cell, fails the gate.",
             "makefile_help": {
-                "order": 12,
+                "order": 11,
                 "text": "make check-generated-deploy-posture  - Run Django's deployment checks on a freshly generated project in both forwarding cells"
             },
             "make_recipe": [
@@ -662,7 +616,7 @@
                 "failure_label": "Workflow Security Gate"
             },
             "makefile_help": {
-                "order": 13,
+                "order": 12,
                 "text": "make check-workflow-security      - Blocking zizmor scan: action pinning and top-level workflow permissions"
             },
             "make_recipe": [
@@ -702,7 +656,7 @@
                 "failure_label": "Secret Scanning Gate"
             },
             "makefile_help": {
-                "order": 14,
+                "order": 13,
                 "text": "make check-secret-scanning        - Blocking gitleaks secret scan with reasoned allowlists"
             },
             "make_recipe": [
@@ -742,7 +696,7 @@
                 "failure_label": "Module Conventions Gate"
             },
             "makefile_help": {
-                "order": 15,
+                "order": 14,
                 "text": "make check-module-conventions     - Module Conventions rule 40 conformance check over every manifest and module source"
             },
             "make_recipe": [
@@ -782,7 +736,7 @@
                 "failure_label": "Split-Facade Import Gate"
             },
             "makefile_help": {
-                "order": 16,
+                "order": 15,
                 "text": "make check-split-facade-imports   - Reject a private module importing a facade in its distribution (SA234)"
             },
             "make_recipe": [
@@ -847,7 +801,7 @@
                 "failure_label": "Migration Freeze Gate"
             },
             "makefile_help": {
-                "order": 18,
+                "order": 17,
                 "text": "make check-migration-freeze      - Frozen module migrations keep their recorded content identity"
             },
             "make_recipe": [

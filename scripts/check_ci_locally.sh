@@ -38,7 +38,6 @@ show_help() {
     echo "  2. Lint (ruff check + format)"
     echo "  3. Module-to-core compatibility (check_module_core_compatibility)"
     echo "  4. Module-core import linter (check_module_core_imports)"
-    echo "  5. Manifest sync gate (sync_module_manifests)"
     echo "  6. Module app declaration and org-context primitives gates"
     echo "  7. Registered script suites, CSRF-exempt, dependency vulnerability, security static-analysis, beta-migration smoke, generated deploy posture, workflow security, and secret scanning gates"
     echo "  8. Type check (mypy)"
@@ -465,11 +464,6 @@ describe_local_conformance_gate() {
             LOCAL_GATE_SUCCESS="✓ Module-core import linter passed"
             LOCAL_GATE_FAILURE_LABEL="Module-Core Import Linter"
             ;;
-        check-manifest-sync)
-            LOCAL_GATE_DESCRIPTION="Running manifest sync gate..."
-            LOCAL_GATE_SUCCESS="✓ Manifest snapshots in sync"
-            LOCAL_GATE_FAILURE_LABEL="Manifest Sync Gate"
-            ;;
         check-module-app-declaration)
             LOCAL_GATE_DESCRIPTION="Running module app declaration gate..."
             LOCAL_GATE_SUCCESS="✓ Evidence-bearing module app declarations are valid"
@@ -572,9 +566,6 @@ run_serial_conformance_gate() {
                 ;;
             check-module-core-imports)
                 echo "║   ✗ Module-Core Import Linter Failed   ║"
-                ;;
-            check-manifest-sync)
-                echo "║   ✗ Manifest Sync Gate Failed          ║"
                 ;;
             check-module-app-declaration)
                 echo "║   ✗ Module App Declaration Gate Failed ║"
@@ -712,11 +703,6 @@ report_static_failure_banner() {
         module-core-imports|check-module-core-imports)
             echo "╔════════════════════════════════════════╗"
             echo "║   ✗ Module-Core Import Linter Failed   ║"
-            echo "╚════════════════════════════════════════╝"
-            ;;
-        manifest-sync|check-manifest-sync)
-            echo "╔════════════════════════════════════════╗"
-            echo "║   ✗ Manifest Sync Gate Failed          ║"
             echo "╚════════════════════════════════════════╝"
             ;;
         module-app-declaration|check-module-app-declaration)

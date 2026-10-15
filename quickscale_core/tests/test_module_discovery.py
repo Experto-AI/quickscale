@@ -588,8 +588,8 @@ class TestSourceAndBundledInventorySync:
 
     When running in the maintainer monorepo, ``discover_shipped_module_names``
     and ``discover_bundled_module_names`` should return the same set of module
-    names — the bundled manifests are byte-identical snapshots of the source
-    manifests (checked by ``make check-manifest-sync``), and the same
+    names — the bundled manifests are materialized from the source manifests at
+    build time, and the same
     ``module.yml`` discovery logic applies to both paths.
 
     The strong superset direction is source ⊇ bundled; in the monorepo,

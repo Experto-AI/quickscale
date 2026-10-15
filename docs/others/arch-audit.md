@@ -524,7 +524,8 @@ items:
     3. **Verdict:** a rule that construction could make true is held by a detector (option 2
        territory).
   - **SA264 (retired settings):** the bundled manifest copy
-    (`quickscale_core/data/manifests/*/module.yml`, held equal by `check-manifest-sync`) gained
+    (`quickscale_core/data/manifests/*/module.yml`, materialized from the module manifests at
+    build time since SA280 (b)) gained
     a **runtime reader**. Django startup in a generated project reads retired-setting refusals
     from core's snapshot, not from the embedded module (`contracts/resolvers.py:28–42`,
     `runtime/conventions.py:527–530`). The copy-pair is now load-bearing in R2 as well as R1.
@@ -563,7 +564,8 @@ items:
       `billing/module.yml:115`, its bundled copy, `_finalize.py:276`, and
       `OPERATIONS.md.j2:115–131`);
     - the privileged-command set at four stations (accepted commitment);
-    - the bundled manifests (above).
+    - the bundled manifests (above) were a copy-pair at this pass; SA280 (b) later made them a
+      build-time derivation.
   - **Governance code is still exempt** from its own bar: `check_quality.sh` scans package
     `src/` only, by SA267's own acceptance ("discovery unchanged").
 - **Counter-evidence:**

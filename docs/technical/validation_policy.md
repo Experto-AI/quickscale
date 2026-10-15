@@ -219,7 +219,6 @@ Every listed gate runs in each of its declared contexts.
 |---|---|---|---|---|
 | `check-core-compat` | `make check-core-compat` | local-serial, local-parallel, hosted, publish, e2e-trigger | 3 | `module-core-compat` |
 | `check-module-core-imports` | `make check-module-core-imports` | local-serial, local-parallel, hosted, publish, e2e-trigger | 4 | `module-core-import-linter` |
-| `check-manifest-sync` | `make check-manifest-sync` | local-serial, local-parallel, hosted, publish, e2e-trigger | 5 | `manifest-sync-gate` |
 | `check-module-app-declaration` | `make check-module-app-declaration` | local-serial, local-parallel, hosted | 6 | `module-app-declaration-gate` |
 | `check-org-context-primitives` | `make check-org-context-primitives` | local-serial, local-parallel, hosted, publish, e2e-trigger | 6 | `org-context-primitives-gate` |
 | `check-csrf-exempt` | `make check-csrf-exempt` | local-serial, local-parallel, hosted, publish, e2e-trigger | 7 | `csrf-exempt-gate` |
@@ -250,7 +249,7 @@ $(PYTHON) -m pytest scripts/ -p no:cacheprovider --no-cov -q
 
 The scripts directory remains outside `.coveragerc`; the product coverage source list
 and `fail_under = 90` are unchanged. The hosted CI job set also contains seven
-separately justified unowned jobs, for twenty-five jobs total. Nineteen registered gates run
+separately justified unowned jobs, for twenty-four jobs total. Eighteen registered gates run
 locally across stages 3–7. `isolation-conformance`
 and the reusable `bypassrls` suite are hosted-unowned jobs: Make exposes both runners for local verification,
 but local execution uses the owned PostgreSQL 18 lifecycle described by

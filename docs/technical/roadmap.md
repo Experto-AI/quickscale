@@ -42,14 +42,13 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA280 | One source for the Stripe API version and the bundled manifests | 2 | — | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
-Track 2: SA280 ──► SA277
+Track 2: SA277
 Track 3: — (SA281 landed)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
@@ -60,8 +59,7 @@ SA191 waits on Track 2's release fixes (through the 0.89.0 publication); SA204's
 costs one registry row now that SA275 has landed (arch audit §7); SA277 waits on SA191's cutover,
 which decides which upgrade mechanism proved itself.
 
-**Parallel start.** SA204 (g) and SA280 have no unmet dependency and touch disjoint
-files.
+**Parallel start.** SA204 (g) is the only ticket with no unmet dependency.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
 with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
@@ -82,7 +80,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (g) | yes | no | yes | no | yes |
-| 2 | SA280 | yes | yes | yes | yes | no |
+| 2 | SA277 | no | no | yes | no | no |
 | 3 | — (SA281 landed) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -327,35 +325,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA282 — One organization-selector flag and a required contract-vintage id.**
 
-- [ ] **SA280 — One source for the Stripe API version and the bundled manifests.**
-
-  Closes the product-copy part of arch `rules-held-by-parity-not-derivation` (Finding 3,
-  option 1, remaining items).
-
-  **Context:** the Stripe API version was held equal at five stations (`billing/_settings.py:32`,
-  `billing/module.yml:115`, its bundled copy, `_finalize.py:276`, and `OPERATIONS.md.j2:115–131`);
-  slice (a) replaced those copies with one authored constant.
-  The bundled manifests under `quickscale_core/data/manifests/` are hand-copied and held equal by
-  `check-manifest-sync`, and since SA264 a generated project's startup reads retired-setting
-  refusals from that copy (`contracts/resolvers.py:28–42`), so the copy-pair now matters at run
-  time.
-
-  **Acceptance:** the Stripe API version has one authored constant; the manifest, the CLI
-  finalizer, and the operations template read or render it, and no test compares copies. The
-  bundled manifests are produced from the module manifests at wheel build time and are not
-  tracked; `check-manifest-sync` and its registry row are deleted (one registry edit after
-  SA275); an installed core wheel carries manifests equal to the modules' at build, proven by a
-  build-and-inspect test; startup's retired-setting refusals still fire in a generated project.
-
-  **Slices:**
-  - [x] (a) One Stripe API version constant across its five stations (Tier 2-fast). Landed:
-    `STRIPE_API_VERSION` (`quickscale_core.contracts.module_options`) is the one authored
-    value; the billing settings re-export it, the CLI next-steps and the generated operations
-    guide read or render it, and the billing manifest's adoption step resolves it as
-    `{stripe_api_version}` (fresh id `sa280-stripe-webhook-version`), so no test compares
-    copies. (b) is next.
-  - [ ] (b) Bundled manifests built at wheel build time, and the sync gate retired (Tier 2-full;
-    the build step and the installed-wheel check are environment-sensitive).
+- [x] **SA280 — One source for the Stripe API version and the bundled manifests.**
 
 - [ ] **SA277 — Keep one project-upgrade mechanism and retire the other.**
 

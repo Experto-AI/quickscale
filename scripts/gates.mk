@@ -2,7 +2,7 @@
 # Do not edit by hand; `make check` fails when this file is not current.
 # Refresh with `poetry run python scripts/sync_ci_gate_jobs.py --write`.
 
-.PHONY: check-core-compat check-module-core-imports check-manifest-sync check-module-app-declaration check-org-context-primitives check-csrf-exempt check-commit-testimony check-project-contract-vintage frontend-proof smoke-install check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture check-generated-project-automation check-workflow-security check-secret-scanning check-module-conventions check-split-facade-imports quality check-migration-freeze
+.PHONY: check-core-compat check-module-core-imports check-module-app-declaration check-org-context-primitives check-csrf-exempt check-commit-testimony check-project-contract-vintage frontend-proof smoke-install check-dependency-vulnerabilities check-security-static-analysis check-beta-migration-smoke check-generated-deploy-posture check-generated-project-automation check-workflow-security check-secret-scanning check-module-conventions check-split-facade-imports quality check-migration-freeze
 
 # Check each module's quickscale_core imports against the current core API.
 # This verifies that every import from quickscale_core in a module's source
@@ -16,12 +16,6 @@ check-core-compat:
 # Per-module legacy exceptions exist for billing/crm adapter seams only.
 check-module-core-imports:
 	@$(PYTHON) scripts/check_module_core_imports.py
-
-# Verify that every module-owned module.yml matches its core snapshot.
-# Fails CI if drift is introduced.  Run ``make manifest-sync`` to
-# resync snapshots after intentionally updating a module manifest.
-check-manifest-sync:
-	@$(PYTHON) scripts/sync_module_manifests.py
 
 # Verify that evidence-bearing modules declare exactly one valid Django apps
 # wiring projection in their authoritative source manifest.

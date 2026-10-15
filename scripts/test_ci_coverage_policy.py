@@ -642,7 +642,6 @@ class TestMakefileGateTargetDerivation:
     CHECK_TARGETS = (
         "check-core-compat",
         "check-module-core-imports",
-        "check-manifest-sync",
         "check-module-app-declaration",
         "check-org-context-primitives",
         "check-csrf-exempt",
@@ -736,7 +735,7 @@ class TestRegisteredScriptGateTarget:
                 args = sys.argv[1:]
                 if "--print-check-targets" in args:
                     print(
-                        "check-core-compat check-module-core-imports check-manifest-sync "
+                        "check-core-compat check-module-core-imports "
                         "check-module-app-declaration "
                         "check-org-context-primitives check-csrf-exempt "
                         "check-commit-testimony check-gate-suites "
@@ -1067,7 +1066,6 @@ class TestMakefileCoveragePipeline:
                     print(
                         "check-core-compat "
                         "check-module-core-imports "
-                        "check-manifest-sync "
                         "check-module-app-declaration "
                         "check-org-context-primitives "
                         "check-csrf-exempt "
@@ -1539,7 +1537,6 @@ class TestCheckQuietSectionDispatch:
                     print(
                         "check-core-compat "
                         "check-module-core-imports "
-                        "check-manifest-sync "
                         "check-module-app-declaration "
                         "check-org-context-primitives "
                         "check-csrf-exempt "
@@ -2595,7 +2592,6 @@ class TestCheckNormalFrontendLint:
                     print(
                         "check-core-compat "
                         "check-module-core-imports "
-                        "check-manifest-sync "
                         "check-module-app-declaration "
                         "check-org-context-primitives "
                         "check-csrf-exempt "

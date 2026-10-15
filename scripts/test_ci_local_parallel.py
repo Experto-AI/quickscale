@@ -375,13 +375,13 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
     """All static gates run, replay in order, and report multiple failures."""
     result = _run_ci(
         tmp_path,
-        failures="lint,typecheck,check-manifest-sync,lint-frontend",
+        failures="lint,typecheck,check-module-app-declaration,lint-frontend",
     )
     assert result.returncode != 0
     assert "database-dependent stages will not run" in result.stdout
     assert "Linting (exit 1)" in result.stdout
     assert "Type Checks (exit 1)" in result.stdout
-    assert "Manifest Sync Gate (exit 1)" in result.stdout
+    assert "Module App Declaration Gate (exit 1)" in result.stdout
     assert "Frontend Lint (exit 1)" in result.stdout
     assert "[10/" not in result.stdout
 
@@ -395,7 +395,6 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
     replay_labels = {
         "check-core-compat": "Running module-vs-core",
         "check-module-core-imports": "Running module-core",
-        "check-manifest-sync": "Running manifest",
         "check-module-app-declaration": "Running module app declaration",
         "check-org-context-primitives": "Running org-context",
         "check-csrf-exempt": "Running CSRF",
@@ -439,7 +438,7 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
     [
         ("lint", "Linting"),
         ("typecheck", "Type Checks"),
-        ("check-manifest-sync", "Manifest Sync Gate"),
+        ("check-module-app-declaration", "Module App Declaration Gate"),
     ],
 )
 def test_parallel_isolated_failure_is_attributed_to_its_gate(
@@ -461,11 +460,11 @@ def test_parallel_isolated_failure_is_attributed_to_its_gate(
 
 def test_serial_opt_out_has_no_overlap_and_stops_before_db_stages(tmp_path: Path) -> None:
     """QS_CI_PARALLEL=0 retains serial short-circuit behaviour."""
-    result = _run_ci(tmp_path, parallel="0", failures="check-manifest-sync")
+    result = _run_ci(tmp_path, parallel="0", failures="check-module-app-declaration")
     assert result.returncode != 0
     assert "[2/11] Running linters" in result.stdout
-    assert "[5/11] Running manifest sync gate" in result.stdout
-    assert "[6/11]" not in result.stdout
+    assert "[6/11] Running module app declaration gate" in result.stdout
+    assert "[7/11]" not in result.stdout
     assert "[10/" not in result.stdout
     assert _max_active(_events(tmp_path)) == 1
 
@@ -962,7 +961,9 @@ def test_help_documents_stage_selection_without_new_numbered_headings() -> None:
     for flag in ("--skip-install", "--from NAME", "--only NAME[,...]"):
         assert flag in help_text
     numbered = re.findall(r"^\s*(\d+)\.\s+", help_text, re.MULTILINE)
-    assert numbered == [str(number) for number in range(1, 13)]
+    # The numbered headings are the runtime stage markers (SA280 (b) retired
+    # the stage-5 manifest-sync gate, so 5 is deliberately absent).
+    assert numbered == ["1", "2", "3", "4", "6", "7", "8", "9", "10", "11", "12"]
 
 
 def test_failing_recorded_stage_snapshots_failures_for_retry(tmp_path: Path) -> None:
