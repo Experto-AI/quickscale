@@ -171,14 +171,6 @@ items:
      effort: Small, confidence: Medium, reality: generated-app,
      anchors: [quickscale_modules/orgs/src/quickscale_modules_orgs/views.py],
      first_seen: 2026-10-13, last_verified: 2026-10-13}
-  - {id: markdownx-upload-client-extension-and-content-type, status: open, severity: S4,
-     category: III, effort: Small, confidence: Medium, reality: generated-app,
-     anchors: [quickscale_modules/storage/src/quickscale_modules_storage/markdownx_urls.py],
-     first_seen: 2026-10-13, last_verified: 2026-10-13}
-  - {id: pyproject-write-not-atomic, status: open, severity: S4, category: IV, effort: Trivial,
-     confidence: Medium, reality: cli,
-     anchors: [quickscale_cli/src/quickscale_cli/utils/_dependency_write.py],
-     first_seen: 2026-10-13, last_verified: 2026-10-13}
   - {id: ci-poetry-retry-curl-pipe-python, status: open, severity: S4, category: VII,
      effort: Trivial, confidence: High, reality: release-pipeline,
      anchors: [.github/workflows/ci.yml, .github/workflows/nightly-bypassrls.yml],
@@ -238,7 +230,7 @@ items:
 ## 3. Summary table
 
 **Counts:**
-- **Open:** 7 in total: S1 — 0 · S2 — 0 · S3 — 1 · S4 — 6.
+- **Open:** 5 in total: S1 — 0 · S2 — 0 · S3 — 1 · S4 — 4.
 - **Watchlist:** 16.
 - **This pass:** prior open `forms-notification-status-misreported` resolved; 11 findings new, 0
   carried, 0 regressed.
@@ -249,8 +241,6 @@ items:
 | `notifications-webhook-status-regresses-out-of-order` | S4 | II | A late delivery event overwrites a terminal status | Small | Medium | new |
 | `notifications-webhook-secret-format-unchecked-at-startup` | S4 | VI | A malformed `whsec_` secret passes the startup check | Trivial | High | new |
 | `orgs-invite-throttle-partial-charge` | S4 | I | The per-sender bucket is charged when the per-org throttle refuses | Small | Medium | new |
-| `markdownx-upload-client-extension-and-content-type` | S4 | III | The staff editor upload trusts the client's extension and type | Small | Medium | new |
-| `pyproject-write-not-atomic` | S4 | IV | The CLI rewrites `pyproject.toml` in place | Trivial | Medium | new |
 | `ci-poetry-retry-curl-pipe-python` | S4 | VII | The CI retry path pipes an unpinned installer into Python | Trivial | High | new |
 
 ---
@@ -283,17 +273,6 @@ items:
   - **Defect:** when the per-sender throttle passes and the per-org throttle refuses, the rolled-
     back invitation still costs the sender a token.
   - **Fix:** check both throttles before charging either.
-- `markdownx-upload-client-extension-and-content-type` · `storage/markdownx_urls.py:19-24` (vendor
-  `markdownx/forms.py:52-57`)
-  - **Defect:** the staff-only editor upload keeps the client's extension and content type. GIF
-    and SVG skip Pillow, so a staff account can store an HTML or SVG document in public media on
-    the site's origin.
-  - **Fix:** wrap the vendor form with the SA239 format-derived extension, and drop SVG from
-    `MARKDOWNX_UPLOAD_CONTENT_TYPES`.
-- `pyproject-write-not-atomic` · `quickscale_cli/utils/_dependency_write.py:65-74`
-  - **Defect:** `_write_validated_toml` truncates the file and writes in place, so an interrupted
-    write leaves a corrupt `pyproject.toml`.
-  - **Fix:** write to a sibling temp file, then `os.replace`.
 - `ci-poetry-retry-curl-pipe-python` · `.github/workflows/ci.yml:667` (3 jobs) and `nightly-bypassrls.yml`
   - **Defect:** the Poetry install retry runs `curl install.python-poetry.org | python3`, unpinned,
     bypassing the SHA-pin contract.
@@ -309,7 +288,7 @@ the delta touched. Changed cells:
 | Entry point | Changed cell(s) at HEAD |
 |---|---|
 | All module session APIs | AuthN: one core session-authentication class (Basic removed, SA262). Throttle: core's one scoped class; a scope with no rate raises `ImproperlyConfigured` (fail-closed). Error shape: core `_error_shape.py`, with no traceback. Declared errors echo `str(exc)` by design, and no secret-bearing message was found. |
-| Markdownx editor upload | Now one storage mount, staff-only. Input validation: vendor `ImageForm` (`markdownx-upload-client-extension-and-content-type`). |
+| Markdownx editor upload | Now one storage mount, staff-only. Input validation: the upload decodes through storage's shared image validation and stores the decoded format's extension and content type, never the client-supplied pair, and SVG is refused. |
 | `NotificationWebhookView` | Startup: secret non-empty only (`notifications-webhook-secret-format-unchecked-at-startup`). Ordering: `notifications-webhook-status-regresses-out-of-order`. |
 | Billing reconcile command | `--dry-run` gates every write. Shares the per-org provider mutex with the webhooks. Conditional writes. Absent verdict waits out Stripe's Search indexing lag; two customer matches fail closed. |
 | Orgs invite (HTML + JSON) | Both scopes charged inside the atomic block, rolled back on refusal (`orgs-invite-throttle-partial-charge`). Pending cap under the org row lock. |
@@ -339,7 +318,10 @@ All batches are independent of each other.
 4. **Notifications:** the two webhook S4s (`_webhooks.py`, `checks.py`).
 5. **Opportunistic:** `crm-theme-stats-always-zero` (landed: the CRM stats endpoint and the
    theme's stat cards, with the contract-vintage adoption step), `orgs-invite-throttle-partial-charge`,
-   `markdownx-upload-client-extension-and-content-type`, and `pyproject-write-not-atomic`.
+   `markdownx-upload-client-extension-and-content-type` and `pyproject-write-not-atomic` (landed:
+   the shared editor upload stores the decoded format's extension and content type with SVG
+   refused, and the CLI's `pyproject.toml` write goes through a sibling temp file and
+   `os.replace`).
 
 ---
 
@@ -354,12 +336,12 @@ All batches are independent of each other.
 | forms | clean. The prior S4 is resolved and the view surfaces `notification_status: "skipped"`. | Views, `_email.py`. |
 | crm | clean. | Viewsets, pagination. |
 | blog / listings | clean. Throttle scopes kept; the bucket identity moved to per-user, as declared. | API views. |
-| storage | `markdownx-upload-client-extension-and-content-type` | Adapter, Markdownx URLs. |
+| storage | clean. | Adapter, Markdownx URLs. |
 | social | clean; one watch item. | Services, cache path. |
 | analytics | clean. The coherence lead `module-enabled-switch` is killed: the app stays installed when off, and no shipped template loads the tag. | Adapter, services. |
 | backups | clean. The `--scheduled` removal and the prune default are documented (release notes, `decisions.md:946`). | Diff in full. |
 | core runtime / templates | clean. Seam, DRF admission, error shape, URL ownership, and the blank `__QS_ENV__` marker (now renders `''`) are all verified. | New runtime files in full. |
-| CLI / manifest | `pyproject-write-not-atomic`; one watch item. The SA256 and SA260 closures hold. | Delta in full. |
+| CLI / manifest | clean; one watch item. The SA256 and SA260 closures hold. | Delta in full. |
 | DR engine | clean. The streaming restore and the `.part` publish cleanup are verified. | `_media.py` in full, `_remote.py` (variant sweep). |
 | gates + pipeline | two S4/S3 findings; two watch items. No gate dropped, no detector weakened (differential replay). | Workflows, `gates.mk`, security gates in full. |
 | devtools | clean (diff only). | Beta-migration delta. |
@@ -803,6 +785,16 @@ Added:
   from one bare-list page; the CRM suite's theme-contract test checks the hook's declared shape
   against the rendered response. Dropped from the index and summary; the §10 tooling gap closes
   with it.
+- 2026-10-15 — `markdownx-upload-client-extension-and-content-type`, `pyproject-write-not-atomic`:
+  **resolved** (SA273). Verified at
+  `quickscale_modules/storage/src/quickscale_modules_storage/markdownx_urls.py` and
+  `quickscale_cli/src/quickscale_cli/utils/_dependency_write.py`: the shared staff-only editor
+  upload decodes every file through the module's image validation, stores the decoded format's
+  extension and content type instead of the client's filename and media type, and refuses an HTML
+  document named `.png` and an SVG (the storage suite's HTTP tests pin both refusals and the
+  stored identity), while the CLI writes the validated document through a fresh sibling temp file
+  and an `os.replace`, with tests proving an interrupted write and an interrupted replace leave
+  the original `pyproject.toml` intact. Dropped from the index and summary.
 - 2026-10-13 — `dr-restore-vintage-exact-match`, `orgs-provider-id-check-blocks-migrate`, `crm-stage-seed-lost-on-commit-failure`, `backups-upload-restore-by-model-permission`, `single-sync-worker-vendor-calls`, `allow-bypassrls-serving-undetected`, `migrate-runs-per-replica`, `development-workflow-intermittent-root-500`, `core-e2e-poetry-cache-install-candidates`: carried (triggers not fired; evidence in §11).
 - 2026-10-13 — new open: `stripe-customer-search-lag-resolves-absent`, `dr-private-remote-restore-whole-object-in-memory`, `e2e-release-tag-trigger-never-matches` (S3); `crm-theme-stats-always-zero`, `notifications-webhook-status-regresses-out-of-order`, `notifications-webhook-secret-format-unchecked-at-startup`, `orgs-invite-throttle-partial-charge`, `markdownx-upload-client-extension-and-content-type`, `dr-media-part-file-leak-on-publish-failure`, `pyproject-write-not-atomic`, `ci-poetry-retry-curl-pipe-python` (S4).
 - 2026-10-13 — new watchlist: `orgs-role-mixin-checks-request-org`, `social-config-error-served-200`, `deploy-existing-settings-module-never-corrected`, `account-deletion-hook-exception-text`, `security-suppressions-uniform-expiry`, `generated-project-automation-local-only`, `initial-migration-edited-in-place`.

@@ -8,6 +8,8 @@ paths and test patch targets keep working.
 
 from __future__ import annotations
 
+import os
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import Any, Mapping
@@ -63,7 +65,14 @@ def _render_toml_literal(value: Any) -> str:
 
 
 def _write_validated_toml(path: Path, content: str) -> None:
-    """Write TOML content only after validating the rewritten document."""
+    """Write TOML content only after validating the rewritten document.
+
+    The validated document lands in a fresh sibling temp file first and is
+    moved over the target with ``os.replace``, so an interrupted write leaves
+    the original file intact instead of truncating it.  The staging file
+    takes the target's permission bits before the replacement, so a rewrite
+    never changes who can read ``pyproject.toml``.
+    """
     try:
         tomllib.loads(content)
     except tomllib.TOMLDecodeError as error:
@@ -71,7 +80,24 @@ def _write_validated_toml(path: Path, content: str) -> None:
             f"Refusing to write invalid TOML to {path}: {error}"
         ) from error
 
-    path.write_text(content)
+    try:
+        mode = path.stat().st_mode & 0o777
+    except FileNotFoundError:
+        mode = 0o644
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary_path.chmod(mode)
+        os.replace(temporary_path, path)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def _append_dependency_entries(

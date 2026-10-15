@@ -103,8 +103,12 @@ those keys into final public URLs.
 Storage mounts the one shared Markdownx editor endpoint at `markdownx/` (`upload/` and
 `markdownify/`), each staff-guarded, for every installed module whose admin Markdown editor
 uses it (Module Conventions rule 41). The mount's global settings
-(`MARKDOWNX_MARKDOWN_EXTENSIONS` and `MARKDOWNX_MEDIA_PATH = "markdownx/"`) are storage's, so
-editor uploads land in one location no matter which modules are installed.
+(`MARKDOWNX_MARKDOWN_EXTENSIONS`, `MARKDOWNX_MEDIA_PATH = "markdownx/"`, and
+`MARKDOWNX_UPLOAD_CONTENT_TYPES` without SVG) are storage's, so editor uploads land in one
+location no matter which modules are installed. Every upload is decoded through the module's
+shared image validation before it is stored: the stored name's extension and the stored content
+type come from the decoded format, never from the client-supplied filename or media type, and a
+document that is not a decodable image (an HTML file named `.png`, or an SVG) is refused.
 
 ## Management commands
 
