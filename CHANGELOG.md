@@ -789,6 +789,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **CRM stat cards show organization totals.** The React CRM workspace reads its contact,
     company, deal, and tag totals from the module's `crm/api/stats/` endpoint instead of
     inferring them from a paginated list page, so the cards no longer show 0.
+  - **Quality thresholds cover the gate scripts.** The quality scan also analyzes the non-test
+    Python under `scripts/`, so the gate scripts and the module-conventions harness meet the same
+    fixed thresholds as package source.
   - **Startup checks read their setting names from the manifest.** A module's `checks.py` asks the
     runtime for the secret and derived settings `apply` writes instead of holding its own list, so a
     renamed setting lands once in `module.yml`; the module-conventions gate refuses a `checks.py`

@@ -37,6 +37,7 @@ from _sync_ci_gate_catalog import (
 #: ``(module, facade module name)`` for every private sibling; a sibling must
 #: never import its own facade back.
 SPLIT_SIBLINGS = {
+    "_gate_registry_metadata": "_gate_registry_schema",
     "_gate_registry_schema": "check_gate_parity",
     "_sync_ci_gate_catalog": "sync_ci_gate_jobs",
     "_sync_ci_gate_core": "sync_ci_gate_jobs",

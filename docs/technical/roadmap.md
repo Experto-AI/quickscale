@@ -42,20 +42,19 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA278 | Retire the gate-script frozen surfaces and scan `scripts/` for quality | 2 | — | Optional |
 | SA273 | Harden the editor upload and the CLI's `pyproject.toml` write | 2 | — | Optional |
 | SA282 | One organization-selector flag and a required contract-vintage id | 2 | — | Optional |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | — | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
 | SA283 | Manifest-read startup checks, one capability collector, one `--cov` form | 3 | — | Optional |
-| SA279 | Retire the conformance harness's frozen surfaces | 3 | SA278 | Optional |
+| SA279 | Retire the conformance harness's frozen surfaces | 3 | — | Optional |
 | SA281 | Hand adapter hooks typed resolved options and delete the dataflow detector | 3 | SA279 | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
-Track 2: SA278 ──► SA273 ──► SA282 ──► SA280 ──► SA277
+Track 2: SA273 ──► SA282 ──► SA280 ──► SA277
 Track 3: SA283 ──► SA279 ──► SA281
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
@@ -63,11 +62,11 @@ Track 3: SA283 ──► SA279 ──► SA281
 
 Arrows within a track are queue order; the table holds the dependency edges. Cross-track edges:
 SA191 waits on Track 2's release fixes (through the 0.89.0 publication); SA204's freeze gate
-costs one registry row now that SA275 has landed (arch audit §7); SA279 waits on SA278, whose
-guard test it extends; SA277 waits on SA191's cutover, which decides which upgrade mechanism
-proved itself.
+costs one registry row now that SA275 has landed (arch audit §7); SA279 extends SA278's guard
+test to the conformance harness; SA277 waits on SA191's cutover, which decides which upgrade
+mechanism proved itself.
 
-**Parallel start.** SA204 (c), SA278, and SA283 have no unmet dependency and touch disjoint
+**Parallel start.** SA204 (c), SA273, and SA283 have no unmet dependency and touch disjoint
 files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -89,7 +88,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (f) | yes | no | yes | no | yes |
-| 2 | SA278 | yes | yes | yes | yes | no |
+| 2 | SA273 | yes | yes | yes | yes | no |
 | 3 | SA283 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -323,29 +322,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA275 — Derive gate wiring from the registry instead of holding copies equal.**
 
-- [ ] **SA278 — Retire the gate-script frozen surfaces and scan `scripts/` for quality.**
-
-  Closes the SA267 part of arch `rules-held-by-parity-not-derivation` (Finding 3,
-  recommendation: frozen name lists are deleted when a family's split closes; governance code
-  meets the product bar).
-
-  **Context:** SA267's slices split the gate scripts into facades plus private siblings and added
-  a parity test per family whose `FROZEN_SURFACE` pins every module-level name the pre-split module
-  published, private helpers included. SA267 has closed, so the lists now only tax refactors.
-  `check_quality.sh` scans package `src/` only.
-
-  **Acceptance:** every SA267 family's `FROZEN_SURFACE` name list is deleted; its exact-findings
-  corpus stays as a behavioral test where one exists. `check_quality.sh` scans `scripts/` under
-  the same thresholds, and the tree passes. A test fails when a `test_*_parity.py` holding a
-  `FROZEN_SURFACE` exists under `scripts/` (SA279 extends it to the harness).
-
-  **Slices:**
-  - [x] (a) Delete the gate-script frozen surfaces, keeping behavioral corpora, and add the
-    no-frozen-surface test (Tier 2-fast). Landed: the 11 gate-parity files under `scripts/`
-    keep their behavioral corpora and structural invariants, and
-    `scripts/test_no_frozen_surface.py` fails a top-level `test_*_parity.py` that defines a
-    module-level `FROZEN_*` name. (b) is next.
-  - [ ] (b) `check_quality.sh` scans `scripts/` (Tier 1).
+- [x] **SA278 — Retire the gate-script frozen surfaces and scan `scripts/` for quality.**
 
 - [ ] **SA273 — Harden the editor upload and the CLI's `pyproject.toml` write.**
 

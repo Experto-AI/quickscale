@@ -10,6 +10,8 @@ make quality
 
 ## What Gets Analyzed
 
+The scan covers every package `src/` tree plus the non-test Python under `scripts/` — the gate scripts and the module-conventions harness that hold the repository's governance code — so both meet the same fixed thresholds. Test files (`test_*.py`) stay out of the scan, exactly as package test code lives outside the scanned `src/` trees.
+
 Every metric has exactly two bands: a **fail** column that exits non-zero and a **warn** band that prints and still exits 0. Fail-column findings are named with their function, file, or block and value.
 
 | Metric | Fails (non-zero exit) | Warns only |

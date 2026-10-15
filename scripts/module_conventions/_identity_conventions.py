@@ -132,6 +132,54 @@ def _datetime_now_calls(tree: ast.Module) -> list[ast.Call]:
                 continue
             scan_expression(child, bindings)
 
+    def scan_compound(
+        statement: ast.stmt,
+        bindings: dict[str, tuple[str, ...]],
+        method_base: dict[str, tuple[str, ...]],
+        overwrite: bool,
+    ) -> None:
+        """Recurse into one compound statement's blocks in execution order."""
+        if isinstance(statement, ast.If):
+            scan_expression(statement.test, bindings)
+            test = statement.test
+            if isinstance(test, ast.Constant) and test.value is False:
+                scan_statements(statement.orelse, bindings, method_base, overwrite)
+            elif isinstance(test, ast.Constant) and test.value is True:
+                scan_statements(statement.body, bindings, method_base, overwrite)
+            else:
+                scan_statements(statement.body, bindings, method_base, False)
+                scan_statements(statement.orelse, bindings, method_base, False)
+            return
+        if isinstance(statement, (ast.With, ast.AsyncWith)):
+            for item in statement.items:
+                scan_expression(item.context_expr, bindings)
+            scan_statements(statement.body, bindings, method_base, overwrite)
+            return
+        if isinstance(statement, ast.For):
+            scan_expression(statement.iter, bindings)
+            scan_statements(statement.body, bindings, method_base, False)
+            scan_statements(statement.orelse, bindings, method_base, False)
+            return
+        if isinstance(statement, ast.While):
+            scan_expression(statement.test, bindings)
+            test = statement.test
+            if not (isinstance(test, ast.Constant) and test.value is False):
+                scan_statements(statement.body, bindings, method_base, False)
+            scan_statements(statement.orelse, bindings, method_base, False)
+            return
+        if isinstance(statement, ast.Try):
+            scan_statements(statement.body, bindings, method_base, overwrite)
+            for handler in statement.handlers:
+                scan_statements(handler.body, bindings, method_base, False)
+            scan_statements(statement.orelse, bindings, method_base, False)
+            scan_statements(statement.finalbody, bindings, method_base, overwrite)
+            return
+        if isinstance(statement, ast.Match):
+            scan_expression(statement.subject, bindings)
+            for case in statement.cases:
+                scan_statements(case.body, bindings, method_base, False)
+            return
+
     def scan_statements(
         statements: list[ast.stmt],
         bindings: dict[str, tuple[str, ...]],
@@ -156,45 +204,11 @@ def _datetime_now_calls(tree: ast.Module) -> list[ast.Call]:
                 _visit_definition_expressions(statement, bindings, scan_expression)
                 scan_expression(statement.body, bindings)
                 continue
-            if isinstance(statement, ast.If):
-                scan_expression(statement.test, bindings)
-                test = statement.test
-                if isinstance(test, ast.Constant) and test.value is False:
-                    scan_statements(statement.orelse, bindings, method_base, overwrite)
-                elif isinstance(test, ast.Constant) and test.value is True:
-                    scan_statements(statement.body, bindings, method_base, overwrite)
-                else:
-                    scan_statements(statement.body, bindings, method_base, False)
-                    scan_statements(statement.orelse, bindings, method_base, False)
-                continue
-            if isinstance(statement, (ast.With, ast.AsyncWith)):
-                for item in statement.items:
-                    scan_expression(item.context_expr, bindings)
-                scan_statements(statement.body, bindings, method_base, overwrite)
-                continue
-            if isinstance(statement, ast.For):
-                scan_expression(statement.iter, bindings)
-                scan_statements(statement.body, bindings, method_base, False)
-                scan_statements(statement.orelse, bindings, method_base, False)
-                continue
-            if isinstance(statement, ast.While):
-                scan_expression(statement.test, bindings)
-                test = statement.test
-                if not (isinstance(test, ast.Constant) and test.value is False):
-                    scan_statements(statement.body, bindings, method_base, False)
-                scan_statements(statement.orelse, bindings, method_base, False)
-                continue
-            if isinstance(statement, ast.Try):
-                scan_statements(statement.body, bindings, method_base, overwrite)
-                for handler in statement.handlers:
-                    scan_statements(handler.body, bindings, method_base, False)
-                scan_statements(statement.orelse, bindings, method_base, False)
-                scan_statements(statement.finalbody, bindings, method_base, overwrite)
-                continue
-            if isinstance(statement, ast.Match):
-                scan_expression(statement.subject, bindings)
-                for case in statement.cases:
-                    scan_statements(case.body, bindings, method_base, False)
+            if isinstance(
+                statement,
+                (ast.If, ast.With, ast.AsyncWith, ast.For, ast.While, ast.Try, ast.Match),
+            ):
+                scan_compound(statement, bindings, method_base, overwrite)
                 continue
             scan_expression(statement, bindings)
         for function in deferred_functions:
@@ -202,6 +216,66 @@ def _datetime_now_calls(tree: ast.Module) -> list[ast.Call]:
             scan_statements(function.body, seed, seed)
         for class_node, definition_bindings in deferred_classes:
             scan_class_body(class_node.body, definition_bindings, {**module_imports, **bindings})
+
+    def scan_class_block(
+        nodes: list[ast.stmt],
+        class_bindings: dict[str, tuple[str, ...]],
+        methods: list[ast.FunctionDef],
+        method_base: dict[str, tuple[str, ...]],
+        overwrite: bool,
+    ) -> None:
+        """Scan every statement of one class-scope block in order."""
+        for child in nodes:
+            scan_class_statement(child, class_bindings, methods, method_base, overwrite)
+
+    def scan_class_compound(
+        node: ast.stmt,
+        class_bindings: dict[str, tuple[str, ...]],
+        methods: list[ast.FunctionDef],
+        method_base: dict[str, tuple[str, ...]],
+        overwrite: bool,
+    ) -> None:
+        """Recurse into one class-scope compound statement's blocks in order."""
+        if isinstance(node, ast.If):
+            scan_expression(node.test, class_bindings)
+            test = node.test
+            if isinstance(test, ast.Constant) and test.value is False:
+                scan_class_block(node.orelse, class_bindings, methods, method_base, overwrite)
+            elif isinstance(test, ast.Constant) and test.value is True:
+                scan_class_block(node.body, class_bindings, methods, method_base, overwrite)
+            else:
+                scan_class_block(node.body, class_bindings, methods, method_base, False)
+                scan_class_block(node.orelse, class_bindings, methods, method_base, False)
+            return
+        if isinstance(node, ast.Try):
+            scan_class_block(node.body, class_bindings, methods, method_base, overwrite)
+            scan_class_block(node.finalbody, class_bindings, methods, method_base, overwrite)
+            scan_class_block(node.orelse, class_bindings, methods, method_base, False)
+            for handler in node.handlers:
+                scan_class_block(handler.body, class_bindings, methods, method_base, False)
+            return
+        if isinstance(node, ast.Match):
+            scan_expression(node.subject, class_bindings)
+            for case in node.cases:
+                scan_class_block(case.body, class_bindings, methods, method_base, False)
+            return
+        if isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                scan_expression(item.context_expr, class_bindings)
+            scan_class_block(node.body, class_bindings, methods, method_base, overwrite)
+            return
+        if isinstance(node, ast.For):
+            scan_expression(node.iter, class_bindings)
+            scan_class_block(node.body, class_bindings, methods, method_base, False)
+            scan_class_block(node.orelse, class_bindings, methods, method_base, False)
+            return
+        if isinstance(node, ast.While):
+            scan_expression(node.test, class_bindings)
+            test = node.test
+            if not (isinstance(test, ast.Constant) and test.value is False):
+                scan_class_block(node.body, class_bindings, methods, method_base, False)
+            scan_class_block(node.orelse, class_bindings, methods, method_base, False)
+            return
 
     def scan_class_statement(
         node: ast.AST,
@@ -225,58 +299,10 @@ def _datetime_now_calls(tree: ast.Module) -> list[ast.Call]:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             _add_import_bindings(class_bindings, node, overwrite=overwrite)
             return
-        if isinstance(node, ast.If):
-            scan_expression(node.test, class_bindings)
-            test = node.test
-            if isinstance(test, ast.Constant) and test.value is False:
-                for child in node.orelse:
-                    scan_class_statement(child, class_bindings, methods, method_base, overwrite)
-            elif isinstance(test, ast.Constant) and test.value is True:
-                for child in node.body:
-                    scan_class_statement(child, class_bindings, methods, method_base, overwrite)
-            else:
-                for child in node.body:
-                    scan_class_statement(child, class_bindings, methods, method_base, False)
-                for child in node.orelse:
-                    scan_class_statement(child, class_bindings, methods, method_base, False)
-            return
-        if isinstance(node, ast.Try):
-            for block in (node.body, node.finalbody):
-                for child in block:
-                    scan_class_statement(child, class_bindings, methods, method_base, overwrite)
-            for child in node.orelse:
-                scan_class_statement(child, class_bindings, methods, method_base, False)
-            for handler in node.handlers:
-                for child in handler.body:
-                    scan_class_statement(child, class_bindings, methods, method_base, False)
-            return
-        if isinstance(node, ast.Match):
-            scan_expression(node.subject, class_bindings)
-            for case in node.cases:
-                for child in case.body:
-                    scan_class_statement(child, class_bindings, methods, method_base, False)
-            return
-        if isinstance(node, (ast.With, ast.AsyncWith)):
-            for item in node.items:
-                scan_expression(item.context_expr, class_bindings)
-            for child in node.body:
-                scan_class_statement(child, class_bindings, methods, method_base, overwrite)
-            return
-        if isinstance(node, ast.For):
-            scan_expression(node.iter, class_bindings)
-            for child in node.body:
-                scan_class_statement(child, class_bindings, methods, method_base, False)
-            for child in node.orelse:
-                scan_class_statement(child, class_bindings, methods, method_base, False)
-            return
-        if isinstance(node, ast.While):
-            scan_expression(node.test, class_bindings)
-            test = node.test
-            if not (isinstance(test, ast.Constant) and test.value is False):
-                for child in node.body:
-                    scan_class_statement(child, class_bindings, methods, method_base, False)
-            for child in node.orelse:
-                scan_class_statement(child, class_bindings, methods, method_base, False)
+        if isinstance(
+            node, (ast.If, ast.Try, ast.Match, ast.With, ast.AsyncWith, ast.For, ast.While)
+        ):
+            scan_class_compound(node, class_bindings, methods, method_base, overwrite)
             return
         scan_expression(node, class_bindings)
 
