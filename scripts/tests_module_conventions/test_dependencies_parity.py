@@ -1,39 +1,30 @@
 """
-Parity controls for the ``rules_dependencies`` split (SA267).
+Behavioral controls for the ``rules_dependencies`` split (SA267).
 
 The layer-direction mechanics, the environment-reference scan, the
 manifest-dependency checks, and the type-check configuration analysis live in
 private siblings (``_dependencies_layers``, ``_dependencies_secrets``,
 ``_dependencies_manifests``, ``_dependencies_typecheck``) behind the
-``rules_dependencies`` facade.  These controls pin the facade's preserved
-surface, the split's structural invariants, and the exact ordered findings of
-representative corpora captured from the pre-split module, so a later slice
-cannot silently drop, reorder, or reword them.
+``rules_dependencies`` facade.  SA267 has closed, so SA279 retired the pre-split
+surface pins; these controls keep the split's structural invariants and the
+exact ordered findings of representative corpora captured from the pre-split
+module, so a later change cannot silently drop, reorder, or reword them.
 """
 
 from __future__ import annotations
 
 import ast
-import configparser
-import inspect
-import os
-import re
-import tomllib
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Corpus, Module
 from scripts.module_conventions import (
     _dependencies_layers,
     _dependencies_manifests,
     _dependencies_secrets,
     _dependencies_typecheck,
-    core,
-    registry,
     rules_dependencies,
 )
 from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FILES
@@ -50,79 +41,6 @@ SPLIT_SIBLINGS = {
     "_dependencies_typecheck": _dependencies_typecheck,
 }
 
-FROZEN_SURFACE = (
-    "BASE_RUNTIME_DEPENDENCY_NAMES",
-    "CORE_DEPENDENCY_NAME",
-    "CORE_RUNTIME_ROLE_ENV_VARS",
-    "DEPENDENCY_NAME_PATTERN",
-    "RULE_36_ALLOWED_DISABLED_CODES",
-    "RULE_36_ALLOWED_RELAXATION_KEYS",
-    "RULE_36_FALSE_VALUES",
-    "RULE_36_FORBIDDEN_SECTION_KEYS",
-    "RULE_36_KNOWN_EFFECTIVE_KEYS",
-    "RULE_36_MODULE_GLOB",
-    "RULE_36_RELAXED_FOLLOW_IMPORTS",
-    "RULE_36_RELAXED_VALUES",
-    "RULE_36_SECTION_TEMPLATE",
-    "RULE_36_TRUE_VALUES",
-    "_dependency_value_is_usable",
-    "_environ_references",
-    "_mypy_effective_option",
-    "_mypy_glob_targets_module",
-    "_pyproject_runtime_dependencies",
-    "rule_35_secrets",
-    "rule_36_typecheck_config",
-    "rule_39_module_dependencies",
-    "rule_5_dependency_direction",
-)
-
-#: The pre-split module's own imports, which it exposed as module attributes;
-#: the facade keeps every one importable through its redundant aliases.
-FROZEN_IMPORTED_BINDINGS = (
-    "Any",
-    "Corpus",
-    "MODULE_LAYERS",
-    "Module",
-    "SNAKE_CASE",
-    "ast",
-    "configparser",
-    "os",
-    "re",
-    "tomllib",
-    "_attribute_chain",
-    "_cross_module_imports",
-    "_literal",
-    "_parse",
-    "_same_layer_cycles",
-    "_setting_name_module",
-    "_settings_attribute_reads",
-)
-
-FROZEN_CORE_HELPERS = (
-    "Corpus",
-    "MODULE_LAYERS",
-    "Module",
-    "SNAKE_CASE",
-    "_attribute_chain",
-    "_cross_module_imports",
-    "_literal",
-    "_parse",
-    "_same_layer_cycles",
-    "_setting_name_module",
-    "_settings_attribute_reads",
-)
-
-FROZEN_SIGNATURES = {
-    "_dependency_value_is_usable": "(value: 'Any') -> 'bool'",
-    "_environ_references": "(tree: 'ast.Module') -> 'list[tuple[int, str | None]]'",
-    "_mypy_effective_option": "(key: 'str', value: 'str') -> 'tuple[str, str]'",
-    "_mypy_glob_targets_module": "(glob: 'str', package: 'str') -> 'bool'",
-    "_pyproject_runtime_dependencies": "(module: 'Module') -> 'dict[str, bool]'",
-    "rule_35_secrets": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_36_typecheck_config": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_39_module_dependencies": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_5_dependency_direction": "(corpus: 'Corpus') -> 'list[str]'",
-}
 
 BASE_MYPY = (
     "[mypy-quickscale_modules_demo.*]\n"
@@ -354,35 +272,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rules_dependencies.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rules_dependencies, name) is not None
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split module's own imports stay importable through the facade."""
-    assert rules_dependencies.ast is ast
-    assert rules_dependencies.configparser is configparser
-    assert rules_dependencies.os is os
-    assert rules_dependencies.re is re
-    assert rules_dependencies.tomllib is tomllib
-    assert rules_dependencies.Any is Any
-    for name in FROZEN_IMPORTED_BINDINGS:
-        assert getattr(rules_dependencies, name) is not None
-    for name in FROZEN_CORE_HELPERS:
-        assert getattr(rules_dependencies, name) is getattr(core, name)
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each pre-split callable keeps its pre-split signature through the facade."""
-    assert {
-        name: str(inspect.signature(getattr(rules_dependencies, name)))
-        for name in FROZEN_SIGNATURES
-    } == FROZEN_SIGNATURES
-
-
 def test_rule_37_exempts_only_the_facade() -> None:
     """The split siblings stay inside rule 37's closed world."""
     assert ("scripts", "module_conventions/rules_dependencies.py") in RULE_37_ALLOWED_LITERAL_FILES
@@ -409,56 +298,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                         name,
                         node.lineno,
                     )
-
-
-def test_orchestrators_and_entrypoints_keep_their_homes() -> None:
-    """The four detectors stay orchestrated by the facade; the mechanics move out."""
-    assert rules_dependencies.rule_5_dependency_direction.__module__ == (
-        "scripts.module_conventions.rules_dependencies"
-    )
-    assert rules_dependencies.rule_35_secrets.__module__ == (
-        "scripts.module_conventions.rules_dependencies"
-    )
-    assert rules_dependencies.rule_39_module_dependencies.__module__ == (
-        "scripts.module_conventions.rules_dependencies"
-    )
-    assert rules_dependencies.rule_36_typecheck_config.__module__ == (
-        "scripts.module_conventions.rules_dependencies"
-    )
-    assert _dependencies_layers._module_layer_findings.__module__ == (
-        "scripts.module_conventions._dependencies_layers"
-    )
-    assert _dependencies_layers._core_module_setting_findings.__module__ == (
-        "scripts.module_conventions._dependencies_layers"
-    )
-    assert _dependencies_secrets._environ_references.__module__ == (
-        "scripts.module_conventions._dependencies_secrets"
-    )
-    assert _dependencies_manifests._dependency_value_is_usable.__module__ == (
-        "scripts.module_conventions._dependencies_manifests"
-    )
-    assert _dependencies_manifests._pyproject_runtime_dependencies.__module__ == (
-        "scripts.module_conventions._dependencies_manifests"
-    )
-    assert _dependencies_typecheck._mypy_effective_option.__module__ == (
-        "scripts.module_conventions._dependencies_typecheck"
-    )
-    assert _dependencies_typecheck._mypy_glob_targets_module.__module__ == (
-        "scripts.module_conventions._dependencies_typecheck"
-    )
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detectors are the facade callables, not siblings."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    for number, name in (
-        (5, "rule_5_dependency_direction"),
-        (35, "rule_35_secrets"),
-        (36, "rule_36_typecheck_config"),
-        (39, "rule_39_module_dependencies"),
-    ):
-        assert detectors[number] is getattr(rules_dependencies, name)
-        assert getattr(checker, name) is getattr(rules_dependencies, name)
 
 
 @pytest.mark.parametrize(

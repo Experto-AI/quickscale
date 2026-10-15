@@ -44,26 +44,24 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | — | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
-| SA279 | Retire the conformance harness's frozen surfaces | 3 | — | Optional |
-| SA281 | Hand adapter hooks typed resolved options and delete the dataflow detector | 3 | SA279 | Optional |
+| SA281 | Hand adapter hooks typed resolved options and delete the dataflow detector | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
 Track 2: SA280 ──► SA277
-Track 3: SA279 ──► SA281
+Track 3: SA281
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Cross-track edges:
 SA191 waits on Track 2's release fixes (through the 0.89.0 publication); SA204's freeze gate
-costs one registry row now that SA275 has landed (arch audit §7); SA279 extends SA278's guard
-test to the conformance harness; SA277 waits on SA191's cutover, which decides which upgrade
-mechanism proved itself.
+costs one registry row now that SA275 has landed (arch audit §7); SA277 waits on SA191's cutover,
+which decides which upgrade mechanism proved itself.
 
-**Parallel start.** SA204 (f), SA280, and SA279 have no unmet dependency and touch disjoint
+**Parallel start.** SA204 (f), SA280, and SA281 have no unmet dependency and touch disjoint
 files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -86,7 +84,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA204 (f) | yes | no | yes | no | yes |
 | 2 | SA280 | yes | yes | yes | yes | no |
-| 3 | SA279 | yes | yes | yes | yes | no |
+| 3 | SA281 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -377,21 +375,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA283 — Manifest-read startup checks, one capability collector, one `--cov` form.**
 
-- [ ] **SA279 — Retire the conformance harness's frozen surfaces.**
-
-  Closes the SA268 part of arch `rules-held-by-parity-not-derivation` (Finding 3,
-  recommendation).
-
-  **Context:** SA268 split `rules_routes.py`, `rules_identity.py`, `rules_webhooks.py`, and
-  `core.py` into facades plus siblings, each with a parity test whose `FROZEN_SURFACE` pins every
-  published name. SA268 has closed.
-
-  **Acceptance:** the harness families' `FROZEN_SURFACE` lists are deleted, keeping any
-  exact-findings corpus as a behavioral test; SA278's no-frozen-surface test extends to the
-  harness, so no `test_*_parity.py` with a frozen surface survives anywhere; all 43 covered rules
-  still pass with their controls.
-
-  **Tier:** 2-fast.
+- [x] **SA279 — Retire the conformance harness's frozen surfaces.**
 
 - [ ] **SA281 — Hand adapter hooks typed resolved options and delete the dataflow detector.**
 

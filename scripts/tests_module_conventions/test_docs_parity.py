@@ -1,30 +1,25 @@
 """
-Parity controls for the ``rules_docs`` split (SA267).
+Behavioral controls for the ``rules_docs`` split (SA267).
 
 Rule 38's README mechanics live in the private sibling (``_docs_readme``)
-behind the ``rules_docs`` facade.  These controls pin the facade's preserved
-surface, the split's structural invariants, and the exact ordered findings of
-representative corpora captured from the pre-split module, so a later slice
-cannot silently drop, reorder, or reword them.
+behind the ``rules_docs`` facade.  SA267 has closed, so SA279 retired the
+pre-split surface pins; these controls keep the split's structural invariants
+and the exact ordered findings of representative corpora captured from the
+pre-split module, so a later change cannot silently drop, reorder, or reword
+them.
 """
 
 from __future__ import annotations
 
 import ast
-import inspect
-import re
-from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Module
 from scripts.module_conventions import (
     _docs_readme,
-    core,
-    registry,
     rules_docs,
 )
 from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FILES
@@ -38,52 +33,6 @@ from scripts.tests_module_conventions._support import (
 SPLIT_SIBLINGS = {
     "_docs_readme": _docs_readme,
 }
-
-#: Every module-level name the pre-split ``rules_docs`` published, from its
-#: own ``def``/``class``/assignment statements.  The facade must keep exposing
-#: all of them, private helpers included.
-FROZEN_SURFACE = (
-    "_ORG_ROLE_TOKENS",
-    "_ROLE_LISTING",
-    "_ROLE_TABLE_HEADER",
-    "_ROLE_TABLE_VALUE",
-    "_lists_role_requirement",
-    "_uses_org_roles",
-    "rule_38_readme_content",
-)
-
-#: The pre-split module's own imports, which it exposed as module attributes;
-#: the facade keeps every one importable through its redundant aliases.
-FROZEN_IMPORTED_BINDINGS = (
-    "Corpus",
-    "Mapping",
-    "Module",
-    "Path",
-    "re",
-)
-
-FROZEN_CORE_HELPERS = (
-    "Corpus",
-    "Module",
-)
-
-#: The pre-split signature of every callable the pre-split module published.
-FROZEN_SIGNATURES = {
-    "_lists_role_requirement": "(section: 'str') -> 'bool'",
-    "_uses_org_roles": "(module: 'Module') -> 'bool'",
-    "rule_38_readme_content": "(corpus: 'Corpus') -> 'list[str]'",
-}
-
-#: Rule 38's required level-two headings, in order; the sibling owns the tuple.
-FROZEN_REQUIRED_HEADINGS = (
-    "Overview",
-    "Configuration",
-    "Public surface",
-    "URLs",
-    "Management commands",
-    "Operations",
-    "Extending",
-)
 
 
 def _without_readme(name: str = "demo") -> Module:
@@ -237,31 +186,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rules_docs.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rules_docs, name) is not None
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split module's own imports stay importable through the facade."""
-    assert rules_docs.re is re
-    assert rules_docs.Mapping is Mapping
-    assert rules_docs.Path is Path
-    for name in FROZEN_IMPORTED_BINDINGS:
-        assert getattr(rules_docs, name) is not None
-    for name in FROZEN_CORE_HELPERS:
-        assert getattr(rules_docs, name) is getattr(core, name)
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each pre-split callable keeps its pre-split signature through the facade."""
-    assert {
-        name: str(inspect.signature(getattr(rules_docs, name))) for name in FROZEN_SIGNATURES
-    } == FROZEN_SIGNATURES
-
-
 def test_rule_37_exempts_only_the_facade() -> None:
     """The split sibling stays inside rule 37's closed world."""
     assert (
@@ -291,43 +215,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                         name,
                         node.lineno,
                     )
-
-
-def test_orchestrators_and_helpers_keep_their_homes() -> None:
-    """Rule 38 stays orchestrated by the facade; the mechanics move out."""
-    assert rules_docs.rule_38_readme_content.__module__ == ("scripts.module_conventions.rules_docs")
-    for name in (
-        "_ORG_ROLE_TOKENS",
-        "_ROLE_LISTING",
-        "_ROLE_TABLE_HEADER",
-        "_ROLE_TABLE_VALUE",
-        "_lists_role_requirement",
-        "_uses_org_roles",
-    ):
-        assert getattr(rules_docs, name) is getattr(_docs_readme, name), name
-    for name in (
-        "_lists_role_requirement",
-        "_uses_org_roles",
-        "_readme_headings",
-        "_heading_violations",
-        "_versioned_heading_violations",
-        "_readme_sections",
-        "_configuration_violations",
-        "_command_violations",
-        "_role_listing_violations",
-        "_readme_violations",
-    ):
-        assert getattr(_docs_readme, name).__module__ == (
-            "scripts.module_conventions._docs_readme"
-        ), name
-    assert _docs_readme.REQUIRED_HEADINGS == FROZEN_REQUIRED_HEADINGS
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detector is the facade callable, not the sibling."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    assert detectors[38] is rules_docs.rule_38_readme_content
-    assert checker.rule_38_readme_content is rules_docs.rule_38_readme_content
 
 
 @pytest.mark.parametrize(

@@ -1,29 +1,25 @@
 """
-Parity controls for the ``rules_redaction`` split (SA268).
+Behavioral controls for the ``rules_redaction`` split (SA268).
 
 Rules 47 and 48's anonymization-handler mechanics live in the private sibling
-(``_redaction_handlers``) behind the ``rules_redaction`` facade.  These
-controls pin the facade's preserved surface, the split's structural
-invariants, and the exact ordered findings of representative corpora captured
-from the pre-split module, so a later slice cannot silently drop, reorder, or
-reword them.
+(``_redaction_handlers``) behind the ``rules_redaction`` facade.  SA268 has
+closed, so SA279 retired the pre-split surface pins; these controls keep the
+split's structural invariants and the exact ordered findings of representative
+corpora captured from the pre-split module, so a later change cannot silently
+drop, reorder, or reword them.
 """
 
 from __future__ import annotations
 
 import ast
-import inspect
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Module
 from scripts.module_conventions import (
     _redaction_handlers,
-    core,
-    registry,
     rules_redaction,
 )
 from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FILES
@@ -37,51 +33,6 @@ SPLIT_SIBLINGS = {
     "_redaction_handlers": _redaction_handlers,
 }
 
-#: Every module-level name the pre-split ``rules_redaction`` published, from
-#: its own ``def``/assignment statements.  The facade must keep exposing all of
-#: them, private helpers included.
-FROZEN_SURFACE = (
-    "_ADDRESS_SENTINEL_END",
-    "_ADDRESS_SENTINEL_START",
-    "_ANONYMIZATION_FILE",
-    "_ENTITY_TERMINATOR",
-    "_NAME_SENTINEL",
-    "_compiled_address_pattern",
-    "_dotted_name",
-    "_entry_point_violations",
-    "_literal_skeleton",
-    "_sentinel_violations",
-    "rule_47_redaction",
-    "rule_48_replacement_values",
-)
-
-#: The pre-split module's own imports, which it exposed as module attributes;
-#: the facade keeps every one importable through its redundant aliases.
-FROZEN_IMPORTED_BINDINGS = (
-    "Corpus",
-    "Module",
-    "_docstring_nodes",
-    "_parse",
-    "ast",
-)
-
-FROZEN_CORE_HELPERS = (
-    "Corpus",
-    "Module",
-    "_docstring_nodes",
-    "_parse",
-)
-
-#: The pre-split signature of every callable the pre-split module published.
-FROZEN_SIGNATURES = {
-    "_compiled_address_pattern": "(node: 'ast.stmt') -> 'str | None'",
-    "_dotted_name": "(node: 'ast.expr') -> 'str | None'",
-    "_entry_point_violations": "(module: 'Module') -> 'list[str]'",
-    "_literal_skeleton": "(node: 'ast.expr') -> 'str | None'",
-    "_sentinel_violations": "(module: 'Module') -> 'list[str]'",
-    "rule_47_redaction": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_48_replacement_values": "(corpus: 'Corpus') -> 'list[str]'",
-}
 
 CLEAN_HANDLER = '''\
 """Demo anonymization handler."""
@@ -553,29 +504,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rules_redaction.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rules_redaction, name) is not None
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split module's own imports stay importable through the facade."""
-    assert rules_redaction.ast is ast
-    for name in FROZEN_IMPORTED_BINDINGS:
-        assert getattr(rules_redaction, name) is not None
-    for name in FROZEN_CORE_HELPERS:
-        assert getattr(rules_redaction, name) is getattr(core, name)
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each pre-split callable keeps its pre-split signature through the facade."""
-    assert {
-        name: str(inspect.signature(getattr(rules_redaction, name))) for name in FROZEN_SIGNATURES
-    } == FROZEN_SIGNATURES
-
-
 def test_rule_37_exempts_neither_module() -> None:
     """The split adds no rule 37 exemption; neither module names modules."""
     for name in ("rules_redaction", *SPLIT_SIBLINGS):
@@ -601,52 +529,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                         name,
                         node.lineno,
                     )
-
-
-def test_orchestrators_and_helpers_keep_their_homes() -> None:
-    """Rules 47 and 48 stay orchestrated by the facade; the mechanics move out."""
-    assert rules_redaction.rule_47_redaction.__module__ == (
-        "scripts.module_conventions.rules_redaction"
-    )
-    assert rules_redaction.rule_48_replacement_values.__module__ == (
-        "scripts.module_conventions.rules_redaction"
-    )
-    for name in (
-        "_ADDRESS_SENTINEL_END",
-        "_ADDRESS_SENTINEL_START",
-        "_ANONYMIZATION_FILE",
-        "_ENTITY_TERMINATOR",
-        "_NAME_SENTINEL",
-        "_compiled_address_pattern",
-        "_dotted_name",
-        "_entry_point_violations",
-        "_literal_skeleton",
-        "_sentinel_violations",
-    ):
-        assert getattr(rules_redaction, name) is getattr(_redaction_handlers, name), name
-    for name in (
-        "_compiled_address_pattern",
-        "_dotted_name",
-        "_entry_point_violations",
-        "_literal_skeleton",
-        "_matcher_violations",
-        "_sentinel_violations",
-        "_anonymize_account_method",
-        "_anonymization_aliases",
-        "_delegated_names",
-    ):
-        assert getattr(_redaction_handlers, name).__module__ == (
-            "scripts.module_conventions._redaction_handlers"
-        ), name
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detectors are the facade callables, not siblings."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    assert detectors[47] is rules_redaction.rule_47_redaction
-    assert detectors[48] is rules_redaction.rule_48_replacement_values
-    assert checker.rule_47_redaction is rules_redaction.rule_47_redaction
-    assert checker.rule_48_replacement_values is rules_redaction.rule_48_replacement_values
 
 
 @pytest.mark.parametrize(

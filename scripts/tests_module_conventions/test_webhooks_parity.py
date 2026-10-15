@@ -1,24 +1,22 @@
 """
-Parity controls for the ``rules_webhooks`` split (SA267).
+Behavioral controls for the ``rules_webhooks`` split (SA267).
 
 The rule-26 mechanics live in private siblings (``_webhooks_routes``,
 ``_webhooks_views``, ``_webhooks_services``, ``_webhooks_signature``,
-``_webhooks_flows``) behind the ``rules_webhooks`` facade.  These controls pin
-the facade's preserved surface, the split's structural invariants, and the
-exact ordered findings of representative corpora captured from the pre-split
-module, so a later slice cannot silently drop, reorder, or reword them.
+``_webhooks_flows``) behind the ``rules_webhooks`` facade.  SA267 has closed,
+so SA279 retired the pre-split surface pins; these controls keep the split's
+structural invariants and the exact ordered findings of representative corpora
+captured from the pre-split module, so a later change cannot silently drop,
+reorder, or reword them.
 """
 
 from __future__ import annotations
 
 import ast
-import inspect
-from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Corpus, Module
 from scripts.module_conventions import (
     _webhooks_flows,
@@ -26,8 +24,6 @@ from scripts.module_conventions import (
     _webhooks_services,
     _webhooks_signature,
     _webhooks_views,
-    core,
-    registry,
     rules_webhooks,
 )
 from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FILES
@@ -43,116 +39,6 @@ SPLIT_SIBLINGS = {
     "_webhooks_services": _webhooks_services,
     "_webhooks_signature": _webhooks_signature,
     "_webhooks_views": _webhooks_views,
-}
-
-FROZEN_SURFACE = (
-    "CANDIDATE_SELECTION_METHODS",
-    "CANDIDATE_SPLIT_METHODS",
-    "SIGNATURE_METHOD_DERIVATIONS",
-    "_and_evaluated_compares",
-    "_callee_signature_binding",
-    "_calls_construct_event",
-    "_candidate_guard_returns",
-    "_candidate_value",
-    "_consumes_names",
-    "_direct_call_node",
-    "_distinct_arguments",
-    "_entry_signature_binding",
-    "_evaluated_signature_value",
-    "_executed_local_calls",
-    "_executed_service_calls",
-    "_failure_branch",
-    "_is_rejection_value",
-    "_may_return_any",
-    "_may_return_non_rejection",
-    "_meaningful_verification",
-    "_mentions_headers",
-    "_overwritten_names",
-    "_rejects_by_raising",
-    "_rejects_failure",
-    "_request_header_argument",
-    "_service_call_target",
-    "_service_verifies_signature",
-    "_signature_candidate_loop_verifies",
-    "_single_target_names",
-    "_update_candidate_derivation",
-    "_verification_on_accepting_path",
-    "rule_26_webhooks",
-)
-
-#: The pre-split module's own imports, which it exposed as module attributes;
-#: the facade keeps every one importable through its redundant aliases.
-FROZEN_IMPORTED_BINDINGS = (
-    "Callable",
-    "Mapping",
-    "ast",
-    "Corpus",
-    "_call_func_name",
-    "_class_names",
-    "_keyword",
-    "_literal",
-    "_parse",
-    "_static_truth",
-)
-
-FROZEN_CORE_HELPERS = (
-    "_call_func_name",
-    "_class_names",
-    "_keyword",
-    "_literal",
-    "_parse",
-    "_static_truth",
-)
-
-FROZEN_SIGNATURES = {
-    "_and_evaluated_compares": "(node: 'ast.expr') -> 'list[ast.Call]'",
-    "_callee_signature_binding": (
-        "(call: 'ast.Call', caller_names: 'set[str]', callee: 'ast.FunctionDef') -> 'set[str]'"
-    ),
-    "_calls_construct_event": "(value: 'ast.expr | None', signature_names: 'set[str]') -> 'bool'",
-    "_candidate_guard_returns": "(statement: 'ast.If', derived: 'set[str]') -> 'bool'",
-    "_candidate_value": "(node: 'ast.expr', derived: 'set[str]') -> 'bool'",
-    "_consumes_names": "(call: 'ast.Call', names: 'set[str]') -> 'bool'",
-    "_direct_call_node": (
-        "(node: 'ast.expr | None', functions: 'Mapping[str, ast.FunctionDef]') -> 'ast.Call | None'"
-    ),
-    "_distinct_arguments": "(call: 'ast.Call') -> 'bool'",
-    "_entry_signature_binding": "(view_call: 'ast.Call', entry: 'ast.FunctionDef') -> 'set[str]'",
-    "_evaluated_signature_value": "(expr: 'ast.expr', names: 'set[str]') -> 'bool'",
-    "_executed_local_calls": (
-        "(statements: 'list[ast.stmt]', functions: 'Mapping[str, ast.FunctionDef]', trusted: "
-        "'set[str]') -> 'list[tuple[ast.Call, set[str]]]'"
-    ),
-    "_executed_service_calls": (
-        "(statements: 'list[ast.stmt]', is_service: 'Callable[[ast.Call], bool]') -> "
-        "'list[ast.Call]'"
-    ),
-    "_failure_branch": (
-        "(statement: 'ast.If', signature_names: 'set[str]') -> 'list[ast.stmt] | None'"
-    ),
-    "_is_rejection_value": "(value: 'ast.expr | None') -> 'bool'",
-    "_may_return_any": "(statements: 'list[ast.stmt]') -> 'bool'",
-    "_may_return_non_rejection": "(statements: 'list[ast.stmt]') -> 'bool'",
-    "_meaningful_verification": "(node: 'ast.AST', signature_names: 'set[str]') -> 'bool'",
-    "_mentions_headers": "(node: 'ast.expr') -> 'bool'",
-    "_overwritten_names": "(statements: 'list[ast.stmt]') -> 'set[str]'",
-    "_rejects_by_raising": "(branch: 'list[ast.stmt]') -> 'bool'",
-    "_rejects_failure": "(branch: 'list[ast.stmt]') -> 'bool'",
-    "_request_header_argument": "(node: 'ast.expr') -> 'bool'",
-    "_service_call_target": (
-        "(call: 'ast.Call', bindings: 'Mapping[str, str]', module_names: 'set[str]') -> "
-        "'str | None'"
-    ),
-    "_service_verifies_signature": (
-        "(services_source: 'str', function_name: 'str', view_call: 'ast.Call') -> 'bool'"
-    ),
-    "_signature_candidate_loop_verifies": "(statement: 'ast.For', trusted: 'set[str]') -> 'bool'",
-    "_single_target_names": "(target: 'ast.expr') -> 'set[str] | None'",
-    "_update_candidate_derivation": "(statement: 'ast.stmt', derived: 'set[str]') -> 'None'",
-    "_verification_on_accepting_path": (
-        "(statements: 'list[ast.stmt]', signature_names: 'set[str]') -> 'bool'"
-    ),
-    "rule_26_webhooks": "(corpus: 'Corpus') -> 'list[str]'",
 }
 
 
@@ -628,32 +514,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rules_webhooks.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rules_webhooks, name) is not None
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split module's own imports stay importable through the facade."""
-    assert rules_webhooks.ast is ast
-    assert rules_webhooks.Callable is Callable
-    assert rules_webhooks.Mapping is Mapping
-    assert rules_webhooks.Corpus is core.Corpus
-    for name in FROZEN_IMPORTED_BINDINGS:
-        assert getattr(rules_webhooks, name) is not None
-    for name in FROZEN_CORE_HELPERS:
-        assert getattr(rules_webhooks, name) is getattr(core, name)
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each pre-split callable keeps its pre-split signature through the facade."""
-    assert {
-        name: str(inspect.signature(getattr(rules_webhooks, name))) for name in FROZEN_SIGNATURES
-    } == FROZEN_SIGNATURES
-
-
 def test_rule_37_exempts_only_the_facade() -> None:
     """The split siblings stay inside rule 37's closed world."""
     assert ("scripts", "module_conventions/rules_webhooks.py") in RULE_37_ALLOWED_LITERAL_FILES
@@ -680,41 +540,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                         name,
                         node.lineno,
                     )
-
-
-def test_orchestrators_and_entrypoints_keep_their_homes() -> None:
-    """Rule 26 stays orchestrated by the facade; the mechanics move out."""
-    assert rules_webhooks.rule_26_webhooks.__module__ == (
-        "scripts.module_conventions.rules_webhooks"
-    )
-    assert _webhooks_routes._route_entries.__module__ == (
-        "scripts.module_conventions._webhooks_routes"
-    )
-    assert _webhooks_views._view_violations.__module__ == (
-        "scripts.module_conventions._webhooks_views"
-    )
-    assert _webhooks_services._service_verifies_signature.__module__ == (
-        "scripts.module_conventions._webhooks_services"
-    )
-    assert _webhooks_services._executed_local_calls.__module__ == (
-        "scripts.module_conventions._webhooks_services"
-    )
-    assert _webhooks_signature._verification_on_accepting_path.__module__ == (
-        "scripts.module_conventions._webhooks_signature"
-    )
-    assert _webhooks_signature._evaluated_signature_value.__module__ == (
-        "scripts.module_conventions._webhooks_signature"
-    )
-    assert _webhooks_flows._rejects_by_raising.__module__ == (
-        "scripts.module_conventions._webhooks_flows"
-    )
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detector is the facade orchestration, not a sibling."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    assert detectors[26] is rules_webhooks.rule_26_webhooks
-    assert checker.rule_26_webhooks is rules_webhooks.rule_26_webhooks
 
 
 @pytest.mark.parametrize(
