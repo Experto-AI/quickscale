@@ -2253,7 +2253,7 @@ class TestUpdateCommand:
                 project_contract=CORE_VERSION,
                 adopted_contract_steps=[
                     *_ADOPTED_CONTRACT_STEPS,
-                    "sa209-stripe-webhook-version",
+                    "sa280-stripe-webhook-version",
                 ],
             ),
             modules={"billing": module_state},

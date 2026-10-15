@@ -273,7 +273,8 @@ def _display_billing_next_steps(modules: Mapping[str, Any]) -> None:
     webhook_secret_env_var = str(billing_options.get("webhook_secret_env_var") or "")
     click.echo("\n  # Billing setup")
     click.echo(
-        "  Create the Stripe webhook endpoint at API version 2026-06-24.dahlia, "
+        "  Create the Stripe webhook endpoint at API version "
+        f"{_module_options.STRIPE_API_VERSION}, "
         "pointed at /billing/webhooks/stripe/."
     )
     click.echo(

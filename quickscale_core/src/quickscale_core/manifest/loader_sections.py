@@ -11,6 +11,7 @@ from __future__ import annotations
 import posixpath
 from typing import Any
 
+from quickscale_core.contracts.module_options import resolve_adoption_step_tokens
 from quickscale_core.manifest.loader_errors import ManifestError
 from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
@@ -252,7 +253,14 @@ def _parse_contract_vintage(
 def _parse_contract_adoption_steps(
     steps_raw: Any, module_name: str | None
 ) -> list[str]:
-    """Parse and validate the contract-vintage manual-adoption-steps list."""
+    """Parse and validate the contract-vintage manual-adoption-steps list.
+
+    A step may reference a core contract value as a declared token (see
+    ``quickscale_core.contracts.module_options.ADOPTION_STEP_TOKENS``); the
+    value is resolved here, while the manifest is read, so every consumer of
+    the parsed steps — status output, apply/update refusals, JSON diagnostics
+    — reads the authored constant instead of a hand-synced copy.
+    """
     if steps_raw is None:
         steps_raw = []
     if not isinstance(steps_raw, list):
@@ -267,7 +275,7 @@ def _parse_contract_adoption_steps(
                 f"'contract_vintage.manual_adoption_steps[{i}]' must be a string",
                 module_name,
             )
-        steps.append(step)
+        steps.append(resolve_adoption_step_tokens(step))
     return steps
 
 

@@ -179,6 +179,7 @@ class TestRuntimeAllExport:
             "ShellCommandRunner",
             "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
             "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
+            "STRIPE_API_VERSION",
             "StagedAdminRestoreUpload",
             "_cleanup_admin_restore_upload_directory",
             "_get_authoritative_snapshot_for_artifact",

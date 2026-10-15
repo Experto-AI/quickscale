@@ -17,6 +17,15 @@ from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from django.urls import NoReverseMatch, reverse
 
+# The Stripe API version this module is written against (the version
+# stripe-python 15.x ships pinned) is the one authored constant in
+# ``quickscale_core.contracts.module_options``, served to module code through
+# the versioned runtime facade; it is re-exported here so the module's import
+# paths keep working. It is set on the SDK before every call and every webhook
+# event must report the same named release.
+from quickscale_core.runtime.manifest import (
+    STRIPE_API_VERSION as STRIPE_API_VERSION,
+)
 from quickscale_modules_billing.exceptions import (
     BillingConfigurationError,
     BillingDisabledError,
@@ -27,10 +36,6 @@ from quickscale_modules_billing.models import (
     Subscription,
 )
 
-# The Stripe API version this module is written against: the version
-# stripe-python 15.x ships pinned. It is set on the SDK before every call and
-# every webhook event must report the same named release.
-STRIPE_API_VERSION: Final[str] = "2026-06-24.dahlia"
 STRIPE_EVENT_TYPE_CHECKOUT_SESSION_COMPLETED = "checkout.session.completed"
 STRIPE_EVENT_TYPE_CHECKOUT_SESSION_EXPIRED = "checkout.session.expired"
 STRIPE_EVENT_TYPE_CHECKOUT_SESSION_ASYNC_PAYMENT_SUCCEEDED = (

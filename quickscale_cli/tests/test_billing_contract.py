@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from quickscale_core.contracts.module_options import STRIPE_API_VERSION
 from quickscale_core.contracts.resolvers import (
     resolve_manifest_module_options,
 )
@@ -97,7 +98,7 @@ def test_apply_next_steps_name_the_required_stripe_endpoint_version(
     output = capsys.readouterr().out
 
     assert "# Billing setup" in output
-    assert "2026-06-24.dahlia" in output
+    assert STRIPE_API_VERSION in output
     assert "OPS_BILLING_WEBHOOK_SECRET" in output
     assert "/billing/webhooks/stripe/" in output
     assert "older API version stops processing" in output

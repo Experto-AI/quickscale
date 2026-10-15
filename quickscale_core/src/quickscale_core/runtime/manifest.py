@@ -20,6 +20,13 @@ from quickscale_core.contracts.module_options import (
 )
 
 # ---------------------------------------------------------------------------
+# Billing contract constants
+# ---------------------------------------------------------------------------
+from quickscale_core.contracts.module_options import (
+    STRIPE_API_VERSION as STRIPE_API_VERSION,
+)
+
+# ---------------------------------------------------------------------------
 # Social-manifest surface: path constants
 # ---------------------------------------------------------------------------
 from quickscale_core.contracts.module_options import (

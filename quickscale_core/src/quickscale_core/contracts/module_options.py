@@ -42,6 +42,42 @@ BILLING_ENV_VAR_OPTION_NAMES: Final[tuple[str, ...]] = (
     "webhook_secret_env_var",
 )
 
+#: The Stripe API version the billing module is written against: the version
+#: the pinned ``stripe`` SDK ships.  One authored constant — the billing
+#: module's settings re-export it, the CLI's apply next-steps read it, the
+#: generated operations guide renders it from the generator context, and a
+#: module manifest's contract-vintage prose references it as the
+#: ``{stripe_api_version}`` token (see :data:`ADOPTION_STEP_TOKENS`).
+STRIPE_API_VERSION: Final[str] = "2026-06-24.dahlia"
+
+
+# ---------------------------------------------------------------------------
+# Contract-prose tokens (module manifests)
+# ---------------------------------------------------------------------------
+#
+# A module manifest's contract-vintage adoption-step prose may reference a
+# core contract value as a ``{name}`` token instead of copying its current
+# text; the manifest loader resolves the vocabulary below when it reads the
+# manifest, so operator output carries the value while the manifest itself
+# holds no hand-synced copy.  Only these declared tokens are substituted, so
+# unrelated braces in prose pass through unchanged.
+
+ADOPTION_STEP_TOKENS: Final[dict[str, str]] = {
+    "stripe_api_version": STRIPE_API_VERSION,
+}
+
+
+def resolve_adoption_step_tokens(text: str) -> str:
+    """Resolve the core contract tokens a manifest adoption step references.
+
+    Each token in :data:`ADOPTION_STEP_TOKENS` is substituted with its
+    authored value; every other character, braces included, is returned
+    unchanged so prose that embeds JSON or template syntax is never rewritten.
+    """
+    for name, value in ADOPTION_STEP_TOKENS.items():
+        text = text.replace("{" + name + "}", value)
+    return text
+
 
 # ---------------------------------------------------------------------------
 # Constants: notifications (option names)

@@ -332,8 +332,9 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Closes the product-copy part of arch `rules-held-by-parity-not-derivation` (Finding 3,
   option 1, remaining items).
 
-  **Context:** the Stripe API version is held equal at five stations (`billing/_settings.py:32`,
-  `billing/module.yml:115`, its bundled copy, `_finalize.py:276`, and `OPERATIONS.md.j2:115–131`).
+  **Context:** the Stripe API version was held equal at five stations (`billing/_settings.py:32`,
+  `billing/module.yml:115`, its bundled copy, `_finalize.py:276`, and `OPERATIONS.md.j2:115–131`);
+  slice (a) replaced those copies with one authored constant.
   The bundled manifests under `quickscale_core/data/manifests/` are hand-copied and held equal by
   `check-manifest-sync`, and since SA264 a generated project's startup reads retired-setting
   refusals from that copy (`contracts/resolvers.py:28–42`), so the copy-pair now matters at run
@@ -347,7 +348,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   build-and-inspect test; startup's retired-setting refusals still fire in a generated project.
 
   **Slices:**
-  - [ ] (a) One Stripe API version constant across its five stations (Tier 2-fast).
+  - [x] (a) One Stripe API version constant across its five stations (Tier 2-fast). Landed:
+    `STRIPE_API_VERSION` (`quickscale_core.contracts.module_options`) is the one authored
+    value; the billing settings re-export it, the CLI next-steps and the generated operations
+    guide read or render it, and the billing manifest's adoption step resolves it as
+    `{stripe_api_version}` (fresh id `sa280-stripe-webhook-version`), so no test compares
+    copies. (b) is next.
   - [ ] (b) Bundled manifests built at wheel build time, and the sync gate retired (Tier 2-full;
     the build step and the installed-wheel check are environment-sensitive).
 
