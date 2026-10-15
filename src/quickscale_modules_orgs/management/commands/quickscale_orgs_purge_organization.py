@@ -43,13 +43,13 @@ import uuid
 from collections import Counter as Counter
 from contextlib import ExitStack, nullcontext
 from heapq import heappop as heappop, heappush as heappush
-from typing import Any, cast
+from typing import Any, Callable, cast
 
-from django.apps import apps
 from django.core.exceptions import FieldDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
 from django.db import models, transaction
 
+from quickscale_core.runtime import collect_capabilities
 from quickscale_modules_orgs._purge_plan import (
     _PURGE_ORDER_OVERRIDES as _PURGE_ORDER_OVERRIDES,
     _carries_provider_value as _carries_provider_value,
@@ -522,17 +522,15 @@ class Command(_PurgeSupportMixin, BaseCommand):
         """Run every installed app's declared cache invalidation hook.
 
         The ``INVALIDATE`` stage's executor is the declaring app's
-        ``invalidate_organization_cache`` hook, so the stage is discharged only
-        after each installed app's own invalidation has run.  This method stays
-        on the command module so the rule 34 boundary check follows the
-        INVALIDATE discharge on ``Command.handle``'s entry path.
+        ``invalidate_organization_cache`` hook, declared through the rule 4
+        ``organization_cache_invalidation_hooks`` capability and collected by
+        the shared core helper, so the stage is discharged only after each
+        declaring app's own invalidation has run.  This method stays on the
+        command module so the rule 34 boundary check follows the INVALIDATE
+        discharge on ``Command.handle``'s entry path.
         """
-        for app_config in sorted(
-            apps.get_app_configs(), key=lambda config: config.label
-        ):
-            hook = getattr(app_config, "invalidate_organization_cache", None)
-            if callable(hook):
-                hook(org_id)
+        for hook in collect_capabilities("organization_cache_invalidation_hooks"):
+            cast("Callable[[object], None]", hook)(org_id)
         coordinator.discharge_stage(RemovalAction.INVALIDATE)
 
     # ------------------------------------------------------------------
