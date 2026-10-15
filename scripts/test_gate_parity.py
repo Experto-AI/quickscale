@@ -237,6 +237,28 @@ def _run_checker(argv: list[str] | None = None) -> subprocess.CompletedProcess:
     )
 
 
+# ``make -n check`` expands the whole recursive check plan; it costs ~2 s idle
+# but competes for CPU with every xdist worker inside a full ``make check``.
+_MAKE_PLAN_TIMEOUT = 300
+
+
+def _plan_make_check(*make_args: str) -> subprocess.CompletedProcess:
+    """Dry-run the real Makefile's ``check`` recipe with a load-tolerant timeout."""
+    return subprocess.run(
+        ["make", "-n", "check", *make_args],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=_MAKE_PLAN_TIMEOUT,
+    )
+
+
+@pytest.fixture(scope="module")
+def make_check_plan() -> subprocess.CompletedProcess:
+    """One shared default-registry ``make -n check`` plan per module."""
+    return _plan_make_check()
+
+
 def _repo_fixture_file(tmp_path: Path, filename: str) -> Path:
     """Return a cleanup-armed, canonical fixture path inside the repository."""
     fixture_dir = Path(
@@ -2580,15 +2602,11 @@ class TestMakeIncludeGeneration:
         expected = sync_ci_gate_jobs_module._render_make_include(_parse_registry(DEFAULT_REGISTRY))
         assert include_path.read_text(encoding="utf-8") == expected
 
-    def test_mandatory_check_plans_include_drift_gate(self) -> None:
+    def test_mandatory_check_plans_include_drift_gate(
+        self, make_check_plan: subprocess.CompletedProcess
+    ) -> None:
         """The make check recipe runs the direct generation gate over the include."""
-        result = subprocess.run(
-            ["make", "-n", "check"],
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        result = make_check_plan
         assert result.returncode == 0, result.stderr
         assert "scripts/sync_ci_gate_jobs.py --check" in result.stdout
 
@@ -3080,15 +3098,11 @@ class TestPublishWorkflowGeneration:
 class TestMandatoryGenerationGate:
     """CI workflow generation drift fails mandatory ``make check`` (F-006)."""
 
-    def test_mandatory_check_plans_generation_drift_gate(self) -> None:
+    def test_mandatory_check_plans_generation_drift_gate(
+        self, make_check_plan: subprocess.CompletedProcess
+    ) -> None:
         """The real Makefile's check recipe plans the direct generation check."""
-        result = subprocess.run(
-            ["make", "-n", "check"],
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        result = make_check_plan
         assert result.returncode == 0, result.stderr
         assert "scripts/sync_ci_gate_jobs.py --check" in result.stdout, (
             "make check must plan the direct generation drift gate (F-006)"
@@ -3204,13 +3218,7 @@ class TestGenerationGateRegistryParity:
         # A registry-identical fixture keeps the -n recursive derivation on
         # targets that exist, so the planned generation line is what is proven.
         registry_path = self._custom_registry(tmp_path, renamed=False)
-        result = subprocess.run(
-            ["make", "-n", "check", f"GATE_REGISTRY={registry_path}"],
-            cwd=str(REPO_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        result = _plan_make_check(f"GATE_REGISTRY={registry_path}")
         assert result.returncode == 0, result.stderr
         assert f'sync_ci_gate_jobs.py --check --registry "{registry_path}"' in result.stdout
 

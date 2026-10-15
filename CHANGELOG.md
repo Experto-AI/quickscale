@@ -40,6 +40,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     every package carrying `_*.py` split files fails when a private module reaches a facade in
     its distribution.
   - **Gate-parity counts derive from their sources.** The parity suite computes registry-bound and workflow-station expectations from their authoritative declarations, so adding a gate updates derived counts without a hand edit.
+  - **Gate-parity plan checks tolerate a loaded `make check`.** The parity suite dry-runs the
+    real `check` recipe once and shares that plan, with a timeout sized for a fully parallel run,
+    so a busy machine no longer fails those checks spuriously.
   - **Harness parity controls are behavioral.** The module-conventions harness keeps each split
     family's exact-findings corpus and structural invariants, and a control fails any parity test
     that reintroduces a frozen pre-split surface pin.
