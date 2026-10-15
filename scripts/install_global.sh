@@ -280,6 +280,10 @@ POETRY_BUILD_VENVS_DIR="$(mktemp -d)"
 
 echo "🚀 Installing QuickScale globally (version $VERSION)..."
 
+# SA280 (b): the bundled module manifests are build artifacts; materialize
+# them from the module manifests before building the core wheel.
+"$PYTHON_BIN" "$ROOT/scripts/sync_module_manifests.py" "$ROOT"
+
 # Build quickscale_core first
 echo "📦 Building quickscale_core..."
 cd "$ROOT/quickscale_core"

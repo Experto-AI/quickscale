@@ -71,13 +71,11 @@ EXPECTED_UNOWNED_JOB_IDS = frozenset(
 NEEDS_ALL_HOSTED_CONSUMERS = ("test",)
 NEEDS_GATE_IDS = {
     "isolation-conformance": (
-        "check-manifest-sync",
         "check-org-context-primitives",
         "check-csrf-exempt",
         "check-gate-suites",
     ),
     "lint-cli": (
-        "check-manifest-sync",
         "check-org-context-primitives",
         "check-csrf-exempt",
         "check-gate-suites",

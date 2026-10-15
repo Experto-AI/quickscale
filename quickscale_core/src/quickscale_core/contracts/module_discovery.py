@@ -128,6 +128,11 @@ def set_modules_base_path(path: str | Path | None) -> None:
     _modules_base_path = Path(path) if path is not None else None
 
 
+def _monorepo_modules_base_path() -> Path:
+    """Return this checkout's ``quickscale_modules/`` path (may not exist)."""
+    return Path(__file__).resolve().parents[4] / "quickscale_modules"
+
+
 def get_modules_base_path() -> Path:
     """Return the modules base path, with runtime override support.
 
@@ -154,7 +159,7 @@ def get_modules_base_path() -> Path:
         return _modules_base_path
 
     # Monorepo checkout (development / CI).
-    monorepo_path = Path(__file__).resolve().parents[4] / "quickscale_modules"
+    monorepo_path = _monorepo_modules_base_path()
     if monorepo_path.is_dir():
         return monorepo_path
 
@@ -312,6 +317,37 @@ def discover_shipped_module_names() -> list[str]:
     ]
 
 
+def release_module_names() -> list[str]:
+    """Return the release module inventory for the running context.
+
+    The inventory prefers the maintainer monorepo's ``quickscale_modules/``
+    workspace — the source the bundled manifests are materialized from at
+    build time (SA280 (b)) — and falls back to the bundled manifests when no
+    source workspace exists (an installed package).  Only directories with a
+    ``module.yml`` count, exactly as bundled discovery counts them; callers
+    that need fail-closed presence validation still run
+    :func:`discover_module_presence` on their own base path.
+
+    A runtime override describes a project's embedded module set (a subset),
+    never the release inventory, so it does not participate here.
+
+    Returns:
+        Sorted list of release module names.
+
+    Raises:
+        ImproperlyConfigured: If no source workspace exists and no bundled
+            manifests can be discovered.
+    """
+    monorepo_path = _monorepo_modules_base_path()
+    if monorepo_path.is_dir():
+        return sorted(
+            entry.name
+            for entry in monorepo_path.iterdir()
+            if entry.is_dir() and (entry / "module.yml").is_file()
+        )
+    return discover_bundled_module_names()
+
+
 def validate_active_module_subset(
     active_names: Iterable[str], release_names: Iterable[str]
 ) -> None:
@@ -374,7 +410,7 @@ def authoritative_module_names() -> list[str]:
 
     if _modules_base_path is not None:
         names = discover_shipped_module_names()
-        release_names = discover_bundled_module_names()
+        release_names = release_module_names()
         validate_active_module_subset(names, release_names)
         if names != release_names:
             raise ImproperlyConfigured(
@@ -444,7 +480,7 @@ def get_resolution_source() -> ModuleResolutionSource:
     if _modules_base_path is not None:
         return ModuleResolutionSource.OVERRIDE
 
-    monorepo_path = Path(__file__).resolve().parents[4] / "quickscale_modules"
+    monorepo_path = _monorepo_modules_base_path()
     if monorepo_path.is_dir():
         return ModuleResolutionSource.MONOREPO
 

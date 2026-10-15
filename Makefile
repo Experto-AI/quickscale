@@ -338,7 +338,6 @@ help:
 	@# BEGIN GENERATED: makefile-gate-help
 	@echo "  make check-core-compat            - Module core imports resolve, and the lockstep pin matches VERSION"
 	@echo "  make check-module-core-imports    - Module code imports only from quickscale_core.runtime"
-	@echo "  make check-manifest-sync          - Module-owned module.yml files match their core snapshots"
 	@echo "  make check-module-app-declaration - Evidence-bearing modules declare Django apps wiring"
 	@echo "  make check-org-context-primitives - No external use of privatized org-context primitives"
 	@echo "  make check-csrf-exempt            - Every csrf_exempt callsite is paired with CSRF/signature enforcement"
@@ -355,7 +354,7 @@ help:
 	@echo "  make check-gate-suites            - Run all registered scripts test suites without cache or product coverage"
 	@echo "  make check-migration-freeze      - Frozen module migrations keep their recorded content identity"
 	@# END GENERATED: makefile-gate-help
-	@echo "  make manifest-sync                - Resync snapshots after intentional manifest changes"
+	@echo "  make manifest-sync                - Materialize the bundled module manifests for a build"
 	@echo "  make security-negative-probes     - Verify scanner finding exit contracts and the known-bad Dockerfile gate control"
 	@echo "  make refresh-action-pins          - Operator: refresh SHA-pinned actions to their latest releases (CHECK=1 reports only)"
 	@echo "  make isolation-conformance         - Run the PostgreSQL isolation-conformance suite"
@@ -1000,12 +999,12 @@ format:
 # scripts/gates.mk (included near the top) from scripts/gate_registry.json, so
 # each recipe is authored once in the registry and a new gate needs no Makefile
 # edit.  The hand-written targets that remain here are the ones a registry
-# projection cannot express: manifest-sync (the writer paired with the
-# check-manifest-sync gate; it resyncs module-owned module.yml snapshots after
-# an intentional manifest change) and check-gate-suites below.
+# projection cannot express: manifest-sync (SA280 (b): it materializes the
+# bundled module manifests for a build; the shipped build entrypoints run it
+# before every quickscale_core wheel build) and check-gate-suites below.
 
 manifest-sync:
-	@$(PYTHON) scripts/sync_module_manifests.py --sync
+	@$(PYTHON) scripts/sync_module_manifests.py
 
 security-negative-probes:
 	@$(PYTHON) scripts/check_security_gates.py security-negative-probes
@@ -1207,6 +1206,7 @@ sa117-lock-diff:
 	candidate=$(call shell_quote,$(call sa117_transport_value,SA117_CANDIDATE)); \
 	expected_version=$(call shell_quote,$(call sa117_transport_value,SA117_EXPECTED_VERSION)); \
 	evidence=$(call shell_quote,$(call sa117_transport_value,SA117_EVIDENCE)); \
+	$(PYTHON) scripts/sync_module_manifests.py "$$root"; \
 	cd "$$root"; \
 	$(PYTHON) "$$root/scripts/check_sa117_scope.py" --profile make lock-diff \
 		$(if $(value SA117_BASELINE_REF),--baseline-ref "$$baseline_ref",) \
@@ -1472,6 +1472,7 @@ docs:
 build:
 	@rm -rf quickscale/dist/ quickscale_core/dist/ quickscale_cli/dist/
 	@cd quickscale && poetry build
+	@$(PYTHON) scripts/sync_module_manifests.py
 	@cd quickscale_core && poetry build
 	@cd quickscale_cli && poetry build
 	@echo "✅ Build complete! See dist/ in each package."

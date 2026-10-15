@@ -1,6 +1,7 @@
 """Pytest configuration for quickscale_core tests."""
 
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -10,6 +11,35 @@ import pytest
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
+
+
+def _materialize_bundled_manifests() -> None:
+    """Derive the bundled manifests before any test module reads them (SA280 (b)).
+
+    A fresh clone does not track ``quickscale_core/data/manifests/``; several
+    suites read the bundled tree at import or call time (the installed-context
+    fallback proxy, discovery tests, the env-example conformance
+    parametrization), so the repository materializes it here exactly as a wheel
+    build does.  Runs at conftest import time, before test modules are imported.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    script = repo_root / "scripts" / "sync_module_manifests.py"
+    if not (repo_root / "quickscale_modules").is_dir() or not script.is_file():
+        return
+    result = subprocess.run(
+        [sys.executable, str(script), str(repo_root)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "failed to materialize the bundled module manifests:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+
+_materialize_bundled_manifests()
 
 
 def _isolate_poetry_cache_per_worker() -> None:

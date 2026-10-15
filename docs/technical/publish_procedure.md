@@ -31,7 +31,6 @@ verdict earned before the bump does not carry over.
 
 ```bash
 make version-check          # VERSION parity across all packages and module manifests
-make check-manifest-sync    # module.yml sources equal their core snapshots
 make check-core-compat      # quickscale-core lockstep pins equal the derived specifier
 ```
 
@@ -42,10 +41,10 @@ bare `quickscale-core` name (rule 39); the bounded pin a generated project recei
 the module `pyproject.toml` against `VERSION`, so a stale pin is a red gate rather than something to
 catch by eye. The e2e constraint literal derives from `VERSION` for the same reason.
 
-Note that `scripts/sync_module_manifests.py --sync` only copies a module-owned `module.yml` to its
-core snapshot. Manifests carry no pin to restamp — the dependency name stays bare and the specifier
-lives in the module `pyproject.toml` — so `make check-manifest-sync` and `make check-core-compat`
-cover different surfaces.
+Note that `scripts/sync_module_manifests.py` only materializes a module-owned `module.yml` into
+the bundled data directory the wheel ships; the publish build runs it before the core wheel build.
+Manifests carry no pin to restamp — the dependency name stays bare and the specifier
+lives in the module `pyproject.toml` — so `make check-core-compat` covers that surface.
 
 `contract_vintage.minimum` is **not** a lockstep field. It is the adoption boundary for
 module-specific contracts; leave it alone, and give a genuinely new manual adoption step its own

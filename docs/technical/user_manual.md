@@ -900,9 +900,11 @@ poetry install
 
 Build & publish
 ```bash
-cd quickscale_core
-poetry build
-poetry publish --build
+# Build & publish through the supported entrypoints (they materialize the
+# bundled module manifests first; see publish_procedure.md)
+make build          # build all packages into dist/
+make publish-test   # upload to TestPyPI
+make publish-prod   # upload to production PyPI
 ```
 
 ## 8) Git Subtree Workflow (Advanced)

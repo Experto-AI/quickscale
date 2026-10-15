@@ -1043,13 +1043,13 @@ class TestDiscoveredInventoryRegistryTransition:
         from quickscale_core.contracts import module_discovery
 
         active = {"auth", "orgs"}
-        bundled = set(module_discovery.discover_bundled_module_names())
+        bundled = set(module_discovery.release_module_names())
         original_registry = dict(MANIFEST_ADAPTER_REGISTRY)
         original_origins = set(MANAGED_ADAPTER_ORIGINS)
 
         monkeypatch.setattr(
             module_discovery,
-            "discover_bundled_module_names",
+            "release_module_names",
             lambda: sorted(bundled),
         )
         monkeypatch.setattr(
@@ -1331,7 +1331,7 @@ class TestRefreshManagedAdaptersFailure:
         original_origins = set(MANAGED_ADAPTER_ORIGINS)
         modules_dir = tmp_path / "modules"
         active = {"auth", "orgs"}
-        bundled = set(module_discovery.discover_bundled_module_names())
+        bundled = set(module_discovery.release_module_names())
 
         adapters = {
             name: (lambda options, **kwargs: ModuleWiringSpec())
@@ -1339,7 +1339,7 @@ class TestRefreshManagedAdaptersFailure:
         }
         monkeypatch.setattr(
             module_discovery,
-            "discover_bundled_module_names",
+            "release_module_names",
             lambda: sorted(bundled),
         )
         monkeypatch.setattr(
@@ -1432,7 +1432,7 @@ class TestRefreshManagedAdaptersFailure:
                 1,
             )
             monkeypatch.setattr(
-                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                "quickscale_core.contracts.module_discovery.release_module_names",
                 lambda: ["_test_missing_adapter"],
             )
             # Clear the registry so we start fresh, then register only
@@ -1515,7 +1515,7 @@ class TestRefreshManagedAdaptersFailure:
                 2,
             )
             monkeypatch.setattr(
-                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                "quickscale_core.contracts.module_discovery.release_module_names",
                 lambda: [first_name, failing_name],
             )
             modules_dir = tmp_path / "modules"
@@ -1621,7 +1621,7 @@ def get_manifest_adapter():
                 1,
             )
             monkeypatch.setattr(
-                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                "quickscale_core.contracts.module_discovery.release_module_names",
                 lambda: [module_name],
             )
             modules_dir = tmp_path / "modules"
@@ -1666,7 +1666,7 @@ def get_manifest_adapter():
                 1,
             )
             monkeypatch.setattr(
-                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                "quickscale_core.contracts.module_discovery.release_module_names",
                 lambda: [module_name],
             )
             modules_dir = tmp_path / "modules"
@@ -1719,7 +1719,7 @@ def get_manifest_adapter():
                 1,
             )
             monkeypatch.setattr(
-                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                "quickscale_core.contracts.module_discovery.release_module_names",
                 lambda: [module_name],
             )
             modules_dir = tmp_path / "modules"
@@ -1776,7 +1776,7 @@ def get_manifest_adapter():
                 1,
             )
             monkeypatch.setattr(
-                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                "quickscale_core.contracts.module_discovery.release_module_names",
                 lambda: [module_name],
             )
             modules_dir = tmp_path / "modules"
@@ -1874,7 +1874,7 @@ def get_manifest_adapter():
                 1,
             )
             monkeypatch.setattr(
-                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                "quickscale_core.contracts.module_discovery.release_module_names",
                 lambda: [module_name],
             )
             first_base = tmp_path / "first" / "modules"
@@ -1936,7 +1936,7 @@ def get_manifest_adapter():
                 1,
             )
             monkeypatch.setattr(
-                "quickscale_core.contracts.module_discovery.discover_bundled_module_names",
+                "quickscale_core.contracts.module_discovery.release_module_names",
                 lambda: [module_name],
             )
             modules_dir = tmp_path / "modules"

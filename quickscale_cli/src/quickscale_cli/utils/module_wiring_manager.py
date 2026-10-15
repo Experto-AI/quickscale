@@ -10,10 +10,10 @@ from quickscale_core.contracts.module_discovery import (
     ImproperlyConfigured,
     ModulePresenceState,
     ModuleResolutionSource,
-    discover_bundled_module_names,
     discover_module_presence,
     get_modules_base_path,
     get_resolution_source,
+    release_module_names,
     set_modules_base_path,
 )
 from quickscale_core.manifest.entry_point import (
@@ -167,7 +167,7 @@ def _has_embedded_module_source(project_path: Path) -> bool:
         return False
 
     presence = discover_module_presence(base_path=modules_dir)
-    registered_names = set(discover_bundled_module_names())
+    registered_names = set(release_module_names())
     return any(
         record.state is ModulePresenceState.ACTIVE
         or (

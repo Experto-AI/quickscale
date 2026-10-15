@@ -316,6 +316,12 @@ build_package() {
     # Clean dist directory
     clean_dist "$pkg_dir"
 
+    # SA280 (b): materialize the bundled module manifests before the core
+    # wheel build; they are build artifacts derived from quickscale_modules/.
+    if [[ "$pkg_name" == "quickscale_core" ]]; then
+        (cd "$ROOT" && poetry run python "$ROOT/scripts/sync_module_manifests.py" "$ROOT")
+    fi
+
     # Build with poetry
     cd "$pkg_dir"
     if poetry build; then

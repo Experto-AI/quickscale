@@ -1671,7 +1671,6 @@ class TestHostedCiGateGeneration:
             "module-manifest-contract",
             "module-core-compat",
             "module-core-import-linter",
-            "manifest-sync-gate",
             "module-app-declaration-gate",
             "org-context-primitives-gate",
             "csrf-exempt-gate",
@@ -1692,7 +1691,6 @@ class TestHostedCiGateGeneration:
             assert needs[consumer] == (
                 "backups-validation",
                 "module-manifest-contract",
-                "manifest-sync-gate",
                 "org-context-primitives-gate",
                 "csrf-exempt-gate",
                 "check-gate-suites",
@@ -1797,7 +1795,7 @@ class TestHostedCiGateGeneration:
         assert "  module-core-compat:\n" not in generated
         assert (
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
-            "module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, "
+            "module-core-import-linter, module-app-declaration-gate, "
             "org-context-primitives-gate, "
             "csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, "
             "check-gate-suites, "
@@ -1854,7 +1852,7 @@ class TestHostedCiGateGeneration:
         assert "  module-core-compat:\n" not in generated
         assert (
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
-            "module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, "
+            "module-core-import-linter, module-app-declaration-gate, "
             "org-context-primitives-gate, "
             "csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, "
             "check-gate-suites, "
@@ -1898,7 +1896,7 @@ class TestHostedCiGateGeneration:
         assert "  module-core-compat:\n" not in written
         assert (
             "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
-            "module-core-import-linter, manifest-sync-gate, module-app-declaration-gate, "
+            "module-core-import-linter, module-app-declaration-gate, "
             "org-context-primitives-gate, "
             "csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, "
             "check-gate-suites, "
@@ -1963,7 +1961,7 @@ class TestHostedCiGateGeneration:
         relocated = current.replace(begin, "", 1).replace(end, "", 1)
         needs_line = (
             "    needs: [backups-validation, module-manifest-contract, "
-            "manifest-sync-gate, org-context-primitives-gate, csrf-exempt-gate, "
+            "org-context-primitives-gate, csrf-exempt-gate, "
             "check-gate-suites]\n"
         )
         relocated = relocated.replace(needs_line, begin + needs_line + end, 1)
