@@ -232,6 +232,102 @@ def test_listed_capability_name_and_constant_pass() -> None:
     assert _violations(checker.rule_4_public_surface, listed) == []
 
 
+def test_app_config_walk_control() -> None:
+    """Rule 4: walking app configs with getattr() is refused, seams excepted."""
+    walk = (
+        "from django.apps import apps\n\n\n"
+        "def invalidate(org_id):\n"
+        "    for app_config in sorted(apps.get_app_configs(), key=lambda c: c.label):\n"
+        "        hook = getattr(app_config, 'invalidate_organization_cache', None)\n"
+        "        if callable(hook):\n"
+        "            hook(org_id)\n"
+    )
+    module = _golden_module()
+    broken = _with_files(module, views=walk)
+    assert any(
+        "reads an app config through getattr()" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+    assert _violations(checker.rule_4_public_surface, module) == []
+    assigned_walk = _with_files(
+        module,
+        views=(
+            "from django.apps import apps\n\n\n"
+            "def invalidate(org_id):\n"
+            "    configs = sorted(apps.get_app_configs(), key=lambda c: c.label)\n"
+            "    for app_config in configs:\n"
+            "        hook = getattr(app_config, 'invalidate_organization_cache', None)\n"
+            "        if callable(hook):\n"
+            "            hook(org_id)\n"
+        ),
+    )
+    assert any(
+        "reads an app config through getattr()" in violation
+        for violation in _violations(checker.rule_4_public_surface, assigned_walk)
+    )
+    assigned_single = _with_files(
+        module,
+        views=(
+            "from django.apps import apps\n\n\n"
+            "def hook(label):\n"
+            "    app_config = apps.get_app_config(label)\n"
+            "    return getattr(app_config, 'invalidate_organization_cache', None)\n"
+        ),
+    )
+    assert any(
+        "reads an app config through getattr()" in violation
+        for violation in _violations(checker.rule_4_public_surface, assigned_single)
+    )
+    observer = _with_files(
+        module,
+        views=("def observe(app_config):\n    return getattr(app_config, 'label', '')\n"),
+    )
+    assert _violations(checker.rule_4_public_surface, observer) == []
+    direct = _with_files(
+        module,
+        views=(
+            "from django.apps import apps\n\n\n"
+            "def hook():\n"
+            "    return getattr(apps.get_app_config('quickscale_demo'), 'hook', None)\n"
+        ),
+    )
+    assert any(
+        "reads an app config through getattr()" in violation
+        for violation in _violations(checker.rule_4_public_surface, direct)
+    )
+    seam_source = (
+        "from django.apps import apps\n\n\n"
+        "def discover():\n"
+        "    hooks = []\n"
+        "    for app_config in sorted(apps.get_app_configs(), key=lambda c: c.label):\n"
+        "        hook = getattr(\n"
+        "            app_config, 'reconcile_account_deletion_provider_state', None\n"
+        "        )\n"
+        "        if callable(hook):\n"
+        "            hooks.append(hook)\n"
+        "    return hooks\n"
+    )
+    seam = _with_files(_golden_module("auth"), **{"_account_deletion_providers.py": seam_source})
+    assert _violations(checker.rule_4_public_surface, seam) == []
+    elsewhere = _with_files(_golden_module(), **{"_account_deletion_providers.py": seam_source})
+    assert any(
+        "reads an app config through getattr()" in violation
+        for violation in _violations(checker.rule_4_public_surface, elsewhere)
+    )
+    other_attribute = _with_files(
+        _golden_module("auth"),
+        **{
+            "_account_deletion_providers.py": seam_source.replace(
+                "reconcile_account_deletion_provider_state", "invalidate_organization_cache"
+            )
+        },
+    )
+    assert any(
+        "reads an app config through getattr()" in violation
+        for violation in _violations(checker.rule_4_public_surface, other_attribute)
+    )
+
+
 def test_migration_model_import_is_excepted() -> None:
     module = _golden_module()
     excepted = _with_files(

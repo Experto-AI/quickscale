@@ -336,6 +336,7 @@ class TestCollectCapabilities:
             "account_deletion_handlers",
             "anonymize_handlers",
             "notification_templates",
+            "organization_cache_invalidation_hooks",
             "organization_cache_keys",
             "organization_pricing_url_hooks",
             "personal_data_declarations",

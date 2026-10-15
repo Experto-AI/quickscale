@@ -468,7 +468,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `checks.py` SA272 (b) extended (Tier 2-fast). Landed: `quickscale_core.runtime` gains
     `projected_setting_names`, the three checks read it, and harness rule 6 refuses a `checks.py`
     that re-lists its setting names literally, controls included. (b) is next.
-  - [ ] (b) The purge command's hook through `collect_capabilities` (Tier 1).
+  - [x] (b) The purge command's hook through `collect_capabilities` (Tier 1). Landed: the purge
+    collects the `organization_cache_invalidation_hooks` capability, the declaration validation
+    refuses an INVALIDATE executor not declared through it, and harness rule 4 refuses a
+    `getattr(app_config, ...)` walk outside core, control included; auth's undeclared-reconcile
+    fallback is the one recorded seam. (c) is next.
   - [ ] (c) The `--cov` form in auth and blog with its harness check (Tier 1).
 
 - [ ] **SA279 — Retire the conformance harness's frozen surfaces.**

@@ -88,6 +88,18 @@ def test_app_config_declares_post_auth_redirect_hooks() -> None:
     assert config.post_signup_redirect_hooks() == (post_signup_redirect,)
 
 
+def test_app_config_declares_the_cache_invalidation_hook() -> None:
+    """The purge boundary collects orgs' cache hook through the capability."""
+    config = QuickscaleOrgsConfig(
+        "quickscale_modules_orgs",
+        import_module("quickscale_modules_orgs"),
+    )
+
+    assert config.organization_cache_invalidation_hooks() == (
+        config.invalidate_organization_cache,
+    )
+
+
 def test_invalidate_organization_cache_collects_declared_keys(monkeypatch) -> None:
     """The obligation executor clears the keys installed apps declare."""
     from django.core.cache import cache

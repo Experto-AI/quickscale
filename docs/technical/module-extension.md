@@ -222,9 +222,11 @@ provider-confirmed expired checkout id, and an optional `mutation_lock` hook
 whose context manager the boundary holds across both. The app-owned stages name
 their executor: an
 `INVALIDATE` declaration needs the declaring app's
-`invalidate_organization_cache` hook, a `RECONCILE` declaration needs its
-`reconcile_account_deletion_provider_state` hook, and an `ANONYMIZE`
-declaration needs its `anonymize_account` hook, so the boundary runs the
+`invalidate_organization_cache` hook declared through the
+`organization_cache_invalidation_hooks` capability the purge collects; a
+`RECONCILE` declaration needs its `reconcile_account_deletion_provider_state`
+hook, and an `ANONYMIZE` declaration needs its `anonymize_account` hook, so
+the boundary runs the
 declaring app's own work instead of marking a declaration discharged for
 nothing. An `ANONYMIZE` declaration must also declare the `anonymize_handlers`
 capability (a method returning `(self,)`, the app's own config) so auth's

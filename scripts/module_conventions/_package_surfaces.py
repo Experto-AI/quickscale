@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 
 from scripts.module_conventions.core import (
+    APP_CONFIG_WALK_SEAMS,
     CAPABILITY_NAMES,
     MODULE_IMPORT_PREFIX,
     ORG_PUBLIC_SURFACE,
@@ -192,6 +193,117 @@ def _import_surface_violations(
     return violations
 
 
+def _derives_from(node: ast.expr, names: set[str], attribute: str) -> bool:
+    """Return whether *node* derives from ``apps.<attribute>()`` (aliases included)."""
+    for inner in ast.walk(node):
+        if isinstance(inner, ast.Name) and inner.id in names:
+            return True
+        if (
+            isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Attribute)
+            and inner.func.attr == attribute
+        ):
+            return True
+    return False
+
+
+def _assigned_derivations(tree: ast.Module, attribute: str) -> set[str]:
+    """
+    Return every name assigned a value deriving from ``apps.<attribute>()``.
+
+    Aliases are resolved to a fixpoint, so ``configs =
+    sorted(apps.get_app_configs(), key=...)`` and ``more = configs`` both bind
+    the registry result, and ``app_config = apps.get_app_config(label)`` binds
+    one config.  Only assignments bind; a parameter or a returned value stays
+    out, so a validation observer's ``app_config`` argument is untouched.
+    """
+    names: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                targets: list[ast.expr] = list(node.targets)
+                value = node.value
+            elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                targets = [node.target]
+                value = node.value
+            else:
+                continue
+            if not _derives_from(value, names, attribute):
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id not in names:
+                    names.add(target.id)
+                    changed = True
+    return names
+
+
+def _app_config_walk_names(tree: ast.Module) -> set[str]:
+    """Return every name bound by iterating the installed app configs."""
+    collections = _assigned_derivations(tree, "get_app_configs")
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+            target = node.target
+        else:
+            continue
+        if not _derives_from(node.iter, collections, "get_app_configs"):
+            continue
+        names.update(name.id for name in ast.walk(target) if isinstance(name, ast.Name))
+    return names
+
+
+def _is_app_config_receiver(node: ast.expr, walked: set[str], singles: set[str]) -> bool:
+    """Return whether *node* is an app config from the registry (rule 4)."""
+    if isinstance(node, ast.Name):
+        return node.id in walked or node.id in singles
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "get_app_config"
+    )
+
+
+def _app_config_getattr_findings(module: Module, rel: str, tree: ast.Module) -> list[str]:
+    """
+    Rule 4: no module walks app configs reading hooks through ``getattr``.
+
+    A module that needs a hook from every installed app declares it as a
+    listed capability and collects it through ``collect_capabilities``; core
+    owns the one walk over app configs.  The receiver may be a loop variable,
+    an alias of the registry result or of one config, or a direct
+    ``apps.get_app_config(...)`` call.  auth's recorded undeclared-reconcile
+    fallback (:data:`APP_CONFIG_WALK_SEAMS`) is the only exception.
+    """
+    walked = _app_config_walk_names(tree)
+    singles = _assigned_derivations(tree, "get_app_config")
+    findings: list[str] = []
+    for node in ast.walk(tree):
+        if (
+            not isinstance(node, ast.Call)
+            or _call_func_name(node) != "getattr"
+            or not node.args
+            or not _is_app_config_receiver(node.args[0], walked, singles)
+        ):
+            continue
+        attribute = (
+            node.args[1].value
+            if len(node.args) > 1
+            and isinstance(node.args[1], ast.Constant)
+            and isinstance(node.args[1].value, str)
+            else None
+        )
+        if (module.name, rel, attribute) in APP_CONFIG_WALK_SEAMS:
+            continue
+        findings.append(
+            f"rule 4: {module.name}: {rel}:{node.lineno} reads an app config "
+            "through getattr(); collect the capability through "
+            "collect_capabilities"
+        )
+    return findings
+
+
 def _file_surface_violations(module: Module, rel: str, text: str) -> list[str]:
     """Return one package file's rule 4 findings, in report order."""
     tree = _parse(text)
@@ -214,4 +326,5 @@ def _file_surface_violations(module: Module, rel: str, text: str) -> list[str]:
             f"rule 4: {module.name}: {rel}:{lineno} collects {described}, "
             "which is not in CAPABILITIES"
         )
+    violations.extend(_app_config_getattr_findings(module, rel, tree))
     return violations
