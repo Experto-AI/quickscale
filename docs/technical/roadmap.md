@@ -409,10 +409,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   Closes the construction part of arch `rules-held-by-parity-not-derivation` (Finding 3,
   option 2, applied to SA263's hook signature).
 
-  **Context:** SA263 made the engine validate, coerce, and default options, but hooks still
-  receive a mutable settings dict holding the raw values, so "a hook never re-coerces or re-reads a
-  raw option" is policed by a bounded inter-procedural dataflow analyzer (`adapter_flow.py` 697
-  lines, `adapter_options.py` 353, `url_options.py` 99, and about 1.4k lines of controls).
+  **Context:** SA263 made the engine validate, coerce, and default options; slice (a) replaced
+  the mutable resolved-options dict its hooks received with a frozen, typed object, so "a hook
+  never re-coerces or re-reads a raw option" holds by construction for the hook bodies. Until
+  slice (b) deletes it, a bounded inter-procedural dataflow analyzer (`adapter_flow.py`,
+  `adapter_options.py`, `url_options.py`, and their controls) still polices the adapter sources.
 
   **Acceptance:** every adapter hook receives a frozen, typed resolved-options object and no raw
   option values; the 12 adapters are migrated; a hook that tries to read a raw option fails by
@@ -421,9 +422,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   settings are byte-identical for every module's fixture options.
 
   **Slices:**
-  - [ ] (a) The resolved-options object in core's hook contract and the 12 adapters, with the
-    byte-identical settings test (Tier 2-full; the object's shape and the hook signature are
-    settled in planning, consumers enumerated).
+  - [x] (a) The resolved-options object in core's hook contract and the 12 adapters, with the
+    byte-identical settings test (Tier 2-full). Landed: `ResolvedOptions`
+    (`quickscale_core.manifest.resolved_options`) exposes frozen attribute-only reads and fails
+    raw container idioms by construction, all 11 hooks read attributes, and per-module goldens
+    pin the generated settings bytes. (b) is next.
   - [ ] (b) Delete the dataflow detector and its controls, and amend the rule (Tier 2-fast).
 
 ## Deferred constraints and references

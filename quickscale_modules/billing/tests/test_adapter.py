@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quickscale_core.manifest import ManifestError
+from quickscale_core.manifest import ManifestError, ResolvedOptions
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_billing.adapter import (
@@ -85,7 +85,7 @@ class TestBillingPostHook:
             middleware=("some.middleware",),
             settings={"QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour"},
         )
-        result = _billing_post_hook(spec, {"enabled": True})
+        result = _billing_post_hook(spec, ResolvedOptions({"enabled": True}))
 
         assert result.apps == ("quickscale_modules_billing",)
         assert result.middleware == ("some.middleware",)
@@ -104,7 +104,7 @@ class TestBillingPostHook:
             pre_home_url_includes=(),
             url_includes=(("billing/", "quickscale_modules_billing.urls"),),
         )
-        result = _billing_post_hook(spec, {"enabled": False})
+        result = _billing_post_hook(spec, ResolvedOptions({"enabled": False}))
 
         assert result.url_includes == (
             ("billing/", "quickscale_modules_billing.webhook_urls"),

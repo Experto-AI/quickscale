@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec
+from quickscale_core.runtime import (
+    ModuleWiringSpec,
+    ResolvedOptions,
+    build_generic_manifest_spec,
+)
 
 
 def _orgs_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
+    spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
     """Contribute orgs' throttle scopes and apply its off-switch transformation.
 
@@ -32,7 +36,7 @@ def _orgs_post_hook(
         },
     }
 
-    if resolved["enabled"]:
+    if resolved.enabled:
         pre_home_url_includes = spec.pre_home_url_includes
         url_includes = spec.url_includes
     else:
