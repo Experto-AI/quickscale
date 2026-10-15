@@ -70,6 +70,11 @@ MARKDOWNX_MARKDOWN_EXTENSIONS = [
     "markdown.extensions.toc",
 ]
 MARKDOWNX_MEDIA_PATH = "markdownx/"
+MARKDOWNX_UPLOAD_CONTENT_TYPES = [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+]
 
 # Rule 3: every declared storage setting plus the applied credential settings,
 # so the generic startup check and the rule 35 vendor check both run against a

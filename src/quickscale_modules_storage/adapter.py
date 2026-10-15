@@ -79,13 +79,20 @@ def _storage_post_hook(
     # Rule 41: storage owns the one shared Markdownx editor mount, so its
     # global settings live here and no consumer module writes them.  The
     # upload path is the vendor's neutral default and does not depend on
-    # which modules are installed.
+    # which modules are installed.  The accepted upload types are the
+    # vendor's minus SVG: the shared upload decodes every file, and an SVG
+    # is an active document on the site's origin.
     settings["MARKDOWNX_MARKDOWN_EXTENSIONS"] = [
         "markdown.extensions.fenced_code",
         "markdown.extensions.tables",
         "markdown.extensions.toc",
     ]
     settings["MARKDOWNX_MEDIA_PATH"] = "markdownx/"
+    settings["MARKDOWNX_UPLOAD_CONTENT_TYPES"] = [
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+    ]
 
     if not resolved["enabled"]:
         # Rule 1 (D3): off keeps the module installed — app, migrations,
