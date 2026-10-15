@@ -7,6 +7,7 @@ from typing import Any
 
 from quickscale_core.runtime.manifest import (
     ModuleWiringSpec,
+    ResolvedOptions,
     build_generic_manifest_spec,
     resolve_manifest_module_options,
 )
@@ -49,19 +50,17 @@ def _is_valid_env_var_reference(value: str) -> bool:
     return not candidate or bool(_ENV_VAR_NAME_PATTERN.fullmatch(candidate))
 
 
-def _production_targeted(resolved: dict[str, Any]) -> bool:
-    return bool(resolved.get("enabled", True)) and bool(
-        str(resolved.get("resend_domain", "")).strip()
-    )
+def _production_targeted(resolved: ResolvedOptions) -> bool:
+    return bool(resolved.enabled) and bool(str(resolved.resend_domain).strip())
 
 
-def _live_delivery_configured(resolved: dict[str, Any]) -> bool:
+def _live_delivery_configured(resolved: ResolvedOptions) -> bool:
     if not _production_targeted(resolved):
         return False
-    sender_name = str(resolved.get("sender_name", "")).strip()
-    sender_email = str(resolved.get("sender_email", "")).strip()
-    resend_domain = str(resolved.get("resend_domain", "")).strip()
-    resend_api_key_env_var = str(resolved.get("resend_api_key_env_var", "")).strip()
+    sender_name = str(resolved.sender_name).strip()
+    sender_email = str(resolved.sender_email).strip()
+    resend_domain = str(resolved.resend_domain).strip()
+    resend_api_key_env_var = str(resolved.resend_api_key_env_var).strip()
     return (
         bool(sender_name)
         and _is_valid_email(sender_email)
@@ -71,8 +70,8 @@ def _live_delivery_configured(resolved: dict[str, Any]) -> bool:
     )
 
 
-def _runtime_email_backend(resolved: dict[str, Any]) -> str | None:
-    if not bool(resolved.get("enabled", True)):
+def _runtime_email_backend(resolved: ResolvedOptions) -> str | None:
+    if not bool(resolved.enabled):
         return None
     if _live_delivery_configured(resolved):
         return NOTIFICATIONS_LIVE_EMAIL_BACKEND
@@ -82,21 +81,21 @@ def _runtime_email_backend(resolved: dict[str, Any]) -> str | None:
 def notifications_production_targeted(options: dict[str, Any] | None) -> bool:
     """Return whether *options* target live Resend delivery."""
     return _production_targeted(
-        resolve_manifest_module_options("notifications", options)
+        ResolvedOptions(resolve_manifest_module_options("notifications", options))
     )
 
 
 def notifications_live_delivery_configured(options: dict[str, Any] | None) -> bool:
     """Return whether live Resend delivery is fully configured."""
     return _live_delivery_configured(
-        resolve_manifest_module_options("notifications", options)
+        ResolvedOptions(resolve_manifest_module_options("notifications", options))
     )
 
 
 def notifications_runtime_email_backend(options: dict[str, Any] | None) -> str | None:
     """Return the resolved Django email backend, or ``None`` when disabled."""
     return _runtime_email_backend(
-        resolve_manifest_module_options("notifications", options)
+        ResolvedOptions(resolve_manifest_module_options("notifications", options))
     )
 
 
@@ -106,7 +105,7 @@ def notifications_runtime_email_backend(options: dict[str, Any] | None) -> str |
 
 
 def _notifications_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
+    spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
     """Select the runtime email backend for the resolved options.
 
