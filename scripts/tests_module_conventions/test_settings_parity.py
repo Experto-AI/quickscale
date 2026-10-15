@@ -54,26 +54,6 @@ _GOLDEN_EXTRA_SETTINGS = (
 )
 
 
-def _adapter(body: str) -> str:
-    return (
-        '"""Demo adapter."""\n\n'
-        "from typing import Any\n\n"
-        "from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec\n\n\n"
-        "def _demo_post_hook(spec: ModuleWiringSpec, resolved: dict[str, Any])"
-        " -> ModuleWiringSpec:\n"
-        f"{body}\n\n\n"
-        "def _demo_manifest_adapter(\n"
-        "    options: dict[str, Any], *, project_package: str | None = None\n"
-        ") -> ModuleWiringSpec:\n"
-        "    del project_package\n"
-        '    return build_generic_manifest_spec("demo", options, post_hook=_demo_post_hook)\n'
-    )
-
-
-def _with_adapter(module: Module, body: str) -> Module:
-    return _with_files(module, adapter=_adapter(body))
-
-
 def _credential_module() -> Module:
     return _with_option(
         _golden_module(),
@@ -599,15 +579,6 @@ CASES: dict[str, tuple[object, str]] = {
         lambda: _corpus(_setting_pattern("cdn_url", "   ")),
         "rule_12_manifest_options",
     ),
-    "rule12_adapter_and_manifest": (
-        lambda: _corpus(
-            _with_adapter(
-                _manifest_without("dependencies"),
-                '    backend = resolved["backend"].lower()\n    return spec\n',
-            )
-        ),
-        "rule_12_manifest_and_adapter_options",
-    ),
     # rule 42: settings snapshots
     "rule42_clean": (lambda: _corpus(_golden_module()), "rule_42_settings_snapshots"),
     "rule42_snapshot_outside": (
@@ -990,14 +961,6 @@ EXACT_FINDINGS = (
         "rule12_blank_pattern",
         "rule_12_manifest_options",
         ("rule 12: demo: option 'cdn_url' declares a blank validation pattern",),
-    ),
-    (
-        "rule12_adapter_and_manifest",
-        "rule_12_manifest_and_adapter_options",
-        (
-            "rule 12: demo: manifest has no dependencies key",
-            "rule 12: demo: adapter.py:9 calls lower() on an option container",
-        ),
     ),
     ("rule42_clean", "rule_42_settings_snapshots", ()),
     (

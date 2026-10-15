@@ -413,6 +413,11 @@ containers, and integer booleans are refused), a declared normalization rule's
 conversion is the only way a string spelling satisfies the declared type, and
 hooks consume the canonical value.
 
+**SA281 amendment.** The hook boundary is structural: a post-resolution hook
+receives a frozen, typed resolved-options object — one read-only attribute per
+declared option, no mapping interface — so a hook that reads a raw option fails
+with a type or attribute error, and no detector polices the hook bodies.
+
 `path_or_absolute_url` is the parameter-free normalization kind for a
 relative-or-absolute path URL such as `MEDIA_URL`: strip whitespace; a blank
 result substitutes the owning option's declared string default and strips its

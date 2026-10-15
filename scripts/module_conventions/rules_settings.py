@@ -66,9 +66,6 @@ from scripts.module_conventions._settings_snapshots import (
     _settings_snapshot_names,
     _snapshot_scan_violations,
 )
-from scripts.module_conventions.adapter_options import (
-    rule_12_adapter_duplicate_logic,
-)
 from scripts.module_conventions.core import (
     CREDENTIAL_REFERENCE_NAMES as CREDENTIAL_REFERENCE_NAMES,
 )
@@ -180,7 +177,6 @@ __all__ = (
     "_reference_module_name",
     "_returns_settings_snapshot",
     "_settings_snapshot_names",
-    "rule_12_manifest_and_adapter_options",
     "rule_12_manifest_options",
     "rule_1_settings_names",
     "rule_3_settings_reads",
@@ -263,14 +259,6 @@ def rule_12_manifest_options(corpus: Corpus) -> list[str]:
         if _contains_key(manifest, "validation_rules"):
             violations.append(f"rule 12: {module.name}: manifest declares retired validation_rules")
     return violations
-
-
-def rule_12_manifest_and_adapter_options(corpus: Corpus) -> list[str]:
-    """Rule 12's manifest schema and its SA263 adapter clause, in one detector."""
-    return [
-        *rule_12_manifest_options(corpus),
-        *rule_12_adapter_duplicate_logic(corpus),
-    ]
 
 
 def rule_42_settings_snapshots(corpus: Corpus) -> list[str]:
