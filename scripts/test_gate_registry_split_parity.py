@@ -1,22 +1,21 @@
 """
-Parity controls for the SA267(a) gate-registry script split.
+Behavioral controls for the SA267(a) gate-registry script split.
 
-``check_gate_parity`` and ``sync_ci_gate_jobs`` keep their pre-split surface
-through private ``_``-prefixed siblings.  These controls pin the preserved
-surface, the split's structural invariants, and the exact diagnostics and
-generated texts captured from the pre-split modules, so a later slice cannot
-silently drop, reorder, or reword them.
+``check_gate_parity`` and ``sync_ci_gate_jobs`` keep their pre-split behavior
+through private ``_``-prefixed siblings.  SA267 has closed, so SA278 retired
+the pre-split surface pins; these controls keep the split's structural
+invariants and the exact diagnostics and generated texts captured from the
+pre-split modules as behavioral tests, so a later change cannot silently
+drop, reorder, or reword them.
 
 SA275(a) deleted the gate-order tuples, the hosted/publish/help catalogs, and
-the copy-equality refusals they fed; the pinned name lists below no longer
-carry those deleted names, and the registry metadata fields that replaced
-them are validated through the schema diagnostics exercised here.
+the copy-equality refusals they fed; the registry metadata fields that
+replaced them are validated through the schema diagnostics exercised here.
 """
 
 from __future__ import annotations
 
 import ast
-import inspect
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -35,180 +34,6 @@ from _sync_ci_gate_catalog import (
     PUBLISH_END,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-
-#: Names the pre-split modules published that in-repo consumers reach through
-#: the facade (test imports, attribute reaches, the sibling checker, and the
-#: action-pin refresher).  The facade must keep every one of them.
-FROZEN_SYNC_SURFACE = (
-    "CHECKOUT_COMMENT",
-    "CHECKOUT_REF",
-    "DEFAULT_DOCS",
-    "DEFAULT_E2E_WORKFLOW",
-    "DEFAULT_MAKE_INCLUDE",
-    "DEFAULT_PUBLISH_WORKFLOW",
-    "DEFAULT_REGISTRY",
-    "DEFAULT_WORKFLOW",
-    "DOCS_TABLE_BEGIN",
-    "DOCS_TABLE_END",
-    "E2E_PATHS_BEGIN",
-    "E2E_PATHS_END",
-    "GeneratorError",
-    "HAND_OWNED_MAKE_TARGETS",
-    "INSTALL_POETRY_COMMENT",
-    "INSTALL_POETRY_REF",
-    "JOB_BEGIN",
-    "JOB_END",
-    "NEEDS_BEGIN",
-    "NEEDS_END",
-    "POETRY_VERSION",
-    "PUBLISH_BEGIN",
-    "PUBLISH_END",
-    "SETUP_PYTHON_COMMENT",
-    "SETUP_PYTHON_REF",
-    "UNOWNED_JOB_IDS",
-    "_atomic_write",
-    "_bootstrap_job_markers",
-    "_expected_e2e_paths",
-    "_generated_make_targets",
-    "_parse_registry",
-    "_parse_workflow",
-    "_render_make_include",
-    "expected_docs_text",
-    "expected_e2e_workflow_text",
-    "expected_publish_workflow_text",
-    "expected_workflow_text",
-    "main",
-    "os",
-    "sync_docs_table",
-    "sync_e2e_workflow",
-    "sync_make_include",
-    "sync_publish_workflow",
-    "sync_workflow",
-)
-
-FROZEN_PARITY_SURFACE = (
-    "SchemaValidationError",
-    "_DuplicateKeyError",
-    "_REPO_ROOT",
-    "_REGISTRY_PATH",
-    "_TRIGGER_INPUTS_CONTRACT",
-    "_canonical_input_path",
-    "_generated_drift",
-    "_is_strict_int",
-    "_load_registry",
-    "_no_duplicate_keys",
-    "_parse_args",
-    "_parse_json_strict",
-    "_print_error",
-    "_validate_registry",
-    "main",
-)
-
-#: Every non-underscore name the pre-split generator defined; the facade's
-#: ``__all__`` must keep all of them so a wildcard import keeps its surface.
-FROZEN_WILDCARD_SURFACE = (
-    "CHECKOUT_COMMENT",
-    "CHECKOUT_REF",
-    "DEFAULT_DOCS",
-    "DEFAULT_E2E_WORKFLOW",
-    "DEFAULT_MAKE_INCLUDE",
-    "DEFAULT_PUBLISH_WORKFLOW",
-    "DEFAULT_REGISTRY",
-    "DEFAULT_WORKFLOW",
-    "DOCS_TABLE_BEGIN",
-    "DOCS_TABLE_END",
-    "E2E_PATHS_BEGIN",
-    "E2E_PATHS_END",
-    "EXPECTED_UNOWNED_JOB_IDS",
-    "FIXED_NEEDS",
-    "GeneratorError",
-    "HAND_OWNED_MAKE_TARGETS",
-    "INSTALL_POETRY_COMMENT",
-    "INSTALL_POETRY_REF",
-    "JOB_BEGIN",
-    "JOB_END",
-    "MAKE_INCLUDE_HEADER",
-    "NEEDS_BEGIN",
-    "NEEDS_END",
-    "NEEDS_GATE_IDS",
-    "POETRY_VERSION",
-    "PUBLISH_BEGIN",
-    "PUBLISH_END",
-    "REPO_ROOT",
-    "SETUP_PYTHON_COMMENT",
-    "SETUP_PYTHON_REF",
-    "UNOWNED_JOB_IDS",
-    "UNOWNED_JOB_RATIONALES",
-    "expected_docs_text",
-    "expected_e2e_workflow_text",
-    "expected_publish_workflow_text",
-    "expected_workflow_text",
-    "main",
-    "sync_docs_table",
-    "sync_e2e_workflow",
-    "sync_make_include",
-    "sync_publish_workflow",
-    "sync_workflow",
-)
-
-#: Non-underscore imported bindings the pre-split wildcard import also bound;
-#: the facades keep them as attributes but exclude them from ``__all__``.
-FROZEN_SYNC_INCIDENTAL_BINDINGS = (
-    "Any",
-    "Path",
-    "SchemaValidationError",
-    "annotations",
-    "argparse",
-    "dataclass",
-    "difflib",
-    "os",
-    "re",
-    "sys",
-    "tempfile",
-    "yaml",
-)
-
-FROZEN_PARITY_INCIDENTAL_BINDINGS = (
-    "Any",
-    "Iterator",
-    "Path",
-    "annotations",
-    "argparse",
-    "difflib",
-    "json",
-    "re",
-    "sys",
-)
-
-#: The pre-split modules' own imports, which they exposed as module attributes.
-FROZEN_SYNC_IMPORTED_BINDINGS = (
-    "argparse",
-    "dataclass",
-    "difflib",
-    "os",
-    "re",
-    "sys",
-    "tempfile",
-    "Path",
-    "Any",
-    "yaml",
-    "SchemaValidationError",
-    "_parse_json_strict",
-    "_validate_registry",
-)
-
-FROZEN_PARITY_IMPORTED_BINDINGS = (
-    "argparse",
-    "difflib",
-    "json",
-    "re",
-    "sys",
-    "Iterator",
-    "Path",
-    "Any",
-)
-
 #: ``(module, facade module name)`` for every private sibling; a sibling must
 #: never import its own facade back.
 SPLIT_SIBLINGS = {
@@ -221,66 +46,6 @@ SPLIT_SIBLINGS = {
     "_sync_ci_gate_make": "sync_ci_gate_jobs",
     "_sync_ci_gate_publish": "sync_ci_gate_jobs",
     "_sync_ci_gate_regions": "sync_ci_gate_jobs",
-}
-
-
-def _normalized_signature(function: Callable[..., Any]) -> str:
-    return str(inspect.signature(function)).replace(str(_REPO_ROOT), "<root>")
-
-
-#: The pre-split signature of every callable consumers invoke, with the
-#: repository root (embedded in the default paths) normalized.
-FROZEN_SIGNATURES = {
-    "sync_ci_gate_jobs.sync_workflow": (
-        "(path: 'Path' = PosixPath('<root>/.github/workflows/ci.yml'), "
-        "registry_path: 'Path' = PosixPath('<root>/scripts/gate_registry.json')) "
-        "-> 'tuple[bool, str]'"
-    ),
-    "sync_ci_gate_jobs.sync_e2e_workflow": (
-        "(path: 'Path' = PosixPath('<root>/.github/workflows/e2e.yml'), "
-        "registry_path: 'Path' = PosixPath('<root>/scripts/gate_registry.json')) "
-        "-> 'tuple[bool, str]'"
-    ),
-    "sync_ci_gate_jobs.sync_publish_workflow": (
-        "(path: 'Path' = PosixPath('<root>/.github/workflows/publish.yml'), "
-        "registry_path: 'Path' = PosixPath('<root>/scripts/gate_registry.json')) "
-        "-> 'tuple[bool, str]'"
-    ),
-    "sync_ci_gate_jobs.sync_make_include": (
-        "(path: 'Path' = PosixPath('<root>/scripts/gates.mk'), "
-        "registry_path: 'Path' = PosixPath('<root>/scripts/gate_registry.json')) "
-        "-> 'tuple[bool, str]'"
-    ),
-    "sync_ci_gate_jobs.sync_docs_table": (
-        "(path: 'Path' = PosixPath('<root>/docs/technical/validation_policy.md'), "
-        "registry_path: 'Path' = PosixPath('<root>/scripts/gate_registry.json')) "
-        "-> 'tuple[bool, str]'"
-    ),
-    "sync_ci_gate_jobs.expected_workflow_text": (
-        "(text: 'str', gates: 'list[dict[str, Any]]') -> 'str'"
-    ),
-    "sync_ci_gate_jobs.expected_e2e_workflow_text": (
-        "(text: 'str', gates: 'list[dict[str, Any]]') -> 'str'"
-    ),
-    "sync_ci_gate_jobs.expected_publish_workflow_text": (
-        "(text: 'str', gates: 'list[dict[str, Any]]') -> 'str'"
-    ),
-    "sync_ci_gate_jobs.expected_docs_text": "(text: 'str', gates: 'list[dict[str, Any]]') -> 'str'",
-    "sync_ci_gate_jobs.main": "(argv: 'list[str] | None' = None) -> 'int'",
-    "sync_ci_gate_jobs._parse_registry": "(path: 'Path') -> 'list[dict[str, Any]]'",
-    "sync_ci_gate_jobs._parse_workflow": "(text: 'str', label: 'str') -> 'dict[str, Any]'",
-    "sync_ci_gate_jobs._atomic_write": "(path: 'Path', content: 'str') -> 'None'",
-    "sync_ci_gate_jobs._expected_e2e_paths": "(gates: 'list[dict[str, Any]]') -> 'tuple[str, ...]'",
-    "sync_ci_gate_jobs._generated_make_targets": (
-        "(gates: 'list[dict[str, Any]]') -> 'list[tuple[str, str, tuple[str, ...], str]]'"
-    ),
-    "sync_ci_gate_jobs._render_make_include": "(gates: 'list[dict[str, Any]]') -> 'str'",
-    "sync_ci_gate_jobs._bootstrap_job_markers": (
-        "(lines: 'list[str]', gates: 'list[dict[str, Any]]') -> 'list[str]'"
-    ),
-    "check_gate_parity._validate_registry": ("(data: 'dict[str, Any]') -> 'list[dict[str, Any]]'"),
-    "check_gate_parity._canonical_input_path": "(path: 'Path', source_kind: 'str') -> 'Path'",
-    "check_gate_parity.main": "(argv: 'list[str] | None' = None) -> 'int'",
 }
 
 # ---------------------------------------------------------------------------
@@ -336,7 +101,7 @@ def _second_gate(**over: Any) -> dict[str, Any]:
 
 #: ``(case, builder, expected path, expected message)``; ``path``/``message``
 #: are the exact pre-split diagnostics.  The valid case expects no error.
-FROZEN_REGISTRY_FINDINGS: tuple[tuple[str, Callable[[], Any], str, str], ...] = (
+REGISTRY_FINDING_CASES: tuple[tuple[str, Callable[[], Any], str, str], ...] = (
     ("not_object", lambda: [], "", "must be a JSON object"),
     (
         "top_unknown_key",
@@ -718,82 +483,6 @@ FROZEN_REGISTRY_FINDINGS: tuple[tuple[str, Callable[[], Any], str, str], ...] = 
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """Every consumer-reachable pre-split name stays on the facade."""
-    for name in FROZEN_SYNC_SURFACE:
-        assert getattr(sync_ci_gate_jobs, name) is not None, name
-    for name in FROZEN_PARITY_SURFACE:
-        assert getattr(check_gate_parity, name) is not None, name
-
-
-def test_facade_wildcard_surface_keeps_the_pre_split_public_names() -> None:
-    """``__all__`` keeps every non-underscore pre-split definition."""
-    missing = [name for name in FROZEN_WILDCARD_SURFACE if name not in sync_ci_gate_jobs.__all__]
-    assert missing == []
-    for name in sync_ci_gate_jobs.__all__:
-        assert hasattr(sync_ci_gate_jobs, name), name
-
-
-def test_facade_wildcard_surface_excludes_incidental_bindings() -> None:
-    """
-    The narrower wildcard contract is explicit, documented, and tested.
-
-    Pre-split, ``from sync_ci_gate_jobs import *`` also bound incidental
-    imported names.  decisions.md § Split-Facade Seams has facades re-export
-    public names only, so those names stay attributes of the facade but are
-    deliberately excluded from the wildcard surface.
-    """
-    for name in FROZEN_SYNC_INCIDENTAL_BINDINGS:
-        assert hasattr(sync_ci_gate_jobs, name), name
-        assert name not in sync_ci_gate_jobs.__all__, name
-    for name in FROZEN_PARITY_INCIDENTAL_BINDINGS:
-        assert hasattr(check_gate_parity, name), name
-        assert name not in check_gate_parity.__all__, name
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split modules' own imports stay importable through the facades."""
-    import argparse as argparse_module
-    import dataclasses as dataclasses_module
-    import difflib as difflib_module
-    import json as json_module
-    import os as os_module
-    import re as re_module
-    import sys as sys_module
-    import tempfile as tempfile_module
-    from collections.abc import Iterator as Iterator_class
-    from pathlib import Path as Path_class
-    from typing import Any as Any_type
-
-    assert sync_ci_gate_jobs.argparse is argparse_module
-    assert sync_ci_gate_jobs.dataclass is dataclasses_module.dataclass
-    assert sync_ci_gate_jobs.difflib is difflib_module
-    assert sync_ci_gate_jobs.os is os_module
-    assert sync_ci_gate_jobs.re is re_module
-    assert sync_ci_gate_jobs.sys is sys_module
-    assert sync_ci_gate_jobs.tempfile is tempfile_module
-    assert sync_ci_gate_jobs.Path is Path_class
-    assert sync_ci_gate_jobs.Any is Any_type
-    assert check_gate_parity.json is json_module
-    assert check_gate_parity.Iterator is Iterator_class
-    assert check_gate_parity.Path is Path_class
-    assert check_gate_parity.Any is Any_type
-    for name in FROZEN_SYNC_IMPORTED_BINDINGS:
-        assert getattr(sync_ci_gate_jobs, name) is not None, name
-    for name in FROZEN_PARITY_IMPORTED_BINDINGS:
-        assert getattr(check_gate_parity, name) is not None, name
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each callable consumers invoke keeps its pre-split signature."""
-    observed = {}
-    for qualified in FROZEN_SIGNATURES:
-        module_name, _, function_name = qualified.partition(".")
-        module = sync_ci_gate_jobs if module_name == "sync_ci_gate_jobs" else check_gate_parity
-        observed[qualified] = _normalized_signature(getattr(module, function_name))
-    assert observed == FROZEN_SIGNATURES
-
-
 def test_split_siblings_never_import_their_facade() -> None:
     """Siblings reach collaborators through defining siblings, never the facade."""
     for module_name, facade in SPLIT_SIBLINGS.items():
@@ -807,75 +496,10 @@ def test_split_siblings_never_import_their_facade() -> None:
                     assert alias.name.split(".")[-1] != facade, (module_name, node.lineno)
 
 
-def test_helpers_keep_their_homes() -> None:
-    """Facade-owned callables stay in the facade; split helpers keep their sibling."""
-    for name in (
-        "main",
-        "sync_workflow",
-        "expected_workflow_text",
-        "_bootstrap_job_markers",
-        "_render_job",
-        "_validate_workflow_projection",
-        "_check_gate_targets",
-        "_print_drift",
-        "_parse_args",
-    ):
-        assert getattr(sync_ci_gate_jobs, name).__module__ == "sync_ci_gate_jobs", name
-    for name in ("_load_registry", "_generated_drift", "_print_error", "_parse_args", "main"):
-        assert getattr(check_gate_parity, name).__module__ == "check_gate_parity", name
-    for name in (
-        "SchemaValidationError",
-        "_canonical_input_path",
-        "_is_strict_int",
-        "_validate_registry",
-        "_DuplicateKeyError",
-        "_no_duplicate_keys",
-        "_parse_json_strict",
-    ):
-        assert getattr(check_gate_parity, name).__module__ == "_gate_registry_schema", name
-        assert getattr(check_gate_parity, name) is getattr(schema, name), name
-    for name in (
-        "GeneratorError",
-        "_parse_registry",
-        "_parse_workflow",
-        "_atomic_write",
-    ):
-        assert getattr(sync_ci_gate_jobs, name).__module__ == "_sync_ci_gate_core", name
-    for name in (
-        "expected_e2e_workflow_text",
-        "sync_e2e_workflow",
-        "_expected_e2e_paths",
-    ):
-        assert getattr(sync_ci_gate_jobs, name).__module__ == "_sync_ci_gate_e2e", name
-    for name in (
-        "expected_publish_workflow_text",
-        "sync_publish_workflow",
-    ):
-        assert getattr(sync_ci_gate_jobs, name).__module__ == "_sync_ci_gate_publish", name
-    for name in (
-        "_generated_make_targets",
-        "_render_make_include",
-        "sync_make_include",
-    ):
-        assert getattr(sync_ci_gate_jobs, name).__module__ == "_sync_ci_gate_make", name
-    for name in ("expected_docs_text", "sync_docs_table"):
-        assert getattr(sync_ci_gate_jobs, name).__module__ == "_sync_ci_gate_docs", name
-    for name in (
-        "expected_local_arms_text",
-        "expected_makefile_help_text",
-        "sync_local_arms",
-        "sync_makefile_help",
-    ):
-        assert getattr(sync_ci_gate_jobs, name).__module__ == "_sync_ci_gate_help", name
-    assert (
-        getattr(sync_ci_gate_jobs, "_validate_marked_regions").__module__ == "_sync_ci_gate_regions"
-    )
-
-
 @pytest.mark.parametrize(
     ("case", "builder", "expected_path", "expected_message"),
-    FROZEN_REGISTRY_FINDINGS,
-    ids=[case for case, _, _, _ in FROZEN_REGISTRY_FINDINGS],
+    REGISTRY_FINDING_CASES,
+    ids=[case for case, _, _, _ in REGISTRY_FINDING_CASES],
 )
 def test_registry_diagnostics_are_exact(
     case: str,
@@ -1150,19 +774,3 @@ def test_pinned_catalog_constants_stay_single_literal_assignments() -> None:
         "INSTALL_POETRY_COMMENT",
     ):
         assert source.count(f"{name} = ") == 1, name
-
-
-def test_frozen_catalog_exports_are_the_catalog_objects() -> None:
-    """Re-exported catalog names stay identical to their sibling definitions."""
-    import _sync_ci_gate_catalog as catalog
-
-    assert sync_ci_gate_jobs.JOB_BEGIN is catalog.JOB_BEGIN
-    assert sync_ci_gate_jobs.JOB_END is catalog.JOB_END
-    assert sync_ci_gate_jobs.NEEDS_BEGIN is catalog.NEEDS_BEGIN
-    assert sync_ci_gate_jobs.NEEDS_END is catalog.NEEDS_END
-    assert sync_ci_gate_jobs.E2E_PATHS_BEGIN is catalog.E2E_PATHS_BEGIN
-    assert sync_ci_gate_jobs.E2E_PATHS_END is catalog.E2E_PATHS_END
-    assert sync_ci_gate_jobs.PUBLISH_BEGIN is catalog.PUBLISH_BEGIN
-    assert sync_ci_gate_jobs.PUBLISH_END is catalog.PUBLISH_END
-    assert sync_ci_gate_jobs.HAND_OWNED_MAKE_TARGETS is catalog.HAND_OWNED_MAKE_TARGETS
-    assert sync_ci_gate_jobs.UNOWNED_JOB_IDS is catalog.UNOWNED_JOB_IDS

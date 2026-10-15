@@ -1,69 +1,20 @@
 """
-Parity controls for the SA267(d) ``check_coverage_policy`` refactor.
+Behavioral controls for the SA267(d) ``check_coverage_policy`` refactor.
 
-The module keeps its pre-split surface; ``check_policy`` was decomposed into
-private helpers without moving any name.  These controls pin the preserved
-surface, the callable homes and signatures, and the exact policy diagnostics
-captured from the pre-split module, so a later slice cannot silently drop,
-relocate, or reword them.
+SA267 has closed, so SA278 retired the pre-split surface pins; these controls
+keep the exact policy diagnostics captured from the pre-split module as
+behavioral tests, so a later change cannot silently drop, reorder, or reword
+them.
 """
 
 from __future__ import annotations
 
-import inspect
 import json
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import check_coverage_policy as coverage_gate
 import pytest
-
-#: Every pre-split name consumers reach through the module.  The refactor must
-#: keep every one of them.
-FROZEN_SURFACE = (
-    "Any",
-    "KNOWN_PACKAGES",
-    "PACKAGE_PREFIXES",
-    "Path",
-    "_classify_file",
-    "_validate_file_summary",
-    "annotations",
-    "argparse",
-    "check_policy",
-    "json",
-    "load_coverage_json",
-    "main",
-    "math",
-    "sys",
-)
-
-#: Every pre-split callable; the in-place refactor moves none of them.
-FROZEN_CALLABLE_SURFACE = (
-    "_classify_file",
-    "_validate_file_summary",
-    "check_policy",
-    "load_coverage_json",
-    "main",
-)
-
-#: The pre-split signature of every callable consumers invoke.
-FROZEN_SIGNATURES = {
-    "_classify_file": "(filepath: 'str') -> 'str | None'",
-    "_validate_file_summary": (
-        "(summary: 'Any', filepath: 'str') -> 'tuple[int, int, float] | None'"
-    ),
-    "check_policy": (
-        "(coverage_path: 'str', mean_threshold: 'float' = 90.0, "
-        "file_threshold: 'float' = 80.0) -> 'int'"
-    ),
-    "load_coverage_json": "(path: 'Path') -> 'dict[str, Any] | None'",
-    "main": "(argv: 'list[str] | None' = None) -> 'int'",
-}
-
-
-def _normalized_signature(function: Callable[..., Any]) -> str:
-    return str(inspect.signature(function))
 
 
 def _coverage_document(files: dict[str, Any]) -> dict[str, Any]:
@@ -82,26 +33,6 @@ def _summary(covered: int, statements: int, percent: float) -> dict[str, Any]:
         "num_statements": statements,
         "percent_covered": percent,
     }
-
-
-def test_module_surface_is_preserved() -> None:
-    """Every pre-split name stays reachable on the module."""
-    missing = [name for name in FROZEN_SURFACE if not hasattr(coverage_gate, name)]
-    assert missing == []
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each callable consumers invoke keeps its pre-split signature."""
-    observed = {
-        name: _normalized_signature(getattr(coverage_gate, name)) for name in FROZEN_SIGNATURES
-    }
-    assert observed == FROZEN_SIGNATURES
-
-
-def test_pre_split_callables_stay_in_the_module() -> None:
-    """The in-place refactor relocates no callable to another module."""
-    observed = {name: getattr(coverage_gate, name).__module__ for name in FROZEN_CALLABLE_SURFACE}
-    assert observed == dict.fromkeys(FROZEN_CALLABLE_SURFACE, "check_coverage_policy")
 
 
 def test_file_classification_keeps_its_pre_split_semantics() -> None:
