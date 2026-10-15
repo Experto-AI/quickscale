@@ -40,6 +40,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     every package carrying `_*.py` split files fails when a private module reaches a facade in
     its distribution.
   - **Gate-parity counts derive from their sources.** The parity suite computes registry-bound and workflow-station expectations from their authoritative declarations, so adding a gate updates derived counts without a hand edit.
+  - **Harness parity controls are behavioral.** The module-conventions harness keeps each split
+    family's exact-findings corpus and structural invariants, and a control fails any parity test
+    that reintroduces a frozen pre-split surface pin.
   - **Version-derived test expectations.** CLI wiring, module-command, billing, and notifications tests derive the expected current version from package metadata instead of a pinned release string, so version bumps no longer require matching test edits.
   - **Project-owned tenant models join isolation checks.** Models in a project app inherit `TenantModel` (directly or through a module's abstract base) and declare their own FORCE RLS migration so classification and policy refresh cover them while retaining organization ownership and forced row-level security.
   - **Tenant models share one base.** Every organization-scoped model inherits `TenantModel`, and a `TenantManager` on a model that does not inherit it fails startup, so a half-built tenant model cannot go unenrolled.

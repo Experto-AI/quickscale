@@ -1,25 +1,24 @@
 """
-Parity controls for the ``rules_routes`` split (SA267).
+Behavioral controls for the ``rules_routes`` split (SA267).
 
 The route detectors' mechanics live in private siblings (``_routes_urls``,
 ``_routes_templates``, ``_routes_http_apis``, ``_routes_view_index``,
 ``_routes_authorization``, ``_routes_theme_seam``, ``_routes_throttles``)
-behind the ``rules_routes`` facade.  These controls pin the facade's preserved
-surface, the split's structural invariants, and the exact ordered findings of
-representative corpora captured from the pre-split module, so a later slice
-cannot silently drop, reorder, or reword them.
+behind the ``rules_routes`` facade.  SA267 has closed, so SA279 retired the
+pre-split surface pins; these controls keep the split's structural invariants
+and the exact ordered findings of representative corpora captured from the
+pre-split module, so a later change cannot silently drop, reorder, or reword
+them.
 """
 
 from __future__ import annotations
 
 import ast
-import inspect
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Corpus
 from scripts.module_conventions import (
     _routes_authorization,
@@ -29,7 +28,6 @@ from scripts.module_conventions import (
     _routes_throttles,
     _routes_urls,
     _routes_view_index,
-    registry,
     rules_routes,
 )
 from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FILES
@@ -51,95 +49,6 @@ SPLIT_SIBLINGS = {
     "_routes_view_index": _routes_view_index,
 }
 
-#: Every module-level name the pre-split ``rules_routes`` published, from its
-#: own ``def``/``class``/assignment statements.  The facade must keep exposing
-#: all of them, private helpers included.
-FROZEN_SURFACE = (
-    "CORE_LIST_PAGINATION",
-    "CORE_SESSION_AUTHENTICATION",
-    "DJANGO_VIEW_MODULE_PREFIXES",
-    "DRF_VIEW_MODULE_PREFIXES",
-    "FORBIDDEN_VIEW_TOKENS",
-    "GUARD_MIXIN_NAMES",
-    "OPERATOR_TOKENS",
-    "PUBLIC_READ_MIXIN_NAMES",
-    "PUBLIC_READ_MIXIN_SUFFIX",
-    "RATE_LITERAL",
-    "ROLE_ENFORCING_BASE_NAMES",
-    "RULE_7_ALLOWED_TEMPLATE_MOUNTS",
-    "SEAM_LIBRARY_LOAD",
-    "THEME_SEAM_TEMPLATE",
-    "THEME_SEAM_TEMPLATES",
-    "THEME_TS_ROOT",
-    "THEME_TS_TEST_MARKER",
-    "TRAFFIC_FILTER_TOKENS",
-    "VIEW_MODULE_PREFIXES",
-    "WIRING_LITERAL_FIELDS",
-    "_adapter_literal_wiring_violations",
-    "_allow_any_hand_check_violations",
-    "_base_name",
-    "_base_view_target",
-    "_class_declares_guard",
-    "_declares_literal_wiring",
-    "_declares_min_org_role",
-    "_declares_page_size_setting",
-    "_declares_permission_classes",
-    "_defines_view_class",
-    "_defines_view_code",
-    "_dotted_name",
-    "_effective_methods",
-    "_effective_permission_names",
-    "_get_permissions_binding",
-    "_inherits_role_enforcement",
-    "_is_admin_model_override",
-    "_is_sanctioned_guard_name",
-    "_is_view_base",
-    "_is_view_module",
-    "_module_helper_index",
-    "_pagination_bindings",
-    "_pagination_violations",
-    "_paginator_classifications",
-    "_permission_expression_name",
-    "_reads_user_is_authenticated",
-    "_rendered_managed_json_violations",
-    "_resolves_to_core_list_pagination",
-    "_resolves_to_core_session_authentication",
-    "_resolves_to_drf_page_number_pagination",
-    "_resolves_to_drf_session_authentication",
-    "_route_name_violations",
-    "_session_authentication_bindings",
-    "_session_authentication_violations",
-    "_sibling_paginator_imports",
-    "_sibling_rel",
-    "_takes_request",
-    "_template_mount_literal_violations",
-    "_theme_api_literal_violations",
-    "_throttle_registration_violations",
-    "_url_prefix_collision_violations",
-    "_view_bindings",
-    "_view_class_index",
-    "_view_framework",
-    "_view_token",
-    "_webhook_view_names",
-    "rule_19_authorization",
-    "rule_31_theme_seam",
-    "rule_32_throttles",
-    "rule_7_urls",
-    "rule_8_templates",
-    "rule_9_http_apis",
-)
-
-#: The pre-split signature of every callable the registry, the entry point, or
-#: the control cases invoke.
-FROZEN_SIGNATURES = {
-    "rule_7_urls": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_8_templates": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_9_http_apis": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_19_authorization": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_31_theme_seam": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_32_throttles": "(corpus: 'Corpus') -> 'list[str]'",
-    "_url_prefix_collision_violations": "(corpus: 'Corpus') -> 'list[str]'",
-}
 
 #: Rule 37's module-name exception tables stay defined in the facade: the
 #: rule's allowlist exempts only ``rules_routes.py``.
@@ -148,29 +57,6 @@ RULE_37_TABLES = (
     "OPERATOR_TOKENS",
     "TRAFFIC_FILTER_TOKENS",
 )
-
-FROZEN_RULE_7_MOUNTS = {
-    ("generator/templates/templates/404.html.j2", "auth"): (
-        "the 404 hint tests the requested path against the module's mount; it declares no route"
-    ),
-    ("generator/templates/templates/404.html.j2", "billing"): (
-        "the 404 hint tests the requested path against the module's mount; it declares no route"
-    ),
-}
-
-FROZEN_OPERATOR_KEYS = (
-    ("forms", "views.py"),
-    ("orgs", "_api_views.py"),
-    ("orgs", "_debug.py"),
-    ("orgs", "_view_context.py"),
-    ("orgs", "_view_org_management.py"),
-    ("orgs", "admin.py"),
-    ("orgs", "debug_views.py"),
-    ("orgs", "middleware.py"),
-    ("orgs", "permissions.py"),
-)
-
-FROZEN_TRAFFIC_FILTERS = {("analytics", "services.py"): frozenset({"is_staff"})}
 
 
 def _clean_corpus() -> Corpus:
@@ -421,28 +307,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rules_routes.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rules_routes, name) is not None
-
-
-def test_entrypoint_signatures_are_unchanged() -> None:
-    """Each entrypoint keeps its pre-split signature, read at its definition."""
-    assert {
-        "rule_7_urls": str(inspect.signature(rules_routes.rule_7_urls)),
-        "rule_8_templates": str(inspect.signature(_routes_templates.rule_8_templates)),
-        "rule_9_http_apis": str(inspect.signature(_routes_http_apis.rule_9_http_apis)),
-        "rule_19_authorization": str(inspect.signature(rules_routes.rule_19_authorization)),
-        "rule_31_theme_seam": str(inspect.signature(_routes_theme_seam.rule_31_theme_seam)),
-        "rule_32_throttles": str(inspect.signature(_routes_throttles.rule_32_throttles)),
-        "_url_prefix_collision_violations": str(
-            inspect.signature(_routes_urls._url_prefix_collision_violations)
-        ),
-    } == FROZEN_SIGNATURES
-
-
 def test_rule_37_exception_tables_stay_defined_here() -> None:
     """Rule 37 exempts only ``rules_routes.py``, so its tables must live there."""
     tree = ast.parse(Path(rules_routes.__file__).read_text(encoding="utf-8"))
@@ -455,9 +319,6 @@ def test_rule_37_exception_tables_stay_defined_here() -> None:
             targets = [node.target]
         assigned.update(target.id for target in targets if isinstance(target, ast.Name))
     assert set(RULE_37_TABLES) <= assigned
-    assert rules_routes.RULE_7_ALLOWED_TEMPLATE_MOUNTS == FROZEN_RULE_7_MOUNTS
-    assert tuple(sorted(rules_routes.OPERATOR_TOKENS)) == FROZEN_OPERATOR_KEYS
-    assert rules_routes.TRAFFIC_FILTER_TOKENS == FROZEN_TRAFFIC_FILTERS
 
 
 def test_rule_37_exempts_only_the_facade() -> None:
@@ -485,39 +346,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                     )
 
 
-def test_orchestrators_and_entrypoints_keep_their_homes() -> None:
-    """Rule 7's and rule 19's ordered groups stay orchestrated by the facade."""
-    assert rules_routes.rule_7_urls.__module__ == "scripts.module_conventions.rules_routes"
-    assert (
-        rules_routes._template_mount_literal_violations.__module__
-        == "scripts.module_conventions.rules_routes"
-    )
-    assert rules_routes.rule_19_authorization.__module__ == (
-        "scripts.module_conventions.rules_routes"
-    )
-    assert _routes_urls._url_prefix_collision_violations.__module__ == (
-        "scripts.module_conventions._routes_urls"
-    )
-    assert _routes_templates.rule_8_templates.__module__ == (
-        "scripts.module_conventions._routes_templates"
-    )
-    assert _routes_http_apis.rule_9_http_apis.__module__ == (
-        "scripts.module_conventions._routes_http_apis"
-    )
-    assert _routes_theme_seam.rule_31_theme_seam.__module__ == (
-        "scripts.module_conventions._routes_theme_seam"
-    )
-    assert _routes_throttles.rule_32_throttles.__module__ == (
-        "scripts.module_conventions._routes_throttles"
-    )
-    assert _routes_authorization._guard_violations.__module__ == (
-        "scripts.module_conventions._routes_authorization"
-    )
-    assert _routes_view_index._view_class_index.__module__ == (
-        "scripts.module_conventions._routes_view_index"
-    )
-
-
 @pytest.mark.parametrize(
     ("case", "detector", "expected"),
     EXACT_FINDINGS,
@@ -528,16 +356,3 @@ def test_detector_findings_are_exact_and_ordered(
 ) -> None:
     corpus = CASE_BUILDERS[case]()
     assert getattr(rules_routes, detector)(corpus) == list(expected)
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detectors are the facade orchestration, not a sibling."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    assert detectors[7] is rules_routes.rule_7_urls
-    assert detectors[8] is rules_routes.rule_8_templates
-    assert detectors[9] is rules_routes.rule_9_http_apis
-    assert detectors[19] is rules_routes.rule_19_authorization
-    assert detectors[31] is rules_routes.rule_31_theme_seam
-    assert detectors[32] is rules_routes.rule_32_throttles
-    assert checker.THEME_SEAM_TEMPLATE is rules_routes.THEME_SEAM_TEMPLATE
-    assert checker.THEME_SEAM_TEMPLATES is rules_routes.THEME_SEAM_TEMPLATES

@@ -1,35 +1,29 @@
 """
-Parity controls for the ``rules_misc`` split (SA267).
+Behavioral controls for the ``rules_misc`` split (SA267).
 
 The statement-flow mechanics, the ready()-scope analysis, rule 10's error
 homes, and rules 20/45/50 live in private siblings (``_misc_flow``,
 ``_misc_ready``, ``_misc_checks``, ``_misc_rules``) behind the ``rules_misc``
-facade.  These controls pin the facade's preserved surface, the split's
-structural invariants, and the exact ordered findings of representative
-corpora captured from the pre-split module, so a later slice cannot silently
-drop, reorder, or reword them.
+facade.  SA267 has closed, so SA279 retired the pre-split surface pins; these
+controls keep the split's structural invariants and the exact ordered findings
+of representative corpora captured from the pre-split module, so a later change
+cannot silently drop, reorder, or reword them.
 """
 
 from __future__ import annotations
 
 import ast
-import inspect
-import tomllib
-from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Module
 from scripts.module_conventions import (
     _misc_checks,
     _misc_flow,
     _misc_ready,
     _misc_rules,
-    core,
-    registry,
     rules_misc,
 )
 from scripts.module_conventions.rules_identity import RULE_37_ALLOWED_LITERAL_FILES
@@ -45,108 +39,6 @@ SPLIT_SIBLINGS = {
     "_misc_ready": _misc_ready,
     "_misc_rules": _misc_rules,
 }
-
-FROZEN_SURFACE = (
-    "_BUILTIN_EXCEPTION_BASES",
-    "_base_is_exception",
-    "_base_origin",
-    "_base_origins",
-    "_calls_within",
-    "_collect_direct_calls",
-    "_contains_break",
-    "_contains_continue",
-    "_contains_jump",
-    "_declares_module_error",
-    "_direct_calls",
-    "_effective_cases",
-    "_expected_error_base",
-    "_import_bindings",
-    "_mapping_key_writes",
-    "_match_exhaustive",
-    "_may_fall_through",
-    "_ready_registration_order",
-    "_ready_scope_signature_calls",
-    "_registration_reachable",
-    "_statements_terminate",
-    "rule_10_checks_errors",
-    "rule_20_email",
-    "rule_45_stub_exemptions",
-    "rule_50_notification_links",
-)
-
-#: The pre-split module's own imports, which it exposed as module attributes;
-#: the facade keeps every one importable through its redundant aliases.
-FROZEN_IMPORTED_BINDINGS = (
-    "Corpus",
-    "Mapping",
-    "ast",
-    "tomllib",
-    "_call_func_name",
-    "_class_names",
-    "_parse",
-    "_static_truth",
-)
-
-FROZEN_CORE_HELPERS = (
-    "_call_func_name",
-    "_class_names",
-    "_parse",
-    "_static_truth",
-)
-
-FROZEN_SIGNATURES = {
-    "_base_is_exception": "(module: 'str | None', name: 'str') -> 'bool'",
-    "_base_origin": (
-        "(base: 'ast.expr', bindings: 'Mapping[str, tuple[str, str | None, bool]]') -> "
-        "'tuple[str | None, str]'"
-    ),
-    "_base_origins": (
-        "(node: 'ast.ClassDef', bindings: 'Mapping[str, tuple[str, str | None, bool]]') -> "
-        "'list[tuple[str | None, str]]'"
-    ),
-    "_calls_within": "(node: 'ast.AST') -> 'list[ast.Call]'",
-    "_collect_direct_calls": "(statements: 'list[ast.stmt]', calls: 'list[ast.Call]') -> 'bool'",
-    "_contains_break": "(statements: 'list[ast.stmt]') -> 'bool'",
-    "_contains_continue": "(statements: 'list[ast.stmt]') -> 'bool'",
-    "_contains_jump": "(statements: 'list[ast.stmt]', kind: 'type[ast.Break]') -> 'bool'",
-    "_declares_module_error": (
-        "(node: 'ast.ClassDef', bindings: 'Mapping[str, tuple[str, str | None, bool]]') -> 'bool'"
-    ),
-    "_direct_calls": "(node: 'ast.AST') -> 'list[ast.Call]'",
-    "_effective_cases": "(cases: 'list[ast.match_case]') -> 'list[ast.match_case]'",
-    "_expected_error_base": "(module_name: 'str') -> 'str'",
-    "_import_bindings": "(tree: 'ast.Module') -> 'dict[str, tuple[str, str | None, bool]]'",
-    "_mapping_key_writes": "(tree: 'ast.Module', key: 'str') -> 'list[int]'",
-    "_match_exhaustive": "(cases: 'list[ast.match_case]') -> 'bool'",
-    "_may_fall_through": "(statements: 'list[ast.stmt]') -> 'bool'",
-    "_ready_registration_order": "(tree: 'ast.Module') -> 'list[str]'",
-    "_ready_scope_signature_calls": "(tree: 'ast.Module') -> 'tuple[bool, list[str]]'",
-    "_registration_reachable": "(tree: 'ast.Module') -> 'bool'",
-    "_statements_terminate": "(statements: 'list[ast.stmt]') -> 'bool'",
-    "rule_10_checks_errors": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_20_email": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_45_stub_exemptions": "(corpus: 'Corpus') -> 'list[str]'",
-    "rule_50_notification_links": "(corpus: 'Corpus') -> 'list[str]'",
-}
-
-FROZEN_BUILTIN_EXCEPTION_BASES = (
-    "ArithmeticError",
-    "AssertionError",
-    "AttributeError",
-    "EOFError",
-    "Exception",
-    "ImportError",
-    "IndexError",
-    "KeyError",
-    "LookupError",
-    "NameError",
-    "NotImplementedError",
-    "OSError",
-    "RuntimeError",
-    "StopIteration",
-    "TypeError",
-    "ValueError",
-)
 
 
 def _apps(replacement: str) -> Module:
@@ -399,37 +291,6 @@ EXACT_FINDINGS = (
 )
 
 
-def test_facade_publishes_the_pre_split_surface() -> None:
-    """The facade's ``__all__`` is the pre-split module's own name set."""
-    assert rules_misc.__all__ == FROZEN_SURFACE
-    for name in FROZEN_SURFACE:
-        assert getattr(rules_misc, name) is not None
-
-
-def test_facade_preserves_the_pre_split_imported_bindings() -> None:
-    """The pre-split module's own imports stay importable through the facade."""
-    assert rules_misc.ast is ast
-    assert rules_misc.tomllib is tomllib
-    assert rules_misc.Mapping is Mapping
-    assert rules_misc.Corpus is core.Corpus
-    for name in FROZEN_IMPORTED_BINDINGS:
-        assert getattr(rules_misc, name) is not None
-    for name in FROZEN_CORE_HELPERS:
-        assert getattr(rules_misc, name) is getattr(core, name)
-
-
-def test_frozen_callable_signatures_are_unchanged() -> None:
-    """Each pre-split callable keeps its pre-split signature through the facade."""
-    assert {
-        name: str(inspect.signature(getattr(rules_misc, name))) for name in FROZEN_SIGNATURES
-    } == FROZEN_SIGNATURES
-
-
-def test_frozen_builtin_exception_bases_are_unchanged() -> None:
-    """The builtin-base allowance keeps its pre-split membership."""
-    assert sorted(rules_misc._BUILTIN_EXCEPTION_BASES) == list(FROZEN_BUILTIN_EXCEPTION_BASES)
-
-
 def test_rule_37_exempts_only_the_facade() -> None:
     """The split siblings stay inside rule 37's closed world."""
     assert ("scripts", "module_conventions/rules_misc.py") in RULE_37_ALLOWED_LITERAL_FILES
@@ -456,43 +317,6 @@ def test_split_siblings_never_import_the_facade_or_registry() -> None:
                         name,
                         node.lineno,
                     )
-
-
-def test_orchestrators_and_entrypoints_keep_their_homes() -> None:
-    """Rule 10 stays orchestrated by the facade; the mechanics move out."""
-    assert rules_misc.rule_10_checks_errors.__module__ == ("scripts.module_conventions.rules_misc")
-    assert _misc_flow._calls_within.__module__ == "scripts.module_conventions._misc_flow"
-    assert _misc_flow._collect_direct_calls.__module__ == ("scripts.module_conventions._misc_flow")
-    assert _misc_flow._may_fall_through.__module__ == ("scripts.module_conventions._misc_flow")
-    assert _misc_flow._contains_jump.__module__ == "scripts.module_conventions._misc_flow"
-    assert _misc_ready._ready_scope_signature_calls.__module__ == (
-        "scripts.module_conventions._misc_ready"
-    )
-    assert _misc_checks._base_origin.__module__ == "scripts.module_conventions._misc_checks"
-    assert _misc_checks._declares_module_error.__module__ == (
-        "scripts.module_conventions._misc_checks"
-    )
-    assert _misc_rules._mapping_key_writes.__module__ == ("scripts.module_conventions._misc_rules")
-    assert _misc_rules.rule_20_email.__module__ == "scripts.module_conventions._misc_rules"
-    assert _misc_rules.rule_45_stub_exemptions.__module__ == (
-        "scripts.module_conventions._misc_rules"
-    )
-    assert _misc_rules.rule_50_notification_links.__module__ == (
-        "scripts.module_conventions._misc_rules"
-    )
-
-
-def test_registry_and_entrypoint_read_the_facade() -> None:
-    """The registry's detectors are the facade callables, not siblings."""
-    detectors = {rule.number: rule.detector for rule in registry.RULES}
-    for number, name in (
-        (10, "rule_10_checks_errors"),
-        (20, "rule_20_email"),
-        (45, "rule_45_stub_exemptions"),
-        (50, "rule_50_notification_links"),
-    ):
-        assert detectors[number] is getattr(rules_misc, name)
-        assert getattr(checker, name) is getattr(rules_misc, name)
 
 
 @pytest.mark.parametrize(
