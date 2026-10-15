@@ -123,6 +123,11 @@ class TestStorageManifestAdapter:
                 "markdown.extensions.toc",
             ],
             "MARKDOWNX_MEDIA_PATH": "markdownx/",
+            "MARKDOWNX_UPLOAD_CONTENT_TYPES": [
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+            ],
         }
         assert list(spec.settings) == [
             "QUICKSCALE_STORAGE_ENABLED",
@@ -141,6 +146,7 @@ class TestStorageManifestAdapter:
             "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED",
             "MARKDOWNX_MARKDOWN_EXTENSIONS",
             "MARKDOWNX_MEDIA_PATH",
+            "MARKDOWNX_UPLOAD_CONTENT_TYPES",
         ]
         assert "STORAGES" not in spec.settings
         assert "AWS_ACCESS_KEY_ID" not in spec.settings
@@ -212,6 +218,7 @@ class TestStorageManifestAdapter:
             "STORAGES",
             "MARKDOWNX_MARKDOWN_EXTENSIONS",
             "MARKDOWNX_MEDIA_PATH",
+            "MARKDOWNX_UPLOAD_CONTENT_TYPES",
         ]
         assert list(spec.settings["STORAGES"]["default"]["OPTIONS"]) == [
             "querystring_auth",
@@ -372,6 +379,11 @@ class TestStorageManifestAdapter:
                 "markdown.extensions.toc",
             ],
             "MARKDOWNX_MEDIA_PATH": "markdownx/",
+            "MARKDOWNX_UPLOAD_CONTENT_TYPES": [
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+            ],
         }
         assert r2.settings["QUICKSCALE_STORAGE_BACKEND"] == "r2"
         assert r2.settings["AWS_STORAGE_BUCKET_NAME"] == "r2-bucket"

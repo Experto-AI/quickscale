@@ -801,6 +801,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `invalidate_organization_cache` attribute off every app config, a declared `INVALIDATE`
     obligation whose executor is not collected is refused, and the module-conventions gate refuses
     a `getattr(app_config, ...)` walk outside core.
+  - **Editor uploads store the decoded image's identity.** The shared staff Markdownx upload takes
+    its stored extension and content type from the image the server decoded, never from the
+    client's filename or media type, and SVG is no longer an accepted upload type, so an HTML or
+    SVG document cannot land in public media.
+  - **Dependency-file rewrites are atomic.** The CLI's module dependency sync writes the validated
+    `pyproject.toml` through a sibling temp file and an atomic replace, so an interrupted write
+    leaves the original file intact.
   - **Module test runs measure the package they ship.** Every module's `pyproject.toml` runs pytest
     coverage against its import package (`quickscale_modules_<name>`) instead of a `src/` path, and
     the module-conventions gate refuses any other `--cov` target.

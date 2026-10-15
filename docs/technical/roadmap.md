@@ -42,7 +42,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA273 | Harden the editor upload and the CLI's `pyproject.toml` write | 2 | — | Optional |
 | SA282 | One organization-selector flag and a required contract-vintage id | 2 | — | Optional |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | — | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
@@ -53,7 +52,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
-Track 2: SA273 ──► SA282 ──► SA280 ──► SA277
+Track 2: SA282 ──► SA280 ──► SA277
 Track 3: SA279 ──► SA281
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
@@ -65,7 +64,7 @@ costs one registry row now that SA275 has landed (arch audit §7); SA279 extends
 test to the conformance harness; SA277 waits on SA191's cutover, which decides which upgrade
 mechanism proved itself.
 
-**Parallel start.** SA204 (c), SA273, and SA279 have no unmet dependency and touch disjoint
+**Parallel start.** SA204 (f), SA282, and SA279 have no unmet dependency and touch disjoint
 files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -87,7 +86,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (f) | yes | no | yes | no | yes |
-| 2 | SA273 | yes | yes | yes | yes | no |
+| 2 | SA282 | yes | yes | yes | yes | no |
 | 3 | SA279 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -323,26 +322,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA278 — Retire the gate-script frozen surfaces and scan `scripts/` for quality.**
 
-- [ ] **SA273 — Harden the editor upload and the CLI's `pyproject.toml` write.**
-
-  Closes tech `markdownx-upload-client-extension-and-content-type` and
-  `pyproject-write-not-atomic` (S4, opportunistic batch).
-
-  **Context:** the staff-only Markdownx upload (`storage/markdownx_urls.py:19–24`, vendor
-  `markdownx/forms.py:52–57`) keeps the client's extension and content type, and GIF and SVG skip
-  Pillow, so a staff account can store an HTML or SVG document in public media on the site's
-  origin. `_write_validated_toml` (`quickscale_cli/utils/_dependency_write.py:65–74`) truncates
-  and rewrites `pyproject.toml` in place.
-
-  **Acceptance:** the upload stores the format-derived extension (the SA239 builder) and a
-  content type derived from the decoded image; SVG is dropped from
-  `MARKDOWNX_UPLOAD_CONTENT_TYPES`; tests reject an HTML file named `.png` and an SVG. The CLI
-  writes a sibling temp file and `os.replace`s it, and a test proves an interrupted write leaves
-  the original intact.
-
-  **Slices:**
-  - [ ] (a) The Markdownx upload wrapper and its tests (Tier 2-fast).
-  - [ ] (b) The atomic `pyproject.toml` write and its test (Tier 1).
+- [x] **SA273 — Harden the editor upload and the CLI's `pyproject.toml` write.**
 
 - [ ] **SA282 — One organization-selector flag and a required contract-vintage id.**
 

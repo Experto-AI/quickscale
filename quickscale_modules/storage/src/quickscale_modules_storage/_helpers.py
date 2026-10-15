@@ -37,6 +37,24 @@ def _image_extension_for_format(image_format: str | None) -> str:
     return _IMAGE_EXTENSION_BY_FORMAT.get(str(image_format or "").upper(), ".bin")
 
 
+#: the content type for each Pillow format the modules accept. A stored
+#: upload takes its content type from the decoded image, never from the
+#: client-supplied value.
+_IMAGE_CONTENT_TYPE_BY_FORMAT: dict[str, str] = {
+    "JPEG": "image/jpeg",
+    "PNG": "image/png",
+    "WEBP": "image/webp",
+    "GIF": "image/gif",
+}
+
+
+def _image_content_type_for_format(image_format: str | None) -> str:
+    """Return the content type for a validated Pillow image format."""
+    return _IMAGE_CONTENT_TYPE_BY_FORMAT.get(
+        str(image_format or "").upper(), "application/octet-stream"
+    )
+
+
 @dataclass(frozen=True)
 class StorageBackendSelection:
     """Resolved storage backend selection and optional provider options."""
