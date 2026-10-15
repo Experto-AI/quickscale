@@ -793,7 +793,7 @@ The command reports every organization it cannot clear.
 
 ```bash
 python manage.py quickscale_billing_reconcile_checkouts
-python manage.py quickscale_billing_reconcile_checkouts --organization <org-uuid> --dry-run
+python manage.py quickscale_billing_reconcile_checkouts --organization-id <org-uuid> --dry-run
 ```
 
 ## Operations
