@@ -132,10 +132,6 @@ jobs:
         run: |
           make check-module-core-imports
 
-      - name: Run manifest sync gate
-        run: |
-          make check-manifest-sync
-
       - name: Run org context primitives gate
         run: |
           make check-org-context-primitives
@@ -246,6 +242,11 @@ jobs:
           version: 2.4.1
           virtualenvs-create: true
           virtualenvs-in-project: true
+
+      - name: Materialize the bundled module manifests
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/scripts/sync_module_manifests.py" "$GITHUB_WORKSPACE"
 
       - name: Build sdist and wheel
         env:

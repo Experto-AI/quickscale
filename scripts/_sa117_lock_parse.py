@@ -425,6 +425,29 @@ def _git_top_level(repo_path: Path) -> Path | None:
         return None
 
 
+_BUNDLED_MANIFEST_ROOT: Final[str] = "quickscale_core/src/quickscale_core/data/manifests/"
+_SOURCE_MANIFEST_ROOT: Final[str] = "quickscale_modules/"
+
+
+def _derived_snapshot_source(path: str) -> str | None:
+    """
+    Return the source manifest a bundled snapshot path is derived from.
+
+    SA280 (b): the bundled manifests under ``data/manifests/`` are build
+    artifacts materialized from ``quickscale_modules/<name>/module.yml``.  A
+    tree (or Git ref) that has not been materialized yet reads a bundled
+    snapshot through its source manifest; the two are the same bytes by
+    construction.
+    """
+    if not path.startswith(_BUNDLED_MANIFEST_ROOT):
+        return None
+    tail = path[len(_BUNDLED_MANIFEST_ROOT) :]
+    module, _, filename = tail.partition("/")
+    if not module or filename != "module.yml":
+        return None
+    return f"{_SOURCE_MANIFEST_ROOT}{module}/module.yml"
+
+
 def _git_baseline_contents(
     repo_root: Path, resolved_sha: str, paths: list[str]
 ) -> dict[str, bytes]:
@@ -448,15 +471,20 @@ def _git_baseline_contents(
         except (UnicodeDecodeError, ValueError) as exc:
             raise LockDiffError("baseline tree contains an invalid Git entry") from exc
         entries[path] = (mode, kind + " " + object_sha)
-    missing = [path for path in paths if path not in entries]
+    missing = [
+        path
+        for path in paths
+        if path not in entries and _derived_snapshot_source(path) not in entries
+    ]
     if missing:
         raise LockDiffError(f"baseline is missing expected paths: {', '.join(missing)}")
     contents: dict[str, bytes] = {}
     for path in paths:
-        mode, kind_sha = entries[path]
+        lookup = path if path in entries else _derived_snapshot_source(path)
+        mode, kind_sha = entries[lookup]
         kind, object_sha = kind_sha.split()
         if kind != "blob" or mode not in {"100644", "100755"}:
-            raise LockDiffError(f"baseline path is not a regular 100644/100755 blob: {path}")
+            raise LockDiffError(f"baseline path is not a regular 100644/100755 blob: {lookup}")
         blob = subprocess.run(
             ["git", "cat-file", "blob", object_sha],
             cwd=repo_root,
@@ -464,24 +492,42 @@ def _git_baseline_contents(
             timeout=30,
         )
         if blob.returncode:
-            raise LockDiffError(f"cannot read baseline blob: {path}")
+            raise LockDiffError(f"cannot read baseline blob: {lookup}")
         contents[path] = blob.stdout
     return contents
 
 
+def _read_candidate_file(root: Path, path: str) -> bytes | None:
+    """Return a candidate file's bytes, or ``None`` when the path is absent."""
+    candidate = root / path
+    try:
+        info = candidate.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise LockDiffError(f"candidate path cannot be inspected: {path}") from exc
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        raise LockDiffError(f"candidate path is not a regular non-symlink file: {path}")
+    try:
+        return candidate.read_bytes()
+    except OSError as exc:
+        raise LockDiffError(f"candidate path cannot be read: {path}") from exc
+
+
 def _candidate_contents(root: Path, paths: list[str]) -> dict[str, bytes]:
-    """Read expected candidate files, rejecting symlinks and non-regular files."""
+    """
+    Read expected candidate files, rejecting symlinks and non-regular files.
+
+    SA280 (b): an absent bundled snapshot (a tree that has not been
+    materialized yet) reads through its source manifest instead.
+    """
     contents: dict[str, bytes] = {}
     for path in paths:
-        candidate = root / path
-        try:
-            info = candidate.lstat()
-        except OSError as exc:
-            raise LockDiffError(f"candidate path cannot be inspected: {path}") from exc
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-            raise LockDiffError(f"candidate path is not a regular non-symlink file: {path}")
-        try:
-            contents[path] = candidate.read_bytes()
-        except OSError as exc:
-            raise LockDiffError(f"candidate path cannot be read: {path}") from exc
+        payload = _read_candidate_file(root, path)
+        if payload is None:
+            source = _derived_snapshot_source(path)
+            payload = _read_candidate_file(root, source) if source is not None else None
+        if payload is None:
+            raise LockDiffError(f"candidate path cannot be inspected: {path}")
+        contents[path] = payload
     return contents

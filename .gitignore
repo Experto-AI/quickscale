@@ -38,6 +38,11 @@ MANIFEST
 quickscale_core/poetry.lock
 quickscale_cli/poetry.lock
 quickscale_modules/*/poetry.lock
+
+# SA280 (b): the bundled module manifests are materialized from the module
+# manifests at build time by scripts/sync_module_manifests.py.  Only the
+# package marker (manifests/__init__.py) stays tracked.
+quickscale_core/src/quickscale_core/data/manifests/*/
 var/
 wheels/
 share/python-wheels/

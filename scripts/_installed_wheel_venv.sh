@@ -668,6 +668,18 @@ quickscale_provision_installed_venv() {
     _QS_IV_BUILD_VENVS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/quickscale-iv-build-venvs-XXXXXX")"
     _QS_IV_WHEEL_COLLECT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/quickscale-iv-wheels-XXXXXX")"
 
+    # ---- Materialize the core package's bundled manifests ----
+    # SA280 (b): data/manifests is a build artifact materialized from the
+    # module manifests.  Materialize the repository tree before staging so
+    # every staged wheel carries it; a QS_SMOKE_REGRESSION_CORE input keeps
+    # its deliberately removed manifests, so the SA109 negative probe still
+    # fails closed.  Harness fixtures build from a layout without the module
+    # workspace; there the staged copy is used as-is (and the probes below
+    # fail closed when its manifests are missing).
+    if [[ -f "$repo_root/scripts/sync_module_manifests.py" && -d "$repo_root/quickscale_modules" ]]; then
+        "$QUICKSCALE_IV_PYTHON_BIN" "$repo_root/scripts/sync_module_manifests.py" "$repo_root" >&2
+    fi
+
     # ---- Stage all packages ----
     # Modifications are applied only to the per-run staged copies; the source
     # tree's pyproject.toml bytes are never rewritten.

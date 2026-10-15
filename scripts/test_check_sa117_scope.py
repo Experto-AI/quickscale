@@ -996,3 +996,91 @@ class TestEvidenceAndEntrypoint:
         assert result.returncode == 2
         assert "unrecognized arguments" in result.stderr
         assert not output.exists()
+
+
+class TestBundledSnapshotDerivation:
+    """SA280 (b): an absent bundled snapshot reads through its source manifest."""
+
+    @staticmethod
+    def _snapshot_paths(paths: list[str]) -> list[str]:
+        return [
+            path
+            for path in paths
+            if path.startswith("quickscale_core/src/quickscale_core/data/manifests/")
+        ]
+
+    @staticmethod
+    def _source_for(snapshot_path: str) -> str:
+        return f"quickscale_modules/{snapshot_path.split('/')[-2]}/module.yml"
+
+    def test_candidate_reads_absent_snapshot_through_its_source(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        root = tmp_path / "candidate"
+        root.mkdir()
+        _write_inventory(root, "1.2.3")
+        paths = _expected_inventory(root)
+        snapshots = self._snapshot_paths(paths)
+        assert snapshots
+        for snapshot in snapshots:
+            (root / snapshot).unlink()
+
+        contents = sa117_scope._candidate_contents(root, paths)
+
+        for snapshot in snapshots:
+            assert contents[snapshot] == contents[self._source_for(snapshot)]
+
+    def test_candidate_fails_closed_when_snapshot_and_source_are_missing(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        root = tmp_path / "candidate"
+        root.mkdir()
+        _write_inventory(root, "1.2.3")
+        paths = _expected_inventory(root)
+        snapshot = "quickscale_core/src/quickscale_core/data/manifests/auth/module.yml"
+        (root / snapshot).unlink()
+        (root / self._source_for(snapshot)).unlink()
+
+        with pytest.raises(sa117_scope.LockDiffError, match="cannot be inspected"):
+            sa117_scope._candidate_contents(root, paths)
+
+    def test_baseline_ref_reads_absent_snapshot_through_its_source(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        root = tmp_path / "baseline"
+        root.mkdir()
+        _write_inventory(root, "1.2.3")
+        paths = _expected_inventory(root)
+        snapshots = self._snapshot_paths(paths)
+        assert snapshots
+        for snapshot in snapshots:
+            (root / snapshot).unlink()
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=fixture",
+                "-c",
+                "user.email=fixture@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "fixture",
+            ],
+            cwd=root,
+            check=True,
+        )
+        sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+        contents = sa117_scope._git_baseline_contents(root, sha, paths)
+
+        for snapshot in snapshots:
+            assert contents[snapshot] == contents[self._source_for(snapshot)]
