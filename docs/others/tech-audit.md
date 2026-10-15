@@ -159,10 +159,6 @@ items:
      title: "Hosted E2E never runs on a release tag", effort: Trivial, confidence: High,
      reality: release-pipeline, anchors: [.github/workflows/e2e.yml], depends_on: [],
      first_seen: 2026-10-13, last_verified: 2026-10-13}
-  - {id: crm-theme-stats-always-zero, status: open, severity: S4, category: IX, effort: Trivial,
-     confidence: High, reality: generated-app,
-     anchors: [quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/src/pages/CrmPage.tsx],
-     first_seen: 2026-10-13, last_verified: 2026-10-13}
   - {id: notifications-webhook-status-regresses-out-of-order, status: open, severity: S4,
      category: II, effort: Small, confidence: Medium, reality: generated-app,
      anchors: [quickscale_modules/notifications/src/quickscale_modules_notifications/_webhooks.py],
@@ -242,7 +238,7 @@ items:
 ## 3. Summary table
 
 **Counts:**
-- **Open:** 8 in total: S1 — 0 · S2 — 0 · S3 — 1 · S4 — 7.
+- **Open:** 7 in total: S1 — 0 · S2 — 0 · S3 — 1 · S4 — 6.
 - **Watchlist:** 16.
 - **This pass:** prior open `forms-notification-status-misreported` resolved; 11 findings new, 0
   carried, 0 regressed.
@@ -250,7 +246,6 @@ items:
 | ID | Sev | Cat | Title | Effort | Conf | Since |
 |---|---|---|---|---|---|---|
 | `e2e-release-tag-trigger-never-matches` | S3 | VII | Hosted E2E never runs on a release tag | Trivial | High | new (**quick win**) |
-| `crm-theme-stats-always-zero` | S4 | IX | Theme CRM stat cards always show 0 | Trivial | High | new |
 | `notifications-webhook-status-regresses-out-of-order` | S4 | II | A late delivery event overwrites a terminal status | Small | Medium | new |
 | `notifications-webhook-secret-format-unchecked-at-startup` | S4 | VI | A malformed `whsec_` secret passes the startup check | Trivial | High | new |
 | `orgs-invite-throttle-partial-charge` | S4 | I | The per-sender bucket is charged when the per-org throttle refuses | Small | Medium | new |
@@ -276,11 +271,6 @@ items:
 
 ### S4 findings (one line each)
 
-- `crm-theme-stats-always-zero` · `themes/showcase_react/src/pages/CrmPage.tsx:28-31`
-  - **Defect:** the stat cards read `.count`, then `.results.length`, but the CRM lists return a
-    bare array (`runtime/drf.py:75-77`, `PlainListPagination`), so every card shows 0. Even
-    `.length` would count only one page.
-  - **Fix:** expose a count endpoint, or a header the theme reads.
 - `notifications-webhook-status-regresses-out-of-order` · `notifications/_webhooks.py:257+ (`_apply_delivery_event`)`
   - **Defect:** `_apply_delivery_event` overwrites the status with no ordering check and no row
     lock, so a late `email.sent` regresses a `delivered` or `bounced` row.
@@ -325,7 +315,7 @@ the delta touched. Changed cells:
 | Orgs invite (HTML + JSON) | Both scopes charged inside the atomic block, rolled back on refusal (`orgs-invite-throttle-partial-charge`). Pending cap under the org row lock. |
 | Orgs HTML management views | The object comes from the route slug. The role check uses `resolve_request_org` (watch: `orgs-role-mixin-checks-request-org`). |
 | Social payload views (core-rendered) | DRF `AllowAny`, `SocialPayloadUnavailable` 503 with no exception text. The `status=error` branch is unreachable (watch: `social-config-error-served-200`). |
-| CRM lists | Bare-list pagination, page size fixed by setting, no client override (`crm-theme-stats-always-zero` is on the theme side). |
+| CRM lists | Bare-list pagination, page size fixed by setting, no client override; the theme's stat cards read their totals from `crm/api/stats/`. |
 | React seam (`quickscale_seam` tags) | Output from the catalog and `reverse()` only; `currentOrgSlug` through `escapejs`. Probe-verified. |
 | DR restore (private remote) | Streams through the provider client's chunked transfer, and a failed media publish removes its staging `.part` file. |
 | Release E2E | `e2e-release-tag-trigger-never-matches`. |
@@ -347,8 +337,8 @@ All batches are independent of each other.
 3. **Billing (landed):** `stripe-customer-search-lag-resolves-absent` — reconciliation waits out
    Stripe's Search indexing lag, and the auth deletion test asserts the block again.
 4. **Notifications:** the two webhook S4s (`_webhooks.py`, `checks.py`).
-5. **Opportunistic:** `crm-theme-stats-always-zero` (theme + CRM, plus a contract-vintage
-   adoption step), `orgs-invite-throttle-partial-charge`,
+5. **Opportunistic:** `crm-theme-stats-always-zero` (landed: the CRM stats endpoint and the
+   theme's stat cards, with the contract-vintage adoption step), `orgs-invite-throttle-partial-charge`,
    `markdownx-upload-client-extension-and-content-type`, and `pyproject-write-not-atomic`.
 
 ---
@@ -362,7 +352,7 @@ All batches are independent of each other.
 | auth | clean (latent watch item `account-deletion-hook-exception-text`). | Anonymize boundary, deletion guard. |
 | notifications | two S4s. Svix verification verified. | Webhook path in full. |
 | forms | clean. The prior S4 is resolved and the view surfaces `notification_status: "skipped"`. | Views, `_email.py`. |
-| crm | clean server side; theme S4. | Viewsets, pagination. |
+| crm | clean. | Viewsets, pagination. |
 | blog / listings | clean. Throttle scopes kept; the bucket identity moved to per-user, as declared. | API views. |
 | storage | `markdownx-upload-client-extension-and-content-type` | Adapter, Markdownx URLs. |
 | social | clean; one watch item. | Services, cache path. |
@@ -454,8 +444,9 @@ Added:
   the test that carries it.
 - **A workflow-trigger consistency check:** every workflow that claims to run on release tags uses
   `publish.yml`'s tag pattern. It would have prevented `e2e-release-tag-trigger-never-matches`.
-- **A theme-to-API contract test:** a theme hook's expected response shape is checked against a
-  rendered DRF response. It would have caught `crm-theme-stats-always-zero`.
+- **A theme-to-API contract test:** delivered with SA274 as the CRM suite's
+  `tests/test_theme_contract.py`: the theme's stat-card hook expectation is parsed from the
+  shipped `CrmPage.tsx` and checked against the rendered `crm/api/stats/` response.
 - Carried: image-layer and broader IaC scanning.
 
 ---
@@ -804,6 +795,14 @@ Added:
 - 2026-10-13 — `forms-notification-status-misreported`: **resolved** (`a6b58799`, SA265b). Verified at `forms/_email.py:44-53`: notifications off returns `"skipped"`, and the submit view surfaces it as `notification_status`.
 - 2026-10-13 — `stripe-customer-search-lag-resolves-absent`: **resolved** (SA270). Verified at `billing/_customers.py`: a customer-search miss counts as absence only once the organization's latest customer-resolution attempt completed and is older than Stripe's documented Search indexing lag (up to an hour behind during outages), two matches fail closed, the search requests `limit=2`, and `auth/tests/test_views.py` asserts an unknown outcome blocks deletion again. Dropped from the index and summary.
 - 2026-10-14 — `dr-private-remote-restore-whole-object-in-memory`, `dr-media-part-file-leak-on-publish-failure`: **resolved** (SA271). Verified at `dr_engine/_remote.py` and `_media.py`: every DR object path streams through the provider client's chunked transfers (`download_fileobj`, and `upload_fileobj` for the s3→s3 relay), `_media.py`'s s3→local publish applies the destination mode and renames inside the cleanup `try` so any failure there removes its staging `.part` file, and an in-suite source scan rejects `storage.open()` in `dr_engine`. Dropped from the index and summary; the §10 tooling gap closes with it.
+- 2026-10-15 — `crm-theme-stats-always-zero`: **resolved** (SA274). Verified at
+  `quickscale_modules/crm/src/quickscale_modules_crm/views.py` and the shipped
+  `themes/showcase_react/src/pages/CrmPage.tsx`: the CRM count endpoint (`crm/api/stats/`)
+  answers the active organization's contact, company, deal, and tag totals to a viewer-role
+  caller, and the theme's stat cards read those totals instead of `.count`/`.results.length`
+  from one bare-list page; the CRM suite's theme-contract test checks the hook's declared shape
+  against the rendered response. Dropped from the index and summary; the §10 tooling gap closes
+  with it.
 - 2026-10-13 — `dr-restore-vintage-exact-match`, `orgs-provider-id-check-blocks-migrate`, `crm-stage-seed-lost-on-commit-failure`, `backups-upload-restore-by-model-permission`, `single-sync-worker-vendor-calls`, `allow-bypassrls-serving-undetected`, `migrate-runs-per-replica`, `development-workflow-intermittent-root-500`, `core-e2e-poetry-cache-install-candidates`: carried (triggers not fired; evidence in §11).
 - 2026-10-13 — new open: `stripe-customer-search-lag-resolves-absent`, `dr-private-remote-restore-whole-object-in-memory`, `e2e-release-tag-trigger-never-matches` (S3); `crm-theme-stats-always-zero`, `notifications-webhook-status-regresses-out-of-order`, `notifications-webhook-secret-format-unchecked-at-startup`, `orgs-invite-throttle-partial-charge`, `markdownx-upload-client-extension-and-content-type`, `dr-media-part-file-leak-on-publish-failure`, `pyproject-write-not-atomic`, `ci-poetry-retry-curl-pipe-python` (S4).
 - 2026-10-13 — new watchlist: `orgs-role-mixin-checks-request-org`, `social-config-error-served-200`, `deploy-existing-settings-module-never-corrected`, `account-deletion-hook-exception-text`, `security-suppressions-uniform-expiry`, `generated-project-automation-local-only`, `initial-migration-edited-in-place`.

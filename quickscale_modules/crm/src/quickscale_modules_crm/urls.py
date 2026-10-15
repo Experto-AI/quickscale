@@ -15,6 +15,7 @@ from .views import (
     ContactNoteViewSet,
     ContactViewSet,
     CRMDashboardView,
+    CRMStatsView,
     DealNoteViewSet,
     DealViewSet,
     StageViewSet,
@@ -86,5 +87,6 @@ router.register(r"deal-notes", DealNoteViewSet, basename="deal_note")
 
 urlpatterns = [
     path("dashboard/", CRMDashboardView.as_view(), name="dashboard"),
+    path("api/stats/", CRMStatsView.as_view(), name="stats"),
     path("api/", include(router.urls)),
 ]

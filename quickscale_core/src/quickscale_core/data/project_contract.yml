@@ -303,3 +303,9 @@ steps:
     title: "Adopt the theme seam key manifest's rendered bytes"
     adoption_steps:
       - "The managed frontend/src/quickscaleSeam.keys.ts that the `sa276-managed-seam-types` step lists is emitted byte-identical to the runtime renderer (`quickscale_core.runtime.seam.render_seam_key_manifest`), including its template's whitespace control, so generation and `quickscale apply`/`quickscale update` agree on one content; a project that generated the file before this fix re-runs `quickscale apply --confirm-contract-adoption` to rewrite it."
+
+  - id: sa274-crm-theme-stats
+    minimum: "0.89.0"
+    title: "Adopt the CRM stats endpoint in the theme's CRM workspace"
+    adoption_steps:
+      - "Compare and manually adopt the current showcase_react CrmPage.tsx: the workspace's stat cards read the organization totals from the CRM module's `crm/api/stats/` endpoint (`{\"contacts\", \"companies\", \"deals\", \"tags\"}`) instead of inferring a count from the first bare-list page, which always showed 0. From a clean tree, run `quickscale update --confirm-contract-adoption`: it updates the embedded CRM module to this release — an embedded module from an earlier release serves no stats route, so the cards would show no total — and records this step's adoption, while an unflagged `quickscale update` or `quickscale apply` is refused while the adoption is pending; a project with no embedded modules runs `quickscale apply --confirm-contract-adoption` instead, because `update` has nothing to pull. Rebuild the frontend (`pnpm build`) after adopting."
