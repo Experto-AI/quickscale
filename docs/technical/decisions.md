@@ -369,6 +369,11 @@ Engine boundary: §[DR Engine Boundary Contract](#disaster-recovery-engine-bound
 - ✅ A generated project's embedded manifest is a historical copy: it is read through an explicit
   opt-out of the id requirement so a project installed before the requirement stays upgradable,
   while shipped manifests are the ones read strictly
+- ✅ Contract-vintage adoption-step prose references a shared core contract value as a declared
+  `{name}` token (for example `{stripe_api_version}`) that the loader resolves when it reads the
+  manifest, so the value is authored once in `quickscale_core.contracts.module_options` and
+  reaches module code through the `quickscale_core.runtime.manifest` facade instead of being
+  hand-copied into the manifest; a changed step text takes a new step id as usual
 - ❌ An id-less `contract_vintage` in a shipped manifest, or a version comparison standing in
   for a recorded id
 

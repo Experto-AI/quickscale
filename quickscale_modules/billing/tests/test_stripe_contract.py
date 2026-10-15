@@ -20,6 +20,7 @@ import pytest
 from django.conf import settings
 import stripe
 
+from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_modules_billing.models import (
     CreditBalance,
     CreditTransaction,
@@ -570,11 +571,55 @@ def test_dahlia_subscription_updated_keeps_item_derived_period_bounds(
     )
 
 
-def test_operator_guidance_states_the_pinned_stripe_api_version() -> None:
-    """Every operator-facing surface names the required endpoint version."""
-    guidance_paths = (
-        REPO_ROOT / "quickscale_modules" / "billing" / "README.md",
+def test_manifest_adoption_step_reads_the_core_stripe_api_version() -> None:
+    """The shipped manifest references the one constant; reading it resolves it."""
+    manifest_path = REPO_ROOT / "quickscale_modules" / "billing" / "module.yml"
+    raw_text = manifest_path.read_text()
+    manifest = load_manifest_from_path(manifest_path)
+
+    assert "{stripe_api_version}" in raw_text, (
+        "the manifest must reference the core token, not a copy"
+    )
+    assert STRIPE_API_VERSION not in raw_text, (
+        "the manifest must not hand-copy the Stripe API version"
+    )
+    vintage = manifest.contract_vintage
+    assert vintage is not None
+    assert any(STRIPE_API_VERSION in step for step in vintage.manual_adoption_steps), (
+        "every operator-facing manifest surface must name the required version"
+    )
+
+
+def test_no_product_station_hand_copies_the_stripe_api_version() -> None:
+    """The version is read or rendered at every station, never re-authored."""
+    stations = (
+        REPO_ROOT
+        / "quickscale_modules"
+        / "billing"
+        / "src"
+        / "quickscale_modules_billing"
+        / "_settings.py",
         REPO_ROOT / "quickscale_modules" / "billing" / "module.yml",
+        REPO_ROOT
+        / "quickscale_core"
+        / "src"
+        / "quickscale_core"
+        / "data"
+        / "manifests"
+        / "billing"
+        / "module.yml",
+        REPO_ROOT
+        / "quickscale_cli"
+        / "src"
+        / "quickscale_cli"
+        / "commands"
+        / "_finalize.py",
+        REPO_ROOT
+        / "quickscale_core"
+        / "src"
+        / "quickscale_core"
+        / "generator"
+        / "generator.py",
         REPO_ROOT
         / "quickscale_core"
         / "src"
@@ -582,17 +627,12 @@ def test_operator_guidance_states_the_pinned_stripe_api_version() -> None:
         / "generator"
         / "templates"
         / "OPERATIONS.md.j2",
-        REPO_ROOT
-        / "quickscale_cli"
-        / "src"
-        / "quickscale_cli"
-        / "commands"
-        / "_finalize.py",
     )
 
-    for path in guidance_paths:
-        assert STRIPE_API_VERSION in path.read_text(), (
-            f"{path} must state the required Stripe API version"
+    for path in stations:
+        assert STRIPE_API_VERSION not in path.read_text(), (
+            f"{path} re-states the Stripe API version instead of reading the "
+            "one authored constant"
         )
 
 
@@ -617,6 +657,7 @@ def test_generated_operations_guidance_renders_the_billing_version_contract() ->
         "runtime_db_role": "testproject_app",
         "runtime_db_role_attributes": ["NOSUPERUSER", "NOBYPASSRLS"],
         "runtime_db_manual_grant_statements": ["GRANT CONNECT ON DATABASE"],
+        "stripe_api_version": STRIPE_API_VERSION,
     }
 
     billing_render = template.render({**context, "selected_modules": ["billing"]})

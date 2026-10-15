@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
+from quickscale_core.contracts.module_options import STRIPE_API_VERSION
 from quickscale_core.manifest.loader import (
     ManifestError,
     load_manifest,
@@ -2764,6 +2765,45 @@ contract_vintage:
         assert len(manifest.contract_vintage.manual_adoption_steps) == 2
         assert manifest.contract_vintage.manual_adoption_steps[0] == "Step one: do this"
         assert manifest.contract_vintage.manual_adoption_steps[1] == "Step two: do that"
+
+    def test_contract_vintage_step_resolves_core_tokens(self) -> None:
+        """A declared adoption token reads the one core constant at load.
+
+        The manifest references the value instead of holding a copy, so the
+        loaded steps — and every consumer that displays them — carry the
+        authored constant without a parity check between copies.
+        """
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  id: sa999-step
+  minimum: "0.89.0"
+  manual_adoption_steps:
+    - "Recreate the endpoint at API version {stripe_api_version}."
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.manual_adoption_steps == [
+            f"Recreate the endpoint at API version {STRIPE_API_VERSION}."
+        ]
+
+    def test_contract_vintage_step_keeps_unrelated_braces(self) -> None:
+        """Only declared tokens are substituted; other braces pass through."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+contract_vintage:
+  id: sa999-step
+  minimum: "0.89.0"
+  manual_adoption_steps:
+    - 'Answer {"error": {"code": "x"}} with {unknown_token} unchanged.'
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.contract_vintage is not None
+        assert manifest.contract_vintage.manual_adoption_steps == [
+            'Answer {"error": {"code": "x"}} with {unknown_token} unchanged.'
+        ]
 
     def test_contract_vintage_with_id(self) -> None:
         """The step id is parsed for exact adoption tracking."""

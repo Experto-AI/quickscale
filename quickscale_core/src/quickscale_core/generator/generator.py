@@ -9,6 +9,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
+from quickscale_core.contracts.module_options import STRIPE_API_VERSION
 from quickscale_core.generator.runtime_database import runtime_db_template_context
 from quickscale_core.generator.runtime_pins import (
     DJANGO_CONSTRAINT,
@@ -569,6 +570,9 @@ class ProjectGenerator:
             "postgres_version": POSTGRES_VERSION,
             "postgres_docker_tag": POSTGRES_DOCKER_TAG,
             "quickscale_core_pin": QUICKSCALE_CORE_PIN,
+            # Contract value the generated operations guide renders (the one
+            # authored Stripe API version constant; no hand-copied literal).
+            "stripe_api_version": STRIPE_API_VERSION,
             # Runtime DB role (RLS enforcement — NOSUPERUSER, NOBYPASSRLS)
             **runtime_db_template_context(package_name),
             # Managed theme seam declaration and key manifest (SA276).
