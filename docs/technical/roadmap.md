@@ -44,14 +44,13 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA280 | One source for the Stripe API version and the bundled manifests | 2 | — | Optional |
 | SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
-| SA281 | Hand adapter hooks typed resolved options and delete the dataflow detector | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
 Track 2: SA280 ──► SA277
-Track 3: SA281
+Track 3: — (SA281 landed)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
 ```
@@ -61,7 +60,7 @@ SA191 waits on Track 2's release fixes (through the 0.89.0 publication); SA204's
 costs one registry row now that SA275 has landed (arch audit §7); SA277 waits on SA191's cutover,
 which decides which upgrade mechanism proved itself.
 
-**Parallel start.** SA204 (g), SA280, and SA281 have no unmet dependency and touch disjoint
+**Parallel start.** SA204 (g) and SA280 have no unmet dependency and touch disjoint
 files.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -84,7 +83,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA204 (g) | yes | no | yes | no | yes |
 | 2 | SA280 | yes | yes | yes | yes | no |
-| 3 | SA281 | yes | yes | yes | yes | no |
+| 3 | — (SA281 landed) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -382,30 +381,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA279 — Retire the conformance harness's frozen surfaces.**
 
-- [ ] **SA281 — Hand adapter hooks typed resolved options and delete the dataflow detector.**
-
-  Closes the construction part of arch `rules-held-by-parity-not-derivation` (Finding 3,
-  option 2, applied to SA263's hook signature).
-
-  **Context:** SA263 made the engine validate, coerce, and default options; slice (a) replaced
-  the mutable resolved-options dict its hooks received with a frozen, typed object, so "a hook
-  never re-coerces or re-reads a raw option" holds by construction for the hook bodies. Until
-  slice (b) deletes it, a bounded inter-procedural dataflow analyzer (`adapter_flow.py`,
-  `adapter_options.py`, `url_options.py`, and their controls) still polices the adapter sources.
-
-  **Acceptance:** every adapter hook receives a frozen, typed resolved-options object and no raw
-  option values; the 12 adapters are migrated; a hook that tries to read a raw option fails by
-  construction (a type or attribute error under test). The dataflow detector, its controls, and
-  their harness wiring are deleted, and the rule text says the boundary is structural. Generated
-  settings are byte-identical for every module's fixture options.
-
-  **Slices:**
-  - [x] (a) The resolved-options object in core's hook contract and the 12 adapters, with the
-    byte-identical settings test (Tier 2-full). Landed: `ResolvedOptions`
-    (`quickscale_core.manifest.resolved_options`) exposes frozen attribute-only reads and fails
-    raw container idioms by construction, all 11 hooks read attributes, and per-module goldens
-    pin the generated settings bytes. (b) is next.
-  - [ ] (b) Delete the dataflow detector and its controls, and amend the rule (Tier 2-fast).
+- [x] **SA281 — Hand adapter hooks typed resolved options and delete the dataflow detector.**
 
 ## Deferred constraints and references
 
