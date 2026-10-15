@@ -3,6 +3,7 @@
 These tests cover:
 - assemble_wiring_spec: basic assembly from ResolverResult.
 - assemble_wiring_spec: post_hook seam (receives correct args, can augment).
+- ResolvedOptions: frozen attribute surface; raw container reads fail.
 - PostResolutionHook: type alias importable from the package.
 - Frozen ModuleWiringSpec is returned.
 - managed_files populated from resolver result declarations (Phase 1.3).
@@ -17,6 +18,7 @@ import pytest
 from quickscale_core.manifest import (
     ManifestError,
     PostResolutionHook,
+    ResolvedOptions,
     ResolverResult,
     assemble_wiring_spec,
 )
@@ -36,6 +38,7 @@ from quickscale_core.module_wiring import ModuleWiringSpec
 def _make_result(
     module_name: str = "test",
     resolved: dict[str, Any] | None = None,
+    defaults: dict[str, Any] | None = None,
     derived_settings: dict[str, Any] | None = None,
     apps: tuple[str, ...] = (),
     middleware: tuple[str, ...] = (),
@@ -43,10 +46,11 @@ def _make_result(
     pre_home_url_includes: tuple[tuple[str, str], ...] = (),
     managed_files: tuple[ManagedFileDeclaration, ...] = (),
 ) -> ResolverResult:
+    resolved = resolved or {}
     return ResolverResult(
         module_name=module_name,
-        defaults={},
-        resolved=resolved or {},
+        defaults=resolved if defaults is None else defaults,
+        resolved=resolved,
         derived_settings=derived_settings or {},
         apps=apps,
         middleware=middleware,
@@ -168,7 +172,7 @@ class TestPostResolutionHook:
         """The post_hook receives the assembled spec and resolved options."""
         captured: list[Any] = []
 
-        def hook(spec: ModuleWiringSpec, resolved: dict[str, Any]) -> ModuleWiringSpec:
+        def hook(spec: ModuleWiringSpec, resolved: ResolvedOptions) -> ModuleWiringSpec:
             captured.append(("spec", spec))
             captured.append(("resolved", resolved))
             return spec
@@ -182,12 +186,13 @@ class TestPostResolutionHook:
         assert len(captured) == 2
         assert captured[0] == ("spec", spec)
         assert captured[1][0] == "resolved"
-        assert captured[1][1] == {"key": "val"}
+        assert isinstance(captured[1][1], ResolvedOptions)
+        assert captured[1][1].key == "val"
 
     def test_hook_can_augment_spec(self) -> None:
         """The post_hook can return a modified ModuleWiringSpec."""
 
-        def hook(spec: ModuleWiringSpec, resolved: dict[str, Any]) -> ModuleWiringSpec:
+        def hook(spec: ModuleWiringSpec, resolved: ResolvedOptions) -> ModuleWiringSpec:
             return ModuleWiringSpec(
                 apps=spec.apps + ("extra_app",),
                 middleware=spec.middleware,
@@ -201,29 +206,76 @@ class TestPostResolutionHook:
         spec = assemble_wiring_spec(result, post_hook=hook)
         assert spec.apps == ("myapp", "extra_app")
 
-    def test_hook_receives_copy_of_resolved(self) -> None:
-        """The hook receives a copy — mutations do not propagate back to result."""
-        mutations: list[dict] = []
+    def test_hook_resolved_options_are_frozen_and_detached(self) -> None:
+        """The hook's resolved options are frozen and hold a private copy."""
+        captured: list[ResolvedOptions] = []
 
-        def hook(spec: ModuleWiringSpec, resolved: dict[str, Any]) -> ModuleWiringSpec:
-            resolved["injected_key"] = "injected_value"
-            mutations.append(resolved)
+        def hook(spec: ModuleWiringSpec, resolved: ResolvedOptions) -> ModuleWiringSpec:
+            captured.append(resolved)
+            with pytest.raises(AttributeError):
+                resolved.orig = "changed"
+            with pytest.raises(AttributeError):
+                del resolved.orig
             return spec
 
         result = _make_result(resolved={"orig": "val"})
         assemble_wiring_spec(result, post_hook=hook)
 
-        # The hook mutated its copy but the original result is unchanged.
-        assert "injected_key" not in result.resolved
-        assert mutations[0]["orig"] == "val"
-        assert mutations[0]["injected_key"] == "injected_value"
+        assert captured[0].orig == "val"
+        assert result.resolved == {"orig": "val"}
+
+    def test_hook_cannot_read_options_through_container_idioms(self) -> None:
+        """Raw container reads fail by construction on the frozen options object."""
+        raised: list[type[Exception]] = []
+
+        def hook(spec: ModuleWiringSpec, resolved: ResolvedOptions) -> ModuleWiringSpec:
+            reads = (
+                lambda: resolved["key"],
+                lambda: resolved.get("key", "fallback"),
+                lambda: list(resolved),
+                lambda: resolved.keys(),
+                lambda: resolved.raw_option,
+            )
+            for read in reads:
+                with pytest.raises((TypeError, AttributeError)) as exc_info:
+                    read()
+                raised.append(type(exc_info.value))
+            return spec
+
+        assemble_wiring_spec(_make_result(resolved={"key": "val"}), post_hook=hook)
+
+        assert raised == [
+            TypeError,
+            AttributeError,
+            TypeError,
+            AttributeError,
+            AttributeError,
+        ]
+
+    def test_hook_never_sees_an_undeclared_supplied_option(self) -> None:
+        """A supplied key the manifest does not declare is not exposed."""
+        captured: list[ResolvedOptions] = []
+
+        def hook(spec: ModuleWiringSpec, resolved: ResolvedOptions) -> ModuleWiringSpec:
+            captured.append(resolved)
+            with pytest.raises(AttributeError):
+                resolved.raw_option
+            return spec
+
+        result = _make_result(
+            resolved={"key": "val", "raw_option": {"unvalidated": ["payload"]}},
+            defaults={"key": "val"},
+        )
+        assemble_wiring_spec(result, post_hook=hook)
+
+        assert captured[0].key == "val"
 
     def test_hook_returning_original_spec(self) -> None:
         """A hook that returns the spec unchanged is a no-op."""
         result = _make_result(derived_settings={"KEY": "val"})
 
         def noop_hook(
-            spec: ModuleWiringSpec, resolved: dict[str, Any]
+            spec: ModuleWiringSpec, resolved: ResolvedOptions
         ) -> ModuleWiringSpec:
             return spec
 
@@ -234,10 +286,10 @@ class TestPostResolutionHook:
         """Hook can replace the middleware tuple (gnarly case pattern)."""
 
         def middleware_hook(
-            spec: ModuleWiringSpec, resolved: dict[str, Any]
+            spec: ModuleWiringSpec, resolved: ResolvedOptions
         ) -> ModuleWiringSpec:
             # Only add CorsMiddleware when cors is enabled
-            if resolved.get("cors_enabled"):
+            if resolved.cors_enabled:
                 return ModuleWiringSpec(
                     apps=spec.apps,
                     middleware=spec.middleware
@@ -405,7 +457,7 @@ class TestAssembleValidationIssues:
             validation_issues=["modules.test.key is invalid"],
         )
 
-        def hook(spec: ModuleWiringSpec, resolved: dict[str, Any]) -> ModuleWiringSpec:
+        def hook(spec: ModuleWiringSpec, resolved: ResolvedOptions) -> ModuleWiringSpec:
             msg = "hook should never be called"
             raise AssertionError(msg)
 

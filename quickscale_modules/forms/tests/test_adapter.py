@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quickscale_core.manifest import ManifestError
+from quickscale_core.manifest import ManifestError, ResolvedOptions
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_forms.adapter import (
@@ -64,7 +64,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
             pre_home_url_includes=(),
             url_includes=(("forms/", "quickscale_modules_forms.urls"),),
         ),
-        {"enabled": False},
+        ResolvedOptions({"enabled": False}),
     )
     assert result.url_includes == ()
     assert result.pre_home_url_includes == ()

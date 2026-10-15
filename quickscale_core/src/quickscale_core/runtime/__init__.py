@@ -189,6 +189,7 @@ __all__ = [
     "STORAGE_ACCESS_KEY_ID_ENV_VAR_OPTION",
     "STORAGE_SECRET_ACCESS_KEY_ENV_VAR_OPTION",
     # Manifest/resolver types
+    "ResolvedOptions",
     "ResolverResult",
     "assemble_wiring_spec",
     "build_generic_manifest_spec",

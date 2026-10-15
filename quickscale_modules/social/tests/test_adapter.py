@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quickscale_core.manifest import build_generic_manifest_spec
+from quickscale_core.manifest import ResolvedOptions, build_generic_manifest_spec
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_social.adapter import (
@@ -268,7 +268,7 @@ class TestSocialManifestAdapterRendererIdReplacement:
             managed_files=_managed_files(),
         )
 
-        result = hook(spec, _resolved())
+        result = hook(spec, ResolvedOptions(_resolved()))
 
         assert result.managed_files["quickscale_managed/__init__.py"] == (
             "# init content"
@@ -301,7 +301,7 @@ class TestSocialManifestAdapterRendererIdReplacement:
             },
         )
 
-        result = hook(spec, _resolved())
+        result = hook(spec, ResolvedOptions(_resolved()))
 
         assert "quickscale_managed/unknown.py" not in result.managed_files
         assert "quickscale_managed/social_urls.py" in result.managed_files

@@ -38,6 +38,7 @@ from quickscale_core.manifest import (
     ManifestAdapterNotFound,
     ManifestError,
     ModuleManifest,
+    ResolvedOptions,
     build_generic_manifest_spec,
     build_manifest_wiring_spec,
     load_module_manifest,
@@ -2632,12 +2633,12 @@ class _HookSpy:
     """A post-resolution hook that records its invocations."""
 
     def __init__(self) -> None:
-        self.calls: list[tuple[ModuleWiringSpec, dict[str, Any]]] = []
+        self.calls: list[tuple[ModuleWiringSpec, ResolvedOptions]] = []
 
     def __call__(
-        self, spec: ModuleWiringSpec, resolved: dict[str, Any]
+        self, spec: ModuleWiringSpec, resolved: ResolvedOptions
     ) -> ModuleWiringSpec:
-        self.calls.append((spec, dict(resolved)))
+        self.calls.append((spec, resolved))
         return spec
 
 
@@ -2713,10 +2714,37 @@ class TestGenericManifestBoundary:
 
         assert len(spy.calls) == 1
         _, resolved = spy.calls[0]
-        assert resolved["feature_enabled"] is True
-        assert resolved["tags"] == ["a", "b"]
+        assert resolved.feature_enabled is True
+        assert resolved.tags == ["a", "b"]
         assert spec.settings["DEMO_FEATURE_ENABLED"] is True
         assert spec.settings["DEMO_TAGS"] == ["a", "b"]
+
+    def test_undeclared_supplied_key_never_reaches_the_hook(
+        self, manifest: ModuleManifest
+    ) -> None:
+        """A supplied key the manifest does not declare is not exposed.
+
+        The resolver merges every override into its resolved mapping, so the
+        hook's option surface must exclude the undeclared keys itself.
+        """
+        spy = _HookSpy()
+        spec = build_generic_manifest_spec(
+            "demo",
+            {
+                "mode": "full",
+                "api_token": "token-value",
+                "raw_supplied": {"unvalidated": ["payload"]},
+            },
+            post_hook=spy,
+        )
+
+        assert isinstance(spec, ModuleWiringSpec)
+        assert len(spy.calls) == 1
+        _, resolved = spy.calls[0]
+        assert resolved.mode == "full"
+        assert resolved.attempts == 3
+        with pytest.raises(AttributeError):
+            resolved.raw_supplied
 
     def test_valid_defaults_assemble_without_a_hook(
         self, manifest: ModuleManifest

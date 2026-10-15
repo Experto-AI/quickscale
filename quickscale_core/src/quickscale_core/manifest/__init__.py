@@ -26,6 +26,7 @@ as the additive public entry point for the manifest-driven path.
 
 from quickscale_core.manifest.assembler import (
     PostResolutionHook,
+    ResolvedOptions,
     assemble_wiring_spec,
 )
 from quickscale_core.manifest.derivation import (
@@ -121,6 +122,7 @@ __all__ = [
     "parse_required_module_entry",
     "parse_version_tuple",
     "PostResolutionHook",
+    "ResolvedOptions",
     "ResolvedSocialTarget",
     "ResolverResult",
     "SOCIAL_LAYOUT_VARIANTS",

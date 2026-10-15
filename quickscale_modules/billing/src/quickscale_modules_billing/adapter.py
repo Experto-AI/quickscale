@@ -15,11 +15,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec
+from quickscale_core.runtime import (
+    ModuleWiringSpec,
+    ResolvedOptions,
+    build_generic_manifest_spec,
+)
 
 
 def _billing_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
+    spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
     """Contribute billing's throttle scopes and apply its off-switch behaviour.
 
@@ -43,7 +47,7 @@ def _billing_post_hook(
             "quickscale_billing_portal": api_rate_limit,
         },
     }
-    if resolved["enabled"]:
+    if resolved.enabled:
         return ModuleWiringSpec(
             apps=spec.apps,
             middleware=spec.middleware,

@@ -15,11 +15,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from quickscale_core.runtime import ModuleWiringSpec, build_generic_manifest_spec
+from quickscale_core.runtime import (
+    ModuleWiringSpec,
+    ResolvedOptions,
+    build_generic_manifest_spec,
+)
 
 
 def _crm_post_hook(
-    spec: ModuleWiringSpec, resolved: dict[str, Any]
+    spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
     """Apply CRM's off-switch transformation.
 
@@ -28,7 +32,7 @@ def _crm_post_hook(
     every option default, normalization rule, check, and projection; the
     per-page counts and the API flag are canonical before this hook runs.
     """
-    if resolved["enabled"]:
+    if resolved.enabled:
         return spec
     return ModuleWiringSpec(
         apps=spec.apps,

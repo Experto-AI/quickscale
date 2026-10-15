@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quickscale_core.manifest import ManifestError
+from quickscale_core.manifest import ManifestError, ResolvedOptions
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_blog.adapter import (
@@ -69,7 +69,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
                 ("markdownx/", "quickscale_modules_blog.markdownx_urls"),
             ),
         ),
-        {"enabled": False},
+        ResolvedOptions({"enabled": False}),
     )
     # The module's public mount is gone; the shared staff-guarded Markdownx
     # editor mount belongs to storage (rule 41).

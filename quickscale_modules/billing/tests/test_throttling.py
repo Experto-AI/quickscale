@@ -17,6 +17,7 @@ from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 
+from quickscale_core.manifest import ResolvedOptions
 from quickscale_core.runtime import QuickscaleScopedRateThrottle
 
 import quickscale_modules_billing.views as billing_views
@@ -54,7 +55,7 @@ def test_billing_wiring_contributes_tighter_throttle_scopes() -> None:
                 "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
             }
         ),
-        {"enabled": True},
+        ResolvedOptions({"enabled": True}),
     )
 
     rest_framework = spec.settings["REST_FRAMEWORK"]

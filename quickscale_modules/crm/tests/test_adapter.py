@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from quickscale_core.manifest import ManifestError
+from quickscale_core.manifest import ManifestError, ResolvedOptions
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 from quickscale_modules_crm.adapter import (
@@ -71,7 +71,7 @@ class TestCrmPostHook:
 
     def test_enabled_returns_the_assembled_spec(self) -> None:
         spec = ModuleWiringSpec(apps=("quickscale_modules_crm",))
-        assert _crm_post_hook(spec, {"enabled": True}) is spec
+        assert _crm_post_hook(spec, ResolvedOptions({"enabled": True})) is spec
 
     def test_disabled_module_drops_url_mounts_and_keeps_apps(self) -> None:
         """Rule 1 (D3): off keeps the app and settings but mounts no URLs."""
@@ -84,7 +84,7 @@ class TestCrmPostHook:
             pre_home_url_includes=(),
             url_includes=(("crm/", "quickscale_modules_crm.urls"),),
         )
-        result = _crm_post_hook(spec, {"enabled": False})
+        result = _crm_post_hook(spec, ResolvedOptions({"enabled": False}))
         assert result.url_includes == ()
         assert result.pre_home_url_includes == ()
         assert result.apps == (
