@@ -20,6 +20,7 @@ from django.views import View
 
 from ._debug import clear_debug_as_org, set_debug_as_org
 from .models import Organization
+from .permissions import is_platform_operator
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class DebugAsOrgView(LoginRequiredMixin, View):
         **kwargs: Any,
     ) -> HttpResponse:
         del args
-        if not getattr(request.user, "is_superuser", False):
+        if not is_platform_operator(request.user):
             raise Http404("VIEW-AS is superuser-only.")
 
         org_slug = kwargs.get("org_slug")
@@ -83,7 +84,7 @@ class ExitDebugModeView(LoginRequiredMixin, View):
         **kwargs: Any,
     ) -> HttpResponse:
         del args, kwargs
-        if not getattr(request.user, "is_superuser", False):
+        if not is_platform_operator(request.user):
             raise Http404("VIEW-AS is superuser-only.")
 
         clear_debug_as_org(request)

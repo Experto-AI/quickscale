@@ -27,6 +27,18 @@ ROLE_HIERARCHY = {
 }
 
 
+def is_platform_operator(user: object) -> bool:
+    """Return whether *user* is a platform operator.
+
+    A platform operator is an authenticated superuser: the one account class
+    beyond org roles, allowed to act across organizations (Module Conventions
+    rule 44).  Django's anonymous user reports ``is_superuser`` as ``False``,
+    so the flag carries the whole check.  Every module calls this one helper
+    instead of reading ``is_superuser`` itself.
+    """
+    return bool(getattr(user, "is_superuser", False))
+
+
 def user_has_org_role(
     user: Any,
     organization: Organization,
@@ -36,7 +48,7 @@ def user_has_org_role(
 
     if not bool(user is not None and getattr(user, "is_authenticated", False)):
         return False
-    if getattr(user, "is_superuser", False):
+    if is_platform_operator(user):
         return True
 
     membership = OrganizationMembership.objects.filter(
@@ -112,9 +124,10 @@ class HasOrgRole(BasePermission):
     ``request.org`` context or the ``org_slug`` route kwarg — and a request
     with no resolvable organization fails closed.  The role decision is
     :func:`user_has_org_role`, the same check ``OrgApiBaseView``'s
-    ``min_org_role`` uses (Module Conventions rule 19).  Superusers pass as
-    the listed operator path (rule 19 keeps ``is_superuser`` for
-    ``operator_access``), with or without organization context.
+    ``min_org_role`` uses (Module Conventions rule 19).  Platform operators
+    pass as the listed operator path (``is_platform_operator``; rule 19 keeps
+    the operator escape for ``operator_access``), with or without organization
+    context.
     """
 
     def __init__(self, min_role: OrgRole = OrgRole.VIEWER) -> None:
@@ -127,7 +140,7 @@ class HasOrgRole(BasePermission):
         user = getattr(request, "user", None)
         if not bool(user is not None and getattr(user, "is_authenticated", False)):
             return False
-        if getattr(user, "is_superuser", False):
+        if is_platform_operator(user):
             return True
         organization = resolve_request_org(
             request,

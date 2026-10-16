@@ -17,6 +17,7 @@ from django.http import HttpRequest
 
 from ._constants import DEBUG_AS_ORG_SESSION_KEY
 from .models import Organization
+from .permissions import is_platform_operator
 
 # Module Conventions rule 46: a private file logs on its facade's channel.
 logger = logging.getLogger("quickscale_modules_orgs.debug_views")
@@ -66,7 +67,7 @@ def get_debug_as_org(request: HttpRequest) -> Organization | None:
 
     # Superuser-only invariant.
     user = getattr(request, "user", None)
-    if not bool(getattr(user, "is_superuser", False)):
+    if not is_platform_operator(user):
         request.session.pop(DEBUG_AS_ORG_SESSION_KEY, None)
         logger.warning(
             "Cleared debug-as session for non-superuser",
@@ -93,7 +94,7 @@ def set_debug_as_org(request: HttpRequest, organization: Organization) -> None:
 
     Stores the org PK in the session.  Logs an ``INFO`` event with
     stable structured ``extra`` fields.  The caller is responsible for
-    the superuser check (views enforce it via ``user.is_superuser``).
+    the platform-operator check (views enforce it via ``is_platform_operator``).
     """
     request.session[DEBUG_AS_ORG_SESSION_KEY] = str(organization.pk)
     logger.info(
@@ -133,4 +134,4 @@ def is_debug_as_active(request: HttpRequest) -> bool:
     if org_id is None:
         return False
     user = getattr(request, "user", None)
-    return bool(getattr(user, "is_superuser", False))
+    return is_platform_operator(user)
