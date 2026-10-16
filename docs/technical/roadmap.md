@@ -15,7 +15,12 @@ their value.
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
 with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#11-watchlist-and-accepted-trade-offs)).
-No open ticket is a release requirement for 0.89.0. Publication remains a maintainer action.
+SA284 is the one release requirement for 0.89.0: the wheel uploaded to PyPI is otherwise never
+content-checked for the bundled manifests (arch `rules-held-by-parity-not-derivation`, §7).
+Upgrading a live 0.88.0 install is not supported (maintainer decision, 2026-10-16, answering
+tech audit §13 Q1): 0.88.0 and earlier move to 0.89.0 on a fresh database, the 0.89.0 release
+notes say so, and `initial-migration-edited-in-place` stays a watch item. Publication remains a
+maintainer action.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
@@ -38,28 +43,50 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | SA284 | Optional |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
-| SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191, SA204 | Optional |
+| SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA277 | Keep one project-upgrade mechanism and retire the other | 2 | SA191 | Optional |
+| SA286 | Render module-owned CI environment and operations text into managed includes | 1 | — | Optional |
+| SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
+| SA284 | Content-check the core wheel that `publish.yml` uploads | 2 | — | Required |
+| SA285 | Derive the gate inventory in tests and build the core wheel through one target | 2 | SA284 | Optional |
+| SA295 | Review the security suppressions and stagger their expiry | 2 | — | Optional |
+| SA291 | The manifest owns option validation and throttle rates | 2 | SA288 | Optional |
+| SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
+| SA293 | One test-settings base, one pyproject template, no ticket ids in tests or manifests | 2 | — | Optional |
+| SA288 | JSON-only module APIs through the generated `REST_FRAMEWORK` defaults | 3 | — | Optional |
+| SA289 | Theme requests go through `apiRequest` and parse one error shape | 3 | — | Optional |
+| SA290 | One named platform-operator check | 3 | — | Optional |
+| SA297 | `operator_access` checks the platform operator itself | 3 | SA290 | Optional |
+| SA292 | One command off-refusal helper, service-owned transactions, complete README flags | 3 | — | Optional |
+| SA294 | Record the structured-log-field convention | 3 | — | Optional |
+| SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | SA292 | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 (repin, cutover) ∥ SA204 (a…g) ──► SA153 ──► SA154 (inventory)
-Track 2: SA277
-Track 3: — (SA281 landed)
-     release path:  publish 0.89.0 ──► SA191 repin
-     critical path: SA204 (c) ──► SA204 (g) ──► SA153 (a)
+Track 1: SA204 (g…i) ∥ SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 2: SA284 ──► SA285 ──► SA295 ──► SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
+Track 3: SA288 (a, b) ──► SA289 (a, b) ──► SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
+     release path:  SA284 ──► publish 0.89.0 ──► SA191 repin
+     critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Cross-track edges:
-SA191 waits on Track 2's release fixes (through the 0.89.0 publication); SA204's freeze gate
-costs one registry row now that SA275 has landed (arch audit §7); SA277 waits on SA191's cutover,
-which decides which upgrade mechanism proved itself.
+SA191 waits on SA284 through the 0.89.0 publication; SA291 waits on SA288 because both rewrite
+the composed `REST_FRAMEWORK` (`runtime/settings.compose_rest_framework`), and SA287 waits on
+SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
+SA296 waits on SA292 because both rewrite harness rule 17; SA297 waits on SA290's helper, and
+SA294 queues ahead of SA297 so the audit lines it adds follow the recorded log convention;
+SA277 waits on SA191's cutover, whose evidence draws the line between what `beta_migration`
+automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
+slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA204 (g) is the only ticket with no unmet dependency.
+**Parallel start.** SA204 (g), SA286 (a), SA284, SA295, SA293, SA288, SA289, SA290, SA292, and
+SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 sits ahead
+of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
+once, offline, instead of on a live site (arch audit §7).
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
 with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
@@ -67,8 +94,11 @@ handoff note (what landed, what is next, what to watch) committed with the work.
 when its last slice lands; slices are not scheduled.
 
 **Order.** Every change to a shipped module `0001_initial` lands before SA204 freezes
-migration history, and SA204 lands before SA153 slice (a), whose schema work is `0002+` from the
-start. No open ticket changes a module schema.
+migration history. The freeze (SA204 (j)) waits until SA153's go-live (maintainer decision,
+2026-10-16), keeping `0001` editable while the portal is built, and lands before SA153 (f) puts
+non-reseedable tenant data on `bap-web`. SA153's own tables live in the project-owned extension,
+whose migrations are `0002+` from the start either way. Any module `0001` edit made before the
+freeze is applied to `bap-web` by hand or by a reseed. No open ticket changes a module schema.
 SA154 is an inventory, not work. SA191's remaining repin waits for the 0.89.0 publication, and SA204 proceeds alongside it. SA276 has
 landed, so `bap-web-new` adopts its steps once at the repin instead of on a live site
 (arch audit §7); it is not a release requirement.
@@ -80,8 +110,8 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (g) | yes | no | yes | no | yes |
-| 2 | SA277 | no | no | yes | no | no |
-| 3 | — (SA281 landed) | yes | yes | yes | yes | no |
+| 2 | SA284 | yes | yes | yes | yes | no |
+| 3 | SA288 (a) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -127,11 +157,21 @@ A track is **truly green** only when all three states are yes.
   theme's React API client, module settings snapshots and the module split facades' loggers and
   re-exports, and the conformance harness with its registry row and its parity families, and the
   five `_anonymization.py` handlers with core's redaction helpers.
-- **Cross-track edits.** SA204 (c) adds its gate row to the Track 2 registry; SA204 (d) and (e)
-  edit Track 2's `dr_engine/recovery.py` and `update` command, with Track 2 review. SA282 (a)
+- **New surfaces.** Track 1 also owns the managed CI-environment and operations-guide includes
+  (SA286). Track 2 also owns the core build target and the publish-artifact check (SA284,
+  SA285), `scripts/security_suppressions.json` (SA295), the manifest `throttle_scopes`
+  projection (SA291), and the shared test-settings base and conftest plugin (SA293). Track 3
+  also owns the generated `REST_FRAMEWORK` renderer and parser defaults (SA288), the core
+  scheduled-off refusal helper (SA292), `is_platform_operator` and the gated `operator_access`
+  (SA290, SA297), and `module-extension.md`'s authoring checklist (SA296).
+- **Cross-track edits.** SA204 (c) adds its gate row to the Track 2 registry; SA204 (d), (e),
+  and (g) edit Track 2's `dr_engine/recovery.py` and `update` command, with Track 2 review. SA282 (a)
   adds a harness clause and control to Track 3's harness; SA283 (a) edits Track 2's
-  `billing/checks.py`; SA281 edits Track 2's option contract. All land through the serialized
-  merge queue.
+  `billing/checks.py`; SA281 edits Track 2's option contract. Every coherence ticket adds its
+  detector and control to Track 3's harness. SA288 (b) drops pins in Track 2's billing views;
+  SA291 edits Track 3's `compose_rest_framework` and three module `checks.py`; SA292 (b) and
+  SA293 (c) edit Track 1's module READMEs and module tooling sections. All land through the
+  serialized merge queue.
 - One delivery candidate at a time per track, one serialized merge queue into `v89`.
 - **Conflict surface.** This roadmap, [CHANGELOG.md](../../CHANGELOG.md), the three audits,
   `project_contract.yml` (SA274, SA276, SA282), and [decisions.md](decisions.md). Each track
@@ -199,7 +239,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   refused, and a restore-forward test proves it. `quickscale update` likewise refuses a project
   whose applied migration hashes differ from the embedded files under an equal version label.
 
-  **Slices** (in order; the one-way door is isolated in (g), behind the proof in (f)):
+  **Slices** (in order; the one-way door is isolated in (j), behind the proofs in (f) and (i)):
   - [x] (a), (b), (d): landed (`BlogMediaAssetImageField` public; `quickscale_core.migration_hashes`
     with `scripts/migration_hashes.json`; hash-keyed restore-forward in `recovery.py`).
   - [x] (c): landed as `scripts/check_migration_freeze.py`, one registry row (`check-migration-freeze`)
@@ -223,9 +263,31 @@ suite, and merge only the reviewed delivery through the serialized queue.
     two known `W006` properties warnings — matching the SA191 baseline; no carried module's
     migration changed since the rebuild (SA270's billing and SA204(a)'s blog are not carried).
     (g) is next.
-  - [ ] (g) The decision record lifting rule 1 and the freeze commit of the manifest, after (f)
-    passes and with the maintainer's sign-off (Tier 2-fast; the one-way step, kept to docs and
-    the manifest).
+  The 2026-10-16 arch pass found two branches that still key on labels or authorship (Finding 2,
+  option 1; it answers arch §12 Q2): `quickscale update` compares content only under an equal
+  label (`_module_update.py:286–297`, `:365`), so the cross-release update the freeze exists to
+  make safe is the one path left unverified; and `sync_migration_hashes.py --write` re-freezes an
+  edited `0001` in the same commit that edits it, so the gate catches drift, not intent. Both
+  close before the one-way step, which then verifies them instead of only recording the manifest.
+
+  - [ ] (g) `quickscale update` compares the applied migration identity on every pull: an
+    applied file stays byte-identical and new files apply forward; only vintages before the
+    freeze keep the fresh-database path, keyed on a freeze-vintage constant (set to the release
+    (j) lands in) instead of on any label change. A test refuses a label change plus a changed applied file (Tier 2-fast; Track 2
+    reviews).
+  - [ ] (h) The hash manifest is append-only: the freeze gate refuses a changed or removed
+    recorded value even after `--write`, compared with `scripts/migration_hashes.json` at the
+    latest release tag (maintainer decision, 2026-10-16: release tags are immutable, and CI
+    fetches only that tag, so the shallow clone stays). Before the first release that carries the
+    manifest, the check passes with a notice. A control in which a re-frozen `0001` edit fails
+    (Tier 2-fast).
+  - [ ] (i) Re-run the (f) rehearsal on a `bap-web` copy, adding the cross-release `update` path
+    from (g): a changed applied file is refused, a new `0002` applies forward, and the FORCE-RLS
+    baseline still holds (Tier 2-full; scratch PostgreSQL is environment-sensitive).
+  - [ ] (j) The decision record lifting rule 1 and the freeze commit of the manifest, after (g),
+    (h), and (i) pass, scheduled after SA153 (e) and before SA153 (f)'s go-live, with the
+    maintainer's sign-off (Tier 2-fast; the one-way step, kept to docs and the manifest). If a
+    module `0001` changed after (i), (i) is re-run first.
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port.**
 
@@ -234,7 +296,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   rehearsed on scratch. The cutover rebuilds a fresh database and reseeds the catalog under the
   restricted runtime role; billing stays disabled.
 
-  **Remaining:** after 0.89.0 is published, repin
+  **Remaining:** after 0.89.0 is published (behind SA284), repin
   `bap-web-new` to it and re-run the rehearsal
   (agent); then the maintainer runs the Railway cutover, carries media, re-invites users, and
   archives the old repository. The pre-cutover database is retained until the reseeded site is
@@ -265,6 +327,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and launch SEO including metadata, sitemap, and robots guidance. Currency labels must not imply
   exchange-rate conversion, and Spanish launch coverage does not require translating every
   QuickScale interface.
+
+  Module-coupled data on new pages comes through seam-declared hooks in managed files, so pages
+  consume hooks rather than endpoints (arch `generated-file-ownership-unmodeled`, option 2's
+  theme part, scheduled "as SA153 adds pages").
 
   New child tables, including gallery images, follow the child-table decision in
   [decisions.md](decisions.md) and the `test_rls_boundary.py` coverage pattern.
@@ -298,6 +364,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
     → inquiry journey.
   - [ ] (e) Prerender or server render, Open Graph tags, sitemap, and `robots.txt`, with the
     crawler test and rendered-page isolation.
+  - [ ] (f) Go-live on `buenosairesproperties.com`, after SA204 (j) freezes migration history:
+    the release `bap-web` goes live on carries the frozen manifest, and the search → detail →
+    inquiry journey is re-proved on the deployed site (Tier 2-full; production deploy, maintainer
+    action).
 
   **Surfaces:** the project-owned property extension, its API and React pages, and the project's
   prerender build and deploy step; listings/blog/forms/CRM seams only where needed; extension
@@ -314,8 +384,38 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
+- [ ] **SA286 — Render module-owned CI environment and operations text into managed includes.**
 
-### Track 2 — gate derivation, upgrade path, and Track 2 hardening
+  Closes the mechanical part of arch `generated-file-ownership-unmodeled` (Finding 1, option 2;
+  the theme-hook part rides SA153, the upgrade-mechanism part is SA277).
+
+  **Context:** the seam types are managed (SA276), but the generated `ci.yml` and operations
+  guide are user-owned and still carry module settings and values, so each module contract change
+  becomes a `project_contract.yml` adoption step (40 → 46 in three days; 12 pending on
+  `bap-web-new`).
+
+  Of the 46 steps, at least four exist only because `ci.yml.j2` or `OPERATIONS.md.j2` restates a
+  module value (the vendor placeholders, the notifications secret format, the Stripe webhook
+  events and version).
+
+  **Acceptance:** module-owned CI environment values and operations text render into managed,
+  hash-tracked files (`project_state_hashes.py`) that the user-owned files reference once. GitHub
+  Actions and Markdown have no include, so the reference is a single step that loads a managed
+  environment file and a single link to a managed operations page. The closed-world emission
+  test fails when a user-owned emitted file names a module setting, endpoint, or constant other
+  than through a managed file. One new `project_contract.yml` step adopts the references; later
+  changes to the managed values mint no step. The steps-per-release count is recorded beside
+  SA277's watch.
+
+  **Slices:**
+  - [ ] (a) The managed CI environment file, loaded once by the generated `ci.yml`, with the
+    extended emission guard (Tier 2-full: the loading mechanism and which emitted files still
+    name module values need discovery).
+  - [ ] (b) The managed operations page on the same pattern, and the adoption step (Tier
+    2-fast).
+
+
+### Track 2 — gate derivation, release integrity, upgrade path, and manifest conventions
 
 - [x] **SA275 — Derive gate wiring from the registry instead of holding copies equal.**
 
@@ -327,27 +427,153 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA280 — One source for the Stripe API version and the bundled manifests.**
 
-- [ ] **SA277 — Keep one project-upgrade mechanism and retire the other.**
+- [ ] **SA277 — Define the upgrade path as `beta_migration` code plus a prompt for the remainder.**
 
-  Closes the remaining recommendation of arch `generated-file-ownership-unmodeled` (Finding 2:
-  "choose between keeping `beta_migration` and the prompt-driven port; retire the one SA191 did not
-  use").
+  Answers the remaining recommendation of arch `generated-file-ownership-unmodeled` (Finding 1,
+  option 4: "choose one upgrade mechanism"). Maintainer decision, 2026-10-16: keep both, as one
+  path in two stages, rather than retire one. `beta_migration` is the code stage and does what it
+  can do mechanically; the prompt-driven port handles what the code stage reports it could not.
 
   **Context:** three upgrade mechanisms are maintained: prose adoption steps,
   `quickscale_devtools/beta_migration` (12.9k lines, its smoke gate, playbook, and gap ledger),
   and the prompt-driven port SA191 used (`MIGRATION_PROMPT.md`, `CUTOVER.md`). SA191's cutover is
   the evidence for which one works.
 
-  **Acceptance:** decisions record the kept mechanism, its revocation trigger (a second long-lived
-  project or a template security fix), and the steps-per-release count to watch, which should trend
-  toward zero. The retired mechanism's code, gate row, docs, and ledger are deleted, and no gate or
-  doc references it.
+  **Acceptance:** decisions record the two-stage path: `beta_migration` runs first, and its gap
+  ledger is the handoff list the prompt (`MIGRATION_PROMPT.md`) takes as input, so neither stage
+  repeats the other's work. They also record the boundary rule (a gap that recurs across
+  releases moves into code; a one-off stays in the prompt), the revocation trigger (a second
+  long-lived project or a template security fix), and the steps-per-release count to watch,
+  which should trend toward zero. Prose adoption steps that either stage now covers are not
+  duplicated in the operator docs. The arch audit records option 4 as answered by this hybrid.
 
   **Slices:**
-  - [ ] (a) The decision, after SA191's cutover (Tier 1).
-  - [ ] (b) Delete the retired mechanism and its gate row and docs (Tier 2-fast).
+  - [ ] (a) The decision record and boundary rule, drawn from SA191's cutover evidence (which
+    steps `beta_migration` covered and which the port did by hand) (Tier 1).
+  - [ ] (b) Wire the handoff: `beta_migration` emits its unresolved gaps in the form the prompt
+    reads, the prompt and `CUTOVER.md` move into the maintained tree beside it, and a smoke test
+    proves the handoff file is produced (Tier 2-fast).
 
-### Track 3 — Track 3 hardening, theme seam types, and harness by construction
+- [ ] **SA284 — Content-check the core wheel that `publish.yml` uploads.**
+
+  Closes the release-integrity edge of arch `rules-held-by-parity-not-derivation` (Finding 3,
+  option 1, "now").
+
+  **Context:** since SA280 (b) the bundled manifests are materialized at build time, not tracked.
+  `publish.yml`'s `build` job builds every package (`:295`) and uploads the `dist` artifact that
+  the TestPyPI (`:330`) and PyPI (`:354`) jobs publish, while `smoke-install` (`:185`) checks a
+  different build in another job, and `test_bundled_manifest_wheel.py` checks a wheel it builds
+  itself. A core wheel without manifests fails at startup in every installed project.
+
+  **Acceptance:** after the build loop and before `Upload build artifacts`, the `build` job runs a
+  script under `scripts/` that opens the built core wheel and fails unless it holds all 12 bundled
+  manifests byte-equal to `quickscale_modules/*/module.yml`. The script's test includes a control
+  wheel with one manifest removed, which fails.
+
+  **Slices:** one (Tier 1).
+
+- [ ] **SA285 — Derive the gate inventory in tests and build the core wheel through one target.**
+
+  Closes the rest of arch `rules-held-by-parity-not-derivation` (Finding 3, option 1).
+
+  **Context:** a new gate costs one registry row plus four hand-held test oracles
+  (`test_ci_coverage_policy.py`, `test_ci_local_parallel.py`, `test_gate_parity.py`,
+  `test_refresh_action_pins.py`), and seven build entrypoints plus three conftests must each
+  remember `sync_module_manifests.py` before `poetry build` (the Makefile's `build`,
+  `manifest-sync`, and `sa117-lock-diff`; `publish.yml:249`; `publish.sh:322`;
+  `_installed_wheel_venv.sh:679`; `install_global.sh:285`). Each entrypoint stages the core
+  package its own way (version rewrite, README copy, compatible-Python selection), so one shared
+  step must cover materialization without flattening that staging.
+
+  **Acceptance:** the four tests read the gate set from `gate_registry.json`, keeping one hand pin
+  on the count. Every entrypoint that builds the `quickscale_core` wheel materializes through one
+  shared core-build step, and a test fails when a script under `scripts/`, the `Makefile`, or
+  `.github/` runs `poetry build` for core outside it. `_installed_wheel_venv.sh`'s
+  `QS_SMOKE_REGRESSION_CORE` negative probe still fails closed.
+
+  **Slices:**
+  - [ ] (a) The four oracles derive from the registry (Tier 2-fast).
+  - [ ] (b) The shared core-build step, its seven callers, and the guard test (Tier 2-full: the
+    entrypoints' staging differs and needs discovery).
+
+- [ ] **SA295 — Review the security suppressions and stagger their expiry.**
+
+  Closes tech watchlist `security-suppressions-uniform-expiry` before its 2026-12-01 trigger.
+
+  **Acceptance:** each of the 9 entries in `scripts/security_suppressions.json` is re-justified or
+  removed, and the kept ones carry expiries set by their own review horizon rather than one shared
+  date. **Slices:** one (Tier 1).
+
+- [ ] **SA293 — One test-settings base, one pyproject template, no ticket ids in tests or manifests.**
+
+  Closes coherence `test-ticket-ids-in-identifiers`, `test-harness-parity`, `pyproject-residue`,
+  and `manifest-option-residue` (items 37–40) and merges coherence §6 proposal 57 into decisions rules 11, 18, and 29.
+
+  **Acceptance:** the decisions rules carry proposal 57. No `sa<NNN>` token remains in a test identifier or
+  string, or in a `module.yml` description; module test settings and conftest hooks come from one
+  core base and plugin; module `pyproject.toml` files follow one template; the manifest loader
+  refuses a validation key that does not match the option type (notifications'
+  `webhook_ttl_seconds` `pattern`). Each clause has a harness detector with a control.
+
+  **Slices:**
+  - [ ] (a) Rename the ~70–90 ticket-id test identifiers and extend the rule 29 scan to
+    identifiers in `tests/` (Tier 2-fast).
+  - [ ] (b) The shared test-settings base and conftest plugin, adopted by all 12 modules,
+    including analytics' and storage's missing hooks, auth's `DEFAULT_AUTO_FIELD`, and blog's and
+    listings' `USE_TZ`, with the harness key diff (Tier 2-full: plugin loading across 12 pytest
+    roots needs discovery).
+  - [ ] (c) One pyproject template: the stale "centralized in root" comments, orgs' `>=` dev
+    floors, and the six `pythonpath` variants, with a template diff (Tier 2-fast).
+  - [ ] (d) Manifest text: drop the three version stamps, fix the type-mismatched key, scan
+    `module.yml` descriptions under rule 29, and the loader refusal (Tier 2-fast).
+
+- [ ] **SA291 — The manifest owns option validation and throttle rates.**
+
+  Closes coherence `adapter-restates-manifest-validation`, `throttle-rate-merge-copies`, and
+  `startup-presence-guard-copies` (items 32–34) and merges coherence §6 proposal 55 into decisions rules 10, 12, and 32.
+
+  **Context:** notifications' `adapter.py:20–70` re-implements four manifest patterns, its domain
+  check by hand; five adapters hand-merge `DEFAULT_THROTTLE_RATES`; three `checks.py` re-test a
+  projected setting's presence that the generic settings check already enforces.
+
+  **Acceptance:** the decisions rules carry proposal 55. Adapter predicates evaluate the manifest's declared
+  validation; a manifest `throttle_scopes` projection is merged by core; no module check
+  re-tests a projected setting. The harness bans `re.compile` and `DEFAULT_THROTTLE_RATES` in
+  `adapter.py` and presence re-checks in `checks.py`, each with a control.
+
+  **Slices:**
+  - [ ] (a) Notifications' predicates evaluate declared validation, with the `re.compile` ban
+    (Tier 2-fast).
+  - [ ] (b) The `throttle_scopes` projection merged in `compose_rest_framework`, five adapters
+    migrated, and the literal ban (Tier 2-full: the projection's schema and merge order with
+    project overrides need design; it serves five modules, so the
+    `manifest-dsl-vocabulary-growth` watch trigger does not fire).
+  - [ ] (c) Drop the presence re-checks in analytics, billing, and notifications, with the rule-6
+    scan (Tier 2-fast).
+
+- [ ] **SA287 — The CLI reaches module behaviour through manifest fields and hooks.**
+
+  Closes coherence `cli-module-name-branches` (item 27, option C) and merges coherence §6
+  proposal 51 into decisions rule 37;
+  hands its residue to arch watchlist `core-holds-module-vocabulary`.
+
+  **Context:** five CLI sites branch on module names outside rule 37's list
+  (`_finalize.py:68–76`, `_config.py:402`, `_runtime.py`, `apply_support.py:104`,
+  `_plan_validation.py:38–48`), and harness rule 37 matches only `==`/`!=`, so `in` and
+  `.get("<m>")` pass.
+
+  **Acceptance:** rule 37 carries proposal 51. Option validation in `_config`, `_plan_validation`, and
+  `apply_support` runs through a generic adapter hook; operator next-steps text in `_finalize`
+  and `_runtime` is listed as a reasoned rule 37 exception. Harness rule 37 also matches `in`,
+  `not in`, and `.get()`/subscript with a module-name constant, with the control
+  `if "billing" in modules:`.
+
+  **Slices:**
+  - [ ] (a) Validation behind the generic hook (Tier 2-full: the hook's callers across plan and
+    apply need discovery).
+  - [ ] (b) The listed exceptions and the widened detector (Tier 2-fast).
+
+### Track 3 — Track 3 hardening, API and theme conventions, and harness by construction
 
 - [x] **SA276 — Generate the theme's seam types from the manifest set.**
 
@@ -358,6 +584,139 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [x] **SA279 — Retire the conformance harness's frozen surfaces.**
 
 - [x] **SA281 — Hand adapter hooks typed resolved options and delete the dataflow detector.**
+
+- [ ] **SA288 — JSON-only module APIs through the generated `REST_FRAMEWORK` defaults.**
+
+  Closes coherence `api-renderer-parser-pinning` (item 28, option A) and merges coherence §6 proposal 52 into decisions rule 9.
+
+  **Context:** billing, listings, orgs, and social pin JSON; blog pins the parser only; crm,
+  forms, and notifications run DRF's defaults, so they accept form-encoded bodies and render the
+  browsable HTML API. The generated `REST_FRAMEWORK` sets neither default.
+
+  **Acceptance:** rule 9 carries proposal 52. `compose_rest_framework` (which `base.py.j2` calls)
+  sets JSON renderer and parser defaults; per-view pins are gone except a webhook's raw-body
+  parser; crm's and forms' write APIs refuse a form-encoded body with 415 in a test, and
+  notifications' webhook (its only DRF view) still verifies and records a signed delivery; the
+  release notes say so. The harness checks both defaults and bans `renderer_classes`/`parser_classes` in module
+  views outside webhooks, with a control view.
+
+  **Slices:**
+  - [ ] (a) The generated defaults, the 415 tests, and the release-note line (Tier 2-fast).
+  - [ ] (b) Drop the per-view pins and add the ban (Tier 2-fast).
+
+- [ ] **SA289 — Theme requests go through `apiRequest` and parse one error shape.**
+
+  Closes coherence `theme-retired-error-shapes` and `theme-request-paths` (items 29, 36) and
+  merges coherence §6 proposal 53 into decisions rule 31.
+
+  **Acceptance:** rule 31 carries proposal 53. `useApi.ts` parses only core's
+  `{"error":{code,message,fields?}}`, and a theme unit test rejects an `errors`-only payload.
+  `useFormSchema` and `usePublicSocialSurface` call `apiRequest`; `useOrgNavigation` and
+  `App.tsx` take page paths from the seam; a lint rule bans `fetch(` in `src/hooks`.
+
+  **Slices:**
+  - [ ] (a) The one error parser and its test (Tier 1).
+  - [ ] (b) The two hooks on `apiRequest`, seam page paths, and the lint ban (Tier 2-full: whether
+    the seam already carries page paths needs discovery).
+
+- [ ] **SA290 — One named platform-operator check.**
+
+  Closes coherence `superuser-escape-spelling` (item 30) and merges coherence §6 proposal 54 into
+  decisions rule 44. Answers item 30's team question (maintainer decision, 2026-10-16, option B):
+  forms' cross-tenant read is a different question from an org role, so it gets a named orgs
+  helper, not `HasOrgRole`.
+
+  **Context:** "is this user a platform operator?" is spelled seven times: forms' private
+  `_is_superuser` (`forms/views.py:173`), `HasOrgRole`'s escape (`permissions.py:36–41`), and
+  orgs' `middleware.py:254`, `debug_views.py:44,86`, `admin.py:71,92`, and `_debug.py:69,136`.
+  `HasOrgRole` answers "may this user act inside this organization?"; forms asks "may this user
+  read across every organization?", so routing forms through `HasOrgRole` would change what
+  superusers can do.
+
+  **Acceptance:** rule 44 carries proposal 54. Orgs exports one public `is_platform_operator(user)`
+  (today: an authenticated superuser); forms and every orgs copy call it, with behaviour
+  unchanged; forms' and orgs' authorization tests pass unchanged. The harness bans raw
+  `is_superuser` reads in module source outside that helper, with forms' old predicate as the
+  control. **Slices:** one (Tier 2-fast: the call sites are enumerated and the behaviour is
+  unchanged).
+
+- [ ] **SA297 — `operator_access` checks the platform operator itself.**
+
+  Follows SA290 (maintainer decision, 2026-10-16, option B+ in its small form).
+
+  **Context:** `operator_access` (`orgs/current_org.py:552`) sets `app.operator_access = 'on'` by
+  `SET LOCAL`, and the FORCE-RLS `SELECT` policy then admits every organization's rows; writes stay
+  current-org only. Its docstring leaves the superuser check to each caller, so the database
+  trusts the setting and the setting trusts every caller. PostgreSQL RLS keyed on a session
+  setting is only as safe as the one code path that sets it; Supabase likewise keeps elevation
+  out of callers' hands (a server-only `service_role` key). Callers today: forms'
+  `_with_superuser_operator_access` (`views.py:204`), `quickscale_forms_seed_presets`, and
+  `quickscale_forms_anonymize_submissions` (two blocks).
+
+  **Acceptance:** `operator_access(user=..., reason=...)` refuses, with an audit log line, a
+  user for whom `is_platform_operator` is false, before the setting changes. Management commands,
+  which have no request user, enter through a command variant that records the command and its
+  reason in the audit log; it is importable only for commands, and the harness bans it in module
+  views. Every caller migrates, the debug-as-org path included; the read-only `SELECT` policy and
+  the `SET LOCAL` transaction scope are unchanged. Both activation and refusal log `extra=` fields
+  under SA294's convention. Controls prove that a non-operator user is refused and that the
+  setting stays off after the refusal. **Slices:** one (Tier 2-full: authorization path, medium
+  risk; the command variant's shape needs design).
+
+- [ ] **SA292 — One command off-refusal helper, service-owned transactions, complete README flags.**
+
+  Closes coherence `command-off-refusal-and-atomic` and `readme-flag-coverage` (items 35, 31),
+  merges coherence §6 proposal 56 into decisions rules 17 and 38, and takes the tech §12 hand-off on `quickscale_backups_restore --file`.
+
+  **Acceptance:** rules 17 and 38 carry proposal 56. One core helper refuses a `--trigger scheduled` run
+  while the module is off, used by backups create and prune and forms anonymize; forms' two
+  commands and orgs purge open their transaction in the service; harness rule 17 requires the
+  helper where `--trigger` exists. The rule 38 README test compares every argparse option with
+  the README entry; backups, forms, and orgs document every flag; `quickscale_backups_restore`'s
+  help and usage errors agree with the guard that always refuses `--file`.
+
+  **Slices:**
+  - [ ] (a) The helper, the transaction moves, and the rule 17 clause (Tier 2-fast).
+  - [ ] (b) The flag test, the README rows, and the `--file` help (Tier 2-fast).
+
+- [ ] **SA294 — Record the structured-log-field convention.**
+
+  Closes coherence `structured-log-fields` (item 41). Only orgs logs `extra=` fields (6 calls);
+  six modules log message-only, and coherence §8's "no structured fields" is stale. Maintainer
+  decision, 2026-10-16: security and audit events (operator access, tenancy refusals, and their
+  like) carry `extra=` fields; every other log line stays message-only. **Acceptance:** decisions
+  record that convention as a review rule; orgs' six calls already match it, so no module code
+  changes. **Slices:** one (Tier 1).
+
+- [ ] **SA296 — Close the rule-audit enforcement gaps the 2026-10-16 census found.**
+
+  Closes coherence §7 gaps 17 and 20–25, which no item carries.
+
+  **Context:** rule 40 claims `CommandError`/`BaseCommand` and "unlisted core ports" checks that
+  do not exist; rule 17's destructive duty keys on command-name keywords; rules 5 and 34 skip a
+  module missing from `MODULE_LAYERS`; `AppConfig` capability declarations are open-world, with
+  literal sets in both the harness and core; rule 13's `TenantModelAdmin` registration and rule
+  11's compare-against-members clause have no detector; `module-extension.md:601`'s "exactly
+  these places" checklist omits the seam tables, `runtime/urls.py`, and the layer choice; and
+  rule 30 forbids name-order-dependent settings while apps and middleware compose in module-name
+  order.
+
+  **Acceptance:** every rule clause either has a detector with a control or is reworded to what
+  is checked, and the checklist matches the core edits a new module needs.
+
+  **Slices:**
+  - [ ] (a) Rule 40: add the `CommandError`/`BaseCommand` detector and drop the unchecked
+    "unlisted core ports" claim (Tier 2-fast).
+  - [ ] (b) Rule 17's destructive duty keyed on what the command deletes, not on its name, with
+    `_reset`/`_wipe` controls (Tier 2-full: detecting a destructive command needs design).
+  - [ ] (c) The harness fails on a module missing from `MODULE_LAYERS` and compares decisions'
+    layer table with it (Tier 1).
+  - [ ] (d) Capability declarations checked against core's `CAPABILITIES`, the harness reading
+    core's set instead of its own literal (Tier 2-fast).
+  - [ ] (e) Detectors for rule 13's admin registration and rule 11's compare-against-members
+    clause (Tier 2-fast).
+  - [ ] (f) Docs: the checklist lists the seam tables, `runtime/urls.py`, and the layer choice,
+    and rule 30 names the module-name composition order as its exception (Tier 1).
 
 ## Deferred constraints and references
 

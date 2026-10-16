@@ -1,6 +1,84 @@
 # QuickScale — Deep Coherence Audit (cross-module conformance)
 
-Audited: 0ddc7e30 (v89) · 2026-10-13 · working tree dirty (uncommitted `docs/others/tech-audit.md` only; read for its hand-offs) · repository public (github.com/Experto-AI/quickscale) · prompt: deep-coherence-audit v2 · passes: 2 (prior full pass: 2fd8637f, 2026-10-08, v1, 3 passes)
+Audited: 30b0b6b1 (v89) · 2026-10-16 · working tree dirty (uncommitted `docs/others/arch-audit.md`, `docs/others/tech-audit.md`, and this file; the companions were read only for their hand-offs) · repository public (github.com/Experto-AI/quickscale) · prompt: deep-coherence-audit v2 · passes: 2 (full census, saturation not reached; earlier today: a 1-pass delta re-run at the same SHA; prior: 0ddc7e30, 2026-10-13)
+
+> **Full census 2026-10-16 (b) (`30b0b6b1`).** Earlier today's delta re-run did not rebuild §4,
+> and its coverage note asked for a full census. This pass rebuilds §4. The 2026-10-08 tables
+> below it are kept as dated evidence. **Where they disagree, the census tables in §4 (2026-10-16),
+> this block, the index, the summary, and the log win.**
+>
+> - **Method.** 7 parallel enumeration units read the 12 modules plus core, the CLI, the
+>   generator, and the theme: A+L, B, C+D, E+F+G, H+I+K, J+M+N+O+P+Q, and the rule audit (§3.5,
+>   §3.6). Three units got a second round to fill cells they had left open. The main agent judged
+>   each card and re-read the anchors cited below.
+> - **Passes: 2.** Pass 2 still added aspects: renderer pinning, the logger-name literals (killed
+>   under rule 46), and the CLI membership branches. So saturation was **not** reached, and the
+>   next pass must run a third census round before claiming it.
+> - **Harness.** It still prints *All 43 covered module conventions pass*. Every new item below
+>   sits in a clause the harness does not cover, or covers open-world.
+> - **New open items: 15** (items 27–41). Counts: defect 0 · collision 0 · ambiguity 5 · tax 13
+>   (an item can carry more than one class). Prior IDs: 25 still resolved, 1 accepted. None
+>   regressed. The closest to a regression is `cli-module-name-branches`, which sits beside the
+>   accepted `core-cli-module-knowledge`.
+> - **Killed on judgment (12 cards):**
+>   - The storage markdownx staff gate is rule 41's deliberate design.
+>   - The `qs_` index names are rule 25's declared form.
+>   - The logger-name literals are required by rule 46.
+>   - Orgs' throttle classes are rule 32's listed exception.
+>   - Billing's throttle scopes are mapped by its adapter (`adapter.py:44–48`).
+>   - Notifications staying mounted when off: its one URL is the rule 26 webhook.
+>   - Backups' `admin` trigger value follows its admin actions (`admin.py:421,441`).
+>   - Blog reading `MEDIA_URL` is a Django setting, not storage's.
+>   - The auth↔orgs `required_modules` cycle is an install contract, not an import.
+>   - Single-positional public functions: there are 9, each takes one argument, and rule 18's
+>     keyword-only clause starts at the second.
+>   - Auth's two template trees are allauth shims (prior correction).
+>   - Billing's reconcile command is not scheduled, so it needs no `--trigger`.
+> - **Hand-offs:** 1 to the arch audit (`cli-module-name-branches`). None to the tech audit.
+
+
+> **Re-run 2026-10-16 (`30b0b6b1`).** This pass is a delta re-run. It re-checked the 3 items
+> left open at `0ddc7e30`, the accepted item, and the companions' new hand-offs, and it
+> classified the delta. It did not rebuild the §4 tables, so they keep their dated values.
+> **Where they disagree, this block, the index (§2), the summary (§3), and the log (§12) win.**
+>
+> - **Delta.** `git log --no-merges --since=2026-10-13` has 37 commits touching modules, core,
+>   or the CLI. 6 apply a convention: SA282 (a/b), SA283 (a/b/c), and SA281 (a). The other 31 are
+>   unrelated: DR, migrations, seam generation, gates, and fixes. The harness passing at HEAD
+>   found 0 that break a convention.
+> - **Harness.** `scripts/check_module_conventions.py` at HEAD prints *All 43 covered module
+>   conventions pass*.
+> - **Passes: 1.** Every open item closed with a check, and no new aspect came up.
+> - **Resolved this pass (3):**
+>   - `startup-checks-and-errors`: SA283(a) `1817ef2d`. The `checks.py` of analytics, billing,
+>     and notifications read `projected_setting_names(<module>)`. The rule-6 scan
+>     (`scripts/module_conventions/_package_legacy.py:131–158`) rejects a literal own-setting
+>     name, with controls in `test_package.py`. The 2 literals left in orgs' `checks.py` (`:144`,
+>     `:171`) are process environment flags, not settings, so they are outside the rule.
+>   - `capability-collection`: SA283(b) `98d4e4b7`. The purge command now runs
+>     `collect_capabilities("organization_cache_invalidation_hooks")`
+>     (`quickscale_orgs_purge_organization.py:532`). The `getattr(app_config, hook)` lookups in
+>     orgs `_removal_declarations.py:122,179,296–303` look up hooks that an obligation declares,
+>     and they validate those hooks when the declaration loads. That is consistent by design (§8),
+>     and they were present at the prior pass.
+>   - `dependency-spec-sources`: SA283(c) `bf7e242e`. All 12 `pyproject.toml` addopts use
+>     `--cov=quickscale_modules_<name>`.
+> - **Accepted (1), carried:** `core-cli-module-knowledge` (rule 37's exception list). The arch
+>   audit counts `CAPABILITIES` at +1 and the list flat, so the revisit trigger has not fired.
+> - **Companion hand-offs taken in:**
+>   - From the tech audit: `quickscale_backups_restore` still advertises `--file PATH` in its
+>     help and usage errors (`:42`, `:46`, `:122–126`), while recovery refuses a bare file that
+>     records no hashes (`dr_engine/recovery.py:288`). **Rejected under §0 gate 1:** it is one
+>     command with no peer that does it differently, so it is a defect for the tech audit, not
+>     drift. (It is also not handed back, because the tech audit already holds it.)
+>   - Blog and listings throttle per user, forms per IP: still consistent by design.
+>   - From the arch audit: dr_engine's `ModuleNotFoundError` check, copied in 2 files, stays
+>     below the population threshold.
+> - **Open: 0.** Counts: defect 0 · collision 0 · ambiguity 0 · tax 0. Enforcement gaps 1–5
+>   from 2026-10-13 are carried and still unchecked. Gaps 6 (`--cov`) and 7 (vintage id) are closed.
+> - **Hand-offs from this pass:** none to either companion.
+> - **Coverage limit.** Without a full census, a drift that the harness's 43 rules do not cover
+>   could have entered with the 31 unrelated commits. The next full pass should rebuild §4.
 
 > **Re-run 2026-10-13 (`0ddc7e30`).** This pass re-checked every item that was open at
 > `2fd8637f` against HEAD, and swept the delta for new variants. The aspect tables in §4 and
@@ -233,8 +311,41 @@ and the rules alone. These decisions are left open, each filed under an item:
 
 ```yaml
 schema: coherence-audit/v1
-audited: 0ddc7e30
+audited: 30b0b6b1
 items:
+  # ---- open: 2026-10-16 full census (items 27–41) ----
+  - {id: cli-module-name-branches, status: open, aspect: C, cost: [ambiguity, tax],
+     members_diverging: [backups, notifications, analytics, social, billing, orgs], population: modules(12),
+     rule: "rule 37", check: "harness rule 37 (Eq/NotEq only)", closed_world: false, handoff: [arch],
+     first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: api-renderer-parser-pinning, status: open, aspect: H, cost: [ambiguity], members_diverging: [blog, crm, forms, notifications],
+     population: drf-api-modules(8), rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: theme-retired-error-shapes, status: open, aspect: P, cost: [ambiguity], members_diverging: [theme useApi.ts], population: theme-api-clients,
+     rule: "rule 9 (one error shape)", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: superuser-escape-spelling, status: open, aspect: E, cost: [ambiguity, tax], members_diverging: [forms], population: org-scoped-modules,
+     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: readme-flag-coverage, status: open, aspect: O, cost: [ambiguity, tax], members_diverging: [backups, forms, orgs], population: command-modules(4),
+     rule: "rule 38", check: "README test (command names only)", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: adapter-restates-manifest-validation, status: open, aspect: B, cost: [tax], members_diverging: [notifications], population: adapters(12),
+     rule: "rule 7 / Module Wiring Authority", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: startup-presence-guard-copies, status: open, aspect: B, cost: [tax], members_diverging: [analytics, billing, notifications], population: checks-modules(7),
+     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: throttle-rate-merge-copies, status: open, aspect: B, cost: [tax], members_diverging: [billing, blog, forms, listings, orgs], population: throttled-modules(5),
+     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: command-off-refusal-and-atomic, status: open, aspect: J, cost: [tax], members_diverging: [backups, forms, orgs], population: commands(16),
+     rule: "rule 1, rule 17", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: theme-request-paths, status: open, aspect: P, cost: [tax], members_diverging: [theme], population: theme-hooks,
+     rule: "rule 31", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: test-ticket-ids-in-identifiers, status: open, aspect: M, cost: [tax], members_diverging: [auth, backups, blog, crm, orgs], population: modules(12),
+     rule: "rule 29", check: "harness rule 29 (names/docstrings/comments)", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: test-harness-parity, status: open, aspect: M, cost: [tax], members_diverging: [analytics, storage, auth, blog, listings], population: modules(12),
+     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: pyproject-residue, status: open, aspect: N, cost: [tax], members_diverging: [auth, blog, crm, forms, listings, orgs], population: modules(12),
+     rule: "rule 36", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: manifest-option-residue, status: open, aspect: B, cost: [tax], members_diverging: [analytics, social, notifications], population: options(96),
+     rule: "rule 29 (version stamps)", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: structured-log-fields, status: open, aspect: K, cost: [tax], members_diverging: [orgs], population: logging-modules(7),
+     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   # ---- open: this pass (ranked per §6) ----
   - {id: module-enabled-switch, status: resolved, regressed: false, aspect: B, cost: [defect, ambiguity],
      members_diverging: [analytics, billing, notifications, backups, forms], population: modules(12),
@@ -259,10 +370,10 @@ items:
      members_diverging: [billing, blog, listings, notifications], population: modules(12),
      rule: "rules 9, 10 (silent on the mapping)", check: none, closed_world: false, handoff: [tech],
      first_seen: 2026-10-08, last_verified: 2026-10-13}
-  - {id: startup-checks-and-errors, status: open, regressed: false, aspect: B, cost: [ambiguity, tax],
+  - {id: startup-checks-and-errors, status: resolved, regressed: false, aspect: B, cost: [ambiguity, tax],
      members_diverging: [analytics, backups, blog, forms, notifications], population: modules(12),
      rule: "rules 6, 10", check: "harness rule 10 (any *Error base passes)", closed_world: false,
-     handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-13}
+     handoff: [], first_seen: 2026-09-26, last_verified: 2026-10-16}
   - {id: upward-name-references, status: resolved, regressed: true, aspect: C, cost: [ambiguity, tax],
      members_diverging: [orgs, notifications], population: cross-module-vocabularies(4),
      rule: "rule 34; rule 8 (email templates)", check: "harness rule 34 (labels/packages/models only)",
@@ -291,17 +402,17 @@ items:
      members_diverging: [blog, crm, social], population: modules-importing-orgs(8), rule: "rule 4",
      check: "harness rule 4 (file-level surface only)", closed_world: false, handoff: [],
      first_seen: 2026-09-26, last_verified: 2026-10-13}
-  - {id: capability-collection, status: open, aspect: D, cost: [ambiguity, tax],
+  - {id: capability-collection, status: resolved, aspect: D, cost: [ambiguity, tax],
      members_diverging: [orgs], population: appconfig-capabilities(13), rule: "rule 4 (one core helper)",
-     check: none, closed_world: false, handoff: [arch], first_seen: 2026-10-08, last_verified: 2026-10-13}
+     check: none, closed_world: false, handoff: [arch], first_seen: 2026-10-08, last_verified: 2026-10-16}
   - {id: command-flag-conventions, status: resolved, regressed: false, aspect: J, cost: [ambiguity, tax],
      members_diverging: [], population: commands(16), rule: "rule 17 (one selector spelling)",
      check: "harness rule 17 (spelling ban with controls)", closed_world: false, handoff: [],
      first_seen: 2026-10-08, last_verified: 2026-10-15}
-  - {id: dependency-spec-sources, status: open, aspect: N, cost: [ambiguity, tax],
+  - {id: dependency-spec-sources, status: resolved, aspect: N, cost: [ambiguity, tax],
      members_diverging: [backups, storage, orgs], population: modules(12),
      rule: "Module Manifest Architecture (names only)", check: none, closed_world: false, handoff: [],
-     first_seen: 2026-10-08, last_verified: 2026-10-13}
+     first_seen: 2026-10-08, last_verified: 2026-10-16}
   - {id: secret-env-var-names, status: resolved, regressed: false, aspect: A, cost: [ambiguity],
      members_diverging: [], population: vendor-credential-options(5 modules), rule: "rule 1",
      check: "harness rule 1 (module/option-bound vendor defaults and reasoned QuickScale exceptions)",
@@ -356,7 +467,7 @@ items:
 
 ## 3. Summary table
 
-**Counts (open, 2026-10-13):** defect 0 · collision 0 · ambiguity 4 · tax 3 (items carry more than one class) · **total 5**, plus 1 accepted. **Counts (open, 2026-10-08):** defect 2 · collision 1 (also counted under defect) · ambiguity 17 · tax 5 ·
+**Counts (open, 2026-10-16 (b), full census):** defect 0 · collision 0 · ambiguity 5 · tax 13 · **total 15**, plus 1 accepted. **Counts (open, 2026-10-16 (a), delta re-run):** 0 open, 1 accepted. **Counts (open, 2026-10-13):** defect 0 · collision 0 · ambiguity 4 · tax 3 (items carry more than one class) · **total 5**, plus 1 accepted. **Counts (open, 2026-10-08):** defect 2 · collision 1 (also counted under defect) · ambiguity 17 · tax 5 ·
 **total 25**. 12 of the 25 are prior IDs reopened, and one of those (`upward-name-references`)
 is flagged `regressed`. The other 13 are new. One new item, `markdownx-shared-mount`, recreates a
 state the frozen inventory had warned against (§12). Resolved prior IDs still holding: 43 of 55.
@@ -369,7 +480,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 4 | `option-schema-and-validation` | B | ambiguity, tax | 0 / 12 adapters | resolved (SA263) |
 | 5 | `module-error-http-mapping` | D | ambiguity, tax | 4 / 12 (5 variants) | resolved (2026-10-13) |
 | 6 | `unauthenticated-status-code` | H | ambiguity, tax | 2 / 6 (4 duplicated classes on the other side) | resolved (SA262) |
-| 7 | `startup-checks-and-errors` | B | ambiguity, tax | 5 / 12 | open (2026-10-13) |
+| 7 | `startup-checks-and-errors` | B | ambiguity, tax | 0 / 12 | resolved (SA283a) |
 | 8 | `upward-name-references` | C | ambiguity, tax | 2 owners / 4 vocabularies | resolved (2026-10-13) |
 | 9 | `core-cli-module-knowledge` | C | ambiguity, tax | 6 / 12 named in core or CLI | accepted (2026-10-13) |
 | 10 | `manifest-declared-surface` | B | ambiguity, tax | 3 / 12 (+4 key-presence) | resolved (2026-10-13) |
@@ -377,9 +488,9 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 12 | `throttle-attachment` | H | ambiguity, tax | 4 / 6 | resolved (SA262) |
 | 13 | `optional-sender-guard` | C | ambiguity, tax | 2 / 4 call edges | resolved (2026-10-13) |
 | 14 | `module-dependency-direction` | C | ambiguity, tax | 3 / 8 | resolved (2026-10-13) |
-| 15 | `capability-collection` | D | ambiguity, tax | 1 owner / 13 names | open (2026-10-13) |
+| 15 | `capability-collection` | D | ambiguity, tax | 0 / 13 names | resolved (SA283b) |
 | 16 | `command-flag-conventions` | J | ambiguity, tax | 0 / 3 command-shipping modules | resolved (SA282) |
-| 17 | `dependency-spec-sources` | N | ambiguity, tax | 3 / 12 | open (2026-10-13) |
+| 17 | `dependency-spec-sources` | N | ambiguity, tax | 0 / 12 | resolved (SA283c) |
 | 18 | `mount-path-copies` | P | ambiguity, tax | 4 / 5 theme API clients | resolved (SA261) |
 | 19 | `secret-env-var-names` | A | ambiguity | 0 / 5 | resolved (SA263) |
 | 20 | `session-and-host-names` | A | ambiguity | 2 | resolved (2026-10-13) |
@@ -389,10 +500,67 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 24 | `ticket-ids-in-shipped-source` | O | tax | 10 / 12 | resolved (2026-10-13) |
 | 25 | `constraint-purpose-tokens` | A | tax | 4 / 9 | resolved (2026-10-13) |
 | 26 | `contract-vintage-identity` | B | ambiguity | 0 / 4 vintage manifests | resolved (SA282) |
+| 27 | `cli-module-name-branches` | C | ambiguity, tax | 6 modules named at 5 CLI sites outside rule 37's list | open (2026-10-16) |
+| 28 | `api-renderer-parser-pinning` | H | ambiguity | 4 / 8 DRF-serving surfaces unpinned or half-pinned | open (2026-10-16) |
+| 29 | `theme-retired-error-shapes` | P | ambiguity | 1 client, 2 retired shapes | open (2026-10-16) |
+| 30 | `superuser-escape-spelling` | E | ambiguity, tax | 1 / 2 spellings | open (2026-10-16) |
+| 31 | `readme-flag-coverage` | O | ambiguity, tax | 3 / 4 command modules | open (2026-10-16) |
+| 32 | `adapter-restates-manifest-validation` | B | tax | 1 / 12 adapters | open (2026-10-16) |
+| 33 | `startup-presence-guard-copies` | B | tax | 3 / 7 `checks.py` | open (2026-10-16) |
+| 34 | `throttle-rate-merge-copies` | B | tax | 5 / 5 throttled adapters | open (2026-10-16) |
+| 35 | `command-off-refusal-and-atomic` | J | tax | 3 / 16 commands | open (2026-10-16) |
+| 36 | `theme-request-paths` | P | tax | 2 raw `fetch` + literal paths | open (2026-10-16) |
+| 37 | `test-ticket-ids-in-identifiers` | M | tax | 5 / 12 | open (2026-10-16) |
+| 38 | `test-harness-parity` | M | tax | 5 / 12 | open (2026-10-16) |
+| 39 | `pyproject-residue` | N | tax | 6 / 12 | open (2026-10-16) |
+| 40 | `manifest-option-residue` | B | tax | 4 / 96 options | open (2026-10-16) |
+| 41 | `structured-log-fields` | K | tax | 1 / 7 logging modules | open (2026-10-16) |
 
 ---
 
 ## 4. Aspect sections
+
+### Census 2026-10-16 (b) at `30b0b6b1` — supersedes the 2026-10-08 tables below
+
+The full cell-level tables are in the scratch ledgers. They are summarised here with counts. Rows
+marked ✓ are *Already consistent (keep)*. Drift rows name their item.
+
+| Aspect | Census (counts · members) | Drift → item |
+|---|---|---|
+| A · settings / env | `QUICKSCALE_<MODULE>_*` 12/12; no module reads another's `QUICKSCALE_*` ✓ | — |
+| A · URL mounts | `<module>/` 9 · `accounts/` auth · `_quickscale/social/` social · `markdownx/` storage only (Correction: 2026-10-08 had blog *and* listings; SA261) ✓ | — |
+| A · session / cache / lock / throttle keys | `quickscale_<m>:<key>` 4/4 session keys; cache, lock, and throttle-scope stems `quickscale_<m>_` everywhere ✓ | — |
+| A · constraints / indexes | constraints `quickscale_<m>_<model>_<purpose>` (all end `_unique`); indexes `qs_<m>_…_idx` in blog 3, listings 3 — rule 25's declared form ✓; `db_table` unset 12/12 ✓; `related_name` on User/Organization stemmed ✓ | — |
+| A · removal obligations | `quickscale_<m>:<purpose>`, owned per module ✓ (Correction: the 2026-10-08 Item 8 owner split is gone) | — |
+| A · host route names | auth `reverse_lazy("home")` (`auth/views.py:105`) is the only one; documented, unchecked | §7 gap 4 (carried) |
+| B · adapters | `build_generic_manifest_spec` 12/12 ✓; generic settings check registered 12/12 ✓; 96 options all have type/default/description/validation ✓; 0 adapters call `validate_module_options` ✓ | 32, 34 |
+| B · `checks.py` | 7 files (analytics, backups, billing, blog, notifications, orgs, storage). (Correction: the 2026-10-08 count of 10 is stale.) Presence-guard copies in 3 | 33 |
+| B · off switch | apps, middleware, and settings kept 12/12 ✓; public URLs dropped 11/11 mounting modules; webhooks stay mounted (billing, notifications) per rule 26 ✓ | — |
+| B · `contract_vintage` | 4/4 carry `id` ✓ | — |
+| B · option text | version stamps in 3 descriptions (analytics `provider`, social ×2); integer `webhook_ttl_seconds` carries a string `pattern` | 40 |
+| C · imports | 0 cross-module private imports ✓; 0 undeclared sibling imports ✓; 0 `import_string` ✓; capability reads via `collect_capabilities` 17/17 ✓; 12 `CAPABILITIES` names all consumed ✓ | — |
+| C · core/CLI module names | listed exceptions (rule 37) + unlisted branches at 5 CLI sites | 27 |
+| D · package root | `__all__ = ["__version__"]` 12/12 ✓; `py.typed` 12/12 ✓; error base `<Name>Error(Exception)` 9/12; analytics, forms raise none (exempt, decisions.md:810–815); backups re-exports core `BackupError` ✓ | — |
+| D · failure semantics | raise-only: backups, billing, blog, crm, listings, storage; best-effort swallow: analytics (4), notifications (1), social (2) | §8 |
+| E · authorization | org role via orgs' tools in every org-scoped API ✓; storage markdownx staff gate (rule 41) ✓; superuser escape spelled 2 ways | 30 |
+| F · effects | request-path email, events, seeding, file deletes `on_commit` everywhere ✓; 2 inline cache purges outside requests (social `services.py:205`, no caller; orgs `apps.py:217`, after the purge command's delete) — low | §8 |
+| G · models | `published_at` blog + listings ✓; no `Meta.verbose_name`, no `Meta.app_label` 0/10 ✓ (Correction: Item 21's residue is gone) | — |
+| H · errors / auth / pages | core error shape 8/8 including social's generated `APIView`s ✓; `QuickscaleSessionAuthentication` 6/6 ✓; `PlainListPagination` 3/3 ✓; throttle scope 4/4 + orgs rule-32 exception ✓; webhook secrets checked at startup 2/2 ✓ | — |
+| H · renderer / parser | JSON pinned: billing, listings, orgs, social views (4); parser only: blog; defaults (browsable + form/multipart): crm, forms, notifications | 28 |
+| H · off answer | Django `Http404` crm, forms; DRF `NotFound`/module `not_found` billing, notifications, orgs; one bare `HttpResponse(404)` orgs `_view_invitation.py:158` (bodies likely equal, not run) | low, ledger |
+| I · outbound | 0/5 vendor-calling modules set timeouts or retries — consistent, no rule (carried §8) | — |
+| J · commands | 16 commands. `--json` where machine output exists ✓; `--trigger` default `manual` 3/3 ✓; `--confirm` on purge/restore ✓; trigger choices backups `manual,scheduled,admin` vs forms `manual,scheduled` (by design, §8); off refusal 2 spellings; `transaction.atomic` in the command 3/16 | 35 |
+| K · logging | package-derived logger names, with split files on the facade logger (rule 46) ✓; `extra=` fields only in orgs (6 calls). (Correction: §8's "no structured fields" is stale.) | 41 |
+| L · layout | closed `tests/` list holds (rule 29) ✓; template depth flat except auth's allauth shims ✓; one placeholder `.gitkeep` in a non-empty dir (listings `static/quickscale_listings/`) — trivial | ledger |
+| M · tests | conftest hooks 10/12 (missing in analytics, storage); test settings gaps: auth has no `DEFAULT_AUTO_FIELD`, blog and listings have no `USE_TZ`; vendor fakes in 3 styles; ~70–90 ticket ids in test identifiers | 37, 38 |
+| N · tooling | build backend, 0.89.0 lockstep, ruff, Django/Python pins, `--cov=<package>` 12/12 ✓; stale "centralized in root" comment 5; orgs dev floors `>=`; 6 `pythonpath` variants | 39 |
+| O · docs | README H2 outline 12/12 ✓; 104 option rows match `module.yml` ✓; flags documented partially | 31 |
+| P · theme | API bases from the seam's `moduleApiPaths` ✓; raw `fetch` ×2 and literal page paths; `useApi.ts` still parses 2 retired error shapes | 29, 36 |
+| Q · locale | 0 `gettext`, 0 `trans` in 12/12 — English only by decision ✓ | — |
+
+Inert: none beyond Q (consistent). Population sizes: 12 modules · 16 commands · 8 DRF-serving
+surfaces · 7 `checks.py` · 96 options · 2 webhooks.
+
 
 ### A. Identity and shared namespaces
 
@@ -1424,6 +1592,101 @@ API status codes) still need a release-notes line.
 
 ---
 
+### 2026-10-16 (b) census items (ranked: ambiguity before tax, then diverging × churn)
+
+### Item 27: Core/CLI — module-name branches outside rule 37's list
+- **ID:** `cli-module-name-branches` · **Aspect / population:** C (per-module knowledge) · 12 modules, as named by the CLI.
+- **Table:** listed exceptions (rule 37): `module_options`, `social_manifest`, `_dependency_io` storage, `_module_embed` auth, seam and URL tables, `MODULE_CATALOG`, `ENV_EXAMPLE_MODULE_SPECS` · **unlisted:**
+  - `commands/_finalize.py:68–76`: `"<m>" in modules` for backups, notifications, analytics, social, and billing;
+  - `commands/_config.py:402`: orgs;
+  - `commands/_runtime.py` (`config.modules.get("backups")`);
+  - `apply_support.py:104` and `commands/_plan_validation.py:38–48`: notifications.
+- **Drift:** rule 37 ❌ forbids "an equality branch on a module name in core or the CLI outside the listed exceptions". Harness rule 37 matches only `ast.Eq`/`ast.NotEq` (`scripts/module_conventions/_identity_module_lists.py:27`), so `in` and `.get("<m>")` branches pass. Six modules carry next-steps, validation, or runtime knowledge in the CLI. The next module's author cannot tell whether to add a branch or a manifest field.
+- **Cost class:** ambiguity (the rule reads as closed, while the check is open), and tax (each new module copies a branch).
+- **Declared rule:** decisions.md rule 37 (`:1248–1277`).
+- **Options:**
+  - A: list the 5 sites as rule 37 exceptions, with reasons. Cheap, but it keeps the knowledge in the CLI.
+  - B: move next-steps text and option validation behind manifest fields, or adapter hooks the CLI calls generically. Medium cost, no one-way door.
+  - C: B for validation (`_config`, `_plan_validation`, `apply_support`), and A for operator next-steps text.
+- **Recommended rule:** ✅ The CLI reaches module-specific behaviour through a manifest field or a generic adapter hook. ❌ A membership (`in`), `.get("<module>")`, or equality branch on a module name in core or the CLI outside the listed exceptions.
+- **Enforcement:** extend `RULE_37_BRANCH_OPERATORS` to `ast.In`/`ast.NotIn`, and add `.get()`/subscript calls with a module-name constant. The control is a fixture `if "billing" in modules:`. It stays open-world over spellings, but closes the two that occur.
+- **Migration:** CLI only, with no persisted names. Rides any release.
+- **Confidence:** High. All 5 sites and the harness operator tuple were read.
+- **Hand-off:** arch (`core-holds-module-vocabulary`).
+
+### Item 28: API — renderer and parser pinning
+- **ID:** `api-renderer-parser-pinning` · **Aspect / population:** H · 8 DRF-serving surfaces.
+- **Table:** JSON renderer + parser pinned → billing, listings, orgs, social's generated views (4) · parser only → blog (1) · DRF defaults (browsable HTML renderer; JSON + form + multipart parsers) → crm, forms, notifications (3). The generated `REST_FRAMEWORK` (`base.py.j2`, `runtime/settings.compose_rest_framework`) sets no `DEFAULT_RENDERER_CLASSES` or `DEFAULT_PARSER_CLASSES`.
+- **Drift:** the same endpoint class accepts form-encoded bodies, and renders HTML to a browser, in 3 modules and not in 4. Callers and the theme cannot rely on one content contract.
+- **Cost class:** ambiguity.
+- **Declared rule:** none.
+- **Options:**
+  - A: set the JSON-only defaults once in the generated `REST_FRAMEWORK`, and drop the per-view pins. Smallest change, project-wide.
+  - B: require every module view to pin. This multiplies copies.
+- **Recommended rule:** ✅ Module APIs are JSON-only, through the generated `REST_FRAMEWORK` defaults. ❌ A per-view renderer or parser pin, except a webhook's raw-body parser.
+- **Enforcement:** a harness check that the generated settings carry both defaults, plus a ban on `renderer_classes`/`parser_classes` in module views outside webhooks. Closed-world. The control is a view with `parser_classes`.
+- **Migration:** crm, forms, and notifications stop accepting form posts. Release-note line. Confidence: High on the table, Medium on caller reliance.
+
+### Item 29 (compact): `theme-retired-error-shapes`
+P · `useApi.ts:52,70,81` still parses the retired `errors` list and the string-`error` shape "for compatibility" (1 client). Every module now emits only core's `{"error":{code,message,fields?}}`, so the client advertises a contract that no longer exists. **Rule:** ✅ the theme parses core's error shape only. **Check:** a theme unit test rejects a payload that has only `errors`. Confidence: High.
+
+### Item 30 (compact): `superuser-escape-spelling`
+E · operator escape: orgs `permissions.py:36–41` (inside `HasOrgRole`) vs forms' private `_is_superuser` (`forms/views.py:173`). **Rule:** ✅ the superuser escape is orgs' permission helper only. ❌ a module-private superuser predicate. **Check:** the harness bans `is_superuser` reads in module views outside orgs. The control is forms. Confidence: Medium. Whether forms' cross-tenant `operator_access` needs a distinct predicate is a team question (§11).
+
+### Item 31 (compact): `readme-flag-coverage`
+O · rule 38 checks command *names* only:
+- backups documents 6 of its 19 flags;
+- forms omits `--dry-run`;
+- orgs omits `--force` and `--postgres-only`;
+- billing is complete.
+
+**Rule:** ✅ a README's Management commands entry lists every flag. **Check:** extend the rule 38 README test to compare the argparse options. Confidence: Medium, because the flag counts come from the worker.
+
+### Item 32 (compact): `adapter-restates-manifest-validation`
+B · 1 of 12 adapters. Notifications' `adapter.py:20–70` re-implements 4 manifest patterns: email, placeholder sender, domain, and env-var name. The domain check is hand-written rather than the manifest's regex. The CLI consumes these copies (`apply_support.py:104` loads the adapter). Two sources of truth for one option. **Rule:** ✅ the adapter's runtime predicates evaluate the manifest's declared validation. **Check:** a ban on `re.compile` in `adapter.py`. Confidence: High.
+
+### Item 33 (compact): `startup-presence-guard-copies`
+B · analytics `checks.py:69`, billing `:53`, and notifications `:86` repeat the `projected_setting_names` + `hasattr` presence guard that the generic settings check already enforces (`runtime/conventions.py:489–493`). The other 4 `checks.py` files don't. **Rule:** ❌ a module check that re-tests a projected setting's presence. **Check:** a rule-6 AST scan. Confidence: Medium.
+
+### Item 34 (compact): `throttle-rate-merge-copies`
+B · billing `adapter.py:44`, blog `:27`, forms `:26`, listings `:27`, and orgs `:32` each hand-merge `REST_FRAMEWORK.DEFAULT_THROTTLE_RATES`. **Rule:** ✅ a manifest `throttle_scopes` projection that core merges. **Check:** a ban on `DEFAULT_THROTTLE_RATES` in adapters. Confidence: High.
+
+### Item 35 (compact): `command-off-refusal-and-atomic`
+J · the off refusal uses a helper in backups create, and is inline in backups prune and forms anonymize. `transaction.atomic` opens inside the command in forms ×2 and orgs purge, and below it in services elsewhere. **Rule:** ✅ one core helper for the scheduled-off refusal; the transaction lives in the service. **Check:** harness rule 17 requires the helper call when `--trigger` exists. Confidence: Medium.
+
+### Item 36 (compact): `theme-request-paths`
+P · residue of `mount-path-copies`. `useFormSchema` and `usePublicSocialSurface` call raw `fetch`, not `apiRequest`. `useOrgNavigation` and `App.tsx` write page paths as literals. **Rule:** ✅ theme requests go through `apiRequest` with seam paths. **Check:** a lint ban on `fetch(` in `src/hooks`. Confidence: High.
+
+### Item 37 (compact): `test-ticket-ids-in-identifiers`
+M · about 70–90 `sa<NNN>` tokens remain in test identifiers and strings (auth, backups, blog, crm, orgs), e.g. `_sa61_media_root_tmp_path`. Rule 29's scan covers file names, docstrings, and comments only. **Rule:** ✅ test names describe the behaviour. **Check:** extend the rule 29 token scan to identifiers in `tests/`. Confidence: Medium (a grep count).
+
+### Item 38 (compact): `test-harness-parity`
+M ·
+- conftest `pytest_configure` and `pytest_collection_modifyitems` are missing in analytics and storage (10 of 12 have them);
+- auth's test settings lack `DEFAULT_AUTO_FIELD`;
+- blog and listings lack `USE_TZ`;
+- vendor fakes come in 3 styles (`Fake*` classes in 3 modules, stubs in analytics, mocks only in 8).
+
+**Rule:** ✅ a shared test-settings base and conftest plugin from core. **Check:** a harness diff of each module's test settings keys against the base. Confidence: Medium.
+
+### Item 39 (compact): `pyproject-residue`
+N ·
+- auth, blog, crm, forms, and listings carry a stale comment, "centralized in root pyproject.toml", above sections they own;
+- orgs' dev group uses `>=` floors where the others use carets;
+- there are 6 `pythonpath` variants.
+
+**Rule:** ✅ one pyproject template; rule 36 covers the sections. **Check:** a harness template diff. Confidence: High.
+
+### Item 40 (compact): `manifest-option-residue`
+B/O ·
+- 3 option descriptions carry release stamps: analytics `provider` (v0.80.0), and social `:41` and `layout_variant` (v0.79.0);
+- notifications' integer `webhook_ttl_seconds` carries a string `pattern` beside `min`.
+
+**Rule:** ✅ no version stamps in manifest text; validation keys match the option type. **Check:** extend the rule 29 scan to `module.yml` descriptions, and have the loader refuse type-mismatched keys. Confidence: High.
+
+### Item 41 (compact): `structured-log-fields`
+K · `extra=` fields appear only in orgs (6 calls). The other 6 logging modules log message-only. **Rule:** a team decision (§11). Either ✅ the events named in rule N carry `extra=` fields, or record message-only as the convention and drop the orgs variant. **Check:** review rule. Confidence: High on the counts, Low on whether it matters.
+
 ## 6. Proposed rules (ready to merge into decisions.md § Module Conventions)
 
 Each proposal amends an existing rule; the item that motivates it is in brackets.
@@ -1500,6 +1763,16 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 
 ---
 
+**2026-10-16 (b) additions** (from items 27–41; ready to paste):
+
+51. **CLI module knowledge** [27]. ✅ The CLI reaches module-specific behaviour through a manifest field or a generic adapter hook. ❌ A membership, `.get()`, or equality branch on a module name in core or the CLI outside rule 37's list.
+52. **JSON-only APIs** [28]. ✅ The generated `REST_FRAMEWORK` sets JSON renderer and parser defaults. ❌ A per-view renderer or parser pin outside webhooks.
+53. **One theme error parser** [29, 36]. ✅ Theme requests go through `apiRequest`, parse core's error shape only, and take paths from the seam.
+54. **One operator escape** [30]. ✅ The superuser escape is orgs' permission helper. ❌ A module-private superuser predicate.
+55. **Manifest owns validation and throttle rates** [32, 34, 33]. ✅ Adapters evaluate the declared validation, and core merges declared throttle scopes. ❌ `re.compile`, a `DEFAULT_THROTTLE_RATES` literal in `adapter.py`, or a presence re-check in `checks.py`.
+56. **Command scaffolding** [35, 31]. ✅ One core helper refuses scheduled runs while off; the transaction is in the service; the README lists every flag.
+57. **Test and tooling templates** [37, 38, 39, 40]. ✅ Shared test-settings base and conftest plugin; one pyproject template; no ticket ids in test identifiers or manifest text.
+
 ## 7. Enforcement gaps
 
 1. **Manifest loader is open-world on top-level keys — resolved (SA260).** `load_manifest` now
@@ -1560,6 +1833,34 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 
 ---
 
+**2026-10-16 (b) rule audit (§3.5).** All 50 rules were tabled, and 11 rules' detectors were read at the code. All cross-references resolve (11 anchors, `frontend.md`, and every cited file). No declared config is unread. New or confirmed gaps:
+
+19. **Rule 37 branch check is open-world over operators.** Only `Eq`/`NotEq` are matched (`_identity_module_lists.py:27`) [Item 27].
+20. **Rule 40 claims checks that do not exist.** No detector checks `CommandError` or `BaseCommand` (decisions.md:1309 lists `CommandError`), and none checks "unlisted core ports". The rule 28 file allowlist is the only indirect guard.
+21. **Rule 17's destructive duty triggers on command-name keywords.** `--dry-run` is matched as a substring, so a command named `_reset` or `_wipe` passes. `--json` is never required, and `--trigger` is checked only when present (`_package_commands.py:84–104`). Carried gap 2, still true.
+22. **Rules 5 and 34 skip a module missing from `MODULE_LAYERS`.** Only a pytest backstops this, and the decisions.md layer table is never compared with `MODULE_LAYERS`.
+23. **Capability declarations are open-world.** A misspelled capability on an `AppConfig` is never flagged, and the harness and core each keep a literal set with no cross-check. Carried gap 4, still true.
+24. **Clauses with no detector and no open record:** rule 13's `TenantModelAdmin` registration, and rule 11's compare-against-members clause.
+25. **The authoring checklist contradicts the code.** `module-extension.md:601` says core is edited "in exactly these places and no others". A React- or API-bearing module also edits the seam tables (`runtime/seam.py:89–97,179–184`) and `runtime/urls.py`. The checklist never mentions choosing a rule 5 layer or adding the `MODULE_LAYERS` entry.
+
+Carried 2026-10-13 gaps re-checked:
+- 1 (off-switch parity skips URL drops and trigger refusal): still true (`test_module_off_switch_parity.py:45–53`).
+- 3 (rule 33 obligation-name and email-key stems; rule 34 matches `quickscale_` stems only): still true.
+- 4 (`home` host route): still true.
+- 5 (rule 29 scan reads `.py` and `module.yml` only, `_identity_tests.py:44–45`): still true.
+- 6 and 7: closed.
+
+**"Add one more" probe (§3.6):** 10 decisions are left open by the docs. The ledger lists all of them. The ones not covered above:
+- layer choice criteria;
+- whether to ship `checks.py`;
+- which vendor-fake style to use;
+- whether to pin renderers;
+- whether to add `extra=` log fields;
+- trigger choices beyond `manual`/`scheduled`;
+- README flag depth.
+
+Each maps to items 28, 31, 33, 35, 38, and 41, or to gap 25.
+
 ## 8. Consistent by design
 
 - **Service-surface size** (2 → 44 names) follows purpose. backups exposes a DR toolkit and auth's
@@ -1589,6 +1890,16 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 
 ---
 
+- **2026-10-16 (b) additions:**
+  - **Storage's staff-gated markdownx endpoints** (rule 41): editors are staff-only by design.
+  - **The `qs_` index prefix** (rule 25): declared for index names.
+  - **Literal logger names in split files** (rule 46): split files log on the facade's logger.
+  - **Backups' `admin` trigger:** it is backed by its admin actions (`admin.py:421,441`).
+  - **Best-effort services:** analytics, notifications, and social swallow vendor failures so a request never fails on telemetry or delivery. Raise-only elsewhere.
+  - **Inline cache purges outside a request transaction** (social's uncalled helper; orgs' purge command, after its delete).
+  - **The auth↔orgs `required_modules` pair:** an install contract, not an import cycle.
+  - (Correction: the *Logging* bullet above said "no structured fields". orgs has 6 `extra=` calls; see Item 41.)
+
 ## 9. Hand-offs
 
 **To the technical audit** (live or latent defects; detail stays there per the disclosure rule):
@@ -1617,6 +1928,10 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 
 ---
 
+**2026-10-16 (b):**
+- *To the architectural audit:* `cli-module-name-branches`. 5 CLI sites name 6 modules outside rule 37's list, and the harness misses `in`/`.get()` branches. This adds to the watchlist `core-holds-module-vocabulary`.
+- *To the technical audit:* none. No census variant is a live defect. The `--file` help mismatch stays with the tech audit.
+
 ## 10. Aspect catalogue additions
 
 - **B · Off-switch mechanism per surface.** App, URLs, jobs, `.env.example`, capabilities.
@@ -1637,6 +1952,12 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 - **A · Session keys and project route names a module depends on.**
 
 ---
+
+- **H · Renderer and parser pinning per API** (2026-10-16 (b)).
+- **J · Command transaction boundary and off-refusal spelling** (2026-10-16 (b)).
+- **M · Test-settings key parity and conftest hooks** (2026-10-16 (b)).
+- **K · Structured log fields** (2026-10-16 (b)).
+- **C · Harness operator coverage for module-name branches** (2026-10-16 (b)).
 
 ## 11. Questions that would change a rule
 
@@ -2215,3 +2536,13 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-13 — Prior resolved IDs (`markdownx-shared-mount`, `tenant-authorization`, `option-schema-and-validation`, `unauthenticated-status-code`, `http-api-shape`, `throttle-attachment`, `mount-path-copies`, `secret-env-var-names`, and the 43 listed in §2): still resolved (harness pass at HEAD; no regression found by the delta sweep).
 - 2026-10-15 — `command-flag-conventions`: resolved (SA282 — the billing reconcile command selects with `--organization-id`, decisions rule 17 names the one spelling, and harness rule 17 bans `--organization`, `--org`, and slug declarations without `--organization-id`, with controls and exact-findings rows).
 - 2026-10-15 — `contract-vintage-identity`: resolved (SA282 — every `contract_vintage` carries an `sa<NNN>-<slug>` id, the loader refuses a missing one with a control manifest, backups and social gained new ids in both manifest copies, and the CLI's version-comparison fallback is deleted so recorded adoption is the one mechanism).
+- 2026-10-16 — **Re-run** at `30b0b6b1` (prompt v2, 1 delta pass; harness: 43 covered rules pass).
+- 2026-10-16 — `startup-checks-and-errors`: resolved (SA283(a) 1817ef2d — verified; rule-6 scan rejects own-setting literals in checks.py, with controls).
+- 2026-10-16 — `capability-collection`: resolved (SA283(b) 98d4e4b7 — verified; purge collects `organization_cache_invalidation_hooks`; obligation hook lookups consistent by design).
+- 2026-10-16 — `dependency-spec-sources`: resolved (SA283(c) bf7e242e — verified; 12/12 `--cov=<import package>`).
+- 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
+- 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).
+- 2026-10-16 — All other prior IDs: still resolved (harness pass at HEAD; delta has no convention-breaking commit).
+6. Does forms' cross-tenant `operator_access` need its own predicate, distinct from orgs' superuser escape? → `superuser-escape-spelling`
+7. Do host projects post form-encoded bodies to the crm, forms, or notifications APIs? This sets the release-note weight of a JSON-only default. → `api-renderer-parser-pinning`
+8. Should module logs carry structured fields? → `structured-log-fields`
