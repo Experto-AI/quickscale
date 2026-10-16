@@ -83,24 +83,30 @@ describe('QuickScale API error parsing', () => {
     expect(getApiFieldErrors(error)).toEqual({})
   })
 
-  it('still reads the pre-convention string and field shapes', async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse(400, { error: 'Invalid JSON payload' }),
-    )
-    const stringError = await apiRequest('/forms/api/example/').catch(
-      (caught: unknown) => caught,
-    )
-    expect(getApiErrorMessage(stringError)).toBe('Invalid JSON payload')
-
+  it('rejects a payload that carries only the retired errors list', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse(400, { errors: { title: ['This field is required.'] } }),
     )
-    const fieldsError = await apiRequest('/forms/api/example/').catch(
+
+    const error = await apiRequest('/forms/api/example/').catch(
       (caught: unknown) => caught,
     )
-    expect(getApiFieldErrors(fieldsError)).toEqual({
-      title: ['This field is required.'],
-    })
+
+    expect(getApiErrorMessage(error)).toBe('API Error: 400')
+    expect(getApiFieldErrors(error)).toEqual({})
+  })
+
+  it('rejects a payload that carries only the retired string error', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(400, { error: 'Invalid JSON payload' }),
+    )
+
+    const error = await apiRequest('/forms/api/example/').catch(
+      (caught: unknown) => caught,
+    )
+
+    expect(getApiErrorMessage(error)).toBe('API Error: 400')
+    expect(getApiFieldErrors(error)).toEqual({})
   })
 
   it('falls back to the status text for an unshaped error body', async () => {

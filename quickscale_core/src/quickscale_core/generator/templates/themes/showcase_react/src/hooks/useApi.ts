@@ -48,11 +48,6 @@ function getFirstFieldMessage(fields: Record<string, unknown>): string | null {
   return null
 }
 
-function getFirstValidationMessage(payload: Record<string, unknown>): string | null {
-  const errors = payload.errors
-  return isRecord(errors) ? getFirstFieldMessage(errors) : null
-}
-
 function normalizeFieldErrors(source: Record<string, unknown>): Record<string, string[]> {
   return Object.fromEntries(
     Object.entries(source).map(([key, value]) => [
@@ -65,9 +60,10 @@ function normalizeFieldErrors(source: Record<string, unknown>): Record<string, s
 }
 
 // QuickScale answers every API error in one shape:
-// `{"error": {"code", "message", "fields"}}`. Older module releases still
-// answer `{"error": "<message>"}` or `{"errors": {...}}`, so both are read
-// for compatibility with projects that have not updated every module yet.
+// `{"error": {"code", "message", "fields"}}`. Nothing else is read: the
+// retired pre-convention shapes (`{"error": "<message>"}` and
+// `{"errors": {...}}`) are deliberately unparsed, so a payload that carries
+// only them is treated as unshaped.
 function getErrorFields(payload: unknown): Record<string, string[]> | null {
   if (!isRecord(payload)) {
     return null
@@ -78,8 +74,7 @@ function getErrorFields(payload: unknown): Record<string, string[]> | null {
     return isRecord(error.fields) ? normalizeFieldErrors(error.fields) : null
   }
 
-  const errors = payload.errors
-  return isRecord(errors) ? normalizeFieldErrors(errors) : null
+  return null
 }
 
 // Reads the one QuickScale shape from a raw payload: the first field message
@@ -104,11 +99,9 @@ export function getApiPayloadMessage(payload: unknown): string | null {
     if (typeof error.message === 'string' && error.message) {
       return error.message
     }
-  } else if (typeof error === 'string' && error) {
-    return error
   }
 
-  return getFirstValidationMessage(payload)
+  return null
 }
 
 function getApiMessage(payload: unknown, status: number): string {

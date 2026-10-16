@@ -114,7 +114,7 @@ steps:
     minimum: "0.89.0"
     title: "Adopt the one-shape API error parsing in the React theme client"
     adoption_steps:
-      - "Compare and manually adopt the current frontend/src/hooks/useApi.ts: getApiErrorMessage and getApiFieldErrors read the one QuickScale shape {\"error\": {\"code\", \"message\", \"fields\"}}, prefer the first field message as the actionable message, and still tolerate the pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes until every module API conversion lands; without the update, a converted module API shows only a generic message or no field errors in an existing project."
+      - "Compare and manually adopt the current frontend/src/hooks/useApi.ts: getApiErrorMessage and getApiFieldErrors read the one QuickScale shape {\"error\": {\"code\", \"message\", \"fields\"}}, prefer the first field message as the actionable message, and no longer read the retired pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes (see the `sa289-theme-one-error-parser` step for the current parser); without the update, a converted module API shows only a generic message or no field errors in an existing project."
       - "Optionally copy the new frontend/src/test/useApiErrors.test.ts to pin the parser behavior."
   - id: sa223-theme-error-shape-social
     minimum: "0.89.0"
@@ -315,3 +315,9 @@ steps:
     title: "Adopt the operations guide's rendered Stripe API version"
     adoption_steps:
       - "Compare and manually adopt the current OPERATIONS.md Stripe Billing section: the required webhook endpoint version now renders from the billing module's one authored constant instead of a hand-copied literal, so the guide names the current version after any future Stripe pin bump without a template edit; the rendered text is unchanged at this release."
+
+  - id: sa289-theme-one-error-parser
+    minimum: "0.89.0"
+    title: "Adopt the theme's one-shape API error parser"
+    adoption_steps:
+      - "Compare and manually adopt the current frontend/src/hooks/useApi.ts and frontend/src/test/useApiErrors.test.ts: the parser reads only the one QuickScale shape {\"error\": {\"code\", \"message\", \"fields\"}} — the first field message as the actionable message, the shape's message otherwise — and the retired pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes are deliberately unparsed, so a body that carries only them shows the status fallback and no field errors instead of a stale message. Adopting the current useApi.ts satisfies the `sa223-theme-error-shape` step's comparison for the parser. Rebuild the frontend (`pnpm build`) after adopting."

@@ -109,7 +109,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA204 (h) | yes | no | yes | no | yes |
 | 2 | SA285 | yes | yes | yes | yes | no |
-| 3 | SA289 (a) | yes | yes | yes | yes | no |
+| 3 | SA289 (b) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -588,7 +588,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `App.tsx` take page paths from the seam; a lint rule bans `fetch(` in `src/hooks`.
 
   **Slices:**
-  - [ ] (a) The one error parser and its test (Tier 1).
+  - [x] (a) The one error parser and its test (Tier 1). Landed: `useApi.ts` parses only core's
+    `{"error": {code, message, fields?}}` — the retired string-`error` and `errors`-list shapes
+    are unparsed — and `useApiErrors.test.ts` rejects both retired payloads; the contract carries
+    the `sa289-theme-one-error-parser` adoption step and the SA90 fixture re-hashes both files.
+    (b) is next: `useFormSchema` and `usePublicSocialSurface` on `apiRequest`, seam page paths
+    for `useOrgNavigation` and `App.tsx`, the lint ban on `fetch(` in `src/hooks`, and the
+    proposal 53 merge into rule 31.
   - [ ] (b) The two hooks on `apiRequest`, seam page paths, and the lint ban (Tier 2-full: whether
     the seam already carries page paths needs discovery).
 
