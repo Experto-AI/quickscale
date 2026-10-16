@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { useOrgNavigation } from '@/hooks/useOrgNavigation'
 import type { QuickScaleConfig } from '@/hooks/useModules'
-import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 function buildConfig(overrides: Partial<QuickScaleConfig> = {}): QuickScaleConfig {
   return {
@@ -11,6 +11,7 @@ function buildConfig(overrides: Partial<QuickScaleConfig> = {}): QuickScaleConfi
     modules: moduleFlags({ blog: true, listings: true, forms: true }),
     modulePaths: modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -104,10 +105,12 @@ describe('useOrgNavigation', () => {
       members: '/orgs/acme/members',
       settings: '/orgs/acme/settings',
     })
+    // A module's server-rendered document keeps its own URL in saas mode
+    // too; only the SPA page paths move under the org prefix.
     expect(result.current.documentPaths).toMatchObject({
-      blogIndex: '/orgs/acme/blog/',
-      blogFeed: '/orgs/acme/blog/feed/',
-      listingsIndex: '/orgs/acme/listings/',
+      blogIndex: '/blog/',
+      blogFeed: '/blog/feed/',
+      listingsIndex: '/listings/',
     })
   })
 
@@ -123,5 +126,47 @@ describe('useOrgNavigation', () => {
     expect(result.current.currentOrgSlug).toBe('route-org')
     expect(result.current.appPaths.dashboard).toBe('/orgs/route-org')
     expect(result.current.appPaths.settings).toBe('/orgs/route-org/settings')
+  })
+
+  it('follows non-default seam paths for module pages and documents', () => {
+    window.__QUICKSCALE__ = buildConfig({
+      modulePaths: modulePaths({ blog: '/journal', listings: '/catalog' }),
+      moduleDocumentPaths: moduleDocumentPaths({
+        blogIndex: '/journal/archive/',
+        blogFeed: '/journal/archive/feed/',
+        listingsIndex: '/catalog/all/',
+        crmDashboard: '/crm/overview/',
+      }),
+    })
+
+    const { result } = renderHook(() => useOrgNavigation(), {
+      wrapper: wrapperFor('/dashboard'),
+    })
+
+    // Both path families come from their own seam table, never from a
+    // literal or from each other.
+    expect(result.current.appPaths.blog).toBe('/journal')
+    expect(result.current.appPaths.listings).toBe('/catalog')
+    expect(result.current.documentPaths.blogIndex).toBe('/journal/archive/')
+    expect(result.current.documentPaths.blogFeed).toBe('/journal/archive/feed/')
+    expect(result.current.documentPaths.listingsIndex).toBe('/catalog/all/')
+    expect(result.current.documentPaths.crmDashboard).toBe('/crm/overview/')
+  })
+
+  it('composes the saas workspace members from the seam page paths', () => {
+    window.__QUICKSCALE__ = buildConfig({
+      modulePaths: modulePaths({ blog: '/journal', listings: '/catalog' }),
+      owner: { mode: 'saas', currentOrgSlug: 'acme' },
+    })
+
+    const { result } = renderHook(() => useOrgNavigation(), {
+      wrapper: wrapperFor('/orgs/acme'),
+    })
+
+    expect(result.current.appPaths.blog).toBe('/orgs/acme/journal')
+    expect(result.current.appPaths.listings).toBe('/orgs/acme/catalog')
+    // The document destinations keep the module's own document URLs.
+    expect(result.current.documentPaths.blogIndex).toBe('/blog/')
+    expect(result.current.documentPaths.listingsIndex).toBe('/listings/')
   })
 })

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SocialLinkTreePublicPage } from '@/pages/SocialLinkTreePublicPage'
 import type { QuickScaleConfig } from '@/hooks/useModules'
 import type { SocialLinkTreePayload } from '@/hooks/usePublicSocialSurface'
-import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 const analyticsMock = vi.hoisted(() => ({ trackSocialLinkClick: vi.fn() }))
 
@@ -22,6 +22,7 @@ function buildProjectConfig(): QuickScaleConfig {
     modules: moduleFlags({ social: true }),
     modulePaths: modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
     publicPage: {
       module: 'social',
@@ -84,6 +85,7 @@ describe('social link-tree page states', () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
       json: async () =>
         buildPayload({
           layout_variant: 'grid',
@@ -128,6 +130,7 @@ describe('social link-tree page states', () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
       json: async () =>
         buildPayload({
           layout_variant: 'list',
@@ -169,6 +172,7 @@ describe('social link-tree page states', () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
       json: async () =>
         buildPayload({
           status: 'error',

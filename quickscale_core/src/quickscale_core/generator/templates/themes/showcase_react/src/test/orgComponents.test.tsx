@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { OrgStatePanel } from '@/components/orgs/OrgStatePanel'
 import { OrgSwitcher } from '@/components/orgs/OrgSwitcher'
 import type { QuickScaleConfig } from '@/hooks/useModules'
-import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 const fetchMock = vi.fn()
 
@@ -36,6 +36,7 @@ function buildConfig(mode: 'solo' | 'saas', currentOrgSlug: string | null = null
     modules: moduleFlags(),
     modulePaths: modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: { mode, currentOrgSlug },
   }
 }

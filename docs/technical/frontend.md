@@ -80,19 +80,25 @@ It is written by `templates/index.html.j2` and carries:
 | --- | --- |
 | `projectName` | Display name |
 | `modules` | Boolean flag per module: `true` only when the module is installed and its `QUICKSCALE_<MODULE>_ENABLED` is on |
-| `modulePaths` | Server-resolved base paths for `crm`, `social`, `analytics` |
+| `modulePaths` | Server-resolved base paths for `blog`, `listings`, `crm`, `social`, `analytics` |
 | `moduleApiPaths` | Server-resolved module API bases for `orgs`, `billing`, `crm`, `forms`; the theme's API clients read these instead of writing `/<mount>/api` (rule 41) |
+| `moduleDocumentPaths` | Server-resolved module document paths for `blogIndex`, `blogFeed`, `listingsIndex`, and `crmDashboard`; the theme's launcher pages read these instead of writing the module's document paths (rule 31) |
 
 [decisions.md § Module Conventions](decisions.md#module-conventions) rule 31 (SA219) fixes how the
 producer fills `modules` and `modulePaths`: the `quickscale_seam` runtime template tag that ships
 in `quickscale_core.runtime` renders them from the shipped module inventory and the live settings,
 so `modules` carries a key for every shipped module — `true` only
 while the module is installed and its `QUICKSCALE_<MODULE>_ENABLED` is on, `false` when the module
-is absent — and every `modulePaths` entry reverses a named route (`crm` through
+is absent — and every `modulePaths` entry reverses a named route (`blog` and `listings` through
+their manifest-declared `quickscale_blog_shell`/`quickscale_listings_shell` routes rendered in
+`<package>/urls_modules.py`, `crm` through
 the manifest-declared `quickscale_crm_shell` route rendered in `<package>/urls_modules.py`,
 `social` through `social-link-tree`/`social-embeds`, `analytics` through
 `quickscale_analytics:dashboard`), never a
-literal. `moduleApiPaths` resolves the same way (rule 41): each entry reverses a named route inside
+literal. The theme's SPA routes and navigation read those paths instead of writing them. The
+same three-place rule covers `moduleDocumentPaths` (blog's index and feed, listings' index, and
+the CRM dashboard), each resolved from the document's named route through
+`quickscale_seam`'s sibling tag, so the document links follow a module's own URL names. `moduleApiPaths` resolves the same way (rule 41): each entry reverses a named route inside
 the module's `<mount>api/` subtree and is cut at that `api/` boundary, and a module that is absent
 or switched off resolves the always-present `home` route, so every field stays a non-empty string
 for the validator. The public social producers (`templates/social/link_tree.html.j2`,
@@ -116,7 +122,7 @@ social condition before hydrating or linking. The three-place rule below is unch
 
 ### React → Django
 
-The return path is plain `fetch` against same-origin DRF endpoints, wrapped by `hooks/useApi.ts` (TanStack Query for caching, `ApiError` for typed failures, `getApiFieldErrors` for DRF validation payloads). CSRF is read from the `<meta name="csrf-token">` tag emitted by `index.html.j2` and attached as `X-CSRFToken` on every non-GET/HEAD request (`lib/csrf.ts`).
+The return path is same-origin DRF endpoints through one client, `apiRequest` in `hooks/useApi.ts` (TanStack Query for caching, `ApiError` for typed failures, `getApiFieldErrors` for DRF validation payloads); every hook request goes through it — the theme's ESLint configuration fails a raw `fetch(` in `src/hooks` outside that one file — so transport, CSRF, and error handling have one owner. CSRF is read from the `<meta name="csrf-token">` tag emitted by `index.html.j2` and attached as `X-CSRFToken` on every non-GET/HEAD request (`lib/csrf.ts`).
 
 There is no token auth and no separate API origin. Session cookies plus CSRF is the whole authentication story for the SPA.
 

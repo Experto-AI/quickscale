@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../App'
-import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 const fetchMock = vi.fn()
 
@@ -12,14 +12,16 @@ vi.stubGlobal('fetch', fetchMock)
 function applyRuntimeConfig(
   config: {
     modules?: Partial<Record<string, boolean>>
+    modulePaths?: ReturnType<typeof modulePaths>
     owner?: { currentOrgSlug: string | null; mode: 'saas' | 'solo' }
   } = {},
 ) {
   window.__QUICKSCALE__ = {
     projectName: 'QuickScale Test Project',
     modules: moduleFlags({ ...config.modules }),
-    modulePaths: modulePaths({ analytics: '/analytics/' }),
+    modulePaths: config.modulePaths ?? modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: config.owner ?? {
       mode: 'solo',
       currentOrgSlug: null,
@@ -121,6 +123,24 @@ describe('App', () => {
 
     expect(await screen.findByText('Dashboard')).toBeInTheDocument()
     expect(screen.queryByText(/crm/i)).not.toBeInTheDocument()
+  })
+
+  it('takes the dashboard module card links from the seam', () => {
+    applyRuntimeConfig({
+      modules: { blog: true, listings: true },
+      modulePaths: modulePaths({
+        analytics: '/analytics/',
+        blog: '/journal',
+        listings: '/catalog',
+      }),
+    })
+    renderWithProviders(<App />)
+
+    const hrefs = screen.getAllByRole('link').map((link) => link.getAttribute('href'))
+    expect(hrefs).toContain('/journal')
+    expect(hrefs).toContain('/catalog')
+    expect(hrefs).not.toContain('/blog')
+    expect(hrefs).not.toContain('/listings')
   })
 
   it('renders settings page unconditionally at /settings', async () => {

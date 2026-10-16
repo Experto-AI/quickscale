@@ -5,7 +5,7 @@ import { Dashboard } from '@/pages/Dashboard'
 import { NotFound } from '@/pages/NotFound'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { SettingsPage } from '@/pages/SettingsPage'
-import { buildOrgPath, useCurrentOrgSlug, useModules, useOwnerMode } from '@/hooks/useModules'
+import { buildOrgPath, useCurrentOrgSlug, useModules, useOwnerMode, useProjectConfig } from '@/hooks/useModules'
 
 const BlogPage = lazy(() => import('@/pages/BlogPage').then((m) => ({ default: m.BlogPage })))
 const CrmPage = lazy(() => import('@/pages/CrmPage').then((m) => ({ default: m.CrmPage })))
@@ -24,10 +24,18 @@ function LegacySaasRedirect({ path = '' }: { path?: string }) {
   return <Navigate to={currentOrgSlug ? buildOrgPath(currentOrgSlug, path) : '/orgs'} replace />
 }
 
+// A saas workspace mounts each module page beneath /orgs/<slug>/, so its
+// nested route pattern is the module's own seam path, reduced to one segment
+// — never a path written here (rule 31).
+function orgModuleRoute(modulePath: string): string {
+  return modulePath.replace(/^\/+/, '').replace(/\/+$/, '')
+}
+
 function App() {
   const ownerMode = useOwnerMode()
   const currentOrgSlug = useCurrentOrgSlug()
   const modules = useModules()
+  const { modulePaths } = useProjectConfig()
 
   if (ownerMode === 'saas') {
     const defaultOrgDestination = currentOrgSlug ? buildOrgPath(currentOrgSlug) : '/orgs'
@@ -41,15 +49,15 @@ function App() {
             <Route path="/orgs/new" element={<OrgCreatePage />} />
             <Route path="/orgs/:orgSlug" element={<OrgLayout />}>
               <Route index element={<OrgDashboardPage />} />
-              {modules.blog && <Route path="blog" element={<BlogPage />} />}
-              {modules.listings && <Route path="listings" element={<ListingsPage />} />}
+              {modules.blog && <Route path={orgModuleRoute(modulePaths.blog)} element={<BlogPage />} />}
+              {modules.listings && <Route path={orgModuleRoute(modulePaths.listings)} element={<ListingsPage />} />}
               <Route path="members" element={<OrgMembersPage />} />
               <Route path="settings" element={<OrgSettingsPage />} />
             </Route>
-            {modules.crm && <Route path="/crm" element={<CrmPage />} />}
+            {modules.crm && <Route path={modulePaths.crm} element={<CrmPage />} />}
             <Route path="/profile" element={<ProfilePage />} />
-            {modules.blog && <Route path="/blog" element={<LegacySaasRedirect path="blog" />} />}
-            {modules.listings && <Route path="/listings" element={<LegacySaasRedirect path="listings" />} />}
+            {modules.blog && <Route path={modulePaths.blog} element={<LegacySaasRedirect path={modulePaths.blog} />} />}
+            {modules.listings && <Route path={modulePaths.listings} element={<LegacySaasRedirect path={modulePaths.listings} />} />}
             {modules.forms && <Route path="/forms" element={<FormsPage />} />}
             {modules.forms && <Route path="/forms/:slug" element={<FormsPage />} />}
             <Route path="/settings" element={<LegacySaasRedirect path="settings" />} />
@@ -65,9 +73,9 @@ function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
-          {modules.blog && <Route path="/blog" element={<BlogPage />} />}
-          {modules.listings && <Route path="/listings" element={<ListingsPage />} />}
-          {modules.crm && <Route path="/crm" element={<CrmPage />} />}
+          {modules.blog && <Route path={modulePaths.blog} element={<BlogPage />} />}
+          {modules.listings && <Route path={modulePaths.listings} element={<ListingsPage />} />}
+          {modules.crm && <Route path={modulePaths.crm} element={<CrmPage />} />}
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/settings" element={<SettingsPage />} />
           {modules.forms && <Route path="/forms" element={<FormsPage />} />}

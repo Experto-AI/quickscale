@@ -7,11 +7,13 @@
  */
 import type {
   QuickScaleModuleApiPaths,
+  QuickScaleModuleDocumentPaths,
   QuickScaleModulePaths,
   QuickScaleModules,
 } from '@/quickscaleSeam'
 import {
   SEAM_MODULE_API_PATH_KEYS,
+  SEAM_MODULE_DOCUMENT_PATH_KEYS,
   SEAM_MODULE_FLAG_KEYS,
   SEAM_MODULE_PATH_KEYS,
 } from '@/quickscaleSeam.keys'
@@ -27,6 +29,21 @@ const ALL_MODULE_PATHS = Object.fromEntries(
 const ALL_MODULE_API_PATHS = Object.fromEntries(
   SEAM_MODULE_API_PATH_KEYS.map((key) => [key, `/${key}/api/`] as const),
 ) as unknown as QuickScaleModuleApiPaths
+
+//: The shipped documents' default paths, so a test reads a real destination;
+//: a key a future module adds falls back to the generic `/<key>/` shape.
+const DOCUMENT_PATH_DEFAULTS: Partial<Record<string, string>> = {
+  blogIndex: '/blog/',
+  blogFeed: '/blog/feed/',
+  listingsIndex: '/listings/',
+  crmDashboard: '/crm/dashboard/',
+}
+
+const ALL_MODULE_DOCUMENT_PATHS = Object.fromEntries(
+  SEAM_MODULE_DOCUMENT_PATH_KEYS.map(
+    (key) => [key, DOCUMENT_PATH_DEFAULTS[key] ?? `/${key}/`] as const,
+  ),
+) as unknown as QuickScaleModuleDocumentPaths
 
 export function moduleFlags(
   overrides: Partial<QuickScaleModules> = {},
@@ -54,4 +71,10 @@ export function moduleApiPaths(
   overrides: Partial<QuickScaleModuleApiPaths> = {},
 ): QuickScaleModuleApiPaths {
   return { ...ALL_MODULE_API_PATHS, ...overrides }
+}
+
+export function moduleDocumentPaths(
+  overrides: Partial<QuickScaleModuleDocumentPaths> = {},
+): QuickScaleModuleDocumentPaths {
+  return { ...ALL_MODULE_DOCUMENT_PATHS, ...overrides }
 }

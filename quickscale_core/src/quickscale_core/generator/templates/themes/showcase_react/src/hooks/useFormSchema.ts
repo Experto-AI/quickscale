@@ -1,6 +1,6 @@
 // DORMANT: Forms module hook. Inert unless modules.forms is true at runtime. React.lazy-loaded, tree-shaken when unused. Safe to leave dormant.
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, getApiPayloadMessage } from '@/hooks/useApi'
+import { apiRequest } from '@/hooks/useApi'
 import { useProjectConfig } from '@/hooks/useModules'
 
 export interface FormFieldOption {
@@ -59,18 +59,9 @@ function normalizeApiBasePath(apiBasePath: string): string {
 }
 
 async function fetchFormSchema(slug: string, apiBasePath: string): Promise<FormSchema> {
-  const response = await fetch(`${normalizeApiBasePath(apiBasePath)}${slug}/`)
-  if (!response.ok) {
-    // Surface the one QuickScale error shape's message when the endpoint
-    // answers it, and keep the generic text otherwise.
-    const payload = await response.json().catch(() => null)
-    throw new ApiError(
-      response.status,
-      getApiPayloadMessage(payload) ?? `Failed to fetch form schema: ${response.statusText}`,
-      payload,
-    )
-  }
-  return response.json() as Promise<FormSchema>
+  // The shared client owns transport, CSRF, and the one QuickScale error
+  // shape (rule 31); a failed schema fetch carries the shape's message.
+  return apiRequest<FormSchema>(`${normalizeApiBasePath(apiBasePath)}${slug}/`)
 }
 
 export function useFormSchema(slug: string, apiBasePath?: string) {

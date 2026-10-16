@@ -21,12 +21,15 @@ from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
     render_module_api_paths,
+    render_module_document_paths,
     render_module_flags,
     render_module_paths,
     render_seam_declaration,
     render_seam_key_manifest,
     seam_api_path_names,
+    seam_document_path_names,
     seam_module_api_paths,
+    seam_module_document_paths,
     seam_module_flags,
     seam_module_paths,
     seam_modules,
@@ -73,7 +76,15 @@ class TestSeamInventory:
         )
 
     def test_seam_path_names_are_the_theme_surfaces(self) -> None:
-        assert seam_path_names() == ("crm", "social", "analytics")
+        assert seam_path_names() == ("blog", "listings", "crm", "social", "analytics")
+
+    def test_seam_document_path_names_are_the_theme_documents(self) -> None:
+        assert seam_document_path_names() == (
+            "blogIndex",
+            "blogFeed",
+            "listingsIndex",
+            "crmDashboard",
+        )
 
 
 class TestSeamResolution:
@@ -106,10 +117,14 @@ class TestSeamResolution:
     def test_paths_reverse_enabled_routes(self) -> None:
         settings_obj = _settings(
             INSTALLED_APPS=[
+                "quickscale_modules_blog",
+                "quickscale_modules_listings",
                 "quickscale_modules_crm",
                 "quickscale_modules_social",
                 "quickscale_modules_analytics",
             ],
+            QUICKSCALE_BLOG_ENABLED=True,
+            QUICKSCALE_LISTINGS_ENABLED=True,
             QUICKSCALE_CRM_ENABLED=True,
             QUICKSCALE_SOCIAL_ENABLED=True,
             QUICKSCALE_ANALYTICS_ENABLED=True,
@@ -117,6 +132,8 @@ class TestSeamResolution:
         )
         reverse = _RecordingReverse(
             {
+                "quickscale_blog_shell": "/blog",
+                "quickscale_listings_shell": "/listings",
                 "quickscale_crm_shell": "/crm/",
                 "social-link-tree": "/social",
                 "quickscale_analytics:dashboard": "/analytics/",
@@ -127,11 +144,15 @@ class TestSeamResolution:
         paths = seam_module_paths(settings_obj, reverse)
 
         assert paths == {
+            "blog": "/blog",
+            "listings": "/listings",
             "crm": "/crm/",
             "social": "/social",
             "analytics": "/analytics/",
         }
         assert reverse.calls == [
+            "quickscale_blog_shell",
+            "quickscale_listings_shell",
             "quickscale_crm_shell",
             "social-link-tree",
             "quickscale_analytics:dashboard",
@@ -146,8 +167,84 @@ class TestSeamResolution:
 
         paths = seam_module_paths(settings_obj, reverse)
 
-        assert paths == {"crm": "/", "social": "/", "analytics": "/"}
-        assert reverse.calls == ["home", "home", "home"]
+        assert paths == {
+            "blog": "/",
+            "listings": "/",
+            "crm": "/",
+            "social": "/",
+            "analytics": "/",
+        }
+        assert reverse.calls == ["home", "home", "home", "home", "home"]
+
+    def test_document_paths_reverse_enabled_documents(self) -> None:
+        settings_obj = _settings(
+            INSTALLED_APPS=[
+                "quickscale_modules_blog",
+                "quickscale_modules_listings",
+                "quickscale_modules_crm",
+            ],
+            QUICKSCALE_BLOG_ENABLED=True,
+            QUICKSCALE_LISTINGS_ENABLED=True,
+            QUICKSCALE_CRM_ENABLED=True,
+            QUICKSCALE_BLOG_RSS_ENABLED=True,
+        )
+        reverse = _RecordingReverse(
+            {
+                "quickscale_blog:post_list": "/blog/",
+                "quickscale_blog:feed": "/blog/feed/",
+                "quickscale_listings:listing_list": "/listings/",
+                "quickscale_crm:dashboard": "/crm/dashboard/",
+                "home": "/",
+            }
+        )
+
+        paths = seam_module_document_paths(settings_obj, reverse)
+
+        assert paths == {
+            "blogIndex": "/blog/",
+            "blogFeed": "/blog/feed/",
+            "listingsIndex": "/listings/",
+            "crmDashboard": "/crm/dashboard/",
+        }
+        assert reverse.calls == [
+            "quickscale_blog:post_list",
+            "quickscale_blog:feed",
+            "quickscale_listings:listing_list",
+            "quickscale_crm:dashboard",
+        ]
+
+    def test_document_feed_falls_back_to_the_index_when_rss_is_off(self) -> None:
+        settings_obj = _settings(
+            INSTALLED_APPS=["quickscale_modules_blog"],
+            QUICKSCALE_BLOG_ENABLED=True,
+            QUICKSCALE_BLOG_RSS_ENABLED=False,
+        )
+        reverse = _RecordingReverse(
+            {"quickscale_blog:post_list": "/blog/", "home": "/"}
+        )
+
+        paths = seam_module_document_paths(settings_obj, reverse)
+
+        assert paths["blogIndex"] == "/blog/"
+        assert paths["blogFeed"] == "/blog/"
+        assert "quickscale_blog:feed" not in reverse.calls
+
+    def test_disabled_and_absent_documents_fall_back_home(self) -> None:
+        settings_obj = _settings(
+            INSTALLED_APPS=["quickscale_modules_blog"],
+            QUICKSCALE_BLOG_ENABLED=False,
+        )
+        reverse = _RecordingReverse({"home": "/"})
+
+        paths = seam_module_document_paths(settings_obj, reverse)
+
+        assert paths == {
+            "blogIndex": "/",
+            "blogFeed": "/",
+            "listingsIndex": "/",
+            "crmDashboard": "/",
+        }
+        assert reverse.calls == ["home", "home", "home", "home"]
 
     def test_social_path_prefers_link_tree_then_embeds(self) -> None:
         routes = {
@@ -350,6 +447,18 @@ class TestSeamRendering:
         assert render_module_api_paths({"orgs": "/orgs/api/"}, indent="  ") == (
             '  orgs: "/orgs/api/"'
         )
+        assert render_module_document_paths({"blogIndex": "/blog/"}, indent="  ") == (
+            '  blogIndex: "/blog/"'
+        )
+
+    def test_render_module_document_paths_omits_only_the_last_comma(self) -> None:
+        rendered = render_module_document_paths(
+            {"blogIndex": "/blog/", "blogFeed": "/blog/feed/"}
+        )
+
+        assert rendered == (
+            '          blogIndex: "/blog/",\n          blogFeed: "/blog/feed/"'
+        )
 
     def test_render_module_api_paths_omits_only_the_last_comma(self) -> None:
         rendered = render_module_api_paths(
@@ -387,6 +496,9 @@ class TestSeamDeclaration:
         assert _interface_property_names(
             declaration, "QuickScaleModuleApiPaths"
         ) == set(seam_api_path_names())
+        assert _interface_property_names(
+            declaration, "QuickScaleModuleDocumentPaths"
+        ) == set(seam_document_path_names())
 
     def test_declaration_types_each_table(self) -> None:
         """Flags are booleans; both path tables are strings."""
@@ -397,6 +509,8 @@ class TestSeamDeclaration:
         for name in seam_path_names():
             assert f"  {name}: string" in declaration
         for name in seam_api_path_names():
+            assert f"  {name}: string" in declaration
+        for name in seam_document_path_names():
             assert f"  {name}: string" in declaration
 
     def test_declaration_is_a_replaced_managed_file(self) -> None:
@@ -430,6 +544,9 @@ class TestSeamKeyManifest:
         assert _key_array(manifest, "SEAM_MODULE_API_PATH_KEYS") == list(
             seam_api_path_names()
         )
+        assert _key_array(manifest, "SEAM_MODULE_DOCUMENT_PATH_KEYS") == list(
+            seam_document_path_names()
+        )
 
     def test_manifest_states_the_regenerate_contract(self) -> None:
         """It states the regenerate contract and lives at a project-relative path."""
@@ -455,7 +572,30 @@ class TestSeamTemplateTags:
         urlconf = types.ModuleType("_quickscale_runtime_seam_test_urls")
         urlconf.urlpatterns = [
             path("", _view, name="home"),
+            path("blog", _view, name="quickscale_blog_shell"),
+            path("listings", _view, name="quickscale_listings_shell"),
             path("crm", _view, name="quickscale_crm_shell"),
+            path(
+                "blog/",
+                include(
+                    (
+                        [
+                            path("", _view, name="post_list"),
+                            path("feed/", _view, name="feed"),
+                        ],
+                        "quickscale_blog",
+                    )
+                ),
+            ),
+            path(
+                "listings/",
+                include(
+                    (
+                        [path("", _view, name="listing_list")],
+                        "quickscale_listings",
+                    )
+                ),
+            ),
             path("social", _view, name="social-link-tree"),
             path("social/embeds", _view, name="social-embeds"),
             path(
@@ -479,7 +619,15 @@ class TestSeamTemplateTags:
             ),
             path(
                 "crm/",
-                include(([path("api/", _view, name="api_root")], "quickscale_crm")),
+                include(
+                    (
+                        [
+                            path("api/", _view, name="api_root"),
+                            path("dashboard/", _view, name="dashboard"),
+                        ],
+                        "quickscale_crm",
+                    )
+                ),
             ),
             path(
                 "forms/",
@@ -515,6 +663,8 @@ class TestSeamTemplateTags:
             django_settings,
             "INSTALLED_APPS",
             [
+                "quickscale_modules_blog",
+                "quickscale_modules_listings",
                 "quickscale_modules_crm",
                 "quickscale_modules_social",
                 "quickscale_modules_analytics",
@@ -525,6 +675,9 @@ class TestSeamTemplateTags:
             raising=False,
         )
         for name in (
+            "QUICKSCALE_BLOG_ENABLED",
+            "QUICKSCALE_BLOG_RSS_ENABLED",
+            "QUICKSCALE_LISTINGS_ENABLED",
             "QUICKSCALE_CRM_ENABLED",
             "QUICKSCALE_SOCIAL_ENABLED",
             "QUICKSCALE_ANALYTICS_ENABLED",
@@ -545,6 +698,7 @@ class TestSeamTemplateTags:
             "{% load quickscale_seam %}modules: {\n{% seam_module_flags %}\n};"
             "paths: {\n{% seam_module_paths %}\n};"
             "apiPaths: {\n{% seam_module_api_paths %}\n};"
+            "documentPaths: {\n{% seam_module_document_paths %}\n};"
         )
 
         rendered = template.render(Context({}))
@@ -552,8 +706,12 @@ class TestSeamTemplateTags:
         assert "          crm: true," in rendered
         assert "          social: true," in rendered
         assert "          analytics: true," in rendered
+        assert "          blog: true," in rendered
+        assert "          listings: true," in rendered
         # Absent from INSTALLED_APPS: the flag renders false.
-        assert "          blog: false," in rendered
+        assert "          auth: false," in rendered
+        assert '          blog: "/blog",' in rendered
+        assert '          listings: "/listings",' in rendered
         assert '          crm: "/crm",' in rendered
         assert '          social: "/social",' in rendered
         assert '          analytics: "/analytics/"' in rendered
@@ -561,6 +719,10 @@ class TestSeamTemplateTags:
         assert '          billing: "/billing/api/",' in rendered
         assert '          crm: "/crm/api/",' in rendered
         assert '          forms: "/forms/api/"' in rendered
+        assert '          blogIndex: "/blog/",' in rendered
+        assert '          blogFeed: "/blog/feed/",' in rendered
+        assert '          listingsIndex: "/listings/",' in rendered
+        assert '          crmDashboard: "/crm/dashboard/"' in rendered
 
     def test_api_bases_preserve_django_script_prefix(self) -> None:
         from django.urls import get_script_prefix, reverse, set_script_prefix
