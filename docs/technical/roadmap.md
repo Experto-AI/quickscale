@@ -52,8 +52,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
 | SA293 | One test-settings base, one pyproject template, no ticket ids in tests or manifests | 2 | — | Optional |
-| SA290 | One named platform-operator check | 3 | — | Optional |
-| SA297 | `operator_access` checks the platform operator itself | 3 | SA290 | Optional |
+| SA297 | `operator_access` checks the platform operator itself | 3 | — | Optional |
 | SA292 | One command off-refusal helper, service-owned transactions, complete README flags | 3 | — | Optional |
 | SA294 | Record the structured-log-field convention | 3 | — | Optional |
 | SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | SA292 | Optional |
@@ -63,7 +62,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
-Track 3: SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
+Track 3: SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
@@ -72,13 +71,14 @@ Arrows within a track are queue order; the table holds the dependency edges. Cro
 SA191 waits on the 0.89.0 publication; SA291 waited on SA288, which has landed (both rewrote
 the composed `REST_FRAMEWORK`, `runtime/settings.compose_rest_framework`), and SA287 waits on
 SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
-SA296 waits on SA292 because both rewrite harness rule 17; SA297 waits on SA290's helper, and
+SA296 waits on SA292 because both rewrite harness rule 17; SA297 waited on SA290, which has
+landed (its `is_platform_operator` helper is the check `operator_access` will trust), and
 SA294 queues ahead of SA297 so the audit lines it adds follow the recorded log convention;
 SA277 waits on SA191's cutover, whose evidence draws the line between what `beta_migration`
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA286 (a), SA293, SA290, SA292, and
+**Parallel start.** SA286 (a), SA293, SA292, and
 SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 sits ahead
 of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -106,7 +106,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA286 (a) | yes | no | yes | no | yes |
 | 2 | SA293 | yes | yes | yes | yes | no |
-| 3 | SA290 | yes | yes | yes | yes | no |
+| 3 | SA294 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -559,26 +559,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA289 — Theme requests go through `apiRequest` and parse one error shape.**
 
-- [ ] **SA290 — One named platform-operator check.**
-
-  Closes coherence `superuser-escape-spelling` (item 30) and merges coherence §6 proposal 54 into
-  decisions rule 44. Answers item 30's team question (maintainer decision, 2026-10-16, option B):
-  forms' cross-tenant read is a different question from an org role, so it gets a named orgs
-  helper, not `HasOrgRole`.
-
-  **Context:** "is this user a platform operator?" is spelled seven times: forms' private
-  `_is_superuser` (`forms/views.py:173`), `HasOrgRole`'s escape (`permissions.py:36–41`), and
-  orgs' `middleware.py:254`, `debug_views.py:44,86`, `admin.py:71,92`, and `_debug.py:69,136`.
-  `HasOrgRole` answers "may this user act inside this organization?"; forms asks "may this user
-  read across every organization?", so routing forms through `HasOrgRole` would change what
-  superusers can do.
-
-  **Acceptance:** rule 44 carries proposal 54. Orgs exports one public `is_platform_operator(user)`
-  (today: an authenticated superuser); forms and every orgs copy call it, with behaviour
-  unchanged; forms' and orgs' authorization tests pass unchanged. The harness bans raw
-  `is_superuser` reads in module source outside that helper, with forms' old predicate as the
-  control. **Slices:** one (Tier 2-fast: the call sites are enumerated and the behaviour is
-  unchanged).
+- [x] **SA290 — One named platform-operator check.**
 
 - [ ] **SA297 — `operator_access` checks the platform operator itself.**
 

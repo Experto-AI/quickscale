@@ -1269,3 +1269,72 @@ def test_role_check_comprehension_walrus_retains_prestate() -> None:
         "filters OrganizationMembership by string role 'owner' outside orgs" in violation
         for violation in _violations(checker.rule_44_role_checks, nested_comprehension)
     )
+
+
+def test_platform_operator_read_controls() -> None:
+    module = _golden_module()
+    assert _violations(checker.rule_44_role_checks, module) == []
+
+    forms_old_predicate = _with_files(
+        module,
+        views=(
+            "class FormsAdminApiMixin:\n"
+            "    def _is_superuser(self) -> bool:\n"
+            '        return bool(getattr(self.request.user, "is_superuser", False))\n'
+        ),
+    )
+    assert any(
+        "reads is_superuser outside orgs' is_platform_operator helper" in violation
+        for violation in _violations(checker.rule_44_role_checks, forms_old_predicate)
+    )
+
+    attribute_read = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n\ndef operator(user):\n    return user.is_superuser\n'
+        ),
+    )
+    assert any(
+        "reads is_superuser outside orgs' is_platform_operator helper" in violation
+        for violation in _violations(checker.rule_44_role_checks, attribute_read)
+    )
+
+    helper_call = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            "from quickscale_modules_orgs.permissions import is_platform_operator\n\n\n"
+            "def operator(user):\n"
+            "    return is_platform_operator(user)\n"
+        ),
+    )
+    assert _violations(checker.rule_44_role_checks, helper_call) == []
+
+    helper = _with_files(
+        _golden_module("orgs"),
+        **{
+            "permissions.py": (
+                '"""Org permissions."""\n\n\n'
+                "def is_platform_operator(user):\n"
+                '    return bool(getattr(user, "is_superuser", False))\n'
+            )
+        },
+    )
+    assert _violations(checker.rule_44_role_checks, helper) == []
+
+    outside_helper = _with_files(
+        _golden_module("orgs"),
+        **{
+            "permissions.py": (
+                '"""Org permissions."""\n\n\n'
+                "def is_platform_operator(user):\n"
+                '    return bool(getattr(user, "is_superuser", False))\n\n\n'
+                "def resolve(user):\n"
+                '    return bool(getattr(user, "is_superuser", False))\n'
+            )
+        },
+    )
+    assert any(
+        "reads is_superuser outside orgs' is_platform_operator helper" in violation
+        for violation in _violations(checker.rule_44_role_checks, outside_helper)
+    )

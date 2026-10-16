@@ -6,6 +6,7 @@ from django import template
 from django.http import HttpRequest
 
 from .._constants import DEBUG_AS_ORG_SESSION_KEY
+from ..permissions import is_platform_operator
 
 register = template.Library()
 
@@ -23,6 +24,6 @@ def debug_as_active(context: dict) -> bool:
     request: HttpRequest | None = context.get("request")
     if request is None:
         return False
-    if not getattr(request.user, "is_superuser", False):
+    if not is_platform_operator(request.user):
         return False
     return DEBUG_AS_ORG_SESSION_KEY in request.session

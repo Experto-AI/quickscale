@@ -57,7 +57,7 @@ from quickscale_modules_orgs.current_org import (
     org_scope,
 )
 from quickscale_modules_orgs.models import OrgRole
-from quickscale_modules_orgs.permissions import HasOrgRole
+from quickscale_modules_orgs.permissions import HasOrgRole, is_platform_operator
 
 logger = logging.getLogger(__name__)
 
@@ -170,15 +170,6 @@ class FormsAdminApiMixin:
     # retained-role helpers
     # ------------------------------------------------------------------
 
-    def _is_superuser(self) -> bool:
-        """Return True when the requesting user is a superuser.
-
-        Superusers are the only role permitted cross-tenant SELECT via
-        ``operator_access``.  Regular members are always scoped to their
-        active org and fail-closed without one.
-        """
-        return bool(getattr(self.request.user, "is_superuser", False))
-
     def _get_org_bound_queryset(self, model: Any) -> Any:
         """Return a fail-closed base queryset for the requesting user's role.
 
@@ -194,7 +185,7 @@ class FormsAdminApiMixin:
         values in submissions) should continue to use ``all_objects`` in the
         ``Prefetch`` queryset argument regardless of user role.
         """
-        if self._is_superuser():
+        if is_platform_operator(self.request.user):
             return model.all_objects.all()
         org_id = get_current_org_id()
         if org_id is None:
@@ -215,7 +206,7 @@ class FormsAdminApiMixin:
 
         For non-superuser callers this is a pass-through — no wrapping.
         """
-        if not self._is_superuser():
+        if not is_platform_operator(self.request.user):
             return view_method(*args, **kwargs)
         with transaction.atomic():
             with operator_access(
@@ -505,7 +496,7 @@ class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
     def partial_update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         # superuser get_object uses operator_access for
         # cross-tenant read; regular staff uses scoped queryset.
-        if self._is_superuser():
+        if is_platform_operator(self.request.user):
             instance = self._with_superuser_operator_access(self.get_object)
         else:
             instance = self.get_object()
@@ -540,7 +531,7 @@ class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
 
     def get(self, request: Request, pk: int, *args: Any, **kwargs: Any) -> HttpResponse:
         # wrap the entire method in operator_access for superuser
-        if self._is_superuser():
+        if is_platform_operator(self.request.user):
             return self._with_superuser_operator_access(
                 self._export_csv, request, pk, *args, **kwargs
             )

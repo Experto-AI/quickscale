@@ -42,6 +42,7 @@ from .current_org import (
     set_current_org_id,
 )
 from .models import Organization, OrganizationMembership
+from .permissions import is_platform_operator
 
 EXEMPT_PATH_PREFIXES = ("/accounts/", "/admin/", "/healthcheck/")
 
@@ -182,7 +183,7 @@ class TenantMiddleware:
         if active_org_id is not None:
             organization = self._resolve_session_org(active_org_id)
             if organization is not None:
-                if not self._is_superuser(request.user) and not self._is_org_member(
+                if not is_platform_operator(request.user) and not self._is_org_member(
                     request.user, organization
                 ):
                     request.session.pop(ACTIVE_ORG_SESSION_KEY, None)
@@ -249,10 +250,6 @@ class TenantMiddleware:
     def _is_authenticated_user(request: HttpRequest) -> bool:
         user = getattr(request, "user", None)
         return bool(user is not None and user.is_authenticated)
-
-    @staticmethod
-    def _is_superuser(user: object) -> bool:
-        return bool(getattr(user, "is_superuser", False))
 
     @staticmethod
     def _resolve_debug_org(request: OrganizationRequest) -> Organization | None:

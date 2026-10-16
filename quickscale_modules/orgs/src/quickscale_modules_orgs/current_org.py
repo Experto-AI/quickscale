@@ -566,7 +566,7 @@ def operator_access(*, reason: str) -> Iterator[None]:
     on entry and restores it on exit, so nested ``operator_access()``
     use correctly preserves the outer scope.
 
-    **Superuser-gated:** callers must verify ``user.is_superuser``
+    **Superuser-gated:** callers must verify ``is_platform_operator(user)``
     before entering this context manager.  Views and management commands
     are responsible for this check (see the existing pattern in
     :func:`_debug.set_debug_as_org`).

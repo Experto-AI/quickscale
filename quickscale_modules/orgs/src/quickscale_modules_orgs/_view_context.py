@@ -13,6 +13,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 
 from quickscale_modules_orgs.models import Organization, OrganizationMembership, OrgRole
+from quickscale_modules_orgs.permissions import is_platform_operator
 
 
 def _is_saas_mode() -> bool:
@@ -79,7 +80,7 @@ class OrganizationContextMixin:
         if self._acting_membership_loaded:
             return self._acting_membership
 
-        if getattr(self.request.user, "is_superuser", False):
+        if is_platform_operator(self.request.user):
             self._acting_membership_loaded = True
             self._acting_membership = None
             return None
@@ -92,7 +93,7 @@ class OrganizationContextMixin:
         return self._acting_membership
 
     def acting_user_is_owner_like(self) -> bool:
-        if getattr(self.request.user, "is_superuser", False):
+        if is_platform_operator(self.request.user):
             return True
         acting_membership = self.get_acting_membership()
         return bool(
