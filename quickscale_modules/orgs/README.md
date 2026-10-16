@@ -93,7 +93,12 @@ and `get_tenant_models()`. The module also installs the always-on RLS boot guard
 
 `current_org.py` publishes the execution-context surface:
 
-- `org_scope()` and `operator_access()` context managers.
+- `org_scope()` and the `operator_access(user=…, reason=…)` context manager, which verifies the
+  platform operator itself and refuses — with an audit log line — a user for whom
+  `is_platform_operator` is false, before the elevation.
+- `operator_access_for_command(command=…, reason=…)`, the command-only variant that records the
+  command and its reason in the audit log; it is importable only from `management/commands/`
+  (rule 44).
 - `get_current_org()` / `get_current_org_id()` / `set_current_org_id()`.
 - `get_client_ip()` and `ClientIPThrottleMixin`, used by module throttles.
 

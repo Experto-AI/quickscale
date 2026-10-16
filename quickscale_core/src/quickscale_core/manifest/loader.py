@@ -62,6 +62,7 @@ from quickscale_core.manifest.loader_sections import (
     _parse_ci_environment,
     _parse_contract_vintage,
     _parse_managed_files,
+    _parse_operations,
     _parse_project_contract_vintage,
     _parse_required_modules,
     _validate_declared_minimum,
@@ -77,6 +78,7 @@ from quickscale_core.manifest.schema import (
     ContractVintage,
     ManagedFileDeclaration,
     ModuleManifest,
+    ModuleOperations,
     ProjectContractStep,
     ProjectContractVintage,
 )
@@ -250,6 +252,7 @@ _TOP_LEVEL_MANIFEST_KEYS = frozenset(
         "dependencies",
         "managed_files",
         "ci_env",
+        "operations",
         "derivation",
         "contract_vintage",
     }
@@ -391,6 +394,11 @@ def load_manifest(
         data, module_name, {**mutable_options, **immutable_options}
     )
 
+    # Parse operations declarations (additive; None when absent)
+    operations = _parse_operations(
+        data, module_name, {**mutable_options, **immutable_options}
+    )
+
     # Parse derivation section (T2.3+; additive; every field defaults to [])
     derivation = _parse_derivation_section(
         data, module_name, {**mutable_options, **immutable_options}
@@ -411,6 +419,7 @@ def load_manifest(
         dependencies=dependencies,
         managed_files=managed_files,
         ci_env=ci_env,
+        operations=operations,
         derivation_rules=derivation.get("normalization_rules", []),
         validation_rules=derivation.get("validation_rules", []),
         legacy_aliases=derivation.get("legacy_aliases", []),
@@ -518,6 +527,7 @@ __all__ = [
     "ManagedFileDeclaration",
     "ManifestError",
     "ModuleManifest",
+    "ModuleOperations",
     "ModuleVersionMismatchError",
     "NORMALIZATION_RULE_KINDS",
     "OPTION_TYPE_LABELS",
@@ -546,6 +556,7 @@ __all__ = [
     "_parse_contract_vintage",
     "_parse_derivation_section",
     "_parse_managed_files",
+    "_parse_operations",
     "_parse_project_contract_vintage",
     "_parse_required_modules",
     "_parse_retired_options",

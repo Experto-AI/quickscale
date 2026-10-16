@@ -134,7 +134,7 @@ class TestSocialIsolation:
         finally:
             _reset_org_context()
 
-    def test_operator_manager_escape_hatch(self, org_a, org_b) -> None:
+    def test_operator_manager_escape_hatch(self, org_a, org_b, superuser) -> None:
         """``all_objects`` with ``operator_access`` should return all rows
         regardless of org.
 
@@ -167,7 +167,7 @@ class TestSocialIsolation:
                 organization=org_b,
             )
 
-            with operator_access(reason="all_objects cross-org read"):
+            with operator_access(user=superuser, reason="all_objects cross-org read"):
                 all_rows = SocialLink.all_objects.all()
                 assert all_rows.count() == 2
         finally:

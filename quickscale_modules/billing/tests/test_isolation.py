@@ -219,6 +219,7 @@ class TestBillingIsolation:
 @pytest.mark.django_db(transaction=True)
 def test_operator_access_sees_all_organizations_tenant_rows(
     billing_tenants: _Tenants,
+    superuser,
 ) -> None:
     """``all_objects`` inside ``operator_access()`` sees cross-org rows."""
     tenants = billing_tenants
@@ -226,7 +227,9 @@ def test_operator_access_sees_all_organizations_tenant_rows(
     rows_b = _create_tenant_rows(tenants, org=tenants.org_b, suffix="org-b")
 
     with transaction.atomic():
-        with operator_access(reason="billing cross-tenant operator read"):
+        with operator_access(
+            user=superuser, reason="billing cross-tenant operator read"
+        ):
             for model in _TENANT_MODELS:
                 visible = set(
                     model.all_objects.filter(

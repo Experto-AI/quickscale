@@ -188,7 +188,7 @@ def test_social_embed_can_be_created_with_organization() -> None:
 
 
 @django_db
-def test_social_item_tenant_manager_auto_scopes_to_org_context() -> None:
+def test_social_item_tenant_manager_auto_scopes_to_org_context(superuser) -> None:
     """The TenantManager should auto-scope queries to the current org context."""
     from quickscale_modules_orgs.current_org import (
         operator_access,
@@ -235,7 +235,7 @@ def test_social_item_tenant_manager_auto_scopes_to_org_context() -> None:
     # requires current_org_id = organization_id, so cross-org reads need
     # operator_access to extend the FOR SELECT sub-policy.
     set_current_org_id(org_b.id)
-    with operator_access(reason="verify all_objects cross-org read"):
+    with operator_access(user=superuser, reason="verify all_objects cross-org read"):
         all_links = list(SocialLink.all_objects.filter(is_published=True))
     assert len(all_links) == 2
 

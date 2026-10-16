@@ -56,7 +56,8 @@
       "sa274-crm-theme-stats": "Regenerated 2026-10-15 \u2014 the showcase_react CRM workspace's stat cards read the CRM stats endpoint (SA274): frontend/src/pages/CrmPage.tsx fetches `crm/api/stats/` through useApiData and reads the four organization totals instead of inferring counts from the bare-list responses, which always yielded 0. 1 fixture hash updated per variant: frontend/src/pages/CrmPage.tsx. All unrelated paths, hashes, and modes remain authoritative.",
       "sa289": "Regenerated 2026-10-16 \u2014 the theme's useApi parser reads only the one QuickScale error shape {\"error\": {\"code\", \"message\", \"fields\"}} and no longer parses the retired pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes (SA289 slice a). 2 fixture hashes updated per variant: frontend/src/hooks/useApi.ts, frontend/src/test/useApiErrors.test.ts (all 3 variants). All unrelated paths, hashes, and modes remain authoritative.",
       "sa289-b-theme-request-client-and-seam-paths": "Regenerated 2026-10-16 \u2014 the theme's hooks send every request through the shared apiRequest client, the SPA's blog, listings, and crm page routes, navigation, and Dashboard card links take their paths from the seam's modulePaths (which gains blog and listings entries), and the launcher pages' server-rendered document links take theirs from the new moduleDocumentPaths table (blogIndex, blogFeed, listingsIndex, crmDashboard) in every mode, so no module path is written by hand; the theme's ESLint config rejects a raw fetch( in src/hooks outside useApi.ts (SA289 slice b). 30 fixture hashes updated per variant: frontend/eslint.config.js, frontend/src/App.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/usePublicSocialSurface.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/Dashboard.tsx, frontend/src/quickscaleSeam.d.ts, frontend/src/quickscaleSeam.keys.ts, the frontend/src/test suite (App, AppRoutes, FormRenderer, PublicSocialPages, RootDispatch, csrf, formFields, layoutComponents, orgComponents, orgListPage, seamFixtures, settingsPage, socialLinkTreeStates, useModules, useOrgNavigation, useOrgs, validateQuickScaleSeam), and templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa286": "Regenerated 2026-10-16 \u2014 the generated .github/workflows/ci.yml no longer carries the module credential placeholders: it loads the managed .github/quickscale-ci-env file in one step, and that new generated path renders each module's declared ci_env placeholders (SA286). New generated path: .github/quickscale-ci-env; re-hashed per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative."
+      "sa286": "Regenerated 2026-10-16 \u2014 the generated .github/workflows/ci.yml no longer carries the module credential placeholders: it loads the managed .github/quickscale-ci-env file in one step, and that new generated path renders each module's declared ci_env placeholders (SA286). New generated path: .github/quickscale-ci-env; re-hashed per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa286-b-managed-operations-page": "Regenerated 2026-10-16 \u2014 OPERATIONS.md links one managed quickscale-operations.md page instead of carrying the billing module's Stripe operations text (SA286 slice b): the new generated path renders each installed module's declared operations text, with the declared values, the core contract tokens, and the configured options resolved. New generated path: quickscale-operations.md; re-hashed per variant: OPERATIONS.md. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -128,7 +129,7 @@
     },
     "OPERATIONS.md": {
       "mode": "644",
-      "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
+      "sha256": "cf70987a143a1d3846af31ffaaa9aef113a6ad1dedb366367673ccda1e9dc20c"
     },
     "README.md": {
       "mode": "644",
@@ -653,6 +654,10 @@
     ".github/quickscale-ci-env": {
       "mode": "644",
       "sha256": "a131c83dc09a088bacf352d9c7a7194f2cb5c7c48c42df90e4917089e50d4387"
+    },
+    "quickscale-operations.md": {
+      "mode": "644",
+      "sha256": "ae594592dfa4dfed170b21d12439000b86deb75243ccf1c9fe3e6373495da6f3"
     }
   },
   "react_empty": {
@@ -694,7 +699,7 @@
     },
     "OPERATIONS.md": {
       "mode": "644",
-      "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
+      "sha256": "cf70987a143a1d3846af31ffaaa9aef113a6ad1dedb366367673ccda1e9dc20c"
     },
     "README.md": {
       "mode": "644",
@@ -1219,6 +1224,10 @@
     ".github/quickscale-ci-env": {
       "mode": "644",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "quickscale-operations.md": {
+      "mode": "644",
+      "sha256": "c43df870f867f4d59e7d5e5251f7381ec20c229e57703b85e8a9dff2fa0b65e5"
     }
   },
   "react_selected": {
@@ -1260,7 +1269,7 @@
     },
     "OPERATIONS.md": {
       "mode": "644",
-      "sha256": "cdd16ef1f79ea97c12f9caf4747842f8d84e5cf108b35735d0800b45f83e0038"
+      "sha256": "cf70987a143a1d3846af31ffaaa9aef113a6ad1dedb366367673ccda1e9dc20c"
     },
     "README.md": {
       "mode": "644",
@@ -1785,6 +1794,10 @@
     ".github/quickscale-ci-env": {
       "mode": "644",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "quickscale-operations.md": {
+      "mode": "644",
+      "sha256": "c43df870f867f4d59e7d5e5251f7381ec20c229e57703b85e8a9dff2fa0b65e5"
     }
   }
 }

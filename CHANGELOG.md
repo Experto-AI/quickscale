@@ -878,6 +878,16 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **Security and audit events log structured fields.** Operator access, a tenancy refusal, and
     their like carry their context as `extra=` fields on the log record, and every other module
     log line stays message-only.
+  - **The generated operations guide carries module-owned details through one managed page.**
+    `OPERATIONS.md` links the hash-tracked `quickscale-operations.md` page instead of restating
+    the billing module's Stripe version, webhook events, and endpoint, and each module declares
+    its own operations text in `module.yml`, so a module release that changes those values
+    reaches a project through `quickscale apply` or `quickscale update` without editing a
+    user-owned file.
+  - **Operator access verifies the operator itself.** `operator_access(user=..., reason=...)`
+    checks the platform operator before elevating a cross-tenant read and refuses — with an audit
+    log line — any other user, and management commands enter through a command-only variant that
+    records the command and its reason.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

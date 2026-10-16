@@ -23,6 +23,7 @@ import yaml
 from click.testing import CliRunner
 
 from quickscale_core import __version__ as CORE_VERSION
+from quickscale_core.contracts.module_options import STRIPE_API_VERSION
 from quickscale_core.project_state import (
     ProjectStateManager,
     hash_managed_file,
@@ -281,6 +282,7 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
     assert "frontend/src/quickscaleSeam.d.ts" in committed_paths
     assert "frontend/src/quickscaleSeam.keys.ts" in committed_paths
     assert ".github/quickscale-ci-env" in committed_paths
+    assert "quickscale-operations.md" in committed_paths
 
     # The managed CI environment file renders from the freshly pulled
     # embedded manifests' ci_env declarations (SA286).
@@ -290,6 +292,14 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
     assert "QUICKSCALE_BILLING_WEBHOOK_SECRET=whsec_test_ci" in ci_environment
     assert "RESEND_API_KEY=re_test_ci" in ci_environment
 
+    # The managed operations page renders from the freshly pulled embedded
+    # manifests' operations declarations (SA286), with the core contract
+    # token resolved.
+    operations_page = (project / "quickscale-operations.md").read_text()
+    assert "## Stripe Billing" in operations_page
+    assert "invoice.paid" in operations_page
+    assert STRIPE_API_VERSION in operations_page
+
     state = StateManager(project).load()
     assert state is not None
     for path_str in (
@@ -298,6 +308,7 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
         "frontend/src/quickscaleSeam.d.ts",
         "frontend/src/quickscaleSeam.keys.ts",
         ".github/quickscale-ci-env",
+        "quickscale-operations.md",
     ):
         assert path_str in state.managed_files
         assert state.managed_files[path_str].hash == hash_managed_file(

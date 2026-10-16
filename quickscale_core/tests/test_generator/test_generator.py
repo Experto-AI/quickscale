@@ -1050,6 +1050,9 @@ class TestSa90MappingDrivenGeneration:
         from quickscale_core.generator.ci_environment import (
             CI_ENVIRONMENT_RELATIVE_PATH,
         )
+        from quickscale_core.generator.operations_page import (
+            OPERATIONS_PAGE_RELATIVE_PATH,
+        )
         from quickscale_core.project_state_hashes import DEFAULT_MANAGED_PROJECT_PATHS
         from quickscale_core.runtime.seam import (
             SEAM_DECLARATION_RELATIVE_PATH,
@@ -1064,10 +1067,12 @@ class TestSa90MappingDrivenGeneration:
         assert SEAM_DECLARATION_RELATIVE_PATH in mapping
         assert SEAM_KEY_MANIFEST_RELATIVE_PATH in mapping
         assert CI_ENVIRONMENT_RELATIVE_PATH in mapping
+        assert OPERATIONS_PAGE_RELATIVE_PATH in mapping
         assert DEFAULT_MANAGED_PROJECT_PATHS == (
             SEAM_DECLARATION_RELATIVE_PATH,
             SEAM_KEY_MANIFEST_RELATIVE_PATH,
             CI_ENVIRONMENT_RELATIVE_PATH,
+            OPERATIONS_PAGE_RELATIVE_PATH,
         )
 
         gen = ProjectGenerator(theme="showcase_react")
@@ -1138,6 +1143,61 @@ class TestSa90MappingDrivenGeneration:
             text=True,
         )
         assert listed.stdout.strip() == CI_ENVIRONMENT_RELATIVE_PATH
+
+    def test_managed_operations_page_is_emitted_verbatim(self, tmp_path: Path) -> None:
+        """Generation emits the managed operations page byte-for-byte (SA286).
+
+        The page renders from the shipped manifests' ``operations``
+        declarations, the same content ``apply``/``update``/``remove``
+        regenerate under the managed-file hash guard, so the user-owned
+        ``OPERATIONS.md`` link reads one content in every case.
+        """
+        from quickscale_core.generator.operations_page import (
+            OPERATIONS_PAGE_RELATIVE_PATH,
+            render_operations_page,
+        )
+
+        gen = ProjectGenerator(theme="showcase_react")
+        output = tmp_path / "operations_page"
+        gen.generate("validname", output)
+
+        emitted = output / OPERATIONS_PAGE_RELATIVE_PATH
+        assert emitted.read_text() == render_operations_page(None)
+
+        empty_output = tmp_path / "operations_page_empty"
+        ProjectGenerator(theme="showcase_react", selected_modules=[]).generate(
+            "validname", empty_output
+        )
+        assert (empty_output / OPERATIONS_PAGE_RELATIVE_PATH).read_text() == (
+            render_operations_page([])
+        )
+
+    def test_managed_operations_page_is_tracked_by_git(self, tmp_path: Path) -> None:
+        """The generated ignore rules do not exclude the managed page (SA286).
+
+        The user-owned ``OPERATIONS.md`` links ``quickscale-operations.md``,
+        so the project's own ``.gitignore`` must not treat it as an artifact:
+        a fresh project committed with ``git add -A`` has to carry the page,
+        or the link dangles for anyone reading the repository.
+        """
+        from quickscale_core.generator.operations_page import (
+            OPERATIONS_PAGE_RELATIVE_PATH,
+        )
+
+        gen = ProjectGenerator(theme="showcase_react")
+        output = tmp_path / "operations_page_tracked"
+        gen.generate("validname", output)
+
+        subprocess.run(["git", "init", "-q"], cwd=output, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=output, check=True)
+        listed = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", OPERATIONS_PAGE_RELATIVE_PATH],
+            cwd=output,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert listed.stdout.strip() == OPERATIONS_PAGE_RELATIVE_PATH
 
 
 class TestSa90ExactManifestParity:

@@ -1559,6 +1559,149 @@ ci_env:
 
 
 # ---------------------------------------------------------------------------
+# Operations declarations (SA286)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadManifestOperations:
+    """Tests for the operations section in load_manifest."""
+
+    def test_no_operations_section(self) -> None:
+        """Manifests without operations produce None."""
+        manifest = load_manifest("name: mymod\nversion: '1.0.0'\n", "mymod")
+        assert manifest.operations is None
+
+    def test_valid_operations_section(self) -> None:
+        """Title, text, and declared values parse (a list value stays a tuple)."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+operations:
+  title: "Vendor Billing"
+  values:
+    endpoint: /vendor/webhooks/
+    events:
+      - one.done
+      - two.failed
+  text: |
+    Talk to the vendor at {endpoint}; subscribe to {events}.
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.operations is not None
+        assert manifest.operations.title == "Vendor Billing"
+        assert manifest.operations.values == {
+            "endpoint": "/vendor/webhooks/",
+            "events": ("one.done", "two.failed"),
+        }
+        assert "{endpoint}" in manifest.operations.text
+
+    def test_operations_section_requires_title_and_text(self) -> None:
+        """A missing or empty title or text fails the load."""
+        with pytest.raises(ManifestError, match="operations.title"):
+            load_manifest(
+                "name: mymod\nversion: '1.0.0'\noperations:\n  text: Body\n",
+                "mymod",
+            )
+        with pytest.raises(ManifestError, match="operations.text"):
+            load_manifest(
+                "name: mymod\nversion: '1.0.0'\noperations:\n  title: Title\n",
+                "mymod",
+            )
+
+    def test_operations_not_mapping_raises(self) -> None:
+        """operations that is not a mapping is refused."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\noperations: not_a_mapping\n"
+        with pytest.raises(ManifestError, match="'operations' must be a mapping"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_operations_unknown_key_raises(self) -> None:
+        """A misspelled key cannot load and contribute nothing."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "operations:\n  title: Title\n  text: Body\n  valuez: {}\n"
+        )
+        with pytest.raises(ManifestError, match="unknown key 'valuez'"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_operations_mixed_type_unknown_key_is_refused(self) -> None:
+        """Heterogeneous unknown keys fail closed, never a bare TypeError."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "operations:\n  title: Title\n  text: Body\n  1: x\n  extra: y\n"
+        )
+        with pytest.raises(ManifestError, match="unknown key"):
+            load_manifest(yaml_content, "mymod")
+
+    @pytest.mark.parametrize("value", ["''", "null", "5", "[]", "[ok, '']"])
+    def test_operations_invalid_value_raises(self, value: str) -> None:
+        """A declared value must be a non-empty string or list of them."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "operations:\n  title: Title\n  text: Body\n"
+            f"  values:\n    endpoint: {value}\n"
+        )
+        with pytest.raises(ManifestError, match="operations.values.endpoint"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_operations_value_name_must_be_a_token(self) -> None:
+        """A value name that cannot form one {name} token is refused."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "operations:\n  title: Title\n  text: Body\n"
+            "  values:\n    'bad name': x\n"
+        )
+        with pytest.raises(ManifestError, match="token names"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_operations_value_cannot_shadow_an_option(self) -> None:
+        """A declared value name may not shadow a declared option."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    secret_env_var:
+      type: string
+      default: MY_SECRET
+      django_setting: MY_SECRET_ENV_VAR
+      description: "Environment variable holding the secret."
+      validation: {}
+  immutable: {}
+operations:
+  title: Title
+  text: "Secret lives in {secret_env_var}."
+  values:
+    secret_env_var: shadowed
+"""
+        with pytest.raises(ManifestError, match="would shadow"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_operations_value_cannot_shadow_a_core_token(self) -> None:
+        """A declared value name may not shadow a core contract token."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "operations:\n  title: Title\n  text: Body\n"
+            "  values:\n    stripe_api_version: copied\n"
+        )
+        with pytest.raises(ManifestError, match="would shadow"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_shipped_billing_manifest_declares_its_operations_text(self) -> None:
+        """The billing module owns the operations text the guide links."""
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        manifest = load_manifest_from_path(
+            repo_root / "quickscale_modules" / "billing" / "module.yml"
+        )
+        assert manifest.operations is not None
+        assert manifest.operations.title == "Stripe Billing"
+        assert manifest.operations.values["webhook_endpoint"] == (
+            "/billing/webhooks/stripe/"
+        )
+        assert "invoice.paid" in manifest.operations.values["webhook_events"]
+        assert "{stripe_api_version}" in manifest.operations.text
+
+
+# ---------------------------------------------------------------------------
 # Retired implies key and required_modules parsing
 # ---------------------------------------------------------------------------
 

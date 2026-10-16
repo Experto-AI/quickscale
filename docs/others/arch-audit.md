@@ -8,7 +8,10 @@ Audited: `30b0b6b1` (`v89`) · 2026-10-16 · working tree clean · prompt: deep-
 > the three open findings, and each remediation went through the fix-regression audit.
 > **Bottom line:** no new findings, and no prior finding is resolved. All three are **still
 > open, each with a much narrower residual**:
-> - Finding 1 is down to one label-keyed branch and an unlifted decision rule.
+> - Finding 1 is down to one label-keyed branch and an unlifted decision rule. *(Same-day
+>   follow-up: SA286 rendered the module CI environment values and the module-owned operations
+>   text into the managed `.github/quickscale-ci-env` and `quickscale-operations.md` files that
+>   the user-owned files reference once; that half of option 2 is landed.)*
 > - Finding 2 is down to theme pages and other non-seam user-owned files. Its step rate did not
 >   fall.
 > - Finding 3 is down to one small relocation, minted by SA280 (b). *(Same-day follow-up:
@@ -306,7 +309,9 @@ items:
   files (`settings/modules.py`, `urls_modules.py`, and the two theme seam files). Module
   contracts still land in user-owned emitted files, so every such contract change becomes a
   hand-applied prose step per project. The user-owned files involved are theme pages, the
-  generated CI workflow, and the operations guide.
+  generated CI workflow, and the operations guide. *(Follow-up: SA286 added the managed
+  `.github/quickscale-ci-env` and `quickscale-operations.md`, so the managed set is six paths
+  and the CI workflow and operations guide carry no module value.)*
 - **Evidence** (re-verified this pass unless marked new):
   - The managed sets are `project_state_hashes.py:38–50`: two wiring paths and two seam paths
     (new).
@@ -356,23 +361,24 @@ items:
 - **Options:**
   1. ~~**Path-enumerated adoption gate**~~: superseded (SA207/SA211).
   2. **Extend the managed pattern.** ~~Django side~~ (SA258, SA261), ~~theme seam types~~
-     (SA276). **Remaining:** route module-coupled page data through seam-declared hooks that live
-     in managed files, so pages consume hooks, not endpoints. Render module-owned CI environment
-     values and operations text into managed include files that the user-owned files reference
-     once. Effort M. **Live option.**
+     (SA276), ~~module-owned CI environment values and operations text rendered into managed
+     include files the user-owned files reference once~~ (SA286). **Remaining:** route
+     module-coupled page data through seam-declared hooks that live in managed files, so pages
+     consume hooks, not endpoints. Effort M. **Live option.**
   3. **Accept and document** that projects are one-shot: retire `beta_migration` and the vintage
      machinery. Revocation trigger: a second long-lived project, or a security fix in a template.
   4. **Choose one upgrade mechanism.** Keep either `beta_migration` or the prompt-driven port and
      retire the other. Effort S. This is independent of options 2 and 3.
-- **Recommendation:** option 4 now (S), then option 2 for the CI-environment and operations-guide
-  cases (they are mechanical), and theme page hooks as SA153 adds pages.
+- **Recommendation:** option 4 now (S); the CI-environment and operations-guide cases of option 2
+  are landed (SA286), and theme page hooks follow as SA153 adds pages.
   - **Size:** M.
   - **Reversibility:** `two-way door`.
   - **Guard:** extend the closed-world emission test so that no user-owned emitted file names a
     module setting, endpoint, or constant except through a managed include. Track steps per
-    release; the number should trend toward zero.
-  - **First step:** move the module-owned CI environment block into a managed file that the
-    generated `ci.yml` includes once.
+    release; the number should trend toward zero. *(SA286 extended the test for the declared CI
+    variables and the operations guide's declared values.)*
+  - **First step:** ~~move the module-owned CI environment block into a managed file that the
+    generated `ci.yml` includes once~~ (SA286).
 
 ### Finding 2: Module schemas have no verified data upgrade path
 

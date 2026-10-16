@@ -116,14 +116,20 @@ PLATFORM_OPERATOR_HELPER_MODULE = "orgs"
 PLATFORM_OPERATOR_HELPER_FILE = "permissions.py"
 PLATFORM_OPERATOR_HELPER_FUNCTION = "is_platform_operator"
 
+#: Rule 44's command-only operator entry: the management-command variant of
+#: ``operator_access``, referenceable only from ``management/commands/``.
+COMMAND_OPERATOR_ACCESS_FUNCTION = "operator_access_for_command"
+
 
 def rule_44_role_checks(corpus: Corpus) -> list[str]:
     """
-    Rule 44: one org-role check; one operator escape.
+    Rule 44: one org-role check; one operator escape; one command entry.
 
     The role-check clause: no string ``role=`` query outside orgs.  The
     operator-escape clause (proposal 54): no raw ``is_superuser`` read in
-    module source outside orgs' ``is_platform_operator`` helper.
+    module source outside orgs' ``is_platform_operator`` helper.  The
+    command-entry clause: the command-only command variant of orgs'
+    ``operator_access`` is referenced only from ``management/commands/``.
     """
     violations: list[str] = []
     for module in corpus.modules:
@@ -144,6 +150,7 @@ def rule_44_role_checks(corpus: Corpus) -> list[str]:
                 violations,
             )
     violations.extend(_rule_44_operator_read_violations(corpus))
+    violations.extend(_rule_44_command_helper_violations(corpus))
     return violations
 
 
@@ -188,3 +195,45 @@ def _rule_44_reads_superuser(node: ast.AST) -> bool:
     if isinstance(node, ast.Call) and _call_func_name(node) == "getattr":
         return len(node.args) >= 2 and _literal(node.args[1]) == "is_superuser"
     return False
+
+
+def _rule_44_command_helper_violations(corpus: Corpus) -> list[str]:
+    """Rule 44: the command-only operator entry stays in management commands."""
+    violations: list[str] = []
+    for module in corpus.modules:
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            if rel.startswith("management/commands/"):
+                continue
+            for node in _rule_44_iter_command_helper_refs(_parse(text)):
+                violations.append(
+                    f"rule 44: {module.name}: {rel}:{node.lineno} references "
+                    f"{COMMAND_OPERATOR_ACCESS_FUNCTION} outside management commands"
+                )
+    return violations
+
+
+def _rule_44_iter_command_helper_refs(node: ast.AST) -> Iterator[ast.AST]:
+    """Yield references to the command-only operator entry."""
+    if _rule_44_references_command_helper(node):
+        yield node
+    for child in ast.iter_child_nodes(node):
+        yield from _rule_44_iter_command_helper_refs(child)
+
+
+def _rule_44_references_command_helper(node: ast.AST) -> bool:
+    """
+    Return whether *node* names the command-only operator entry.
+
+    An import alias matches on either side so a renamed import
+    (``import operator_access_for_command as elevate``) stays refused.
+    """
+    if isinstance(node, ast.alias):
+        return (
+            node.name.split(".")[-1] == COMMAND_OPERATOR_ACCESS_FUNCTION
+            or node.asname == COMMAND_OPERATOR_ACCESS_FUNCTION
+        )
+    if isinstance(node, ast.Attribute):
+        return node.attr == COMMAND_OPERATOR_ACCESS_FUNCTION
+    return isinstance(node, ast.Name) and node.id == COMMAND_OPERATOR_ACCESS_FUNCTION

@@ -48,21 +48,19 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
-| SA286 | Render module-owned CI environment and operations text into managed includes | 1 | — | Optional |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
 | SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
 | SA293 | One test-settings base, one pyproject template, no ticket ids in tests or manifests | 2 | — | Optional |
-| SA297 | `operator_access` checks the platform operator itself | 3 | — | Optional |
 | SA292 | One command off-refusal helper, service-owned transactions, complete README flags | 3 | — | Optional |
 | SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | SA292 | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA286 (b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
-Track 3: SA297 ──► SA292 (a, b) ──► SA296 (a…f)
+Track 3: SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
@@ -71,16 +69,14 @@ Arrows within a track are queue order; the table holds the dependency edges. Cro
 SA191 waits on the 0.89.0 publication; SA291 waited on SA288, which has landed (both rewrote
 the composed `REST_FRAMEWORK`, `runtime/settings.compose_rest_framework`), and SA287 waits on
 SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
-SA296 waits on SA292 because both rewrite harness rule 17; SA297 waited on SA290, which has
-landed (its `is_platform_operator` helper is the check `operator_access` will trust), and
-SA294 landed ahead of SA297, so the audit lines SA297 adds follow the recorded log convention;
+SA296 waits on SA292 because both rewrite harness rule 17;
 SA277 waits on SA191's cutover, whose evidence draws the line between what `beta_migration`
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA286 (b), SA293, and SA292 have no unmet dependency; each track takes one
-at a time, in queue order. SA286 sits ahead
-of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
+**Parallel start.** SA293 and SA292 have no unmet dependency; each track takes one at a time,
+in queue order. SA286 landed ahead
+of SA191 in Track 1's queue because every adoption step it removed before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
@@ -104,9 +100,9 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA286 (b) | yes | no | yes | no | yes |
+| 1 | SA191 | no | no | yes | no | yes |
 | 2 | SA293 | yes | yes | yes | yes | no |
-| 3 | SA297 | yes | yes | yes | yes | no |
+| 3 | SA292 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -396,38 +392,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   and purge, not on module-source edits, and items that change a module schema ship an incremental
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
-- [ ] **SA286 — Render module-owned CI environment and operations text into managed includes.**
-
-  Closes the mechanical part of arch `generated-file-ownership-unmodeled` (Finding 1, option 2;
-  the theme-hook part rides SA153, the upgrade-mechanism part is SA277).
-
-  **Context:** the seam types are managed (SA276), but the generated `ci.yml` and operations
-  guide are user-owned and still carry module settings and values, so each module contract change
-  becomes a `project_contract.yml` adoption step (40 → 46 in three days; 12 pending on
-  `bap-web-new`).
-
-  Of the 46 steps, at least four exist only because `ci.yml.j2` or `OPERATIONS.md.j2` restates a
-  module value (the vendor placeholders, the notifications secret format, the Stripe webhook
-  events and version).
-
-  **Acceptance:** module-owned CI environment values and operations text render into managed,
-  hash-tracked files (`project_state_hashes.py`) that the user-owned files reference once. GitHub
-  Actions and Markdown have no include, so the reference is a single step that loads a managed
-  environment file and a single link to a managed operations page. The closed-world emission
-  test fails when a user-owned emitted file names a module setting, endpoint, or constant other
-  than through a managed file. One new `project_contract.yml` step adopts the references; later
-  changes to the managed values mint no step. The steps-per-release count is recorded beside
-  SA277's watch.
-
-  **Slices:**
-  - [x] (a): landed as the managed, hash-tracked `.github/quickscale-ci-env` rendered from a new
-    `ci_env` manifest section (each module's declared placeholders, keyed by the option that
-    names the variable, so a renamed `*_env_var` follows) and loaded once by the generated
-    `ci.yml`; the closed-world emission guard now fails when an emitted workflow names a declared
-    CI variable or placeholder value, and the `sa286-managed-ci-environment` contract step carries
-    the adoption. (b) is next: the managed operations page.
-  - [ ] (b) The managed operations page on the same pattern, and the adoption step (Tier
-    2-fast).
+- [x] **SA286 — Render module-owned CI environment and operations text into managed includes.**
 
 
 ### Track 2 — gate derivation, release integrity, upgrade path, and manifest conventions
@@ -459,7 +424,8 @@ suite, and merge only the reviewed delivery through the serialized queue.
   repeats the other's work. They also record the boundary rule (a gap that recurs across
   releases moves into code; a one-off stays in the prompt), the revocation trigger (a second
   long-lived project or a template security fix), and the steps-per-release count to watch,
-  which should trend toward zero. Prose adoption steps that either stage now covers are not
+  which should trend toward zero (recorded beside this watch: 50 declared project-contract
+  steps at SA286's close, 2026-10-16). Prose adoption steps that either stage now covers are not
   duplicated in the operator docs. The arch audit records option 4 as answered by this hybrid.
 
   **Slices:**
@@ -573,28 +539,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA290 — One named platform-operator check.**
 
-- [ ] **SA297 — `operator_access` checks the platform operator itself.**
-
-  Follows SA290 (maintainer decision, 2026-10-16, option B+ in its small form).
-
-  **Context:** `operator_access` (`orgs/current_org.py:552`) sets `app.operator_access = 'on'` by
-  `SET LOCAL`, and the FORCE-RLS `SELECT` policy then admits every organization's rows; writes stay
-  current-org only. Its docstring leaves the superuser check to each caller, so the database
-  trusts the setting and the setting trusts every caller. PostgreSQL RLS keyed on a session
-  setting is only as safe as the one code path that sets it; Supabase likewise keeps elevation
-  out of callers' hands (a server-only `service_role` key). Callers today: forms'
-  `_with_superuser_operator_access` (`views.py:204`), `quickscale_forms_seed_presets`, and
-  `quickscale_forms_anonymize_submissions` (two blocks).
-
-  **Acceptance:** `operator_access(user=..., reason=...)` refuses, with an audit log line, a
-  user for whom `is_platform_operator` is false, before the setting changes. Management commands,
-  which have no request user, enter through a command variant that records the command and its
-  reason in the audit log; it is importable only for commands, and the harness bans it in module
-  views. Every caller migrates, the debug-as-org path included; the read-only `SELECT` policy and
-  the `SET LOCAL` transaction scope are unchanged. Both activation and refusal log `extra=` fields
-  under SA294's convention. Controls prove that a non-operator user is refused and that the
-  setting stays off after the refusal. **Slices:** one (Tier 2-full: authorization path, medium
-  risk; the command variant's shape needs design).
+- [x] **SA297 — `operator_access` checks the platform operator itself.**
 
 - [ ] **SA292 — One command off-refusal helper, service-owned transactions, complete README flags.**
 

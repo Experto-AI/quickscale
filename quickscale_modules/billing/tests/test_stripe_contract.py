@@ -637,10 +637,20 @@ def test_no_product_station_hand_copies_the_stripe_api_version() -> None:
 
 
 def test_generated_operations_guidance_renders_the_billing_version_contract() -> None:
-    """The generated operations guide states the version only for billing projects."""
+    """The managed operations page states the version only for billing projects."""
     import jinja2
 
-    template = jinja2.Template(
+    from quickscale_core.generator.operations_page import render_operations_page
+
+    managed_billing = render_operations_page(["billing"])
+    managed_default = render_operations_page(["blog", "forms", "social"])
+
+    assert "## Stripe Billing" in managed_billing
+    assert STRIPE_API_VERSION in managed_billing
+    assert "## Stripe Billing" not in managed_default
+
+    # The user-owned guide links the managed page and states no module value.
+    guide_template = jinja2.Template(
         (
             REPO_ROOT
             / "quickscale_core"
@@ -657,12 +667,10 @@ def test_generated_operations_guidance_renders_the_billing_version_contract() ->
         "runtime_db_role": "testproject_app",
         "runtime_db_role_attributes": ["NOSUPERUSER", "NOBYPASSRLS"],
         "runtime_db_manual_grant_statements": ["GRANT CONNECT ON DATABASE"],
-        "stripe_api_version": STRIPE_API_VERSION,
     }
 
-    billing_render = template.render({**context, "selected_modules": ["billing"]})
-    default_render = template.render({**context, "selected_modules": ["blog"]})
+    guide = guide_template.render({**context, "selected_modules": ["billing"]})
 
-    assert "## Stripe Billing" in billing_render
-    assert STRIPE_API_VERSION in billing_render
-    assert "## Stripe Billing" not in default_render
+    assert "quickscale-operations.md" in guide
+    assert STRIPE_API_VERSION not in guide
+    assert "## Stripe Billing" not in guide

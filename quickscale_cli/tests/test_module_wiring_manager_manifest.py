@@ -284,6 +284,33 @@ class TestRegenerateManagedWiringManifestPath:
         assert "set_current_org_id" not in views_content
         assert "set_db_current_org_id" not in views_content
 
+    def test_regeneration_writes_the_managed_operations_page(
+        self, tmp_path: Path
+    ) -> None:
+        """The managed operations page regenerates from the installed modules.
+
+        The page must be byte-identical to the generation-time rendering, or
+        the managed-file hash guard reports drift on every apply (SA286).
+        """
+        from quickscale_core.generator.operations_page import (
+            OPERATIONS_PAGE_RELATIVE_PATH,
+            render_operations_page,
+        )
+
+        project = tmp_path / "myapp"
+        _write_minimal_project(project, modules={"billing": {"enabled": True}})
+        _write_complete_embedded_inventory(project)
+
+        success, message = regenerate_managed_wiring(
+            project, module_names=_with_required_modules("billing")
+        )
+        assert success, f"regenerate_managed_wiring failed: {message}"
+
+        selection = _with_required_modules("billing")
+        page = (project / OPERATIONS_PAGE_RELATIVE_PATH).read_text()
+        assert "## Stripe Billing" in page
+        assert page == render_operations_page(selection)
+
     def test_multiple_known_modules(self, tmp_path: Path) -> None:
         """Multiple registered modules should all be built via the manifest path."""
         project = tmp_path / "myapp"
@@ -1598,6 +1625,17 @@ class TestRegenerateManagedWiringEmptySelection:
             ci_env_file = project / CI_ENVIRONMENT_RELATIVE_PATH
             assert ci_env_file.exists()
             assert ci_env_file.read_text() == ""
+
+            # The managed operations page is regenerated too (SA286); an
+            # empty selection declares no module section.
+            from quickscale_core.generator.operations_page import (
+                OPERATIONS_PAGE_RELATIVE_PATH,
+                render_operations_page,
+            )
+
+            operations_page = project / OPERATIONS_PAGE_RELATIVE_PATH
+            assert operations_page.exists()
+            assert operations_page.read_text() == render_operations_page([])
 
             # No managed files when no module specs exist.
             managed_init = project / "myapp" / "quickscale_managed" / "__init__.py"

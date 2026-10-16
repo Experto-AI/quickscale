@@ -25,6 +25,15 @@ the names and values are derived from the shipped manifests' ``ci_env``
 declarations, so a module that adds or renames a credential is covered
 without editing this test.
 
+The closed world also covers module-owned operations text (SA286): the
+emitted user-owned operations guide (``OPERATIONS.md``) may not name a
+module's declared operations value — a version, an event list, an endpoint,
+or a declared option's name — nor a module CI value.  Those live in the
+managed ``quickscale-operations.md`` page the guide links once (Markdown has
+no include directive), rendered from the shipped manifests' ``operations``
+declarations, so a module that changes its operations text is covered without
+editing this test.
+
 The scanned set is derived from ``get_generator_emission_mapping`` (the closed
 world), not a hand-maintained path list; the managed wiring files, the
 generated seam files, and the generated CI environment file are the
@@ -45,6 +54,10 @@ from quickscale_core.contracts.module_catalog import MODULE_CATALOG
 from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
 from quickscale_core.generator import ProjectGenerator, get_generator_emission_mapping
 from quickscale_core.generator.ci_environment import CI_ENVIRONMENT_RELATIVE_PATH
+from quickscale_core.generator.operations_page import (
+    OPERATIONS_PAGE_RELATIVE_PATH,
+    operations_sections,
+)
 from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
@@ -78,6 +91,37 @@ _MANAGED_SEAM_PATHS = frozenset(
 #: The generated managed CI environment file: the module-owned CI values
 #: live there by design (SA286).
 _MANAGED_CI_PATH = frozenset({CI_ENVIRONMENT_RELATIVE_PATH})
+
+#: The generated managed operations page: the module-owned operations text
+#: lives there by design (SA286).
+_MANAGED_OPERATIONS_PATH = frozenset({OPERATIONS_PAGE_RELATIVE_PATH})
+
+#: The user-owned operations guide: it links the managed page once and names
+#: no module value (SA286).
+_USER_OWNED_OPERATIONS_GUIDE = "OPERATIONS.md"
+
+
+def _declared_operations_values() -> frozenset[str]:
+    """Return the module-owned operations values the shipped manifests declare.
+
+    Each module's ``operations`` section declares the values its text
+    references; the resolved sections carry those declared values plus the
+    resolved values of the core and option tokens the text uses.  A declared
+    group contributes each of its entries, which is exactly the set the
+    managed ``quickscale-operations.md`` page renders and a user-owned file
+    must not restate.
+    """
+    values: set[str] = set()
+    for section in operations_sections(None):
+        for value in section.values.values():
+            if isinstance(value, tuple):
+                values.update(entry for entry in value if entry)
+            elif value:
+                values.add(value)
+    return frozenset(values)
+
+
+_OPERATIONS_VALUES = _declared_operations_values()
 
 
 def _declared_ci_environment() -> tuple[frozenset[str], frozenset[str]]:
@@ -147,15 +191,22 @@ def _scan_kind(emitted_path: str, package_name: str) -> str | None:
 
     Django-side Python means every emitted ``.py`` file outside the two
     managed wiring files: the project package, ``manage.py``, and the test
-    scaffold all count.  Django-side templates are the emitted HTML under
+    scaffold all count.      Django-side templates are the emitted HTML under
     ``templates/``.  Emitted CI workflows are the YAML files under
     ``.github/workflows/``; the module CI values they reference live in the
-    managed ``.github/quickscale-ci-env`` file (SA286).  User-owned
-    TypeScript is every emitted ``.ts``/``.tsx`` file under ``frontend/``
-    except the generated managed seam files, which carry the module set by
-    design (SA276).
+    managed ``.github/quickscale-ci-env`` file (SA286).  The emitted
+    user-owned operations guide is ``OPERATIONS.md``; the module-owned
+    operations values it references live in the managed
+    ``quickscale-operations.md`` page (SA286).  User-owned TypeScript is
+    every emitted ``.ts``/``.tsx`` file under ``frontend/`` except the
+    generated managed seam files, which carry the module set by design
+    (SA276).
     """
-    if emitted_path in _MANAGED_SEAM_PATHS or emitted_path in _MANAGED_CI_PATH:
+    if (
+        emitted_path in _MANAGED_SEAM_PATHS
+        or emitted_path in _MANAGED_CI_PATH
+        or emitted_path in _MANAGED_OPERATIONS_PATH
+    ):
         return None
     if emitted_path.startswith(".github/workflows/") and emitted_path.endswith(
         (".yml", ".yaml")
@@ -173,6 +224,8 @@ def _scan_kind(emitted_path: str, package_name: str) -> str | None:
         return "python"
     if emitted_path.startswith("templates/") and emitted_path.endswith(".html"):
         return "template"
+    if emitted_path == _USER_OWNED_OPERATIONS_GUIDE:
+        return "operations_guide"
     return None
 
 
@@ -371,6 +424,39 @@ def _ci_environment_violations(text: str) -> list[str]:
     return violations
 
 
+def _operations_guide_violations(text: str) -> list[str]:
+    """Return module values named in one emitted user-owned operations guide.
+
+    The guide names no module value: the module-owned operations values
+    (derived from each module's ``operations`` declaration) live in the
+    managed ``quickscale-operations.md`` page it links, and the module CI
+    values live in the managed ``.github/quickscale-ci-env`` file, so a
+    declared value of either kind in the guide fails.  The one legitimate
+    reference — the managed page's link — names the path, not a value, and
+    is not flagged; module URL names and module-stemmed flat names are
+    covered by the shared shape checks (SA286).
+    """
+    violations: list[str] = []
+    for match in _MODULE_URL_NAME.finditer(text):
+        violations.append(
+            f"line {_line_number(text, match.start())}: module URL name "
+            f"{match.group(0)!r}"
+        )
+    for match in _MODULE_FLAT_NAME.finditer(text):
+        violations.append(
+            f"line {_line_number(text, match.start())}: module-stemmed name "
+            f"{match.group(0)!r}"
+        )
+    for value in sorted(_OPERATIONS_VALUES):
+        for match in re.finditer(re.escape(value), text):
+            violations.append(
+                f"line {_line_number(text, match.start())}: module operations "
+                f"value {value!r}"
+            )
+    violations.extend(_ci_environment_violations(text))
+    return violations
+
+
 # ---------------------------------------------------------------------------
 # Controls: each detector rejects the wiring shape it exists to catch.
 # ---------------------------------------------------------------------------
@@ -488,6 +574,43 @@ def test_ci_workflow_detector_accepts_the_managed_reference() -> None:
     assert not _ci_environment_violations("name: CI\non:\n  push:\n")
 
 
+def test_operations_guide_detector_rejects_a_module_operations_value() -> None:
+    assert _operations_guide_violations(
+        "Set the webhook endpoint version to 2026-06-24.dahlia first.\n"
+    )
+    assert _operations_guide_violations(
+        "Subscribe it to invoice.paid and the other billing events.\n"
+    )
+    assert _operations_guide_violations(
+        "Point the endpoint at /billing/webhooks/stripe/ from the dashboard.\n"
+    )
+
+
+def test_operations_guide_detector_rejects_a_module_ci_value() -> None:
+    assert _operations_guide_violations(
+        "Set QUICKSCALE_BILLING_WEBHOOK_SECRET before enabling billing.\n"
+    )
+    assert _operations_guide_violations("Stripe CI key: sk_test_ci\n")
+
+
+def test_operations_guide_detector_rejects_module_shapes() -> None:
+    assert _operations_guide_violations(
+        "Reverse the route 'quickscale_billing:pricing_page' for the link.\n"
+    )
+    assert _operations_guide_violations("Run quickscale_billing_sync nightly.\n")
+
+
+def test_operations_guide_detector_accepts_the_managed_link() -> None:
+    # The single link references the managed page by path, not by value.
+    assert not _operations_guide_violations(
+        "Module-owned details live in\n"
+        "[quickscale-operations.md](quickscale-operations.md).\n"
+    )
+    assert not _operations_guide_violations(
+        "## Module operations\n\nThe generated page carries the vendor details.\n"
+    )
+
+
 # ---------------------------------------------------------------------------
 # The closed-world emission check.
 # ---------------------------------------------------------------------------
@@ -508,6 +631,7 @@ def test_user_owned_emissions_carry_no_module_wiring(tmp_path: Path) -> None:
         "template": _template_violations,
         "typescript": _typescript_violations,
         "ci_workflow": _ci_environment_violations,
+        "operations_guide": _operations_guide_violations,
     }
     scanned: list[str] = []
     missing: list[str] = []
@@ -549,6 +673,11 @@ def test_scan_set_excludes_only_the_managed_files() -> None:
     assert kinds.get(CI_ENVIRONMENT_RELATIVE_PATH) is None
     assert CI_ENVIRONMENT_RELATIVE_PATH in mapping
     assert kinds.get(".github/workflows/ci.yml") == "ci_workflow"
+    # The managed operations page is excluded; the user-owned guide that
+    # links it is scanned (SA286).
+    assert kinds.get(OPERATIONS_PAGE_RELATIVE_PATH) is None
+    assert OPERATIONS_PAGE_RELATIVE_PATH in mapping
+    assert kinds.get("OPERATIONS.md") == "operations_guide"
 
     assert kinds.get(f"{_PROJECT_NAME}/urls.py") == "python"
     assert kinds.get(f"{_PROJECT_NAME}/context_processors.py") == "python"

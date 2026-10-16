@@ -561,6 +561,14 @@ class ProjectGenerator:
             render_ci_environment,
         )
 
+        # The managed operations page (SA286) renders from each selected
+        # module's declared ``operations`` text — the same content
+        # ``apply``/``update``/``remove`` regenerate under the managed-file
+        # hash guard.
+        from quickscale_core.generator.operations_page import (
+            render_operations_page,
+        )
+
         # Context for template rendering
         context = {
             "project_name": project_slug,
@@ -593,6 +601,9 @@ class ProjectGenerator:
             "ci_environment": render_ci_environment(
                 ci_environment_entries(self.selected_modules)
             ),
+            # Managed operations page (SA286): the module-owned operations
+            # text the user-owned OPERATIONS.md links once.
+            "operations_page": render_operations_page(self.selected_modules),
         }
 
         # Known executable files (emitted paths that should be executable)
