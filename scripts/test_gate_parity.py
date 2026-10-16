@@ -2135,6 +2135,7 @@ class TestE2eWorkflowGeneration:
             "quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py",
             "scripts/smoke_install.sh",
             "scripts/_installed_wheel_venv.sh",
+            "scripts/build_core_wheel.sh",
             "scripts/provision_installed_venv.sh",
             "scripts/_python_requirement.sh",
         ]

@@ -243,11 +243,6 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
-      - name: Materialize the bundled module manifests
-        run: |
-          set -euo pipefail
-          python3 "$GITHUB_WORKSPACE/scripts/sync_module_manifests.py" "$GITHUB_WORKSPACE"
-
       - name: Build sdist and wheel
         env:
           VERSION: ${{ needs.verify.outputs.version }}
@@ -292,7 +287,13 @@ jobs:
             fi
 
             rm -rf "$pkg_dir/dist"
-            (cd "$pkg_dir" && poetry build)
+            if [[ "$pkg" == "quickscale_core" ]]; then
+              # The one shared core-build step materializes the bundled module
+              # manifests before the wheel build (SA285 (b)).
+              bash "$ROOT/scripts/build_core_wheel.sh" --root "$ROOT" --package-dir "$pkg_dir"
+            else
+              (cd "$pkg_dir" && poetry build)  # non-core wheel build
+            fi
 
             cp "$pkg_dir"/dist/* "$BUILD_DIR"/
 
