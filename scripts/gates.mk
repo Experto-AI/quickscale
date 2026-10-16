@@ -118,9 +118,10 @@ quality:
 	@scripts/check_quality.sh
 
 # Verify every frozen module migration file is still byte-identical to its
-# recorded SHA-256 in scripts/migration_hashes.json, that no recorded file is
+# recorded SHA-256 in scripts/migration_hashes.json, that the manifest only adds
+# to the values recorded at the latest release tag, that no recorded file is
 # missing, and that no numbered migration of a shipped module names a private
 # (_-prefixed) symbol.  A new numbered migration is accepted; the next manifest
-# regeneration freezes it.
+# regeneration records it.
 check-migration-freeze:
 	@$(PYTHON) scripts/check_migration_freeze.py

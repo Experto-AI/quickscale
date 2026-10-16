@@ -64,7 +64,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA204 (h…i) ∥ SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA204 (i) ∥ SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA285 ──► SA295 ──► SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
 Track 3: SA289 (a, b) ──► SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
@@ -81,7 +81,7 @@ SA277 waits on SA191's cutover, whose evidence draws the line between what `beta
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA204 (h), SA286 (a), SA285, SA295, SA293, SA289, SA290, SA292, and
+**Parallel start.** SA204 (i), SA286 (a), SA285, SA295, SA293, SA289, SA290, SA292, and
 SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 sits ahead
 of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -107,7 +107,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA204 (h) | yes | no | yes | no | yes |
+| 1 | SA204 (i) | yes | no | yes | no | yes |
 | 2 | SA285 | yes | yes | yes | yes | no |
 | 3 | SA289 (b) | yes | yes | yes | yes | no |
 
@@ -219,10 +219,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   promoted to a public, documented field or replaced, so frozen history names only symbols with a
   stability promise (arch audit `clean-break-schema-no-data-path`, guard).
 
-  The gate compares against a checked-in manifest of the frozen files' content hashes (it works in
-  shallow CI clones and needs no tag). The same manifest is the content identity that restore and
-  `quickscale update` compare: per module, the hashes of the applied migration files, recorded
-  with every backup. Before merging, confirm no module schema change shipped
+  The gate compares against a checked-in manifest of the frozen files' content hashes, append-only
+  against the manifest the latest release tag carries (from SA204 (h): a shallow CI clone has the
+  gate fetch that one tag; a tag predating the manifest passes with a notice). The same manifest
+  is the content identity that restore and `quickscale update` compare: per module, the hashes of
+  the applied migration files, recorded with every backup. Before merging, confirm no module
+  schema change shipped
   between SA191's rebuild and the freeze, and prove on a restored `bap-web` copy that `migrate`
   from the frozen `0001` reproduces the FORCE-RLS parity baseline (the door is one-way). SA153's
   schema work is written as `0002+` migrations from the start. `test_module_migration_topology.py` changes from exactly
@@ -243,7 +245,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     with `scripts/migration_hashes.json`; hash-keyed restore-forward in `recovery.py`).
   - [x] (c): landed as `scripts/check_migration_freeze.py`, one registry row (`check-migration-freeze`)
     with controls for an in-place edit, a deletion, a new `0002`, and a `_`-symbol reference; the
-    topology guard accepts an ordered chain and its `0002` canary is inverted. (h) is next.
+    topology guard accepts an ordered chain and its `0002` canary is inverted. (i) is next.
   - [x] (d) Restore-forward in `dr_engine/recovery.py` keyed on the hash manifest: forward
     migration from N to N+1, the bare-file refusal, and the equal-label hash-mismatch refusal,
     with tests (Tier 2-fast; Track 2 reviews). Landed as per-module `migration_hashes` recorded
@@ -261,7 +263,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `properties_propertylisting`'s canonical pair); tenant isolation 6/6, no `W004`/`W007`, only the
     two known `W006` properties warnings — matching the SA191 baseline; no carried module's
     migration changed since the rebuild (SA270's billing and SA204(a)'s blog are not carried).
-    (h) is next.
+    (i) is next.
   The 2026-10-16 arch pass found two branches that still key on labels or authorship (Finding 2,
   option 1; it answers arch §12 Q2): `quickscale update` compares content only under an equal
   label (`_module_update.py:286–297`, `:365`), so the cross-release update the freeze exists to
@@ -276,13 +278,17 @@ suite, and merge only the reviewed delivery through the serialized queue.
     identity refuses a frozen pull instead of silently authorizing it, and a vintage before the
     freeze keeps the fresh-database path. Tests: a label change plus a changed applied file is
     refused and rolled back — through a real subtree pull too — a removal is refused, an added
-    `0002` applies forward, and the pre-freeze label-change path is unchanged. (h) is next.
-  - [ ] (h) The hash manifest is append-only: the freeze gate refuses a changed or removed
-    recorded value even after `--write`, compared with `scripts/migration_hashes.json` at the
-    latest release tag (maintainer decision, 2026-10-16: release tags are immutable, and CI
-    fetches only that tag, so the shallow clone stays). Before the first release that carries the
-    manifest, the check passes with a notice. A control in which a re-frozen `0001` edit fails
-    (Tier 2-fast).
+    `0002` applies forward, and the pre-freeze label-change path is unchanged. (i) is next.
+  - [x] (h): landed as the freeze gate's append-only comparison against the latest release
+    tag: a value that release recorded may not change or disappear, even after `--write`
+    re-froze the manifest, while unreleased additions stay legal; the release being tagged is
+    never its own baseline, and a shallow clone refreshes the newest eligible tag from `origin`
+    on every run (an unreachable remote fails closed; a non-shallow clone stays local). A tag
+    predating the manifest, or no baseline other than the checked-out release, passes with a
+    notice. Controls cover the re-frozen `0001` edit, a removal, an addition, the
+    highest-release-version selection, the checked-out-release exclusion, the shallow-clone
+    fetch, the newer-release refresh, both notices, a malformed released manifest, and an
+    uninspectable Git root. (i) is next.
   - [ ] (i) Re-run the (f) rehearsal on a `bap-web` copy, adding the cross-release `update` path
     from (g): a changed applied file is refused, a new `0002` applies forward, and the FORCE-RLS
     baseline still holds (Tier 2-full; scratch PostgreSQL is environment-sensitive).
