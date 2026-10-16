@@ -7,11 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from quickscale_core import migration_hashes
 from quickscale_core.migration_hashes import (
     MigrationHashError,
     compute_migration_hashes,
     compute_module_migration_hashes,
     hash_migration_file,
+    is_frozen_vintage,
     resolve_module_migrations_dir,
 )
 
@@ -124,3 +126,42 @@ class TestComputeMigrationHashes:
         resolved = resolve_module_migrations_dir(module_dir)
         assert resolved == module_dir / "src" / "quickscale_modules_auth" / "migrations"
         assert resolve_module_migrations_dir(_write_module(tmp_path, "storage")) is None
+
+
+class TestIsFrozenVintage:
+    """Which applied vintages sit at or after the model migration freeze."""
+
+    def test_unset_freeze_has_no_frozen_vintage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """While SA204 (j) has not set the freeze vintage, nothing is frozen."""
+        monkeypatch.setattr(migration_hashes, "MIGRATION_FREEZE_VINTAGE", None)
+        assert is_frozen_vintage("0.89.0") is False
+        assert is_frozen_vintage("99.0.0") is False
+
+    def test_vintage_at_the_freeze_is_frozen(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(migration_hashes, "MIGRATION_FREEZE_VINTAGE", "0.90.0")
+        assert is_frozen_vintage("0.90.0") is True
+
+    def test_vintage_after_the_freeze_is_frozen(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(migration_hashes, "MIGRATION_FREEZE_VINTAGE", "0.90.0")
+        assert is_frozen_vintage("0.90.1") is True
+        assert is_frozen_vintage("1.0.0") is True
+
+    def test_vintage_before_the_freeze_is_not_frozen(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(migration_hashes, "MIGRATION_FREEZE_VINTAGE", "0.90.0")
+        assert is_frozen_vintage("0.89.0") is False
+
+    def test_missing_or_unparseable_vintage_is_not_frozen(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(migration_hashes, "MIGRATION_FREEZE_VINTAGE", "0.90.0")
+        assert is_frozen_vintage(None) is False
+        assert is_frozen_vintage("") is False
+        assert is_frozen_vintage("not.a.version") is False

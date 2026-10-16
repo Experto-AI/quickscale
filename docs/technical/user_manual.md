@@ -347,8 +347,11 @@ See [decisions.md: CLI Command Matrix](./decisions.md#cli-command-matrix) for th
 `quickscale update` pulls module code into `modules/<name>/` through `git subtree` and regenerates
 the QuickScale-managed files. It never rewrites the rest of what generation copied into your
 project. An update also refuses to replace an applied migration file while the module's version
-label is unchanged — the database's applied schema would no longer be identifiable — and restores
-the pre-update content; a migration file the pull adds is applied forward on the next `migrate`.
+label is unchanged, and on every pull once the project's applied vintage is at or after the
+migration-freeze release: from that release on, the applied migration files are the database's
+schema identity, so replacing one would leave it unidentified and an update refuses to proceed
+while that identity cannot be established from the embedded module. A refused update restores the
+pre-update content, and a migration file the pull adds is applied forward on the next `migrate`.
 
 | Project part | Changed by `quickscale update`? | Notes |
 | --- | --- | --- |

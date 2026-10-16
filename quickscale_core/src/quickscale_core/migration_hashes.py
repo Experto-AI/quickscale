@@ -23,6 +23,13 @@ digest covers the file's raw bytes, so reformatting or rewriting a frozen
 migration file changes its identity — the intended semantics for a freeze.
 Missing or empty migration packages fail closed rather than hashing to an
 empty mapping.
+
+The freeze vintage answers which vintages that identity is enforced for:
+before the freeze, a release may still rewrite a migration in place and the
+documented upgrade stays a fresh database; from the freeze vintage on, an
+applied file is immutable and a schema change ships as a new migration.
+:data:`MIGRATION_FREEZE_VINTAGE` names that release, SA204 (j) sets it, and
+:func:`is_frozen_vintage` is the one predicate callers key on.
 """
 
 from __future__ import annotations
@@ -32,9 +39,17 @@ import re
 from pathlib import Path
 from typing import Final
 
+from quickscale_core.manifest.schema import parse_version_tuple
+
 #: A migration file that carries an applied schema change: a four-digit
 #: ordered prefix plus a name, matching Django's migration naming.
 NUMBERED_MIGRATION_PATTERN: Final = re.compile(r"^\d{4}_.+\.py$")
+
+#: The QuickScale release the module migration freeze lands in.  SA204 (j)
+#: sets it to that release; while it is ``None`` the freeze has not landed, no
+#: vintage is at or after it, and every project keeps the documented
+#: fresh-database upgrade path.
+MIGRATION_FREEZE_VINTAGE: Final[str | None] = None
 
 #: Read chunk size for hashing.  64 KiB keeps memory low for large files.
 _HASH_CHUNK_SIZE: Final[int] = 65536
@@ -158,11 +173,35 @@ def compute_module_migration_hashes(module_path: Path) -> dict[str, str]:
     return compute_migration_hashes(migrations_dir)
 
 
+def is_frozen_vintage(version: str | None) -> bool:
+    """Return whether an applied module vintage is at or after the freeze.
+
+    The freeze vintage is :data:`MIGRATION_FREEZE_VINTAGE`; while that is
+    unset the freeze has not landed, so no vintage is at or after it and every
+    project keeps the documented fresh-database upgrade path.  A missing,
+    empty, or unparseable version compares below any real freeze vintage —
+    unknown stays unfrozen rather than being read as a promised identity.
+
+    Args:
+        version: The module version label recorded for the applied content.
+
+    Returns:
+        ``True`` when the vintage is at or after the freeze vintage.
+
+    """
+    freeze_vintage = MIGRATION_FREEZE_VINTAGE
+    if freeze_vintage is None or not version:
+        return False
+    return parse_version_tuple(version) >= parse_version_tuple(freeze_vintage)
+
+
 __all__ = [
+    "MIGRATION_FREEZE_VINTAGE",
     "NUMBERED_MIGRATION_PATTERN",
     "MigrationHashError",
     "compute_migration_hashes",
     "compute_module_migration_hashes",
     "hash_migration_file",
+    "is_frozen_vintage",
     "resolve_module_migrations_dir",
 ]
