@@ -346,8 +346,8 @@ items:
      rule: "rule 29 (identifiers, strings, names, docstrings, and comments)", check: "harness rule 29 (identifiers and strings in every tests/ entry, any case, embedded ids included, with controls); 0 tokens remain", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: test-harness-parity, status: resolved, aspect: M, cost: [tax], members_diverging: [], population: modules(12),
      rule: "rule 18 (shared test-settings base and conftest plugin)", check: "harness rule 18 (each module's test-settings keys diffed against the core base; both hooks taken from the plugin, with controls); 12/12 suites adopted", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: pyproject-residue, status: open, aspect: N, cost: [tax], members_diverging: [auth, blog, crm, forms, listings, orgs], population: modules(12),
-     rule: "rule 36", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: pyproject-residue, status: resolved, aspect: N, cost: [tax], members_diverging: [], population: modules(12),
+     rule: "rule 18 (one pyproject template)", check: "harness rule 18 (table order and every shared value diffed against the template, with controls); 12/12 conform", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: manifest-option-residue, status: open, aspect: B, cost: [tax], members_diverging: [analytics, social, notifications], population: options(96),
      rule: "rule 29 (version stamps)", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: structured-log-fields, status: resolved, aspect: K, cost: [tax], members_diverging: [],
@@ -520,7 +520,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 36 | `theme-request-paths` | P | tax | 2 raw `fetch` + literal paths | resolved (SA289 (b)) |
 | 37 | `test-ticket-ids-in-identifiers` | M | tax | 5 / 12 | resolved (SA293 (a)) |
 | 38 | `test-harness-parity` | M | tax | 5 / 12 | resolved (SA293 (b)) |
-| 39 | `pyproject-residue` | N | tax | 6 / 12 | open (2026-10-16) |
+| 39 | `pyproject-residue` | N | tax | 6 / 12 | resolved (SA293 (c)) |
 | 40 | `manifest-option-residue` | B | tax | 4 / 96 options | open (2026-10-16) |
 | 41 | `structured-log-fields` | K | tax | 1 / 7 logging modules | resolved (SA294) |
 
@@ -2586,6 +2586,7 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-16 — `test-ticket-ids-in-identifiers`: resolved (SA293 (a) — every ticket id left the 12 modules' tests, and rule 29 scans identifiers and string literals in every `tests/` entry, in any case and embedded ids included, with controls; proposal 57's rule-29 clause lands here, items 38–40 with SA293 (b)–(d)).
 - 2026-10-16 — `superuser-escape-spelling`: resolved (SA290 — orgs publishes one `is_platform_operator(user)` helper; forms' `_is_superuser` and every orgs copy call it, and harness rule 44 bans raw `is_superuser` reads in module source outside it, with forms' old predicate as the control).
 - 2026-10-16 — `test-harness-parity`: resolved (SA293 (b) — one core test-settings base (`quickscale_core.testing.settings`, `BASE_TEST_SETTINGS_KEYS` plus the database, secret-key, and schema helpers) and one conftest plugin (`quickscale_core.testing.pytest_plugin`, the `bypass_rls` hooks) are adopted by all 12 modules; analytics and storage gained the hooks, auth gained `DEFAULT_AUTO_FIELD`, and blog and listings gained `USE_TZ`; harness rule 18 reads the base from the corpus, diffs every module's test-settings keys against it, and requires both hooks from the plugin, with controls; proposal 57's rule-11 and rule-18 clauses land here).
+- 2026-10-16 — `pyproject-residue`: resolved (SA293 (c) — one pyproject template across the 12 modules: the stale "centralized in root" comments, orgs' `>=` dev floors, and the six `pythonpath` variants are gone, and the table order, the marker block, and every shared value are one; harness rule 18 diffs each file against the template, with controls; proposal 57's one-pyproject-template clause lands here).
 - 2026-10-16 — `structured-log-fields`: resolved (SA294 — decisions rule 24 carries the convention: a security or audit event carries `extra=` fields and every other module log line stays message-only; orgs' operator-access and VIEW-AS audit logs are the recorded sites, and the clause stays a review rule).
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).

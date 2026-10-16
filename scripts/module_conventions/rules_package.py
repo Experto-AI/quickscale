@@ -3,9 +3,9 @@ Package structure rules: public surface, files, signals, commands, tooling.
 
 The mechanics live in private sibling modules (``_package_surfaces``,
 ``_package_legacy``, ``_package_commands``, ``_package_services``,
-``_package_files``); this module orchestrates rules 4, 6, 17, and 23 and
-re-exports every moved name so existing import paths and the rule registry
-keep working.
+``_package_files``, ``_package_pyproject``); this module orchestrates rules 4,
+6, 17, and 23 and re-exports every moved name so existing import paths and the
+rule registry keep working.
 """
 
 from __future__ import annotations

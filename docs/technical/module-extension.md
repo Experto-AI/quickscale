@@ -478,9 +478,9 @@ name = "quickscale-module-<name>"
 version = "0.XX.0"
 description = "QuickScale <name> module - brief description"
 requires-python = ">=3.14,<3.15"
-authors = [{name = "Experto AI", email = "victor@experto.ai"}]
-license = "Apache-2.0"
 readme = "README.md"
+license = "Apache-2.0"
+authors = [{name = "Experto AI", email = "victor@experto.ai"}]
 dynamic = ["dependencies"]
 
 [tool.poetry]
@@ -489,14 +489,15 @@ packages = [{include = "quickscale_modules_<name>", from = "src"}]
 [tool.poetry.dependencies]
 python = ">=3.14,<3.15"
 Django = ">=6.0.7,<6.1.0"
-# Every module declares the lockstep core dependency (module.yml lists the
-# bare name `quickscale-core`; this path spec installs it in the monorepo).
+# Add module-specific runtime dependencies here (e.g., django-allauth, Pillow).
+# Every module declares the lockstep core dependency last (module.yml lists
+# the bare name `quickscale-core`; this path spec installs it in the monorepo).
 quickscale-core = {path = "../../quickscale_core", develop = true}
-# Add module-specific runtime dependencies here (e.g., django-allauth, Pillow)
 
 [tool.poetry.group.dev.dependencies]
-# Minimal dev dependencies - shared tools come from root pyproject.toml
-pytest-django = "^4.7.0"
+# Dev-group specs take the caret form; the shared tooling comes from the
+# root development environment in the monorepo.
+pytest-django = "^4.11.1"
 
 [build-system]
 requires = ["poetry-core>=2.0,<3.0"]
@@ -512,15 +513,45 @@ build-backend = "poetry.core.masonry.api"
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "S"]
+
+# The S (flake8-bandit) rules govern shipped package source. The Bandit
+# static-security gate already scopes its scan to maintained source roots,
+# excluding test trees; this table keeps the Ruff selection in step.
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
-pythonpath = ["."]
+# The module dir, its src tree, and the workspace root that carries the
+# shared test helpers (tests_shared/ in the monorepo, the project root when
+# the module is embedded).
+pythonpath = [".", "src", "../.."]
 python_files = ["test_*.py"]
 testpaths = ["tests"]
 addopts = "-v --cov=quickscale_modules_<name> --cov-report=html --cov-report=term-missing --cov-fail-under=90"
+# The marker block every module declares, the union of the markers the
+# suites use: a suite that adds one of these behaviours needs no pyproject
+# edit, and no suite can use a marker it never declared.
+markers = [
+    "bypass_rls: test requires BYPASSRLS database privilege (superuser / migration DDL). Deselected unless QUICKSCALE_ALLOW_BYPASSRLS is exactly 1.",
+    "e2e: End-to-end integration tests that exercise the full user workflow",
+    "isolation: cross-tenant isolation tests (roadmap Finding 14 / F11 rollout)",
+]
+
+[tool.coverage.report]
+fail_under = 90
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"
 ```
+
+One template, checked by the conformance harness (rule 18): every module's file carries these
+tables in this order and these literal values. The per-module slots are the project name and
+description, the package include, the module's own runtime and dev dependency names, and its
+extras. Two values sit outside the diff by design: of `addopts` only the `--cov` target is
+compared, and `version` is kept equal to the repository `VERSION` by `make version-check`.
+Anything else is a diff the harness fails.
 
 **1.2. Register Module in Root pyproject.toml:**
 Add the module to root `pyproject.toml` for centralized testing:

@@ -199,15 +199,60 @@ def _golden_module(name: str = "demo") -> Module:
         },
         root_files={
             "pyproject.toml": (
-                "[project]\nname = 'quickscale-module-demo'\n"
+                "[project]\n"
+                "name = 'quickscale-module-demo'\n"
+                "version = '0.0.0'\n"
+                "description = 'Conformance-control module.'\n"
+                "requires-python = '>=3.14,<3.15'\n"
+                "readme = 'README.md'\n"
+                "license = 'Apache-2.0'\n"
+                "authors = [{name = 'Experto AI', email = 'victor@experto.ai'}]\n"
+                "dynamic = ['dependencies']\n"
+                "\n"
+                "[tool.poetry]\n"
+                "packages = [{include = 'quickscale_modules_demo', from = 'src'}]\n"
+                "\n"
                 "[tool.poetry.dependencies]\n"
                 "python = '>=3.14,<3.15'\n"
                 "Django = '>=6.0.7,<6.1.0'\n"
                 "quickscale-core = {path = '../../quickscale_core', develop = true}\n"
+                "\n"
+                "[tool.poetry.group.dev.dependencies]\n"
+                "pytest-django = '^4.11.1'\n"
+                "\n"
+                "[build-system]\n"
+                "requires = ['poetry-core>=2.0,<3.0']\n"
+                "build-backend = 'poetry.core.masonry.api'\n"
+                "\n"
+                "[tool.ruff]\n"
+                "target-version = 'py314'\n"
+                "\n"
+                "[tool.ruff.lint]\n"
+                "select = ['E4', 'E7', 'E9', 'F', 'S']\n"
+                "\n"
+                "[tool.ruff.lint.per-file-ignores]\n"
+                "'tests/**' = ['S']\n"
+                "\n"
                 "[tool.pytest.ini_options]\n"
+                "DJANGO_SETTINGS_MODULE = 'tests.settings'\n"
+                "pythonpath = ['.', 'src', '../..']\n"
+                "python_files = ['test_*.py']\n"
+                "testpaths = ['tests']\n"
                 "addopts = '-v --cov=quickscale_modules_demo --cov-report=html "
                 "--cov-report=term-missing --cov-fail-under=90'\n"
-                "[tool.ruff]\n"
+                "markers = [\n"
+                "    'bypass_rls: test requires BYPASSRLS database privilege (superuser / "
+                "migration DDL). Deselected unless QUICKSCALE_ALLOW_BYPASSRLS is exactly 1.',\n"
+                "    'e2e: End-to-end integration tests that exercise the full user workflow',\n"
+                "    'isolation: cross-tenant isolation tests "
+                "(roadmap Finding 14 / F11 rollout)',\n"
+                "]\n"
+                "\n"
+                "[tool.coverage.report]\n"
+                "fail_under = 90\n"
+                "\n"
+                "[tool.django-stubs]\n"
+                "django_settings_module = 'tests.settings'\n"
             ).replace("demo", name),
             "README.md": GOLDEN_README.replace("demo", name),
             "poetry.toml": "[virtualenvs]\nin-project = true\n",
@@ -268,6 +313,11 @@ def _with_files(module: Module, **files: str) -> Module:
             key = f"{key}.py"
         updated[key] = value
     return replace(module, files=updated)
+
+
+def _with_pyproject(module: Module, text: str) -> Module:
+    """Replace a module's pyproject.toml text."""
+    return replace(module, root_files={**module.root_files, "pyproject.toml": text})
 
 
 def _with_addopts(module: Module, addopts: str) -> Module:

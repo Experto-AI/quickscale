@@ -13,6 +13,7 @@ from scripts.tests_module_conventions._support import (
     _violations,
     _with_addopts,
     _with_files,
+    _with_pyproject,
 )
 
 
@@ -118,6 +119,144 @@ def test_coverage_target_control() -> None:
         "pyproject --cov takes no target" in violation
         for violation in _violations(checker.rule_18_package_tooling, option_after_bare)
     )
+
+
+def test_pyproject_template_control() -> None:
+    """Rule 18: the module pyproject files follow one template (SA293 (c))."""
+    module = _golden_module()
+    template = module.root_files["pyproject.toml"]
+    assert _violations(checker.rule_18_package_tooling, module) == []
+
+    stale = _with_pyproject(
+        module,
+        template.replace(
+            "[tool.poetry.group.dev.dependencies]\n",
+            "# pytest, pytest-cov, ruff, mypy centralized in root pyproject.toml\n"
+            "[tool.poetry.group.dev.dependencies]\n",
+        ),
+    )
+    assert any(
+        "pyproject keeps the stale 'centralized in root' comment" in violation
+        for violation in _violations(checker.rule_18_package_tooling, stale)
+    )
+
+    missing = _with_pyproject(
+        module, template.replace("[tool.coverage.report]\nfail_under = 90\n\n", "")
+    )
+    assert any(
+        "pyproject is missing the [tool.coverage.report] table" in violation
+        for violation in _violations(checker.rule_18_package_tooling, missing)
+    )
+
+    reordered = _with_pyproject(
+        module,
+        template.replace(
+            "[tool.django-stubs]\ndjango_settings_module = 'tests.settings'\n", ""
+        ).replace(
+            "[tool.coverage.report]\n",
+            "[tool.django-stubs]\ndjango_settings_module = 'tests.settings'\n"
+            "\n[tool.coverage.report]\n",
+        ),
+    )
+    assert any(
+        "pyproject tables are not in the template order" in violation
+        for violation in _violations(checker.rule_18_package_tooling, reordered)
+    )
+
+    unexpected = _with_pyproject(module, template + "\n[tool.bandit]\n")
+    assert any(
+        "pyproject table [tool.bandit] is not part of the template" in violation
+        for violation in _violations(checker.rule_18_package_tooling, unexpected)
+    )
+
+    root_key = _with_pyproject(
+        module, template.replace("[project]", "keywords = ['release']\n\n[project]", 1)
+    )
+    assert any(
+        "pyproject key 'keywords' is not part of the template" in violation
+        for violation in _violations(checker.rule_18_package_tooling, root_key)
+    )
+
+    extra_group = _with_pyproject(
+        module,
+        template.replace(
+            "[tool.poetry.group.dev.dependencies]",
+            "[tool.poetry.group.docs.dependencies]\nfoo = '^1'\n\n"
+            "[tool.poetry.group.dev.dependencies]",
+            1,
+        ),
+    )
+    assert any(
+        "pyproject [tool.poetry.group] key 'docs' is not part of the template" in violation
+        for violation in _violations(checker.rule_18_package_tooling, extra_group)
+    )
+
+    one_pythonpath = _with_pyproject(
+        module,
+        template.replace(
+            "pythonpath = ['.', 'src', '../..']", "pythonpath = ['.', 'src', '../orgs/src']"
+        ),
+    )
+    assert any(
+        "pythonpath is ['.', 'src', '../orgs/src']" in violation
+        for violation in _violations(checker.rule_18_package_tooling, one_pythonpath)
+    )
+
+    one_marker_set = _with_pyproject(
+        module,
+        template.replace(
+            "    'e2e: End-to-end integration tests that exercise the full user workflow',\n",
+            "",
+        ),
+    )
+    assert any(
+        "pyproject [tool.pytest.ini_options] markers are" in violation
+        for violation in _violations(checker.rule_18_package_tooling, one_marker_set)
+    )
+
+    floor = _with_pyproject(
+        module, template.replace("pytest-django = '^4.11.1'", "pytest-django = '>=4.11.1'")
+    )
+    assert any(
+        "pyproject [tool.poetry.group.dev.dependencies] pytest-django is '>=4.11.1'; "
+        "the template's is '^4.11.1'" in violation
+        for violation in _violations(checker.rule_18_package_tooling, floor)
+    )
+
+    extra_floor = _with_pyproject(
+        module,
+        template.replace(
+            "pytest-django = '^4.11.1'",
+            "pytest-django = '^4.11.1'\ndjango-filter = '>=26.1'",
+        ),
+    )
+    assert any(
+        "dev dependency 'django-filter' is '>=26.1'; dev specs take the caret form" in violation
+        for violation in _violations(checker.rule_18_package_tooling, extra_floor)
+    )
+
+    extra_ini_key = _with_pyproject(
+        module,
+        template.replace("testpaths = ['tests']", "testpaths = ['tests']\nnorecursedirs = ['.']"),
+    )
+    assert any(
+        "pyproject [tool.pytest.ini_options] key 'norecursedirs' is not part of the template"
+        in violation
+        for violation in _violations(checker.rule_18_package_tooling, extra_ini_key)
+    )
+
+    per_module = _with_pyproject(
+        module,
+        template.replace(
+            "pytest-django = '^4.11.1'",
+            "pytest-django = '^4.11.1'\ndjango-filter = '^26.1'",
+        ).replace(
+            "quickscale-core = {path = '../../quickscale_core', develop = true}",
+            "posthog = '^7.33.0'\n"
+            "quickscale-core = {path = '../../quickscale_core', develop = true}",
+        ),
+    )
+    assert _violations(checker.rule_18_package_tooling, per_module) == []
 
 
 BASE_TEST_SETTINGS_FIXTURE = """\

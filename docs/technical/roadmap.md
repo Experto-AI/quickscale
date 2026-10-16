@@ -499,9 +499,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
     helpers; `pytest_plugin.py` with the `bypass_rls` hooks) is imported by every module's
     `tests/settings.py` and `tests/conftest.py`; harness rule 18 reads the base from the corpus,
     diffs each module's keys against it, and requires both hooks from the plugin, with controls;
-    decisions rules 11 and 18 carry the clauses. (c) is next.
-  - [ ] (c) One pyproject template: the stale "centralized in root" comments, orgs' `>=` dev
-    floors, and the six `pythonpath` variants, with a template diff (Tier 2-fast).
+    decisions rules 11 and 18 carry the clauses.
+  - [x] (c) One pyproject template: the stale "centralized in root" comments, orgs' `>=` dev
+    floors, and the six `pythonpath` variants, with a template diff (Tier 2-fast). Landed: harness
+    rule 18 diffs each module pyproject against one template — table order, shared values, one
+    `pythonpath` (`[".", "src", "../.."]`), one marker block, caret dev specs, the stale-comment ban
+    — with controls; the 12 files conform, and decisions rule 18 and module-extension.md § 1.1
+    carry the clause. (d) is next.
   - [ ] (d) Manifest text: drop the three version stamps, fix the type-mismatched key, scan
     `module.yml` descriptions under rule 29, and the loader refusal (Tier 2-fast).
 

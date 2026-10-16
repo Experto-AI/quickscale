@@ -1003,9 +1003,17 @@ public surface is `services.py` (rule 4).
 - ❌ `print()`, `sys.exit()`, or returning normally after a failure.
 
 **18. Package tooling.**
-- ✅ Every module's `pyproject.toml` has `[tool.pytest.ini_options]` (with `--cov-fail-under=90`)
-  and `[tool.ruff]`; these checks read section presence, with the coverage target the one value
-  they compare. Type checking is configured in the root `mypy.ini` only (rule 36).
+- ✅ Every module's `pyproject.toml` follows one template
+  ([module-extension.md](module-extension.md) § 1.1): the same tables in the same order and the
+  same literal values — the pytest `pythonpath` (`[".", "src", "../.."]`), the three shared test
+  markers, the Ruff block, the build backend, the coverage floor, and the stub setting — with the
+  project name and description, the package include, the module's own runtime and dev dependency
+  names (dev specs take the caret form), and its extras as the only per-module slots. The harness
+  diffs each module file against the template. `addopts` carries `--cov-fail-under=90`, and of
+  that string the `--cov` target is the one value compared. Type checking is configured in the
+  root `mypy.ini` only (rule 36).
+- ❌ A stale "centralized in root" comment, a `>=` dev floor, or a one-off `pythonpath` in a
+  module pyproject.
 - ✅ `--cov` names the module's import package (`quickscale_modules_<name>`), never a path into
   `src/`, so a module's own test run measures the package it ships under the name it is imported by.
 - ❌ A `--cov` target spelled as a `src/` path, and a module pyproject declaring no `--cov` target.
