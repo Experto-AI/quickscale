@@ -10,6 +10,13 @@ from django.contrib.auth import get_user_model
 from django.test import Client
 from django.utils import timezone
 
+# The bypass_rls marker and its collection-time opt-in come from core's
+# conftest plugin (decisions rule 18); this suite only adds its reuse-db
+# wrapper on top, so every module suite shares one copy of the hook.
+from quickscale_core.testing.pytest_plugin import (  # noqa: F401
+    pytest_collection_modifyitems,
+    pytest_configure as shared_pytest_configure,
+)
 from quickscale_modules_notifications.models import (
     NotificationDelivery,
     NotificationMessage,
@@ -18,7 +25,7 @@ from quickscale_modules_notifications.services import ensure_default_settings
 
 # NOBYPASSRLS is the default. Tests that need BYPASSRLS privilege
 # (migration DDL) must be explicitly marked with @pytest.mark.bypass_rls.
-# The collection hook below deselects bypass_rls-marked tests unless the env var
+# The shared collection hook deselects bypass_rls-marked tests unless the env var
 # is exactly 1. Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include them.
 # This runs before django.setup() below — use a NOBYPASSRLS DB role.
 
@@ -118,12 +125,7 @@ def delivery_for_webhook(db, notification_settings_row):
 
 def pytest_configure(config: pytest.Config) -> None:
     """Register the bypass_rls marker and enable reuse-db by default."""
-    config.addinivalue_line(
-        "markers",
-        "bypass_rls: test requires BYPASSRLS database privilege "
-        "(superuser / migration DDL). Deselected unless QUICKSCALE_ALLOW_BYPASSRLS "
-        "is exactly '1'.",
-    )
+    shared_pytest_configure(config)
     # Enable reuse-db so the test database persists between
     # runs instead of being dropped and recreated.  Under a restricted
     # role (quickscale_test_role) a leftover test database may be
@@ -131,26 +133,3 @@ def pytest_configure(config: pytest.Config) -> None:
     # no DROP DATABASE is attempted, avoiding the ownership/
     # duplicate-database failure on rerun.
     config.option.reuse_db = True
-
-
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
-    """Deselect bypass_rls tests unless QUICKSCALE_ALLOW_BYPASSRLS is exactly "1".
-
-    Under NOBYPASSRLS (the default), migration tests and other
-    BYPASSRLS-dependent tests are deselected so the suite passes
-    cleanly with a restricted DB role.
-    """
-    if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
-        return  # Explicit BYPASSRLS authorization — run all tests
-    selected: list[pytest.Item] = []
-    deselected: list[pytest.Item] = []
-    for item in items:
-        if item.get_closest_marker("bypass_rls"):
-            deselected.append(item)
-        else:
-            selected.append(item)
-    items[:] = selected
-    if deselected:
-        config.hook.pytest_deselected(items=deselected)
