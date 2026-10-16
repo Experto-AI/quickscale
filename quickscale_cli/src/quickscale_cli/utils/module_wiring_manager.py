@@ -16,6 +16,11 @@ from quickscale_core.contracts.module_discovery import (
     release_module_names,
     set_modules_base_path,
 )
+from quickscale_core.generator.ci_environment import (
+    CI_ENVIRONMENT_RELATIVE_PATH,
+    ci_environment_entries,
+    render_ci_environment,
+)
 from quickscale_core.manifest.entry_point import (
     MANAGED_ADAPTER_ORIGINS,
     MANIFEST_ADAPTER_REGISTRY,
@@ -292,10 +297,26 @@ def _write_seam_files(project_path: Path) -> None:
         target_path.write_text(render())
 
 
+def _write_ci_environment(project_path: Path, entries: Mapping[str, str]) -> None:
+    """Write the managed CI environment file (SA286).
+
+    The file carries each installed module's declared non-live CI
+    placeholders under the resolved variable names; the generated workflow
+    loads it in one step, so a module release that changes a placeholder
+    changes only this managed file.  Apply, embed, update, and remove all
+    regenerate it alongside the managed wiring files.
+    """
+    target_path = project_path / CI_ENVIRONMENT_RELATIVE_PATH
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(render_ci_environment(entries))
+
+
 def _write_wiring_files(
     project_path: Path,
     package_name: str,
     specs: Mapping[str, ModuleWiringSpec],
+    *,
+    ci_entries: Mapping[str, str],
 ) -> tuple[bool, str]:
     package_dir = project_path / package_name
     if not package_dir.exists():
@@ -304,6 +325,7 @@ def _write_wiring_files(
     try:
         write_managed_wiring(package_dir, specs)
         _write_seam_files(project_path)
+        _write_ci_environment(project_path, ci_entries)
     except Exception as error:
         return False, f"Failed to write managed wiring files: {error}"
     return True, "Managed wiring files regenerated"
@@ -390,7 +412,7 @@ def regenerate_managed_wiring(
     if not selected_modules:
         # SA127: empty module selection requires no base path, manifests, or
         # adapter refresh. Write empty managed wiring and return success.
-        return _write_wiring_files(project_path, package_name, {})
+        return _write_wiring_files(project_path, package_name, {}, ci_entries={})
 
     prior_base_path: Path | None = None
     prior_base_path_was_override = False
@@ -411,7 +433,14 @@ def regenerate_managed_wiring(
         requirement_error = _missing_required_modules(selected_modules)
         if requirement_error is not None:
             return False, requirement_error
-        return _write_wiring_files(project_path, package_name, specs)
+        # SA286: the managed CI environment file renders from the same
+        # installed-module manifests the wiring specs resolved, with the
+        # project's configured options, so a renamed *_env_var reaches CI
+        # without editing a user-owned file.
+        ci_entries = ci_environment_entries(specs.keys(), module_options)
+        return _write_wiring_files(
+            project_path, package_name, specs, ci_entries=ci_entries
+        )
     finally:
         _restore_modules_context(
             prior_base_path,

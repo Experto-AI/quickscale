@@ -66,6 +66,14 @@ config:
 
   immutable: {}
 
+# Non-live CI placeholder (SA286): the key names a declared option whose
+# resolved value is the environment variable the enabled module's startup
+# check reads, and the placeholder is what the managed
+# .github/quickscale-ci-env file sets under it, so the user-owned CI
+# workflow names no module value.
+ci_env:
+  posthog_api_key_env_var: ph_test_ci
+
 # Required first-party modules (bare names; rule 39): the overview page's
 # guard uses orgs' published role check.
 required_modules:

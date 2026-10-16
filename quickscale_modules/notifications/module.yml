@@ -104,6 +104,17 @@ config:
 
   immutable: {}
 
+# Non-live CI placeholders (SA286): each key names a declared option whose
+# resolved value is the environment variable the enabled module's startup
+# check reads, and the placeholder is what the managed
+# .github/quickscale-ci-env file sets under it, so the user-owned CI
+# workflow names no module value. The webhook-secret placeholder carries the
+# Svix shape the module's startup check requires: a whsec_ prefix over
+# decodable base64.
+ci_env:
+  resend_api_key_env_var: re_test_ci
+  webhook_secret_env_var: whsec_YWFhYWFhYWFhYWFhYWFhYQ==
+
 required_modules: []
 
 dependencies:

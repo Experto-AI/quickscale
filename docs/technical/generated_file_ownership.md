@@ -54,6 +54,22 @@ hand-edit the files because the next apply that regenerates the managed files
 overwrites them (``quickscale apply --confirm-contract-adoption`` does so
 without a configuration change; a plain no-delta apply reports nothing to do).
 
+### Managed CI environment file (SA286)
+
+``.github/quickscale-ci-env`` is the generated project's managed CI
+environment file: it carries each installed module's declared non-live CI
+placeholders (the manifest's ``ci_env`` section, keyed by the declaring
+option so a renamed ``*_env_var`` follows the project's configuration) as one
+``NAME=value`` line per entry.  The generated ``.github/workflows/ci.yml``
+stays user-owned and names no module value: it appends this file to GitHub
+Actions' ``$GITHUB_ENV`` in one load step, because a workflow has no include
+directive.  It is classified as a recipient-managed protected root file
+(``FRESH_FIRST_PROTECTED_ROOT_FILES``): the migration preserves the
+recipient's copy and never writes donor content over it, and
+``quickscale apply``/``quickscale update``/``quickscale remove`` regenerate it
+under the managed-file hash guard, so a local edit is reported as drift and a
+module release that changes a placeholder changes only this managed file.
+
 ## Categories
 
 ### Category U1 — Project-level user-owned files (root-level generated config/docs)

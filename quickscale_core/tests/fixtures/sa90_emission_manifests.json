@@ -54,7 +54,8 @@
       "sa276-a-managed-seam-declaration": "Regenerated 2026-10-14 \u2014 the theme's seam types become a generated, managed file (SA276 slice a): frontend/src/quickscaleSeam.d.ts renders from the shipped module set (the 11 module flags, the crm/social/analytics path names, and the orgs/billing/crm/forms API-base names), generation emits it, and quickscale apply/update regenerate it under the managed-file hash guard. New generated path in all three variants: frontend/src/quickscaleSeam.d.ts. All unrelated paths, hashes, and modes remain authoritative.",
       "sa276-b-theme-seam-consumers": "Regenerated 2026-10-14 \u2014 the theme's seam consumers read the generated seam files (SA276 slice b): frontend/src/hooks/useModules.ts imports the QuickScaleModules/QuickScaleModulePaths/QuickScaleModuleApiPaths types from the managed frontend/src/quickscaleSeam.d.ts instead of declaring them and reads the producer-resolved owner slug instead of inferring one from a crm path; frontend/src/lib/validateQuickScaleSeam.ts requires every entry of the new managed frontend/src/quickscaleSeam.keys.ts key manifest; and the theme's tests build their seam fixtures from the new frontend/src/test/seamFixtures.ts helper. New generated paths in all three variants: frontend/src/quickscaleSeam.keys.ts and frontend/src/test/seamFixtures.ts; the theme's seam-consuming hooks, validator, and test files were re-hashed. All unrelated paths, hashes, and modes remain authoritative.",
       "sa274-crm-theme-stats": "Regenerated 2026-10-15 \u2014 the showcase_react CRM workspace's stat cards read the CRM stats endpoint (SA274): frontend/src/pages/CrmPage.tsx fetches `crm/api/stats/` through useApiData and reads the four organization totals instead of inferring counts from the bare-list responses, which always yielded 0. 1 fixture hash updated per variant: frontend/src/pages/CrmPage.tsx. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa289": "Regenerated 2026-10-16 \u2014 the theme's useApi parser reads only the one QuickScale error shape {\"error\": {\"code\", \"message\", \"fields\"}} and no longer parses the retired pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes (SA289 slice a). 2 fixture hashes updated per variant: frontend/src/hooks/useApi.ts, frontend/src/test/useApiErrors.test.ts (all 3 variants). All unrelated paths, hashes, and modes remain authoritative."
+      "sa289": "Regenerated 2026-10-16 \u2014 the theme's useApi parser reads only the one QuickScale error shape {\"error\": {\"code\", \"message\", \"fields\"}} and no longer parses the retired pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes (SA289 slice a). 2 fixture hashes updated per variant: frontend/src/hooks/useApi.ts, frontend/src/test/useApiErrors.test.ts (all 3 variants). All unrelated paths, hashes, and modes remain authoritative.",
+      "sa286": "Regenerated 2026-10-16 \u2014 the generated .github/workflows/ci.yml no longer carries the module credential placeholders: it loads the managed .github/quickscale-ci-env file in one step, and that new generated path renders each module's declared ci_env placeholders (SA286). New generated path: .github/quickscale-ci-env; re-hashed per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -106,7 +107,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "bbd53b79875c842b08125664fa5cde572b6f75bf550b20da89d97121eac6f9d6"
+      "sha256": "82aa3348adf53bd6030be0c0949a3712b2782801e3ff4c15588627365a5670a1"
     },
     ".gitignore": {
       "mode": "644",
@@ -647,6 +648,10 @@
     "tests/test_example.py": {
       "mode": "644",
       "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
+    },
+    ".github/quickscale-ci-env": {
+      "mode": "644",
+      "sha256": "a131c83dc09a088bacf352d9c7a7194f2cb5c7c48c42df90e4917089e50d4387"
     }
   },
   "react_empty": {
@@ -668,7 +673,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "63b4e11a4b830c484581deef69b588ea65a18aa6b1eb17ee2994be96c9c1a112"
+      "sha256": "f3f645e664739c9c86e95b8aa5e65ffa0dedb0a1353ae4e686fef8b80cf52ad7"
     },
     ".gitignore": {
       "mode": "644",
@@ -1209,6 +1214,10 @@
     "tests/test_example.py": {
       "mode": "644",
       "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
+    },
+    ".github/quickscale-ci-env": {
+      "mode": "644",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
   "react_selected": {
@@ -1230,7 +1239,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "644",
-      "sha256": "63b4e11a4b830c484581deef69b588ea65a18aa6b1eb17ee2994be96c9c1a112"
+      "sha256": "f3f645e664739c9c86e95b8aa5e65ffa0dedb0a1353ae4e686fef8b80cf52ad7"
     },
     ".gitignore": {
       "mode": "644",
@@ -1771,6 +1780,10 @@
     "tests/test_example.py": {
       "mode": "644",
       "sha256": "441ce4b364cdcb8c4ff2e00f79f8dfcd81ae021bfb44c5e8a789add704aa4694"
+    },
+    ".github/quickscale-ci-env": {
+      "mode": "644",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   }
 }

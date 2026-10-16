@@ -170,6 +170,18 @@ class ModuleManifest:
     dependencies: list[str] = field(default_factory=list)
     managed_files: dict[str, ManagedFileDeclaration] = field(default_factory=dict)
 
+    ci_env: dict[str, str] = field(default_factory=dict)
+    """Non-live CI environment placeholders keyed by declaring option name.
+
+    Populated from the top-level ``ci_env`` section: each key names a
+    declared string option whose resolved value is the environment-variable
+    name the module's startup check reads, and the value is the placeholder
+    CI sets under that name.  The generated project's managed
+    ``.github/quickscale-ci-env`` renders from these declarations, so the
+    module owns its CI credential contract and a module release changes no
+    user-owned file.
+    """
+
     # ------------------------------------------------------------------ #
     # Derivation metadata (T2.3+)
     #

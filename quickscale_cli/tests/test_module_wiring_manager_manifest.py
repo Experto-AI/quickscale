@@ -1589,6 +1589,16 @@ class TestRegenerateManagedWiringEmptySelection:
             assert seam_keys_file.exists()
             assert seam_keys_file.read_text() == render_seam_key_manifest()
 
+            # The managed CI environment file is regenerated too (SA286);
+            # an empty selection declares no module CI value.
+            from quickscale_core.generator.ci_environment import (
+                CI_ENVIRONMENT_RELATIVE_PATH,
+            )
+
+            ci_env_file = project / CI_ENVIRONMENT_RELATIVE_PATH
+            assert ci_env_file.exists()
+            assert ci_env_file.read_text() == ""
+
             # No managed files when no module specs exist.
             managed_init = project / "myapp" / "quickscale_managed" / "__init__.py"
             assert not managed_init.exists()
