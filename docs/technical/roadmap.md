@@ -49,7 +49,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA286 | Render module-owned CI environment and operations text into managed includes | 1 | — | Optional |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
-| SA285 | Derive the gate inventory in tests and build the core wheel through one target | 2 | — | Optional |
 | SA295 | Review the security suppressions and stagger their expiry | 2 | — | Optional |
 | SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
@@ -65,7 +64,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
-Track 2: SA285 ──► SA295 ──► SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
+Track 2: SA295 ──► SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
 Track 3: SA289 (a, b) ──► SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
@@ -81,7 +80,7 @@ SA277 waits on SA191's cutover, whose evidence draws the line between what `beta
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA286 (a), SA285, SA295, SA293, SA289, SA290, SA292, and
+**Parallel start.** SA286 (a), SA295, SA293, SA289, SA290, SA292, and
 SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 sits ahead
 of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -108,7 +107,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA286 (a) | yes | no | yes | no | yes |
-| 2 | SA285 | yes | yes | yes | yes | no |
+| 2 | SA295 | yes | yes | yes | yes | no |
 | 3 | SA289 (b) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -470,32 +469,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA284 — Content-check the core wheel that `publish.yml` uploads.**
 
-- [ ] **SA285 — Derive the gate inventory in tests and build the core wheel through one target.**
-
-  Closes the rest of arch `rules-held-by-parity-not-derivation` (Finding 3, option 1).
-
-  **Context:** a new gate costs one registry row plus four hand-held test oracles
-  (`test_ci_coverage_policy.py`, `test_ci_local_parallel.py`, `test_gate_parity.py`,
-  `test_refresh_action_pins.py`), and seven build entrypoints plus three conftests must each
-  remember `sync_module_manifests.py` before `poetry build` (the Makefile's `build`,
-  `manifest-sync`, and `sa117-lock-diff`; `publish.yml:249`; `publish.sh:322`;
-  `_installed_wheel_venv.sh:679`; `install_global.sh:285`). Each entrypoint stages the core
-  package its own way (version rewrite, README copy, compatible-Python selection), so one shared
-  step must cover materialization without flattening that staging.
-
-  **Acceptance:** the four tests read the gate set from `gate_registry.json`, keeping one hand pin
-  on the count. Every entrypoint that builds the `quickscale_core` wheel materializes through one
-  shared core-build step, and a test fails when a script under `scripts/`, the `Makefile`, or
-  `.github/` runs `poetry build` for core outside it. `_installed_wheel_venv.sh`'s
-  `QS_SMOKE_REGRESSION_CORE` negative probe still fails closed.
-
-  **Slices:**
-  - [x] (a) The four oracles derive from the registry (Tier 2-fast). Landed: all four tests read
-    the gate set from `scripts/gate_registry.json` and derive their expectations from it; the one
-    hand pin on the count is `test_gate_parity.py`'s `EXPECTED_GATE_COUNT`, and the arch audit's
-    relocation and change-cost rows are reconciled. (b) is next.
-  - [ ] (b) The shared core-build step, its seven callers, and the guard test (Tier 2-full: the
-    entrypoints' staging differs and needs discovery).
+- [x] **SA285 — Derive the gate inventory in tests and build the core wheel through one target.**
 
 - [ ] **SA295 — Review the security suppressions and stagger their expiry.**
 
