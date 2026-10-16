@@ -104,7 +104,7 @@ config:
 
   immutable: {}
 
-# Non-live CI placeholders (SA286): each key names a declared option whose
+# Non-live CI placeholders: each key names a declared option whose
 # resolved value is the environment variable the enabled module's startup
 # check reads, and the placeholder is what the managed
 # .github/quickscale-ci-env file sets under it, so the user-owned CI
