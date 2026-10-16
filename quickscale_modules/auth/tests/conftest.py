@@ -1,47 +1,14 @@
 """Pytest fixtures for auth module tests"""
 
-import os
-
 import pytest
 from django.test import Client
 
-
-# ---------------------------------------------------------------------------
-# bypass_rls marker registration and collection-time opt-in
-# ---------------------------------------------------------------------------
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    """Register the bypass_rls marker to prevent PytestUnknownMarkWarning."""
-    config.addinivalue_line(
-        "markers",
-        "bypass_rls: test requires BYPASSRLS database privilege "
-        "(superuser / migration DDL). Deselected unless QUICKSCALE_ALLOW_BYPASSRLS "
-        "is exactly '1'.",
-    )
-
-
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
-    """Deselect bypass_rls tests unless QUICKSCALE_ALLOW_BYPASSRLS is exactly "1".
-
-    Under NOBYPASSRLS (the default), migration tests and other
-    BYPASSRLS-dependent tests are deselected so the suite passes
-    cleanly with a restricted DB role.
-    """
-    if os.environ.get("QUICKSCALE_ALLOW_BYPASSRLS") == "1":
-        return  # Explicit BYPASSRLS authorization — run all tests
-    selected: list[pytest.Item] = []
-    deselected: list[pytest.Item] = []
-    for item in items:
-        if item.get_closest_marker("bypass_rls"):
-            deselected.append(item)
-        else:
-            selected.append(item)
-    items[:] = selected
-    if deselected:
-        config.hook.pytest_deselected(items=deselected)
+# The bypass_rls marker and its collection-time opt-in come from core's
+# conftest plugin (decisions rule 18), so every module suite shares one copy.
+from quickscale_core.testing.pytest_plugin import (  # noqa: F401
+    pytest_collection_modifyitems,
+    pytest_configure,
+)
 
 
 @pytest.fixture

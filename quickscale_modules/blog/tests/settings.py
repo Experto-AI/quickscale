@@ -1,10 +1,13 @@
 """Django settings for blog module tests"""
 
-import os
 import tempfile
 from pathlib import Path
 
-from quickscale_core.manifest.settings_schema import load_settings_schema
+from quickscale_core.testing.settings import (
+    module_settings_schema,
+    suite_database,
+    suite_secret_key,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SHARED_TEST_TEMPLATES = (
@@ -17,7 +20,7 @@ SHARED_TEST_TEMPLATES = (
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
 # Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include bypass_rls tests.
 
-SECRET_KEY = "test-secret-key-for-blog-module"
+SECRET_KEY = suite_secret_key("blog")
 
 DEBUG = True
 
@@ -74,14 +77,7 @@ TEMPLATES = [
 
 # Database
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("QS_BLOG_DB_NAME", "test_quickscale_blog"),
-        "USER": os.environ.get("QS_BLOG_DB_USER", "quickscale_test_role"),
-        "PASSWORD": os.environ.get("QS_BLOG_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_BLOG_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_BLOG_DB_PORT", "5432"),
-    }
+    "default": suite_database("blog", user="quickscale_test_role"),
 }
 
 # Static files
@@ -97,6 +93,8 @@ MEDIA_ROOT = Path(tempfile.mkdtemp(prefix="qs_blog_test_media_"))
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+USE_TZ = True
 
 # Blog module required settings (fail-hard defaults)
 QUICKSCALE_BLOG_ENABLED = True
@@ -126,10 +124,9 @@ AWS_SECRET_ACCESS_KEY = ""
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
-MODULE_SETTINGS_SCHEMA = {
-    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
-    for name in ("blog", "orgs", "storage")
-}
+MODULE_SETTINGS_SCHEMA = module_settings_schema(
+    _MODULES_ROOT, "blog", "orgs", "storage"
+)
 
 # DRF configuration mirroring the generated settings: session authentication
 # only, the composed JSON renderer and parser defaults (rule 9), the one

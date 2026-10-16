@@ -12,7 +12,11 @@ Uses PostgreSQL unconditionally.  Configure the connection via env vars:
 import os
 from pathlib import Path
 
-from quickscale_core.manifest.settings_schema import load_settings_schema
+from quickscale_core.testing.settings import (
+    module_settings_schema,
+    suite_database,
+    suite_secret_key,
+)
 
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
 
@@ -22,7 +26,7 @@ _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
 # Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include bypass_rls tests.
 
-SECRET_KEY = "test-secret-key-for-orgs-module"
+SECRET_KEY = suite_secret_key("orgs")
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
@@ -91,14 +95,7 @@ TEMPLATES = [
 ]
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("QS_ORGS_DB_NAME", "test_quickscale_orgs"),
-        "USER": os.environ.get("QS_ORGS_DB_USER", "postgres"),
-        "PASSWORD": os.environ.get("QS_ORGS_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_ORGS_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_ORGS_DB_PORT", "5432"),
-    }
+    "default": suite_database("orgs"),
 }
 
 USE_TZ = True
@@ -255,18 +252,16 @@ QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS = [
 QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS = 300
 MEDIA_URL = "/media/"
 
-MODULE_SETTINGS_SCHEMA = {
-    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
-    for name in (
-        "auth",
-        "orgs",
-        "billing",
-        "social",
-        "forms",
-        "listings",
-        "blog",
-        "crm",
-        "backups",
-        "notifications",
-    )
-}
+MODULE_SETTINGS_SCHEMA = module_settings_schema(
+    _MODULES_ROOT,
+    "auth",
+    "orgs",
+    "billing",
+    "social",
+    "forms",
+    "listings",
+    "blog",
+    "crm",
+    "backups",
+    "notifications",
+)

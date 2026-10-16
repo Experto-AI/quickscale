@@ -1,9 +1,12 @@
 """Django settings for testing CRM module"""
 
-import os
 from pathlib import Path
 
-from quickscale_core.manifest.settings_schema import load_settings_schema
+from quickscale_core.testing.settings import (
+    module_settings_schema,
+    suite_database,
+    suite_secret_key,
+)
 
 SHARED_TEST_TEMPLATES = (
     Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
@@ -15,7 +18,7 @@ SHARED_TEST_TEMPLATES = (
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
 # Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include bypass_rls tests.
 
-SECRET_KEY = "test-secret-key-for-crm-module"
+SECRET_KEY = suite_secret_key("crm")
 DEBUG = True
 
 INSTALLED_APPS = [
@@ -42,14 +45,7 @@ MIDDLEWARE = [
 ]
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("QS_CRM_DB_NAME", "test_quickscale_crm"),
-        "USER": os.environ.get("QS_CRM_DB_USER", "quickscale_test_role"),
-        "PASSWORD": os.environ.get("QS_CRM_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_CRM_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_CRM_DB_PORT", "5432"),
-    }
+    "default": suite_database("crm", user="quickscale_test_role"),
 }
 
 ROOT_URLCONF = "tests.urls"
@@ -100,7 +96,4 @@ QUICKSCALE_CRM_DEAL_NOTES_PER_PAGE = 50
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
-MODULE_SETTINGS_SCHEMA = {
-    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
-    for name in ("crm", "orgs")
-}
+MODULE_SETTINGS_SCHEMA = module_settings_schema(_MODULES_ROOT, "crm", "orgs")
