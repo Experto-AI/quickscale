@@ -130,7 +130,11 @@ def _rule29_corpus() -> Corpus:
             **module.tests,
             "helpers.py": "VALUE = 1\n",
             "test_widget.py": (
-                '"""SA999 widget."""\n\n\ndef test_widget():\n    pass\n# SA998 note\n'
+                '"""SA999 widget."""\n\n\n'
+                "class TestWidgetSA997:\n"
+                "    pass\n\n\n"
+                'VALUE = "sa996-widget"\n'
+                "# SA998 note\n"
             ),
         },
     )
@@ -285,6 +289,8 @@ EXACT_FINDINGS = (
             "rule 29: demo: module.yml:1 carries a ticket id",
             "rule 29: demo: test_widget.py docstring carries a ticket id",
             "rule 29: demo: test_widget.py comment carries a ticket id",
+            "rule 29: demo: test_widget.py identifier carries a ticket id",
+            "rule 29: demo: test_widget.py string carries a ticket id",
         ),
     ),
     (

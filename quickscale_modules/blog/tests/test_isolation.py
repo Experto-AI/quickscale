@@ -101,9 +101,7 @@ def test_operator_bypass_returns_all_orgs_posts(
                 organization=org_b,
             )
 
-        with operator_access(
-            reason="SA83 blog restricted-role cross-tenant SELECT proof"
-        ):
+        with operator_access(reason="blog restricted-role cross-tenant SELECT proof"):
             titles = list(
                 Post.all_objects.filter(status="published").values_list(
                     "title", flat=True

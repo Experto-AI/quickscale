@@ -52,7 +52,7 @@ class TestTenantManagerScoping:
                 Category.objects.create(name="Cat B", organization=org_a)
 
             with operator_access(
-                reason="SA83 blog restricted-role cross-tenant SELECT proof"
+                reason="blog restricted-role cross-tenant SELECT proof"
             ):
                 all_cats = list(
                     Category.all_objects.all().values_list("name", flat=True)
@@ -132,7 +132,7 @@ class TestOperatorBypass:
                 )
 
             with operator_access(
-                reason="SA83 blog restricted-role cross-tenant SELECT proof"
+                reason="blog restricted-role cross-tenant SELECT proof"
             ):
                 titles = list(Post.all_objects.all().values_list("title", flat=True))
         assert "Post A" in titles

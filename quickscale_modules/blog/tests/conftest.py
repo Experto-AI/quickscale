@@ -34,7 +34,7 @@ User = get_user_model()
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _sa61_media_root_tmp_path(tmp_path_factory):
+def _media_root_tmp_path(tmp_path_factory):
     """Redirect MEDIA_ROOT to a pytest-managed temporary directory so
     uploaded test media files are never written into the tracked worktree.
     Individual tests that also override MEDIA_ROOT (e.g. with a function-scoped

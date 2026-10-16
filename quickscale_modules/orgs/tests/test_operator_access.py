@@ -190,7 +190,7 @@ class TestOperatorAccessGucLifecycle:
                     assert _guc_state[0] == "", (
                         f"After outer exit, GUC should be '' (outer's prior), "
                         f"got {_guc_state[0]!r}. "
-                        "CR-SA14.5-002: nested operator_access must restore "
+                        "Nested operator_access must restore "
                         "the outer scope's prior GUC value."
                     )
 
