@@ -339,6 +339,7 @@
                 "quickscale_cli/tests/test_e2e_installed_wheel_lifecycle.py",
                 "scripts/smoke_install.sh",
                 "scripts/_installed_wheel_venv.sh",
+                "scripts/build_core_wheel.sh",
                 "scripts/provision_installed_venv.sh",
                 "scripts/_python_requirement.sh"
             ]
@@ -796,7 +797,7 @@
                 "order": 17,
                 "step_name": "Run migration freeze gate"
             },
-            "help": "Verify every frozen module migration file is still byte-identical to its\nrecorded SHA-256 in scripts/migration_hashes.json, that no recorded file is\nmissing, and that no numbered migration of a shipped module names a private\n(_-prefixed) symbol.  A new numbered migration is accepted; the next manifest\nregeneration freezes it.",
+            "help": "Verify every frozen module migration file is still byte-identical to its\nrecorded SHA-256 in scripts/migration_hashes.json, that the manifest only adds\nto the values recorded at the latest release tag, that no recorded file is\nmissing, and that no numbered migration of a shipped module names a private\n(_-prefixed) symbol.  A new numbered migration is accepted; the next manifest\nregeneration records it.",
             "local": {
                 "order": 18,
                 "description": "Running migration freeze gate...",

@@ -102,8 +102,11 @@ ensure_poetry_uses_compatible_python() {
     )
 }
 
-build_with_poetry_compatible_python() {
+# Run a build command for one package directory inside the selected
+# compatible-Python Poetry environment.
+run_in_compatible_poetry_env() {
     local pkg_dir="$1"
+    shift
     local venv_path
 
     venv_path="$(
@@ -122,8 +125,25 @@ build_with_poetry_compatible_python() {
         POETRY_VIRTUALENVS_CREATE=true \
         POETRY_VIRTUALENVS_IN_PROJECT=false \
         POETRY_VIRTUALENVS_PATH="$POETRY_BUILD_VENVS_DIR" \
-        poetry build
+        "$@"
     )
+}
+
+build_with_poetry_compatible_python() {
+    local pkg_dir="$1"
+
+    run_in_compatible_poetry_env "$pkg_dir" poetry build  # non-core wheel build
+}
+
+# Build quickscale_core through the one shared core-build step (SA285 (b)):
+# the step materializes the bundled module manifests and builds the wheel in
+# the selected compatible-Python Poetry environment.
+build_core_with_shared_step() {
+    local pkg_dir="$1"
+
+    run_in_compatible_poetry_env "$pkg_dir" \
+        "$ROOT/scripts/build_core_wheel.sh" --root "$ROOT" --package-dir "$pkg_dir" \
+        --python "$PYTHON_BIN"
 }
 
 read_version() {
@@ -280,11 +300,9 @@ POETRY_BUILD_VENVS_DIR="$(mktemp -d)"
 
 echo "🚀 Installing QuickScale globally (version $VERSION)..."
 
-# SA280 (b): the bundled module manifests are build artifacts; materialize
-# them from the module manifests before building the core wheel.
-"$PYTHON_BIN" "$ROOT/scripts/sync_module_manifests.py" "$ROOT"
-
-# Build quickscale_core first
+# Build quickscale_core first, through the one shared core-build step
+# (SA285 (b)): the step materializes the bundled module manifests and builds
+# the wheel in the selected compatible-Python Poetry environment.
 echo "📦 Building quickscale_core..."
 cd "$ROOT/quickscale_core"
 ensure_poetry_uses_compatible_python "$ROOT/quickscale_core"
@@ -292,7 +310,7 @@ copy_readme "$ROOT/quickscale_core"
 backup_pyproject "$ROOT/quickscale_core"
 fix_readme_path "$ROOT/quickscale_core"
 rm -rf dist/
-build_with_poetry_compatible_python "$ROOT/quickscale_core"
+build_core_with_shared_step "$ROOT/quickscale_core"
 
 # Build quickscale_cli (with path dependency replaced)
 echo "📦 Building quickscale_cli..."
