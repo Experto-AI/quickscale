@@ -599,6 +599,18 @@ those declarations under the resolved names, and the generated workflow loads th
 step, so the user-owned workflow names no module value and a renamed option reaches CI through
 `quickscale apply`/`quickscale update` alone.
 
+A module whose operators must follow vendor-specific guidance declares an `operations`
+section: `title` names the section, `text` is the module-owned Markdown body, and `values`
+maps each module-owned value name to its text (a string, or a list of strings rendered
+comma-separated with each entry guarded on its own). The text references a value as
+`{name}`; a declared option name and a core contract token
+(`quickscale_core.contracts.module_options.ADOPTION_STEP_TOKENS`) resolve the same way when
+the page renders, so a renamed `*_env_var` follows the project's configuration. The generated
+managed `quickscale-operations.md` renders each installed module's section under its title,
+and the generated `OPERATIONS.md` links that page once, so the user-owned guide names no
+module value and a module release that changes a version, an event list, or an endpoint
+regenerates only the managed page.
+
 **3. Templates (if applicable):**
 - [ ] `templates/quickscale_<name>/` — Zero-style semantic HTML templates, with one flat `base.html` that the pages extend (emails under `email/`)
 - [ ] Static files under `static/quickscale_<name>/{css,js,img}/`; template-tag library named `quickscale_<name>`

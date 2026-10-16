@@ -107,33 +107,14 @@ WHERE rolname = '{{ runtime_db_role }}';
 SELECT current_user;
 -- Expected: {{ runtime_db_role }}
 ```
-{%- if selected_modules and "billing" in selected_modules %}
 
-## Stripe Billing
+## Module operations
 
-{{ project_name }} has the QuickScale billing module installed. Billing talks to Stripe at
-API version `{{ stripe_api_version }}`, and its webhook endpoint must use that same version.
-
-1. In the Stripe Dashboard, create a webhook endpoint for
-   `https://<your-host>/billing/webhooks/stripe/` at API version `{{ stripe_api_version }}`,
-   subscribed to the billing events you use (`invoice.paid`, `invoice.payment_failed`,
-   `checkout.session.completed`, `checkout.session.expired`,
-   `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
-   `customer.subscription.*`).
-2. Set the endpoint's signing secret in the configured webhook secret environment variable
-   (`QUICKSCALE_BILLING_WEBHOOK_SECRET` by default; the name comes from
-   `modules.billing.webhook_secret_env_var` in `quickscale.yml`).
-3. Set the Stripe secret and publishable key variables before enabling billing traffic.
-
-> **Upgrade note:** a webhook endpoint on an older API version stops processing billing
-> webhooks (`500` responses) until it is recreated at `{{ stripe_api_version }}`. Events refused
-> under the old version are not credited automatically, so reconcile them once the endpoint
-> is on `{{ stripe_api_version }}`: resend the event to that endpoint (Stripe Dashboard **Resend**,
-> or `stripe events resend <event_id> --webhook-endpoint=<endpoint_id>`, up to 30 days) and
-> confirm it is accepted; when an event is still refused or is outside the resend window,
-> credit the affected invoice once through the module's `credit_user` service from a Django
-> shell so the balance and ledger stay consistent.
-{%- endif %}
+The vendor versions, webhook events, and endpoints an installed module's operators must
+follow — and anything a later module release changes on its own — live in the generated
+managed page [the module operations page](quickscale-operations.md), which `quickscale apply`
+and `quickscale update` regenerate from the installed modules' own declarations. A local edit
+to that page is reported as drift.
 
 ## Troubleshooting
 

@@ -9,15 +9,21 @@ and packaged project-contract declaration sections.
 from __future__ import annotations
 
 import posixpath
+import re
 from collections.abc import Mapping
 from typing import Any
 
-from quickscale_core.contracts.module_options import resolve_adoption_step_tokens
+from quickscale_core.contracts.module_options import (
+    ADOPTION_STEP_TOKENS,
+    resolve_adoption_step_tokens,
+)
 from quickscale_core.manifest.loader_errors import ManifestError
 from quickscale_core.manifest.schema import (
     MANAGED_FILE_ROOT_PREFIX,
+    ConfigOption,
     ContractVintage,
     ManagedFileDeclaration,
+    ModuleOperations,
     ProjectContractStep,
     ProjectContractVintage,
 )
@@ -192,6 +198,121 @@ def _parse_ci_environment(
         declarations[option_name] = placeholder
 
     return declarations
+
+
+#: The keys a top-level ``operations`` section may declare.
+_OPERATIONS_SECTION_KEYS = frozenset({"title", "text", "values"})
+
+#: A module-declared operations value name: the ``{name}`` token the text
+#: references.  Letters, digits, and underscores only, so the token always
+#: forms one unambiguous ``{name}`` marker.
+_OPERATIONS_TOKEN_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+
+
+def _parse_operations(
+    data: dict[str, Any],
+    module_name: str | None,
+    options: Mapping[str, ConfigOption],
+) -> ModuleOperations | None:
+    """Parse and validate the optional top-level ``operations`` section.
+
+    The section carries the module's operator-facing operations text: a
+    ``title`` heading, a Markdown ``text`` body, and the module-owned
+    ``values`` the text references as ``{name}`` tokens.  The generated
+    project's managed ``quickscale-operations.md`` page renders the section,
+    and the user-owned ``OPERATIONS.md`` links that page once instead of
+    restating a module value, so the module owns its operations contract.
+
+    A ``text`` token resolves when the page renders: a declared value, a
+    declared option's resolved value, or a core contract token (see
+    ``quickscale_core.contracts.module_options.ADOPTION_STEP_TOKENS``).  A
+    module-declared value whose name shadows a declared option or a core
+    token is refused, because it would silently change what the existing
+    text means.
+
+    Args:
+        data: The full parsed YAML data dictionary.
+        module_name: Optional module name for error messages.
+        options: The manifest's declared options (mutable and immutable).
+
+    Returns:
+        A :class:`ModuleOperations` instance, or ``None`` when the section is
+        absent.
+
+    Raises:
+        ManifestError: If the section is not a mapping, declares an unknown
+            key, leaves ``title`` or ``text`` empty, or declares a value
+            whose name is malformed or shadows a reserved token name.
+    """
+    raw_section = data.get("operations")
+    if raw_section is None:
+        return None
+
+    if not isinstance(raw_section, dict):
+        raise ManifestError("'operations' must be a mapping", module_name)
+
+    # Report the first unknown key in declaration order: heterogeneous keys
+    # (a YAML integer against a string) cannot be sorted, and the refusal must
+    # stay a ManifestError rather than escape as a bare TypeError.
+    unknown_keys = [key for key in raw_section if key not in _OPERATIONS_SECTION_KEYS]
+    if unknown_keys:
+        allowed = ", ".join(sorted(_OPERATIONS_SECTION_KEYS))
+        raise ManifestError(
+            f"'operations' declares unknown key '{unknown_keys[0]}' "
+            f"(allowed: {allowed})",
+            module_name,
+        )
+
+    title = raw_section.get("title")
+    if not isinstance(title, str) or not title:
+        raise ManifestError(
+            "'operations.title' must be a non-empty string", module_name
+        )
+
+    text = raw_section.get("text")
+    if not isinstance(text, str) or not text.strip():
+        raise ManifestError("'operations.text' must be a non-empty string", module_name)
+
+    values_raw = raw_section.get("values", {})
+    if not isinstance(values_raw, dict):
+        raise ManifestError("'operations.values' must be a mapping", module_name)
+
+    reserved = set(options) | set(ADOPTION_STEP_TOKENS)
+    values: dict[str, str | tuple[str, ...]] = {}
+    for value_name, value in values_raw.items():
+        if (
+            not isinstance(value_name, str)
+            or _OPERATIONS_TOKEN_NAME.match(value_name) is None
+        ):
+            raise ManifestError(
+                "'operations.values' keys must be token names (letters, "
+                "digits, and underscores, not starting with a digit)",
+                module_name,
+            )
+        if value_name in reserved:
+            raise ManifestError(
+                f"'operations.values.{value_name}' would shadow a declared "
+                "option or a core contract token; rename the value",
+                module_name,
+            )
+        if isinstance(value, list):
+            if not value or not all(isinstance(item, str) and item for item in value):
+                raise ManifestError(
+                    f"'operations.values.{value_name}' list entries must be "
+                    "non-empty strings",
+                    module_name,
+                )
+            values[value_name] = tuple(value)
+        elif isinstance(value, str) and value:
+            values[value_name] = value
+        else:
+            raise ManifestError(
+                f"'operations.values.{value_name}' must be a non-empty string "
+                "or a list of non-empty strings",
+                module_name,
+            )
+
+    return ModuleOperations(title=title, text=text, values=values)
 
 
 def _parse_required_modules(data: dict[str, Any], module_name: str | None) -> list[str]:
