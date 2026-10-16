@@ -19,17 +19,11 @@ django-filter = "^26.1"
 quickscale-core = {path = "../../quickscale_core", develop = true}
 
 [tool.poetry.group.dev.dependencies]
-# Minimal dev dependencies for standalone testing
-# pytest, pytest-cov, ruff, mypy centralized in root pyproject.toml (monorepo)
-# or provided by user's project (standalone embed)
 pytest-django = "^4.11.1"
 
 [build-system]
 requires = ["poetry-core>=2.0,<3.0"]
 build-backend = "poetry.core.masonry.api"
-
-# Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
-# Package-specific overrides:
 
 [tool.ruff]
 target-version = "py314"
@@ -51,12 +45,12 @@ select = ["E4", "E7", "E9", "F", "S"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S"]
 
-[tool.django-stubs]
-django_settings_module = "tests.settings"
-
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
-pythonpath = [".", "src"]
+# The module dir, its src tree, and the workspace root that carries the
+# shared test helpers (tests_shared/ in the monorepo, the project root when
+# the module is embedded).
+pythonpath = [".", "src", "../.."]
 python_files = ["test_*.py"]
 testpaths = ["tests"]
 addopts = "-v --cov=quickscale_modules_forms --cov-report=html --cov-report=term-missing --cov-fail-under=90"
@@ -68,4 +62,6 @@ markers = [
 
 [tool.coverage.report]
 fail_under = 90
-# Per-file minimum target: 80% (enforced via code review)
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"
