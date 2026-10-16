@@ -1556,8 +1556,8 @@ class TestAccountDeleteView:
         )
 
         org = Organization.objects.create(
-            name="SA41 Personal",
-            slug="sa41-personal",
+            name="Personal Anomaly Org",
+            slug="personal-anomaly-org",
             is_personal=True,
         )
         OrganizationMembership.objects.create(
@@ -1599,8 +1599,8 @@ class TestAccountDeleteView:
         )
 
         org = Organization.objects.create(
-            name="SA41 No Sub",
-            slug="sa41-no-sub",
+            name="No Subscription Org",
+            slug="no-subscription-org",
             is_personal=True,
         )
         OrganizationMembership.objects.create(
@@ -2081,7 +2081,7 @@ class TestAccountDeleteView:
 
 
 @pytest.mark.django_db
-class TestAccountDeleteViewSA35:
+class TestAccountDeleteViewContentPreservation:
     """Regression: account deletion preserves content authored by
     the deleted user in org records that are reachable from the auth
     test suite (orgs module installed).
@@ -2108,8 +2108,8 @@ class TestAccountDeleteViewSA35:
 
         # Create an org and membership so the user has a personal org.
         org = Organization.objects.create(
-            name="SA35 Test Org",
-            slug="sa35-test-org",
+            name="Deletion Test Org",
+            slug="deletion-test-org",
             is_personal=True,
         )
         OrganizationMembership.objects.create(
@@ -2140,8 +2140,8 @@ class TestAccountDeleteViewSA35:
         )
 
         org = Organization.objects.create(
-            name="SA35 Shared Org",
-            slug="sa35-shared-org",
+            name="Shared Deletion Org",
+            slug="shared-deletion-org",
             is_personal=False,
         )
         OrganizationMembership.objects.create(
@@ -2151,9 +2151,9 @@ class TestAccountDeleteViewSA35:
         )
         User = get_user_model()
         other_user = User.objects.create_user(
-            username="sa35_other",
-            email="sa35_other@example.com",
-            password="SA35Other123!",
+            username="other_owner",
+            email="other_owner@example.com",
+            password="OtherOwner123!",
         )
         OrganizationMembership.objects.create(
             user=other_user,
