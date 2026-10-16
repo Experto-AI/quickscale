@@ -1,15 +1,18 @@
 """Django settings for QuickScale analytics module tests."""
 
-import os
 from pathlib import Path
 
-from quickscale_core.manifest.settings_schema import load_settings_schema
+from quickscale_core.testing.settings import (
+    module_settings_schema,
+    suite_database,
+    suite_secret_key,
+)
 
 SHARED_TEST_TEMPLATES = (
     Path(__file__).resolve().parents[3] / "tests_shared" / "templates"
 )
 
-SECRET_KEY = "test-secret-key-for-analytics-module"
+SECRET_KEY = suite_secret_key("analytics")
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
@@ -52,17 +55,10 @@ TEMPLATES = [
     }
 ]
 
+# The NOBYPASSRLS role orgs' boot guard requires, shared with the
+# other module suites; provisioned by scripts/provision_test_roles.sh.
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("QS_ANALYTICS_DB_NAME", "test_quickscale_analytics"),
-        # The NOBYPASSRLS role orgs' boot guard requires, shared with the
-        # other module suites; provisioned by scripts/provision_test_roles.sh.
-        "USER": os.environ.get("QS_ANALYTICS_DB_USER", "quickscale_test_role"),
-        "PASSWORD": os.environ.get("QS_ANALYTICS_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_ANALYTICS_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_ANALYTICS_DB_PORT", "5432"),
-    }
+    "default": suite_database("analytics", user="quickscale_test_role"),
 }
 
 USE_TZ = True
@@ -94,7 +90,4 @@ QUICKSCALE_ANALYTICS_POSTHOG_HOST_OVERRIDE = ""
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
 MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
-MODULE_SETTINGS_SCHEMA = {
-    name: load_settings_schema(MODULES_ROOT / name / "module.yml")
-    for name in ("analytics", "orgs")
-}
+MODULE_SETTINGS_SCHEMA = module_settings_schema(MODULES_ROOT, "analytics", "orgs")
