@@ -339,8 +339,8 @@ items:
      rule: "rule 1, rule 17", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: theme-request-paths, status: open, aspect: P, cost: [tax], members_diverging: [theme], population: theme-hooks,
      rule: "rule 31", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: test-ticket-ids-in-identifiers, status: open, aspect: M, cost: [tax], members_diverging: [auth, backups, blog, crm, orgs], population: modules(12),
-     rule: "rule 29", check: "harness rule 29 (names/docstrings/comments)", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: test-ticket-ids-in-identifiers, status: resolved, aspect: M, cost: [tax], members_diverging: [], population: modules(12),
+     rule: "rule 29 (identifiers, strings, names, docstrings, and comments)", check: "harness rule 29 (identifiers and strings in every tests/ entry, any case, embedded ids included, with controls); 0 tokens remain", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: test-harness-parity, status: open, aspect: M, cost: [tax], members_diverging: [analytics, storage, auth, blog, listings], population: modules(12),
      rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: pyproject-residue, status: open, aspect: N, cost: [tax], members_diverging: [auth, blog, crm, forms, listings, orgs], population: modules(12),
@@ -513,7 +513,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 34 | `throttle-rate-merge-copies` | B | tax | 5 / 5 throttled adapters | open (2026-10-16) |
 | 35 | `command-off-refusal-and-atomic` | J | tax | 3 / 16 commands | open (2026-10-16) |
 | 36 | `theme-request-paths` | P | tax | 2 raw `fetch` + literal paths | open (2026-10-16) |
-| 37 | `test-ticket-ids-in-identifiers` | M | tax | 5 / 12 | open (2026-10-16) |
+| 37 | `test-ticket-ids-in-identifiers` | M | tax | 5 / 12 | resolved (SA293 (a)) |
 | 38 | `test-harness-parity` | M | tax | 5 / 12 | open (2026-10-16) |
 | 39 | `pyproject-residue` | N | tax | 6 / 12 | open (2026-10-16) |
 | 40 | `manifest-option-residue` | B | tax | 4 / 96 options | open (2026-10-16) |
@@ -2558,6 +2558,7 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-16 — `dependency-spec-sources`: resolved (SA283(c) bf7e242e — verified; 12/12 `--cov=<import package>`).
 - 2026-10-16 — `api-renderer-parser-pinning`: resolved (SA288 — decisions rule 9 carries the JSON-only clause; harness rule 9 checks both composed defaults and bans per-view renderer/parser pins with controls; billing, listings, orgs, blog, and the rendered social views dropped their pins, while the blog media upload keeps its multipart policy).
 - 2026-10-16 — `theme-retired-error-shapes`: resolved (SA289 (a) — the theme's `useApi.ts` parses only the one QuickScale error shape, and `useApiErrors.test.ts` rejects the retired string-`error` and `errors`-key payloads; proposal 53's rule-31 merge lands with SA289 (b)).
+- 2026-10-16 — `test-ticket-ids-in-identifiers`: resolved (SA293 (a) — every ticket id left the 12 modules' tests, and rule 29 scans identifiers and string literals in every `tests/` entry, in any case and embedded ids included, with controls; proposal 57's rule-29 clause lands here, items 38–40 with SA293 (b)–(d)).
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).
 - 2026-10-16 — All other prior IDs: still resolved (harness pass at HEAD; delta has no convention-breaking commit).

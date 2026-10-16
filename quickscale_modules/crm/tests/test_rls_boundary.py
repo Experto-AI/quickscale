@@ -221,7 +221,7 @@ class TestCrmRlsBoundaryRestrictedRole:
     # Restricted-role cursor proof
     # ------------------------------------------------------------------
 
-    def test_af9_priming_proof_restricted_role_cursor(self, org_a) -> None:
+    def test_priming_proof_restricted_role_cursor(self, org_a) -> None:
         """The execute wrapper primes the GUC from the
         ContextVar under a restricted PostgreSQL role.
 
@@ -249,8 +249,8 @@ class TestCrmRlsBoundaryRestrictedRole:
         # Pre-seed data under superuser connection.
         set_current_org_id(org_a.id)
         try:
-            Tag.objects.create(name="AF9 Tag", organization=org_a)
-            Company.objects.create(name="AF9 Company", organization=org_a)
+            Tag.objects.create(name="Priming Tag", organization=org_a)
+            Company.objects.create(name="Priming Company", organization=org_a)
         finally:
             set_current_org_id(None)
 
@@ -265,9 +265,9 @@ class TestCrmRlsBoundaryRestrictedRole:
                     # running the query — no manual SET required.
                     cursor.execute("SELECT name FROM quickscale_crm_tag ORDER BY name")
                     names = [r[0] for r in cursor.fetchall()]
-                    assert names == ["AF9 Tag"], (
-                        f"Expected AF9 Tag, got {names}. "
-                        "The AF9 wrapper must prime app.current_org_id "
+                    assert names == ["Priming Tag"], (
+                        f"Expected Priming Tag, got {names}. "
+                        "The execute wrapper must prime app.current_org_id "
                         "from the ContextVar for the restricted-role cursor."
                     )
                 finally:

@@ -1139,8 +1139,9 @@ for every module whose editor uses it, in place of the vendor's unguarded one); 
 named `_<name>.py`. Any other name needs a decision edit.
 
 **29. Test names.** Test files are `test_<subject>.py`, named for what they protect; neither the file
-name nor its docstrings and comments carry a ticket number (`SA<n>`, `AF<n>`, `CR-SA<n>-<n>`); the
-test checks both. Other files in `tests/` are `conftest.py`, `__init__.py`, `settings*.py`,
+name, its docstrings and comments, nor any identifier or string literal under `tests/` carries a
+ticket number (`SA<n>`, `AF<n>`, `CR-SA<n>-<n>`, in any case and embedded in a longer name); the
+test checks all of them. Other files in `tests/` are `conftest.py`, `__init__.py`, `settings*.py`,
 `urls*.py`, private `_`-prefixed files and folders, `templates/` for test-only templates, and test apps
 named `<purpose>_app/`. Shipped module source and `module.yml` follow the same no-ticket-id rule.
 
@@ -1318,7 +1319,7 @@ hand-written login checks, and unguarded or `AllowAny`+hand-checked views, email
 event names, and `session_key` reads, `services.py` `__all__` and keyword-only signatures, `py.typed`, `datetime.now`, and
 cache-key prefixes, constraint and index names and `unique_together`, webhook view bases, empty
 authentication and throttle classes, a signature-verifying service call in every such view (taking
-over from the CSRF pairing gate for webhooks), and response bodies, unlisted package file names, and ticket numbers in test file names, docstrings, and comments,
+over from the CSRF pairing gate for webhooks), and response bodies, unlisted package file names, and ticket numbers in test file names, docstrings, comments, identifiers, and string literals,
 hand-written module lines and literal mount paths in the seam producer, throttle scopes and rates
 and `RunSQL` tables, database function and advisory-lock names,
 stems in shared namespaces, references by name against the layers, `os.getenv` in module code, the

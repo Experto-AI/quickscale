@@ -32,7 +32,7 @@ from quickscale_modules_orgs.removal import (
 )
 
 DECLARED_PROJECT_OBLIGATION = OrganizationRemovalObligation(
-    name="sa213-project-provider-state",
+    name="project-provider-state",
     purge_action=RemovalAction.REFUSE,
     anonymize_action=RemovalAction.SKIP,
     anonymize_skip_reason="Account deletion retains the organization's records.",
@@ -46,7 +46,7 @@ DECLARED_PROJECT_OBLIGATION = OrganizationRemovalObligation(
 
 
 DECLARED_CUSTOMER_OBLIGATION = OrganizationRemovalObligation(
-    name="sa213-customer-provider-state",
+    name="customer-provider-state",
     purge_action=RemovalAction.REFUSE,
     anonymize_action=RemovalAction.SKIP,
     anonymize_skip_reason="Account deletion retains the organization row.",
@@ -111,8 +111,8 @@ def test_purge_refuses_a_populated_declared_provider_field(
     from tests.provider_id_app.models import ProjectProviderRecord
 
     org = Organization.objects.create(
-        name="SA213 Declared Provider Refusal",
-        slug="sa213-declared-provider-refusal",
+        name="Declared Provider Refusal",
+        slug="declared-provider-refusal",
     )
     set_current_org_id(org.pk)
     try:
@@ -162,8 +162,8 @@ def test_purge_deletes_rows_with_an_empty_declared_provider_field(
     from tests.provider_id_app.models import ProjectProviderRecord
 
     org = Organization.objects.create(
-        name="SA213 Declared Provider Empty",
-        slug="sa213-declared-provider-empty",
+        name="Declared Provider Empty",
+        slug="declared-provider-empty",
     )
     set_current_org_id(org.pk)
     try:
@@ -221,12 +221,12 @@ def test_purge_refuses_a_populated_declared_customer_field(
 ) -> None:
     """A recorded customer identity refuses dry-run and purge alike."""
     org = Organization.objects.create(
-        name="SA213 Declared Customer Field",
-        slug="sa213-declared-customer-field",
+        name="Declared Customer Field",
+        slug="declared-customer-field",
     )
     BillingCustomer.objects.create(
         organization=org,
-        stripe_customer_id="cus_sa213_declared",
+        stripe_customer_id="cus_declared",
     )
     org_id = org.pk
 
@@ -265,8 +265,8 @@ def test_purge_deletes_without_a_declared_customer_field(
 ) -> None:
     """No recorded customer identity does not refuse the purge."""
     org = Organization.objects.create(
-        name="SA213 Declared Customer Empty",
-        slug="sa213-declared-customer-empty",
+        name="Declared Customer Empty",
+        slug="declared-customer-empty",
     )
     org_id = org.pk
 
@@ -284,7 +284,7 @@ def test_purge_deletes_without_a_declared_customer_field(
 
 
 UNSCOPED_DECLARATION = OrganizationRemovalObligation(
-    name="sa213-unscoped-provider-state",
+    name="unscoped-provider-state",
     purge_action=RemovalAction.REFUSE,
     anonymize_action=RemovalAction.SKIP,
     anonymize_skip_reason="Account deletion retains the rows.",
@@ -312,8 +312,8 @@ def test_purge_fails_closed_on_an_uninspectable_declared_field(
 ) -> None:
     """A declared field the purge cannot inspect fails closed before deletion."""
     org = Organization.objects.create(
-        name="SA213 Unscoped Declared Field",
-        slug="sa213-unscoped-declared-field",
+        name="Unscoped Declared Field",
+        slug="unscoped-declared-field",
     )
     org_id = org.pk
 
@@ -331,7 +331,7 @@ def test_purge_fails_closed_on_an_uninspectable_declared_field(
 
 
 DECLARED_CACHE_OBLIGATION = OrganizationRemovalObligation(
-    name="sa213-project-cache-state",
+    name="project-cache-state",
     purge_action=RemovalAction.INVALIDATE,
     anonymize_action=RemovalAction.SKIP,
     anonymize_skip_reason="Account deletion retains the organization's rows.",
@@ -368,8 +368,8 @@ def declared_cache_hook(monkeypatch: pytest.MonkeyPatch) -> list:
 def test_purge_runs_a_declared_cache_hook(declared_cache_hook: list) -> None:
     """An app-owned INVALIDATE obligation runs the app's own hook."""
     org = Organization.objects.create(
-        name="SA213 Declared Cache Hook",
-        slug="sa213-declared-cache-hook",
+        name="Declared Cache Hook",
+        slug="declared-cache-hook",
     )
     org_id = org.pk
 
@@ -419,8 +419,8 @@ def test_purge_refuses_a_one_shot_hook_declaration_before_deleting(
 ) -> None:
     """The collector's refusal reaches the purge before any destruction."""
     org = Organization.objects.create(
-        name="SA283 One-shot Hook",
-        slug="sa283-one-shot-hook",
+        name="One-shot Hook",
+        slug="one-shot-hook",
     )
     org_id = org.pk
 
@@ -439,7 +439,7 @@ def test_purge_refuses_a_one_shot_hook_declaration_before_deleting(
 
 
 DECLARED_UNKNOWN_LABEL_OBLIGATION = OrganizationRemovalObligation(
-    name="sa213-unknown-label-state",
+    name="unknown-label-state",
     purge_action=RemovalAction.REFUSE,
     anonymize_action=RemovalAction.SKIP,
     anonymize_skip_reason="Account deletion retains the organization's rows.",
@@ -482,8 +482,8 @@ def test_purge_fails_closed_on_an_unknown_declared_label(
 ) -> None:
     """A misspelled declared model label refuses the purge."""
     org = Organization.objects.create(
-        name="SA213 Unknown Declared Label",
-        slug="sa213-unknown-declared-label",
+        name="Unknown Declared Label",
+        slug="unknown-declared-label",
     )
     org_id = org.pk
 
@@ -597,8 +597,8 @@ def test_purge_resolves_boundary_guarded_labels_too(
 ) -> None:
     """A guarded field's model label is resolved before deletion as well."""
     org = Organization.objects.create(
-        name="SA213 Guarded Unknown Label",
-        slug="sa213-guarded-unknown-label",
+        name="Guarded Unknown Label",
+        slug="guarded-unknown-label",
     )
     org_id = org.pk
 
@@ -616,7 +616,7 @@ def test_purge_resolves_boundary_guarded_labels_too(
 
 
 UNDISCHARGEABLE_DECLARATION = OrganizationRemovalObligation(
-    name="sa213-undischargeable-state",
+    name="undischargeable-state",
     purge_action=RemovalAction.RECONCILE,
     anonymize_action=RemovalAction.SKIP,
     anonymize_skip_reason="Account deletion retains the organization's rows.",
@@ -647,8 +647,8 @@ def test_purge_rejects_an_undischargeable_declaration_before_deleting(
 ) -> None:
     """A declaration with no purge stage refuses before any destruction."""
     org = Organization.objects.create(
-        name="SA213 Undischargeable Declaration",
-        slug="sa213-undischargeable-declaration",
+        name="Undischargeable Declaration",
+        slug="undischargeable-declaration",
     )
     org_id = org.pk
 

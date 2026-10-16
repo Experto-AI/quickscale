@@ -10,7 +10,7 @@ Structure
 1. Seed an Organization row and establish a session org context via
    ``set_current_org_id()``.
 2. Process a synthetic request (``RequestFactory`` + ``TenantMiddleware``)
-   through the ``af9_guc_probe_view`` which runs a direct
+   through the ``guc_probe_view`` which runs a direct
    ``cursor.execute()`` and returns the DB-level ``app.current_org_id``.
 3. Assert the probe response carries the expected org UUID — proving the
    wrapper primed the GUC from the ContextVar in the same transaction as
@@ -38,23 +38,23 @@ from quickscale_modules_orgs.models import (
     Organization,
     OrganizationMembership,
 )
-from tests.urls import af9_guc_probe_view
+from tests.urls import guc_probe_view
 
 
 @pytest.mark.django_db(transaction=True)
-class TestAf9AutocommitRequestPathProof:
+class TestAutocommitRequestPathProof:
     """Autocommit GUC priming proof through a request path."""
 
     @pytest.fixture(autouse=True)
     def _setup(self, settings) -> None:
         settings.QUICKSCALE_ORGS_MODE = "saas"
         self.user = get_user_model().objects.create_user(
-            username="af9-probe",
-            email="af9-probe@example.com",
+            username="guc-probe",
+            email="guc-probe@example.com",
             password="secret123",
         )
         self.organization = Organization.objects.create(
-            name="AF9 Probe Org", slug="af9-probe-org"
+            name="GUC Probe Org", slug="guc-probe-org"
         )
         OrganizationMembership.objects.create(
             user=self.user,
@@ -64,10 +64,10 @@ class TestAf9AutocommitRequestPathProof:
 
     def _send_autocommit_request(self) -> str:
         """Send a request through middleware + probe view, return response body."""
-        request = RequestFactory().get("/_af9/guc-probe/")
+        request = RequestFactory().get("/_guc-probe/")
         request.user = self.user
         request.session = {ACTIVE_ORG_SESSION_KEY: str(self.organization.pk)}
-        response = TenantMiddleware(af9_guc_probe_view)(request)
+        response = TenantMiddleware(guc_probe_view)(request)
         assert response.status_code == 200
         return response.content.decode()
 
@@ -84,7 +84,7 @@ class TestAf9AutocommitRequestPathProof:
         assert body == str(self.organization.pk), (
             f"Expected the probe view to return the org UUID "
             f"({self.organization.pk}), got {body!r}. "
-            "The AF9 execute wrapper must prime app.current_org_id "
+            "The execute wrapper must prime app.current_org_id "
             "from the ContextVar during autocommit request-path queries."
         )
 
@@ -111,7 +111,7 @@ class TestAf9AutocommitRequestPathProof:
             "After the autocommit request, app.current_org_id must be "
             f"at the session default, got {raw!r}. "
             "The short atomic must commit and the GUC must revert "
-            "(AF4 no-request-long-transaction guard)."
+            "(the no-request-long-transaction guard)."
         )
 
     # ------------------------------------------------------------------
@@ -127,8 +127,8 @@ class TestAf9AutocommitRequestPathProof:
         """
         reset_current_org_id()
 
-        request = RequestFactory().get("/_af9/guc-probe/")
-        response = af9_guc_probe_view(request)
+        request = RequestFactory().get("/_guc-probe/")
+        response = guc_probe_view(request)
         assert response.status_code == 200
         body = response.content.decode()
         assert body == "", (

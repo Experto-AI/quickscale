@@ -484,8 +484,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `webhook_ttl_seconds` `pattern`). Each clause has a harness detector with a control.
 
   **Slices:**
-  - [ ] (a) Rename the ~70–90 ticket-id test identifiers and extend the rule 29 scan to
-    identifiers in `tests/` (Tier 2-fast).
+  - [x] (a) Rename the ~70–90 ticket-id test identifiers and extend the rule 29 scan to
+    identifiers in `tests/` (Tier 2-fast). Landed: 241 ticket-id occurrences left the
+    modules' tests (identifiers, strings, docstrings, comments); rule 29 scans every `tests/`
+    `.py` entry's identifiers and string literals, any case, embedded ids included, with
+    controls; decisions rule 29 carries the clause. (b) is next.
   - [ ] (b) The shared test-settings base and conftest plugin, adopted by all 12 modules,
     including analytics' and storage's missing hooks, auth's `DEFAULT_AUTO_FIELD`, and blog's and
     listings' `USE_TZ`, with the harness key diff (Tier 2-full: plugin loading across 12 pytest

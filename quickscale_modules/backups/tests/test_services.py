@@ -4351,7 +4351,7 @@ class TestStaleRestoreDetection:
     # Deduplicate the stale-restore threshold constant
     # ------------------------------------------------------------------
 
-    def test_sa54_stale_threshold_default_matches_constant(self) -> None:
+    def test_stale_threshold_default_matches_constant(self) -> None:
         """The default ``stale_threshold_minutes`` parameter of
         ``restore_admin_uploaded_backup`` must match the canonical
         ``STALE_RESTORE_THRESHOLD_MINUTES`` constant in services.py.
@@ -4373,7 +4373,7 @@ class TestStaleRestoreDetection:
 
 
 @pytest.mark.django_db
-class TestGetManagePySA52:
+class TestGetManagePy:
     """Regression tests for _get_manage_py fail-hard behavior."""
 
     def test_get_manage_py_raises_when_unresolvable(self) -> None:
@@ -4477,7 +4477,7 @@ class TestGetManagePySA52:
 
 
 @pytest.mark.django_db
-class TestPrepareAdminUploadedRestoreArtifactSA53:
+class TestPrepareAdminUploadedRestoreArtifact:
     """Crash-safe local artifact copy in prepare_admin_uploaded_restore_artifact."""
 
     def test_copy_failure_preserves_existing_artifact_and_cleans_staging(

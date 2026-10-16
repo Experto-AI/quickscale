@@ -561,6 +561,30 @@ def test_test_name_control() -> None:
     comment = "# SA999 legacy reason\ndef test_widget():\n    pass\n"
     commented = replace(module, tests={**module.tests, "test_widget.py": comment})
     assert _violations(checker.rule_29_test_names, commented)
+    identifier = "class TestWidgetSA999:\n    pass\n"
+    named = replace(module, tests={**module.tests, "test_widget.py": identifier})
+    assert any(
+        "identifier carries a ticket id" in violation
+        for violation in _violations(checker.rule_29_test_names, named)
+    )
+    fixture = "@pytest.fixture\ndef _sa999_fixture():\n    return 1\n"
+    conftest = replace(module, tests={**module.tests, "conftest.py": fixture})
+    assert any(
+        "identifier carries a ticket id" in violation
+        for violation in _violations(checker.rule_29_test_names, conftest)
+    )
+    literal = "VALUE = 'sa999-widget'\n"
+    text = replace(module, tests={**module.tests, "test_widget.py": literal})
+    assert any(
+        "string carries a ticket id" in violation
+        for violation in _violations(checker.rule_29_test_names, text)
+    )
+    clean = "class TestWidget:\n    pass\n\n\nVALUE = 'usa42'\n"
+    accepted = replace(module, tests={**module.tests, "test_widget.py": clean})
+    assert _violations(checker.rule_29_test_names, accepted) == []
+    ordinary = "class TestWidgetAA999:\n    pass\n"
+    worded = replace(module, tests={**module.tests, "test_widget.py": ordinary})
+    assert _violations(checker.rule_29_test_names, worded) == []
 
 
 def test_shared_stem_control() -> None:

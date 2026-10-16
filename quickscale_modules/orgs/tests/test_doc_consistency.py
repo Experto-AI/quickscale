@@ -161,7 +161,7 @@ def test_derived_registry_no_fallback_reason() -> None:
         assert "Classified by registry" not in entry.reason, (
             f"Model {entry.app_label}.{entry.model_name} has reason "
             f"{entry.reason!r} which references registry fallback. "
-            f"After the SA15.3 marker backfill, every excluded model "
+            f"After the marker backfill, every excluded model "
             f"should carry an explicit tenant_excluded marker."
         )
 
@@ -357,7 +357,7 @@ def test_no_stale_manager_names_in_managers_module() -> None:
     for name in _STALE_MANAGER_NAMES:
         assert not hasattr(mgrs, name), (
             f"Stale manager name '{name}' found in managers module. "
-            f"SA3.1 removed this class.  Remove it again and update "
+            f"This class was removed.  Remove it again and update "
             f"the docs."
         )
 
@@ -374,7 +374,7 @@ def test_no_stale_manager_names_in_decisions_doc() -> None:
     for name in _STALE_MANAGER_NAMES:
         assert name not in content, (
             f"Stale manager name '{name}' found in decisions.md. "
-            f"SA3.1 removed this reference.  Update decisions.md to "
+            f"This reference was removed.  Update decisions.md to "
             f"use the current TenantManager API."
         )
 
@@ -391,7 +391,7 @@ def test_no_stale_manager_names_in_organizations_doc() -> None:
     for name in _STALE_MANAGER_NAMES:
         assert name not in content, (
             f"Stale manager name '{name}' found in organizations.md. "
-            f"SA3.1 removed this reference.  Update organizations.md to "
+            f"This reference was removed.  Update organizations.md to "
             f"use the current TenantManager API."
         )
 
@@ -499,7 +499,7 @@ def test_m2m_through_marker_only_with_non_project_target() -> None:
         side_effect=_mock_is_project_app,
     ):
         assert _get_m2m_through_classification_marker_only(through_model), (
-            f"SA15.3 regression: through {through_model.__name__} should "
+            f"Marker-only regression: through {through_model.__name__} should "
             f"remain marker-classifiable when target {target_model.__name__} "
             f"appears as non-project (simulating auth.User -> auth.Group)."
         )

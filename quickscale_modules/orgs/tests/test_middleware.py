@@ -948,7 +948,7 @@ def test_tenant_context_nested_restores_db_guc_on_postgres() -> None:
             cursor.execute("SELECT current_setting('app.current_org_id', true)")
             (raw,) = cursor.fetchone()
             assert raw == str(outer_id), (
-                "DB GUC must be restored to outer_id after inner exit — CR-AF11-001"
+                "DB GUC must be restored to outer_id after inner exit"
             )
 
     # After outer exit: DB GUC restored to prior (empty).
@@ -956,7 +956,7 @@ def test_tenant_context_nested_restores_db_guc_on_postgres() -> None:
         cursor.execute("SELECT current_setting('app.current_org_id', true)")
         (raw,) = cursor.fetchone()
         assert raw is None or raw == "", (
-            "DB GUC must return to empty/default after outer exit — CR-AF11-001"
+            "DB GUC must return to empty/default after outer exit"
         )
 
 
@@ -999,7 +999,7 @@ def test_tenant_context_nested_none_inner_restores_db_guc_on_postgres() -> None:
             cursor.execute("SELECT current_setting('app.current_org_id', true)")
             (raw,) = cursor.fetchone()
             assert raw == str(org_id), (
-                "DB GUC must be restored to org_id after inner None exit — CR-AF11-001"
+                "DB GUC must be restored to org_id after inner None exit"
             )
 
 
