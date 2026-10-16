@@ -11,7 +11,8 @@ Audited: `30b0b6b1` (`v89`) · 2026-10-16 · working tree clean · prompt: deep-
 > - Finding 1 is down to one label-keyed branch and an unlifted decision rule.
 > - Finding 2 is down to theme pages and other non-seam user-owned files. Its step rate did not
 >   fall.
-> - Finding 3 is down to one small relocation, minted by SA280 (b).
+> - Finding 3 is down to one small relocation, minted by SA280 (b). *(Same-day follow-up:
+>   SA285 (b) removed it; Finding 3 is resolved.)*
 >
 > Ranks are re-derived: `generated-file-ownership-unmodeled` moves to rank 1. The prior pass's
 > full text is in version control (`git show 30b0b6b1:docs/others/arch-audit.md`).
@@ -200,11 +201,11 @@ first-party Django modules**, in one monorepo: `quickscale` (meta), `quickscale_
 | Theme seam types and keys | managed, hash-tracked `quickscaleSeam.d.ts` / `.keys.ts` (`project_state_hashes.py:47–50`) | **structural** | — | **new** (SA276) |
 | Vendored module source unmodified | extension contract prose only | **convention** | — | unchanged |
 | Gate present in every required context | registry-generated regions, `gates.mk`, local arms (`check_ci_locally.sh:456–542`), and Makefile help | **structural** (generated) | — | **strengthened** (SA275, SA285 (a)); the four oracles derive the inventory, one hand count pin remains |
-| Bundled manifests ship in the core wheel | `sync_module_manifests.py` run by each build entrypoint (7 call sites, plus 3 conftests) | **convention** per entrypoint | — | **new** (SA280 (b)); replaces a tracked copy held by parity |
+| Bundled manifests ship in the core wheel | one shared core-build step (`scripts/build_core_wheel.sh`) materializes for every build entrypoint, guarded by `scripts/check_core_build_routing.py`; the three conftests run the materializer directly | **structural** for build entrypoints | — | **derived** (SA285 (b)); replaces 7 remembered call sites |
 | Quality thresholds | `check_quality.sh`, package `src/` plus non-test `scripts/` | gated | closed per metric | **scope extended** (SA278 (b)) |
 
-Findings concentrate on the three **convention** rows that grew or were minted this pass: update
-across a label change, adoption, and the build-entrypoint materializer.
+Findings concentrate on the two **convention** rows that grew this pass: update across a label
+change and adoption; SA285 (b) moved the build-entrypoint materializer row to structural.
 
 ---
 
@@ -214,7 +215,7 @@ across a label change, adoption, and the build-entrypoint materializer.
 |---|---|---|---|---|---|---|---|
 | 1 | `generated-file-ownership-unmodeled` | Module-facing contracts live in user-owned generated files | now | High | M | two-way door | Seam types are now managed, but theme pages, CI workflow, and docs still carry module contracts; steps 40 → 46 in 3 days, 12 pending on `bap-web-new` |
 | 2 | `clean-break-schema-no-data-path` | Module schemas have no verified data upgrade path | now | High | S | one-way door | The freeze and append-only content identity landed; `update` checks content only under an equal label until `MIGRATION_FREEZE_VINTAGE` is set, and rule 1 still forbids `0002` |
-| 3 | `rules-held-by-parity-not-derivation` | Rules are kept as hand-synced copies | 6–18 months | High | S | two-way door | Most copies are derived or deleted; the residual is a materializer every build entrypoint must remember, with one hand count pin in the gate oracles |
+| 3 | `rules-held-by-parity-not-derivation` | Rules are kept as hand-synced copies | 6–18 months | High | S | two-way door | Copies are derived or deleted; the materializer runs through one shared core-build step, and the gate oracles keep their one deliberate hand count pin (SA285) |
 
 ---
 
@@ -240,7 +241,7 @@ items:
                scripts/check_migration_freeze.py, scripts/sync_migration_hashes.py, scripts/migration_hashes.json,
                quickscale_core/src/quickscale_core/dr_engine/recovery.py],
      first_seen: 2026-09-23, last_verified: 2026-10-16}
-  - {id: rules-held-by-parity-not-derivation, status: open, rank: 3,
+  - {id: rules-held-by-parity-not-derivation, status: resolved, rank: 3,
      title: "Rules are kept as hand-synced copies", lenses: [XV, XIII, XX],
      horizon: 6–18 months, confidence: High, size: S, reversibility: two-way door,
      depends_on: [], amplifies: [],
@@ -489,8 +490,8 @@ items:
 
 ### Finding 3: Rules are kept as hand-synced copies
 
-- **ID:** `rules-held-by-parity-not-derivation`. Still open; **most of the mechanism removed,
-  with one small relocation**.
+- **ID:** `rules-held-by-parity-not-derivation`. **Resolved by SA285 (b)** (this pass found most
+  of the mechanism removed, with one small relocation; that relocation is now derived too).
 - **Fix-regression audit:**
   - **SA275 (a, b): gate wiring.**
     1. **Mechanism:** removed. Gate order and the hosted, publish, and help metadata are
@@ -520,7 +521,11 @@ items:
     - **Seven build entrypoints** must each run `sync_module_manifests.py` before
       `poetry build`: three Makefile targets, `publish.yml:249`, `publish.sh:322`,
       `_installed_wheel_venv.sh:679`, and `install_global.sh:285`. **Three conftests** must also
-      run it.
+      run it. *(Closed by SA285 (b): every build entrypoint now routes through
+      `scripts/build_core_wheel.sh`, which owns the one core `poetry build` and materializes
+      before it; `scripts/check_core_build_routing.py` fails when a shell entrypoint, the
+      Makefile, or a workflow builds core outside it. The three conftests still run the
+      materializer directly — they build no wheel.)*
     - The derivation already needed four follow-up commits: `5dd2b2a6` (Poetry silently dropped
       the gitignored manifests from every Git-aware wheel), `340cde24`, `cee5b995` (the user
       manual still showed a bare `poetry build`), and `b9dff3da`.
@@ -534,6 +539,10 @@ items:
     `test_refresh_action_pins.py`) read the gate set from `gate_registry.json` and derive their
     expectations from it; the one hand pin kept on the count is `test_gate_parity.py`'s
     `EXPECTED_GATE_COUNT`.
+  - **SA285 (b) (shared core-build step):** removed. `scripts/build_core_wheel.sh` is the one
+    step; `make build-core`, `make manifest-sync`, `make sa117-lock-diff`, the publish workflow,
+    `publish.sh`, `install_global.sh`, and the installed-wheel provisioner route through it, each
+    keeping its own staging around the call, and the routing guard below holds the line.
 - **Rank rationale:** Medium blast radius, Medium likelihood, linear compounding (down from
   steep).
   - **Blast radius:** delivery cost. One release-integrity edge: a core wheel without manifests
@@ -550,7 +559,9 @@ items:
 - **Problem:** One rule is still authored once and restated by hand: "materialize the manifests
   first" at every build entrypoint (the gate inventory in test oracles now derives from the
   registry with a single hand count pin — SA285 (a)). Its correctness is held by each copy being
-  remembered, not by derivation.
+  remembered, not by derivation. *(Resolved by SA285 (b): the rule is authored once in
+  `scripts/build_core_wheel.sh`, every build entrypoint routes through it, and the routing guard
+  rejects a build site that does not.)*
 - **Evidence:** as above. Measured: `git show --stat 518cc377`; `git grep sync_module_manifests`
   gives 7 non-test entrypoints and 3 conftests.
 - **Counter-evidence:**
@@ -563,12 +574,13 @@ items:
     unexpected output is valuable, and the cost is low.
 - **Why it compounds:**
   - **Growth variable:** gates (one count-pin edit each) and build entrypoints (one more caller
-    to remember each).
+    to route through the shared step and declare — SA285 (b) converts the second from a
+    remembered copy to a guarded call).
   - **Built on top:** the 21-gate registry, three workflows, the installed-wheel provisioner,
     and the publish pipeline.
 - **Detection signal:** an `ImproperlyConfigured` manifest load in a freshly installed project. A
   commit that adds a gate and re-pins the oracle count. A build entrypoint that misses the
-  materializer.
+  materializer — now caught at review time by `scripts/check_core_build_routing.py` (SA285 (b)).
 - **Steelman:** One count-pin edit per gate is cheap, and the oracle set stays a deliberate
   end-to-end assertion on generated text that a fully self-derived test would miss. The
   materializer callers are few and stable, and the next release runs through `make`. Accept the
@@ -584,18 +596,21 @@ items:
        count. *(Landed as SA285 (a).)*
      - Add a wheel-content assertion (12 bundled manifests, byte-equal to the source) to
        `publish.yml` between `:295` and the upload.
-     - Route all build entrypoints through one `make build-core` that materializes.
+     - Route all build entrypoints through one `make build-core` that materializes. *(Landed as
+       SA285 (b).)*
 
      Effort S. **Live option.**
   2. **Accept and document** the oracle pattern; keep only the publish-artifact assertion. Effort
      XS.
 - **Recommendation:** option 1's publish-artifact assertion now, since it is release integrity
-  before 0.89.0 publishes (landed as SA284). The rest goes in as gates are next touched: the
-  oracle derivation landed as SA285 (a); the one core-build step remains (SA285 (b)).
+  before 0.89.0 publishes (landed as SA284). The rest went in as gates were next touched: the
+  oracle derivation landed as SA285 (a), and the one core-build step landed as SA285 (b); the
+  finding's residual is fully relocated.
   - **Size:** S.
   - **Reversibility:** `two-way door`.
   - **Guard:** the publish-job wheel assertion itself; and a test that no script under `scripts/`
-    or `.github/` runs `poetry build` for `quickscale_core` outside the one target.
+    or `.github/` runs `poetry build` for `quickscale_core` outside the one target (landed as
+    `scripts/check_core_build_routing.py`, SA285 (b); the Makefile is scanned too).
   - **First step:** add the post-build manifest-count and hash check to `publish.yml`'s build job
     (landed as `scripts/check_core_wheel_manifests.py`, SA284).
 
@@ -805,7 +820,7 @@ Append-only. One dated line per ID per pass. Placements before 2026-10-13 are in
 - 2026-10-13 — Coherence hand-off "markdownx_urls copy-pair": resolved (SA261).
 - 2026-10-16 — `generated-file-ownership-unmodeled`: still-open, rank 2 → 1. SA276 resolved the theme-type half (fix-regression passed for it); SA282 unified adoption; steps 40 → 46; 12 pending on `bap-web-new`; contracts now arrive via user-owned pages, CI, and docs.
 - 2026-10-16 — `clean-break-schema-no-data-path`: still-open, rank 1 → 2, size M → S. SA204 (a–f) removed most of the mechanism (freeze gate, content-keyed restore, bare-file closed, 0 rewrites since the gate); SA204 (g) keys the update guard on the freeze vintage, and SA204 (h) closes the `--write` re-freeze branch (the gate is append-only against the latest release tag, excludes the release being tagged, and acquires that one tag in a shallow clone); residual: `MIGRATION_FREEZE_VINTAGE` is still unset — the cross-release update compares content only under an equal label until SA204 (j) — and decision rule 1 still forbids `0002`.
-- 2026-10-16 — `rules-held-by-parity-not-derivation`: still-open, horizon now → 6–18 months, size M → S. SA275, SA278, SA279, SA280 (a), SA281, and SA285 (a) removed their copies; residual relocation: seven materializer build entrypoints (minted by SA280 (b)); the gate oracles now derive with one hand count pin; the publish artifact is now content-checked (SA284).
+- 2026-10-16 — `rules-held-by-parity-not-derivation`: resolved (SA285 (b)), horizon 6–18 months, size S. SA275, SA278, SA279, SA280 (a), SA281, SA285 (a), and SA285 (b) removed their copies; the materializer now runs through one shared core-build step every build entrypoint routes through (`scripts/build_core_wheel.sh`, guarded by `scripts/check_core_build_routing.py`); the gate oracles keep their one deliberate hand count pin and the publish artifact stays content-checked (SA284).
 - 2026-10-16 — `lockstep-release-unit`: accepted, carried (not fired).
 - 2026-10-16 — `privileged-command-four-stations`: accepted, carried (not fired).
 - 2026-10-16 — `single-railway-shared-fate`: accepted, carried (not fired; DR containment strengthened).

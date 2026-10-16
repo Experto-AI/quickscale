@@ -394,8 +394,12 @@ _qs_iv_ensure_poetry_uses_compatible_python() {
     )
 }
 
-_qs_iv_build_with_poetry() {
+# Run a staged build command inside the selected Poetry environment.  Build
+# output goes to stderr so the helper's stdout contract (the caller-visible
+# OUTPUT_DIR only) stays intact.
+_qs_iv_run_staged_build() {
     local pkg_dir="$1"
+    shift
     local venv_path
 
     venv_path="$(
@@ -414,8 +418,27 @@ _qs_iv_build_with_poetry() {
         POETRY_VIRTUALENVS_CREATE=true \
         POETRY_VIRTUALENVS_IN_PROJECT=false \
         POETRY_VIRTUALENVS_PATH="$_QS_IV_BUILD_VENVS_DIR" \
-        poetry build >&2
+        "$@" >&2
     )
+}
+
+# Build a non-core staged package with Poetry.
+_qs_iv_build_with_poetry() {
+    local pkg_dir="$1"
+
+    _qs_iv_run_staged_build "$pkg_dir" poetry build  # non-core wheel build
+}
+
+# Build the staged quickscale_core package through the one shared core-build
+# step (SA285 (b)), which owns the only core `poetry build`.  It runs with
+# --build-only: the repository tree was materialized before staging, so the
+# staged copy is built exactly as staged (a QS_SMOKE_REGRESSION_CORE input
+# keeps its deliberately removed manifests, and the probes still fail closed).
+_qs_iv_build_staged_core() {
+    local staged_dir="$_QS_IV_STAGE_DIR/quickscale_core"
+
+    _qs_iv_run_staged_build "$staged_dir" \
+        "$_QS_IV_HELPER_DIR/build_core_wheel.sh" --build-only --package-dir "$staged_dir"
 }
 
 # Build a staged package and copy the resulting wheel into the collection
@@ -428,7 +451,11 @@ _qs_iv_build_staged_package() {
     echo "  🏗️  Building $pkg_name (staged)..." >&2
     _qs_iv_ensure_poetry_uses_compatible_python "$staged_dir"
     rm -rf "$staged_dir/dist"
-    _qs_iv_build_with_poetry "$staged_dir"
+    if [[ "$pkg_name" == "quickscale_core" ]]; then
+        _qs_iv_build_staged_core
+    else
+        _qs_iv_build_with_poetry "$staged_dir"
+    fi
 
     # Collect the wheel into the shared collection directory.
     mkdir -p "$_QS_IV_WHEEL_COLLECT_DIR"
@@ -669,15 +696,17 @@ quickscale_provision_installed_venv() {
     _QS_IV_WHEEL_COLLECT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/quickscale-iv-wheels-XXXXXX")"
 
     # ---- Materialize the core package's bundled manifests ----
-    # SA280 (b): data/manifests is a build artifact materialized from the
-    # module manifests.  Materialize the repository tree before staging so
-    # every staged wheel carries it; a QS_SMOKE_REGRESSION_CORE input keeps
-    # its deliberately removed manifests, so the SA109 negative probe still
-    # fails closed.  Harness fixtures build from a layout without the module
-    # workspace; there the staged copy is used as-is (and the probes below
+    # SA285 (b): data/manifests is a build artifact materialized from the
+    # module manifests through the one shared core-build step.  Materialize
+    # the repository tree before staging so every staged wheel carries it; a
+    # QS_SMOKE_REGRESSION_CORE input keeps its deliberately removed manifests,
+    # so the SA109 negative probe still fails closed.  Harness fixtures build
+    # from a layout without the module workspace; there the materializer is
+    # not present and the staged copy is used as-is (and the probes below
     # fail closed when its manifests are missing).
     if [[ -f "$repo_root/scripts/sync_module_manifests.py" && -d "$repo_root/quickscale_modules" ]]; then
-        "$QUICKSCALE_IV_PYTHON_BIN" "$repo_root/scripts/sync_module_manifests.py" "$repo_root" >&2
+        "$_QS_IV_HELPER_DIR/build_core_wheel.sh" --materialize-only \
+            --root "$repo_root" --python "$QUICKSCALE_IV_PYTHON_BIN" >&2
     fi
 
     # ---- Stage all packages ----

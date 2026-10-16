@@ -4,14 +4,15 @@ SA280 (b) — materialize the bundled module manifests for a build.
 
 The bundled copies under
 ``quickscale_core/src/quickscale_core/data/manifests/<name>/module.yml`` are
-build artifacts, not tracked sources.  The repository's build entrypoints
+build artifacts, not tracked sources.  Since SA285 (b) every build entrypoint
 (``make build``, ``scripts/publish.sh``, the publish workflow,
-``scripts/install_global.sh``, and the installed-wheel provisioner) run this
-before each ``quickscale-core`` wheel build, and the test conftests run it
-before a manifest-reading suite, so an installed ``quickscale-core`` carries
-the manifests its runtime reads (the ``contracts/resolvers.py`` fallback,
-``contracts/module_discovery.py`` discovery, and every module's startup
-retired-setting refusal).
+``scripts/install_global.sh``, and the installed-wheel provisioner) runs this
+through the one shared core-build step, ``scripts/build_core_wheel.sh``,
+before each ``quickscale-core`` wheel build; the test conftests run it
+directly before a manifest-reading suite, so an installed ``quickscale-core``
+carries the manifests its runtime reads (the ``contracts/resolvers.py``
+fallback, ``contracts/module_discovery.py`` discovery, and every module's
+startup retired-setting refusal).
 
 The step is idempotent: a file whose bytes already match its source is left
 untouched.  Snapshot directories with no corresponding source module are

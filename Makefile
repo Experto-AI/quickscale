@@ -47,6 +47,7 @@
 #   make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first beta migration on a throwaway recipient
 #   make beta-migrate-iterate DONOR=/abs/path RECIPIENT=/abs/path - Regenerate the recipient from the donor's quickscale.yml, then run fresh-first
 #   make build                - Build all distribution packages
+#   make build-core           - Build the quickscale_core wheel through the one shared core-build step
 #   make publish-build        - Build packages only (no publish)
 #   make publish-test         - Publish to TestPyPI
 #   make publish-prod         - Publish to production PyPI
@@ -66,7 +67,7 @@
         lint lint-fix lint-frontend lint-agent typecheck format \
         fix check ci ci-e2e release-gate retry retry-show \
         docs \
-        build clean \
+        build build-core clean \
 		beta-migrate-fresh \
 		beta-migrate-iterate \
         publish-build publish-test publish-prod publish-full publish-module publish-modules \
@@ -315,6 +316,7 @@ help:
 	@echo ""
 	@echo "Build & Publish:"
 	@echo "  make build                - Build all distribution packages"
+	@echo "  make build-core           - Build the quickscale_core wheel through the one shared core-build step"
 	@echo "  make publish-build        - Build packages only (no publish)"
 	@echo "  make publish-test         - Publish to TestPyPI"
 	@echo "  make publish-prod         - Publish to production PyPI"
@@ -1000,11 +1002,12 @@ format:
 # each recipe is authored once in the registry and a new gate needs no Makefile
 # edit.  The hand-written targets that remain here are the ones a registry
 # projection cannot express: manifest-sync (SA280 (b): it materializes the
-# bundled module manifests for a build; the shipped build entrypoints run it
-# before every quickscale_core wheel build) and check-gate-suites below.
+# bundled module manifests for a build; SA285 (b) routes it and every shipped
+# build entrypoint through the one shared core-build step,
+# scripts/build_core_wheel.sh) and check-gate-suites below.
 
 manifest-sync:
-	@$(PYTHON) scripts/sync_module_manifests.py
+	@$(MAKEFILE_ROOT)scripts/build_core_wheel.sh --materialize-only
 
 security-negative-probes:
 	@$(PYTHON) scripts/check_security_gates.py security-negative-probes
@@ -1206,7 +1209,7 @@ sa117-lock-diff:
 	candidate=$(call shell_quote,$(call sa117_transport_value,SA117_CANDIDATE)); \
 	expected_version=$(call shell_quote,$(call sa117_transport_value,SA117_EXPECTED_VERSION)); \
 	evidence=$(call shell_quote,$(call sa117_transport_value,SA117_EVIDENCE)); \
-	$(PYTHON) scripts/sync_module_manifests.py "$$root"; \
+	"$$root/scripts/build_core_wheel.sh" --materialize-only --root "$$root"; \
 	cd "$$root"; \
 	$(PYTHON) "$$root/scripts/check_sa117_scope.py" --profile make lock-diff \
 		$(if $(value SA117_BASELINE_REF),--baseline-ref "$$baseline_ref",) \
@@ -1468,13 +1471,19 @@ docs:
 
 # --- Build & Publish ---
 
+# Build the quickscale_core wheel through the one shared core-build step
+# (SA285 (b)): the step materializes the bundled module manifests and runs the
+# only core `poetry build`; scripts/check_core_build_routing.py fails when a
+# script, this Makefile, or a workflow builds the core wheel outside it.
+build-core:
+	@$(MAKEFILE_ROOT)scripts/build_core_wheel.sh
+
 # Build all distribution packages
 build:
 	@rm -rf quickscale/dist/ quickscale_core/dist/ quickscale_cli/dist/
-	@cd quickscale && poetry build
-	@$(PYTHON) scripts/sync_module_manifests.py
-	@cd quickscale_core && poetry build
-	@cd quickscale_cli && poetry build
+	@cd quickscale && poetry build  # non-core wheel build
+	@$(MAKE) build-core
+	@cd quickscale_cli && poetry build  # non-core wheel build
 	@echo "✅ Build complete! See dist/ in each package."
 
 # Build packages only (no upload)
