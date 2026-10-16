@@ -21,6 +21,10 @@ from quickscale_core.generator.ci_environment import (
     ci_environment_entries,
     render_ci_environment,
 )
+from quickscale_core.generator.operations_page import (
+    OPERATIONS_PAGE_RELATIVE_PATH,
+    render_operations_page,
+)
 from quickscale_core.manifest.entry_point import (
     MANAGED_ADAPTER_ORIGINS,
     MANIFEST_ADAPTER_REGISTRY,
@@ -311,12 +315,27 @@ def _write_ci_environment(project_path: Path, entries: Mapping[str, str]) -> Non
     target_path.write_text(render_ci_environment(entries))
 
 
+def _write_operations_page(project_path: Path, content: str) -> None:
+    """Write the managed operations page (SA286).
+
+    The page carries each installed module's declared operations text under
+    its own section; the user-owned ``OPERATIONS.md`` links it once, so a
+    module release that changes a version, an event list, or an endpoint
+    changes only this managed page.  Apply, embed, update, and remove all
+    regenerate it alongside the managed wiring files.
+    """
+    target_path = project_path / OPERATIONS_PAGE_RELATIVE_PATH
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(content)
+
+
 def _write_wiring_files(
     project_path: Path,
     package_name: str,
     specs: Mapping[str, ModuleWiringSpec],
     *,
     ci_entries: Mapping[str, str],
+    operations_page: str,
 ) -> tuple[bool, str]:
     package_dir = project_path / package_name
     if not package_dir.exists():
@@ -326,6 +345,7 @@ def _write_wiring_files(
         write_managed_wiring(package_dir, specs)
         _write_seam_files(project_path)
         _write_ci_environment(project_path, ci_entries)
+        _write_operations_page(project_path, operations_page)
     except Exception as error:
         return False, f"Failed to write managed wiring files: {error}"
     return True, "Managed wiring files regenerated"
@@ -412,7 +432,13 @@ def regenerate_managed_wiring(
     if not selected_modules:
         # SA127: empty module selection requires no base path, manifests, or
         # adapter refresh. Write empty managed wiring and return success.
-        return _write_wiring_files(project_path, package_name, {}, ci_entries={})
+        return _write_wiring_files(
+            project_path,
+            package_name,
+            {},
+            ci_entries={},
+            operations_page=render_operations_page([]),
+        )
 
     prior_base_path: Path | None = None
     prior_base_path_was_override = False
@@ -433,13 +459,18 @@ def regenerate_managed_wiring(
         requirement_error = _missing_required_modules(selected_modules)
         if requirement_error is not None:
             return False, requirement_error
-        # SA286: the managed CI environment file renders from the same
-        # installed-module manifests the wiring specs resolved, with the
-        # project's configured options, so a renamed *_env_var reaches CI
-        # without editing a user-owned file.
+        # SA286: the managed CI environment file and operations page render
+        # from the same installed-module manifests the wiring specs resolved,
+        # with the project's configured options, so a renamed *_env_var
+        # reaches CI and the operations page without editing a user-owned
+        # file.
         ci_entries = ci_environment_entries(specs.keys(), module_options)
         return _write_wiring_files(
-            project_path, package_name, specs, ci_entries=ci_entries
+            project_path,
+            package_name,
+            specs,
+            ci_entries=ci_entries,
+            operations_page=render_operations_page(specs.keys(), module_options),
         )
     finally:
         _restore_modules_context(

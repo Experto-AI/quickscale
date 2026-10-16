@@ -70,6 +70,22 @@ recipient's copy and never writes donor content over it, and
 under the managed-file hash guard, so a local edit is reported as drift and a
 module release that changes a placeholder changes only this managed file.
 
+### Managed operations page (SA286)
+
+``quickscale-operations.md`` is the generated project's managed operations
+page: it renders each installed module's declared operations text (the
+manifest's ``operations`` section) — vendor versions, webhook events, and
+endpoints, with the module's declared values, core contract tokens, and
+configured options resolved — and the user-owned ``OPERATIONS.md`` links it
+once, because Markdown has no include directive.  It is classified as a
+recipient-managed protected root file
+(``FRESH_FIRST_PROTECTED_ROOT_FILES``): the migration preserves the
+recipient's copy and never writes donor content over it, and
+``quickscale apply``/``quickscale update``/``quickscale remove`` regenerate it
+under the managed-file hash guard, so a local edit is reported as drift and a
+module release that changes its operations text changes only this managed
+file.
+
 ## Categories
 
 ### Category U1 — Project-level user-owned files (root-level generated config/docs)

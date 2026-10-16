@@ -158,6 +158,37 @@ class ProjectContractVintage:
 
 
 @dataclass
+class ModuleOperations:
+    """A module's own operations text (SA286).
+
+    Populated from the top-level ``operations`` section: the module names the
+    operator-facing section (``title``), authors its Markdown body (``text``),
+    and declares the module-owned values the text references (``values``,
+    keyed by the ``{name}`` token the text uses).  The generated project's
+    managed ``quickscale-operations.md`` page renders these sections, and the
+    user-owned ``OPERATIONS.md`` links that page once, so the module owns its
+    operations contract and a module release changes no user-owned file.
+
+    The ``text`` may also reference a declared option's resolved value or a
+    core contract token (see
+    ``quickscale_core.contracts.module_options.ADOPTION_STEP_TOKENS``); both
+    resolve when the page renders.
+
+    Attributes:
+        title: The section heading rendered on the managed page.
+        text: The module-owned Markdown body.
+        values: Module-owned values keyed by token name; the text references
+            each as ``{name}``.  A value is a string, or a tuple of strings
+            for a declared group (rendered comma-separated, each entry
+            guarded as its own module-owned value).
+    """
+
+    title: str
+    text: str
+    values: dict[str, str | tuple[str, ...]] = field(default_factory=dict)
+
+
+@dataclass
 class ModuleManifest:
     """Complete module manifest from module.yml"""
 
@@ -169,6 +200,12 @@ class ModuleManifest:
     required_modules: list[str] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)
     managed_files: dict[str, ManagedFileDeclaration] = field(default_factory=dict)
+
+    operations: ModuleOperations | None = None
+    """The module's operations declaration, or ``None`` when absent.
+
+    The generated project's managed ``quickscale-operations.md`` page renders
+    it; see :class:`ModuleOperations`."""
 
     ci_env: dict[str, str] = field(default_factory=dict)
     """Non-live CI environment placeholders keyed by declaring option name.
