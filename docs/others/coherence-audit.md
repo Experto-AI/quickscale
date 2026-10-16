@@ -350,8 +350,10 @@ items:
      rule: "rule 36", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: manifest-option-residue, status: open, aspect: B, cost: [tax], members_diverging: [analytics, social, notifications], population: options(96),
      rule: "rule 29 (version stamps)", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: structured-log-fields, status: open, aspect: K, cost: [tax], members_diverging: [orgs], population: logging-modules(7),
-     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: structured-log-fields, status: resolved, aspect: K, cost: [tax], members_diverging: [],
+     population: logging-modules(7), rule: "rule 24 (small conventions)",
+     check: "review rule (orgs' operator-access and tenancy-refusal logs are the recorded sites)",
+     closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   # ---- open: this pass (ranked per §6) ----
   - {id: module-enabled-switch, status: resolved, regressed: false, aspect: B, cost: [defect, ambiguity],
      members_diverging: [analytics, billing, notifications, backups, forms], population: modules(12),
@@ -520,7 +522,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 38 | `test-harness-parity` | M | tax | 5 / 12 | open (2026-10-16) |
 | 39 | `pyproject-residue` | N | tax | 6 / 12 | open (2026-10-16) |
 | 40 | `manifest-option-residue` | B | tax | 4 / 96 options | open (2026-10-16) |
-| 41 | `structured-log-fields` | K | tax | 1 / 7 logging modules | open (2026-10-16) |
+| 41 | `structured-log-fields` | K | tax | 1 / 7 logging modules | resolved (SA294) |
 
 ---
 
@@ -811,6 +813,12 @@ and exact-findings rows pin both refusals.
 Package-derived logger names everywhere. No structured fields anywhere. Module loggers reach only
 the root handler (the generated `LOGGING` routes only the project package to the file handler).
 Consistent; no drift passes §0.
+
+*SA294 note (2026-10-16):* item 41 is closed. Decisions rule 24 carries the convention: a security
+or audit event — operator access, a tenancy refusal, and their like — carries `extra=` fields, and
+every other module log line stays message-only. The clause has no detector by design and stays a
+review rule; orgs' six `extra=` calls (the operator-access and VIEW-AS audit logs) are the recorded
+sites.
 
 ### L. Files and package layout
 
@@ -1717,7 +1725,7 @@ B/O ·
 **Rule:** ✅ no version stamps in manifest text; validation keys match the option type. **Check:** extend the rule 29 scan to `module.yml` descriptions, and have the loader refuse type-mismatched keys. Confidence: High.
 
 ### Item 41 (compact): `structured-log-fields`
-K · `extra=` fields appear only in orgs (6 calls). The other 6 logging modules log message-only. **Rule:** a team decision (§11). Either ✅ the events named in rule N carry `extra=` fields, or record message-only as the convention and drop the orgs variant. **Check:** review rule. Confidence: High on the counts, Low on whether it matters.
+K · `extra=` fields appear only in orgs (6 calls). The other 6 logging modules log message-only. **Rule:** a team decision (§11). Either ✅ the events named in rule N carry `extra=` fields, or record message-only as the convention and drop the orgs variant. **Check:** review rule. Confidence: High on the counts, Low on whether it matters. **Settled (SA294, 2026-10-16):** decisions rule 24 carries the convention — a security or audit event (operator access, a tenancy refusal, and their like) carries `extra=` fields, every other module log line stays message-only, and the clause stays a review rule.
 
 ## 6. Proposed rules (ready to merge into decisions.md § Module Conventions)
 
@@ -2577,9 +2585,10 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-16 — `theme-request-paths`: resolved (SA289 (b) — every theme hook request goes through `apiRequest`, the SPA's blog, listings, and crm page routes and navigation read the seam's `modulePaths` (which gained `blog` and `listings` entries resolved from `quickscale_blog_shell`/`quickscale_listings_shell`), a raw `fetch(` in `src/hooks` fails the theme's ESLint outside `useApi.ts`, and proposal 53 merged into decisions rule 31).
 - 2026-10-16 — `test-ticket-ids-in-identifiers`: resolved (SA293 (a) — every ticket id left the 12 modules' tests, and rule 29 scans identifiers and string literals in every `tests/` entry, in any case and embedded ids included, with controls; proposal 57's rule-29 clause lands here, items 38–40 with SA293 (b)–(d)).
 - 2026-10-16 — `superuser-escape-spelling`: resolved (SA290 — orgs publishes one `is_platform_operator(user)` helper; forms' `_is_superuser` and every orgs copy call it, and harness rule 44 bans raw `is_superuser` reads in module source outside it, with forms' old predicate as the control).
+- 2026-10-16 — `structured-log-fields`: resolved (SA294 — decisions rule 24 carries the convention: a security or audit event carries `extra=` fields and every other module log line stays message-only; orgs' operator-access and VIEW-AS audit logs are the recorded sites, and the clause stays a review rule).
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).
 - 2026-10-16 — All other prior IDs: still resolved (harness pass at HEAD; delta has no convention-breaking commit).
 6. Does forms' cross-tenant `operator_access` need its own predicate, distinct from orgs' superuser escape? → `superuser-escape-spelling`
 7. Do host projects post form-encoded bodies to the crm, forms, or notifications APIs? This sets the release-note weight of a JSON-only default. → `api-renderer-parser-pinning`
-8. Should module logs carry structured fields? → `structured-log-fields`
+8. Should module logs carry structured fields? → `structured-log-fields` (settled by SA294: decisions rule 24 carries the convention — a security or audit event carries `extra=` fields; every other module log line stays message-only).

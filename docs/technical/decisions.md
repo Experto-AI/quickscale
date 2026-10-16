@@ -1085,6 +1085,9 @@ public surface is `services.py` (rule 4).
 - ✅ Every module ships `py.typed` (added to rule 11's file list).
 - ✅ The current time is `django.utils.timezone.now()`.
 - ✅ Cache keys are `quickscale_<module>:<name>` (added to rule 2's identity table).
+- ✅ A security or audit event — operator access, a tenancy refusal, and their like — carries its
+  context as `extra=` fields on the log record; every other log line stays message-only. The event
+  classification is not statically checkable, so the clause stays a review rule.
 
 **25. Constraint and index names.**
 - ✅ Every `UniqueConstraint`, `CheckConstraint`, and `Index` sets `name`. A constraint is
