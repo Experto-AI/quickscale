@@ -109,6 +109,12 @@ CI_YML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PUBLISH_YML = REPO_ROOT / ".github" / "workflows" / "publish.yml"
 E2E_YML = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
 
+#: The one hand pin on the count (SA285 (a)): the gate oracles read their sets
+#: from ``gate_registry.json``, so a registry resize would otherwise flow
+#: through every derived expectation unnoticed.  Adding or removing a gate
+#: fails here until this literal is re-pinned deliberately.
+EXPECTED_GATE_COUNT = 21
+
 # These service-backed workflow stations are the only callers allowed to
 # provision hosted PostgreSQL.  This mapping is the test-owned station
 # contract; profile facts themselves come from provision_ci_postgres.sh.
@@ -175,6 +181,35 @@ def _registry_hosted_bindings(registry: Path = DEFAULT_REGISTRY) -> dict[str, st
 def _expected_ci_job_ids(registry: Path = DEFAULT_REGISTRY) -> frozenset[str]:
     """Return the closed hosted workflow job universe for a registry."""
     return UNOWNED_JOB_IDS | frozenset(_registry_hosted_bindings(registry))
+
+
+def _registry_generated_needs(
+    registry: Path = DEFAULT_REGISTRY,
+) -> dict[str, tuple[str, ...]]:
+    """
+    Derive every generated consumer ``needs`` list from registry bindings.
+
+    The needs policy (the fixed prerequisites and which gates each consumer
+    waits on) is read from the generator's published names; the job order and
+    identities come from the parsed registry — hosted gates in their
+    ``hosted.order``, the order the generator's own bindings use — so a new
+    hosted gate reaches the expectations without a hand edit here.
+    """
+    hosted = [gate for gate in _parse_registry(registry) if "hosted" in gate["required_contexts"]]
+    hosted.sort(key=lambda gate: gate["hosted"]["order"])
+    hosted_jobs: dict[str, str] = {}
+    for gate in hosted:
+        ci_job = gate["bindings"].get("ci_job")
+        assert isinstance(ci_job, str), f"hosted gate {gate['id']!r} has no ci_job"
+        hosted_jobs[gate["id"]] = ci_job
+    needs = {
+        "test": sync_ci_gate_jobs_module.FIXED_NEEDS + tuple(hosted_jobs.values()),
+    }
+    for consumer, gate_ids in sync_ci_gate_jobs_module.NEEDS_GATE_IDS.items():
+        needs[consumer] = sync_ci_gate_jobs_module.FIXED_NEEDS + tuple(
+            hosted_jobs[gate_id] for gate_id in gate_ids
+        )
+    return needs
 
 
 # All five known execution contexts
@@ -296,6 +331,10 @@ class TestCurrentRepositoryState:
         """The real registry and all required execution contexts are green."""
         result = _run_checker()
         assert result.returncode == 0, f"Expected exit 0, got {result.returncode}: {result.stderr}"
+
+    def test_registry_gate_count_is_pinned(self) -> None:
+        """The registry's size is the one hand pin the gate oracles keep."""
+        assert len(_parse_registry(DEFAULT_REGISTRY)) == EXPECTED_GATE_COUNT
 
     def test_real_checker_stdout_is_empty(self) -> None:
         """A green checker emits no JSONL diagnostics on stdout."""
@@ -1666,37 +1705,37 @@ class TestHostedCiGateGeneration:
         registry = _parse_registry(DEFAULT_REGISTRY)
         jobs, needs, run_values = self._projection(workflow_text)
         assert jobs == _expected_ci_job_ids()
-        assert needs["test"] == (
-            "backups-validation",
-            "module-manifest-contract",
-            "module-core-compat",
-            "module-core-import-linter",
-            "module-app-declaration-gate",
-            "org-context-primitives-gate",
-            "csrf-exempt-gate",
-            "commit-testimony-gate",
-            "project-contract-vintage-gate",
-            "check-gate-suites",
-            "dependency-vulnerabilities-gate",
-            "security-static-analysis-gate",
-            "beta-migration-smoke-gate",
-            "generated-deploy-posture-gate",
-            "workflow-security-gate",
-            "secret-scanning-gate",
-            "module-conventions-gate",
-            "split-facade-gate",
-            "migration-freeze-gate",
-        )
+        expected_needs = _registry_generated_needs()
+        assert needs["test"] == expected_needs["test"]
         for consumer in ("isolation-conformance", "lint-cli"):
-            assert needs[consumer] == (
-                "backups-validation",
-                "module-manifest-contract",
-                "org-context-primitives-gate",
-                "csrf-exempt-gate",
-                "check-gate-suites",
-            )
+            assert needs[consumer] == expected_needs[consumer]
         assert run_values["module-core-compat"][-1] == "make check-core-compat\n"
         assert expected_workflow_text(workflow_text, registry) == workflow_text
+
+    def test_registry_needs_follow_hosted_order_not_registry_row_order(
+        self, tmp_path: Path
+    ) -> None:
+        """Reordered registry rows cannot move the all-hosted consumer's needs."""
+        registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        registry_data["gates"] = list(reversed(registry_data["gates"]))
+        registry_path = tmp_path / "reversed-registry.json"
+        registry_path.write_text(json.dumps(registry_data), encoding="utf-8")
+        by_hosted_order = sorted(
+            (gate for gate in registry_data["gates"] if "hosted" in gate["required_contexts"]),
+            key=lambda gate: gate["hosted"]["order"],
+        )
+        expected = sync_ci_gate_jobs_module.FIXED_NEEDS + tuple(
+            gate["bindings"]["ci_job"] for gate in by_hosted_order
+        )
+        assert _registry_generated_needs(registry_path)["test"] == expected
+        # The generator renders that same order for the reordered rows.
+        generated = expected_workflow_text(
+            DEFAULT_WORKFLOW.read_text(encoding="utf-8"), _parse_registry(registry_path)
+        )
+        expected_needs_line = (
+            f"    needs: [{', '.join(_registry_generated_needs(registry_path)['test'])}]"
+        )
+        assert expected_needs_line in generated
 
     def test_generation_is_idempotent(self) -> None:
         """A generated workflow is stable under a second generation pass."""
@@ -1793,18 +1832,10 @@ class TestHostedCiGateGeneration:
 
         assert "  module-core-compat-renamed:\n" in generated
         assert "  module-core-compat:\n" not in generated
-        assert (
-            "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
-            "module-core-import-linter, module-app-declaration-gate, "
-            "org-context-primitives-gate, "
-            "csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, "
-            "check-gate-suites, "
-            "dependency-vulnerabilities-gate, "
-            "security-static-analysis-gate, beta-migration-smoke-gate, "
-            "generated-deploy-posture-gate, workflow-security-gate, "
-            "secret-scanning-gate, module-conventions-gate, "
-            "split-facade-gate, migration-freeze-gate]" in generated
+        expected_needs_line = (
+            f"    needs: [{', '.join(_registry_generated_needs(registry_path)['test'])}]"
         )
+        assert expected_needs_line in generated
         assert expected_workflow_text(generated, gates) == generated
 
     def test_ci_job_rename_preserves_unowned_workflow_bytes(self, tmp_path: Path) -> None:
@@ -1850,18 +1881,10 @@ class TestHostedCiGateGeneration:
 
         assert "  module-core-compat-renamed:\n" in generated
         assert "  module-core-compat:\n" not in generated
-        assert (
-            "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
-            "module-core-import-linter, module-app-declaration-gate, "
-            "org-context-primitives-gate, "
-            "csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, "
-            "check-gate-suites, "
-            "dependency-vulnerabilities-gate, "
-            "security-static-analysis-gate, beta-migration-smoke-gate, "
-            "generated-deploy-posture-gate, workflow-security-gate, "
-            "secret-scanning-gate, module-conventions-gate, "
-            "split-facade-gate, migration-freeze-gate]" in generated
+        expected_needs_line = (
+            f"    needs: [{', '.join(_registry_generated_needs(registry_path)['test'])}]"
         )
+        assert expected_needs_line in generated
         assert expected_workflow_text(generated, gates) == generated
 
     def test_cli_ci_job_rename_check_write_and_clean_exit_contract(self, tmp_path: Path) -> None:
@@ -1894,18 +1917,10 @@ class TestHostedCiGateGeneration:
         written = workflow_path.read_text(encoding="utf-8")
         assert "  module-core-compat-renamed:\n" in written
         assert "  module-core-compat:\n" not in written
-        assert (
-            "needs: [backups-validation, module-manifest-contract, module-core-compat-renamed, "
-            "module-core-import-linter, module-app-declaration-gate, "
-            "org-context-primitives-gate, "
-            "csrf-exempt-gate, commit-testimony-gate, project-contract-vintage-gate, "
-            "check-gate-suites, "
-            "dependency-vulnerabilities-gate, "
-            "security-static-analysis-gate, beta-migration-smoke-gate, "
-            "generated-deploy-posture-gate, workflow-security-gate, "
-            "secret-scanning-gate, module-conventions-gate, "
-            "split-facade-gate, migration-freeze-gate]" in written
+        expected_needs_line = (
+            f"    needs: [{', '.join(_registry_generated_needs(registry_path)['test'])}]"
         )
+        assert expected_needs_line in written
 
         clean = subprocess.run(
             [*command, "--check", *args],
@@ -1960,9 +1975,7 @@ class TestHostedCiGateGeneration:
         end = NEEDS_END["test"] + "\n"
         relocated = current.replace(begin, "", 1).replace(end, "", 1)
         needs_line = (
-            "    needs: [backups-validation, module-manifest-contract, "
-            "org-context-primitives-gate, csrf-exempt-gate, "
-            "check-gate-suites]\n"
+            f"    needs: [{', '.join(_registry_generated_needs()['isolation-conformance'])}]\n"
         )
         relocated = relocated.replace(needs_line, begin + needs_line + end, 1)
         with pytest.raises(GeneratorError, match="not owned by its top-level job"):
@@ -3031,6 +3044,9 @@ class TestPublishWorkflowGeneration:
     def test_registry_publish_addition_projects_from_its_row_alone(self, tmp_path: Path) -> None:
         """A registry-only publish gate projects into the marked region in order."""
         registry_data = json.loads(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
+        next_publish_order = 1 + max(
+            gate["publish"]["order"] for gate in registry_data["gates"] if "publish" in gate
+        )
         registry_data["gates"].append(
             {
                 "id": "fake-publish-gate",
@@ -3041,7 +3057,7 @@ class TestPublishWorkflowGeneration:
                     "ci_job": None,
                     "local_ci_stage": None,
                 },
-                "publish": {"order": 18, "step_name": "Run fake publish gate"},
+                "publish": {"order": next_publish_order, "step_name": "Run fake publish gate"},
                 "depends_on": [],
                 "trigger_inputs": [],
             }

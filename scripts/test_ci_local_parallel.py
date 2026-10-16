@@ -62,6 +62,35 @@ def _registry_local_gate_targets(registry: Path = REGISTRY) -> list[str]:
     return [target for _, target in _registry_local_gate_entries(registry)]
 
 
+def _registry_local_gate_banners(registry: Path = REGISTRY) -> dict[str, str]:
+    """
+    Return each local-stage gate's runtime banner, straight from the registry.
+
+    The generated display arms print ``local.description`` verbatim, and a gate
+    without local metadata keeps the generic ``Running <target>...`` fallback,
+    so deriving the replay markers keeps a new gate from being a hand edit
+    here.
+    """
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    banners: dict[str, str] = {}
+    for gate in data["gates"]:
+        bindings = gate.get("bindings")
+        if not isinstance(bindings, dict):
+            continue
+        target = bindings.get("make_target")
+        stage = bindings.get("local_ci_stage")
+        if not isinstance(target, str) or not isinstance(stage, int):
+            continue
+        if not 3 <= stage <= 7:
+            continue
+        local = gate.get("local")
+        if isinstance(local, dict):
+            banners[target] = local["description"]
+        else:
+            banners[target] = f"Running {target}..."
+    return banners
+
+
 EXPECTED_CI_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         ".github/workflows/ci.yml",
@@ -392,31 +421,11 @@ def test_parallel_replay_and_aggregate_failures(tmp_path: Path) -> None:
     assert sum(event.startswith("START ") for event in events) == expected_worker_count
     assert _max_active(events) > 1
 
-    replay_labels = {
-        "check-core-compat": "Running module-vs-core",
-        "check-module-core-imports": "Running module-core",
-        "check-module-app-declaration": "Running module app declaration",
-        "check-org-context-primitives": "Running org-context",
-        "check-csrf-exempt": "Running CSRF",
-        "check-commit-testimony": "Running behavioural commit testimony",
-        "check-project-contract-vintage": "Running project contract vintage",
-        "check-gate-suites": "Running registered scripts",
-        "check-dependency-vulnerabilities": "Running dependency vulnerability",
-        "check-security-static-analysis": "Running security static-analysis",
-        "check-beta-migration-smoke": "Running check-beta-migration-smoke",
-        "check-generated-deploy-posture": "Running check-generated-deploy-posture",
-        "check-generated-project-automation": "Running generated-project automation gate",
-        "check-workflow-security": "Running workflow security gate",
-        "check-secret-scanning": "Running secret scanning gate",
-        "check-module-conventions": "Running module conventions conformance check",
-        "check-split-facade-imports": "Running split-facade import gate",
-        "check-migration-freeze": "Running migration freeze",
-        "quality": "Running quality thresholds gate",
-    }
+    replay_banners = _registry_local_gate_banners()
     replay_markers = [
         "[2/11] Running linters",
         *[
-            f"[{stage}/11] {replay_labels[target]}"
+            f"[{stage}/11] {replay_banners[target]}"
             for stage, target in _registry_local_gate_entries()
         ],
         "[8/11] Running type checks",
