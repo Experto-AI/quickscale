@@ -156,8 +156,6 @@ items:
   - {id: account-deletion-hook-exception-text, status: watchlist, category: VI, reality: generated-app,
      anchors: [quickscale_modules/auth/src/quickscale_modules_auth/views.py],
      first_seen: 2026-10-13, last_verified: 2026-10-16}
-  - {id: security-suppressions-uniform-expiry, status: watchlist, category: VII, reality: tooling,
-     anchors: [scripts/security_suppressions.json], first_seen: 2026-10-13, last_verified: 2026-10-16}
   - {id: generated-project-automation-local-only, status: watchlist, category: VIII, reality: tooling,
      anchors: [scripts/check_generated_project_automation.py],
      first_seen: 2026-10-13, last_verified: 2026-10-16}
@@ -174,7 +172,8 @@ items:
 
 **Counts:**
 - **Open:** 0 (S1 — 0 · S2 — 0 · S3 — 0 · S4 — 0).
-- **Watchlist:** 15.
+- **Watchlist:** 14. *(Same-day follow-up: SA295 re-adjudicated all nine suppressions against the
+  live source and retired `security-suppressions-uniform-expiry`; §11.)*
 - **This pass:** 5 resolved, 0 new, 0 regressed, 0 withdrawn; 1 watchlist item retired.
 
 No open findings.
@@ -211,7 +210,6 @@ changed-cell table. Cells changed this pass:
 ## 6. Fix order and batching
 
 Nothing is open. For the watchlist:
-- Schedule the `security-suppressions-uniform-expiry` review before 2026-12-01.
 - Answer §13 Q1 before publishing 0.89.0.
 
 ---
@@ -307,10 +305,6 @@ The "two S3 streaming idioms" smell is retired with SA271's source scan.
   - **Evaluation:** not fired. The migration freeze gate (SA204c) now fails any further in-place
     edit after `scripts/migration_hashes.json`, so the exposure is capped at the edits already
     made before 0.89.0.
-- **`security-suppressions-uniform-expiry`.**
-  - **Why watch:** all 9 suppressions still expire on 2026-12-31.
-  - **Trigger:** 2026-12-01 with no review scheduled.
-  - **Evaluation:** not fired (today is 2026-10-16).
 - **Carried, triggers evaluated — not fired** (each anchor unchanged in the delta unless noted):
   - `orgs-provider-id-check-blocks-migrate`;
   - `crm-stage-seed-lost-on-commit-failure`;
@@ -329,6 +323,11 @@ The "two S3 streaming idioms" smell is retired with SA271's source scan.
 - **Retired:** `dr-restore-vintage-exact-match`. SA204d replaced the exact version-label match
   with per-file migration content identity, and forward migration is allowed on the DR snapshot
   route. The trigger it watched can no longer occur.
+- **Retired:** `security-suppressions-uniform-expiry`. SA295 re-adjudicated all nine suppressions
+  against the live source and gave every kept entry an expiry set by its own review horizon:
+  quarterly for the raw-JavaScript seam emissions, semi-annual for the encoded JSON seam, annual
+  for the scanner heuristic false positive. The trigger — one shared expiry with no review
+  scheduled — can no longer occur.
 
 ---
 
@@ -656,3 +655,7 @@ Prior Q2 (whether hosted E2E at release is relied on) is retired: the trigger is
 - 2026-10-16 — `dr-restore-vintage-exact-match`: **retired** (SA204d replaced the version-label match with migration content identity and allows forward migration on the DR route).
 - 2026-10-16 — `orgs-provider-id-check-blocks-migrate`, `crm-stage-seed-lost-on-commit-failure`, `backups-upload-restore-by-model-permission`, `single-sync-worker-vendor-calls`, `allow-bypassrls-serving-undetected`, `migrate-runs-per-replica`, `development-workflow-intermittent-root-500`, `core-e2e-poetry-cache-install-candidates`, `orgs-role-mixin-checks-request-org`, `social-config-error-served-200`, `deploy-existing-settings-module-never-corrected`, `account-deletion-hook-exception-text`, `security-suppressions-uniform-expiry`, `generated-project-automation-local-only`, `initial-migration-edited-in-place`: carried (triggers not fired; evidence in §11).
 - 2026-10-16 — Q2 retired (the E2E trigger is fixed). Q1 carried.
+- 2026-10-16 — `security-suppressions-uniform-expiry`: **retired** (SA295 re-adjudicated all nine
+  entries against the live source and staggered their expiries by review horizon: six
+  raw-JavaScript seam emissions quarterly, two encoded-JSON seam entries semi-annually, the B105
+  heuristic false positive annually).

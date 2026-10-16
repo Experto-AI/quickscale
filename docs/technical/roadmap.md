@@ -49,7 +49,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA286 | Render module-owned CI environment and operations text into managed includes | 1 | — | Optional |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
-| SA295 | Review the security suppressions and stagger their expiry | 2 | — | Optional |
 | SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
 | SA293 | One test-settings base, one pyproject template, no ticket ids in tests or manifests | 2 | — | Optional |
@@ -64,7 +63,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA204 (i) ∥ SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
-Track 2: SA295 ──► SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
+Track 2: SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
 Track 3: SA289 (a, b) ──► SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
@@ -80,7 +79,7 @@ SA277 waits on SA191's cutover, whose evidence draws the line between what `beta
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA204 (i), SA286 (a), SA295, SA293, SA289, SA290, SA292, and
+**Parallel start.** SA204 (i), SA286 (a), SA293, SA289, SA290, SA292, and
 SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 sits ahead
 of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -107,7 +106,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (i) | yes | no | yes | no | yes |
-| 2 | SA295 | yes | yes | yes | yes | no |
+| 2 | SA293 | yes | yes | yes | yes | no |
 | 3 | SA289 (b) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -466,13 +465,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA285 — Derive the gate inventory in tests and build the core wheel through one target.**
 
-- [ ] **SA295 — Review the security suppressions and stagger their expiry.**
-
-  Closes tech watchlist `security-suppressions-uniform-expiry` before its 2026-12-01 trigger.
-
-  **Acceptance:** each of the 9 entries in `scripts/security_suppressions.json` is re-justified or
-  removed, and the kept ones carry expiries set by their own review horizon rather than one shared
-  date. **Slices:** one (Tier 1).
+- [x] **SA295 — Review the security suppressions and stagger their expiry.**
 
 - [ ] **SA293 — One test-settings base, one pyproject template, no ticket ids in tests or manifests.**
 
