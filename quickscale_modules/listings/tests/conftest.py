@@ -211,6 +211,21 @@ def org_b_admin(db, org_b):
     return user
 
 
+@pytest.fixture
+def superuser(db):
+    """Platform operator for audited cross-tenant reads (``operator_access``)."""
+    from django.contrib.auth import get_user_model
+
+    user_model = get_user_model()
+    return user_model.objects.create_user(
+        username="superuser",
+        email="superuser@example.com",
+        password="TestPass123!",
+        is_staff=True,
+        is_superuser=True,
+    )
+
+
 # shared per-test state reset fixture replaces the private
 # ``_reset_current_org_context`` copy.  Listings' previous ContextVar-only
 # reset is upgraded to the full superset (GUCs, memo, cache).

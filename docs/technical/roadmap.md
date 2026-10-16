@@ -53,7 +53,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
 | SA293 | One test-settings base, one pyproject template, no ticket ids in tests or manifests | 2 | — | Optional |
-| SA297 | `operator_access` checks the platform operator itself | 3 | — | Optional |
 | SA292 | One command off-refusal helper, service-owned transactions, complete README flags | 3 | — | Optional |
 | SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | SA292 | Optional |
 
@@ -62,7 +61,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA286 (b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
-Track 3: SA297 ──► SA292 (a, b) ──► SA296 (a…f)
+Track 3: SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
@@ -71,9 +70,7 @@ Arrows within a track are queue order; the table holds the dependency edges. Cro
 SA191 waits on the 0.89.0 publication; SA291 waited on SA288, which has landed (both rewrote
 the composed `REST_FRAMEWORK`, `runtime/settings.compose_rest_framework`), and SA287 waits on
 SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
-SA296 waits on SA292 because both rewrite harness rule 17; SA297 waited on SA290, which has
-landed (its `is_platform_operator` helper is the check `operator_access` will trust), and
-SA294 landed ahead of SA297, so the audit lines SA297 adds follow the recorded log convention;
+SA296 waits on SA292 because both rewrite harness rule 17;
 SA277 waits on SA191's cutover, whose evidence draws the line between what `beta_migration`
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
@@ -106,7 +103,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA286 (b) | yes | no | yes | no | yes |
 | 2 | SA293 | yes | yes | yes | yes | no |
-| 3 | SA297 | yes | yes | yes | yes | no |
+| 3 | SA292 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -569,28 +566,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA290 — One named platform-operator check.**
 
-- [ ] **SA297 — `operator_access` checks the platform operator itself.**
-
-  Follows SA290 (maintainer decision, 2026-10-16, option B+ in its small form).
-
-  **Context:** `operator_access` (`orgs/current_org.py:552`) sets `app.operator_access = 'on'` by
-  `SET LOCAL`, and the FORCE-RLS `SELECT` policy then admits every organization's rows; writes stay
-  current-org only. Its docstring leaves the superuser check to each caller, so the database
-  trusts the setting and the setting trusts every caller. PostgreSQL RLS keyed on a session
-  setting is only as safe as the one code path that sets it; Supabase likewise keeps elevation
-  out of callers' hands (a server-only `service_role` key). Callers today: forms'
-  `_with_superuser_operator_access` (`views.py:204`), `quickscale_forms_seed_presets`, and
-  `quickscale_forms_anonymize_submissions` (two blocks).
-
-  **Acceptance:** `operator_access(user=..., reason=...)` refuses, with an audit log line, a
-  user for whom `is_platform_operator` is false, before the setting changes. Management commands,
-  which have no request user, enter through a command variant that records the command and its
-  reason in the audit log; it is importable only for commands, and the harness bans it in module
-  views. Every caller migrates, the debug-as-org path included; the read-only `SELECT` policy and
-  the `SET LOCAL` transaction scope are unchanged. Both activation and refusal log `extra=` fields
-  under SA294's convention. Controls prove that a non-operator user is refused and that the
-  setting stays off after the refusal. **Slices:** one (Tier 2-full: authorization path, medium
-  risk; the command variant's shape needs design).
+- [x] **SA297 — `operator_access` checks the platform operator itself.**
 
 - [ ] **SA292 — One command off-refusal helper, service-owned transactions, complete README flags.**
 

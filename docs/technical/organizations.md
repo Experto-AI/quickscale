@@ -235,8 +235,8 @@ Django's `is_staff` and `is_superuser` flags continue to control access to the D
 > back offices (blog, listings, crm, forms) stop checking `is_staff` / `IsAdminUser` and check the
 > org role through this module's `permissions`, including a DRF `HasOrgRole(min_role)` that
 > delegates to `user_has_org_role`. The four back offices now do this; Django admin keeps its
-> `is_staff` / `is_superuser` gates, and the `operator_access` paths verify the operator through
-> `is_platform_operator` (rule 44) rather than reading `is_superuser` themselves.
+> `is_staff` / `is_superuser` gates, and the `operator_access` manager verifies the platform
+> operator itself through `is_platform_operator` (rule 44) rather than reading `is_superuser`.
 
 ### Permission Checking Pattern
 
@@ -765,16 +765,18 @@ Use the default `objects` manager only after the current org has been establishe
 Use `Model.all_objects.all()` in:
 
 - **Admin classes** — subclass `TenantModelAdmin` (from `quickscale_modules_orgs.admin`) instead of `admin.ModelAdmin` for tenant-scoped models. `TenantModelAdmin` resolves the active org from the VIEW-AS session, explicit request selection, or session persistence (fail-closed) and automatically scopes `get_queryset` to that org via `_org_db_context`. All standard admin views (`changelist_view`, `add_view`, `change_view`, `delete_view`, `history_view`) are wrapped in `org_scope()` so the Python ContextVar and PostgreSQL GUC are set correctly for RLS. Add an `organization` column and list filter so the operator can focus on a specific client when needed.
-- **Management commands** — cross-tenant commands should run under `operator_access(reason=...)` and use `all_objects` only when they truly need an unfiltered queryset:
+- **Management commands** — cross-tenant commands should run under the command-only `operator_access_for_command(command=..., reason=...)` and use `all_objects` only when they truly need an unfiltered queryset:
   ```python
   from django.db import transaction
 
   with transaction.atomic():
-      with operator_access(reason="nightly-maintenance"):
+      with operator_access_for_command(
+          command="nightly-maintenance", reason="nightly maintenance"
+      ):
           for form in Form.all_objects.all():
               ...
   ```
-  ``operator_access`` requires an active ``transaction.atomic()`` block because the underlying ``SET LOCAL`` is transaction-scoped. It **only grants cross-tenant read visibility** — the PostgreSQL RLS policy template splits operator elevation into a separate ``FOR SELECT`` sub-policy (``{policy_name}_select``), so write and delete operations remain scoped to the current organization even when operator_access is active. Callers must verify ``is_platform_operator(user)`` (the one platform-operator helper in this module's ``permissions``) before entering the context manager.
+  Both command variant and `operator_access` require an active ``transaction.atomic()`` block because the underlying ``SET LOCAL`` is transaction-scoped. They **only grant cross-tenant read visibility** — the PostgreSQL RLS policy template splits operator elevation into a separate ``FOR SELECT`` sub-policy (``{policy_name}_select``), so write and delete operations remain scoped to the current organization even when operator access is active. Request paths pass `user=` to ``operator_access``, which verifies the platform operator itself through ``is_platform_operator`` (the one platform-operator helper in this module's ``permissions``) and refuses — with an audit log line — a user for whom the check is false, before the elevation; the command variant records the command and its reason in the audit log and is importable only from ``management/commands/`` (rule 44).
 - **Operator/superuser shell work** — any ad-hoc query that legitimately needs the unfiltered ORM queryset, subject to the active DB-role / RLS contract.
 
 ### Adoption Steps
@@ -788,7 +790,7 @@ For a generated project that already exists and is adding structural isolation:
 5. **Backfill `organization_id`** on existing rows — the FK is required for new rows; existing rows may need a data migration to assign an org.
 6. **Switch views and services** — remove `.for_org(...)` chaining and rely on middleware-established org context for request paths; for non-request paths, enter scope explicitly with `org_scope(...)` / `tenant_context(...)` / `set_current_org_for_context(...)` before using `objects`.
 7. **Switch admin classes** — change parent class from `admin.ModelAdmin` to `TenantModelAdmin` (from `quickscale_modules_orgs.admin`). `TenantModelAdmin` auto-scopes querysets to the resolved org and wraps all standard views in org context. Add an `organization` column and list filter for org-aware filtering.
-8. **Switch management commands** — audited cross-tenant commands use `operator_access(reason=...)` and `all_objects`; tenant-scoped commands establish org scope explicitly before using the default manager.
+8. **Switch management commands** — audited cross-tenant commands use `operator_access_for_command(command=..., reason=...)` and `all_objects`; tenant-scoped commands establish org scope explicitly before using the default manager.
 
 ### Async Jobs
 

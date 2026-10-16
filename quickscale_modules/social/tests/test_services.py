@@ -845,6 +845,7 @@ def test_social_link_cache_is_partitioned_by_org() -> None:
 @django_db
 def test_social_cache_invalidates_old_org_partition_on_reassignment(
     django_capture_on_commit_callbacks,
+    superuser,
 ) -> None:
     """When a social item moves from org A to org B, org A's stale cache is cleared.
 
@@ -861,7 +862,7 @@ def test_social_cache_invalidates_old_org_partition_on_reassignment(
     no single ``current_org_id`` value can equal both the old and new
     organisation simultaneously.
 
-    ``operator_access(reason=...)`` extends only the
+    ``operator_access(user=..., reason=...)`` extends only the
     ``FOR SELECT`` sub-policy — it grants cross-tenant **read**
     visibility, not write visibility.  It does NOT bypass the FOR ALL
     policy's USING or WITH CHECK clauses and cannot unblock a
@@ -946,7 +947,9 @@ def test_social_cache_invalidates_old_org_partition_on_reassignment(
         # FOR ALL USING (current_org_id = org_a ≠ org_b).
         # With operator_access, the _select sub-policy allows the read.
         set_current_org_id(org_a.id)
-        with operator_access(reason="cross-org read — verify link in Org B"):
+        with operator_access(
+            user=superuser, reason="cross-org read — verify link in Org B"
+        ):
             confirmed = list(
                 SocialLink.all_objects.filter(
                     title="Shared Link", organization=org_b

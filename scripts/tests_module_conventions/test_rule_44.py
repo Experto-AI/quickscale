@@ -1338,3 +1338,61 @@ def test_platform_operator_read_controls() -> None:
         "reads is_superuser outside orgs' is_platform_operator helper" in violation
         for violation in _violations(checker.rule_44_role_checks, outside_helper)
     )
+
+
+def test_command_only_operator_entry_controls() -> None:
+    """The command-only operator entry is referenceable only from commands."""
+    module = _golden_module()
+    assert _violations(checker.rule_44_role_checks, module) == []
+
+    imported_in_view = _with_files(
+        module,
+        views=("from quickscale_modules_orgs.current_org import operator_access_for_command\n"),
+    )
+    assert any(
+        "references operator_access_for_command outside management commands" in violation
+        for violation in _violations(checker.rule_44_role_checks, imported_in_view)
+    )
+
+    aliased_in_service = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            "from quickscale_modules_orgs.current_org import "
+            "operator_access_for_command as elevate\n\n\n"
+            "def run():\n"
+            "    return elevate\n"
+        ),
+    )
+    assert any(
+        "references operator_access_for_command outside management commands" in violation
+        for violation in _violations(checker.rule_44_role_checks, aliased_in_service)
+    )
+
+    attribute_use = _with_files(
+        module,
+        services=(
+            '"""Demo service surface."""\n\n'
+            "from quickscale_modules_orgs import current_org\n\n\n"
+            "def run():\n"
+            "    return current_org.operator_access_for_command\n"
+        ),
+    )
+    assert any(
+        "references operator_access_for_command outside management commands" in violation
+        for violation in _violations(checker.rule_44_role_checks, attribute_use)
+    )
+
+    command_use = _with_files(
+        module,
+        **{
+            "management/commands/quickscale_demo_seed.py": (
+                '"""Demo command."""\n\n'
+                "from quickscale_modules_orgs.current_org import "
+                "operator_access_for_command\n\n\n"
+                "def handle():\n"
+                "    return operator_access_for_command(command='quickscale_demo_seed')\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_44_role_checks, command_use) == []

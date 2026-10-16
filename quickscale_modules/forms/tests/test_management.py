@@ -17,19 +17,21 @@ from quickscale_modules_orgs.models import Organization, OrganizationTombstone
 class TestFormsSeedPresets:
     """Tests for the quickscale_forms_seed_presets management command"""
 
-    def test_seed_presets_creates_four_forms(self):
+    def test_seed_presets_creates_four_forms(self, superuser):
         """Command creates all four preset forms"""
         from quickscale_modules_orgs.current_org import operator_access
 
         call_command("quickscale_forms_seed_presets", verbosity=0)
-        with operator_access(reason="test: verify all four presets created"):
+        with operator_access(
+            user=superuser, reason="test: verify all four presets created"
+        ):
             slugs = list(Form.all_objects.values_list("slug", flat=True))
         assert "contact" in slugs
         assert "newsletter" in slugs
         assert "feedback" in slugs
         assert "support" in slugs
 
-    def test_contact_preset_has_correct_fields(self):
+    def test_contact_preset_has_correct_fields(self, superuser):
         """Contact preset has the five standard fields"""
         from quickscale_modules_orgs.current_org import (
             operator_access,
@@ -37,7 +39,7 @@ class TestFormsSeedPresets:
         )
 
         call_command("quickscale_forms_seed_presets", verbosity=0)
-        with operator_access(reason="test: lookup preset form"):
+        with operator_access(user=superuser, reason="test: lookup preset form"):
             form = Form.all_objects.get(slug="contact")
         # Enter org scope so that form.fields (via all_objects base
         # manager) sees the correct app.current_org_id GUC.
@@ -49,7 +51,7 @@ class TestFormsSeedPresets:
         assert "subject" in field_names
         assert "project_context" in field_names
 
-    def test_newsletter_preset_has_two_fields(self):
+    def test_newsletter_preset_has_two_fields(self, superuser):
         """Newsletter preset has exactly two fields"""
         from quickscale_modules_orgs.current_org import (
             operator_access,
@@ -57,24 +59,24 @@ class TestFormsSeedPresets:
         )
 
         call_command("quickscale_forms_seed_presets", verbosity=0)
-        with operator_access(reason="test: lookup preset form"):
+        with operator_access(user=superuser, reason="test: lookup preset form"):
             form = Form.all_objects.get(slug="newsletter")
         # Enter org scope so that form.fields (via all_objects base
         # manager) sees the correct app.current_org_id GUC.
         with org_scope(form.organization):
             assert form.fields.count() == 2
 
-    def test_seed_presets_is_idempotent(self):
+    def test_seed_presets_is_idempotent(self, superuser):
         """Running the command twice does not create duplicate forms"""
         from quickscale_modules_orgs.current_org import operator_access
 
         call_command("quickscale_forms_seed_presets", verbosity=0)
         call_command("quickscale_forms_seed_presets", verbosity=0)
-        with operator_access(reason="test: verify idempotent count"):
+        with operator_access(user=superuser, reason="test: verify idempotent count"):
             assert Form.all_objects.filter(slug="contact").count() == 1
 
     @override_settings(QUICKSCALE_FORMS_RETENTION_DAYS=730)
-    def test_seed_presets_use_settings_backed_data_retention_default(self):
+    def test_seed_presets_use_settings_backed_data_retention_default(self, superuser):
         """Preset-created forms should inherit the configured retention default."""
         from quickscale_modules_orgs.current_org import (
             operator_access,
@@ -90,7 +92,9 @@ class TestFormsSeedPresets:
 
         # Scope the assertion to System org — pre-existing forms in other
         # orgs (e.g. from other test modules) must not affect the check.
-        with operator_access(reason="test: verify retention days default"):
+        with operator_access(
+            user=superuser, reason="test: verify retention days default"
+        ):
             assert set(
                 Form.all_objects.filter(organization=system_org).values_list(
                     "data_retention_days", flat=True
@@ -98,7 +102,7 @@ class TestFormsSeedPresets:
             ) == {730}
 
     @override_settings(QUICKSCALE_FORMS_RETENTION_DAYS=730)
-    def test_seed_presets_preserve_existing_form_data_retention_days(self):
+    def test_seed_presets_preserve_existing_form_data_retention_days(self, superuser):
         """Existing forms should keep their stored retention days when presets rerun."""
         from quickscale_modules_orgs.current_org import (
             operator_access,
@@ -106,7 +110,9 @@ class TestFormsSeedPresets:
         )
 
         call_command("quickscale_forms_seed_presets", verbosity=0)
-        with operator_access(reason="test: lookup form to customise retention"):
+        with operator_access(
+            user=superuser, reason="test: lookup form to customise retention"
+        ):
             form = Form.all_objects.get(slug="contact")
         form.data_retention_days = 14
         with org_scope(form.organization):
@@ -114,10 +120,12 @@ class TestFormsSeedPresets:
 
         call_command("quickscale_forms_seed_presets", verbosity=0)
 
-        with operator_access(reason="test: verify retention days preserved"):
+        with operator_access(
+            user=superuser, reason="test: verify retention days preserved"
+        ):
             assert Form.all_objects.get(slug="contact").data_retention_days == 14
 
-    def test_feedback_preset_has_select_field(self):
+    def test_feedback_preset_has_select_field(self, superuser):
         """Feedback preset has a select field named 'rating'"""
         from quickscale_modules_orgs.current_org import (
             operator_access,
@@ -125,26 +133,26 @@ class TestFormsSeedPresets:
         )
 
         call_command("quickscale_forms_seed_presets", verbosity=0)
-        with operator_access(reason="test: lookup feedback form"):
+        with operator_access(user=superuser, reason="test: lookup feedback form"):
             form = Form.all_objects.get(slug="feedback")
         # Enter org scope so that form.fields (via all_objects base
         # manager) sees the correct app.current_org_id GUC.
         with org_scope(form.organization):
             assert form.fields.filter(field_type=FormField.FieldType.SELECT).exists()
 
-    def test_support_preset_has_priority_select(self):
+    def test_support_preset_has_priority_select(self, superuser):
         """Support preset has a priority select field with three options"""
         from quickscale_modules_orgs.current_org import operator_access
 
         call_command("quickscale_forms_seed_presets", verbosity=0)
-        with operator_access(reason="test: lookup priority field"):
+        with operator_access(user=superuser, reason="test: lookup priority field"):
             priority_field = FormField.all_objects.get(
                 form__slug="support", name="priority"
             )
         assert priority_field.field_type == FormField.FieldType.SELECT
         assert len(priority_field.options) == 3
 
-    def test_seed_scoped_to_system_org_under_per_org_slug_uniqueness(self):
+    def test_seed_scoped_to_system_org_under_per_org_slug_uniqueness(self, superuser):
         """Seed command must not reuse tenant-owned rows with the same slug.
 
         CR-T17-002: With per-org slug uniqueness, a tenant may have a form
@@ -174,7 +182,7 @@ class TestFormsSeedPresets:
         call_command("quickscale_forms_seed_presets", verbosity=0)
 
         # The System org should now have a "contact" preset.
-        with operator_access(reason="test: lookup system contact"):
+        with operator_access(user=superuser, reason="test: lookup system contact"):
             system_contact = Form.all_objects.get(
                 slug="contact", organization=system_org
             )
@@ -186,7 +194,7 @@ class TestFormsSeedPresets:
             tenant_form.refresh_from_db()
         assert tenant_form.title == "Tenant Contact"
 
-    def test_seed_idempotent_with_conflicting_tenant_slug(self):
+    def test_seed_idempotent_with_conflicting_tenant_slug(self, superuser):
         """Seed must stay idempotent after a tenant-owned same-slug row exists."""
         from quickscale_modules_orgs.current_org import (
             operator_access,
@@ -211,13 +219,17 @@ class TestFormsSeedPresets:
         call_command("quickscale_forms_seed_presets", verbosity=0)
 
         # System-org presets must exist exactly once.
-        with operator_access(reason="test: verify system contact count"):
+        with operator_access(
+            user=superuser, reason="test: verify system contact count"
+        ):
             assert (
                 Form.all_objects.filter(slug="contact", organization=system_org).count()
                 == 1
             )
         # Tenant's form still exists independently.
-        with operator_access(reason="test: verify tenant contact count"):
+        with operator_access(
+            user=superuser, reason="test: verify tenant contact count"
+        ):
             assert (
                 Form.all_objects.filter(slug="contact", organization=tenant_org).count()
                 == 1
@@ -506,7 +518,7 @@ class TestFormsAnonymizeSubmissionsOperatorPath:
 class TestPurgeOrganization:
     """quickscale_orgs_purge_organization must delete form rows owned by the purged org."""
 
-    def test_purge_deletes_org_forms(self):
+    def test_purge_deletes_org_forms(self, superuser):
         """Form and FormSubmission rows are deleted by quickscale_orgs_purge_organization."""
         from io import StringIO
 
@@ -530,6 +542,6 @@ class TestPurgeOrganization:
         )
 
         assert not Organization.objects.filter(pk=org_id).exists()
-        with operator_access(reason="test: verify forms purged"):
+        with operator_access(user=superuser, reason="test: verify forms purged"):
             assert Form.all_objects.filter(organization_id=org_id).count() == 0
         assert OrganizationTombstone.objects.filter(organization_id=org_id).exists()
