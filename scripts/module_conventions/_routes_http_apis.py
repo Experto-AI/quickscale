@@ -1,5 +1,5 @@
 """
-Rule 9's JSON-response, session-authentication, and pagination mechanics.
+Rule 9's JSON-response, session-authentication, pagination, and content-policy mechanics.
 
 Implementation detail of :mod:`scripts.module_conventions.rules_routes`; that
 module re-exports every public name defined here, so existing import paths
@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 
 from scripts.module_conventions._routes_view_index import _dotted_name
+from scripts.module_conventions._webhooks_routes import _as_view_target, _route_entries
 from scripts.module_conventions.core import (
     Corpus,
     Module,
@@ -33,10 +34,34 @@ CORE_SESSION_AUTHENTICATION = "QuickscaleSessionAuthentication"
 #: ``page_size`` both fail the closed world.
 CORE_LIST_PAGINATION = "PlainListPagination"
 
+#: Rule 9's JSON-only content contract: the generated ``REST_FRAMEWORK``
+#: composes the JSON renderer and parser defaults through
+#: ``quickscale_core.runtime.settings.compose_rest_framework``, so a module
+#: view pins neither class.  A webhook reads its raw body and a file upload
+#: declares the multipart parser it needs; those two keep their local policy.
+JSON_RENDERER_CLASS = "rest_framework.renderers.JSONRenderer"
+JSON_PARSER_CLASS = "rest_framework.parsers.JSONParser"
+MULTIPART_PARSER_CLASSES = frozenset(
+    {
+        "rest_framework.parsers.FormParser",
+        "rest_framework.parsers.MultiPartParser",
+        "rest_framework.parsers.FileUploadParser",
+    }
+)
+UPLOAD_MULTIPART_PARSERS = frozenset(
+    {
+        "rest_framework.parsers.MultiPartParser",
+        "rest_framework.parsers.FileUploadParser",
+    }
+)
+#: The two DRF view attributes rule 9's content contract claims.
+CONTENT_POLICY_ATTRIBUTES = ("renderer_classes", "parser_classes")
+
 
 def rule_9_http_apis(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
+        webhook_view_names = _webhook_view_names(module)
         paginator_classes = _paginator_classifications(module)
         for rel, text in module.files.items():
             if not rel.endswith(".py") or rel.startswith("migrations/"):
@@ -46,6 +71,9 @@ def rule_9_http_apis(corpus: Corpus) -> list[str]:
                 violations.append(f"rule 9: {module.name}: {rel} uses JsonResponse")
             violations.extend(_session_authentication_violations(module.name, rel, tree))
             violations.extend(_pagination_violations(module.name, rel, tree, paginator_classes))
+            violations.extend(
+                _content_policy_pin_violations(f"{module.name}: {rel}", tree, webhook_view_names)
+            )
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call) and _call_func_name(node) == "HttpResponse":
                     content_type = _literal(_keyword(node, "content_type"))
@@ -67,6 +95,7 @@ def rule_9_http_apis(corpus: Corpus) -> list[str]:
                             f"rule 9: {module.name}: {rel} builds an error body in module code"
                         )
     violations.extend(_rendered_managed_json_violations())
+    violations.extend(_composed_json_default_violations())
     return violations
 
 
@@ -489,6 +518,174 @@ def _pagination_violations(
     return violations
 
 
+def _webhook_view_names(module: Module) -> frozenset[str]:
+    """
+    Return the view names the module mounts on its webhook routes (rule 26).
+
+    The webhook route definition is rule 26's (a ``webhooks/`` path or a
+    ``*webhook*`` name); a view rule 26 discovers as a webhook keeps its local
+    parser policy, so the pin ban reads the same set.
+    """
+    urls = module.files.get("urls.py")
+    if urls is None:
+        return frozenset()
+    view_names, _route_violations = _route_entries(module.name, urls)
+    return frozenset(view_names)
+
+
+def _parser_class_bindings(tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Resolve the DRF parser classes and namespaces a module file binds.
+
+    Returns the names bound to ``rest_framework.parsers`` classes and the
+    namespace aliases bound to ``rest_framework`` or ``rest_framework.parsers``,
+    so the direct import, the ``parsers`` module alias, and the fully qualified
+    spelling all resolve.
+    """
+    imported: dict[str, str] = {}
+    namespaces: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                binding = alias.asname or alias.name
+                if node.module == "rest_framework.parsers":
+                    imported[binding] = f"rest_framework.parsers.{alias.name}"
+                elif node.module == "rest_framework" and alias.name == "parsers":
+                    namespaces[binding] = "rest_framework.parsers"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "rest_framework":
+                    namespaces[alias.asname or "rest_framework"] = "rest_framework"
+                elif alias.name == "rest_framework.parsers":
+                    if alias.asname:
+                        namespaces[alias.asname] = "rest_framework.parsers"
+                    else:
+                        namespaces.setdefault("rest_framework", "rest_framework")
+    return imported, namespaces
+
+
+def _resolve_parser_class(
+    node: ast.expr, imported: dict[str, str], namespaces: dict[str, str]
+) -> str | None:
+    """Resolve one parser-class expression to its dotted DRF parser name."""
+    if isinstance(node, ast.Name):
+        return imported.get(node.id)
+    dotted = _dotted_name(node)
+    if dotted is None:
+        return None
+    root, _, rest = dotted.partition(".")
+    if not rest:
+        return imported.get(dotted)
+    resolved = f"{namespaces.get(root, root)}.{rest}"
+    return resolved if resolved.startswith("rest_framework.parsers.") else None
+
+
+def _is_multipart_upload_parser_list(
+    value: ast.expr, imported: dict[str, str], namespaces: dict[str, str]
+) -> bool:
+    """
+    Return whether a ``parser_classes`` value is a file upload's multipart policy.
+
+    Closed world: the value is a literal list or tuple of DRF multipart parser
+    classes and names at least one parser that reads an uploaded file, so a
+    form-encoded-only pin (``[FormParser]``) and a mixed pin are not exempt.
+    """
+    if not isinstance(value, (ast.List, ast.Tuple)) or not value.elts:
+        return False
+    resolved = [_resolve_parser_class(element, imported, namespaces) for element in value.elts]
+    if any(item is None for item in resolved):
+        return False
+    return all(item in MULTIPART_PARSER_CLASSES for item in resolved) and any(
+        item in UPLOAD_MULTIPART_PARSERS for item in resolved
+    )
+
+
+def _content_policy_pin_violations(
+    label: str, tree: ast.Module, webhook_view_names: frozenset[str]
+) -> list[str]:
+    """
+    Return rule 9's per-view renderer/parser pin violations for one source.
+
+    ``label`` names the source in the finding (``"demo: views.py"`` or the
+    rendered managed views).  Closed world: no view pins ``renderer_classes``
+    or ``parser_classes`` — as a class attribute or as an ``as_view()``
+    keyword override, which DRF applies to the instance — except a webhook
+    view (its raw body is the input) and a file upload's multipart parser
+    policy.
+    """
+    imported, namespaces = _parser_class_bindings(tree)
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef) or node.name in webhook_view_names:
+            continue
+        for statement in node.body:
+            if isinstance(statement, ast.Assign):
+                targets = statement.targets
+                value = statement.value
+            elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
+                targets = [statement.target]
+                value = statement.value
+            else:
+                continue
+            names = {target.id for target in targets if isinstance(target, ast.Name)}
+            for attribute in CONTENT_POLICY_ATTRIBUTES:
+                if attribute not in names:
+                    continue
+                if attribute == "parser_classes" and _is_multipart_upload_parser_list(
+                    value, imported, namespaces
+                ):
+                    continue
+                violations.append(
+                    f"rule 9: {label} pins {attribute} on {node.name}; the composed "
+                    "REST_FRAMEWORK defaults carry the JSON content contract"
+                )
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            continue
+        if node.func.attr != "as_view":
+            continue
+        view_name, _target_error = _as_view_target(node)
+        if view_name in webhook_view_names:
+            continue
+        for keyword in node.keywords:
+            if keyword.arg not in CONTENT_POLICY_ATTRIBUTES:
+                continue
+            if keyword.arg == "parser_classes" and _is_multipart_upload_parser_list(
+                keyword.value, imported, namespaces
+            ):
+                continue
+            violations.append(
+                f"rule 9: {label} pins {keyword.arg} in an as_view() override on "
+                f"{view_name or 'an unresolved view'}; the composed REST_FRAMEWORK "
+                "defaults carry the JSON content contract"
+            )
+    return violations
+
+
+def _composed_json_default_violations() -> list[str]:
+    """
+    Return rule 9 violations when the composed REST_FRAMEWORK is not JSON-only.
+
+    The generated ``settings/base.py`` delegates its ``REST_FRAMEWORK`` to
+    ``quickscale_core.runtime.settings.compose_rest_framework``; the composed
+    defaults install DRF's JSON renderer and parser.  The helper is imported at
+    call time so a control can substitute it.
+    """
+    from quickscale_core.runtime.settings import compose_rest_framework  # noqa: PLC0415
+
+    composed = compose_rest_framework(use_x_forwarded_for=False, trusted_proxy_count=0)
+    violations: list[str] = []
+    if composed.get("DEFAULT_RENDERER_CLASSES") != [JSON_RENDERER_CLASS]:
+        violations.append(
+            "rule 9: the composed REST_FRAMEWORK does not install the JSON renderer default"
+        )
+    if composed.get("DEFAULT_PARSER_CLASSES") != [JSON_PARSER_CLASS]:
+        violations.append(
+            "rule 9: the composed REST_FRAMEWORK does not install the JSON parser default"
+        )
+    return violations
+
+
 def _rendered_managed_json_violations() -> list[str]:
     """
     Return rule 9 violations from core's managed-file renderer output.
@@ -524,4 +721,7 @@ def _rendered_managed_json_violations() -> list[str]:
         ]
         if error_values and isinstance(error_values[0], ast.Dict):
             violations.append("rule 9: managed social views (rendered) build an error body")
+    violations.extend(
+        _content_policy_pin_violations("managed social views (rendered)", tree, frozenset())
+    )
     return violations

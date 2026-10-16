@@ -784,6 +784,10 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   (`QuickscaleSessionAuthentication` in `quickscale_core.runtime`), so an unauthenticated call
   answers 401; the generated `settings/base.py` installs it as
   `DEFAULT_AUTHENTICATION_CLASSES` through `compose_rest_framework`.
+- ✅ The generated `REST_FRAMEWORK` sets DRF's JSON renderer and parser defaults through
+  `compose_rest_framework`, so a module API accepts and answers JSON only: a view that inherits
+  the composed defaults pins no renderer or parser of its own, and an HTML-preferring or
+  form-posting client is refused (`406` and `415` respectively through the one error shape).
 - ✅ JSON lists page through core's one list paginator (`PlainListPagination` in
   `quickscale_core.runtime`): a module paginator subclasses it and names its `<THING>_PER_PAGE`
   setting in `page_size_setting`, so every list has one page-size source and the response stays
@@ -794,7 +798,9 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   parsers, per-module token schemes (blog's `BLOG_API_TOKENS` is removed; a shared token scheme is
   SA154 inventory), a module-defined `SessionAuthentication` subclass,
   `authentication_classes` naming DRF's class directly on a non-webhook view, a
-  `PageNumberPagination` subclass outside core, or a literal `page_size`.
+  `PageNumberPagination` subclass outside core, a literal `page_size`, or a per-view
+  `renderer_classes`/`parser_classes` pin other than a webhook's raw-body parser and a file
+  upload's multipart parser.
 
 **10. Startup checks, errors, core ports.**
 - ✅ A module's configuration and invariant checks are functions in its `checks.py`. From

@@ -51,10 +51,9 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
 | SA285 | Derive the gate inventory in tests and build the core wheel through one target | 2 | — | Optional |
 | SA295 | Review the security suppressions and stagger their expiry | 2 | — | Optional |
-| SA291 | The manifest owns option validation and throttle rates | 2 | SA288 | Optional |
+| SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
 | SA293 | One test-settings base, one pyproject template, no ticket ids in tests or manifests | 2 | — | Optional |
-| SA288 | JSON-only module APIs through the generated `REST_FRAMEWORK` defaults | 3 | — | Optional |
 | SA289 | Theme requests go through `apiRequest` and parse one error shape | 3 | — | Optional |
 | SA290 | One named platform-operator check | 3 | — | Optional |
 | SA297 | `operator_access` checks the platform operator itself | 3 | SA290 | Optional |
@@ -67,14 +66,14 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA204 (h…i) ∥ SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA285 ──► SA295 ──► SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
-Track 3: SA288 (a, b) ──► SA289 (a, b) ──► SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
+Track 3: SA289 (a, b) ──► SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Cross-track edges:
-SA191 waits on the 0.89.0 publication; SA291 waits on SA288 because both rewrite
-the composed `REST_FRAMEWORK` (`runtime/settings.compose_rest_framework`), and SA287 waits on
+SA191 waits on the 0.89.0 publication; SA291 waited on SA288, which has landed (both rewrote
+the composed `REST_FRAMEWORK`, `runtime/settings.compose_rest_framework`), and SA287 waits on
 SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
 SA296 waits on SA292 because both rewrite harness rule 17; SA297 waits on SA290's helper, and
 SA294 queues ahead of SA297 so the audit lines it adds follow the recorded log convention;
@@ -82,7 +81,7 @@ SA277 waits on SA191's cutover, whose evidence draws the line between what `beta
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA204 (h), SA286 (a), SA285, SA295, SA293, SA288, SA289, SA290, SA292, and
+**Parallel start.** SA204 (h), SA286 (a), SA285, SA295, SA293, SA289, SA290, SA292, and
 SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 sits ahead
 of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -110,7 +109,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA204 (h) | yes | no | yes | no | yes |
 | 2 | SA285 | yes | yes | yes | yes | no |
-| 3 | SA288 (b) | yes | yes | yes | yes | no |
+| 3 | SA289 (a) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -576,28 +575,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA281 — Hand adapter hooks typed resolved options and delete the dataflow detector.**
 
-- [ ] **SA288 — JSON-only module APIs through the generated `REST_FRAMEWORK` defaults.**
-
-  Closes coherence `api-renderer-parser-pinning` (item 28, option A) and merges coherence §6 proposal 52 into decisions rule 9.
-
-  **Context:** billing, listings, orgs, and social pin JSON; blog pins the parser only; crm,
-  forms, and notifications run DRF's defaults, so they accept form-encoded bodies and render the
-  browsable HTML API. The generated `REST_FRAMEWORK` sets neither default.
-
-  **Acceptance:** rule 9 carries proposal 52. `compose_rest_framework` (which `base.py.j2` calls)
-  sets JSON renderer and parser defaults; per-view pins are gone except a webhook's raw-body
-  parser; crm's and forms' write APIs refuse a form-encoded body with 415 in a test, and
-  notifications' webhook (its only DRF view) still verifies and records a signed delivery; the
-  release notes say so. The harness checks both defaults and bans `renderer_classes`/`parser_classes` in module
-  views outside webhooks, with a control view.
-
-  **Slices:**
-  - [x] (a) The generated defaults, the 415 tests, and the release-note line (Tier 2-fast). Landed:
-    `compose_rest_framework` sets JSON renderer and parser defaults (a contribution still wins), CRM's
-    and forms' write APIs are pinned by a 415 test under the composed settings, and the release notes
-    carry the line. (b) is next: drop the per-view pins, merge proposal 52 into rule 9, and add the
-    harness ban (the blog media upload keeps a multipart parser pin to account for).
-  - [ ] (b) Drop the per-view pins and add the ban (Tier 2-fast).
+- [x] **SA288 — JSON-only module APIs through the generated `REST_FRAMEWORK` defaults.**
 
 - [ ] **SA289 — Theme requests go through `apiRequest` and parse one error shape.**
 

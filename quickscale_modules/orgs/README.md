@@ -101,8 +101,8 @@ and `get_tenant_models()`. The module also installs the always-on RLS boot guard
   System organization.
 - `views.py` publishes `OrgApiBaseView`, the sanctioned organization-role JSON API base: a DRF
   `APIView` with session authentication (CSRF enforced), `min_org_role` access gating, and
-  JSON-only rendering, so every org API error answers the one QuickScale shape and anonymous
-  callers keep their `401` challenge.
+  JSON-only parsing and rendering through the composed `REST_FRAMEWORK` defaults, so every org
+  API error answers the one QuickScale shape and anonymous callers keep their `401` challenge.
 - `signals.py` sends `organization_created` when an organization is created.
 - `middleware.py` installs `TenantMiddleware`, which resolves `request.org` per request,
   redirects users without an active organization in saas mode, and skips the org-management

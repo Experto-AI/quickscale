@@ -17,9 +17,7 @@ from django.utils.html import escape
 from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
 from rest_framework.exceptions import ValidationError
-from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -54,14 +52,13 @@ class ListingPublishAPIView(APIView):
     provides (rule 32): its rate is the module's ``api_rate_limit`` option
     and the bucket follows the authenticated user.  Every error goes through
     the one QuickScale exception handler the generated settings install.  The
-    JSON renderer is the only one, so an HTML-preferring client never receives
-    DRF's browsable-API page instead of the one error shape.
+    composed ``REST_FRAMEWORK`` defaults make the endpoint JSON-only (rule 9),
+    so an HTML-preferring client never receives DRF's browsable-API page
+    instead of the one error shape.
     """
 
     authentication_classes = [QuickscaleSessionAuthentication]
     permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.MEMBER)]
-    parser_classes = [JSONParser]
-    renderer_classes = [JSONRenderer]
     throttle_scope = "quickscale_listings_api"
     http_method_names = ["post"]
 
