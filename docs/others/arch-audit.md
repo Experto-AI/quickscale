@@ -518,9 +518,11 @@ items:
     - The derivation already needed four follow-up commits: `5dd2b2a6` (Poetry silently dropped
       the gitignored manifests from every Git-aware wheel), `340cde24`, `cee5b995` (the user
       manual still showed a bare `poetry build`), and `b9dff3da`.
-    - **The artifact actually uploaded to PyPI is not content-checked.** `publish.yml:295`
+    - **The artifact actually uploaded to PyPI was not content-checked.** `publish.yml:295`
       builds, and `:330` publishes; `smoke-install` (`:185`) runs in another job against its own
-      build.
+      build. *(Closed by SA284: the build job runs `scripts/check_core_wheel_manifests.py`
+      between the build loop and the upload and fails unless the wheel's bundled manifests are
+      byte-equal to `quickscale_modules/*/module.yml`.)*
 - **Rank rationale:** Medium blast radius, Medium likelihood, linear compounding (down from
   steep).
   - **Blast radius:** delivery cost. One release-integrity edge: a core wheel without manifests
@@ -542,7 +544,8 @@ items:
 - **Counter-evidence:**
   - Searched for a Poetry build hook or a `build.py` that would make materialization structural:
     none (`quickscale_core/pyproject.toml:29–33` only declares the include).
-  - Searched for a post-build wheel-content assertion on the publish artifact: none.
+  - Searched for a post-build wheel-content assertion on the publish artifact: none before SA284,
+    which adds one (`scripts/check_core_wheel_manifests.py`, run by the build job);
     `test_bundled_manifest_wheel.py` checks a wheel it builds itself.
   - The test oracles are deliberate end-to-end assertions on generated text. Rejecting
     unexpected output is valuable, and the cost is low.
@@ -574,12 +577,13 @@ items:
   2. **Accept and document** the oracle pattern; keep only the publish-artifact assertion. Effort
      XS.
 - **Recommendation:** option 1's publish-artifact assertion now, since it is release integrity
-  before 0.89.0 publishes. The rest goes in as gates are next touched.
+  before 0.89.0 publishes (landed as SA284). The rest goes in as gates are next touched.
   - **Size:** S.
   - **Reversibility:** `two-way door`.
   - **Guard:** the publish-job wheel assertion itself; and a test that no script under `scripts/`
     or `.github/` runs `poetry build` for `quickscale_core` outside the one target.
-  - **First step:** add the post-build manifest-count and hash check to `publish.yml`'s build job.
+  - **First step:** add the post-build manifest-count and hash check to `publish.yml`'s build job
+    (landed as `scripts/check_core_wheel_manifests.py`, SA284).
 
 ---
 
@@ -787,7 +791,7 @@ Append-only. One dated line per ID per pass. Placements before 2026-10-13 are in
 - 2026-10-13 — Coherence hand-off "markdownx_urls copy-pair": resolved (SA261).
 - 2026-10-16 — `generated-file-ownership-unmodeled`: still-open, rank 2 → 1. SA276 resolved the theme-type half (fix-regression passed for it); SA282 unified adoption; steps 40 → 46; 12 pending on `bap-web-new`; contracts now arrive via user-owned pages, CI, and docs.
 - 2026-10-16 — `clean-break-schema-no-data-path`: still-open, rank 1 → 2, size M → S. SA204 (a–f) removed most of the mechanism (freeze gate, content-keyed restore, bare-file closed, 0 rewrites since the gate); residual: `update` compares content only under an equal label, the manifest re-freezes via `--write`, and decision rule 1 still forbids `0002`.
-- 2026-10-16 — `rules-held-by-parity-not-derivation`: still-open, horizon now → 6–18 months, size M → S. SA275, SA278, SA279, SA280 (a), and SA281 removed their copies; relocated residue: four gate-inventory test oracles (SA275) and seven materializer build entrypoints with an unchecked publish artifact (minted by SA280 (b)).
+- 2026-10-16 — `rules-held-by-parity-not-derivation`: still-open, horizon now → 6–18 months, size M → S. SA275, SA278, SA279, SA280 (a), and SA281 removed their copies; relocated residue: four gate-inventory test oracles (SA275) and seven materializer build entrypoints (minted by SA280 (b)); the publish artifact is now content-checked (SA284).
 - 2026-10-16 — `lockstep-release-unit`: accepted, carried (not fired).
 - 2026-10-16 — `privileged-command-four-stations`: accepted, carried (not fired).
 - 2026-10-16 — `single-railway-shared-fate`: accepted, carried (not fired; DR containment strengthened).

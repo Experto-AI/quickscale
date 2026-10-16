@@ -15,8 +15,8 @@ their value.
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
 with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#11-watchlist-and-accepted-trade-offs)).
-SA284 is the one release requirement for 0.89.0: the wheel uploaded to PyPI is otherwise never
-content-checked for the bundled manifests (arch `rules-held-by-parity-not-derivation`, §7).
+SA284, 0.89.0's one release requirement, has landed: the release build content-checks the wheel
+it uploads for the bundled manifests (arch `rules-held-by-parity-not-derivation`, §7).
 Upgrading a live 0.88.0 install is not supported (maintainer decision, 2026-10-16, answering
 tech audit §13 Q1): 0.88.0 and earlier move to 0.89.0 on a fresh database, the 0.89.0 release
 notes say so, and `initial-migration-edited-in-place` stays a watch item. Publication remains a
@@ -43,14 +43,13 @@ one-way or high-risk step stands alone behind the slices that prove it.
 
 | Ticket | Delivery | Track | Depends on | Release requirement |
 |---|---|---|---|---|
-| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | SA284 | Optional |
+| SA191 | Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port | 1 | — | Optional |
 | SA204 | Freeze module migration history at the vintage `bap-web` lands on | 1 | — | Optional |
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA286 | Render module-owned CI environment and operations text into managed includes | 1 | — | Optional |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
-| SA284 | Content-check the core wheel that `publish.yml` uploads | 2 | — | Required |
-| SA285 | Derive the gate inventory in tests and build the core wheel through one target | 2 | SA284 | Optional |
+| SA285 | Derive the gate inventory in tests and build the core wheel through one target | 2 | — | Optional |
 | SA295 | Review the security suppressions and stagger their expiry | 2 | — | Optional |
 | SA291 | The manifest owns option validation and throttle rates | 2 | SA288 | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
@@ -67,14 +66,14 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 
 ```text
 Track 1: SA204 (h…i) ∥ SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
-Track 2: SA284 ──► SA285 ──► SA295 ──► SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
+Track 2: SA285 ──► SA295 ──► SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
 Track 3: SA288 (a, b) ──► SA289 (a, b) ──► SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
-     release path:  SA284 ──► publish 0.89.0 ──► SA191 repin
+     release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Cross-track edges:
-SA191 waits on SA284 through the 0.89.0 publication; SA291 waits on SA288 because both rewrite
+SA191 waits on the 0.89.0 publication; SA291 waits on SA288 because both rewrite
 the composed `REST_FRAMEWORK` (`runtime/settings.compose_rest_framework`), and SA287 waits on
 SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
 SA296 waits on SA292 because both rewrite harness rule 17; SA297 waits on SA290's helper, and
@@ -83,7 +82,7 @@ SA277 waits on SA191's cutover, whose evidence draws the line between what `beta
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA204 (h), SA286 (a), SA284, SA295, SA293, SA288, SA289, SA290, SA292, and
+**Parallel start.** SA204 (h), SA286 (a), SA285, SA295, SA293, SA288, SA289, SA290, SA292, and
 SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 sits ahead
 of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -110,7 +109,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA204 (h) | yes | no | yes | no | yes |
-| 2 | SA284 | yes | yes | yes | yes | no |
+| 2 | SA285 | yes | yes | yes | yes | no |
 | 3 | SA288 (a) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -301,7 +300,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   rehearsed on scratch. The cutover rebuilds a fresh database and reseeds the catalog under the
   restricted runtime role; billing stays disabled.
 
-  **Remaining:** after 0.89.0 is published (behind SA284), repin
+  **Remaining:** after 0.89.0 is published, repin
   `bap-web-new` to it and re-run the rehearsal
   (agent); then the maintainer runs the Railway cutover, carries media, re-invites users, and
   archives the old repository. The pre-cutover database is retained until the reseeded site is
@@ -459,23 +458,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     reads, the prompt and `CUTOVER.md` move into the maintained tree beside it, and a smoke test
     proves the handoff file is produced (Tier 2-fast).
 
-- [ ] **SA284 — Content-check the core wheel that `publish.yml` uploads.**
-
-  Closes the release-integrity edge of arch `rules-held-by-parity-not-derivation` (Finding 3,
-  option 1, "now").
-
-  **Context:** since SA280 (b) the bundled manifests are materialized at build time, not tracked.
-  `publish.yml`'s `build` job builds every package (`:295`) and uploads the `dist` artifact that
-  the TestPyPI (`:330`) and PyPI (`:354`) jobs publish, while `smoke-install` (`:185`) checks a
-  different build in another job, and `test_bundled_manifest_wheel.py` checks a wheel it builds
-  itself. A core wheel without manifests fails at startup in every installed project.
-
-  **Acceptance:** after the build loop and before `Upload build artifacts`, the `build` job runs a
-  script under `scripts/` that opens the built core wheel and fails unless it holds all 12 bundled
-  manifests byte-equal to `quickscale_modules/*/module.yml`. The script's test includes a control
-  wheel with one manifest removed, which fails.
-
-  **Slices:** one (Tier 1).
+- [x] **SA284 — Content-check the core wheel that `publish.yml` uploads.**
 
 - [ ] **SA285 — Derive the gate inventory in tests and build the core wheel through one target.**
 
