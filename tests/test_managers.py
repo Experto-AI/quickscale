@@ -77,14 +77,16 @@ class TestTenantManagerScoping:
         assert count == 0, "Expected empty queryset without org context"
 
     @pytest.mark.django_db
-    def test_all_objects_returns_all_rows(self, org, org_a):
+    def test_all_objects_returns_all_rows(self, org, org_a, superuser):
         """``Listing.all_objects.all()`` must return all rows (operator bypass)."""
         with org_scope(org):
             Listing.objects.create(title="Listing A", organization=org)
         with org_scope(org_a):
             Listing.objects.create(title="Listing B", organization=org_a)
 
-        with operator_access(reason="test_all_objects_returns_all_rows"):
+        with operator_access(
+            user=superuser, reason="test_all_objects_returns_all_rows"
+        ):
             results = list(Listing.all_objects.all().values_list("title", flat=True))
 
         assert "Listing A" in results
