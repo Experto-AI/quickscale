@@ -195,18 +195,22 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         from django.db import transaction
 
-        from quickscale_modules_orgs.current_org import operator_access, org_scope
+        from quickscale_modules_orgs.current_org import (
+            operator_access_for_command,
+            org_scope,
+        )
         from quickscale_modules_orgs.models import Organization
 
         system_org = Organization.objects.get_system_org()
 
         with transaction.atomic():
             # Phase 1 — Read inventory: find which preset slugs already exist
-            # in the System org. operator_access is SELECT-only:
+            # in the System org. operator_access_for_command is SELECT-only:
             # it lets us see cross-tenant rows without elevating write
-            # privilege.
-            with operator_access(
-                reason="quickscale_forms_seed_presets: lookup existing preset slugs"
+            # privilege, and records this command's name in the audit log.
+            with operator_access_for_command(
+                command="quickscale_forms_seed_presets",
+                reason="quickscale_forms_seed_presets: lookup existing preset slugs",
             ):
                 existing_slugs = set(
                     Form.all_objects.filter(

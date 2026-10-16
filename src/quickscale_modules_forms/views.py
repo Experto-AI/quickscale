@@ -198,19 +198,23 @@ class FormsAdminApiMixin:
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        """Wrap a view method in ``operator_access`` for superuser audit.
+        """Wrap a view method in ``operator_access`` for operator audit.
 
         Must be called from the view's ``list`` / ``retrieve`` / ``get``
-        override when the requesting user is a superuser.  The ``operator_access``
-        context manager requires an active ``transaction.atomic()`` block.
+        override when the requesting user is a platform operator.  The
+        ``operator_access`` context manager requires an active
+        ``transaction.atomic()`` block and checks the operator itself
+        (``request.user``), so the VIEW-AS debug path passes the real
+        signed-in operator either way.
 
-        For non-superuser callers this is a pass-through — no wrapping.
+        For non-operator callers this is a pass-through — no wrapping.
         """
         if not is_platform_operator(self.request.user):
             return view_method(*args, **kwargs)
         with transaction.atomic():
             with operator_access(
-                reason=f"{self.__class__.__name__}: superuser {self.request.user.pk}"
+                user=self.request.user,
+                reason=f"{self.__class__.__name__}: superuser {self.request.user.pk}",
             ):
                 return view_method(*args, **kwargs)
 
