@@ -480,7 +480,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `QS_SMOKE_REGRESSION_CORE` negative probe still fails closed.
 
   **Slices:**
-  - [ ] (a) The four oracles derive from the registry (Tier 2-fast).
+  - [x] (a) The four oracles derive from the registry (Tier 2-fast). Landed: all four tests read
+    the gate set from `scripts/gate_registry.json` and derive their expectations from it; the one
+    hand pin on the count is `test_gate_parity.py`'s `EXPECTED_GATE_COUNT`, and the arch audit's
+    relocation and change-cost rows are reconciled. (b) is next.
   - [ ] (b) The shared core-build step, its seven callers, and the guard test (Tier 2-full: the
     entrypoints' staging differs and needs discovery).
 

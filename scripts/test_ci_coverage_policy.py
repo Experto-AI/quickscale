@@ -32,6 +32,33 @@ import pytest
 from scripts.check_coverage_policy import check_policy
 
 # ---------------------------------------------------------------------------
+# Registry-derived gate inventory
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+GATE_REGISTRY = REPO_ROOT / "scripts" / "gate_registry.json"
+
+
+def _registry_check_targets() -> tuple[str, ...]:
+    """
+    Return the registry's ``check-*`` Make targets, in registry order.
+
+    ``make check`` derives its prerequisite list from the same registry through
+    ``sync_ci_gate_jobs.py --print-check-targets``.  This reader keeps the
+    oracle independent of that helper, so a filter bug cannot agree with
+    itself, and keeps a new gate from being a hand edit here.
+    """
+    data = json.loads(GATE_REGISTRY.read_text(encoding="utf-8"))
+    return tuple(
+        gate["bindings"]["make_target"]
+        for gate in data["gates"]
+        if isinstance(gate.get("bindings"), dict)
+        and isinstance(gate["bindings"].get("make_target"), str)
+        and gate["bindings"]["make_target"].startswith("check-")
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -639,26 +666,6 @@ class TestMakefileGateTargetDerivation:
     """Real-Make regressions for cwd-invariant registry target discovery."""
 
     MAKEFILE_PATH = Path(__file__).resolve().parents[1] / "Makefile"
-    CHECK_TARGETS = (
-        "check-core-compat",
-        "check-module-core-imports",
-        "check-module-app-declaration",
-        "check-org-context-primitives",
-        "check-csrf-exempt",
-        "check-commit-testimony",
-        "check-project-contract-vintage",
-        "check-gate-suites",
-        "check-dependency-vulnerabilities",
-        "check-security-static-analysis",
-        "check-beta-migration-smoke",
-        "check-generated-deploy-posture",
-        "check-generated-project-automation",
-        "check-workflow-security",
-        "check-secret-scanning",
-        "check-module-conventions",
-        "check-split-facade-imports",
-        "check-migration-freeze",
-    )
 
     def _derive_targets(self, cwd: Path, *, registry: Path | None = None) -> str:
         """Run the real Make parser and return its expanded gate target line."""
@@ -689,7 +696,7 @@ class TestMakefileGateTargetDerivation:
             f"stdout={result.stdout}\nstderr={result.stderr}"
         )
 
-        expected = "true " + " ".join(self.CHECK_TARGETS)
+        expected = "true " + " ".join(_registry_check_targets())
         assert expected in result.stdout.splitlines(), (
             f"Make did not derive the bounded registry target list from {cwd}: {result.stdout}"
         )
@@ -734,14 +741,7 @@ class TestRegisteredScriptGateTarget:
 
                 args = sys.argv[1:]
                 if "--print-check-targets" in args:
-                    print(
-                        "check-core-compat check-module-core-imports "
-                        "check-module-app-declaration "
-                        "check-org-context-primitives check-csrf-exempt "
-                        "check-commit-testimony check-gate-suites "
-                        "check-dependency-vulnerabilities check-security-static-analysis "
-                        "check-beta-migration-smoke check-generated-deploy-posture"
-                    )
+                    print("{" ".join(_registry_check_targets())}")
                     raise SystemExit(0)
                 if args[:2] != ["-m", "pytest"]:
                     raise SystemExit(f"unexpected fake Python argv: {{args!r}}")
@@ -1063,19 +1063,7 @@ class TestMakefileCoveragePipeline:
                 )
 
                 if "--print-check-targets" in args:
-                    print(
-                        "check-core-compat "
-                        "check-module-core-imports "
-                        "check-module-app-declaration "
-                        "check-org-context-primitives "
-                        "check-csrf-exempt "
-                        "check-commit-testimony "
-                        "check-gate-suites "
-                        "check-dependency-vulnerabilities "
-                        "check-security-static-analysis "
-                        "check-beta-migration-smoke "
-                        "check-generated-deploy-posture"
-                    )
+                    print("__CHECK_GATE_TARGETS__")
                     raise SystemExit(0)
 
                 if args[:1] == ["-c"]:
@@ -1133,7 +1121,12 @@ class TestMakefileCoveragePipeline:
 
                 raise SystemExit(f"unexpected fake Python invocation: {args!r}")
                 """
-            ).lstrip(),
+            )
+            .lstrip()
+            .replace(
+                "__CHECK_GATE_TARGETS__",
+                " ".join(_registry_check_targets()),
+            ),
             encoding="utf-8",
         )
         fake_python.chmod(0o755)
@@ -1534,22 +1527,15 @@ class TestCheckQuietSectionDispatch:
                     json.dump({"kind": "invoke", "args": args}, stream)
                     stream.write("\\n")
                 if "--print-check-targets" in args:
-                    print(
-                        "check-core-compat "
-                        "check-module-core-imports "
-                        "check-module-app-declaration "
-                        "check-org-context-primitives "
-                        "check-csrf-exempt "
-                        "check-commit-testimony "
-                        "check-gate-suites "
-                        "check-dependency-vulnerabilities "
-                        "check-security-static-analysis "
-                        "check-beta-migration-smoke "
-                        "check-generated-deploy-posture"
-                    )
+                    print("__CHECK_GATE_TARGETS__")
                     raise SystemExit(0)
                 raise SystemExit(0)
-            """).lstrip(),
+            """)
+            .lstrip()
+            .replace(
+                "__CHECK_GATE_TARGETS__",
+                " ".join(_registry_check_targets()),
+            ),
             encoding="utf-8",
         )
         fake_python.chmod(0o755)
@@ -2589,22 +2575,15 @@ class TestCheckNormalFrontendLint:
                     json.dump({"kind": "invoke", "args": args}, stream)
                     stream.write("\\n")
                 if "--print-check-targets" in args:
-                    print(
-                        "check-core-compat "
-                        "check-module-core-imports "
-                        "check-module-app-declaration "
-                        "check-org-context-primitives "
-                        "check-csrf-exempt "
-                        "check-commit-testimony "
-                        "check-gate-suites "
-                        "check-dependency-vulnerabilities "
-                        "check-security-static-analysis "
-                        "check-beta-migration-smoke "
-                        "check-generated-deploy-posture"
-                    )
+                    print("__CHECK_GATE_TARGETS__")
                     raise SystemExit(0)
                 raise SystemExit(0)
-            """).lstrip(),
+            """)
+            .lstrip()
+            .replace(
+                "__CHECK_GATE_TARGETS__",
+                " ".join(_registry_check_targets()),
+            ),
             encoding="utf-8",
         )
         fake_python.chmod(0o755)

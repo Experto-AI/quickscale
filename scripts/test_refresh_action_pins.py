@@ -9,6 +9,7 @@ catalog-owned path is exercised against a copied generator and a copied
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -18,6 +19,7 @@ from urllib.error import HTTPError
 
 import pytest
 import refresh_action_pins as refresh
+from sync_ci_gate_jobs import JOB_BEGIN, JOB_END
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -45,6 +47,12 @@ def _release_for(repository: str) -> refresh.Release:
         tag=f"v9.9.{len(repository) % 10}",
         sha=hashlib.sha256(repository.encode()).hexdigest()[:40],
     )
+
+
+def _registry_hosted_gate_count(registry: Path = REGISTRY) -> int:
+    """Return how many registry gates render a hosted gate job."""
+    data = json.loads(registry.read_text(encoding="utf-8"))
+    return sum(1 for gate in data["gates"] if "hosted" in gate["required_contexts"])
 
 
 def _fake_fetch(url: str) -> object:
@@ -78,6 +86,9 @@ def test_catalog_pins_move_through_the_generator(
     workflows = tmp_path / "workflows"
     workflows.mkdir()
     shutil.copy2(CI_WORKFLOW, workflows / "ci.yml")
+    expected_checkout_pins = (
+        (workflows / "ci.yml").read_text(encoding="utf-8").count("actions/checkout@")
+    )
     generator = _copy_generator(tmp_path)
     monkeypatch.setattr(refresh, "_fetch_json", _fake_fetch)
 
@@ -98,7 +109,14 @@ def test_catalog_pins_move_through_the_generator(
     setup_python = _release_for("actions/setup-python")
     poetry = _release_for("snok/install-poetry")
     assert CHECKOUT_SHA not in text
-    assert text.count(f"actions/checkout@{checkout.sha}") == 23
+    # Every checkout site moved to the new pin: no rewrite was dropped, and the
+    # generated region carries exactly one checkout per hosted gate job.
+    assert text.count("actions/checkout@") == expected_checkout_pins
+    assert text.count(f"actions/checkout@{checkout.sha}") == expected_checkout_pins
+    generated_region = text.split(JOB_BEGIN, 1)[1].split(JOB_END, 1)[0]
+    assert (
+        generated_region.count(f"actions/checkout@{checkout.sha}") == _registry_hosted_gate_count()
+    )
     assert f"actions/setup-python@{setup_python.sha}" in text
     assert f"snok/install-poetry@{poetry.sha}" in text
     catalog_text = generator.read_text(encoding="utf-8")
