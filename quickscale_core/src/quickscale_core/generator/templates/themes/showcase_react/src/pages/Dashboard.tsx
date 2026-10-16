@@ -47,14 +47,14 @@ const buildModuleInfo = (
     name: 'Blog',
     icon: BookOpen,
     description: 'Full-featured blog with Markdown support, categories, tags, and RSS feed',
-    href: '/blog',
+    href: _modulePaths.blog,
   },
   {
     key: 'listings',
     name: 'Listings',
     icon: Store,
     description: 'Generic listings with filtering for marketplace verticals',
-    href: '/listings',
+    href: _modulePaths.listings,
   },
   {
     key: 'crm',

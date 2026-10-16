@@ -4,7 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from '../App'
 import type { QuickScaleConfig } from '@/hooks/useModules'
-import { moduleFlags, moduleFlagsOn, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, moduleFlagsOn, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 // Lazy route modules resolve to synchronous stubs so every route decision in
 // App.tsx executes without pulling the real pages into the test.
@@ -36,6 +36,7 @@ function buildConfig(overrides: Partial<QuickScaleConfig> = {}): QuickScaleConfi
     modules: moduleFlags(),
     modulePaths: modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
     ...overrides,
   }

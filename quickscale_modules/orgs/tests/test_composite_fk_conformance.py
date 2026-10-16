@@ -64,7 +64,7 @@ class TestCompositeFkDeferabilityConformance:
                 deferrable.append(
                     f"'{constraint.constraint_name}' on {reference.child_table} "
                     "is DEFERRABLE (condeferrable=True), expected NOT DEFERRABLE "
-                    "(SA60 uniform policy)."
+                    "(uniform policy)."
                 )
 
         assert not missing, (

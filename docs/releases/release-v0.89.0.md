@@ -76,12 +76,25 @@ annotation to the name.
 
 The React shell seam is now rendered from the shipped module inventory. `templates/index.html`
 renders a key for every shipped module (present as `false` when the module is absent), and its
-`modulePaths` entries reverse named routes instead of literal paths: `crm`
+`modulePaths` entries reverse named routes instead of literal paths: `blog` and `listings`
+through their `quickscale_blog_shell`/`quickscale_listings_shell` routes, `crm`
 through the manifest-declared `quickscale_crm_shell` route `apply` renders in
 `<package>/urls_modules.py`, `social` through `social-link-tree` or `social-embeds`, and
 `analytics` through `quickscale_analytics:dashboard`. The same seam carries `moduleApiPaths`,
 each API-bearing module's base (`orgs`, `billing`, `crm`, `forms`) resolved from its URL names
 at the `<mount>api/` boundary, and the theme's API clients read it instead of literal paths.
+Every theme request goes through the shared `apiRequest` client, the SPA's blog, listings,
+and crm page routes and navigation read `modulePaths`, the launcher pages' links to the
+module-rendered documents read `moduleDocumentPaths` (blog's index and feed, listings' index,
+the CRM dashboard), and the managed seam files carry both tables; an existing project also compares and
+adopts the current `frontend/src/App.tsx`, `frontend/src/pages/Dashboard.tsx`,
+`frontend/src/hooks/useModules.ts`,
+`frontend/src/hooks/useOrgNavigation.ts`, `frontend/src/hooks/useFormSchema.ts`,
+`frontend/src/hooks/usePublicSocialSurface.ts`, `frontend/src/lib/validateQuickScaleSeam.ts`,
+`frontend/eslint.config.js`, `templates/index.html`, and `templates/social/*.html` and
+regenerates the managed seam files with `quickscale apply --confirm-contract-adoption` (or
+`update`), because the module paths exist only once the theme files, the templates, and the
+regenerated managed seam files are all current.
 The two public social pages render the same
 seam content through the `quickscale_seam` runtime template tag that ships in
 `quickscale_core.runtime` and resolves the flags and paths from the live settings. Existing

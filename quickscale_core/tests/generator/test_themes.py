@@ -374,6 +374,8 @@ class TestSelectedModulesReactTheme:
         module_paths_interface = declaration.split(
             "export interface QuickScaleModulePaths {", 1
         )[1].split("\n}", 1)[0]
+        assert "blog: string" in module_paths_interface
+        assert "listings: string" in module_paths_interface
         assert "crm: string" in module_paths_interface
         assert "social: string" in module_paths_interface
         assert "analytics: string" in module_paths_interface
@@ -451,6 +453,8 @@ class TestSelectedModulesReactTheme:
             )
 
         # All known module paths are always present
+        assert "blog: string" in module_paths_block
+        assert "listings: string" in module_paths_block
         assert "crm: string" in module_paths_block
         assert "social: string" in module_paths_block
         assert "analytics: string" in module_paths_block
@@ -502,11 +506,14 @@ class TestSelectedModulesReactTheme:
         assert "import { SettingsPage }" in app_tsx
         assert "import { ProfilePage }" in app_tsx
 
-        # Routes are conditionally gated with runtime flags
-        assert '{modules.blog && <Route path="/blog"' in app_tsx
-        assert '{modules.crm && <Route path="/crm"' in app_tsx
-        assert '{modules.listings && <Route path="/listings"' in app_tsx
+        # Routes are conditionally gated with runtime flags, and each module
+        # page path comes from the seam (rule 31), never a literal.
+        assert "{modules.blog && <Route path={modulePaths.blog}" in app_tsx
+        assert "{modules.crm && <Route path={modulePaths.crm}" in app_tsx
+        assert "{modules.listings && <Route path={modulePaths.listings}" in app_tsx
         assert '{modules.forms && <Route path="/forms"' in app_tsx
+        assert "path={modulePaths.blog}" in app_tsx
+        assert 'path="/blog"' not in app_tsx
 
         # Suspense wrapper is used
         assert "<Suspense fallback={<div>Loading…</div>}>" in app_tsx
@@ -575,6 +582,8 @@ class TestSelectedModulesReactTheme:
         assert "{% seam_module_flags %}" in window_config
         module_paths_section = window_config.split("modulePaths:", 1)[1]
         assert "{% seam_module_paths %}" in module_paths_section
+        document_paths_section = window_config.split("moduleDocumentPaths:", 1)[1]
+        assert "{% seam_module_document_paths %}" in document_paths_section
 
         seam_names = {module.name for module in seam_modules()}
         for module in (
@@ -593,7 +602,13 @@ class TestSelectedModulesReactTheme:
             assert module in seam_names, (
                 f"the runtime seam should report {module} after SA105."
             )
-        assert set(seam_path_names()) == {"crm", "social", "analytics"}
+        assert set(seam_path_names()) == {
+            "blog",
+            "listings",
+            "crm",
+            "social",
+            "analytics",
+        }
 
     # ── Dormant-file banner verification ───────────────────────────────
 

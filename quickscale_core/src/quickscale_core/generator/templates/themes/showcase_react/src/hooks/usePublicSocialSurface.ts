@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, getApiPayloadMessage } from '@/hooks/useApi'
+import { ApiError, apiRequest } from '@/hooks/useApi'
 import { useProjectConfig, type PublicSocialSurface } from '@/hooks/useModules'
 
 export type SocialPayloadStatus = 'enabled' | 'empty' | 'disabled' | 'error'
@@ -204,17 +204,20 @@ async function fetchPublicSocialPayload<TSurface extends PublicSocialSurface>(
   surface: TSurface,
   endpoint: string,
 ): Promise<SocialPayloadBySurface[TSurface]> {
-  const response = await fetch(endpoint, {
-    headers: {
-      Accept: 'application/json',
-    },
-  })
-
   let payload: unknown
+  let transportError: ApiError | null = null
+
   try {
-    payload = await response.json()
-  } catch {
-    throw new Error(`QuickScale social ${surface} payload was not valid JSON`)
+    payload = await apiRequest<unknown>(endpoint)
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      throw error
+    }
+    // The managed payload states its own error and disabled conditions, and
+    // the endpoint answers those with an error status; validate the body
+    // before letting the transport failure stand.
+    transportError = error
+    payload = error.data
   }
 
   if (surface === 'link_tree' && isLinkTreePayload(payload)) {
@@ -225,14 +228,17 @@ async function fetchPublicSocialPayload<TSurface extends PublicSocialSurface>(
     return payload as SocialPayloadBySurface[TSurface]
   }
 
-  // The managed payload is the domain contract; when the endpoint answers
-  // something else, a transport-level error in the one QuickScale shape
-  // ({"error": {"code", "message", "fields"}}) keeps its message so the page
-  // shows it instead of the generic contract-mismatch text.
-  const fallback = `QuickScale social ${surface} payload did not match the managed contract (HTTP ${response.status})`
+  if (transportError) {
+    // The one QuickScale error shape's message, or the status fallback, so
+    // the page shows the transport failure instead of contract-mismatch text.
+    throw transportError
+  }
+
+  // The managed payload is the domain contract; a success body that does not
+  // match it is the page's own contract-mismatch failure.
   throw new ApiError(
-    response.status,
-    getApiPayloadMessage(payload) ?? fallback,
+    200,
+    `QuickScale social ${surface} payload did not match the managed contract`,
     payload,
   )
 }

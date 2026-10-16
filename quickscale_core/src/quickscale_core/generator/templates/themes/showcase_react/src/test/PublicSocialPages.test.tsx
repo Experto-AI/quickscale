@@ -5,7 +5,7 @@ import { SocialEmbedsPublicPage } from '@/pages/SocialEmbedsPublicPage'
 import { SocialLinkTreePublicPage } from '@/pages/SocialLinkTreePublicPage'
 import type { QuickScaleConfig } from '@/hooks/useModules'
 import type { SocialEmbedsPayload, SocialLinkTreePayload } from '@/hooks/usePublicSocialSurface'
-import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 const fetchMock = vi.fn()
 
@@ -17,6 +17,7 @@ function buildProjectConfig(surface: 'link_tree' | 'embeds'): QuickScaleConfig {
     modules: moduleFlags({ social: true }),
     modulePaths: modulePaths({ social: surface === 'link_tree' ? '/social' : '/social/embeds', analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -51,6 +52,7 @@ function mockFetch(payload: unknown, status = 200) {
   fetchMock.mockResolvedValue({
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers({ 'content-type': 'application/json' }),
     json: async () => payload,
   })
 }
@@ -110,14 +112,15 @@ describe('public social pages', () => {
       'href',
       'https://www.youtube.com/watch?v=abc123',
     )
+    // The shared apiRequest client owns the request headers.
     expect(fetchMock).toHaveBeenCalledWith(
       '/_quickscale/social/',
       expect.objectContaining({
-        headers: {
-          Accept: 'application/json',
-        },
+        headers: expect.any(Headers),
       }),
     )
+    const requestHeaders = new Headers(fetchMock.mock.calls[0][1]?.headers)
+    expect(requestHeaders.get('Accept')).toBe('application/json')
   })
 
   it('renders the empty link-tree state from the managed payload', async () => {

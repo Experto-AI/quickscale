@@ -5,7 +5,7 @@ import { FormRenderer } from '@/components/forms/FormRenderer'
 import { getCsrfToken } from '@/lib/csrf'
 import { apiRequest } from '@/hooks/useApi'
 import type { FormSchema } from '@/hooks/useFormSchema'
-import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 const { useFormSchemaMock } = vi.hoisted(() => ({ useFormSchemaMock: vi.fn() }))
 
@@ -36,6 +36,7 @@ function setRuntimeSeam() {
     modules: moduleFlags({ forms: true }),
     modulePaths: modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
   }
 }

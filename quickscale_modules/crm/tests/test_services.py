@@ -181,7 +181,7 @@ def test_seeds_without_ambient_org_context() -> None:
 
     reset_current_org_id()  # Ensure no ambient org context.
 
-    org = Organization.objects.create(name="SA74 Test Org", slug="sa74-test-org")
+    org = Organization.objects.create(name="Seeding Test Org", slug="seeding-test-org")
 
     # Seeding must succeed without ambient context.
     result = ensure_org_default_stages(org)
@@ -299,8 +299,8 @@ def test_ensure_org_default_stages_restores_db_guc_in_outer_transaction(org_a) -
         f"DB GUC app.current_org_id must be empty after "
         f"ensure_org_default_stages exits inside an outer transaction, "
         f"got {guc_value!r}. "
-        "Without the CR-SA74-001 fix the transaction-scoped SET LOCAL "
-        "from the AF9 execute wrapper persists, leaking the seeded org "
+        "Without the restore fix the transaction-scoped SET LOCAL "
+        "from the execute wrapper persists, leaking the seeded org "
         "UUID to subsequent no-context queries in the same transaction."
     )
 

@@ -14,7 +14,7 @@ import {
   useUpdateOrgMemberRole,
   useUpdateOrgSettings,
 } from '@/hooks/useOrgs'
-import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 const fetchMock = vi.fn()
 
@@ -26,6 +26,7 @@ beforeEach(() => {
     modules: moduleFlags({ billing: true }),
     modulePaths: modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
   }
 })

@@ -330,7 +330,7 @@ def test_enrolled_model_has_base_manager_name(entry: Any) -> None:
         f"ENROLLED model {entry.app_label}.{entry.model_name} "
         f"has base_manager_name={model._meta.base_manager_name!r}, "
         f"expected 'all_objects'. The unfiltered manager must be "
-        f"the Django base manager (AF2 Phase 1)."
+        f"the Django base manager."
     )
 
 
@@ -684,7 +684,7 @@ def test_force_rls_catalog_checks_ignore_same_named_table_in_other_schema() -> N
     from tests.project_tenant_app.models import ProjectListing
 
     db_table = ProjectListing._meta.db_table
-    shadow_schema = "sa177_policy_shadow"
+    shadow_schema = "policy_shadow"
     quote_name = connection.ops.quote_name
     quoted_table = quote_name(db_table)
     quoted_shadow_schema = quote_name(shadow_schema)
@@ -814,8 +814,8 @@ def test_enrolled_child_table_has_composite_fk(reference: TenantReference) -> No
         f"Child table {reference.child_table} is missing the expected composite "
         f"FK covering ({reference.fk_column}, organization_id) referencing "
         f"{reference.parent_table}({reference.parent_target_column}, "
-        f"organization_id). The constraint must be added by the module's AF12 "
-        "Phase 1 migration."
+        f"organization_id). The constraint must be added by the module's composite-FK "
+        "migration."
     )
 
 
@@ -1012,7 +1012,7 @@ def test_exactly_zero_pending_remediation_entries() -> None:
         if e.status == TenantTableStatus.PENDING_REMEDIATION
     ]
     assert len(pending) == 0, (
-        f"Expected 0 PENDING_REMEDIATION entries (AF1 Phase 4 complete), "
+        f"Expected 0 PENDING_REMEDIATION entries (remediation complete), "
         f"but found {len(pending)}. "
         f"Entries: {[(e.app_label, e.model_name) for e in pending]}"
     )
@@ -1157,7 +1157,7 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
             )
 
     assert len(enrolled_tables) == 22, (
-        f"Expected 22 enrolled policy tables for AF11 proof, "
+        f"Expected 22 enrolled policy tables for the conformance proof, "
         f"got {len(enrolled_tables)}. Has the registry changed?"
     )
 
@@ -1165,19 +1165,19 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
 
     # Seed reference data (control-plane, not tenant-scoped).
     org = Organization.objects.create(
-        name="AF11 Proof Org",
-        slug="af11-proof-org",
+        name="Conformance Proof Org",
+        slug="conformance-proof-org",
         is_system=False,
         is_personal=False,
     )
     user = UserModel.objects.create_user(  # type: ignore[attr-defined]
-        username="af11_proof_user",
-        password="af11_proof_pass",
+        username="conformance_proof_user",
+        password="conformance_proof_pass",
     )
     plan = Plan.objects.create(
-        name="AF11 Proof Plan",
-        slug="af11-proof-plan",
-        stripe_price_id="price_af11_proof",
+        name="Conformance Proof Plan",
+        slug="conformance-proof-plan",
+        stripe_price_id="price_conformance_proof",
         credits_per_period=0,
         price_cents=0,
     )
@@ -1187,26 +1187,26 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
     # restricted role.
     set_current_org_id(org.pk)
     # -- CRM --
-    CrmTag.all_objects.create(organization=org, name="AF11 CRM Tag")
+    CrmTag.all_objects.create(organization=org, name="CRM Conformance Tag")
     company = Company.all_objects.create(
         organization=org,
-        name="AF11 Company",
+        name="Conformance Company",
     )
     contact = Contact.all_objects.create(
         organization=org,
-        first_name="AF11",
+        first_name="Conformance",
         last_name="Contact",
-        email="af11_contact@test.com",
+        email="conformance_contact@test.com",
         company=company,
     )
     stage = Stage.all_objects.create(
         organization=org,
-        name="AF11 Stage",
+        name="Conformance Stage",
         order=1,
     )
     deal = Deal.all_objects.create(
         organization=org,
-        title="AF11 Deal",
+        title="Conformance Deal",
         contact=contact,
         stage=stage,
         amount=100,
@@ -1215,13 +1215,13 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
         organization=org,
         contact=contact,
         created_by=user,
-        text="AF11 contact note.",
+        text="Conformance contact note.",
     )
     DealNote.all_objects.create(
         organization=org,
         deal=deal,
         created_by=user,
-        text="AF11 deal note.",
+        text="Conformance deal note.",
     )
 
     # -- Billing --
@@ -1231,7 +1231,7 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
         amount=0,
         transaction_type=CreditTransaction.TransactionType.ADJUSTMENT,
         balance_after=0,
-        description="AF11 proof",
+        description="Conformance proof",
     )
     PurchaseCheckout.all_objects.create(
         organization=org,
@@ -1245,31 +1245,31 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
     )
 
     # -- Blog --
-    BlogTag.all_objects.create(organization=org, name="AF11 Blog Tag")
+    BlogTag.all_objects.create(organization=org, name="Blog Conformance Tag")
     category = Category.all_objects.create(
         organization=org,
-        name="AF11 Category",
-        slug="af11-category",
+        name="Conformance Category",
+        slug="conformance-category",
     )
 
     with tempfile.TemporaryDirectory() as tmp_media:
         with override_settings(MEDIA_ROOT=tmp_media):
             gif = SimpleUploadedFile(
-                "af11_proof.gif",
-                b"AF11 proof GIF content",
+                "conformance_proof.gif",
+                b"Conformance proof GIF content",
                 content_type="image/gif",
             )
             BlogMediaAsset.all_objects.create(
                 organization=org,
                 file=gif,
-                original_filename="af11_proof.gif",
+                original_filename="conformance_proof.gif",
             )
 
     Post.all_objects.create(
         organization=org,
-        title="AF11 Blog Post",
-        content="# AF11 Proof Post\n\nThis post exists for the restricted-role conformance proof.",
-        slug="af11-blog-post",
+        title="Conformance Blog Post",
+        content="# Conformance Proof Post\n\nThis post exists for the restricted-role conformance proof.",
+        slug="conformance-blog-post",
         author=user,
         category=category,
     )
@@ -1277,15 +1277,15 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
     # -- Listings --
     Listing.all_objects.create(
         organization=org,
-        title="AF11 Listing",
-        slug="af11-listing",
+        title="Conformance Listing",
+        slug="conformance-listing",
     )
 
     # -- Forms --
     form = Form.all_objects.create(
         organization=org,
-        title="AF11 Form",
-        slug="af11-form",
+        title="Conformance Form",
+        slug="conformance-form",
     )
     FormField.all_objects.create(
         organization=org,
@@ -1304,19 +1304,19 @@ def test_restricted_role_returns_zero_rows_under_null_and_empty_guc() -> None:
         submission=submission,
         field_name="name",
         field_label="Name",
-        value="AF11 proof value",
+        value="Conformance proof value",
     )
 
     # -- Social (URL parsing only, no external calls) --
     SocialLink.all_objects.create(
         organization=org,
-        title="AF11 X Link",
-        url="https://x.com/af11proof",
+        title="Conformance X Link",
+        url="https://x.com/conformanceproof",
     )
     SocialEmbed.all_objects.create(
         organization=org,
-        title="AF11 YouTube Embed",
-        url="https://www.youtube.com/watch?v=af11proof",
+        title="Conformance YouTube Embed",
+        url="https://www.youtube.com/watch?v=conformanceproof",
     )
 
     # Restore no-org context before the restricted-role proof window.
@@ -1422,7 +1422,7 @@ def _close_connection() -> Generator[None, None, None]:
     not _is_postgres,
     reason="Restricted-role cursor proof requires PostgreSQL.",
 )
-def test_af9_listings_restricted_role_cursor_proof() -> None:
+def test_listings_restricted_role_cursor_proof() -> None:
     """The execute wrapper primes ``app.current_org_id``
     from the ContextVar under a restricted PostgreSQL role for the
     Listings module.
@@ -1453,7 +1453,7 @@ def test_af9_listings_restricted_role_cursor_proof() -> None:
     _ensure_rls_test_role()
 
     org = Organization.objects.create(
-        name="AF9 Listings Proof", slug="af9-listings-proof"
+        name="Listings Priming Proof", slug="listings-priming-proof"
     )
 
     # Pre-seed data with ContextVar active so FORCE-RLS allows the INSERT
@@ -1464,8 +1464,8 @@ def test_af9_listings_restricted_role_cursor_proof() -> None:
     set_current_org_id(org.pk)
     try:
         Listing.all_objects.create(
-            title="AF9 Listings Proof",
-            slug="af9-listings-proof",
+            title="Listings Priming Proof",
+            slug="listings-priming-proof",
             organization=org,
         )
     finally:
@@ -1501,9 +1501,9 @@ def test_af9_listings_restricted_role_cursor_proof() -> None:
                     "SELECT title FROM quickscale_listings_listing ORDER BY title"
                 )
                 titles = [r[0] for r in cursor.fetchall()]
-                assert titles == ["AF9 Listings Proof"], (
-                    f"Expected AF9 Listings Proof, got {titles}. "
-                    "The AF9 wrapper must prime app.current_org_id "
+                assert titles == ["Listings Priming Proof"], (
+                    f"Expected Listings Priming Proof, got {titles}. "
+                    "The execute wrapper must prime app.current_org_id "
                     "from the ContextVar for the restricted-role cursor."
                 )
             finally:

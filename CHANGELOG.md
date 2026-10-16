@@ -847,15 +847,24 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **The published core wheel is content-checked.** Before upload, the release build opens the
     built `quickscale-core` wheel and fails unless it carries every module manifest byte-equal to
     `quickscale_modules/*/module.yml`.
-  - **The React theme parses one API error shape.** The theme's API client reads only the one
-    QuickScale shape `{"error": {"code", "message", "fields"}}` — the shape's message, or the
-    first field message when fields are present — and no longer parses the retired
-    `{"error": "<message>"}` and `{"errors": {...}}` bodies.
+  - **The React theme has one API client and seam-backed module paths.** The theme's API client
+    reads only the one QuickScale shape `{"error": {"code", "message", "fields"}}` — the shape's
+    message, or the first field message when fields are present — and no longer parses the
+    retired `{"error": "<message>"}` and `{"errors": {...}}` bodies. Every theme request goes
+    through the shared `apiRequest` client (a raw `fetch(` in the hooks fails lint), the app's
+    blog, listings, and crm pages take their paths from `window.__QUICKSCALE__.modulePaths`, and
+    their links to the module-rendered documents take theirs from
+    `window.__QUICKSCALE__.moduleDocumentPaths`, both instead of hard-coded paths.
   - **One step builds the core wheel.** `make build-core` and every release entrypoint that
     builds `quickscale-core` — the release workflow, `publish.sh`, `install_global.sh`, and the
     installed-wheel provisioner — materialize the bundled module manifests through the same
     `scripts/build_core_wheel.sh` step, and a routing check fails when a build surface bypasses
     it.
+  - **Security suppressions expire on their own review horizons.** Each entry in the scanner
+    suppression ledger now carries an expiry set by its own risk class — quarterly for the
+    raw-JavaScript seam emissions, semi-annual for the encoded JSON seam, and annual for the
+    scanner heuristic false positive — so the ledger reviews in staggered batches instead of on
+    one shared date.
   - **Generated CI reads module credentials from a managed environment file.** The generated
     `.github/workflows/ci.yml` loads the hash-tracked `.github/quickscale-ci-env` in one step
     instead of carrying vendor placeholders itself, and each module declares its own non-live CI
