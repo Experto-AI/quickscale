@@ -16,10 +16,20 @@ template URLs) reaches a project only through the versioned
 ``settings/modules.py`` files that ``apply`` regenerates, so a module release
 changes no user-owned file.
 
+The same closed world covers module CI environment values (SA286): an emitted
+user-owned CI workflow (``.github/workflows/*.yml``) may not name a module's
+declared CI environment variable or a declared placeholder value.  Those
+values live in the managed ``.github/quickscale-ci-env`` file the workflow
+loads in one step (``cat .github/quickscale-ci-env >> "$GITHUB_ENV"``), and
+the names and values are derived from the shipped manifests' ``ci_env``
+declarations, so a module that adds or renames a credential is covered
+without editing this test.
+
 The scanned set is derived from ``get_generator_emission_mapping`` (the closed
-world), not a hand-maintained path list; the managed wiring files and the
-generated seam files are the documented exclusions.  Each detector has a
-control case below proving it rejects the wiring shapes it exists to catch.
+world), not a hand-maintained path list; the managed wiring files, the
+generated seam files, and the generated CI environment file are the
+documented exclusions.  Each detector has a control case below proving it
+rejects the wiring shapes it exists to catch.
 """
 
 from __future__ import annotations
@@ -32,7 +42,9 @@ from pathlib import Path
 import pytest
 
 from quickscale_core.contracts.module_catalog import MODULE_CATALOG
+from quickscale_core.contracts.resolvers import load_module_manifest_with_fallback
 from quickscale_core.generator import ProjectGenerator, get_generator_emission_mapping
+from quickscale_core.generator.ci_environment import CI_ENVIRONMENT_RELATIVE_PATH
 from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
@@ -62,6 +74,34 @@ _MODULE_FLAG_KEYS = frozenset(module.name for module in seam_modules())
 _MANAGED_SEAM_PATHS = frozenset(
     {SEAM_DECLARATION_RELATIVE_PATH, SEAM_KEY_MANIFEST_RELATIVE_PATH}
 )
+
+#: The generated managed CI environment file: the module-owned CI values
+#: live there by design (SA286).
+_MANAGED_CI_PATH = frozenset({CI_ENVIRONMENT_RELATIVE_PATH})
+
+
+def _declared_ci_environment() -> tuple[frozenset[str], frozenset[str]]:
+    """Return the shipped manifests' CI variable names and placeholder values.
+
+    Every module's ``ci_env`` declaration names an option whose declared
+    default is the environment variable an enabled module's startup check
+    reads; the declaration value is the non-live placeholder the managed CI
+    environment file sets under it.
+    """
+    names: set[str] = set()
+    values: set[str] = set()
+    for entry in MODULE_CATALOG:
+        manifest = load_module_manifest_with_fallback(entry.name)
+        defaults = manifest.get_defaults()
+        for option_name, placeholder in manifest.ci_env.items():
+            name = str(defaults.get(option_name) or "").strip()
+            if name:
+                names.add(name)
+            values.add(placeholder)
+    return frozenset(names), frozenset(values)
+
+
+_CI_ENV_NAMES, _CI_ENV_VALUES = _declared_ci_environment()
 
 #: A module's namespaced URL name (``quickscale_billing:pricing_page``).
 _MODULE_URL_NAME = re.compile(
@@ -108,12 +148,19 @@ def _scan_kind(emitted_path: str, package_name: str) -> str | None:
     Django-side Python means every emitted ``.py`` file outside the two
     managed wiring files: the project package, ``manage.py``, and the test
     scaffold all count.  Django-side templates are the emitted HTML under
-    ``templates/``.  User-owned TypeScript is every emitted ``.ts``/``.tsx``
-    file under ``frontend/`` except the generated managed seam files, which
-    carry the module set by design (SA276).
+    ``templates/``.  Emitted CI workflows are the YAML files under
+    ``.github/workflows/``; the module CI values they reference live in the
+    managed ``.github/quickscale-ci-env`` file (SA286).  User-owned
+    TypeScript is every emitted ``.ts``/``.tsx`` file under ``frontend/``
+    except the generated managed seam files, which carry the module set by
+    design (SA276).
     """
-    if emitted_path in _MANAGED_SEAM_PATHS:
+    if emitted_path in _MANAGED_SEAM_PATHS or emitted_path in _MANAGED_CI_PATH:
         return None
+    if emitted_path.startswith(".github/workflows/") and emitted_path.endswith(
+        (".yml", ".yaml")
+    ):
+        return "ci_workflow"
     if emitted_path.endswith((".ts", ".tsx")):
         return "typescript" if emitted_path.startswith("frontend/") else None
     if emitted_path.endswith(".py"):
@@ -297,6 +344,33 @@ def _typescript_violations(text: str) -> list[str]:
     return violations
 
 
+def _ci_environment_violations(text: str) -> list[str]:
+    """Return module CI environment values named in one emitted CI workflow.
+
+    The names and placeholder values come from the shipped manifests'
+    ``ci_env`` declarations: no user-owned CI workflow may name them, because
+    the managed ``.github/quickscale-ci-env`` file is their one home (SA286).
+    A single managed-file reference — the load step's
+    ``.github/quickscale-ci-env`` path — names no module value and is not
+    flagged.
+    """
+    violations: list[str] = []
+    for name in sorted(_CI_ENV_NAMES):
+        pattern = re.compile(r"\b" + re.escape(name) + r"\b")
+        for match in pattern.finditer(text):
+            violations.append(
+                f"line {_line_number(text, match.start())}: module CI "
+                f"environment variable {name!r}"
+            )
+    for value in sorted(_CI_ENV_VALUES):
+        for match in re.finditer(re.escape(value), text):
+            violations.append(
+                f"line {_line_number(text, match.start())}: module CI "
+                f"placeholder value {value!r}"
+            )
+    return violations
+
+
 # ---------------------------------------------------------------------------
 # Controls: each detector rejects the wiring shape it exists to catch.
 # ---------------------------------------------------------------------------
@@ -394,6 +468,26 @@ def test_typescript_detector_ignores_comments() -> None:
     assert not _typescript_violations("// ['auth', 'blog']\n/* 'crm' | 'forms' */\n")
 
 
+def test_ci_workflow_detector_rejects_a_module_credential_name() -> None:
+    assert _ci_environment_violations("        POSTHOG_API_KEY: ph_test_ci\n")
+    assert _ci_environment_violations("        STRIPE_SECRET_KEY: sk_test_ci\n")
+
+
+def test_ci_workflow_detector_rejects_a_module_placeholder_value() -> None:
+    # A placeholder under any key still leaks a module-owned CI value.
+    assert _ci_environment_violations(
+        "        SOME_KEY: whsec_YWFhYWFhYWFhYWFhYWFhYQ==\n"
+    )
+
+
+def test_ci_workflow_detector_accepts_the_managed_reference() -> None:
+    # The one load step references the managed file by path, not by value.
+    assert not _ci_environment_violations(
+        '      run: cat .github/quickscale-ci-env >> "$GITHUB_ENV"\n'
+    )
+    assert not _ci_environment_violations("name: CI\non:\n  push:\n")
+
+
 # ---------------------------------------------------------------------------
 # The closed-world emission check.
 # ---------------------------------------------------------------------------
@@ -413,6 +507,7 @@ def test_user_owned_emissions_carry_no_module_wiring(tmp_path: Path) -> None:
         "python": _python_violations,
         "template": _template_violations,
         "typescript": _typescript_violations,
+        "ci_workflow": _ci_environment_violations,
     }
     scanned: list[str] = []
     missing: list[str] = []
@@ -449,6 +544,11 @@ def test_scan_set_excludes_only_the_managed_files() -> None:
     assert kinds.get(SEAM_KEY_MANIFEST_RELATIVE_PATH) is None
     assert SEAM_DECLARATION_RELATIVE_PATH in mapping
     assert SEAM_KEY_MANIFEST_RELATIVE_PATH in mapping
+    # The managed CI environment file is excluded; the user-owned workflow
+    # that loads it is scanned (SA286).
+    assert kinds.get(CI_ENVIRONMENT_RELATIVE_PATH) is None
+    assert CI_ENVIRONMENT_RELATIVE_PATH in mapping
+    assert kinds.get(".github/workflows/ci.yml") == "ci_workflow"
 
     assert kinds.get(f"{_PROJECT_NAME}/urls.py") == "python"
     assert kinds.get(f"{_PROJECT_NAME}/context_processors.py") == "python"

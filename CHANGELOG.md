@@ -865,6 +865,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     raw-JavaScript seam emissions, semi-annual for the encoded JSON seam, and annual for the
     scanner heuristic false positive — so the ledger reviews in staggered batches instead of on
     one shared date.
+  - **Generated CI reads module credentials from a managed environment file.** The generated
+    `.github/workflows/ci.yml` loads the hash-tracked `.github/quickscale-ci-env` in one step
+    instead of carrying vendor placeholders itself, and each module declares its own non-live CI
+    placeholders in `module.yml`, so a changed placeholder or a renamed `*_env_var` option
+    reaches a project through `quickscale apply` or `quickscale update` without editing a
+    user-owned file.
   - **Every platform-operator check goes through one helper.** Orgs publishes
     `is_platform_operator(user)` — the one superuser predicate — and the forms and orgs operator
     paths call it instead of reading `is_superuser`; a raw `is_superuser` read in module source

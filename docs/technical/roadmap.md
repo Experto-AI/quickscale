@@ -60,7 +60,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA286 (b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
 Track 3: SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
@@ -78,7 +78,7 @@ SA277 waits on SA191's cutover, whose evidence draws the line between what `beta
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA286 (a), SA293, SA292, and
+**Parallel start.** SA286 (b), SA293, SA292, and
 SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 sits ahead
 of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -104,7 +104,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA286 (a) | yes | no | yes | no | yes |
+| 1 | SA286 (b) | yes | no | yes | no | yes |
 | 2 | SA293 | yes | yes | yes | yes | no |
 | 3 | SA294 | yes | yes | yes | yes | no |
 
@@ -419,9 +419,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   SA277's watch.
 
   **Slices:**
-  - [ ] (a) The managed CI environment file, loaded once by the generated `ci.yml`, with the
-    extended emission guard (Tier 2-full: the loading mechanism and which emitted files still
-    name module values need discovery).
+  - [x] (a): landed as the managed, hash-tracked `.github/quickscale-ci-env` rendered from a new
+    `ci_env` manifest section (each module's declared placeholders, keyed by the option that
+    names the variable, so a renamed `*_env_var` follows) and loaded once by the generated
+    `ci.yml`; the closed-world emission guard now fails when an emitted workflow names a declared
+    CI variable or placeholder value, and the `sa286-managed-ci-environment` contract step carries
+    the adoption. (b) is next: the managed operations page.
   - [ ] (b) The managed operations page on the same pattern, and the adoption step (Tier
     2-fast).
 

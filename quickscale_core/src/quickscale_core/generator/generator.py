@@ -551,6 +551,16 @@ class ProjectGenerator:
             render_seam_key_manifest,
         )
 
+        # The managed CI environment file (SA286) renders from each selected
+        # module's declared ``ci_env`` placeholders — the same content
+        # ``apply``/``update``/``remove`` regenerate under the managed-file
+        # hash guard.  Imported here, not at module scope, so the
+        # emission-mapping path stays free of the manifest/resolver package.
+        from quickscale_core.generator.ci_environment import (
+            ci_environment_entries,
+            render_ci_environment,
+        )
+
         # Context for template rendering
         context = {
             "project_name": project_slug,
@@ -578,6 +588,11 @@ class ProjectGenerator:
             # Managed theme seam declaration and key manifest (SA276).
             "seam_declaration": render_seam_declaration(),
             "seam_key_manifest": render_seam_key_manifest(),
+            # Managed CI environment file (SA286): the module-owned non-live
+            # CI credentials, rendered for the selected module set.
+            "ci_environment": render_ci_environment(
+                ci_environment_entries(self.selected_modules)
+            ),
         }
 
         # Known executable files (emitted paths that should be executable)

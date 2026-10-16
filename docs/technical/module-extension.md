@@ -591,6 +591,14 @@ lists bare first-party module names (or `[]`), and `dependencies` lists bare pac
 one per runtime package in the module's `pyproject.toml`, which carries the specs, including
 the lockstep `quickscale-core` dependency every module declares.
 
+A module whose startup check reads a vendor credential in CI declares the non-live CI
+placeholders in a top-level `ci_env` section: each key names one of its declared string
+`*_env_var` options (whose resolved value is the environment variable the check reads) and
+each value is the placeholder. The generated managed `.github/quickscale-ci-env` renders
+those declarations under the resolved names, and the generated workflow loads the file in one
+step, so the user-owned workflow names no module value and a renamed option reaches CI through
+`quickscale apply`/`quickscale update` alone.
+
 **3. Templates (if applicable):**
 - [ ] `templates/quickscale_<name>/` — Zero-style semantic HTML templates, with one flat `base.html` that the pages extend (emails under `email/`)
 - [ ] Static files under `static/quickscale_<name>/{css,js,img}/`; template-tag library named `quickscale_<name>`

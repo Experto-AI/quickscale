@@ -2,13 +2,14 @@
 
 Split out of :mod:`quickscale_core.manifest.loader`; the loader facade
 re-exports these helpers so existing imports keep working.  This module owns
-the ``managed_files``, ``required_modules``, ``contract_vintage``, and
-packaged project-contract declaration sections.
+the ``managed_files``, ``ci_env``, ``required_modules``, ``contract_vintage``,
+and packaged project-contract declaration sections.
 """
 
 from __future__ import annotations
 
 import posixpath
+from collections.abc import Mapping
 from typing import Any
 
 from quickscale_core.contracts.module_options import resolve_adoption_step_tokens
@@ -118,6 +119,77 @@ def _parse_managed_files(
 
     for key, entry in raw_section.items():
         declarations[key] = _parse_managed_file_entry(key, entry, module_name)
+
+    return declarations
+
+
+def _parse_ci_environment(
+    data: dict[str, Any],
+    module_name: str | None,
+    options: Mapping[str, Any],
+) -> dict[str, str]:
+    """Parse and validate the optional top-level ``ci_env`` section.
+
+    Each entry declares one non-live CI placeholder for a credential the
+    module's startup check reads in CI.  The key names a declared string
+    option whose resolved value is the environment-variable name (so a
+    project that renames the variable through ``quickscale.yml`` keeps its CI
+    working without editing a user-owned file), and the value is the
+    placeholder CI sets under that name.  A key that does not name a declared
+    string option fails closed: it would silently contribute no variable.
+
+    Args:
+        data: The full parsed YAML data dictionary.
+        module_name: Optional module name for error messages.
+        options: The manifest's declared options (mutable and immutable).
+
+    Returns:
+        A dict mapping option names to placeholder values.  Returns an empty
+        dict when the section is absent.
+
+    Raises:
+        ManifestError: If the section is not a mapping, a key does not name a
+            declared string option, or a value is not a non-empty string.
+    """
+    raw_section = data.get("ci_env")
+    if raw_section is None:
+        return {}
+
+    if not isinstance(raw_section, dict):
+        raise ManifestError("'ci_env' must be a mapping", module_name)
+
+    declarations: dict[str, str] = {}
+    for option_name, placeholder in raw_section.items():
+        if not isinstance(option_name, str) or not option_name:
+            raise ManifestError(
+                "'ci_env' keys must be non-empty option names",
+                module_name,
+            )
+        option = options.get(option_name)
+        if option is None:
+            raise ManifestError(
+                f"ci_env.{option_name} does not name a declared option",
+                module_name,
+            )
+        if option.option_type != "string":
+            raise ManifestError(
+                f"ci_env.{option_name} must name a string option "
+                f"(got type '{option.option_type}')",
+                module_name,
+            )
+        if not isinstance(placeholder, str) or not placeholder:
+            raise ManifestError(
+                f"ci_env.{option_name} must be a non-empty string",
+                module_name,
+            )
+        if "\n" in placeholder or "\r" in placeholder:
+            raise ManifestError(
+                f"ci_env.{option_name} must not contain a newline "
+                "(GitHub Actions' environment file reads one NAME=value line "
+                "per entry)",
+                module_name,
+            )
+        declarations[option_name] = placeholder
 
     return declarations
 
