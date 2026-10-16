@@ -3,11 +3,15 @@
 import os
 from pathlib import Path
 
-from quickscale_core.manifest.settings_schema import load_settings_schema
+from quickscale_core.testing.settings import (
+    module_settings_schema,
+    suite_database,
+    suite_secret_key,
+)
 
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
 
-SECRET_KEY = "test-secret-key-for-auth-module"
+SECRET_KEY = suite_secret_key("auth")
 
 # This suite installs billing enabled; billing's rule 35 startup check needs
 # the Stripe secret key and webhook secret to resolve.
@@ -37,14 +41,7 @@ INSTALLED_APPS = [
 QUICKSCALE_BILLING_ENABLED = True
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("QS_AUTH_DB_NAME", "test_quickscale_auth"),
-        "USER": os.environ.get("QS_AUTH_DB_USER", "quickscale_test_role"),
-        "PASSWORD": os.environ.get("QS_AUTH_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_AUTH_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_AUTH_DB_PORT", "5432"),
-    }
+    "default": suite_database("auth", user="quickscale_test_role"),
 }
 
 AUTHENTICATION_BACKENDS = [
@@ -77,10 +74,9 @@ QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE = 25
 QUICKSCALE_BILLING_PLANS_PER_PAGE = 25
 
 # Rule 3: schemas for every installed module that registers the generic check.
-MODULE_SETTINGS_SCHEMA = {
-    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
-    for name in ("auth", "orgs", "billing")
-}
+MODULE_SETTINGS_SCHEMA = module_settings_schema(
+    _MODULES_ROOT, "auth", "orgs", "billing"
+)
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -112,6 +108,7 @@ TEMPLATES = [
 ROOT_URLCONF = "tests.urls"
 
 USE_TZ = True
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Static files configuration
 STATIC_URL = "/static/"
