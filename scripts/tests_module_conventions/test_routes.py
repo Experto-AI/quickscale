@@ -827,7 +827,7 @@ def test_authorization_controls() -> None:
         "redirect_to_login" in violation
         for violation in _violations(checker.rule_19_authorization, private_sibling)
     )
-    operator = _with_files(
+    operator_outside_helper = _with_files(
         _golden_module("orgs"),
         **{
             "_view_context.py": (
@@ -835,7 +835,10 @@ def test_authorization_controls() -> None:
             )
         },
     )
-    assert _violations(checker.rule_19_authorization, operator) == []
+    assert any(
+        "is_superuser" in violation
+        for violation in _violations(checker.rule_19_authorization, operator_outside_helper)
+    )
     suffix_sibling = _with_files(
         module,
         **{

@@ -9,10 +9,13 @@ Uses PostgreSQL unconditionally.  Configure the connection via env vars:
 * ``QS_SOCIAL_DB_PORT`` (default: ``5432``)
 """
 
-import os
 from pathlib import Path
 
-from quickscale_core.manifest.settings_schema import load_settings_schema
+from quickscale_core.testing.settings import (
+    module_settings_schema,
+    suite_database,
+    suite_secret_key,
+)
 
 # BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
@@ -20,7 +23,7 @@ from quickscale_core.manifest.settings_schema import load_settings_schema
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
 # Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include bypass_rls tests.
 
-SECRET_KEY = "test-secret-key-for-social-module"
+SECRET_KEY = suite_secret_key("social")
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
@@ -69,14 +72,7 @@ TEMPLATES = [
 ]
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("QS_SOCIAL_DB_NAME", "test_quickscale_social"),
-        "USER": os.environ.get("QS_SOCIAL_DB_USER", "postgres"),
-        "PASSWORD": os.environ.get("QS_SOCIAL_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_SOCIAL_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_SOCIAL_DB_PORT", "5432"),
-    }
+    "default": suite_database("social"),
 }
 
 USE_TZ = True
@@ -109,7 +105,4 @@ QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE = 12
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
-MODULE_SETTINGS_SCHEMA = {
-    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
-    for name in ("social", "orgs")
-}
+MODULE_SETTINGS_SCHEMA = module_settings_schema(_MODULES_ROOT, "social", "orgs")

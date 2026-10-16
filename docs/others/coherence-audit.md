@@ -325,8 +325,10 @@ items:
   - {id: theme-retired-error-shapes, status: resolved, aspect: P, cost: [ambiguity], members_diverging: [],
      population: theme-api-clients, rule: "rule 9 (one error shape)", check: "theme unit test (useApiErrors.test.ts rejects the retired payloads)",
      closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: superuser-escape-spelling, status: open, aspect: E, cost: [ambiguity, tax], members_diverging: [forms], population: org-scoped-modules,
-     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: superuser-escape-spelling, status: resolved, aspect: E, cost: [ambiguity, tax], members_diverging: [],
+     population: org-scoped-modules, rule: "rule 44 (one operator escape)",
+     check: "harness rule 44 (raw is_superuser reads banned in module source outside orgs' is_platform_operator helper, with forms' old predicate as the control)",
+     closed_world: true, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: readme-flag-coverage, status: open, aspect: O, cost: [ambiguity, tax], members_diverging: [backups, forms, orgs], population: command-modules(4),
      rule: "rule 38", check: "README test (command names only)", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: adapter-restates-manifest-validation, status: open, aspect: B, cost: [tax], members_diverging: [notifications], population: adapters(12),
@@ -342,14 +344,16 @@ items:
      closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: test-ticket-ids-in-identifiers, status: resolved, aspect: M, cost: [tax], members_diverging: [], population: modules(12),
      rule: "rule 29 (identifiers, strings, names, docstrings, and comments)", check: "harness rule 29 (identifiers and strings in every tests/ entry, any case, embedded ids included, with controls); 0 tokens remain", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: test-harness-parity, status: open, aspect: M, cost: [tax], members_diverging: [analytics, storage, auth, blog, listings], population: modules(12),
-     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: test-harness-parity, status: resolved, aspect: M, cost: [tax], members_diverging: [], population: modules(12),
+     rule: "rule 18 (shared test-settings base and conftest plugin)", check: "harness rule 18 (each module's test-settings keys diffed against the core base; both hooks taken from the plugin, with controls); 12/12 suites adopted", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: pyproject-residue, status: open, aspect: N, cost: [tax], members_diverging: [auth, blog, crm, forms, listings, orgs], population: modules(12),
      rule: "rule 36", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: manifest-option-residue, status: open, aspect: B, cost: [tax], members_diverging: [analytics, social, notifications], population: options(96),
      rule: "rule 29 (version stamps)", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: structured-log-fields, status: open, aspect: K, cost: [tax], members_diverging: [orgs], population: logging-modules(7),
-     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: structured-log-fields, status: resolved, aspect: K, cost: [tax], members_diverging: [],
+     population: logging-modules(7), rule: "rule 24 (small conventions)",
+     check: "review rule (orgs' operator-access and tenancy-refusal logs are the recorded sites)",
+     closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   # ---- open: this pass (ranked per §6) ----
   - {id: module-enabled-switch, status: resolved, regressed: false, aspect: B, cost: [defect, ambiguity],
      members_diverging: [analytics, billing, notifications, backups, forms], population: modules(12),
@@ -507,7 +511,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 27 | `cli-module-name-branches` | C | ambiguity, tax | 6 modules named at 5 CLI sites outside rule 37's list | open (2026-10-16) |
 | 28 | `api-renderer-parser-pinning` | H | ambiguity | 0 / 8 DRF-serving surfaces unpinned or half-pinned | resolved (SA288) |
 | 29 | `theme-retired-error-shapes` | P | ambiguity | 0 clients, 2 retired shapes | resolved (SA289 (a)) |
-| 30 | `superuser-escape-spelling` | E | ambiguity, tax | 1 / 2 spellings | open (2026-10-16) |
+| 30 | `superuser-escape-spelling` | E | ambiguity, tax | 1 / 2 spellings | resolved (SA290) |
 | 31 | `readme-flag-coverage` | O | ambiguity, tax | 3 / 4 command modules | open (2026-10-16) |
 | 32 | `adapter-restates-manifest-validation` | B | tax | 1 / 12 adapters | open (2026-10-16) |
 | 33 | `startup-presence-guard-copies` | B | tax | 3 / 7 `checks.py` | open (2026-10-16) |
@@ -515,10 +519,10 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 35 | `command-off-refusal-and-atomic` | J | tax | 3 / 16 commands | open (2026-10-16) |
 | 36 | `theme-request-paths` | P | tax | 2 raw `fetch` + literal paths | resolved (SA289 (b)) |
 | 37 | `test-ticket-ids-in-identifiers` | M | tax | 5 / 12 | resolved (SA293 (a)) |
-| 38 | `test-harness-parity` | M | tax | 5 / 12 | open (2026-10-16) |
+| 38 | `test-harness-parity` | M | tax | 5 / 12 | resolved (SA293 (b)) |
 | 39 | `pyproject-residue` | N | tax | 6 / 12 | open (2026-10-16) |
 | 40 | `manifest-option-residue` | B | tax | 4 / 96 options | open (2026-10-16) |
-| 41 | `structured-log-fields` | K | tax | 1 / 7 logging modules | open (2026-10-16) |
+| 41 | `structured-log-fields` | K | tax | 1 / 7 logging modules | resolved (SA294) |
 
 ---
 
@@ -723,6 +727,12 @@ views except the listed paths.
 
 *Drift:* Item 3.
 
+*SA290 note (2026-10-16):* item 30 is closed. Orgs publishes one `is_platform_operator(user)`
+helper (an authenticated superuser), and forms' cross-tenant operator branch and every orgs copy
+call it instead of reading `is_superuser`; decisions rule 44 carries proposal 54, and harness rule
+44 bans a raw `is_superuser` read in module source outside that helper, with forms' old predicate
+as the control. Rule 19's operator-path table now lists only the helper's file.
+
 ### F. Write effects
 
 | Effect | Module → mechanism |
@@ -803,6 +813,12 @@ and exact-findings rows pin both refusals.
 Package-derived logger names everywhere. No structured fields anywhere. Module loggers reach only
 the root handler (the generated `LOGGING` routes only the project package to the file handler).
 Consistent; no drift passes §0.
+
+*SA294 note (2026-10-16):* item 41 is closed. Decisions rule 24 carries the convention: a security
+or audit event — operator access, a tenancy refusal, and their like — carries `extra=` fields, and
+every other module log line stays message-only. The clause has no detector by design and stays a
+review rule; orgs' six `extra=` calls (the operator-access and VIEW-AS audit logs) are the recorded
+sites.
 
 ### L. Files and package layout
 
@@ -1709,7 +1725,7 @@ B/O ·
 **Rule:** ✅ no version stamps in manifest text; validation keys match the option type. **Check:** extend the rule 29 scan to `module.yml` descriptions, and have the loader refuse type-mismatched keys. Confidence: High.
 
 ### Item 41 (compact): `structured-log-fields`
-K · `extra=` fields appear only in orgs (6 calls). The other 6 logging modules log message-only. **Rule:** a team decision (§11). Either ✅ the events named in rule N carry `extra=` fields, or record message-only as the convention and drop the orgs variant. **Check:** review rule. Confidence: High on the counts, Low on whether it matters.
+K · `extra=` fields appear only in orgs (6 calls). The other 6 logging modules log message-only. **Rule:** a team decision (§11). Either ✅ the events named in rule N carry `extra=` fields, or record message-only as the convention and drop the orgs variant. **Check:** review rule. Confidence: High on the counts, Low on whether it matters. **Settled (SA294, 2026-10-16):** decisions rule 24 carries the convention — a security or audit event (operator access, a tenancy refusal, and their like) carries `extra=` fields, every other module log line stays message-only, and the clause stays a review rule.
 
 ## 6. Proposed rules (ready to merge into decisions.md § Module Conventions)
 
@@ -1792,7 +1808,7 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 51. **CLI module knowledge** [27]. ✅ The CLI reaches module-specific behaviour through a manifest field or a generic adapter hook. ❌ A membership, `.get()`, or equality branch on a module name in core or the CLI outside rule 37's list.
 52. **JSON-only APIs** [28]. ✅ The generated `REST_FRAMEWORK` sets JSON renderer and parser defaults. ❌ A per-view renderer or parser pin outside webhooks. ✅ **Merged (SA288):** decisions rule 9 carries the clause, and harness rule 9 checks the composed defaults and bans per-view pins with controls (a webhook's raw-body parser and a file upload's multipart parser stay local).
 53. **One theme error parser** [29, 36]. ✅ Theme requests go through `apiRequest`, parse core's error shape only, and take paths from the seam. ✅ **Merged (SA289):** decisions rule 31 carries the clause; the seam's page-path table carries the blog, listings, crm, social, and analytics paths, a `moduleDocumentPaths` table carries the launcher pages' document destinations, and the theme's ESLint configuration fails a raw `fetch(` in `src/hooks` outside `useApi.ts`.
-54. **One operator escape** [30]. ✅ The superuser escape is orgs' permission helper. ❌ A module-private superuser predicate.
+54. **One operator escape** [30]. ✅ The superuser escape is orgs' permission helper. ❌ A module-private superuser predicate. ✅ **Merged (SA290):** decisions rule 44 carries the clause, and harness rule 44 bans raw `is_superuser` reads in module source outside the helper, with forms' old predicate as the control.
 55. **Manifest owns validation and throttle rates** [32, 34, 33]. ✅ Adapters evaluate the declared validation, and core merges declared throttle scopes. ❌ `re.compile`, a `DEFAULT_THROTTLE_RATES` literal in `adapter.py`, or a presence re-check in `checks.py`.
 56. **Command scaffolding** [35, 31]. ✅ One core helper refuses scheduled runs while off; the transaction is in the service; the README lists every flag.
 57. **Test and tooling templates** [37, 38, 39, 40]. ✅ Shared test-settings base and conftest plugin; one pyproject template; no ticket ids in test identifiers or manifest text.
@@ -2568,9 +2584,12 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-16 — `theme-retired-error-shapes`: resolved (SA289 (a) — the theme's `useApi.ts` parses only the one QuickScale error shape, and `useApiErrors.test.ts` rejects the retired string-`error` and `errors`-key payloads; proposal 53's rule-31 merge lands with SA289 (b)).
 - 2026-10-16 — `theme-request-paths`: resolved (SA289 (b) — every theme hook request goes through `apiRequest`, the SPA's blog, listings, and crm page routes and navigation read the seam's `modulePaths` (which gained `blog` and `listings` entries resolved from `quickscale_blog_shell`/`quickscale_listings_shell`), a raw `fetch(` in `src/hooks` fails the theme's ESLint outside `useApi.ts`, and proposal 53 merged into decisions rule 31).
 - 2026-10-16 — `test-ticket-ids-in-identifiers`: resolved (SA293 (a) — every ticket id left the 12 modules' tests, and rule 29 scans identifiers and string literals in every `tests/` entry, in any case and embedded ids included, with controls; proposal 57's rule-29 clause lands here, items 38–40 with SA293 (b)–(d)).
+- 2026-10-16 — `superuser-escape-spelling`: resolved (SA290 — orgs publishes one `is_platform_operator(user)` helper; forms' `_is_superuser` and every orgs copy call it, and harness rule 44 bans raw `is_superuser` reads in module source outside it, with forms' old predicate as the control).
+- 2026-10-16 — `test-harness-parity`: resolved (SA293 (b) — one core test-settings base (`quickscale_core.testing.settings`, `BASE_TEST_SETTINGS_KEYS` plus the database, secret-key, and schema helpers) and one conftest plugin (`quickscale_core.testing.pytest_plugin`, the `bypass_rls` hooks) are adopted by all 12 modules; analytics and storage gained the hooks, auth gained `DEFAULT_AUTO_FIELD`, and blog and listings gained `USE_TZ`; harness rule 18 reads the base from the corpus, diffs every module's test-settings keys against it, and requires both hooks from the plugin, with controls; proposal 57's rule-11 and rule-18 clauses land here).
+- 2026-10-16 — `structured-log-fields`: resolved (SA294 — decisions rule 24 carries the convention: a security or audit event carries `extra=` fields and every other module log line stays message-only; orgs' operator-access and VIEW-AS audit logs are the recorded sites, and the clause stays a review rule).
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).
 - 2026-10-16 — All other prior IDs: still resolved (harness pass at HEAD; delta has no convention-breaking commit).
 6. Does forms' cross-tenant `operator_access` need its own predicate, distinct from orgs' superuser escape? → `superuser-escape-spelling`
 7. Do host projects post form-encoded bodies to the crm, forms, or notifications APIs? This sets the release-note weight of a JSON-only default. → `api-renderer-parser-pinning`
-8. Should module logs carry structured fields? → `structured-log-fields`
+8. Should module logs carry structured fields? → `structured-log-fields` (settled by SA294: decisions rule 24 carries the convention — a security or audit event carries `extra=` fields; every other module log line stays message-only).

@@ -13,10 +13,12 @@ import shlex
 import tomllib
 from collections.abc import Mapping
 
+from scripts.module_conventions._settings_reads import _module_level_targets
 from scripts.module_conventions.core import (
     MODULE_ABSTRACT_BASES,
     MODULE_IMPORT_PREFIX,
     Corpus,
+    Module,
     _ancestors,
     _call_func_name,
     _class_names,
@@ -37,6 +39,15 @@ RULE_11_REQUIRED_ROOT_FILES = ("pyproject.toml", "poetry.toml", "README.md")
 RULE_11_ONE_OFF_FILES = ("contracts.py", "helpers.py", "constants.py")
 
 RULE_11_REQUIRED_TESTS = ("test_apps.py", "test_services.py")
+
+# Rule 18's shared test support (SA293 (b)): every module's tests adopt core's
+# test-settings base and conftest plugin.
+TEST_SETTINGS_BASE_REL = "testing/settings.py"
+TEST_PLUGIN_REL = "testing/pytest_plugin.py"
+TEST_SETTINGS_BASE_MODULE = "quickscale_core.testing.settings"
+TEST_SETTINGS_BASE_KEYS_NAME = "BASE_TEST_SETTINGS_KEYS"
+TEST_PLUGIN_MODULE = "quickscale_core.testing.pytest_plugin"
+TEST_CONFTEST_HOOKS = ("pytest_configure", "pytest_collection_modifyitems")
 
 
 def rule_15_package_root(corpus: Corpus) -> list[str]:
@@ -213,6 +224,180 @@ def rule_18_package_tooling(corpus: Corpus) -> list[str]:
                 violations.append(f"rule 18: {module.name}: pyproject has no [tool.ruff]")
         if "settings.py" not in module.tests:
             violations.append(f"rule 18: {module.name}: tests/settings.py is missing")
+    violations.extend(_shared_test_support_violations(corpus))
+    return violations
+
+
+def _imported_names_from(tree: ast.Module, module: str) -> set[str]:
+    """Return every name one source text imports from ``module``."""
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == module:
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == module:
+                    names.add(alias.name.rsplit(".", 1)[-1])
+    return names
+
+
+def _own_scope_statements(statements: list[ast.stmt]) -> list[ast.stmt]:
+    """
+    Return statements plus their nested blocks, never function/class bodies.
+
+    The descent rule the settings key collector uses: a statement inside an
+    ``if`` or ``try`` block executes in the enclosing scope, while a name
+    bound inside a function or class body does not.
+    """
+    found: list[ast.stmt] = []
+    for node in statements:
+        found.append(node)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        for field in ("body", "orelse", "finalbody"):
+            block = getattr(node, field, None)
+            if isinstance(block, list):
+                found.extend(_own_scope_statements(block))
+        for handler in getattr(node, "handlers", []) or []:
+            found.extend(_own_scope_statements(handler.body))
+    return found
+
+
+def _plugin_hook_bindings(tree: ast.Module) -> dict[str, set[str]]:
+    """
+    Return the local names each conftest plugin hook is imported under.
+
+    Only bindings in the module's own scope count; an import inside a function
+    body is not visible where pytest collects the hook, so it cannot satisfy
+    the clause.
+    """
+    bindings: dict[str, set[str]] = {hook: set() for hook in TEST_CONFTEST_HOOKS}
+    for node in _own_scope_statements(tree.body):
+        if isinstance(node, ast.ImportFrom) and node.module == TEST_PLUGIN_MODULE:
+            for alias in node.names:
+                if alias.name in bindings:
+                    bindings[alias.name].add(alias.asname or alias.name)
+    return bindings
+
+
+def _calls_any(wrapper: ast.FunctionDef | ast.AsyncFunctionDef, names: set[str]) -> bool:
+    """
+    Return whether the wrapper's own scope calls any name in ``names``.
+
+    The check is syntactic: it reads the statements pytest runs when the hook
+    fires, and nested function or class bodies are not consulted.
+    """
+    pending: list[ast.AST] = list(wrapper.body)
+    while pending:
+        node = pending.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in names:
+            return True
+        pending.extend(ast.iter_child_nodes(node))
+    return False
+
+
+def _string_sequence_value(tree: ast.Module, name: str) -> tuple[str, ...] | None:
+    """Return the string tuple/list a module binds to ``name``, if it does."""
+    for node in tree.body:
+        value: ast.expr | None = None
+        if isinstance(node, ast.Assign):
+            if any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+                value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name) and node.target.id == name:
+                value = node.value
+        if isinstance(value, (ast.Tuple, ast.List)):
+            items = [
+                element.value
+                for element in value.elts
+                if isinstance(element, ast.Constant) and isinstance(element.value, str)
+            ]
+            if len(items) == len(value.elts):
+                return tuple(items)
+            return None
+    return None
+
+
+def _shared_test_support_violations(corpus: Corpus) -> list[str]:
+    """
+    Rule 18: module tests come from core's test-settings base and plugin.
+
+    The base file is read from the corpus, so the required keys cannot drift
+    from the declaration the suites import.  An empty synthetic corpus (the
+    control fixtures) skips the clause; a loaded core tree without the base or
+    the plugin fails, as rule 31 does for the theme seam producer.
+    """
+    base_text = corpus.core_files.get(TEST_SETTINGS_BASE_REL)
+    if base_text is None:
+        if corpus.core_files:
+            return [
+                "rule 18: the core tree carries no shared test-settings base "
+                f"({TEST_SETTINGS_BASE_REL})"
+            ]
+        return []
+    if TEST_PLUGIN_REL not in corpus.core_files:
+        return [f"rule 18: the core tree carries no conftest plugin ({TEST_PLUGIN_REL})"]
+    keys = _string_sequence_value(_parse(base_text), TEST_SETTINGS_BASE_KEYS_NAME)
+    if keys is None:
+        return [
+            f"rule 18: the core test-settings base declares no {TEST_SETTINGS_BASE_KEYS_NAME} tuple"
+        ]
+    violations: list[str] = []
+    for module in corpus.modules:
+        violations.extend(_module_test_support_violations(module, keys))
+    return violations
+
+
+def _module_test_support_violations(module: Module, keys: tuple[str, ...]) -> list[str]:
+    """Rule 18: one module's tests derive from the core base and plugin."""
+    violations: list[str] = []
+    settings_text = module.tests.get("settings.py")
+    if settings_text is not None:
+        tree = _parse(settings_text)
+        if not _imported_names_from(tree, TEST_SETTINGS_BASE_MODULE):
+            violations.append(
+                f"rule 18: {module.name}: tests/settings.py does not import "
+                "the core test-settings base"
+            )
+        defined = _module_level_targets(tree.body)
+        for key in keys:
+            if key not in defined:
+                violations.append(
+                    f"rule 18: {module.name}: tests/settings.py does not define "
+                    f"{key} (core base key)"
+                )
+    conftest_text = module.tests.get("conftest.py")
+    if conftest_text is None:
+        violations.append(
+            f"rule 18: {module.name}: tests/conftest.py does not adopt the core conftest plugin"
+        )
+    else:
+        tree = _parse(conftest_text)
+        bindings = _plugin_hook_bindings(tree)
+        for hook in TEST_CONFTEST_HOOKS:
+            local_names = bindings[hook]
+            if not local_names:
+                violations.append(
+                    f"rule 18: {module.name}: tests/conftest.py does not take {hook} "
+                    "from the core conftest plugin"
+                )
+                continue
+            wrapper = next(
+                (
+                    node
+                    for node in tree.body
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == hook
+                ),
+                None,
+            )
+            if wrapper is not None and not _calls_any(wrapper, local_names):
+                violations.append(
+                    f"rule 18: {module.name}: tests/conftest.py defines a local {hook} "
+                    "that does not call the core conftest plugin hook"
+                )
     return violations
 
 

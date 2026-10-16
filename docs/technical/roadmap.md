@@ -24,7 +24,8 @@ maintainer action.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
-tickets merge the matching coherence §6 rule into decisions with a harness detector.
+tickets merge the matching coherence §6 rule into decisions with a harness detector, or record a
+review-only clause without one.
 
 The scheduling table owns track, dependencies, and release requirement. Ticket bodies own
 context, scope, acceptance, and each slice's tier; [CHANGELOG.md](../../CHANGELOG.md) preserves
@@ -51,10 +52,8 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
 | SA293 | One test-settings base, one pyproject template, no ticket ids in tests or manifests | 2 | — | Optional |
-| SA290 | One named platform-operator check | 3 | — | Optional |
-| SA297 | `operator_access` checks the platform operator itself | 3 | SA290 | Optional |
+| SA297 | `operator_access` checks the platform operator itself | 3 | — | Optional |
 | SA292 | One command off-refusal helper, service-owned transactions, complete README flags | 3 | — | Optional |
-| SA294 | Record the structured-log-field convention | 3 | — | Optional |
 | SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | SA292 | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
@@ -62,7 +61,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
-Track 3: SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
+Track 3: SA297 ──► SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
@@ -71,14 +70,15 @@ Arrows within a track are queue order; the table holds the dependency edges. Cro
 SA191 waits on the 0.89.0 publication; SA291 waited on SA288, which has landed (both rewrote
 the composed `REST_FRAMEWORK`, `runtime/settings.compose_rest_framework`), and SA287 waits on
 SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
-SA296 waits on SA292 because both rewrite harness rule 17; SA297 waits on SA290's helper, and
-SA294 queues ahead of SA297 so the audit lines it adds follow the recorded log convention;
+SA296 waits on SA292 because both rewrite harness rule 17; SA297 waited on SA290, which has
+landed (its `is_platform_operator` helper is the check `operator_access` will trust), and
+SA294 landed ahead of SA297, so the audit lines SA297 adds follow the recorded log convention;
 SA277 waits on SA191's cutover, whose evidence draws the line between what `beta_migration`
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA293, SA290, SA292, and
-SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 landed ahead
+**Parallel start.** SA293 and SA292 have no unmet dependency; each track takes one at a time,
+in queue order. SA286 landed ahead
 of SA191 in Track 1's queue because every adoption step it removed before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
 
@@ -105,7 +105,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | no | no | yes | no | yes |
 | 2 | SA293 | yes | yes | yes | yes | no |
-| 3 | SA290 | yes | yes | yes | yes | no |
+| 3 | SA297 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -162,7 +162,8 @@ A track is **truly green** only when all three states are yes.
   and (g) edit Track 2's `dr_engine/recovery.py` and `update` command, with Track 2 review. SA282 (a)
   adds a harness clause and control to Track 3's harness; SA283 (a) edits Track 2's
   `billing/checks.py`; SA281 edits Track 2's option contract. Every coherence ticket adds its
-  detector and control to Track 3's harness. SA288 (b) drops pins in Track 2's billing views;
+  detector and control to Track 3's harness, or records a review-only clause without one (SA294).
+  SA288 (b) drops pins in Track 2's billing views;
   SA291 edits Track 3's `compose_rest_framework` and three module `checks.py`; SA292 (b) and
   SA293 (c) edit Track 1's module READMEs and module tooling sections. All land through the
   serialized merge queue.
@@ -459,11 +460,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
     identifiers in `tests/` (Tier 2-fast). Landed: 241 ticket-id occurrences left the
     modules' tests (identifiers, strings, docstrings, comments); rule 29 scans every `tests/`
     `.py` entry's identifiers and string literals, any case, embedded ids included, with
-    controls; decisions rule 29 carries the clause. (b) is next.
-  - [ ] (b) The shared test-settings base and conftest plugin, adopted by all 12 modules,
+    controls; decisions rule 29 carries the clause.
+  - [x] (b) The shared test-settings base and conftest plugin, adopted by all 12 modules,
     including analytics' and storage's missing hooks, auth's `DEFAULT_AUTO_FIELD`, and blog's and
-    listings' `USE_TZ`, with the harness key diff (Tier 2-full: plugin loading across 12 pytest
-    roots needs discovery).
+    listings' `USE_TZ`, with the harness key diff (Tier 2-full). Landed: `quickscale_core.testing`
+    (`settings.py` with `BASE_TEST_SETTINGS_KEYS` and the database, secret-key, and schema
+    helpers; `pytest_plugin.py` with the `bypass_rls` hooks) is imported by every module's
+    `tests/settings.py` and `tests/conftest.py`; harness rule 18 reads the base from the corpus,
+    diffs each module's keys against it, and requires both hooks from the plugin, with controls;
+    decisions rules 11 and 18 carry the clauses. (c) is next.
   - [ ] (c) One pyproject template: the stale "centralized in root" comments, orgs' `>=` dev
     floors, and the six `pythonpath` variants, with a template diff (Tier 2-fast).
   - [ ] (d) Manifest text: drop the three version stamps, fix the type-mismatched key, scan
@@ -531,26 +536,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA289 — Theme requests go through `apiRequest` and parse one error shape.**
 
-- [ ] **SA290 — One named platform-operator check.**
-
-  Closes coherence `superuser-escape-spelling` (item 30) and merges coherence §6 proposal 54 into
-  decisions rule 44. Answers item 30's team question (maintainer decision, 2026-10-16, option B):
-  forms' cross-tenant read is a different question from an org role, so it gets a named orgs
-  helper, not `HasOrgRole`.
-
-  **Context:** "is this user a platform operator?" is spelled seven times: forms' private
-  `_is_superuser` (`forms/views.py:173`), `HasOrgRole`'s escape (`permissions.py:36–41`), and
-  orgs' `middleware.py:254`, `debug_views.py:44,86`, `admin.py:71,92`, and `_debug.py:69,136`.
-  `HasOrgRole` answers "may this user act inside this organization?"; forms asks "may this user
-  read across every organization?", so routing forms through `HasOrgRole` would change what
-  superusers can do.
-
-  **Acceptance:** rule 44 carries proposal 54. Orgs exports one public `is_platform_operator(user)`
-  (today: an authenticated superuser); forms and every orgs copy call it, with behaviour
-  unchanged; forms' and orgs' authorization tests pass unchanged. The harness bans raw
-  `is_superuser` reads in module source outside that helper, with forms' old predicate as the
-  control. **Slices:** one (Tier 2-fast: the call sites are enumerated and the behaviour is
-  unchanged).
+- [x] **SA290 — One named platform-operator check.**
 
 - [ ] **SA297 — `operator_access` checks the platform operator itself.**
 
@@ -591,14 +577,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [ ] (a) The helper, the transaction moves, and the rule 17 clause (Tier 2-fast).
   - [ ] (b) The flag test, the README rows, and the `--file` help (Tier 2-fast).
 
-- [ ] **SA294 — Record the structured-log-field convention.**
-
-  Closes coherence `structured-log-fields` (item 41). Only orgs logs `extra=` fields (6 calls);
-  six modules log message-only, and coherence §8's "no structured fields" is stale. Maintainer
-  decision, 2026-10-16: security and audit events (operator access, tenancy refusals, and their
-  like) carry `extra=` fields; every other log line stays message-only. **Acceptance:** decisions
-  record that convention as a review rule; orgs' six calls already match it, so no module code
-  changes. **Slices:** one (Tier 1).
+- [x] **SA294 — Record the structured-log-field convention.**
 
 - [ ] **SA296 — Close the rule-audit enforcement gaps the 2026-10-16 census found.**
 

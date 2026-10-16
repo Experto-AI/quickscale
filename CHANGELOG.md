@@ -871,6 +871,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     placeholders in `module.yml`, so a changed placeholder or a renamed `*_env_var` option
     reaches a project through `quickscale apply` or `quickscale update` without editing a
     user-owned file.
+  - **Every platform-operator check goes through one helper.** Orgs publishes
+    `is_platform_operator(user)` — the one superuser predicate — and the forms and orgs operator
+    paths call it instead of reading `is_superuser`; a raw `is_superuser` read in module source
+    outside that helper fails the module-conventions gate.
+  - **Security and audit events log structured fields.** Operator access, a tenancy refusal, and
+    their like carry their context as `extra=` fields on the log record, and every other module
+    log line stays message-only.
   - **The generated operations guide carries module-owned details through one managed page.**
     `OPERATIONS.md` links the hash-tracked `quickscale-operations.md` page instead of restating
     the billing module's Stripe version, webhook events, and endpoint, and each module declares

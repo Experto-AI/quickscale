@@ -24,6 +24,7 @@ from .models import (
     OrganizationInvitation,
     OrganizationMembership,
 )
+from .permissions import is_platform_operator
 
 
 class OrganizationInvitationAdminForm(forms.ModelForm):
@@ -68,7 +69,7 @@ class OrganizationAdmin(admin.ModelAdmin):
         """
         del args
         org_slug = kwargs.get("org_slug")
-        if not org_slug or not getattr(request.user, "is_superuser", False):
+        if not org_slug or not is_platform_operator(request.user):
             self.message_user(
                 request, "VIEW-AS is superuser-only.", level=messages.ERROR
             )
@@ -89,7 +90,7 @@ class OrganizationAdmin(admin.ModelAdmin):
 
     def _admin_exit_debug_view(self, request: HttpRequest) -> HttpResponse:
         """Admin exit point for VIEW-AS: directly clear the debug session."""
-        if not getattr(request.user, "is_superuser", False):
+        if not is_platform_operator(request.user):
             self.message_user(
                 request, "VIEW-AS is superuser-only.", level=messages.ERROR
             )
