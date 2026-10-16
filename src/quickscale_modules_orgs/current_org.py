@@ -530,13 +530,25 @@ def _set_operator_access(value: str) -> None:
 
 
 @contextlib.contextmanager
-def _audited_cross_tenant_read(*, reason: str) -> Iterator[None]:
-    """Activate and audit the read-only cross-tenant RLS selector."""
+def _audited_cross_tenant_read(
+    *,
+    reason: str,
+    audit_extra: dict[str, object] | None = None,
+) -> Iterator[None]:
+    """Activate and audit the read-only cross-tenant RLS selector.
+
+    ``audit_extra`` carries the identity the caller entered through —
+    ``user_id`` for :func:`operator_access`, ``command`` for
+    :func:`operator_access_for_command` — so both the activation and the
+    deactivation line record it beside the reason (decisions rule 24).
+    The internal account-removal seam passes neither.
+    """
+    extra: dict[str, object] = {"reason": reason, **(audit_extra or {})}
     prior = _get_operator_access()
     _set_operator_access("on")
     logger.info(
         "operator_access activated",
-        extra={"reason": reason},
+        extra=extra,
     )
     try:
         yield
@@ -544,13 +556,13 @@ def _audited_cross_tenant_read(*, reason: str) -> Iterator[None]:
         _set_operator_access(prior)
         logger.info(
             "operator_access deactivated",
-            extra={"reason": reason},
+            extra=extra,
         )
 
 
 @contextlib.contextmanager
-def operator_access(*, reason: str) -> Iterator[None]:
-    """Superuser-gated, audit-logged context manager for cross-tenant reads.
+def operator_access(*, user: object, reason: str) -> Iterator[None]:
+    """Platform-operator-gated, audit-logged context manager for cross-tenant reads.
 
     Temporarily sets the PostgreSQL GUC ``app.operator_access`` to
     ``'on'`` via ``SET LOCAL`` so that FORCE RLS policies allow queries
@@ -566,33 +578,101 @@ def operator_access(*, reason: str) -> Iterator[None]:
     on entry and restores it on exit, so nested ``operator_access()``
     use correctly preserves the outer scope.
 
-    **Superuser-gated:** callers must verify ``is_platform_operator(user)``
-    before entering this context manager.  Views and management commands
-    are responsible for this check (see the existing pattern in
-    :func:`_debug.set_debug_as_org`).
+    **Operator-gated:** the context manager itself checks
+    ``is_platform_operator(user)`` (the one helper, Module Conventions
+    rule 44) and refuses a non-operator, with a ``WARNING`` audit log
+    line, before the GUC is touched.  View callers pass
+    ``request.user``; management commands, which have no request user,
+    enter through :func:`operator_access_for_command` instead.
 
-    **Audit-logged:** every activation is recorded at ``INFO`` level
-    via stdlib logging with a structured ``extra`` dict containing the
-    reason.  Deactivation is also logged so the complete lifecycle is
-    observable.
+    **Audit-logged:** activation, deactivation, and refusal are recorded
+    via stdlib logging with structured ``extra`` fields — ``reason``
+    plus the operator's ``user_id`` — under decisions rule 24.
 
     Usage::
 
         from quickscale_modules_orgs.current_org import operator_access
 
         with transaction.atomic():
-            with operator_access(reason="Support ticket #12345"):
+            with operator_access(user=request.user, reason="Support ticket #12345"):
                 rows = MyModel.all_objects.filter(...)
 
     Args:
+        user: The authenticated user seeking cross-tenant read access;
+            must satisfy ``is_platform_operator`` (typically
+            ``request.user``).
         reason: Human-readable explanation of why operator access is
             needed.  Logged at ``INFO`` level for audit review (e.g.
             ``"Support ticket #12345 — investigate billing discrepancy"``).
 
     Yields:
         None
+
+    Raises:
+        PermissionDenied: *user* is not a platform operator.  The
+            refusal is logged before the exception is raised, and the
+            ``app.operator_access`` GUC is never changed.
     """
-    with _audited_cross_tenant_read(reason=reason):
+    from django.core.exceptions import PermissionDenied
+
+    from .permissions import is_platform_operator
+
+    if not is_platform_operator(user):
+        logger.warning(
+            "operator_access refused for non-operator user",
+            extra={"reason": reason, "user_id": getattr(user, "pk", None)},
+        )
+        raise PermissionDenied(
+            "Operator access requires a platform operator (authenticated superuser)."
+        )
+    with _audited_cross_tenant_read(
+        reason=reason,
+        audit_extra={"user_id": getattr(user, "pk", None)},
+    ):
+        yield
+
+
+@contextlib.contextmanager
+def operator_access_for_command(*, command: str, reason: str) -> Iterator[None]:
+    """Command-only variant of :func:`operator_access` for management commands.
+
+    Management commands have no request user to check, so they enter the
+    audited cross-tenant read scope through this variant instead: its
+    activation and deactivation log lines carry the ``command`` name plus
+    the ``reason`` as structured ``extra`` fields (decisions rule 24).
+    It is importable only from ``management/commands/``; the
+    module-conventions harness (rule 44) refuses a reference to it in
+    module source elsewhere.
+
+    Transaction scope, nesting safety, and the read-only SELECT-policy
+    contract are identical to :func:`operator_access`.
+
+    Usage::
+
+        from django.db import transaction
+
+        from quickscale_modules_orgs.current_org import operator_access_for_command
+
+        with transaction.atomic():
+            with operator_access_for_command(
+                command="quickscale_forms_seed_presets",
+                reason="lookup existing preset slugs",
+            ):
+                rows = MyModel.all_objects.filter(...)
+
+    Args:
+        command: The management command's name, recorded in the audit
+            log lines.
+        reason: Human-readable explanation of why operator access is
+            needed.
+
+    Yields:
+        None
+    """
+    with _audited_cross_tenant_read(
+        reason=reason,
+        audit_extra={"command": command},
+    ):
         yield
 
 
