@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FormRenderer } from '@/components/forms/FormRenderer'
 import type { FormFieldSchema, FormSchema } from '@/hooks/useFormSchema'
-import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 const fetchMock = vi.fn()
 
@@ -16,6 +16,7 @@ beforeEach(() => {
     modules: moduleFlags({ forms: true }),
     modulePaths: modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: { mode: 'solo', currentOrgSlug: null },
   }
 })

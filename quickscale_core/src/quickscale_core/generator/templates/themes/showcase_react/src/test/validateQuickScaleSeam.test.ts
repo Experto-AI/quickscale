@@ -3,10 +3,11 @@ import { validateQuickScaleConfig } from '@/lib/validateQuickScaleSeam'
 import type { QuickScaleConfig } from '@/hooks/useModules'
 import {
   SEAM_MODULE_API_PATH_KEYS,
+  SEAM_MODULE_DOCUMENT_PATH_KEYS,
   SEAM_MODULE_FLAG_KEYS,
   SEAM_MODULE_PATH_KEYS,
 } from '@/quickscaleSeam.keys'
-import { moduleApiPaths, moduleFlags, modulePaths } from '@/test/seamFixtures'
+import { moduleApiPaths, moduleDocumentPaths, moduleFlags, modulePaths } from '@/test/seamFixtures'
 
 function buildValidConfig(): QuickScaleConfig {
   return {
@@ -14,6 +15,7 @@ function buildValidConfig(): QuickScaleConfig {
     modules: moduleFlags(),
     modulePaths: modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -32,6 +34,7 @@ function buildPublicInjectorLinkTree(): QuickScaleConfig {
     modules: moduleFlags({ social: true }),
     modulePaths: modulePaths({ crm: '/crm/', analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -59,6 +62,7 @@ function buildPublicInjectorEmbeds(): QuickScaleConfig {
     modules: moduleFlags({ social: true }),
     modulePaths: modulePaths({ crm: '/crm/', social: '/social/embeds', analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -386,6 +390,43 @@ describe('validateQuickScaleConfig', () => {
     expect(() => validateQuickScaleConfig()).toThrow(/moduleApiPaths\.billing/)
   })
 
+  // ── moduleDocumentPaths validation ──────────────────────────────
+
+  it('throws when moduleDocumentPaths is missing', () => {
+    const config: Record<string, unknown> = JSON.parse(JSON.stringify(buildValidConfig()))
+    delete config.moduleDocumentPaths
+    window.__QUICKSCALE__ = config as unknown as QuickScaleConfig
+    expect(() => validateQuickScaleConfig()).toThrow(/moduleDocumentPaths/)
+  })
+
+  it('throws when moduleDocumentPaths is an array', () => {
+    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleDocumentPaths: [] as unknown as QuickScaleConfig['moduleDocumentPaths'] }
+    expect(() => validateQuickScaleConfig()).toThrow(/moduleDocumentPaths/)
+  })
+
+  it.each([...SEAM_MODULE_DOCUMENT_PATH_KEYS])(
+    'throws when moduleDocumentPaths.%s is missing',
+    (missingKey) => {
+      const config: Record<string, unknown> = JSON.parse(JSON.stringify(buildValidConfig()))
+      const paths = config.moduleDocumentPaths as Record<string, unknown>
+      delete paths[missingKey]
+      window.__QUICKSCALE__ = config as unknown as QuickScaleConfig
+      expect(() => validateQuickScaleConfig()).toThrow(
+        new RegExp(`moduleDocumentPaths\\.${missingKey}`),
+      )
+    },
+  )
+
+  it('throws when moduleDocumentPaths.blogIndex is empty string', () => {
+    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleDocumentPaths: moduleDocumentPaths({ blogIndex: '' }) as QuickScaleConfig['moduleDocumentPaths'] }
+    expect(() => validateQuickScaleConfig()).toThrow(/moduleDocumentPaths\.blogIndex/)
+  })
+
+  it('throws when moduleDocumentPaths.blogFeed is a number', () => {
+    window.__QUICKSCALE__ = { ...buildValidConfig(), moduleDocumentPaths: { ...moduleDocumentPaths(), blogFeed: 42 } as unknown as QuickScaleConfig['moduleDocumentPaths'] }
+    expect(() => validateQuickScaleConfig()).toThrow(/moduleDocumentPaths\.blogFeed/)
+  })
+
   // ── owner validation (SA107-CR-002) ───────────────────────────
 
   it('throws when owner is missing', () => {
@@ -531,7 +572,11 @@ describe('validateQuickScaleConfig', () => {
   it('accepts a production-shaped saas-mode config', () => {
     const config = buildValidConfig()
     config.owner = { mode: 'saas', currentOrgSlug: 'acme-corp' }
-    config.modulePaths = { crm: '/orgs/acme-corp/crm/', social: '/social', analytics: '/analytics/' }
+    config.modulePaths = modulePaths({
+      crm: '/orgs/acme-corp/crm/',
+      social: '/social',
+      analytics: '/analytics/',
+    })
     window.__QUICKSCALE__ = config
     const result = validateQuickScaleConfig()
     expect(result.owner.mode).toBe('saas')

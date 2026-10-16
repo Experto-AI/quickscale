@@ -8,7 +8,7 @@ import {
   useProjectConfig,
 } from '@/hooks/useModules'
 import type { QuickScaleConfig } from '@/hooks/useModules'
-import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 function buildConfig(overrides: Partial<QuickScaleConfig> = {}): QuickScaleConfig {
   return {
@@ -16,6 +16,7 @@ function buildConfig(overrides: Partial<QuickScaleConfig> = {}): QuickScaleConfi
     modules: moduleFlags({ auth: true }),
     modulePaths: modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,

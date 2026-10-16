@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { moduleFlags, modulePaths, moduleApiPaths } from '@/test/seamFixtures'
+import { moduleFlags, modulePaths, moduleApiPaths, moduleDocumentPaths } from '@/test/seamFixtures'
 
 // Mock lazy-loaded social page modules so they resolve synchronously in tests.
 vi.mock('@/pages/SocialEmbedsPublicPage', () => ({
@@ -27,6 +27,7 @@ function applyConfig(overrides?: Record<string, unknown>) {
     modules: moduleFlags(),
     modulePaths: modulePaths({ analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,
@@ -46,6 +47,7 @@ function applyPublicInjectorConfig(surface: 'link_tree' | 'embeds') {
     modules: moduleFlags({ social: true }),
     modulePaths: modulePaths({ crm: '/crm/', social: surface === 'link_tree' ? '/social' : '/social/embeds', analytics: '/analytics/' }),
     moduleApiPaths: moduleApiPaths(),
+    moduleDocumentPaths: moduleDocumentPaths(),
     owner: {
       mode: 'solo',
       currentOrgSlug: null,

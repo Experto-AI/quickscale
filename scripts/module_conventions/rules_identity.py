@@ -195,6 +195,9 @@ RULE_37_ALLOWED_LITERALS: dict[tuple[str, str, str], str] = {
     ("core", "runtime/seam.py", "_SEAM_MODULE_API_PATHS"): (
         "the theme seam's server-resolved API-base table (rule 41)"
     ),
+    ("core", "runtime/seam.py", "_SEAM_DOCUMENT_PATHS"): (
+        "the theme seam's server-resolved document-path table (rule 31)"
+    ),
     ("core", "runtime/seam.py", "_NON_SEAM_MODULES"): (
         "the theme's documented orgs exclusion (rule 31)"
     ),

@@ -19,15 +19,11 @@ function joinPath(basePath: string, path = ''): string {
   return `${stripTrailingSlash(basePath)}${normalizedPath}`
 }
 
-function withTrailingSlash(path: string): string {
-  return path.endsWith('/') ? path : `${path}/`
-}
-
 export function useOrgNavigation() {
   const { orgSlug: routeOrgSlug } = useParams<{ orgSlug: string }>()
   const ownerMode = useOwnerMode()
   const fallbackOrgSlug = useCurrentOrgSlug()
-  const { moduleApiPaths } = useProjectConfig()
+  const { moduleApiPaths, moduleDocumentPaths, modulePaths } = useProjectConfig()
   const currentOrgSlug = routeOrgSlug ?? fallbackOrgSlug
   const isSaas = ownerMode === 'saas'
 
@@ -40,29 +36,45 @@ export function useOrgNavigation() {
       hasOrgContext,
       currentOrgSlug: orgBasePath ? currentOrgSlug : null,
       appPaths: {
+        // Module page paths come from the seam (rule 31): the org-scoped
+        // workspace mounts each module page under /orgs/<slug>/ with the
+        // module's own path, never a path written here.
         orgList: '/orgs',
         orgCreate: '/orgs/new',
         dashboard: orgBasePath ?? (isSaas ? '/orgs' : '/'),
-        blog: orgBasePath ? joinPath(orgBasePath, 'blog') : '/blog',
-        listings: orgBasePath ? joinPath(orgBasePath, 'listings') : '/listings',
-        crm: '/crm',
+        blog: orgBasePath ? joinPath(orgBasePath, modulePaths.blog) : modulePaths.blog,
+        listings: orgBasePath
+          ? joinPath(orgBasePath, modulePaths.listings)
+          : modulePaths.listings,
+        crm: modulePaths.crm,
         forms: '/forms/contact',
         members: orgBasePath ? joinPath(orgBasePath, 'members') : '/orgs',
         settings: orgBasePath ? joinPath(orgBasePath, 'settings') : '/settings',
         profile: '/profile',
       },
       documentPaths: {
-        blogIndex: orgBasePath ? withTrailingSlash(joinPath(orgBasePath, 'blog')) : '/blog/',
-        blogFeed: orgBasePath
-          ? withTrailingSlash(joinPath(orgBasePath, 'blog/feed'))
-          : '/blog/feed/',
-        listingsIndex: orgBasePath
-          ? withTrailingSlash(joinPath(orgBasePath, 'listings'))
-          : '/listings/',
-        crmDashboard: '/crm/dashboard/',
+        // A module's server-rendered document keeps its own URL in every
+        // mode (rule 31): the seam resolves each from the document's named
+        // route, so a launcher link never points back at the SPA.
+        blogIndex: moduleDocumentPaths.blogIndex,
+        blogFeed: moduleDocumentPaths.blogFeed,
+        listingsIndex: moduleDocumentPaths.listingsIndex,
+        crmDashboard: moduleDocumentPaths.crmDashboard,
         crmApiBase: moduleApiPaths.crm,
         formsApiBase: moduleApiPaths.forms,
       },
     }
-  }, [currentOrgSlug, isSaas, moduleApiPaths.crm, moduleApiPaths.forms])
+  }, [
+    currentOrgSlug,
+    isSaas,
+    moduleApiPaths.crm,
+    moduleApiPaths.forms,
+    moduleDocumentPaths.blogFeed,
+    moduleDocumentPaths.blogIndex,
+    moduleDocumentPaths.crmDashboard,
+    moduleDocumentPaths.listingsIndex,
+    modulePaths.blog,
+    modulePaths.crm,
+    modulePaths.listings,
+  ])
 }

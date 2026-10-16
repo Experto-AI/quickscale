@@ -337,8 +337,9 @@ items:
      rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: command-off-refusal-and-atomic, status: open, aspect: J, cost: [tax], members_diverging: [backups, forms, orgs], population: commands(16),
      rule: "rule 1, rule 17", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: theme-request-paths, status: open, aspect: P, cost: [tax], members_diverging: [theme], population: theme-hooks,
-     rule: "rule 31", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: theme-request-paths, status: resolved, aspect: P, cost: [tax], members_diverging: [],
+     population: theme-hooks, rule: "rule 31", check: "theme ESLint (fetch ban in src/hooks)",
+     closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: test-ticket-ids-in-identifiers, status: open, aspect: M, cost: [tax], members_diverging: [auth, backups, blog, crm, orgs], population: modules(12),
      rule: "rule 29", check: "harness rule 29 (names/docstrings/comments)", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: test-harness-parity, status: open, aspect: M, cost: [tax], members_diverging: [analytics, storage, auth, blog, listings], population: modules(12),
@@ -512,7 +513,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 33 | `startup-presence-guard-copies` | B | tax | 3 / 7 `checks.py` | open (2026-10-16) |
 | 34 | `throttle-rate-merge-copies` | B | tax | 5 / 5 throttled adapters | open (2026-10-16) |
 | 35 | `command-off-refusal-and-atomic` | J | tax | 3 / 16 commands | open (2026-10-16) |
-| 36 | `theme-request-paths` | P | tax | 2 raw `fetch` + literal paths | open (2026-10-16) |
+| 36 | `theme-request-paths` | P | tax | 2 raw `fetch` + literal paths | resolved (SA289 (b)) |
 | 37 | `test-ticket-ids-in-identifiers` | M | tax | 5 / 12 | open (2026-10-16) |
 | 38 | `test-harness-parity` | M | tax | 5 / 12 | open (2026-10-16) |
 | 39 | `pyproject-residue` | N | tax | 6 / 12 | open (2026-10-16) |
@@ -558,7 +559,7 @@ marked ✓ are *Already consistent (keep)*. Drift rows name their item.
 | M · tests | conftest hooks 10/12 (missing in analytics, storage); test settings gaps: auth has no `DEFAULT_AUTO_FIELD`, blog and listings have no `USE_TZ`; vendor fakes in 3 styles; ~70–90 ticket ids in test identifiers | 37, 38 |
 | N · tooling | build backend, 0.89.0 lockstep, ruff, Django/Python pins, `--cov=<package>` 12/12 ✓; stale "centralized in root" comment 5; orgs dev floors `>=`; 6 `pythonpath` variants | 39 |
 | O · docs | README H2 outline 12/12 ✓; 104 option rows match `module.yml` ✓; flags documented partially | 31 |
-| P · theme | API bases from the seam's `moduleApiPaths` ✓; raw `fetch` ×2 and literal page paths; `useApi.ts` still parses 2 retired error shapes | 29, 36 |
+| P · theme | the one error parser, one request client, and seam page paths across the theme ✓ | 29, 36 (resolved) |
 | Q · locale | 0 `gettext`, 0 `trans` in 12/12 — English only by decision ✓ | — |
 
 Inert: none beyond Q (consistent). Population sizes: 12 modules · 16 commands · 8 DRF-serving
@@ -859,17 +860,24 @@ not drift.)
 
 | Aspect | Variant → members |
 |---|---|
-| Module path source | seam `modulePaths` → crm pages · **literal API bases** → `useOrgs` (`/orgs/api/`, `/billing/api`), `useFormSchema` (`/forms/api/`), `usePublicSocialSurface` (`/_quickscale/social/…`) |
-| HTTP helper | shared `apiRequest`/`useApiData` → orgs, crm, billing · raw `fetch` → forms schema, social |
-| Error shape parsed | the one shape **and** the retired `errors` key ("for compatibility with projects that have not updated every module yet") → `useApi.ts` |
+| Module path source | seam `modulePaths` → the SPA's blog, listings, and crm page routes and navigation · seam `moduleDocumentPaths` → the launcher pages' document links · seam `moduleApiPaths` → every module API base (rule 41) |
+| HTTP helper | one shared client (`apiRequest`/`useApiData`) → every theme request, with a lint ban on a raw `fetch(` in `src/hooks` |
+| Error shape parsed | the one QuickScale shape only → `useApi.ts` |
 
-*Drift:* Item 18.
+*Drift:* none; items 18, 29, and 36 are resolved.
 
-*SA289 note (2026-10-16):* item 29 is closed. `useApi.ts` parses only the one QuickScale shape
-`{"error": {"code", "message", "fields"}}` and no longer reads the retired string-`error` or
+*SA289 note (2026-10-16):* items 29 and 36 are closed. `useApi.ts` parses only the one QuickScale
+shape `{"error": {"code", "message", "fields"}}` and no longer reads the retired string-`error` or
 `errors`-key payloads; `useApiErrors.test.ts` pins the rejection, and the
-`sa289-theme-one-error-parser` adoption step records it for existing projects. The proposal 53
-merge into decisions rule 31 lands with SA289 (b), which also carries item 36.
+`sa289-theme-one-error-parser` adoption step records it for existing projects. Every theme hook
+request goes through `apiRequest` (the theme's ESLint configuration fails a raw `fetch(` in
+`src/hooks` outside `useApi.ts`), and the SPA's blog, listings, and crm page routes and
+navigation read the seam's `modulePaths`, which gained `blog` and `listings` entries resolved
+from their `quickscale_blog_shell`/`quickscale_listings_shell` routes, and the launcher pages'
+document links read the new `moduleDocumentPaths` table (blog's index and feed, listings' index,
+the CRM dashboard), resolved from the documents' named routes; the
+`sa289-theme-request-client-and-seam-paths` adoption step records the theme-plus-managed-seam
+adoption for existing projects. Proposal 53 merged into decisions rule 31.
 
 ### Q. Locale — quiet
 
@@ -1783,7 +1791,7 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 
 51. **CLI module knowledge** [27]. ✅ The CLI reaches module-specific behaviour through a manifest field or a generic adapter hook. ❌ A membership, `.get()`, or equality branch on a module name in core or the CLI outside rule 37's list.
 52. **JSON-only APIs** [28]. ✅ The generated `REST_FRAMEWORK` sets JSON renderer and parser defaults. ❌ A per-view renderer or parser pin outside webhooks. ✅ **Merged (SA288):** decisions rule 9 carries the clause, and harness rule 9 checks the composed defaults and bans per-view pins with controls (a webhook's raw-body parser and a file upload's multipart parser stay local).
-53. **One theme error parser** [29, 36]. ✅ Theme requests go through `apiRequest`, parse core's error shape only, and take paths from the seam.
+53. **One theme error parser** [29, 36]. ✅ Theme requests go through `apiRequest`, parse core's error shape only, and take paths from the seam. ✅ **Merged (SA289):** decisions rule 31 carries the clause; the seam's page-path table carries the blog, listings, crm, social, and analytics paths, a `moduleDocumentPaths` table carries the launcher pages' document destinations, and the theme's ESLint configuration fails a raw `fetch(` in `src/hooks` outside `useApi.ts`.
 54. **One operator escape** [30]. ✅ The superuser escape is orgs' permission helper. ❌ A module-private superuser predicate.
 55. **Manifest owns validation and throttle rates** [32, 34, 33]. ✅ Adapters evaluate the declared validation, and core merges declared throttle scopes. ❌ `re.compile`, a `DEFAULT_THROTTLE_RATES` literal in `adapter.py`, or a presence re-check in `checks.py`.
 56. **Command scaffolding** [35, 31]. ✅ One core helper refuses scheduled runs while off; the transaction is in the service; the README lists every flag.
@@ -2558,6 +2566,7 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-16 — `dependency-spec-sources`: resolved (SA283(c) bf7e242e — verified; 12/12 `--cov=<import package>`).
 - 2026-10-16 — `api-renderer-parser-pinning`: resolved (SA288 — decisions rule 9 carries the JSON-only clause; harness rule 9 checks both composed defaults and bans per-view renderer/parser pins with controls; billing, listings, orgs, blog, and the rendered social views dropped their pins, while the blog media upload keeps its multipart policy).
 - 2026-10-16 — `theme-retired-error-shapes`: resolved (SA289 (a) — the theme's `useApi.ts` parses only the one QuickScale error shape, and `useApiErrors.test.ts` rejects the retired string-`error` and `errors`-key payloads; proposal 53's rule-31 merge lands with SA289 (b)).
+- 2026-10-16 — `theme-request-paths`: resolved (SA289 (b) — every theme hook request goes through `apiRequest`, the SPA's blog, listings, and crm page routes and navigation read the seam's `modulePaths` (which gained `blog` and `listings` entries resolved from `quickscale_blog_shell`/`quickscale_listings_shell`), a raw `fetch(` in `src/hooks` fails the theme's ESLint outside `useApi.ts`, and proposal 53 merged into decisions rule 31).
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).
 - 2026-10-16 — All other prior IDs: still resolved (harness pass at HEAD; delta has no convention-breaking commit).
