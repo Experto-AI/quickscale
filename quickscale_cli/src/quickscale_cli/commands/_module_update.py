@@ -17,6 +17,8 @@ from quickscale_cli.commands._module_shared import _UpdatePathSnapshot
 from quickscale_cli.commands._module_update_identity import (
     _collect_update_migration_identity,
     _get_update_migration_issues,
+    _is_frozen_update_vintage,
+    _update_migration_identity_reason,
     _UpdateMigrationIdentityError,
 )
 
@@ -243,10 +245,12 @@ def _report_module_update_error(name: str, error: Exception) -> None:
         )
     elif isinstance(error, _UpdateMigrationIdentityError):
         click.echo(
-            "\n💡 An equal-label update must keep every applied migration "
-            "byte-identical: replacing it would leave the database's applied "
-            "schema unidentified. Reconcile the embedded module content before "
-            "updating, or move to the new content through a fresh database.",
+            "\n💡 An update must keep every applied migration file "
+            "byte-identical — under an unchanged version label, and on every "
+            "pull from the migration freeze vintage on: replacing one would "
+            "leave the database's applied schema unidentified. Reconcile the "
+            "embedded module content before updating, or move to the new "
+            "content through a fresh database.",
             err=True,
         )
 
@@ -283,10 +287,12 @@ def _update_single_module(
         if not _check_local_pre_pull_guard(project_path, name, applied_state):
             return False
 
-        # SA204(e): capture the applied migration content identity before the
-        # pull so an equal version label cannot replace it.  A label change is
-        # a release upgrade, whose database handling is the documented
-        # fresh-database path, so only an equal label compares content.
+        # SA204(e)/(g): capture the applied migration content identity before
+        # the pull so the pull cannot replace it: an equal version label must
+        # keep it, and from the migration freeze vintage on every pull must.
+        # A vintage before the freeze is a release upgrade whose database
+        # handling is the documented fresh-database path, so it compares
+        # nothing there.
         applied_version = (
             applied_state.modules[name].version
             if applied_state is not None and name in applied_state.modules
@@ -359,18 +365,35 @@ def _update_single_module(
                     project_path, name
                 )
 
-                # SA204(e): an equal version label must not replace applied
-                # migration content; a same-label rewrite would leave the
-                # database's applied schema unidentified.
-                if installed_version == applied_version:
+                # SA204(g): from the freeze vintage on, a pull must not change
+                # applied migration content, and it must not proceed while
+                # that content cannot be identified: a frozen project has no
+                # fresh-database escape hatch, so an unknown identity refuses
+                # the pull instead of silently authorizing it.
+                if applied_migrations is None and _is_frozen_update_vintage(
+                    applied_version
+                ):
+                    raise _UpdateMigrationIdentityError(
+                        "the applied migration content identity could not be "
+                        f"established for the frozen vintage '{applied_version}': "
+                        "restore the embedded module tree before updating"
+                    )
+
+                # SA204(e)/(g): an applied migration file must survive the
+                # pull byte-identical — under an unchanged version label, and
+                # on every pull from the migration freeze vintage on — so a
+                # rewrite or removal raises the identity refusal.
+                identity_reason = _update_migration_identity_reason(
+                    applied_version, installed_version
+                )
+                if identity_reason is not None:
                     migration_issues = _get_update_migration_issues(
                         applied_migrations,
                         _collect_update_migration_identity(project_path, info.prefix),
                     )
                     if migration_issues:
                         raise _UpdateMigrationIdentityError(
-                            "applied migration content changed under the equal "
-                            f"version label '{installed_version}': "
+                            f"applied migration content changed {identity_reason}: "
                             + "; ".join(migration_issues)
                         )
 
