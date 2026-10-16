@@ -1152,8 +1152,8 @@ class TestCompositeFkFormFieldValueDeletePath:
         from quickscale_modules_orgs.models import Organization
 
         org = Organization.objects.create(
-            name="AF12 Delete Proof Org",
-            slug="af12-del-proof",
+            name="Delete Proof Org",
+            slug="del-proof",
         )
 
         set_current_org_id(org.pk)
@@ -1235,8 +1235,8 @@ class TestCompositeFkFormFieldValueDeletePath:
         from quickscale_modules_orgs.models import Organization
 
         org = Organization.objects.create(
-            name="AF12 Delete Proof Org 2",
-            slug="af12-del-proof-2",
+            name="Delete Proof Org 2",
+            slug="del-proof-2",
         )
 
         set_current_org_id(org.pk)
