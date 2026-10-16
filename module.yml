@@ -94,6 +94,16 @@ config:
 
   immutable: {}
 
+# Non-live CI placeholders (SA286): each key names a declared option whose
+# resolved value is the environment variable the enabled module's startup
+# check reads, and the placeholder is what the managed
+# .github/quickscale-ci-env file sets under it, so the user-owned CI
+# workflow names no module value.
+ci_env:
+  publishable_key_env_var: pk_test_ci
+  secret_key_env_var: sk_test_ci
+  webhook_secret_env_var: whsec_test_ci
+
 required_modules:
   - orgs
 
