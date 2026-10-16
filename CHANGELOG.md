@@ -840,6 +840,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **The bundled manifests are built, not tracked.** A `quickscale-core` wheel materializes its
     bundled `module.yml` files from the module manifests during the build, so a manifest edit
     cannot ship a stale copy and the gate that compared the two copies is retired.
+  - **Module APIs answer JSON by default.** The composed `REST_FRAMEWORK` installs JSON renderer
+    and parser defaults, so the CRM and forms write APIs refuse a form-encoded body with `415`
+    while the blog media upload keeps its multipart policy.
   - **The published core wheel is content-checked.** Before upload, the release build opens the
     built `quickscale-core` wheel and fails unless it carries every module manifest byte-equal to
     `quickscale_modules/*/module.yml`.

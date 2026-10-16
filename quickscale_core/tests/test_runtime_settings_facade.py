@@ -147,6 +147,12 @@ class TestRestFrameworkComposition:
         assert composed["DEFAULT_PERMISSION_CLASSES"] == [
             "rest_framework.permissions.IsAuthenticated",
         ]
+        assert composed["DEFAULT_RENDERER_CLASSES"] == [
+            "rest_framework.renderers.JSONRenderer",
+        ]
+        assert composed["DEFAULT_PARSER_CLASSES"] == [
+            "rest_framework.parsers.JSONParser",
+        ]
         assert composed["DEFAULT_THROTTLE_CLASSES"] == [
             "rest_framework.throttling.AnonRateThrottle",
             "rest_framework.throttling.UserRateThrottle",
@@ -163,6 +169,10 @@ class TestRestFrameworkComposition:
         contribution: dict[str, object] = {
             "EXCEPTION_HANDLER": "myproject.errors.handler",
             "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+            "DEFAULT_RENDERER_CLASSES": [
+                "rest_framework.renderers.BrowsableAPIRenderer",
+            ],
+            "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.FormParser"],
             "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.AnonRateThrottle"],
             "DEFAULT_THROTTLE_RATES": {"quickscale_billing_checkout": "30/hour"},
             "PAGE_SIZE": 25,
@@ -175,6 +185,12 @@ class TestRestFrameworkComposition:
         assert composed["EXCEPTION_HANDLER"] == "myproject.errors.handler"
         assert composed["DEFAULT_PERMISSION_CLASSES"] == [
             "rest_framework.permissions.AllowAny",
+        ]
+        assert composed["DEFAULT_RENDERER_CLASSES"] == [
+            "rest_framework.renderers.BrowsableAPIRenderer",
+        ]
+        assert composed["DEFAULT_PARSER_CLASSES"] == [
+            "rest_framework.parsers.FormParser",
         ]
         assert composed["DEFAULT_THROTTLE_CLASSES"] == [
             "rest_framework.throttling.AnonRateThrottle",
@@ -209,12 +225,18 @@ class TestRestFrameworkComposition:
         first_permissions = first["DEFAULT_PERMISSION_CLASSES"]
         assert isinstance(first_permissions, list)
         first_permissions.append("rest_framework.permissions.AllowAny")
+        first_parsers = first["DEFAULT_PARSER_CLASSES"]
+        assert isinstance(first_parsers, list)
+        first_parsers.append("rest_framework.parsers.FormParser")
 
         second = facade.compose_rest_framework(
             use_x_forwarded_for=False, trusted_proxy_count=0
         )
         assert second["DEFAULT_PERMISSION_CLASSES"] == [
             "rest_framework.permissions.IsAuthenticated",
+        ]
+        assert second["DEFAULT_PARSER_CLASSES"] == [
+            "rest_framework.parsers.JSONParser",
         ]
 
     def test_non_mapping_throttle_rates_fail_loudly(self) -> None:

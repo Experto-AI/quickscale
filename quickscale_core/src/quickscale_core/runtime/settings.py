@@ -18,8 +18,8 @@ Public API (SA206):
 * :func:`compose_rest_framework` — the generated project's ``REST_FRAMEWORK``
   composition: the fail-closed defaults (the one QuickScale error handler, the
   one session authentication class, the authenticated-only permission class,
-  and the throttle classes and rates), the module-contributed keys, and the
-  proxy-derived ``NUM_PROXIES``.
+  the JSON-only renderer and parser, and the throttle classes and rates), the
+  module-contributed keys, and the proxy-derived ``NUM_PROXIES``.
 * :func:`require_production_secret_key` — the production SECRET_KEY guard.
 * :data:`KNOWN_PRIVILEGED_COMMANDS`, :data:`KNOWN_NON_DB_COMMANDS`, and
   :func:`resolve_runtime_database_url` — the launcher one-shot command-mode
@@ -147,6 +147,13 @@ class ClientIdentityMiddleware:
 # included) win over every default below.
 
 _DEFAULT_DRF_EXCEPTION_HANDLER = "quickscale_core.runtime.conventions.exception_handler"
+# The composed defaults make a module API accept and answer JSON only, so a
+# caller cannot depend on one module rendering the browsable HTML API or
+# accepting a form-encoded body.  A view that must read a raw body (a signed
+# webhook) reads ``request.body`` and needs no parser; a view that accepts a
+# file upload keeps its own multipart parser policy.
+_DEFAULT_DRF_RENDERER_CLASSES = ["rest_framework.renderers.JSONRenderer"]
+_DEFAULT_DRF_PARSER_CLASSES = ["rest_framework.parsers.JSONParser"]
 _DEFAULT_DRF_AUTHENTICATION_CLASSES = [
     "quickscale_core.runtime.drf.QuickscaleSessionAuthentication",
 ]
@@ -180,8 +187,9 @@ def compose_rest_framework(
     ``DEFAULT_THROTTLE_RATES`` (rule 30), so in a generated project the only
     module-contributed key is a rate; a directly adopted project that passes
     other keys still wins.  The
-    fail-closed defaults — the one QuickScale error handler, the one session
-    authentication class, the authenticated-only permission class, the
+    fail-closed defaults — the one QuickScale error handler, the JSON-only
+    renderer and parser, the one session authentication class, the
+    authenticated-only permission class, the
     anon/user classes and core's one scoped throttle class, and the
     conservative anon/user rates — fill in only what a module left unset, so
     a project with no modules still fails closed.  ``NUM_PROXIES`` is derived from the trusted-proxy state, so
@@ -190,6 +198,12 @@ def compose_rest_framework(
     rest_framework: dict[str, object] = dict(contributed or {})
 
     rest_framework.setdefault("EXCEPTION_HANDLER", _DEFAULT_DRF_EXCEPTION_HANDLER)
+    rest_framework.setdefault(
+        "DEFAULT_RENDERER_CLASSES", list(_DEFAULT_DRF_RENDERER_CLASSES)
+    )
+    rest_framework.setdefault(
+        "DEFAULT_PARSER_CLASSES", list(_DEFAULT_DRF_PARSER_CLASSES)
+    )
     rest_framework.setdefault(
         "DEFAULT_AUTHENTICATION_CLASSES", list(_DEFAULT_DRF_AUTHENTICATION_CLASSES)
     )
