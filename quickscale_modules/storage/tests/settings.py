@@ -1,11 +1,14 @@
 """Django settings for storage module tests."""
 
-import os
 from pathlib import Path
 
-from quickscale_core.manifest.settings_schema import load_settings_schema
+from quickscale_core.testing.settings import (
+    module_settings_schema,
+    suite_database,
+    suite_secret_key,
+)
 
-SECRET_KEY = "test-secret-key-for-storage-module"
+SECRET_KEY = suite_secret_key("storage")
 DEBUG = True
 ALLOWED_HOSTS: list[str] = []
 
@@ -46,14 +49,7 @@ TEMPLATES = [
 ]
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("QS_STORAGE_DB_NAME", "test_quickscale_storage"),
-        "USER": os.environ.get("QS_STORAGE_DB_USER", "postgres"),
-        "PASSWORD": os.environ.get("QS_STORAGE_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_STORAGE_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_STORAGE_DB_PORT", "5432"),
-    }
+    "default": suite_database("storage"),
 }
 
 ROOT_URLCONF = "tests.urls"
@@ -95,8 +91,8 @@ AWS_SECRET_ACCESS_KEY = ""
 
 # Rule 3: the compiled option schema the generic startup check reads, derived
 # from the module's own manifest so it can never drift from the declarations.
-MODULE_SETTINGS_SCHEMA = {
-    "storage": load_settings_schema(
-        Path(__file__).resolve().parent.parent / "module.yml"
-    )
-}
+# The lookup anchors to this module's own directory, as it always has, and the
+# schema map keeps the manifest's declared name, so a renamed checkout still
+# resolves and still reports itself as storage.
+_MODULE_ROOT = Path(__file__).resolve().parents[1]
+MODULE_SETTINGS_SCHEMA = module_settings_schema(_MODULE_ROOT.parent, _MODULE_ROOT.name)

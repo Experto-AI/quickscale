@@ -846,6 +846,10 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   `allauth_adapter.py`, so no module has both `adapter.py` and `adapters.py`.
 - ✅ Required tests: `test_apps.py`, `test_services.py`, `test_migrations.py` when the module has
   models, and `test_isolation.py` plus `test_rls_boundary.py` for a module with tenant models.
+- ✅ A module's `tests/conftest.py` takes `pytest_configure` and
+  `pytest_collection_modifyitems` from `quickscale_core.testing.pytest_plugin` — imported
+  directly, or imported and reused by a module-local wrapper hook — so no module keeps a private
+  copy of the `bypass_rls` hook bodies.
 - ✅ Model choices are `TextChoices`/`IntegerChoices`, and code compares against their members,
   not string literals. A tuple derived from those members or from a data catalog (orgs'
   `INVITABLE_ORG_ROLE_CHOICES`, social's `SOCIAL_PROVIDER_CHOICES`) is allowed.
@@ -1006,6 +1010,10 @@ public surface is `services.py` (rule 4).
   `src/`, so a module's own test run measures the package it ships under the name it is imported by.
 - ❌ A `--cov` target spelled as a `src/` path, and a module pyproject declaring no `--cov` target.
 - ✅ Test settings are `tests/settings.py`; an additional file is `tests/settings_<purpose>.py`.
+  Every module's `tests/settings.py` imports the helpers it uses from
+  `quickscale_core.testing.settings` and defines every key of that base's
+  `BASE_TEST_SETTINGS_KEYS`; the harness diffs each module's top-level keys against the tuple,
+  so no suite silently drops a base key.
 - ✅ Every directory under `quickscale_modules/` is a module with a `module.yml`; there are no
   placeholder directories. The `teams` placeholder is deleted, its README moved to
   `docs/planning/teams.md`, and core's placeholder handling (the catalog's `teams` entry and the
@@ -2417,7 +2425,11 @@ for a working shared-commons precedent.
    cross-module test infrastructure live under `tests_shared/`.  No module
    conftest may maintain a private copy of the per-test state-reset
    contract or any sanctioned cross-module test utility that already exists
-   in `tests_shared/`.
+   in `tests_shared/`.  The one core-shipped exception is the shared
+   test-settings base and conftest plugin (rule 18): they live in
+   `quickscale_core.testing`, because every module suite already depends on
+   core and a split module branch carries core while it cannot import the
+   repo-root `tests_shared/` package.
 
 **Precedent — `apply_force_rls`/`revert_force_rls`:** The
 `apply_force_rls`/`revert_force_rls` seam is the house pattern for a working

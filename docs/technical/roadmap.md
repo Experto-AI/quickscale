@@ -490,11 +490,15 @@ suite, and merge only the reviewed delivery through the serialized queue.
     identifiers in `tests/` (Tier 2-fast). Landed: 241 ticket-id occurrences left the
     modules' tests (identifiers, strings, docstrings, comments); rule 29 scans every `tests/`
     `.py` entry's identifiers and string literals, any case, embedded ids included, with
-    controls; decisions rule 29 carries the clause. (b) is next.
-  - [ ] (b) The shared test-settings base and conftest plugin, adopted by all 12 modules,
+    controls; decisions rule 29 carries the clause.
+  - [x] (b) The shared test-settings base and conftest plugin, adopted by all 12 modules,
     including analytics' and storage's missing hooks, auth's `DEFAULT_AUTO_FIELD`, and blog's and
-    listings' `USE_TZ`, with the harness key diff (Tier 2-full: plugin loading across 12 pytest
-    roots needs discovery).
+    listings' `USE_TZ`, with the harness key diff (Tier 2-full). Landed: `quickscale_core.testing`
+    (`settings.py` with `BASE_TEST_SETTINGS_KEYS` and the database, secret-key, and schema
+    helpers; `pytest_plugin.py` with the `bypass_rls` hooks) is imported by every module's
+    `tests/settings.py` and `tests/conftest.py`; harness rule 18 reads the base from the corpus,
+    diffs each module's keys against it, and requires both hooks from the plugin, with controls;
+    decisions rules 11 and 18 carry the clauses. (c) is next.
   - [ ] (c) One pyproject template: the stale "centralized in root" comments, orgs' `>=` dev
     floors, and the six `pythonpath` variants, with a template diff (Tier 2-fast).
   - [ ] (d) Manifest text: drop the three version stamps, fix the type-mismatched key, scan

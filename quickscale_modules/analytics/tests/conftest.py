@@ -8,6 +8,13 @@ from pathlib import Path
 
 import django
 
+# The bypass_rls marker and its collection-time opt-in come from core's
+# conftest plugin (decisions rule 18), so every module suite shares one copy.
+from quickscale_core.testing.pytest_plugin import (  # noqa: F401
+    pytest_collection_modifyitems,
+    pytest_configure,
+)
+
 MODULE_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = MODULE_ROOT / "src"
 
