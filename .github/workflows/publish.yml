@@ -304,6 +304,11 @@ jobs:
 
           ls -la "$BUILD_DIR"
 
+      - name: Check the built core wheel's bundled manifests
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/scripts/check_core_wheel_manifests.py" "$GITHUB_WORKSPACE"
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
