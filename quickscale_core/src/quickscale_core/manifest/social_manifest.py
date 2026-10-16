@@ -370,9 +370,10 @@ def render_social_managed_views_module(
 
     The rendered views are DRF views (Module Conventions rule 9): a public
     read API declares its guard explicitly (``AllowAny`` plus empty
-    ``authentication_classes``), and a failed payload build answers DRF's 503
+    ``authentication_classes``), a failed payload build answers DRF's 503
     through core's exception handler — rule 9's one error shape, never the
-    stored exception text.
+    stored exception text — and the composed ``REST_FRAMEWORK`` defaults
+    make the payload endpoints JSON-only, so the view pins no renderer.
     """
     provider_allowlist_text = pformat(provider_allowlist, width=88)
     embed_provider_allowlist_text = pformat(embed_provider_allowlist, width=88)
@@ -389,7 +390,6 @@ def render_social_managed_views_module(
 
         from rest_framework.exceptions import APIException
         from rest_framework.permissions import AllowAny
-        from rest_framework.renderers import JSONRenderer
         from rest_framework.response import Response
         from rest_framework.views import APIView
 
@@ -432,7 +432,6 @@ def render_social_managed_views_module(
 
             authentication_classes: list[Any] = []
             permission_classes = [AllowAny]
-            renderer_classes = [JSONRenderer]
             http_method_names = ["get"]
 
             error_message = "Unable to load the social payload."

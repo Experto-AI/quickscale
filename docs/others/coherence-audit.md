@@ -318,10 +318,13 @@ items:
      members_diverging: [backups, notifications, analytics, social, billing, orgs], population: modules(12),
      rule: "rule 37", check: "harness rule 37 (Eq/NotEq only)", closed_world: false, handoff: [arch],
      first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: api-renderer-parser-pinning, status: open, aspect: H, cost: [ambiguity], members_diverging: [blog, crm, forms, notifications],
-     population: drf-api-modules(8), rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: theme-retired-error-shapes, status: open, aspect: P, cost: [ambiguity], members_diverging: [theme useApi.ts], population: theme-api-clients,
-     rule: "rule 9 (one error shape)", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: api-renderer-parser-pinning, status: resolved, aspect: H, cost: [ambiguity], members_diverging: [],
+     population: drf-api-modules(8), rule: "rule 9 (JSON-only through the composed REST_FRAMEWORK defaults)",
+     check: "harness rule 9 (composed JSON defaults; per-view pin ban with a control view)", closed_world: true,
+     handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: theme-retired-error-shapes, status: resolved, aspect: P, cost: [ambiguity], members_diverging: [],
+     population: theme-api-clients, rule: "rule 9 (one error shape)", check: "theme unit test (useApiErrors.test.ts rejects the retired payloads)",
+     closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: superuser-escape-spelling, status: open, aspect: E, cost: [ambiguity, tax], members_diverging: [forms], population: org-scoped-modules,
      rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: readme-flag-coverage, status: open, aspect: O, cost: [ambiguity, tax], members_diverging: [backups, forms, orgs], population: command-modules(4),
@@ -501,8 +504,8 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 25 | `constraint-purpose-tokens` | A | tax | 4 / 9 | resolved (2026-10-13) |
 | 26 | `contract-vintage-identity` | B | ambiguity | 0 / 4 vintage manifests | resolved (SA282) |
 | 27 | `cli-module-name-branches` | C | ambiguity, tax | 6 modules named at 5 CLI sites outside rule 37's list | open (2026-10-16) |
-| 28 | `api-renderer-parser-pinning` | H | ambiguity | 4 / 8 DRF-serving surfaces unpinned or half-pinned | open (2026-10-16) |
-| 29 | `theme-retired-error-shapes` | P | ambiguity | 1 client, 2 retired shapes | open (2026-10-16) |
+| 28 | `api-renderer-parser-pinning` | H | ambiguity | 0 / 8 DRF-serving surfaces unpinned or half-pinned | resolved (SA288) |
+| 29 | `theme-retired-error-shapes` | P | ambiguity | 0 clients, 2 retired shapes | resolved (SA289 (a)) |
 | 30 | `superuser-escape-spelling` | E | ambiguity, tax | 1 / 2 spellings | open (2026-10-16) |
 | 31 | `readme-flag-coverage` | O | ambiguity, tax | 3 / 4 command modules | open (2026-10-16) |
 | 32 | `adapter-restates-manifest-validation` | B | tax | 1 / 12 adapters | open (2026-10-16) |
@@ -761,6 +764,13 @@ module-owned JSON endpoint.
 
 *Drift:* Items 6, 11, 12.
 
+*SA288 note (2026-10-16):* item 28 is closed. The generated `REST_FRAMEWORK` composes the JSON
+renderer and parser defaults, and the module views pin neither: billing's `_BillingAPIView`,
+listings' `ListingPublishAPIView`, orgs' `OrgApiBaseView`, blog's `PostPublishAPIView`, and the
+rendered social payload views dropped their pins, while the blog media upload keeps its
+multipart policy and a webhook reads its raw body. Decisions rule 9 carries proposal 52, and
+harness rule 9 checks both composed defaults and bans per-view pins, with controls.
+
 ### I. Outbound integrations — quiet
 
 Stripe (`_stripe_client`), Resend (anymail backend), PostHog (`Posthog(sync_mode=False)`), and S3
@@ -854,6 +864,12 @@ not drift.)
 | Error shape parsed | the one shape **and** the retired `errors` key ("for compatibility with projects that have not updated every module yet") → `useApi.ts` |
 
 *Drift:* Item 18.
+
+*SA289 note (2026-10-16):* item 29 is closed. `useApi.ts` parses only the one QuickScale shape
+`{"error": {"code", "message", "fields"}}` and no longer reads the retired string-`error` or
+`errors`-key payloads; `useApiErrors.test.ts` pins the rejection, and the
+`sa289-theme-one-error-parser` adoption step records it for existing projects. The proposal 53
+merge into decisions rule 31 lands with SA289 (b), which also carries item 36.
 
 ### Q. Locale — quiet
 
@@ -1766,7 +1782,7 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 **2026-10-16 (b) additions** (from items 27–41; ready to paste):
 
 51. **CLI module knowledge** [27]. ✅ The CLI reaches module-specific behaviour through a manifest field or a generic adapter hook. ❌ A membership, `.get()`, or equality branch on a module name in core or the CLI outside rule 37's list.
-52. **JSON-only APIs** [28]. ✅ The generated `REST_FRAMEWORK` sets JSON renderer and parser defaults. ❌ A per-view renderer or parser pin outside webhooks.
+52. **JSON-only APIs** [28]. ✅ The generated `REST_FRAMEWORK` sets JSON renderer and parser defaults. ❌ A per-view renderer or parser pin outside webhooks. ✅ **Merged (SA288):** decisions rule 9 carries the clause, and harness rule 9 checks the composed defaults and bans per-view pins with controls (a webhook's raw-body parser and a file upload's multipart parser stay local).
 53. **One theme error parser** [29, 36]. ✅ Theme requests go through `apiRequest`, parse core's error shape only, and take paths from the seam.
 54. **One operator escape** [30]. ✅ The superuser escape is orgs' permission helper. ❌ A module-private superuser predicate.
 55. **Manifest owns validation and throttle rates** [32, 34, 33]. ✅ Adapters evaluate the declared validation, and core merges declared throttle scopes. ❌ `re.compile`, a `DEFAULT_THROTTLE_RATES` literal in `adapter.py`, or a presence re-check in `checks.py`.
@@ -2540,6 +2556,8 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-16 — `startup-checks-and-errors`: resolved (SA283(a) 1817ef2d — verified; rule-6 scan rejects own-setting literals in checks.py, with controls).
 - 2026-10-16 — `capability-collection`: resolved (SA283(b) 98d4e4b7 — verified; purge collects `organization_cache_invalidation_hooks`; obligation hook lookups consistent by design).
 - 2026-10-16 — `dependency-spec-sources`: resolved (SA283(c) bf7e242e — verified; 12/12 `--cov=<import package>`).
+- 2026-10-16 — `api-renderer-parser-pinning`: resolved (SA288 — decisions rule 9 carries the JSON-only clause; harness rule 9 checks both composed defaults and bans per-view renderer/parser pins with controls; billing, listings, orgs, blog, and the rendered social views dropped their pins, while the blog media upload keeps its multipart policy).
+- 2026-10-16 — `theme-retired-error-shapes`: resolved (SA289 (a) — the theme's `useApi.ts` parses only the one QuickScale error shape, and `useApiErrors.test.ts` rejects the retired string-`error` and `errors`-key payloads; proposal 53's rule-31 merge lands with SA289 (b)).
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).
 - 2026-10-16 — All other prior IDs: still resolved (harness pass at HEAD; delta has no convention-breaking commit).

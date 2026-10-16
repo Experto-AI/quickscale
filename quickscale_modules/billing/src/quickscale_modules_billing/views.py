@@ -16,9 +16,7 @@ from rest_framework.exceptions import (
     NotFound,
     ValidationError,
 )
-from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -131,15 +129,14 @@ class _BillingAPIView(APIView):
     owner-only: the default guard is ``IsAuthenticated`` plus orgs'
     ``HasOrgRole(OrgRole.OWNER)``, and a public endpoint states its
     ``[AllowAny]`` guard on the view (Module Conventions rule 19).
-    JSON-only parsing and rendering so an HTML-preferring client never
-    receives DRF's browsable-API page instead of the one QuickScale error
-    shape (Module Conventions rule 9).
+    The composed ``REST_FRAMEWORK`` defaults make the endpoints JSON-only
+    (Module Conventions rule 9), so an HTML-preferring client never receives
+    DRF's browsable-API page instead of the one QuickScale error shape; the
+    view declares no renderer or parser of its own.
     """
 
     authentication_classes = [QuickscaleSessionAuthentication]
     permission_classes = [IsAuthenticated, HasOrgRole(OrgRole.OWNER)]
-    parser_classes = [JSONParser]
-    renderer_classes = [JSONRenderer]
 
     def handle_exception(self, exc: Exception) -> Response:
         """Classify a webhook-scoped provider failure as a server error here.

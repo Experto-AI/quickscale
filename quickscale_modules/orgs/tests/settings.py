@@ -123,10 +123,17 @@ USE_X_FORWARDED_FOR = False
 TRUSTED_PROXY_COUNT = 0
 
 # DRF configuration mirroring the generated settings: session authentication
-# only and the one QuickScale error shape (Module Conventions rule 9).
+# only, the composed JSON renderer and parser defaults (rule 9), and the one
+# QuickScale error shape.
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
     ],
     # The orgs wiring contributes the invitation throttle scopes (rule 32).
     "DEFAULT_THROTTLE_RATES": {

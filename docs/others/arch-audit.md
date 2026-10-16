@@ -11,7 +11,7 @@ Audited: `30b0b6b1` (`v89`) · 2026-10-16 · working tree clean · prompt: deep-
 > - Finding 1 is down to one label-keyed branch and an unlifted decision rule.
 > - Finding 2 is down to theme pages and other non-seam user-owned files. Its step rate did not
 >   fall.
-> - Finding 3 is down to two small relocations, one of them minted by SA280 (b).
+> - Finding 3 is down to one small relocation, minted by SA280 (b).
 >
 > Ranks are re-derived: `generated-file-ownership-unmodeled` moves to rank 1. The prior pass's
 > full text is in version control (`git show 30b0b6b1:docs/others/arch-audit.md`).
@@ -114,7 +114,7 @@ first-party Django modules**, in one monorepo: `quickscale` (meta), `quickscale_
 | `project_contract.yml` steps | 40 | **46** (+6 in 3 days) |
 | Pending adoption steps on `bap-web-new` | 6 | **12** |
 | Gates in `gate_registry.json` | 21 | 21 (+`check-migration-freeze`, −`check-manifest-sync`) |
-| Hand stations to add one gate | ≈8 | **1 authored row + 4 test oracles** (measured on `518cc377`) |
+| Hand stations to add one gate | ≈8 | **1 authored row + 1 count pin** (4 test oracles before SA285 (a), measured on `518cc377`) |
 | `FROZEN_*` name lists in parity tests | 1,381 literals in 11 files | **0** (guarded by `test_no_frozen_surface.py`) |
 | `test_*parity*.py` files | 21 | 34 (the 13 SA267/SA268 additions keep behavioral corpora only) |
 | Adapter dataflow detector | 1.1k lines plus controls | **deleted** (SA281 (b)); hooks receive typed resolved options |
@@ -199,7 +199,7 @@ first-party Django modules**, in one monorepo: `quickscale` (meta), `quickscale_
 | Generated-project contract adoption | recorded adoption id (`contract_vintage.py:38`, `--confirm-contract-adoption`) | **convention** (honor system) | — | one mechanism (SA282); **40 → 46 steps** |
 | Theme seam types and keys | managed, hash-tracked `quickscaleSeam.d.ts` / `.keys.ts` (`project_state_hashes.py:47–50`) | **structural** | — | **new** (SA276) |
 | Vendored module source unmodified | extension contract prose only | **convention** | — | unchanged |
-| Gate present in every required context | registry-generated regions, `gates.mk`, local arms (`check_ci_locally.sh:456–542`), and Makefile help | **structural** (generated) | — | **strengthened** (SA275); 4 test oracles still restate the inventory |
+| Gate present in every required context | registry-generated regions, `gates.mk`, local arms (`check_ci_locally.sh:456–542`), and Makefile help | **structural** (generated) | — | **strengthened** (SA275, SA285 (a)); the four oracles derive the inventory, one hand count pin remains |
 | Bundled manifests ship in the core wheel | `sync_module_manifests.py` run by each build entrypoint (7 call sites, plus 3 conftests) | **convention** per entrypoint | — | **new** (SA280 (b)); replaces a tracked copy held by parity |
 | Quality thresholds | `check_quality.sh`, package `src/` plus non-test `scripts/` | gated | closed per metric | **scope extended** (SA278 (b)) |
 
@@ -214,7 +214,7 @@ across a label change, adoption, and the build-entrypoint materializer.
 |---|---|---|---|---|---|---|---|
 | 1 | `generated-file-ownership-unmodeled` | Module-facing contracts live in user-owned generated files | now | High | M | two-way door | Seam types are now managed, but theme pages, CI workflow, and docs still carry module contracts; steps 40 → 46 in 3 days, 12 pending on `bap-web-new` |
 | 2 | `clean-break-schema-no-data-path` | Module schemas have no verified data upgrade path | now | High | S | one-way door | The freeze and append-only content identity landed; `update` checks content only under an equal label until `MIGRATION_FREEZE_VINTAGE` is set, and rule 1 still forbids `0002` |
-| 3 | `rules-held-by-parity-not-derivation` | Rules are kept as hand-synced copies | 6–18 months | High | S | two-way door | Most copies are derived or deleted; the residual is 4 gate-inventory test oracles and a materializer every build entrypoint must remember |
+| 3 | `rules-held-by-parity-not-derivation` | Rules are kept as hand-synced copies | 6–18 months | High | S | two-way door | Most copies are derived or deleted; the residual is a materializer every build entrypoint must remember, with one hand count pin in the gate oracles |
 
 ---
 
@@ -490,7 +490,7 @@ items:
 ### Finding 3: Rules are kept as hand-synced copies
 
 - **ID:** `rules-held-by-parity-not-derivation`. Still open; **most of the mechanism removed,
-  with two small relocations**.
+  with one small relocation**.
 - **Fix-regression audit:**
   - **SA275 (a, b): gate wiring.**
     1. **Mechanism:** removed. Gate order and the hosted, publish, and help metadata are
@@ -529,6 +529,11 @@ items:
       build. *(Closed by SA284: the build job runs `scripts/check_core_wheel_manifests.py`
       between the build loop and the upload and fails unless the wheel's bundled manifests are
       byte-equal to `quickscale_modules/*/module.yml`.)*
+  - **SA285 (a) (gate test oracles):** removed. The four oracles
+    (`test_ci_coverage_policy.py`, `test_ci_local_parallel.py`, `test_gate_parity.py`,
+    `test_refresh_action_pins.py`) read the gate set from `gate_registry.json` and derive their
+    expectations from it; the one hand pin kept on the count is `test_gate_parity.py`'s
+    `EXPECTED_GATE_COUNT`.
 - **Rank rationale:** Medium blast radius, Medium likelihood, linear compounding (down from
   steep).
   - **Blast radius:** delivery cost. One release-integrity edge: a core wheel without manifests
@@ -542,9 +547,10 @@ items:
   edge, which needs runtime confirmation.
 - **Context dependence:** `wrong-for-now`. The dimension is team shape (one maintainer with agent
   tracks). It lives in R1, and the wheel edge reaches R2.
-- **Problem:** Two rules are still authored once and restated by hand: the gate inventory in test
-  oracles, and "materialize the manifests first" at every build entrypoint. Their correctness is
-  held by each copy being remembered, not by derivation.
+- **Problem:** One rule is still authored once and restated by hand: "materialize the manifests
+  first" at every build entrypoint (the gate inventory in test oracles now derives from the
+  registry with a single hand count pin — SA285 (a)). Its correctness is held by each copy being
+  remembered, not by derivation.
 - **Evidence:** as above. Measured: `git show --stat 518cc377`; `git grep sync_module_manifests`
   gives 7 non-test entrypoints and 3 conftests.
 - **Counter-evidence:**
@@ -556,25 +562,26 @@ items:
   - The test oracles are deliberate end-to-end assertions on generated text. Rejecting
     unexpected output is valuable, and the cost is low.
 - **Why it compounds:**
-  - **Growth variable:** gates (4 oracle edits each) and build entrypoints (one more caller to
-    remember each).
+  - **Growth variable:** gates (one count-pin edit each) and build entrypoints (one more caller
+    to remember each).
   - **Built on top:** the 21-gate registry, three workflows, the installed-wheel provisioner,
     and the publish pipeline.
 - **Detection signal:** an `ImproperlyConfigured` manifest load in a freshly installed project. A
-  commit that adds a gate and edits a test literal list. A `test_refresh_action_pins` count bump.
-- **Steelman:** Four small oracle edits per gate are cheap, and they catch generator regressions
-  that a self-derived test would miss. The materializer callers are few and stable, and the next
-  release runs through `make`. Accept both if no new build entrypoint appears and the gate count
-  stays flat.
+  commit that adds a gate and re-pins the oracle count. A build entrypoint that misses the
+  materializer.
+- **Steelman:** One count-pin edit per gate is cheap, and the oracle set stays a deliberate
+  end-to-end assertion on generated text that a fully self-derived test would miss. The
+  materializer callers are few and stable, and the next release runs through `make`. Accept the
+  residual if no new build entrypoint appears.
 - **Correct shape:** Every rule has one authored source. Tests derive their expectations from the
   registry. The shipped artifact is verified for the derived content it must carry, at the step
   that uploads it.
-- **Do-nothing cost:** four oracle edits per gate; and a nonzero chance that a new build path ships
-  a manifest-less core wheel, failing every project that installs it until a patch release.
+- **Do-nothing cost:** one count-pin edit per gate; and a nonzero chance that a new build path
+  ships a manifest-less core wheel, failing every project that installs it until a patch release.
 - **Options:**
   1. **Derive and verify:**
      - Tests read the gate set from `gate_registry.json`, keeping one hand pin on the
-       count.
+       count. *(Landed as SA285 (a).)*
      - Add a wheel-content assertion (12 bundled manifests, byte-equal to the source) to
        `publish.yml` between `:295` and the upload.
      - Route all build entrypoints through one `make build-core` that materializes.
@@ -583,7 +590,8 @@ items:
   2. **Accept and document** the oracle pattern; keep only the publish-artifact assertion. Effort
      XS.
 - **Recommendation:** option 1's publish-artifact assertion now, since it is release integrity
-  before 0.89.0 publishes (landed as SA284). The rest goes in as gates are next touched.
+  before 0.89.0 publishes (landed as SA284). The rest goes in as gates are next touched: the
+  oracle derivation landed as SA285 (a); the one core-build step remains (SA285 (b)).
   - **Size:** S.
   - **Reversibility:** `two-way door`.
   - **Guard:** the publish-job wheel assertion itself; and a test that no script under `scripts/`
@@ -597,7 +605,7 @@ items:
 
 | Probe | Stations, measured | Verdict |
 |---|---|---|
-| **Adding one gate** (re-run; instance: `check-migration-freeze`, `518cc377`) | Authored: the registry row. Generated: `gates.mk`, the `ci.yml` and `publish.yml` regions, the local arms, the Makefile help, and the docs table. Hand-held: 4 test oracles | **Finding evidence** → Finding 3 (≈8 → 1 + 4) |
+| **Adding one gate** (re-run; instance: `check-migration-freeze`, `518cc377`; re-checked after SA285 (a)) | Authored: the registry row. Generated: `gates.mk`, the `ci.yml` and `publish.yml` regions, the local arms, the Makefile help, and the docs table. Hand-held: one count pin | **Finding evidence** → Finding 3 (≈8 → **1 + 1** after SA285 (a); was 1 + 4 on `518cc377`) |
 | **A module contract change reaching a deployed project** (re-run; instance: SA274's crm stats) | Module endpoint; user-owned `CrmPage.tsx`; a `project_contract.yml` step; the vintage gate; the operator's `--confirm-contract-adoption`; and the embedded crm must update in the same move | **Finding evidence** → Finding 1 |
 | **SA153's first `0002` in a module, then `update` on `bap-web`** (new) | (1) the migration file; (2) `sync_migration_hashes.py --write`; (3) the freeze gate passes; (4) release; (5) `update` crosses a label change, so **no content comparison**; (6) `migrate` applies forward. A concurrent edit to the frozen `0001` re-frozen at step (2) also passes (3) and (5) *(measured on the re-run pass; SA204 (h) now fails step (3) when the edited value is recorded at the latest release tag, and step (5)'s cross-label content gap remains until `MIGRATION_FREEZE_VINTAGE` is set)* | **Finding evidence** → Finding 2 (authoring half closed by SA204 (h)) |
 | **Repin `bap-web-new` to the published 0.89.0** (re-run) | Wheel repin; **12** pending steps; subtree pulls; fresh rebuild and reseed | **Finding evidence** → Finding 1; the rebuild contains Finding 2 at cutover |
@@ -797,7 +805,7 @@ Append-only. One dated line per ID per pass. Placements before 2026-10-13 are in
 - 2026-10-13 — Coherence hand-off "markdownx_urls copy-pair": resolved (SA261).
 - 2026-10-16 — `generated-file-ownership-unmodeled`: still-open, rank 2 → 1. SA276 resolved the theme-type half (fix-regression passed for it); SA282 unified adoption; steps 40 → 46; 12 pending on `bap-web-new`; contracts now arrive via user-owned pages, CI, and docs.
 - 2026-10-16 — `clean-break-schema-no-data-path`: still-open, rank 1 → 2, size M → S. SA204 (a–f) removed most of the mechanism (freeze gate, content-keyed restore, bare-file closed, 0 rewrites since the gate); SA204 (g) keys the update guard on the freeze vintage, and SA204 (h) closes the `--write` re-freeze branch (the gate is append-only against the latest release tag, excludes the release being tagged, and acquires that one tag in a shallow clone); residual: `MIGRATION_FREEZE_VINTAGE` is still unset — the cross-release update compares content only under an equal label until SA204 (j) — and decision rule 1 still forbids `0002`.
-- 2026-10-16 — `rules-held-by-parity-not-derivation`: still-open, horizon now → 6–18 months, size M → S. SA275, SA278, SA279, SA280 (a), and SA281 removed their copies; relocated residue: four gate-inventory test oracles (SA275) and seven materializer build entrypoints (minted by SA280 (b)); the publish artifact is now content-checked (SA284).
+- 2026-10-16 — `rules-held-by-parity-not-derivation`: still-open, horizon now → 6–18 months, size M → S. SA275, SA278, SA279, SA280 (a), SA281, and SA285 (a) removed their copies; residual relocation: seven materializer build entrypoints (minted by SA280 (b)); the gate oracles now derive with one hand count pin; the publish artifact is now content-checked (SA284).
 - 2026-10-16 — `lockstep-release-unit`: accepted, carried (not fired).
 - 2026-10-16 — `privileged-command-four-stations`: accepted, carried (not fired).
 - 2026-10-16 — `single-railway-shared-fate`: accepted, carried (not fired; DR containment strengthened).

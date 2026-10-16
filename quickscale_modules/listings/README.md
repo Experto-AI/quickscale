@@ -55,7 +55,8 @@ Module-to-module use goes through `services.py` (Module Conventions rule 4):
 `POST listings/api/publish/` creates and publishes a listing from a JSON payload for
 authenticated organization members (minimum role: `member`; a `viewer` is refused). It is a DRF
 `APIView` with session authentication only (CSRF is
-enforced) and the JSON renderer alone. The publishing write is throttled by its
+enforced) and answers JSON only through the composed `REST_FRAMEWORK` defaults, so the view
+carries no renderer or parser pin. The publishing write is throttled by its
 `quickscale_listings_api` scope at the `api_rate_limit` rate, keyed per authenticated user
 (rule 32). Every error the view answers takes the shared QuickScale
 shape `{"error": {"code", "message", "fields"}}`, produced by
