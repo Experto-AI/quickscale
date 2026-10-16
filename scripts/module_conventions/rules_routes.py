@@ -197,20 +197,14 @@ RULE_7_ALLOWED_TEMPLATE_MOUNTS: dict[tuple[str, str], str] = {
     ),
 }
 
-# Rule 19's listed operator paths where a superuser check is sanctioned
-# (audited cross-tenant operator access) and the listed traffic filter.  The
-# tables stay defined here because rule 37's allowlist exempts only this
-# module; ``_routes_authorization`` scans with them, and a token is sanctioned
-# only by an explicit mapping entry.
+# Rule 19's listed operator path where a superuser check is sanctioned
+# (audited cross-tenant operator access): orgs' permissions file defines
+# ``is_platform_operator``, the one helper every module calls (rule 44), so no
+# other file keeps an ``is_superuser`` allowance; the listed traffic filter
+# stays separate.  The tables stay defined here because rule 37's allowlist
+# exempts only this module; ``_routes_authorization`` scans with them, and a
+# token is sanctioned only by an explicit mapping entry.
 OPERATOR_TOKENS: dict[tuple[str, str], frozenset[str]] = {
-    ("forms", "views.py"): frozenset({"is_superuser"}),
-    ("orgs", "_api_views.py"): frozenset({"is_superuser"}),
-    ("orgs", "_debug.py"): frozenset({"is_superuser"}),
-    ("orgs", "_view_context.py"): frozenset({"is_superuser"}),
-    ("orgs", "_view_org_management.py"): frozenset({"is_superuser"}),
-    ("orgs", "admin.py"): frozenset({"is_superuser"}),
-    ("orgs", "debug_views.py"): frozenset({"is_superuser"}),
-    ("orgs", "middleware.py"): frozenset({"is_superuser"}),
     ("orgs", "permissions.py"): frozenset({"is_superuser"}),
 }
 

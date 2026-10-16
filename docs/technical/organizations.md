@@ -234,8 +234,9 @@ Django's `is_staff` and `is_superuser` flags continue to control access to the D
 > **SA215** ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 19): module
 > back offices (blog, listings, crm, forms) stop checking `is_staff` / `IsAdminUser` and check the
 > org role through this module's `permissions`, including a DRF `HasOrgRole(min_role)` that
-> delegates to `user_has_org_role`. The four back offices now do this; Django admin and the
-> `operator_access` paths keep their `is_staff` / `is_superuser` gates.
+> delegates to `user_has_org_role`. The four back offices now do this; Django admin keeps its
+> `is_staff` / `is_superuser` gates, and the `operator_access` paths verify the operator through
+> `is_platform_operator` (rule 44) rather than reading `is_superuser` themselves.
 
 ### Permission Checking Pattern
 
@@ -773,7 +774,7 @@ Use `Model.all_objects.all()` in:
           for form in Form.all_objects.all():
               ...
   ```
-  ``operator_access`` requires an active ``transaction.atomic()`` block because the underlying ``SET LOCAL`` is transaction-scoped. It **only grants cross-tenant read visibility** — the PostgreSQL RLS policy template splits operator elevation into a separate ``FOR SELECT`` sub-policy (``{policy_name}_select``), so write and delete operations remain scoped to the current organization even when operator_access is active. Callers must verify ``user.is_superuser`` before entering the context manager.
+  ``operator_access`` requires an active ``transaction.atomic()`` block because the underlying ``SET LOCAL`` is transaction-scoped. It **only grants cross-tenant read visibility** — the PostgreSQL RLS policy template splits operator elevation into a separate ``FOR SELECT`` sub-policy (``{policy_name}_select``), so write and delete operations remain scoped to the current organization even when operator_access is active. Callers must verify ``is_platform_operator(user)`` (the one platform-operator helper in this module's ``permissions``) before entering the context manager.
 - **Operator/superuser shell work** — any ad-hoc query that legitimately needs the unfiltered ORM queryset, subject to the active DB-role / RLS contract.
 
 ### Adoption Steps

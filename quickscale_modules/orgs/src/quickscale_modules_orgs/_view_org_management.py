@@ -35,7 +35,7 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
     OrgRole,
 )
-from quickscale_modules_orgs.permissions import OrgRoleMixin
+from quickscale_modules_orgs.permissions import OrgRoleMixin, is_platform_operator
 
 _MEMBERS_TEMPLATE_NAME = "quickscale_orgs/members.html"
 
@@ -165,7 +165,7 @@ class MemberListView(
             request.POST,
             target_membership=membership,
             acting_membership=self.get_acting_membership(),
-            acting_user_is_superuser=getattr(request.user, "is_superuser", False),
+            acting_user_is_superuser=is_platform_operator(request.user),
         )
         if not form.is_valid():
             error = form.errors.get("role", ["Unable to update role."])[0]

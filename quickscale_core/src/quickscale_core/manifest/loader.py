@@ -59,6 +59,7 @@ from quickscale_core.manifest.loader_options import (
     _validate_validation_block,
 )
 from quickscale_core.manifest.loader_sections import (
+    _parse_ci_environment,
     _parse_contract_vintage,
     _parse_managed_files,
     _parse_project_contract_vintage,
@@ -248,6 +249,7 @@ _TOP_LEVEL_MANIFEST_KEYS = frozenset(
         "required_modules",
         "dependencies",
         "managed_files",
+        "ci_env",
         "derivation",
         "contract_vintage",
     }
@@ -384,6 +386,11 @@ def load_manifest(
     # Parse managed-files declarations (additive; empty when absent)
     managed_files = _parse_managed_files(data, module_name)
 
+    # Parse CI environment declarations (additive; empty when absent)
+    ci_env = _parse_ci_environment(
+        data, module_name, {**mutable_options, **immutable_options}
+    )
+
     # Parse derivation section (T2.3+; additive; every field defaults to [])
     derivation = _parse_derivation_section(
         data, module_name, {**mutable_options, **immutable_options}
@@ -403,6 +410,7 @@ def load_manifest(
         required_modules=required_modules,
         dependencies=dependencies,
         managed_files=managed_files,
+        ci_env=ci_env,
         derivation_rules=derivation.get("normalization_rules", []),
         validation_rules=derivation.get("validation_rules", []),
         legacy_aliases=derivation.get("legacy_aliases", []),
@@ -532,6 +540,7 @@ __all__ = [
     "_condition_references",
     "_core_version",
     "_parse_canonical_version_triple",
+    "_parse_ci_environment",
     "_parse_config_option",
     "_parse_config_section",
     "_parse_contract_vintage",

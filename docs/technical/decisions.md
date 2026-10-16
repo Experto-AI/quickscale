@@ -1416,8 +1416,13 @@ mapping that mirrors this section.
 - ✅ Every org-role decision, in a view or a service, calls orgs' `user_has_org_role` (or a helper
   built on it) with an `OrgRole` member; the one role vocabulary is `OrgRole`, never a string.
   Billing's post-lock re-check keeps its call-site `is_active` test.
+- ✅ The superuser escape is orgs' one public `is_platform_operator(user)` helper (today: an
+  authenticated superuser): every module call site, forms' cross-tenant operator branch included,
+  calls it instead of reading `is_superuser`.
 - ❌ An `OrganizationMembership` query outside orgs whose `role=` keyword spells the role as a
   string literal. The query spelling stays open-world beyond that and is a review rule.
+- ❌ A module-private superuser predicate, or any raw `is_superuser` read in module source outside
+  that helper.
 
 **45. Stub exemptions.**
 - ✅ Third-party type-stub exemptions live in the root `mypy.ini` only.

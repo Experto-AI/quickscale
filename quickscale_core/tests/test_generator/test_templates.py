@@ -3184,22 +3184,51 @@ class TestDevOpsTemplateLoading:
         template = jinja_env.get_template("github/workflows/ci.yml.j2")
         assert template is not None
 
-    def test_github_ci_workflow_supplies_non_live_credentials(
+    def test_ci_environment_template_loads(self, jinja_env: Environment) -> None:
+        """Test the managed CI environment template loads without errors."""
+        template = jinja_env.get_template("github/quickscale-ci-env.j2")
+        assert template is not None
+
+    def test_ci_environment_template_renders_its_context_value(
+        self, jinja_env: Environment
+    ) -> None:
+        """The managed CI env template emits exactly the rendered entries (SA286).
+
+        Generation and ``apply``/``update`` must agree on one content, so the
+        template adds no whitespace of its own around the value.
+        """
+        rendered = _render_template(
+            jinja_env,
+            "github/quickscale-ci-env.j2",
+            {"ci_environment": "POSTHOG_API_KEY=ph_test_ci\n"},
+        )
+        assert rendered == "POSTHOG_API_KEY=ph_test_ci\n"
+
+    def test_github_ci_workflow_loads_the_managed_credentials(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """CI carries non-live credentials for enabled credential modules."""
+        """CI loads the managed environment file instead of naming module values."""
         output = _render_template(jinja_env, "github/workflows/ci.yml.j2", test_context)
 
-        for variable in (
+        assert 'run: cat .github/quickscale-ci-env >> "$GITHUB_ENV"' in output, (
+            "generated CI must load the managed CI environment file in one step"
+        )
+        for token in (
             "POSTHOG_API_KEY",
             "STRIPE_PUBLISHABLE_KEY",
             "STRIPE_SECRET_KEY",
             "QUICKSCALE_BILLING_WEBHOOK_SECRET",
             "RESEND_API_KEY",
             "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET",
+            "ph_test_ci",
+            "pk_test_ci",
+            "sk_test_ci",
+            "whsec_",
+            "re_test_ci",
         ):
-            assert f"{variable}: " in output, (
-                f"generated CI must define the non-live {variable} placeholder"
+            assert token not in output, (
+                f"generated CI must not name the module credential token {token!r}; "
+                "it belongs to the managed .github/quickscale-ci-env file"
             )
 
     def test_dockerfile_loads(self, jinja_env: Environment) -> None:

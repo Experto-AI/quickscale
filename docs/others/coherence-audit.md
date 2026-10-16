@@ -325,8 +325,10 @@ items:
   - {id: theme-retired-error-shapes, status: resolved, aspect: P, cost: [ambiguity], members_diverging: [],
      population: theme-api-clients, rule: "rule 9 (one error shape)", check: "theme unit test (useApiErrors.test.ts rejects the retired payloads)",
      closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: superuser-escape-spelling, status: open, aspect: E, cost: [ambiguity, tax], members_diverging: [forms], population: org-scoped-modules,
-     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: superuser-escape-spelling, status: resolved, aspect: E, cost: [ambiguity, tax], members_diverging: [],
+     population: org-scoped-modules, rule: "rule 44 (one operator escape)",
+     check: "harness rule 44 (raw is_superuser reads banned in module source outside orgs' is_platform_operator helper, with forms' old predicate as the control)",
+     closed_world: true, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: readme-flag-coverage, status: open, aspect: O, cost: [ambiguity, tax], members_diverging: [backups, forms, orgs], population: command-modules(4),
      rule: "rule 38", check: "README test (command names only)", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: adapter-restates-manifest-validation, status: open, aspect: B, cost: [tax], members_diverging: [notifications], population: adapters(12),
@@ -507,7 +509,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 27 | `cli-module-name-branches` | C | ambiguity, tax | 6 modules named at 5 CLI sites outside rule 37's list | open (2026-10-16) |
 | 28 | `api-renderer-parser-pinning` | H | ambiguity | 0 / 8 DRF-serving surfaces unpinned or half-pinned | resolved (SA288) |
 | 29 | `theme-retired-error-shapes` | P | ambiguity | 0 clients, 2 retired shapes | resolved (SA289 (a)) |
-| 30 | `superuser-escape-spelling` | E | ambiguity, tax | 1 / 2 spellings | open (2026-10-16) |
+| 30 | `superuser-escape-spelling` | E | ambiguity, tax | 1 / 2 spellings | resolved (SA290) |
 | 31 | `readme-flag-coverage` | O | ambiguity, tax | 3 / 4 command modules | open (2026-10-16) |
 | 32 | `adapter-restates-manifest-validation` | B | tax | 1 / 12 adapters | open (2026-10-16) |
 | 33 | `startup-presence-guard-copies` | B | tax | 3 / 7 `checks.py` | open (2026-10-16) |
@@ -722,6 +724,12 @@ services (harness rule 23); `__all__` present in all 12.
 views except the listed paths.
 
 *Drift:* Item 3.
+
+*SA290 note (2026-10-16):* item 30 is closed. Orgs publishes one `is_platform_operator(user)`
+helper (an authenticated superuser), and forms' cross-tenant operator branch and every orgs copy
+call it instead of reading `is_superuser`; decisions rule 44 carries proposal 54, and harness rule
+44 bans a raw `is_superuser` read in module source outside that helper, with forms' old predicate
+as the control. Rule 19's operator-path table now lists only the helper's file.
 
 ### F. Write effects
 
@@ -1792,7 +1800,7 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 51. **CLI module knowledge** [27]. ✅ The CLI reaches module-specific behaviour through a manifest field or a generic adapter hook. ❌ A membership, `.get()`, or equality branch on a module name in core or the CLI outside rule 37's list.
 52. **JSON-only APIs** [28]. ✅ The generated `REST_FRAMEWORK` sets JSON renderer and parser defaults. ❌ A per-view renderer or parser pin outside webhooks. ✅ **Merged (SA288):** decisions rule 9 carries the clause, and harness rule 9 checks the composed defaults and bans per-view pins with controls (a webhook's raw-body parser and a file upload's multipart parser stay local).
 53. **One theme error parser** [29, 36]. ✅ Theme requests go through `apiRequest`, parse core's error shape only, and take paths from the seam. ✅ **Merged (SA289):** decisions rule 31 carries the clause; the seam's page-path table carries the blog, listings, crm, social, and analytics paths, a `moduleDocumentPaths` table carries the launcher pages' document destinations, and the theme's ESLint configuration fails a raw `fetch(` in `src/hooks` outside `useApi.ts`.
-54. **One operator escape** [30]. ✅ The superuser escape is orgs' permission helper. ❌ A module-private superuser predicate.
+54. **One operator escape** [30]. ✅ The superuser escape is orgs' permission helper. ❌ A module-private superuser predicate. ✅ **Merged (SA290):** decisions rule 44 carries the clause, and harness rule 44 bans raw `is_superuser` reads in module source outside the helper, with forms' old predicate as the control.
 55. **Manifest owns validation and throttle rates** [32, 34, 33]. ✅ Adapters evaluate the declared validation, and core merges declared throttle scopes. ❌ `re.compile`, a `DEFAULT_THROTTLE_RATES` literal in `adapter.py`, or a presence re-check in `checks.py`.
 56. **Command scaffolding** [35, 31]. ✅ One core helper refuses scheduled runs while off; the transaction is in the service; the README lists every flag.
 57. **Test and tooling templates** [37, 38, 39, 40]. ✅ Shared test-settings base and conftest plugin; one pyproject template; no ticket ids in test identifiers or manifest text.
@@ -2568,6 +2576,7 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-16 — `theme-retired-error-shapes`: resolved (SA289 (a) — the theme's `useApi.ts` parses only the one QuickScale error shape, and `useApiErrors.test.ts` rejects the retired string-`error` and `errors`-key payloads; proposal 53's rule-31 merge lands with SA289 (b)).
 - 2026-10-16 — `theme-request-paths`: resolved (SA289 (b) — every theme hook request goes through `apiRequest`, the SPA's blog, listings, and crm page routes and navigation read the seam's `modulePaths` (which gained `blog` and `listings` entries resolved from `quickscale_blog_shell`/`quickscale_listings_shell`), a raw `fetch(` in `src/hooks` fails the theme's ESLint outside `useApi.ts`, and proposal 53 merged into decisions rule 31).
 - 2026-10-16 — `test-ticket-ids-in-identifiers`: resolved (SA293 (a) — every ticket id left the 12 modules' tests, and rule 29 scans identifiers and string literals in every `tests/` entry, in any case and embedded ids included, with controls; proposal 57's rule-29 clause lands here, items 38–40 with SA293 (b)–(d)).
+- 2026-10-16 — `superuser-escape-spelling`: resolved (SA290 — orgs publishes one `is_platform_operator(user)` helper; forms' `_is_superuser` and every orgs copy call it, and harness rule 44 bans raw `is_superuser` reads in module source outside it, with forms' old predicate as the control).
 - 2026-10-16 — `test-harness-parity`: resolved (SA293 (b) — one core test-settings base (`quickscale_core.testing.settings`, `BASE_TEST_SETTINGS_KEYS` plus the database, secret-key, and schema helpers) and one conftest plugin (`quickscale_core.testing.pytest_plugin`, the `bypass_rls` hooks) are adopted by all 12 modules; analytics and storage gained the hooks, auth gained `DEFAULT_AUTO_FIELD`, and blog and listings gained `USE_TZ`; harness rule 18 reads the base from the corpus, diffs every module's test-settings keys against it, and requires both hooks from the plugin, with controls; proposal 57's rule-11 and rule-18 clauses land here).
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).

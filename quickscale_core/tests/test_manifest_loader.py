@@ -1407,6 +1407,158 @@ managed_files:
 
 
 # ---------------------------------------------------------------------------
+# CI environment declarations (SA286)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadManifestCiEnvironment:
+    """Tests for the ci_env section in load_manifest."""
+
+    def test_no_ci_env_section(self) -> None:
+        """Manifests without ci_env produce an empty dict."""
+        manifest = load_manifest("name: mymod\nversion: '1.0.0'\n", "mymod")
+        assert manifest.ci_env == {}
+
+    def test_empty_ci_env_section(self) -> None:
+        """An empty ci_env section is accepted."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nci_env: {}\n"
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.ci_env == {}
+
+    def test_valid_ci_env_entries(self) -> None:
+        """A declared string option maps to its non-live placeholder."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    secret_env_var:
+      type: string
+      default: MY_SECRET
+      django_setting: MY_SECRET_ENV_VAR
+      description: "Environment variable holding the secret."
+      validation: {}
+  immutable: {}
+ci_env:
+  secret_env_var: test-value
+"""
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.ci_env == {"secret_env_var": "test-value"}
+
+    def test_ci_env_not_mapping_raises(self) -> None:
+        """ci_env that is not a mapping is refused."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nci_env: not_a_mapping\n"
+        with pytest.raises(ManifestError, match="'ci_env' must be a mapping"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_ci_env_unknown_option_raises(self) -> None:
+        """A key that names no declared option is refused, not ignored."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    secret_env_var:
+      type: string
+      default: MY_SECRET
+      django_setting: MY_SECRET_ENV_VAR
+      description: "Environment variable holding the secret."
+      validation: {}
+  immutable: {}
+ci_env:
+  missing_env_var: test-value
+"""
+        with pytest.raises(ManifestError, match="does not name a declared option"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_ci_env_non_string_option_raises(self) -> None:
+        """A key naming a non-string option is refused."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    retries:
+      type: integer
+      default: 3
+      django_setting: MY_RETRIES
+      description: "Retry count."
+      validation: {}
+  immutable: {}
+ci_env:
+  retries: test-value
+"""
+        with pytest.raises(ManifestError, match="must name a string option"):
+            load_manifest(yaml_content, "mymod")
+
+    @pytest.mark.parametrize("placeholder", ["''", "null", "5"])
+    def test_ci_env_empty_value_raises(self, placeholder: str) -> None:
+        """A placeholder must be a non-empty string."""
+        yaml_content = f"""
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    secret_env_var:
+      type: string
+      default: MY_SECRET
+      django_setting: MY_SECRET_ENV_VAR
+      description: "Environment variable holding the secret."
+      validation: {{}}
+  immutable: {{}}
+ci_env:
+  secret_env_var: {placeholder}
+"""
+        with pytest.raises(ManifestError, match="must be a non-empty string"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_ci_env_multiline_value_raises(self) -> None:
+        """A placeholder must fit one GitHub Actions environment-file line."""
+        yaml_content = """
+name: mymod
+version: '1.0.0'
+config:
+  mutable:
+    secret_env_var:
+      type: string
+      default: MY_SECRET
+      django_setting: MY_SECRET_ENV_VAR
+      description: "Environment variable holding the secret."
+      validation: {}
+  immutable: {}
+ci_env:
+  secret_env_var: "line-one\\nline-two"
+"""
+        with pytest.raises(ManifestError, match="must not contain a newline"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_shipped_credential_manifests_declare_their_placeholders(self) -> None:
+        """The three credential-bearing modules own their CI values (SA286).
+
+        The generated managed ``.github/quickscale-ci-env`` renders these
+        declarations, so they are the single home of the non-live CI values
+        the workflow used to carry inline.
+        """
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        modules_dir = repo_root / "quickscale_modules"
+        expected = {
+            "analytics": {"posthog_api_key_env_var": "ph_test_ci"},
+            "billing": {
+                "publishable_key_env_var": "pk_test_ci",
+                "secret_key_env_var": "sk_test_ci",
+                "webhook_secret_env_var": "whsec_test_ci",
+            },
+            "notifications": {
+                "resend_api_key_env_var": "re_test_ci",
+                "webhook_secret_env_var": "whsec_YWFhYWFhYWFhYWFhYWFhYQ==",
+            },
+        }
+        for module_name, expected_ci_env in expected.items():
+            manifest = load_manifest_from_path(modules_dir / module_name / "module.yml")
+            assert manifest.ci_env == expected_ci_env
+
+
+# ---------------------------------------------------------------------------
 # Retired implies key and required_modules parsing
 # ---------------------------------------------------------------------------
 

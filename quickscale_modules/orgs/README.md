@@ -66,11 +66,15 @@ project's home route, in saas mode after it.
 org-scoped views and APIs:
 
 - `user_has_org_role(user, organization, min_role)`.
+- `is_platform_operator(user)`, the one platform-operator check: an authenticated superuser, the
+  account class allowed to act across organizations. Every module calls it instead of reading
+  `is_superuser` (rule 44).
 - `require_org_role(min_role)`, a decorator for function views.
 - `OrgRoleMixin`, a class-based-view mixin with a configurable `min_org_role`.
 - `HasOrgRole(min_role)`, the DRF permission class for JSON endpoints; it resolves the request's
   organization the same way and delegates to `user_has_org_role`, refusing a request with no
-  organization context. Superusers pass as the operator path, matching `user_has_org_role`.
+  organization context. A platform operator passes as the operator path
+  (`is_platform_operator`), matching `user_has_org_role`.
 - `resolve_request_org(request, route_kwargs)`, which returns the request's organization from
   the active context or the routed `org_slug`.
 

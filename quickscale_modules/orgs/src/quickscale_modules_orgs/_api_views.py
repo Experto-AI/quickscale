@@ -43,7 +43,10 @@ from quickscale_modules_orgs.models import (
     OrganizationMembership,
     OrgRole,
 )
-from quickscale_modules_orgs.permissions import user_has_org_role
+from quickscale_modules_orgs.permissions import (
+    is_platform_operator,
+    user_has_org_role,
+)
 
 
 class OrgApiBaseView(OrganizationContextMixin, APIView):
@@ -201,7 +204,7 @@ class OrgApiMemberRoleView(OrgApiBaseView, MemberManagementContextMixin):
             payload,
             target_membership=membership,
             acting_membership=self.get_acting_membership(),
-            acting_user_is_superuser=getattr(request.user, "is_superuser", False),
+            acting_user_is_superuser=is_platform_operator(request.user),
         )
         if not form.is_valid():
             raise DRFValidationError(_form_error_data(form))

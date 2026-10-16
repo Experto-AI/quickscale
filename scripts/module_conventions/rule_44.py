@@ -6,6 +6,10 @@ membership-binding environment and the name-resolution helpers,
 ``_rule44_expressions`` the expression scanner, and ``_rule44_statements``
 the statement scanner.  This module orchestrates the rule and re-exports
 every moved name so existing import paths and the rule registry keep working.
+
+The rule's operator-escape clause (coherence proposal 54) lives here beside
+the orchestration because it names the module that defines the one helper,
+and rule 37's allowlist exempts only this module's module-name literals.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from __future__ import annotations
 # (``ast``, ``Mapping``, and core's private helpers); the redundant aliases
 # keep every one importable from this facade.
 import ast as ast
+from collections.abc import Iterator as Iterator
 from collections.abc import Mapping as Mapping
 
 from scripts.module_conventions._rule44_expressions import (
@@ -103,8 +108,23 @@ __all__ = (
 )
 
 
+#: Rule 44's one operator escape: the public helper every module calls instead
+#: of reading ``is_superuser``, and the module, file, and function that define
+#: it.  The facade holds these literals because rule 37's allowlist exempts
+#: only this module.
+PLATFORM_OPERATOR_HELPER_MODULE = "orgs"
+PLATFORM_OPERATOR_HELPER_FILE = "permissions.py"
+PLATFORM_OPERATOR_HELPER_FUNCTION = "is_platform_operator"
+
+
 def rule_44_role_checks(corpus: Corpus) -> list[str]:
-    """Rule 44: one org-role check; no string ``role=`` query outside orgs."""
+    """
+    Rule 44: one org-role check; one operator escape.
+
+    The role-check clause: no string ``role=`` query outside orgs.  The
+    operator-escape clause (proposal 54): no raw ``is_superuser`` read in
+    module source outside orgs' ``is_platform_operator`` helper.
+    """
     violations: list[str] = []
     for module in corpus.modules:
         if module.name == "orgs":
@@ -123,4 +143,48 @@ def rule_44_role_checks(corpus: Corpus) -> list[str]:
                 rel,
                 violations,
             )
+    violations.extend(_rule_44_operator_read_violations(corpus))
     return violations
+
+
+def _rule_44_operator_read_violations(corpus: Corpus) -> list[str]:
+    """Rule 44: only the helper reads ``is_superuser``."""
+    violations: list[str] = []
+    for module in corpus.modules:
+        for rel, text in module.files.items():
+            if not rel.endswith(".py") or rel.startswith("migrations/"):
+                continue
+            helper_file = (
+                module.name == PLATFORM_OPERATOR_HELPER_MODULE
+                and rel == PLATFORM_OPERATOR_HELPER_FILE
+            )
+            for node in _rule_44_iter_operator_reads(_parse(text), helper_file):
+                violations.append(
+                    f"rule 44: {module.name}: {rel}:{node.lineno} reads is_superuser "
+                    f"outside {PLATFORM_OPERATOR_HELPER_MODULE}' "
+                    f"{PLATFORM_OPERATOR_HELPER_FUNCTION} helper"
+                )
+    return violations
+
+
+def _rule_44_iter_operator_reads(node: ast.AST, helper_file: bool) -> Iterator[ast.AST]:
+    """Yield raw ``is_superuser`` reads, skipping the helper's own body."""
+    if (
+        helper_file
+        and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == PLATFORM_OPERATOR_HELPER_FUNCTION
+    ):
+        return
+    if _rule_44_reads_superuser(node):
+        yield node
+    for child in ast.iter_child_nodes(node):
+        yield from _rule_44_iter_operator_reads(child, helper_file)
+
+
+def _rule_44_reads_superuser(node: ast.AST) -> bool:
+    """Return whether *node* is a raw ``is_superuser`` read."""
+    if isinstance(node, ast.Attribute):
+        return node.attr == "is_superuser" and isinstance(node.ctx, ast.Load)
+    if isinstance(node, ast.Call) and _call_func_name(node) == "getattr":
+        return len(node.args) >= 2 and _literal(node.args[1]) == "is_superuser"
+    return False
