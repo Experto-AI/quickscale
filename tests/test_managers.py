@@ -29,7 +29,7 @@ class TestTenantManagerScoping:
 
     @pytest.mark.django_db(transaction=True)
     def test_all_objects_is_tenant_manager_with_super_scope(
-        self, org, org_a, blog_org_scope
+        self, org, org_a, blog_org_scope, superuser
     ):
         """``all_objects`` (``super_scope=True``) bypasses the ORM-level
         TenantManager auto-scoping but still needs ``operator_access`` to
@@ -52,7 +52,8 @@ class TestTenantManagerScoping:
                 Category.objects.create(name="Cat B", organization=org_a)
 
             with operator_access(
-                reason="blog restricted-role cross-tenant SELECT proof"
+                user=superuser,
+                reason="blog restricted-role cross-tenant SELECT proof",
             ):
                 all_cats = list(
                     Category.all_objects.all().values_list("name", flat=True)
@@ -99,7 +100,9 @@ class TestOperatorBypass:
     """
 
     @pytest.mark.django_db(transaction=True)
-    def test_all_objects_returns_cross_tenant_rows(self, org, org_a, blog_org_scope):
+    def test_all_objects_returns_cross_tenant_rows(
+        self, org, org_a, blog_org_scope, superuser
+    ):
         """``all_objects`` returns rows from all organisations when the
         cross-tenant SELECT is elevated via ``operator_access()``.
 
@@ -132,7 +135,8 @@ class TestOperatorBypass:
                 )
 
             with operator_access(
-                reason="blog restricted-role cross-tenant SELECT proof"
+                user=superuser,
+                reason="blog restricted-role cross-tenant SELECT proof",
             ):
                 titles = list(Post.all_objects.all().values_list("title", flat=True))
         assert "Post A" in titles

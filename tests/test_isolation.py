@@ -68,6 +68,7 @@ def test_operator_bypass_returns_all_orgs_posts(
     org_b,
     org_a_admin,
     blog_org_scope,
+    superuser,
 ):
     """``all_objects`` returns rows from all organisations when the
     cross-tenant SELECT is elevated via ``operator_access()``.
@@ -101,7 +102,9 @@ def test_operator_bypass_returns_all_orgs_posts(
                 organization=org_b,
             )
 
-        with operator_access(reason="blog restricted-role cross-tenant SELECT proof"):
+        with operator_access(
+            user=superuser, reason="blog restricted-role cross-tenant SELECT proof"
+        ):
             titles = list(
                 Post.all_objects.filter(status="published").values_list(
                     "title", flat=True

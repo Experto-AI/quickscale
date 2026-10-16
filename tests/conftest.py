@@ -97,6 +97,19 @@ def author_user(db):
 
 
 @pytest.fixture
+def superuser(db):
+    """Platform operator for audited cross-tenant reads (``operator_access``)."""
+    user_model = get_user_model()
+    return user_model.objects.create_user(
+        username="superuser",
+        email="superuser@example.com",
+        password="testpass123",
+        is_staff=True,
+        is_superuser=True,
+    )
+
+
+@pytest.fixture
 def system_org(db):
     """Return the singleton System organization (reserved slug __system__)."""
     from quickscale_modules_orgs.models import Organization
