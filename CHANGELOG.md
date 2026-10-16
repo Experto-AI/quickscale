@@ -839,6 +839,9 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
   - **The bundled manifests are built, not tracked.** A `quickscale-core` wheel materializes its
     bundled `module.yml` files from the module manifests during the build, so a manifest edit
     cannot ship a stale copy and the gate that compared the two copies is retired.
+  - **Module APIs answer JSON by default.** The composed `REST_FRAMEWORK` installs JSON renderer
+    and parser defaults, so the CRM and forms write APIs refuse a form-encoded body with `415`
+    while the blog media upload keeps its multipart policy.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

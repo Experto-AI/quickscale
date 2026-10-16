@@ -334,8 +334,8 @@ notification logging moves from `quickscale_modules_forms.notifications` to
 step is to update log filters, handlers, and alert rules keyed on the retired channel names.
 
 The module-conventions sweep changes host-overridable template paths, one model field name,
-constraint names, and operator-facing command flags, so an existing project or cron job updates
-with this release:
+constraint names, operator-facing command flags, and the API content contract, so an existing
+project or cron job updates with this release:
 
 - Moved template paths (an override of the old path renames to the new one):
   `templates/quickscale_blog/blog/post_list.html`, `post_detail.html`, `category_list.html`, and
@@ -369,6 +369,10 @@ with this release:
   `QuickscaleScopedRateThrottle` as the default scoped throttle, a view declares only its
   `throttle_scope`, module wiring contributes only `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`, and
   listings' publish API gains an `api_rate_limit` option.
+- Module APIs answer JSON by default through one composed default: generated settings install
+  `JSONRenderer` and `JSONParser` as the composed `REST_FRAMEWORK` renderer and parser defaults,
+  so CRM's and forms' write APIs refuse a form-encoded body with `415` where they previously
+  accepted one, while the blog media upload keeps its multipart parser policy.
 - Module JSON lists page through one core paginator: each list is sized by its `<THING>_PER_PAGE`
   setting and returns only the requested page — billing's ledger (`transactions_per_page`, was a
   fixed `25`) and plan catalog (`plans_per_page`), CRM's tags, companies, stages, and note lists,

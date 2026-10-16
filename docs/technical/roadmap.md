@@ -111,7 +111,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA204 (g) | yes | no | yes | no | yes |
 | 2 | SA284 | yes | yes | yes | yes | no |
-| 3 | SA288 (a) | yes | yes | yes | yes | no |
+| 3 | SA288 (b) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -601,7 +601,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   views outside webhooks, with a control view.
 
   **Slices:**
-  - [ ] (a) The generated defaults, the 415 tests, and the release-note line (Tier 2-fast).
+  - [x] (a) The generated defaults, the 415 tests, and the release-note line (Tier 2-fast). Landed:
+    `compose_rest_framework` sets JSON renderer and parser defaults (a contribution still wins), CRM's
+    and forms' write APIs are pinned by a 415 test under the composed settings, and the release notes
+    carry the line. (b) is next: drop the per-view pins, merge proposal 52 into rule 9, and add the
+    harness ban (the blog media upload keeps a multipart parser pin to account for).
   - [ ] (b) Drop the per-view pins and add the ban (Tier 2-fast).
 
 - [ ] **SA289 — Theme requests go through `apiRequest` and parse one error shape.**
