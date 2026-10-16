@@ -1525,7 +1525,11 @@ def test_rendered_managed_json_control(monkeypatch) -> None:
 
     def _legacy_render(**_kwargs: object) -> str:
         return (
-            "from django.http import JsonResponse\n\n\n"
+            "from django.http import JsonResponse\n"
+            "from rest_framework.renderers import JSONRenderer\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class LegacyPayloadView(APIView):\n"
+            "    renderer_classes = [JSONRenderer]\n\n\n"
             "def social_link_tree_payload(request):\n"
             "    return JsonResponse({'error': {'code': 'x'}})\n"
         )
@@ -1534,6 +1538,176 @@ def test_rendered_managed_json_control(monkeypatch) -> None:
     violations = _violations(checker.rule_9_http_apis, module)
     assert any("JsonResponse" in violation for violation in violations)
     assert any("error body" in violation for violation in violations)
+    assert any(
+        "managed social views (rendered) pins renderer_classes on LegacyPayloadView" in violation
+        for violation in violations
+    )
+
+
+def test_content_policy_pin_controls() -> None:
+    """Rule 9 bans per-view renderer/parser pins; a webhook and an upload keep theirs."""
+    module = _golden_module()
+    assert _violations(checker.rule_9_http_apis, module) == []
+
+    pinned_parser = _with_files(
+        module,
+        views=(
+            "from rest_framework.parsers import JSONParser\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    parser_classes = [JSONParser]\n"
+        ),
+    )
+    assert any(
+        "pins parser_classes on IndexView" in violation
+        for violation in _violations(checker.rule_9_http_apis, pinned_parser)
+    )
+
+    pinned_renderer = _with_files(
+        module,
+        views=(
+            "from rest_framework.renderers import JSONRenderer\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    renderer_classes = [JSONRenderer]\n"
+        ),
+    )
+    assert any(
+        "pins renderer_classes on IndexView" in violation
+        for violation in _violations(checker.rule_9_http_apis, pinned_renderer)
+    )
+
+    non_literal = _with_files(
+        module,
+        views=(
+            "from rest_framework.views import APIView\n\n"
+            "PARSERS = ()\n\n\n"
+            "class IndexView(APIView):\n"
+            "    parser_classes = PARSERS\n"
+        ),
+    )
+    assert any(
+        "pins parser_classes on IndexView" in violation
+        for violation in _violations(checker.rule_9_http_apis, non_literal)
+    )
+
+    upload = _with_files(
+        module,
+        views=(
+            "from rest_framework.parsers import FormParser, MultiPartParser\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    parser_classes = [MultiPartParser, FormParser]\n"
+        ),
+    )
+    assert _violations(checker.rule_9_http_apis, upload) == []
+
+    aliased_upload = _with_files(
+        module,
+        views=(
+            "from rest_framework import parsers\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    parser_classes = [parsers.MultiPartParser]\n"
+        ),
+    )
+    assert _violations(checker.rule_9_http_apis, aliased_upload) == []
+
+    form_only = _with_files(
+        module,
+        views=(
+            "from rest_framework.parsers import FormParser\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    parser_classes = [FormParser]\n"
+        ),
+    )
+    assert any(
+        "pins parser_classes on IndexView" in violation
+        for violation in _violations(checker.rule_9_http_apis, form_only)
+    )
+
+    mixed = _with_files(
+        module,
+        views=(
+            "from rest_framework.parsers import JSONParser, MultiPartParser\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    parser_classes = [MultiPartParser, JSONParser]\n"
+        ),
+    )
+    assert any(
+        "pins parser_classes on IndexView" in violation
+        for violation in _violations(checker.rule_9_http_apis, mixed)
+    )
+
+    as_view_override = _with_files(
+        module,
+        urls=(
+            module.files["urls.py"]
+            .replace(
+                "from . import views",
+                "from rest_framework.renderers import JSONRenderer\n\nfrom . import views",
+            )
+            .replace(
+                "views.IndexView.as_view()",
+                "views.IndexView.as_view(renderer_classes=[JSONRenderer])",
+            )
+        ),
+    )
+    assert any(
+        "pins renderer_classes in an as_view() override on IndexView" in violation
+        for violation in _violations(checker.rule_9_http_apis, as_view_override)
+    )
+
+    upload_as_view = _with_files(
+        module,
+        urls=(
+            module.files["urls.py"]
+            .replace(
+                "from . import views",
+                "from rest_framework.parsers import MultiPartParser\n\nfrom . import views",
+            )
+            .replace(
+                "views.IndexView.as_view()",
+                "views.IndexView.as_view(parser_classes=[MultiPartParser])",
+            )
+        ),
+    )
+    assert _violations(checker.rule_9_http_apis, upload_as_view) == []
+
+    webhook = _with_files(
+        module,
+        urls=module.files["urls.py"].replace(
+            "path('', views.IndexView.as_view(), name='index')",
+            "path('webhooks/vendor/', views.IndexView.as_view(), name='vendor_webhook')",
+        ),
+        views=(
+            "from rest_framework.parsers import JSONParser\n"
+            "from rest_framework.views import APIView\n\n\n"
+            "class IndexView(APIView):\n"
+            "    parser_classes = [JSONParser]\n"
+        ),
+    )
+    assert _violations(checker.rule_9_http_apis, webhook) == []
+
+
+def test_composed_json_default_control(monkeypatch) -> None:
+    """Rule 9 requires the composed REST_FRAMEWORK to carry both JSON defaults."""
+    module = _golden_module()
+    assert _violations(checker.rule_9_http_apis, module) == []
+
+    import quickscale_core.runtime.settings as runtime_settings
+
+    def _compose_without_json_defaults(
+        contributed: object = None, **_kwargs: object
+    ) -> dict[str, object]:
+        return dict(contributed) if isinstance(contributed, dict) else {}
+
+    monkeypatch.setattr(runtime_settings, "compose_rest_framework", _compose_without_json_defaults)
+    violations = _violations(checker.rule_9_http_apis, module)
+    assert any("JSON renderer default" in violation for violation in violations)
+    assert any("JSON parser default" in violation for violation in violations)
 
 
 def test_pagination_sibling_import_controls() -> None:

@@ -19,9 +19,7 @@ from rest_framework.exceptions import (
     PermissionDenied,
     ValidationError as DRFValidationError,
 )
-from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny
-from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -57,11 +55,12 @@ class OrgApiBaseView(OrganizationContextMixin, APIView):
     9).  ``AllowAny`` is deliberate: this base performs its own
     authentication and org-role checks below (the sanctioned pattern for a
     view that does), so its answers do not depend on the project's default
-    DRF permissions.  SaaS-mode gating, authentication, request parsing, and
-    optional org-role access control keep their behaviour: solo mode hides
-    the routes with a 404, an anonymous caller answers 401, and a caller
-    below ``min_org_role`` answers 403.  The org-role logic stays here, on
-    the sanctioned ``OrgApiBaseView``, not rewritten as a permission class.
+    DRF permissions.  The composed ``REST_FRAMEWORK`` defaults make the
+    endpoints JSON-only (rule 9).  SaaS-mode gating, authentication, request
+    parsing, and optional org-role access control keep their behaviour: solo
+    mode hides the routes with a 404, an anonymous caller answers 401, and a
+    caller below ``min_org_role`` answers 403.  The org-role logic stays here,
+    on the sanctioned ``OrgApiBaseView``, not rewritten as a permission class.
 
     Subclasses set ``min_org_role`` to an OrgRole value to enable
     org-scoped access gating. When ``min_org_role`` is None (the default),
@@ -69,9 +68,7 @@ class OrgApiBaseView(OrganizationContextMixin, APIView):
     """
 
     authentication_classes = [QuickscaleSessionAuthentication]
-    parser_classes = [JSONParser]
     permission_classes = [AllowAny]
-    renderer_classes = [JSONRenderer]
 
     min_org_role: OrgRole | None = None
 
