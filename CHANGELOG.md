@@ -140,10 +140,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     missing, or unrecorded identity before `pg_restore` runs, while a backup whose recorded files
     are still installed byte-identical restores and `migrate` applies the newer migrations. The DR
     snapshot route compares the identity recorded with the snapshot's authoritative dump.
-  - **Module updates refuse a same-label migration rewrite.** An update that would replace an
-    applied migration file while the module's version label is unchanged is refused and the
-    pre-update content is restored, because the database's applied schema would no longer be
-    identifiable; a migration file the pull adds is still applied forward on the next `migrate`.
+  - **Module updates keep an applied migration's content identity.** An update that would replace
+    an applied migration file is refused — while the module's version label is unchanged, and on
+    every pull once the project's applied vintage is at or after the migration-freeze release —
+    and the pre-update content is restored, because the database's applied schema would no longer
+    be identifiable; a migration file the pull adds is still applied forward on the next `migrate`.
   - **The generator fails closed on undefined template context.** A missing or renamed context key
     raises during generation instead of rendering empty text, and the release lane boots a freshly
     generated project through its shipped `start.sh` and asserts `/healthcheck/` answers `OK`.

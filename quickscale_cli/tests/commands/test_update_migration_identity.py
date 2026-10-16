@@ -1,12 +1,20 @@
-"""Coverage for the update migration-content identity guard (SA204 slice e).
+"""Coverage for the update migration-content identity guard (SA204 slices e, g).
 
 ``quickscale update`` replaces an embedded module's files with the remote
 content.  When the module's version label does not change, the applied
 migration files must survive byte-identical: the clean-break policy rewrites
 ``0001_initial`` in place across releases, so a same-label rewrite would leave
 the database's applied schema unidentified.  A new migration file is still
-applied forward, and a version-label change is a release upgrade whose database
-handling stays the operator's documented fresh-database path.
+applied forward, and a version-label change on a vintage before the migration
+freeze is a release upgrade whose database handling stays the operator's
+documented fresh-database path.
+
+From the migration freeze vintage on, every pull keeps the applied identity
+byte-identical, a version-label change included, because that vintage's
+applied content is the identity the freeze commits to; a frozen pull whose
+applied content cannot be identified at all is refused rather than silently
+replacing it, while a vintage before the freeze still lets the pull repair
+such a tree.
 """
 
 from __future__ import annotations
@@ -24,6 +32,8 @@ from quickscale_core import __version__ as CORE_VERSION
 from quickscale_core.utils.git_subtree import run_git_subtree_add
 from quickscale_cli.commands._module_update import (
     _get_update_migration_issues,
+    _is_frozen_update_vintage,
+    _update_migration_identity_reason,
     _update_single_module,
     update,
 )
@@ -32,7 +42,15 @@ _APPLIED_MIGRATION = "# applied migration content\n"
 _PULLED_MIGRATION = "# rewritten by the pull\n"
 _MODULE_PREFIX = "modules/auth"
 _MODULE_VERSION = "0.71.0"
+_FREEZE_VINTAGE = "0.90.0"
 _MODULE_MANIFEST_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
+
+
+def _patch_freeze_vintage(monkeypatch: pytest.MonkeyPatch, vintage: str | None) -> None:
+    """Pin the migration freeze vintage a project is judged against."""
+    monkeypatch.setattr(
+        "quickscale_core.migration_hashes.MIGRATION_FREEZE_VINTAGE", vintage
+    )
 
 
 def _migrations_dir(project_path: Path) -> Path:
@@ -41,12 +59,14 @@ def _migrations_dir(project_path: Path) -> Path:
     )
 
 
-def _write_update_project(tmp_path: Path) -> Path:
+def _write_update_project(
+    tmp_path: Path, *, applied_version: str = _MODULE_VERSION
+) -> Path:
     """Create a minimal project whose embedded auth module ships one migration."""
     migrations_dir = _migrations_dir(tmp_path)
     migrations_dir.mkdir(parents=True)
     (tmp_path / _MODULE_PREFIX / "module.yml").write_text(
-        f'name: auth\nversion: "{_MODULE_VERSION}"\n'
+        f'name: auth\nversion: "{applied_version}"\n'
     )
     (migrations_dir / "0001_initial.py").write_text(_APPLIED_MIGRATION)
     quickscale_dir = tmp_path / ".quickscale"
@@ -65,7 +85,7 @@ def _write_update_project(tmp_path: Path) -> Path:
                 "modules": {
                     "auth": {
                         "name": "auth",
-                        "version": _MODULE_VERSION,
+                        "version": applied_version,
                         "commit_sha": "a" * 40,
                         "embedded_at": "2025-01-01T00:00:00",
                         "prefix": _MODULE_PREFIX,
@@ -116,6 +136,15 @@ def update_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A generated-project fixture whose cwd is the project root."""
     project = _write_update_project(tmp_path)
     monkeypatch.chdir(project)
+    return project
+
+
+@pytest.fixture
+def frozen_update_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A project applied at the freeze vintage, with the freeze since landed."""
+    project = _write_update_project(tmp_path, applied_version=_FREEZE_VINTAGE)
+    monkeypatch.chdir(project)
+    _patch_freeze_vintage(monkeypatch, _FREEZE_VINTAGE)
     return project
 
 
@@ -244,12 +273,20 @@ def test_equal_label_added_migration_is_applied_forward(
     ).read_text() == "# new migration\n"
 
 
-def test_version_label_change_allows_a_migration_rewrite(
+def test_pre_freeze_label_change_keeps_the_fresh_database_path(
     update_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A label change is a release upgrade; content comparison is skipped."""
+    """A vintage before the freeze keeps its label-change upgrade path.
+
+    The freeze vintage is pinned unset — the state a project applied before
+    the freeze release is judged in — so the release upgrade keeps the
+    documented fresh-database handling and the pull may replace the applied
+    file.
+    """
     project = update_project
     migration_path = _migrations_dir(project) / "0001_initial.py"
+    _patch_freeze_vintage(monkeypatch, None)
 
     def _pull(*, prefix, remote, branch, squash):
         del remote, branch, squash
@@ -270,15 +307,256 @@ def test_version_label_change_allows_a_migration_rewrite(
     assert migration_path.read_text() == _PULLED_MIGRATION
 
 
-def test_unidentifiable_applied_identity_skips_the_guard(
+def test_pre_freeze_vintage_below_the_freeze_keeps_the_fresh_database_path(
     update_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A pre-pull tree without a source package leaves nothing to compare.
+    """A set freeze vintage does not capture the vintages that predate it."""
+    project = update_project
+    migration_path = _migrations_dir(project) / "0001_initial.py"
+    _patch_freeze_vintage(monkeypatch, _FREEZE_VINTAGE)
 
-    Such a tree is repaired by the update itself, so the guard must not
-    refuse it.
+    def _pull(*, prefix, remote, branch, squash):
+        del remote, branch, squash
+        (
+            project
+            / prefix
+            / "src"
+            / "quickscale_modules_auth"
+            / "migrations"
+            / "0001_initial.py"
+        ).write_text(_PULLED_MIGRATION)
+        return "updated"
+
+    result, mock_commit = _run_update(project, pulled_version="0.95.0", pull=_pull)
+
+    assert result is True
+    mock_commit.assert_called_once()
+    assert migration_path.read_text() == _PULLED_MIGRATION
+
+
+def test_frozen_vintage_label_change_with_a_changed_file_is_refused_and_rolled_back(
+    frozen_update_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A post-freeze release upgrade must keep the applied file byte-identical."""
+    project = frozen_update_project
+    migration_path = _migrations_dir(project) / "0001_initial.py"
+
+    def _pull(*, prefix, remote, branch, squash):
+        del remote, branch, squash
+        (
+            project
+            / prefix
+            / "src"
+            / "quickscale_modules_auth"
+            / "migrations"
+            / "0001_initial.py"
+        ).write_text(_PULLED_MIGRATION)
+        return "updated"
+
+    result, mock_commit = _run_update(project, pulled_version="0.95.0", pull=_pull)
+
+    captured = capsys.readouterr()
+    assert result is False
+    assert (
+        "applied migration content changed across the version label change "
+        "'0.90.0' -> '0.95.0', at or after the migration freeze vintage" in captured.err
+    )
+    assert "migration '0001_initial.py' changed content" in captured.err
+    assert "Reconcile the embedded module content" in captured.err
+    # The rollback restored the applied content and nothing was committed.
+    assert migration_path.read_text() == _APPLIED_MIGRATION
+    mock_commit.assert_not_called()
+
+
+def test_frozen_vintage_label_change_with_a_removed_file_is_refused(
+    frozen_update_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A post-freeze pull that drops the migrations package is refused."""
+    project = frozen_update_project
+    migration_path = _migrations_dir(project) / "0001_initial.py"
+
+    def _pull(*, prefix, remote, branch, squash):
+        del remote, branch, squash
+        shutil.rmtree(
+            project / prefix / "src" / "quickscale_modules_auth" / "migrations"
+        )
+        return "updated"
+
+    result, mock_commit = _run_update(project, pulled_version="0.95.0", pull=_pull)
+
+    captured = capsys.readouterr()
+    assert result is False
+    assert "across the version label change '0.90.0' -> '0.95.0'" in captured.err
+    assert "migration '0001_initial.py' is no longer present" in captured.err
+    assert migration_path.read_text() == _APPLIED_MIGRATION
+    mock_commit.assert_not_called()
+
+
+def test_frozen_vintage_added_migration_applies_forward(
+    frozen_update_project: Path,
+) -> None:
+    """A new file from a post-freeze pull applies forward instead of refusing."""
+    project = frozen_update_project
+
+    def _pull(*, prefix, remote, branch, squash):
+        del remote, branch, squash
+        (
+            project
+            / prefix
+            / "src"
+            / "quickscale_modules_auth"
+            / "migrations"
+            / "0002_add_field.py"
+        ).write_text("# new migration\n")
+        return "updated"
+
+    result, mock_commit = _run_update(project, pulled_version="0.95.0", pull=_pull)
+
+    assert result is True
+    mock_commit.assert_called_once()
+    assert (
+        _migrations_dir(project) / "0002_add_field.py"
+    ).read_text() == "# new migration\n"
+
+
+def test_frozen_vintage_equal_label_still_refuses_a_rewrite(
+    frozen_update_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The equal-label keying holds inside a post-freeze project too."""
+    project = frozen_update_project
+    migration_path = _migrations_dir(project) / "0001_initial.py"
+
+    def _pull(*, prefix, remote, branch, squash):
+        del remote, branch, squash
+        (
+            project
+            / prefix
+            / "src"
+            / "quickscale_modules_auth"
+            / "migrations"
+            / "0001_initial.py"
+        ).write_text(_PULLED_MIGRATION)
+        return "updated"
+
+    result, mock_commit = _run_update(
+        project, pulled_version=_FREEZE_VINTAGE, pull=_pull
+    )
+
+    captured = capsys.readouterr()
+    assert result is False
+    assert (
+        "applied migration content changed under the equal version label '0.90.0'"
+        in captured.err
+    )
+    assert migration_path.read_text() == _APPLIED_MIGRATION
+    mock_commit.assert_not_called()
+
+
+def test_frozen_vintage_unidentifiable_applied_identity_is_refused(
+    frozen_update_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A frozen pull may not proceed while the applied identity is unknown.
+
+    The pre-pull tree has no source package, so the update cannot prove the
+    pulled migration files match the database's applied schema; the repair the
+    pull would otherwise perform is refused instead of silently replacing the
+    applied content.
+    """
+    project = frozen_update_project
+    source_dir = project / _MODULE_PREFIX / "src"
+    shutil.rmtree(source_dir)
+
+    def _pull(*, prefix, remote, branch, squash):
+        del remote, branch, squash
+        migrations_dir = (
+            project / prefix / "src" / "quickscale_modules_auth" / "migrations"
+        )
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "0001_initial.py").write_text(_PULLED_MIGRATION)
+        return "updated"
+
+    result, mock_commit = _run_update(project, pulled_version="0.95.0", pull=_pull)
+
+    captured = capsys.readouterr()
+    assert result is False
+    assert "applied migration content identity could not be established" in captured.err
+    assert "frozen vintage '0.90.0'" in captured.err
+    assert "Reconcile the embedded module content" in captured.err
+    # The rollback restored the pre-pull tree and nothing was committed.
+    assert not source_dir.exists()
+    mock_commit.assert_not_called()
+
+
+def test_frozen_vintage_equal_label_unidentifiable_identity_is_refused(
+    frozen_update_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The refusal keys on the frozen vintage, not on the label change."""
+    project = frozen_update_project
+    source_dir = project / _MODULE_PREFIX / "src"
+    shutil.rmtree(source_dir)
+
+    def _pull(*, prefix, remote, branch, squash):
+        del remote, branch, squash
+        migrations_dir = (
+            project / prefix / "src" / "quickscale_modules_auth" / "migrations"
+        )
+        migrations_dir.mkdir(parents=True)
+        (migrations_dir / "0001_initial.py").write_text(_PULLED_MIGRATION)
+        return "updated"
+
+    result, mock_commit = _run_update(
+        project, pulled_version=_FREEZE_VINTAGE, pull=_pull
+    )
+
+    captured = capsys.readouterr()
+    assert result is False
+    assert "applied migration content identity could not be established" in captured.err
+    assert not source_dir.exists()
+    mock_commit.assert_not_called()
+
+
+def test_update_migration_identity_reason_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The reason helper keys on the label, then the freeze, then skips."""
+    _patch_freeze_vintage(monkeypatch, _FREEZE_VINTAGE)
+    assert _update_migration_identity_reason(None, _FREEZE_VINTAGE) is None
+    assert _update_migration_identity_reason(_FREEZE_VINTAGE, _FREEZE_VINTAGE) == (
+        "under the equal version label '0.90.0'"
+    )
+    assert _update_migration_identity_reason(_FREEZE_VINTAGE, "0.95.0") == (
+        "across the version label change '0.90.0' -> '0.95.0', "
+        "at or after the migration freeze vintage"
+    )
+    assert _is_frozen_update_vintage(None) is False
+    assert _is_frozen_update_vintage("0.89.0") is False
+    assert _is_frozen_update_vintage(_FREEZE_VINTAGE) is True
+    assert _is_frozen_update_vintage("0.95.0") is True
+    _patch_freeze_vintage(monkeypatch, None)
+    assert _update_migration_identity_reason(_FREEZE_VINTAGE, "0.95.0") is None
+    assert _is_frozen_update_vintage("0.95.0") is False
+    _patch_freeze_vintage(monkeypatch, "0.91.0")
+    assert _update_migration_identity_reason(_FREEZE_VINTAGE, "0.95.0") is None
+    assert _is_frozen_update_vintage(_FREEZE_VINTAGE) is False
+
+
+def test_pre_freeze_unidentifiable_applied_identity_skips_the_guard(
+    update_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pre-freeze tree without a source package leaves nothing to compare.
+
+    Such a tree is repaired by the update itself and the project keeps its
+    fresh-database path, so the guard must not refuse it.
     """
     project = update_project
+    _patch_freeze_vintage(monkeypatch, None)
     shutil.rmtree(project / _MODULE_PREFIX / "src")
 
     def _pull(*, prefix, remote, branch, squash):
@@ -373,7 +651,11 @@ def _write_split_remote(tmp_path: Path) -> tuple[Path, str]:
 
 
 def _write_real_update_project(
-    tmp_path: Path, remote_dir: Path, applied_sha: str
+    tmp_path: Path,
+    remote_dir: Path,
+    applied_sha: str,
+    *,
+    applied_version: str = CORE_VERSION,
 ) -> Path:
     """Create a git project whose ``modules/auth`` subtree came from the remote."""
     project = tmp_path / "project"
@@ -424,7 +706,7 @@ def _write_real_update_project(
                 "modules": {
                     "auth": {
                         "name": "auth",
-                        "version": CORE_VERSION,
+                        "version": applied_version,
                         "commit_sha": applied_sha,
                         "embedded_at": "2025-01-01T00:00:00",
                         "prefix": _MODULE_PREFIX,
@@ -483,6 +765,61 @@ def test_refused_real_subtree_pull_restores_git_state(
         "applied migration content changed under the equal version label"
         in result.output
     )
+    assert "migration '0001_initial.py' changed content" in result.output
+
+    # The rejected rewrite is not the effective committed content, and the
+    # restoration is committed so the next update starts from a clean tree.
+    assert _run_git(project, "show", f"HEAD:{migration_relpath}") == applied_content
+    assert _run_git(project, "status", "--porcelain") == ""
+    assert "chore: roll back partial module update" in _run_git(
+        project, "log", "--pretty=%s", "-n", "2"
+    )
+
+
+def test_refused_cross_release_pull_restores_git_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A post-freeze label change that rewrites an applied file is refused.
+
+    From the migration freeze vintage on, the cross-release update is the one
+    the freeze exists to make safe: the applied migration file must survive
+    byte-identical even though the version label changes, and the rejected
+    pull has to be restored as the effective HEAD like the equal-label case.
+    """
+    remote_dir, applied_sha = _write_split_remote(tmp_path)
+    project = _write_real_update_project(
+        tmp_path, remote_dir, applied_sha, applied_version="0.70.0"
+    )
+    monkeypatch.chdir(project)
+    _patch_freeze_vintage(monkeypatch, "0.70.0")
+    migration_relpath = (
+        f"{_MODULE_PREFIX}/src/quickscale_modules_auth/migrations/0001_initial.py"
+    )
+    applied_content = _run_git(project, "show", f"HEAD:{migration_relpath}")
+
+    real_single_module_update = _update_single_module
+
+    def _update_from_local_remote(name, info, default_remote, no_preview):
+        del default_remote
+        return real_single_module_update(name, info, str(remote_dir), no_preview)
+
+    with (
+        patch(
+            "quickscale_cli.commands._module_update._update_single_module",
+            side_effect=_update_from_local_remote,
+        ),
+        patch("click.confirm", return_value=True),
+    ):
+        result = CliRunner().invoke(
+            update,
+            ["--no-preview", "--acknowledge-contract-vintage"],
+            catch_exceptions=False,
+        )
+
+    assert result.exit_code != 0
+    assert "across the version label change '0.70.0'" in result.output
+    assert "at or after the migration freeze vintage" in result.output
     assert "migration '0001_initial.py' changed content" in result.output
 
     # The rejected rewrite is not the effective committed content, and the

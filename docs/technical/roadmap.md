@@ -65,7 +65,7 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA204 (g…i) ∥ SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA204 (h…i) ∥ SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA285 ──► SA295 ──► SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
 Track 3: SA288 (a, b) ──► SA289 (a, b) ──► SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
@@ -82,7 +82,7 @@ SA277 waits on SA191's cutover, whose evidence draws the line between what `beta
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA204 (g), SA286 (a), SA285, SA295, SA293, SA288, SA289, SA290, SA292, and
+**Parallel start.** SA204 (h), SA286 (a), SA285, SA295, SA293, SA288, SA289, SA290, SA292, and
 SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 sits ahead
 of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -108,7 +108,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA204 (g) | yes | no | yes | no | yes |
+| 1 | SA204 (h) | yes | no | yes | no | yes |
 | 2 | SA285 | yes | yes | yes | yes | no |
 | 3 | SA288 (a) | yes | yes | yes | yes | no |
 
@@ -235,15 +235,16 @@ suite, and merge only the reviewed delivery through the serialized queue.
   being refused by `dr_engine/recovery.py`'s exact-vintage match, a bare file that records no
   vintage is still refused (closing the fail-open `recorded_module_versions is None` branch at
   `recovery.py:287–288`), a backup recording an equal label but different migration hashes is
-  refused, and a restore-forward test proves it. `quickscale update` likewise refuses a project
-  whose applied migration hashes differ from the embedded files under an equal version label.
+    refused, and a restore-forward test proves it. `quickscale update` likewise refuses a project
+  whose applied migration hashes differ from the embedded files — under an equal version label,
+  and on every pull from the freeze vintage on.
 
   **Slices** (in order; the one-way door is isolated in (j), behind the proofs in (f) and (i)):
   - [x] (a), (b), (d): landed (`BlogMediaAssetImageField` public; `quickscale_core.migration_hashes`
     with `scripts/migration_hashes.json`; hash-keyed restore-forward in `recovery.py`).
   - [x] (c): landed as `scripts/check_migration_freeze.py`, one registry row (`check-migration-freeze`)
     with controls for an in-place edit, a deletion, a new `0002`, and a `_`-symbol reference; the
-    topology guard accepts an ordered chain and its `0002` canary is inverted. (g) is next.
+    topology guard accepts an ordered chain and its `0002` canary is inverted. (h) is next.
   - [x] (d) Restore-forward in `dr_engine/recovery.py` keyed on the hash manifest: forward
     migration from N to N+1, the bare-file refusal, and the equal-label hash-mismatch refusal,
     with tests (Tier 2-fast; Track 2 reviews). Landed as per-module `migration_hashes` recorded
@@ -261,7 +262,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     `properties_propertylisting`'s canonical pair); tenant isolation 6/6, no `W004`/`W007`, only the
     two known `W006` properties warnings — matching the SA191 baseline; no carried module's
     migration changed since the rebuild (SA270's billing and SA204(a)'s blog are not carried).
-    (g) is next.
+    (h) is next.
   The 2026-10-16 arch pass found two branches that still key on labels or authorship (Finding 2,
   option 1; it answers arch §12 Q2): `quickscale update` compares content only under an equal
   label (`_module_update.py:286–297`, `:365`), so the cross-release update the freeze exists to
@@ -269,11 +270,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
   edited `0001` in the same commit that edits it, so the gate catches drift, not intent. Both
   close before the one-way step, which then verifies them instead of only recording the manifest.
 
-  - [ ] (g) `quickscale update` compares the applied migration identity on every pull: an
-    applied file stays byte-identical and new files apply forward; only vintages before the
-    freeze keep the fresh-database path, keyed on a freeze-vintage constant (set to the release
-    (j) lands in) instead of on any label change. A test refuses a label change plus a changed applied file (Tier 2-fast; Track 2
-    reviews).
+  - [x] (g): landed as `quickscale_core.migration_hashes.MIGRATION_FREEZE_VINTAGE` (still unset;
+    SA204 (j) sets it to the release the freeze lands in) and its `is_frozen_vintage` predicate,
+    which the update guard keys every pull on: an applied migration file stays byte-identical, an
+    equal version label compares as before, new files apply forward, an unidentifiable applied
+    identity refuses a frozen pull instead of silently authorizing it, and a vintage before the
+    freeze keeps the fresh-database path. Tests: a label change plus a changed applied file is
+    refused and rolled back — through a real subtree pull too — a removal is refused, an added
+    `0002` applies forward, and the pre-freeze label-change path is unchanged. (h) is next.
   - [ ] (h) The hash manifest is append-only: the freeze gate refuses a changed or removed
     recorded value even after `--write`, compared with `scripts/migration_hashes.json` at the
     latest release tag (maintainer decision, 2026-10-16: release tags are immutable, and CI
@@ -283,10 +287,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   - [ ] (i) Re-run the (f) rehearsal on a `bap-web` copy, adding the cross-release `update` path
     from (g): a changed applied file is refused, a new `0002` applies forward, and the FORCE-RLS
     baseline still holds (Tier 2-full; scratch PostgreSQL is environment-sensitive).
-  - [ ] (j) The decision record lifting rule 1 and the freeze commit of the manifest, after (g),
+  - [ ] (j) The decision record lifting rule 1, the freeze commit of the manifest, and
+    `MIGRATION_FREEZE_VINTAGE` set to the release this step lands in, after (g),
     (h), and (i) pass, scheduled after SA153 (e) and before SA153 (f)'s go-live, with the
-    maintainer's sign-off (Tier 2-fast; the one-way step, kept to docs and the manifest). If a
-    module `0001` changed after (i), (i) is re-run first.
+    maintainer's sign-off (Tier 2-fast; the one-way step, kept to docs, the manifest, and that
+    one constant). If a module `0001` changed after (i), (i) is re-run first.
 
 - [ ] **SA191 — Migrate `bap-web` onto current QuickScale by a one-off prompt-driven port.**
 
