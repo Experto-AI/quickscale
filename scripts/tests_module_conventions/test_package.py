@@ -6,6 +6,7 @@ import copy
 from dataclasses import replace
 
 from scripts import check_module_conventions as checker
+from scripts.check_module_conventions import Corpus, Module
 from scripts.tests_module_conventions._support import (
     _corpus,
     _golden_module,
@@ -117,6 +118,179 @@ def test_coverage_target_control() -> None:
         "pyproject --cov takes no target" in violation
         for violation in _violations(checker.rule_18_package_tooling, option_after_bare)
     )
+
+
+BASE_TEST_SETTINGS_FIXTURE = """\
+BASE_TEST_SETTINGS_KEYS = ("SECRET_KEY", "USE_TZ")
+"""
+
+TEST_SETTINGS_FIXTURE = """\
+from quickscale_core.testing.settings import suite_secret_key
+
+SECRET_KEY = suite_secret_key("demo")
+USE_TZ = True
+QUICKSCALE_DEMO_ENABLED = True
+"""
+
+TEST_CONFTEST_FIXTURE = """\
+from quickscale_core.testing.pytest_plugin import (
+    pytest_collection_modifyitems,
+    pytest_configure,
+)
+"""
+
+
+def _shared_test_support_module(
+    *,
+    settings: str = TEST_SETTINGS_FIXTURE,
+    conftest: str | None = TEST_CONFTEST_FIXTURE,
+) -> Module:
+    """Build a module whose tests adopt the core base and plugin fixtures."""
+    module = _golden_module()
+    tests = {**module.tests, "settings.py": settings}
+    if conftest is None:
+        tests.pop("conftest.py", None)
+    else:
+        tests["conftest.py"] = conftest
+    return replace(module, tests=tests)
+
+
+def _shared_test_support_corpus(*modules: Module) -> Corpus:
+    """Build a corpus whose core tree carries the base and plugin fixtures."""
+    return replace(
+        _corpus(*modules),
+        core_files={
+            "testing/settings.py": BASE_TEST_SETTINGS_FIXTURE,
+            "testing/pytest_plugin.py": "",
+        },
+    )
+
+
+def test_shared_test_settings_base_control() -> None:
+    """Rule 18: each module's tests/settings.py comes from the core base."""
+    assert (
+        checker.rule_18_package_tooling(_shared_test_support_corpus(_shared_test_support_module()))
+        == []
+    )
+
+    without_import = _shared_test_support_module(settings="SECRET_KEY = 'test'\nUSE_TZ = True\n")
+    findings = checker.rule_18_package_tooling(_shared_test_support_corpus(without_import))
+    assert any("does not import the core test-settings base" in violation for violation in findings)
+
+    missing_key = _shared_test_support_module(
+        settings=TEST_SETTINGS_FIXTURE.replace("USE_TZ = True\n", "")
+    )
+    findings = checker.rule_18_package_tooling(_shared_test_support_corpus(missing_key))
+    assert any("does not define USE_TZ (core base key)" in violation for violation in findings)
+
+    extra_keys = _shared_test_support_module(
+        settings=TEST_SETTINGS_FIXTURE + "QUICKSCALE_DEMO_BACKEND = 'local'\n"
+    )
+    assert checker.rule_18_package_tooling(_shared_test_support_corpus(extra_keys)) == []
+
+
+def test_shared_conftest_plugin_control() -> None:
+    """Rule 18: conftest hooks come from the core plugin; wrappers delegate."""
+    assert (
+        checker.rule_18_package_tooling(_shared_test_support_corpus(_shared_test_support_module()))
+        == []
+    )
+
+    local_copy = _shared_test_support_module(
+        conftest=(
+            "def pytest_configure(config):\n"
+            "    pass\n\n\n"
+            "def pytest_collection_modifyitems(config, items):\n"
+            "    pass\n"
+        )
+    )
+    findings = checker.rule_18_package_tooling(_shared_test_support_corpus(local_copy))
+    assert any(
+        "does not take pytest_configure from the core conftest plugin" in violation
+        for violation in findings
+    )
+    assert any(
+        "does not take pytest_collection_modifyitems from the core conftest plugin" in violation
+        for violation in findings
+    )
+
+    wrapper = _shared_test_support_module(
+        conftest=(
+            "from quickscale_core.testing.pytest_plugin import (\n"
+            "    pytest_collection_modifyitems,\n"
+            "    pytest_configure as shared_pytest_configure,\n"
+            ")\n\n\n"
+            "def pytest_configure(config):\n"
+            "    shared_pytest_configure(config)\n"
+            "    config.option.reuse_db = True\n"
+        )
+    )
+    assert checker.rule_18_package_tooling(_shared_test_support_corpus(wrapper)) == []
+
+    non_delegating = _shared_test_support_module(
+        conftest=(
+            "from quickscale_core.testing.pytest_plugin import (\n"
+            "    pytest_collection_modifyitems,\n"
+            "    pytest_configure as shared_pytest_configure,\n"
+            ")\n\n\n"
+            "def pytest_configure(config):\n"
+            "    config.option.reuse_db = True\n"
+        )
+    )
+    findings = checker.rule_18_package_tooling(_shared_test_support_corpus(non_delegating))
+    assert any(
+        "defines a local pytest_configure that does not call the core conftest plugin hook"
+        in violation
+        for violation in findings
+    )
+
+    nested_import = _shared_test_support_module(
+        conftest=(
+            "def _apply(config):\n"
+            "    from quickscale_core.testing.pytest_plugin import pytest_configure as shared\n"
+            "    shared(config)\n"
+            "\n"
+            "def pytest_configure(config):\n"
+            "    shared(config)\n"
+        )
+    )
+    findings = checker.rule_18_package_tooling(_shared_test_support_corpus(nested_import))
+    assert any(
+        "does not take pytest_configure from the core conftest plugin" in violation
+        for violation in findings
+    )
+
+    missing_conftest = _shared_test_support_module(conftest=None)
+    findings = checker.rule_18_package_tooling(_shared_test_support_corpus(missing_conftest))
+    assert any("does not adopt the core conftest plugin" in violation for violation in findings)
+
+
+def test_shared_test_support_core_tree_control() -> None:
+    """Rule 18: a loaded core tree missing the base or plugin fails."""
+    corpus = _shared_test_support_corpus(_shared_test_support_module())
+    assert checker.rule_18_package_tooling(corpus) == []
+
+    without_base = {
+        rel: text for rel, text in corpus.core_files.items() if rel != "testing/settings.py"
+    }
+    findings = checker.rule_18_package_tooling(replace(corpus, core_files=without_base))
+    assert any("carries no shared test-settings base" in violation for violation in findings)
+
+    without_plugin = {
+        rel: text for rel, text in corpus.core_files.items() if rel != "testing/pytest_plugin.py"
+    }
+    findings = checker.rule_18_package_tooling(replace(corpus, core_files=without_plugin))
+    assert any("carries no conftest plugin" in violation for violation in findings)
+
+    keyless_base = {"testing/settings.py": "SECRET_KEY = 'test'\n", "testing/pytest_plugin.py": ""}
+    findings = checker.rule_18_package_tooling(replace(corpus, core_files=keyless_base))
+    assert any("declares no BASE_TEST_SETTINGS_KEYS tuple" in violation for violation in findings)
+
+
+def test_shared_test_support_skips_an_empty_corpus() -> None:
+    """An empty synthetic corpus skips the clause, as rule 31 does."""
+    module = _shared_test_support_module(settings="SECRET_KEY = 'test'\n", conftest=None)
+    assert checker.rule_18_package_tooling(_corpus(module)) == []
 
 
 def test_cross_module_import_outside_public_surface_control() -> None:

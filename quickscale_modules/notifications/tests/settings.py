@@ -1,9 +1,12 @@
 """Django settings for QuickScale notifications module tests."""
 
-import os
 from pathlib import Path
 
-from quickscale_core.manifest.settings_schema import load_settings_schema
+from quickscale_core.testing.settings import (
+    module_settings_schema,
+    suite_database,
+    suite_secret_key,
+)
 
 # BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
@@ -11,7 +14,7 @@ from quickscale_core.manifest.settings_schema import load_settings_schema
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
 # Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include bypass_rls tests.
 
-SECRET_KEY = "test-secret-key-for-notifications-module"
+SECRET_KEY = suite_secret_key("notifications")
 
 # The rule 35 startup checks run while Django populates the app registry,
 # before the test conftest loads, so the projected secret settings must be
@@ -95,24 +98,13 @@ TEMPLATES = [
     }
 ]
 
+# The fixed test database name (instead of the default
+# test_test_quickscale_notifications), together with reuse_db in conftest.py,
+# avoids ownership/duplicate-database failures on rerun under a restricted role.
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get(
-            "QS_NOTIFICATIONS_DB_NAME", "test_quickscale_notifications"
-        ),
-        "USER": os.environ.get("QS_NOTIFICATIONS_DB_USER", "postgres"),
-        "PASSWORD": os.environ.get("QS_NOTIFICATIONS_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_NOTIFICATIONS_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_NOTIFICATIONS_DB_PORT", "5432"),
-        # Use a fixed test database name instead of the default
-        # test_test_quickscale_notifications.  Together with reuse_db
-        # in conftest.py this avoids ownership/duplicate-database
-        # failures on rerun under a restricted role.
-        "TEST": {
-            "NAME": "qs_notifications_test",
-        },
-    }
+    "default": suite_database(
+        "notifications", test_database_name="qs_notifications_test"
+    ),
 }
 
 USE_TZ = True
@@ -160,7 +152,6 @@ QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS = [
 QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS = 300
 
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
-MODULE_SETTINGS_SCHEMA = {
-    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
-    for name in ("notifications", "orgs", "forms")
-}
+MODULE_SETTINGS_SCHEMA = module_settings_schema(
+    _MODULES_ROOT, "notifications", "orgs", "forms"
+)

@@ -1,9 +1,12 @@
 """Django settings for QuickScale backups module tests."""
 
-import os
 from pathlib import Path
 
-from quickscale_core.manifest.settings_schema import load_settings_schema
+from quickscale_core.testing.settings import (
+    module_settings_schema,
+    suite_database,
+    suite_secret_key,
+)
 
 # BYPASSRLS escape hatch removed from settings.py AND conftest.py.
 # No module test code automatically primes QUICKSCALE_ALLOW_BYPASSRLS.
@@ -13,7 +16,7 @@ from quickscale_core.manifest.settings_schema import load_settings_schema
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "test-secret-key-for-backups-module"
+SECRET_KEY = suite_secret_key("backups")
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
@@ -61,14 +64,7 @@ WSGI_APPLICATION = "tests._wsgi.application"
 # SQLite-specific backup-format coverage is preserved in the one test
 # that exercises the JSON export codepath (test_create_backup_uses_json_export_for_sqlite).
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("QS_BACKUPS_DB_NAME", "test_quickscale_backups"),
-        "USER": os.environ.get("QS_BACKUPS_DB_USER", "postgres"),
-        "PASSWORD": os.environ.get("QS_BACKUPS_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_BACKUPS_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_BACKUPS_DB_PORT", "5432"),
-    }
+    "default": suite_database("backups"),
 }
 
 USE_TZ = True
@@ -97,7 +93,4 @@ QUICKSCALE_APP_VERSION = "test-app"
 QUICKSCALE_STORAGE_BACKEND = "local"
 
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
-MODULE_SETTINGS_SCHEMA = {
-    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
-    for name in ("backups",)
-}
+MODULE_SETTINGS_SCHEMA = module_settings_schema(_MODULES_ROOT, "backups")

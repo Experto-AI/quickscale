@@ -1,9 +1,12 @@
 """Django settings for listings module tests"""
 
-import os
 from pathlib import Path
 
-from quickscale_core.manifest.settings_schema import load_settings_schema
+from quickscale_core.testing.settings import (
+    module_settings_schema,
+    suite_database,
+    suite_secret_key,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SHARED_TEST_TEMPLATES = (
@@ -16,7 +19,7 @@ SHARED_TEST_TEMPLATES = (
 # tests that need BYPASSRLS with @pytest.mark.bypass_rls.
 # Set QUICKSCALE_ALLOW_BYPASSRLS=1 in the shell to include bypass_rls tests.
 
-SECRET_KEY = "test-secret-key-for-listings-module"
+SECRET_KEY = suite_secret_key("listings")
 
 DEBUG = True
 
@@ -74,14 +77,7 @@ TEMPLATES = [
 
 # Database
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("QS_LISTINGS_DB_NAME", "test_quickscale_listings"),
-        "USER": os.environ.get("QS_LISTINGS_DB_USER", "postgres"),
-        "PASSWORD": os.environ.get("QS_LISTINGS_DB_PASSWORD", ""),
-        "HOST": os.environ.get("QS_LISTINGS_DB_HOST", "localhost"),
-        "PORT": os.environ.get("QS_LISTINGS_DB_PORT", "5432"),
-    }
+    "default": suite_database("listings"),
 }
 
 # Static files
@@ -94,6 +90,8 @@ MEDIA_ROOT = BASE_DIR / "tests" / "media"
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+USE_TZ = True
 
 # Logging settings required when tests configure this module as default settings
 LOGGING_CONFIG = None
@@ -108,10 +106,7 @@ QUICKSCALE_LISTINGS_API_RATE_LIMIT = "5/hour"
 # test settings generate it from the module's own manifest, the form rule 3
 # allows, so it can never drift from the declared options.
 _MODULES_ROOT = Path(__file__).resolve().parents[3] / "quickscale_modules"
-MODULE_SETTINGS_SCHEMA = {
-    name: load_settings_schema(_MODULES_ROOT / name / "module.yml")
-    for name in ("listings", "orgs")
-}
+MODULE_SETTINGS_SCHEMA = module_settings_schema(_MODULES_ROOT, "listings", "orgs")
 
 # DRF configuration mirroring the generated settings: session authentication
 # only, the composed JSON renderer and parser defaults (rule 9), the one
