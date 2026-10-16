@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 import yaml
 
+from quickscale_core.generator.ci_environment import CI_ENVIRONMENT_RELATIVE_PATH
+
 
 CI_WORKFLOW_RELATIVE_PATH = ".github/workflows/ci.yml"
 
@@ -15,15 +17,35 @@ _RUNTIME_DATABASE_URL_NAME = "RUNTIME_DATABASE_URL"
 _CI_TEST_JOB_KEY = "test"
 
 
-def project_ci_test_environment(recipient_path: Path) -> dict[str, str]:
-    """Return the string env entries declared by the project's CI test job.
+def _managed_ci_environment(recipient_path: Path) -> dict[str, str]:
+    """Return the entries declared by the managed CI environment file (SA286).
 
-    The generated project's CI declares non-live credential placeholders so an
-    enabled module's startup check passes in CI. The migration's verification
-    commands run the same startup checks, so they inherit those entries. A
-    missing, unreadable, malformed, or differently shaped workflow declares
-    nothing and is not an error: the verification environment then falls back
-    to the operator's environment alone.
+    The current generated workflow loads ``.github/quickscale-ci-env`` in one
+    step; the file carries ``NAME=value`` lines.  A missing or unreadable file
+    declares nothing and is not an error.
+    """
+    try:
+        text = (recipient_path / CI_ENVIRONMENT_RELATIVE_PATH).read_text()
+    except OSError:
+        return {}
+    entries: dict[str, str] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        name, separator, value = stripped.partition("=")
+        name = name.strip()
+        if separator and name:
+            entries[name] = value
+    return entries
+
+
+def _ci_test_job_environment(recipient_path: Path) -> dict[str, str]:
+    """Return the string env entries declared by the CI test job, if any.
+
+    Pre-SA286 projects declare the non-live credential placeholders in the
+    workflow's ``jobs.test.env`` block; a missing, unreadable, malformed, or
+    differently shaped workflow declares nothing and is not an error.
     """
     workflow_path = recipient_path / CI_WORKFLOW_RELATIVE_PATH
     try:
@@ -46,6 +68,22 @@ def project_ci_test_environment(recipient_path: Path) -> dict[str, str]:
         for name, value in declared.items()
         if isinstance(name, str) and isinstance(value, (str, int, float, bool))
     }
+
+
+def project_ci_test_environment(recipient_path: Path) -> dict[str, str]:
+    """Return the string env entries the project declares for CI verification.
+
+    Two sources, the managed file first: the generated
+    ``.github/quickscale-ci-env`` file the current workflow loads (SA286) and
+    the workflow's ``jobs.test.env`` block an older project still declares
+    (the job block wins on a name both carry).  The migration's verification
+    commands run the same startup checks as CI, so they inherit these
+    entries; a project declaring neither falls back to the operator's
+    environment alone.
+    """
+    declared = _managed_ci_environment(recipient_path)
+    declared.update(_ci_test_job_environment(recipient_path))
+    return declared
 
 
 def project_declared_runtime_database_url(recipient_path: Path) -> str | None:

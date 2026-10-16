@@ -3856,6 +3856,39 @@ def test_project_ci_test_environment_reads_the_test_job_and_falls_back_safely(
     }
 
 
+def test_project_ci_test_environment_reads_the_managed_file(tmp_path: Path) -> None:
+    """The managed CI environment file is the current credential contract (SA286)."""
+    recipient = tmp_path / "recipient"
+    recipient.mkdir()
+    managed = recipient / ".github" / "quickscale-ci-env"
+    managed.parent.mkdir(parents=True)
+    managed.write_text(
+        "# the managed file carries NAME=value lines\n"
+        "\n"
+        "POSTHOG_API_KEY=ph_test_ci\n"
+        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET=whsec_YWFhYWFhYWFhYWFhYWFhYQ==\n"
+    )
+    assert project_ci_test_environment(recipient) == {
+        "POSTHOG_API_KEY": "ph_test_ci",
+        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": "whsec_YWFhYWFhYWFhYWFhYWFhYQ==",
+    }
+
+    # A job-level declaration still wins on a name both sources carry.
+    workflow_dir = recipient / ".github" / "workflows"
+    workflow_dir.mkdir(parents=True)
+    (workflow_dir / "ci.yml").write_text(
+        "jobs:\n  test:\n    env:\n      POSTHOG_API_KEY: job_value\n"
+    )
+    assert project_ci_test_environment(recipient) == {
+        "POSTHOG_API_KEY": "job_value",
+        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET": "whsec_YWFhYWFhYWFhYWFhYWFhYQ==",
+    }
+
+    # A missing or unreadable managed file declares nothing and is not an error.
+    managed.unlink()
+    assert project_ci_test_environment(recipient) == {"POSTHOG_API_KEY": "job_value"}
+
+
 def test_project_declared_runtime_database_url_reads_env_example(
     tmp_path: Path,
 ) -> None:

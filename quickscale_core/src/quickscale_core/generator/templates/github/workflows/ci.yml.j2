@@ -28,21 +28,16 @@ jobs:
       matrix:
         python-version: ["{{ python_version }}"]
         django-version: ["{{ django_ci_version }}"]
-{% if selected_modules is none or "analytics" in selected_modules or "billing" in selected_modules or "notifications" in selected_modules %}
-    # Non-live credential placeholders so an enabled module's startup check
-    # passes in CI, which never calls the live vendors. A project using a
-    # custom *_env_var name adds that name here too.
-    env:
-      POSTHOG_API_KEY: ph_test_ci
-      STRIPE_PUBLISHABLE_KEY: pk_test_ci
-      STRIPE_SECRET_KEY: sk_test_ci
-      QUICKSCALE_BILLING_WEBHOOK_SECRET: whsec_test_ci
-      RESEND_API_KEY: re_test_ci
-      QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET: whsec_YWFhYWFhYWFhYWFhYWFhYQ==
-{% endif %}
 
     steps:
     - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+    # Non-live module credentials live in the managed .github/quickscale-ci-env
+    # file, so this user-owned workflow names no module value and a module
+    # release changes no user-owned file. A project using a custom *_env_var
+    # name sets it in quickscale.yml and re-runs `quickscale apply`.
+    - name: Load module CI environment
+      run: cat .github/quickscale-ci-env >> "$GITHUB_ENV"
 
     - name: Set up Python {% raw %}${{ matrix.python-version }}{% endraw %}
       uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0

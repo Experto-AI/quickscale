@@ -38,6 +38,18 @@ from quickscale_cli.commands._module_update import update
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_MANIFEST_ROOT = REPO_ROOT / "quickscale_modules"
 
+#: The emitted generated-project ``.gitignore`` template, verbatim (it holds
+#: no Jinja constructs), so the update fixture carries the real ignore rules.
+_GITIGNORE_TEMPLATE = (
+    REPO_ROOT
+    / "quickscale_core"
+    / "src"
+    / "quickscale_core"
+    / "generator"
+    / "templates"
+    / ".gitignore.j2"
+)
+
 STALE_MODULES_PY = (
     '"""QuickScale managed module settings."""\n'
     "\n"
@@ -92,6 +104,11 @@ def _write_project(
     (tmp_path / "pyproject.toml").write_text(
         '[tool.poetry.dependencies]\npython = "^3.14"\n'
     )
+    # The generated project's actual ignore rules (the emitted .gitignore is
+    # this template verbatim) exclude local secret files.  The managed CI
+    # environment file must not match them, or the update flow's explicit
+    # staging of the managed paths is refused (SA286).
+    (tmp_path / ".gitignore").write_text(_GITIGNORE_TEMPLATE.read_text())
     quickscale_dir = tmp_path / ".quickscale"
     quickscale_dir.mkdir()
     (quickscale_dir / "state.yml").write_text(
@@ -263,6 +280,15 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
     assert "myapp/urls_modules.py" in committed_paths
     assert "frontend/src/quickscaleSeam.d.ts" in committed_paths
     assert "frontend/src/quickscaleSeam.keys.ts" in committed_paths
+    assert ".github/quickscale-ci-env" in committed_paths
+
+    # The managed CI environment file renders from the freshly pulled
+    # embedded manifests' ci_env declarations (SA286).
+    ci_environment = (project / ".github" / "quickscale-ci-env").read_text()
+    assert "POSTHOG_API_KEY=ph_test_ci" in ci_environment
+    assert "STRIPE_SECRET_KEY=sk_test_ci" in ci_environment
+    assert "QUICKSCALE_BILLING_WEBHOOK_SECRET=whsec_test_ci" in ci_environment
+    assert "RESEND_API_KEY=re_test_ci" in ci_environment
 
     state = StateManager(project).load()
     assert state is not None
@@ -271,6 +297,7 @@ def test_update_regenerates_wiring_once_every_module_is_pulled(
         "myapp/urls_modules.py",
         "frontend/src/quickscaleSeam.d.ts",
         "frontend/src/quickscaleSeam.keys.ts",
+        ".github/quickscale-ci-env",
     ):
         assert path_str in state.managed_files
         assert state.managed_files[path_str].hash == hash_managed_file(

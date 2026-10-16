@@ -1047,6 +1047,9 @@ class TestSa90MappingDrivenGeneration:
         guard records, so generation and ``apply``/``update`` agree on one
         content and one location per file.
         """
+        from quickscale_core.generator.ci_environment import (
+            CI_ENVIRONMENT_RELATIVE_PATH,
+        )
         from quickscale_core.project_state_hashes import DEFAULT_MANAGED_PROJECT_PATHS
         from quickscale_core.runtime.seam import (
             SEAM_DECLARATION_RELATIVE_PATH,
@@ -1060,9 +1063,11 @@ class TestSa90MappingDrivenGeneration:
         )
         assert SEAM_DECLARATION_RELATIVE_PATH in mapping
         assert SEAM_KEY_MANIFEST_RELATIVE_PATH in mapping
+        assert CI_ENVIRONMENT_RELATIVE_PATH in mapping
         assert DEFAULT_MANAGED_PROJECT_PATHS == (
             SEAM_DECLARATION_RELATIVE_PATH,
             SEAM_KEY_MANIFEST_RELATIVE_PATH,
+            CI_ENVIRONMENT_RELATIVE_PATH,
         )
 
         gen = ProjectGenerator(theme="showcase_react")
@@ -1073,6 +1078,66 @@ class TestSa90MappingDrivenGeneration:
         assert emitted_declaration.read_text() == render_seam_declaration()
         emitted_manifest = output / SEAM_KEY_MANIFEST_RELATIVE_PATH
         assert emitted_manifest.read_text() == render_seam_key_manifest()
+
+    def test_managed_ci_environment_file_is_emitted_verbatim(
+        self, tmp_path: Path
+    ) -> None:
+        """Generation emits the managed CI environment file byte-for-byte (SA286).
+
+        The emission renders from the shipped manifests' ``ci_env``
+        declarations, the same content ``apply``/``update``/``remove``
+        regenerate under the managed-file hash guard, so the generated
+        workflow's one load step reads one content in every case.
+        """
+        from quickscale_core.generator.ci_environment import (
+            CI_ENVIRONMENT_RELATIVE_PATH,
+            ci_environment_entries,
+            render_ci_environment,
+        )
+
+        gen = ProjectGenerator(theme="showcase_react")
+        output = tmp_path / "ci_environment"
+        gen.generate("validname", output)
+
+        emitted = output / CI_ENVIRONMENT_RELATIVE_PATH
+        assert emitted.read_text() == render_ci_environment(
+            ci_environment_entries(None)
+        )
+
+        empty_output = tmp_path / "ci_environment_empty"
+        ProjectGenerator(theme="showcase_react", selected_modules=[]).generate(
+            "validname", empty_output
+        )
+        assert (empty_output / CI_ENVIRONMENT_RELATIVE_PATH).read_text() == ""
+
+    def test_managed_ci_environment_file_is_tracked_by_git(
+        self, tmp_path: Path
+    ) -> None:
+        """The generated ignore rules do not exclude the managed CI file (SA286).
+
+        The generated workflow loads ``.github/quickscale-ci-env`` in one
+        step, so the project's own ``.gitignore`` must not treat it as a local
+        secret file: a fresh project committed with ``git add -A`` has to
+        carry the file, or the first CI run fails on a missing file.
+        """
+        from quickscale_core.generator.ci_environment import (
+            CI_ENVIRONMENT_RELATIVE_PATH,
+        )
+
+        gen = ProjectGenerator(theme="showcase_react")
+        output = tmp_path / "ci_environment_tracked"
+        gen.generate("validname", output)
+
+        subprocess.run(["git", "init", "-q"], cwd=output, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=output, check=True)
+        listed = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", CI_ENVIRONMENT_RELATIVE_PATH],
+            cwd=output,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert listed.stdout.strip() == CI_ENVIRONMENT_RELATIVE_PATH
 
 
 class TestSa90ExactManifestParity:

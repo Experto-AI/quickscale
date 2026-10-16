@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from quickscale_core.generator.ci_environment import CI_ENVIRONMENT_RELATIVE_PATH
 from quickscale_core.project_state_records import ManagedFileHash
 from quickscale_core.runtime.seam import (
     SEAM_DECLARATION_RELATIVE_PATH,
@@ -43,10 +44,12 @@ DEFAULT_MANAGED_WIRING_PATHS: tuple[str, ...] = (
 # Default managed project files that ``quickscale apply`` regenerates outside
 # the Python package, so they resolve against the project root rather than the
 # package directory.  The theme's seam declaration and its key manifest render
-# from the shipped module set (SA276).
+# from the shipped module set (SA276); the CI environment file renders from
+# each installed module's declared CI placeholders (SA286).
 DEFAULT_MANAGED_PROJECT_PATHS: tuple[str, ...] = (
     SEAM_DECLARATION_RELATIVE_PATH,
     SEAM_KEY_MANIFEST_RELATIVE_PATH,
+    CI_ENVIRONMENT_RELATIVE_PATH,
 )
 
 
