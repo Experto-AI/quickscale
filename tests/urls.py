@@ -56,7 +56,7 @@ def current_org_id_view(request, org_slug: str):
 # ---------------------------------------------------------------------------
 
 
-def _af9_guc_probe(request) -> str:
+def _guc_probe(request) -> str:
     """Return the current DB-level ``app.current_org_id`` GUC value.
 
     Issued via a direct ``cursor.execute()`` so the priming execute
@@ -72,7 +72,7 @@ def _af9_guc_probe(request) -> str:
     return raw if raw is not None else ""
 
 
-def af9_guc_probe_view(request):
+def guc_probe_view(request):
     """Autocommit GUC probe: returns the GUC set by the execute wrapper.
 
     The execute wrapper issues ``SET LOCAL app.current_org_id``
@@ -82,7 +82,7 @@ def af9_guc_probe_view(request):
     Expected response: the organization UUID as a string, or empty
     string when no org context is active.
     """
-    return HttpResponse(_af9_guc_probe(request))
+    return HttpResponse(_guc_probe(request))
 
 
 def api_org_context_view(request, org_slug: str):
@@ -113,7 +113,7 @@ class AdminOnlyMixinView(OrgRoleMixin, View):
 
 urlpatterns = [
     path("", home_view, name="home"),
-    path("_af9/guc-probe/", af9_guc_probe_view, name="af9-guc-probe"),
+    path("_guc-probe/", guc_probe_view, name="guc-probe"),
     path("healthcheck/", healthcheck_view, name="healthcheck"),
     path("accounts/profile/", accounts_profile_view, name="accounts-profile"),
     path(
@@ -149,9 +149,9 @@ urlpatterns = [
     # benchmark path — non-management route that triggers middleware
     # session-org resolution (not a /orgs/<slug>/ management bypass).
     path(
-        "sa41-bench/<slug:org_slug>/",
+        "bench/<slug:org_slug>/",
         OrgDashboardView.as_view(),
-        name="sa41-org-dashboard",
+        name="bench-org-dashboard",
     ),
     path("orgs/", include("quickscale_modules_orgs.urls")),
     # The org-creation handoff resolves billing's declared pricing URL, so the

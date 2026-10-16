@@ -451,9 +451,9 @@ def test_ready_installs_backstops_under_privileged_command(settings: Any) -> Non
             getattr(receiver, "__name__", "")
             == "_protect_last_owner_on_membership_delete"
             for receiver in membership_receivers
-        ), "privileged ready() skipped the SA70 last-owner pre_delete backstop"
+        ), "privileged ready() skipped the last-owner pre_delete backstop"
         assert _install_priming_on_connection in priming_receivers, (
-            "privileged ready() skipped the AF9 connection_created priming install"
+            "privileged ready() skipped the connection_created priming install"
         )
     finally:
         # Re-import in case an assertion fired before the fresh module was

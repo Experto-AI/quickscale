@@ -30,7 +30,7 @@ sequence through the real view dispatch: ``OrgRoleMixin.dispatch()``
 (org resolved from ``request.org`` pre-set by middleware, then
 membership role check) then ``OrgDashboardView.get_context_data()``
 (member count).  The test drives them through the actual view code path
-via a non-management URL route (``/sa41-bench/<slug>/``) so that
+via a non-management URL route (``/bench/<slug>/``) so that
 ``TenantMiddleware`` resolves the org from the session and populates the
 ContextVar via ``_call_with_org()`` — the same path production content
 routes use.
@@ -70,7 +70,7 @@ from quickscale_modules_orgs.views import OrgDashboardView
 #
 # All values are for the ``OrgDashboardView`` endpoint exercised through
 # the real ``TenantMiddleware`` saas session-org resolution path via the
-# test-only non-management URL ``/sa41-bench/<slug>/``.  The middleware
+# test-only non-management URL ``/bench/<slug>/``.  The middleware
 # pre-sets ``request.org`` so ``OrgRoleMixin.dispatch()`` skips the slug
 # lookup, leaving 2 data SELECTs (membership role check → member count).
 # The no-org scenario establishes the theoretical minimum via direct ORM
@@ -274,7 +274,7 @@ def _call_org_dashboard(
     """Exercise ``OrgDashboardView`` through ``TenantMiddleware``.
 
     Creates an authenticated request at the test-only non-management
-    benchmark URL ``/sa41-bench/<slug>/`` and runs it through
+    benchmark URL ``/bench/<slug>/`` and runs it through
     ``TenantMiddleware`` with the session org set so the ContextVar
     is populated via real middleware session-org resolution
     (``_handle_saas_request`` → ``_call_with_org``).
@@ -283,7 +283,7 @@ def _call_org_dashboard(
     primed view queries (the middleware's own session-resolving
     queries happen before the ContextVar is set and are excluded).
     """
-    request = _make_authenticated_request(f"/sa41-bench/{org.slug}/", user)
+    request = _make_authenticated_request(f"/bench/{org.slug}/", user)
     request.session[ACTIVE_ORG_SESSION_KEY] = str(org.pk)
 
     captured_queries: list[list[dict]] = []
@@ -333,13 +333,13 @@ def _seeded_org() -> tuple[Organization, object]:
     ``CaptureQueriesContext`` snapshots inside ``transaction=True`` tests.
     """
     user = get_user_model().objects.create_user(
-        username="sa41-bench",
-        email="sa41-bench@example.com",
+        username="bench",
+        email="bench@example.com",
         password="secret123",
     )
     org = Organization.objects.create(
-        name="SA4.1 Benchmark Org",
-        slug="sa41-bench",
+        name="Benchmark Org",
+        slug="bench",
     )
     OrganizationMembership.objects.create(
         user=user,
@@ -361,12 +361,12 @@ def _seeded_org() -> tuple[Organization, object]:
 # and ``transaction=True`` test isolation handles state cleanup.
 
 
-class TestSa41StatementAmplification:
+class TestStatementAmplification:
     """Reproducible statement-amplification measurement harness.
 
     Scenarios 2 and 3 exercise the real ``OrgDashboardView`` endpoint
     through ``TenantMiddleware`` via a test-only non-management URL
-    (``/sa41-bench/<slug>/``) — the same session-org resolution path
+    (``/bench/<slug>/``) — the same session-org resolution path
     that production content routes use.  Scenario 1 establishes the
     theoretical unprimed minimum via direct ORM calls (pass-through
     adds zero overhead, so the counts are endpoint-equivalent).
@@ -395,9 +395,9 @@ class TestSa41StatementAmplification:
 
         metrics = capture_queries(lambda: _unprimed_query_pattern(org=org, user=user))
 
-        print(f"\n[SA4.1]  No-org autocommit:        {metrics.summary()}")
+        print(f"\n[benchmark]  No-org autocommit:        {metrics.summary()}")
         print(
-            f"[SA4.1]    → Amplification factor:   {metrics.amplification_factor:.1f}x"
+            f"[benchmark]    → Amplification factor:   {metrics.amplification_factor:.1f}x"
         )
 
         assert metrics.total == BASELINE_NO_ORG_TOTAL, (
@@ -428,7 +428,7 @@ class TestSa41StatementAmplification:
     # ``transaction.atomic()`` → BEGIN + SET LOCAL + data + COMMIT.
     # The queries are exercised through the real ``OrgDashboardView``
     # endpoint via ``TenantMiddleware`` (session-org resolution through
-    # the non-management URL ``/sa41-bench/<slug>/``).  The middleware
+    # the non-management URL ``/bench/<slug>/``).  The middleware
     # pre-sets ``request.org``, so the view skips the slug lookup and
     # only issues 2 data SELECTs (membership role check + member count).
     #
@@ -442,9 +442,9 @@ class TestSa41StatementAmplification:
 
         assert response.status_code == 200
 
-        print(f"\n[SA4.1]  With-org autocommit:      {metrics.summary()}")
+        print(f"\n[benchmark]  With-org autocommit:      {metrics.summary()}")
         print(
-            f"[SA4.1]    → Amplification factor:   "
+            f"[benchmark]    → Amplification factor:   "
             f"{metrics.amplification_factor:.1f}x "
             f"(baseline {BASELINE_AUTOCOMMIT_AMPLIFICATION:.1f}x)"
         )
@@ -513,9 +513,9 @@ class TestSa41StatementAmplification:
 
         assert response.status_code == 200
 
-        print(f"\n[SA4.1]  With-org explicit txn:    {metrics.summary()}")
+        print(f"\n[benchmark]  With-org explicit txn:    {metrics.summary()}")
         print(
-            f"[SA4.1]    → Amplification factor:   "
+            f"[benchmark]    → Amplification factor:   "
             f"{metrics.amplification_factor:.1f}x "
             f"(baseline {BASELINE_EXPLICIT_TXN_AMPLIFICATION:.2f}x)"
         )
@@ -552,7 +552,7 @@ class TestSa41StatementAmplification:
     # Summary output
     # ------------------------------------------------------------------
     # The ``print()`` calls above produce a compact three-line benchmark
-    # report when run with ``pytest -s -k TestSa41StatementAmplification``.
+    # report when run with ``pytest -s -k TestStatementAmplification``.
     # Example:
     #
     #   No-org autocommit:        total=3, data=3, txn=(0B+0C+0R),
@@ -567,7 +567,7 @@ class TestSa41StatementAmplification:
     #
     # Baselines are request-bound — measured through the real
     # ``TenantMiddleware`` session-org resolution path (via the
-    # non-management URL ``/sa41-bench/<slug>/``), so they reflect
+    # non-management URL ``/bench/<slug>/``), so they reflect
     # the exact amplification that production content routes see.
     # The explicit-transaction capture starts inside the outer atomic
     # (``CaptureQueriesContext`` is nested), so no BEGIN/COMMIT appear

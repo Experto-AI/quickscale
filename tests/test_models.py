@@ -192,18 +192,18 @@ def test_user_delete_of_last_owner_in_multi_member_org_is_refused() -> None:
     """
 
     owner = _create_user(
-        username="sa70_owner",
-        email="sa70_owner@example.com",
-        password="Sa70Owner1!",
+        username="refusal_owner",
+        email="refusal_owner@example.com",
+        password="RefusalOwner1!",
     )
     other_member = _create_user(
-        username="sa70_member",
-        email="sa70_member@example.com",
-        password="Sa70Member1!",
+        username="refusal_member",
+        email="refusal_member@example.com",
+        password="RefusalMember1!",
     )
     organization = Organization.objects.create(
-        name="SA70 Refusal Org",
-        slug="sa70-refusal-org",
+        name="Refusal Org",
+        slug="refusal-org",
     )
     owner_membership = OrganizationMembership.objects.create(
         user=owner,
@@ -245,18 +245,18 @@ def test_historical_model_delete_of_last_owner_in_multi_member_org_is_refused() 
     from django.db.migrations.loader import MigrationLoader
 
     owner = _create_user(
-        username="sa203_owner",
-        email="sa203_owner@example.com",
-        password="Sa203Owner1!",
+        username="historical_owner",
+        email="historical_owner@example.com",
+        password="HistoricalOwner1!",
     )
     other_member = _create_user(
-        username="sa203_member",
-        email="sa203_member@example.com",
-        password="Sa203Member1!",
+        username="historical_member",
+        email="historical_member@example.com",
+        password="HistoricalMember1!",
     )
     organization = Organization.objects.create(
-        name="SA203 Historical Org",
-        slug="sa203-historical-org",
+        name="Historical Org",
+        slug="historical-org",
     )
     owner_membership = OrganizationMembership.objects.create(
         user=owner,
@@ -894,7 +894,7 @@ class ForwardFKChild(TenantModel):
 
     tenant_excluded = (
         "Test-only model defined in test_models.py for "
-        "AF2 Phase 1 forward-FK traversal regression tests; "
+        "forward-FK traversal regression tests; "
         "not a real tenant table."
     )
 

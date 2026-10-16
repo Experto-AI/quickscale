@@ -157,19 +157,19 @@ class TestUserFkDeleteRuleConformance:
 
         User = apps.get_model(settings.AUTH_USER_MODEL)
         user = User.objects.create_user(
-            username="sa35_survivor",
-            email="sa35_survivor@example.com",
-            password="Sa35Survivor1!",
+            username="survivor",
+            email="survivor@example.com",
+            password="SurvivorPass1!",
         )
 
         org = Organization.objects.create(
-            name="SA35 Survivor Org",
-            slug="sa35-survivor-org",
+            name="Survivor Org",
+            slug="survivor-org",
         )
         set_current_org_id(org.pk)
         try:
             post = Post.objects.create(
-                title="SA35 Survivor Post",
+                title="Survivor Post",
                 author=user,
                 organization=org,
             )
@@ -212,23 +212,23 @@ class TestUserFkDeleteRuleConformance:
 
 
 @pytest.fixture
-def _sa35_user(db: None) -> object:
+def _survivor_user(db: None) -> object:
     """Create a test user for AccountDeleteView survivor regression."""
     from django.contrib.auth import get_user_model
 
     User = get_user_model()
     return User.objects.create_user(
-        username="sa35_survivor_view",
-        email="sa35_survivor_view@example.com",
-        password="Sa35Survivor1!",
+        username="survivor_view",
+        email="survivor_view@example.com",
+        password="SurvivorPass1!",
     )
 
 
 @pytest.fixture
-def _sa35_authenticated_client(db: None, _sa35_user: object) -> Client:
+def _survivor_authenticated_client(db: None, _survivor_user: object) -> Client:
     """Return a client authenticated as the survivor test user."""
     client = Client()
-    client.force_login(_sa35_user)
+    client.force_login(_survivor_user)
     return client
 
 
@@ -253,8 +253,8 @@ class TestAccountDeleteViewSurvivorRegression:
         )
 
         org = Organization.objects.create(
-            name="SA35 Survivor View Org",
-            slug="sa35-survivor-view-org",
+            name="Survivor View Org",
+            slug="survivor-view-org",
             is_personal=False,
         )
         OrganizationMembership.objects.create(
@@ -271,7 +271,7 @@ class TestAccountDeleteViewSurvivorRegression:
         set_current_org_id(org.pk)
         try:
             return Post.objects.create(
-                title="SA35 Survivor View Post",
+                title="Survivor View Post",
                 author=user,
                 organization=org,
             )
@@ -285,7 +285,7 @@ class TestAccountDeleteViewSurvivorRegression:
         set_current_org_id(org.pk)
         try:
             return ProjectListing.objects.create(
-                title="SA35 Project Listing",
+                title="Project Listing",
                 organization=org,
                 created_by=user,
             )
@@ -303,20 +303,20 @@ class TestAccountDeleteViewSurvivorRegression:
         set_current_org_id(org.pk)
         try:
             company = Company.objects.create(
-                name="SA35 Survivor Co",
+                name="Survivor Co",
                 organization=org,
             )
             contact = Contact.objects.create(
-                first_name="Sa35",
+                first_name="Survivor",
                 last_name="Contact",
-                email="sa35_contact@example.com",
+                email="survivor_contact@example.com",
                 company=company,
                 organization=org,
             )
             return ContactNote.objects.create(
                 contact=contact,
                 created_by=user,
-                text="SA35 survivor regression note",
+                text="survivor regression note",
                 organization=org,
             )
         finally:
@@ -335,23 +335,23 @@ class TestAccountDeleteViewSurvivorRegression:
         set_current_org_id(org.pk)
         try:
             company = Company.objects.create(
-                name="SA35 Survivor Deal Co",
+                name="Survivor Deal Co",
                 organization=org,
             )
             contact = Contact.objects.create(
-                first_name="Sa35",
+                first_name="Survivor",
                 last_name="DealContact",
-                email="sa35_deal_contact@example.com",
+                email="deal_contact@example.com",
                 company=company,
                 organization=org,
             )
             stage = Stage.objects.create(
-                name="SA35 Pipeline",
+                name="Pipeline",
                 order=1,
                 organization=org,
             )
             deal = Deal.objects.create(
-                title="SA35 Survivor Deal",
+                title="Survivor Deal",
                 contact=contact,
                 stage=stage,
                 organization=org,
@@ -359,14 +359,14 @@ class TestAccountDeleteViewSurvivorRegression:
             return DealNote.objects.create(
                 deal=deal,
                 created_by=user,
-                text="SA35 survivor deal note",
+                text="survivor deal note",
                 organization=org,
             )
         finally:
             reset_current_org_id()
 
     def test_account_delete_view_preserves_blog_and_crm_content(
-        self, _sa35_user: object, _sa35_authenticated_client: Client
+        self, _survivor_user: object, _survivor_authenticated_client: Client
     ) -> None:
         """AccountDeleteView must not destroy blog Post or CRM notes.
 
@@ -376,8 +376,8 @@ class TestAccountDeleteViewSurvivorRegression:
         disable-and-scrub) with cross-module content present for the user
         being removed.
         """
-        user = _sa35_user
-        client = _sa35_authenticated_client
+        user = _survivor_user
+        client = _survivor_authenticated_client
         from django.contrib.auth import get_user_model
         from quickscale_modules_orgs.models import (
             OrgRole,
@@ -393,13 +393,13 @@ class TestAccountDeleteViewSurvivorRegression:
         contact_note = self._create_crm_contact_note(user, org)
         deal_note = self._create_crm_deal_note(user, org)
         project_org = Organization.objects.create(
-            name="SA35 Former Member Project Org",
-            slug="sa35-former-member-project-org",
+            name="Former Member Project Org",
+            slug="former-member-project-org",
         )
         project_owner = User.objects.create_user(
-            username="sa35_project_owner",
-            email="sa35_project_owner@example.com",
-            password="Sa35ProjectOwner1!",
+            username="project_owner",
+            email="project_owner@example.com",
+            password="ProjectOwnerPass1!",
         )
         OrganizationMembership.objects.create(
             user=project_owner,
@@ -547,7 +547,7 @@ class TestAccountDeleteViewSurvivorRegression:
 # the account only if not blocked.  It simulates the operator hard-delete
 # path (Django admin) under the view's lock order; self-service removal
 # disables and scrubs instead, and its membership cleanup is covered by
-# ``TestAccountDeleteViewSA35`` and the orgs anonymize executor's tests.
+# ``TestAccountDeleteViewContentPreservation`` and the orgs anonymize executor's tests.
 # ---------------------------------------------------------------------------
 
 
@@ -578,25 +578,25 @@ def test_concurrent_account_deletion_locking_protects_last_owner() -> None:
 
     # ---- Setup ----
     org = Organization.objects.create(
-        name="SA47 Locking Org",
-        slug="sa47-locking-org",
+        name="Locking Org",
+        slug="locking-org",
         is_personal=False,
     )
 
     owner_a = User.objects.create_user(
-        username="sa47_locking_a",
-        email="sa47_locking_a@example.com",
-        password="Sa47LockingA1!",
+        username="locking_a",
+        email="locking_a@example.com",
+        password="LockingA1!",
     )
     owner_b = User.objects.create_user(
-        username="sa47_locking_b",
-        email="sa47_locking_b@example.com",
-        password="Sa47LockingB1!",
+        username="locking_b",
+        email="locking_b@example.com",
+        password="LockingB1!",
     )
     member = User.objects.create_user(
-        username="sa47_locking_member",
-        email="sa47_locking_member@example.com",
-        password="Sa47LockingMember1!",
+        username="locking_member",
+        email="locking_member@example.com",
+        password="LockingMember1!",
     )
 
     OrganizationMembership.objects.create(
@@ -706,19 +706,19 @@ def test_account_deletion_and_membership_remove_no_deadlock() -> None:
     User = get_user_model()
 
     org = Organization.objects.create(
-        name="CR-SA47-001 Org",
-        slug="cr-sa47-001-org",
+        name="Deadlock Regression Org",
+        slug="deadlock-regression-org",
         is_personal=False,
     )
     owner = User.objects.create_user(
-        username="cr_sa47_owner",
-        email="cr_sa47_owner@example.com",
-        password="CrSa47Owner1!",
+        username="deadlock_owner",
+        email="deadlock_owner@example.com",
+        password="DeadlockOwner1!",
     )
     other_member = User.objects.create_user(
-        username="cr_sa47_member",
-        email="cr_sa47_member@example.com",
-        password="CrSa47Member1!",
+        username="deadlock_member",
+        email="deadlock_member@example.com",
+        password="DeadlockMember1!",
     )
 
     membership = OrganizationMembership.objects.create(

@@ -680,23 +680,23 @@ def test_purge_organization_one_owner_multi_member_succeeds() -> None:
     is the sole owner but other members exist.
     """
     owner = get_user_model().objects.create_user(
-        username="sa70-regression-owner",
-        email="sa70-regression-owner@example.com",
+        username="purge-regression-owner",
+        email="purge-regression-owner@example.com",
         password="secret123",
     )
     member_a = get_user_model().objects.create_user(
-        username="sa70-regression-member-a",
-        email="sa70-regression-member-a@example.com",
+        username="purge-regression-member-a",
+        email="purge-regression-member-a@example.com",
         password="secret123",
     )
     member_b = get_user_model().objects.create_user(
-        username="sa70-regression-member-b",
-        email="sa70-regression-member-b@example.com",
+        username="purge-regression-member-b",
+        email="purge-regression-member-b@example.com",
         password="secret123",
     )
     organization = Organization.objects.create(
-        name="SA70 Regression Test",
-        slug="sa70-regression",
+        name="Purge Regression Test",
+        slug="purge-regression",
     )
     OrganizationMembership.objects.create(
         user=owner,
@@ -2412,8 +2412,8 @@ def test_purge_refuses_rows_carrying_provider_backed_project_values() -> None:
     from tests.provider_id_app.models import ProjectProviderRecord
 
     org = Organization.objects.create(
-        name="SA208 Provider Refusal",
-        slug="sa208-provider-refusal",
+        name="Provider Refusal",
+        slug="provider-refusal",
     )
     set_current_org_id(org.pk)
     try:
@@ -2469,8 +2469,8 @@ def test_purge_deletes_rows_without_provider_backed_values() -> None:
     from tests.provider_id_app.models import ProjectProviderRecord
 
     org = Organization.objects.create(
-        name="SA208 Local Only",
-        slug="sa208-local-only",
+        name="Local Only",
+        slug="local-only",
     )
     set_current_org_id(org.pk)
     try:
@@ -2508,8 +2508,8 @@ def test_provider_backed_guard_serializes_concurrent_project_updates(
     from tests.provider_id_app.models import ProjectProviderRecord
 
     org = Organization.objects.create(
-        name="SA208 Provider Race",
-        slug="sa208-provider-race",
+        name="Provider Race",
+        slug="provider-race",
     )
     set_current_org_id(org.pk)
     try:
