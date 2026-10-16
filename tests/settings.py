@@ -114,12 +114,19 @@ MODULE_SETTINGS_SCHEMA = {
 }
 
 # DRF configuration mirroring the generated settings: session authentication
-# only, the one QuickScale error shape, core's default throttle classes (the
-# publish view attaches its rate by scope alone, rule 32), and the publish
-# scope rate the module wiring contributes (Module Conventions rules 9 and 32).
+# only, the composed JSON renderer and parser defaults (rule 9), the one
+# QuickScale error shape, core's default throttle classes (the publish view
+# attaches its rate by scope alone, rule 32), and the publish scope rate the
+# module wiring contributes (Module Conventions rules 9 and 32).
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
     ],
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
