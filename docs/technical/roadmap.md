@@ -52,7 +52,6 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
 | SA293 | One test-settings base, one pyproject template, no ticket ids in tests or manifests | 2 | — | Optional |
-| SA289 | Theme requests go through `apiRequest` and parse one error shape | 3 | — | Optional |
 | SA290 | One named platform-operator check | 3 | — | Optional |
 | SA297 | `operator_access` checks the platform operator itself | 3 | SA290 | Optional |
 | SA292 | One command off-refusal helper, service-owned transactions, complete README flags | 3 | — | Optional |
@@ -64,7 +63,7 @@ Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-t
 ```text
 Track 1: SA286 (a, b) ──► SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA293 (a…d) ──► SA291 (a…c) ──► SA287 (a, b) ──► SA277
-Track 3: SA289 (a, b) ──► SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
+Track 3: SA290 ──► SA294 ──► SA297 ──► SA292 (a, b) ──► SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 repin
      critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
@@ -79,7 +78,7 @@ SA277 waits on SA191's cutover, whose evidence draws the line between what `beta
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA286 (a), SA293, SA289, SA290, SA292, and
+**Parallel start.** SA286 (a), SA293, SA290, SA292, and
 SA294 have no unmet dependency; each track takes one at a time, in queue order. SA286 sits ahead
 of SA191 in Track 1's queue because every adoption step it removes before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -107,7 +106,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA286 (a) | yes | no | yes | no | yes |
 | 2 | SA293 | yes | yes | yes | yes | no |
-| 3 | SA289 (b) | yes | yes | yes | yes | no |
+| 3 | SA290 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -558,26 +557,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA288 — JSON-only module APIs through the generated `REST_FRAMEWORK` defaults.**
 
-- [ ] **SA289 — Theme requests go through `apiRequest` and parse one error shape.**
-
-  Closes coherence `theme-retired-error-shapes` and `theme-request-paths` (items 29, 36) and
-  merges coherence §6 proposal 53 into decisions rule 31.
-
-  **Acceptance:** rule 31 carries proposal 53. `useApi.ts` parses only core's
-  `{"error":{code,message,fields?}}`, and a theme unit test rejects an `errors`-only payload.
-  `useFormSchema` and `usePublicSocialSurface` call `apiRequest`; `useOrgNavigation` and
-  `App.tsx` take page paths from the seam; a lint rule bans `fetch(` in `src/hooks`.
-
-  **Slices:**
-  - [x] (a) The one error parser and its test (Tier 1). Landed: `useApi.ts` parses only core's
-    `{"error": {code, message, fields?}}` — the retired string-`error` and `errors`-list shapes
-    are unparsed — and `useApiErrors.test.ts` rejects both retired payloads; the contract carries
-    the `sa289-theme-one-error-parser` adoption step and the SA90 fixture re-hashes both files.
-    (b) is next: `useFormSchema` and `usePublicSocialSurface` on `apiRequest`, seam page paths
-    for `useOrgNavigation` and `App.tsx`, the lint ban on `fetch(` in `src/hooks`, and the
-    proposal 53 merge into rule 31.
-  - [ ] (b) The two hooks on `apiRequest`, seam page paths, and the lint ban (Tier 2-full: whether
-    the seam already carries page paths needs discovery).
+- [x] **SA289 — Theme requests go through `apiRequest` and parse one error shape.**
 
 - [ ] **SA290 — One named platform-operator check.**
 

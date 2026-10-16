@@ -3,9 +3,10 @@
 Module Conventions rule 31: the theme's ``index.html`` and its public social
 pages report modules from the shipped module inventory, so the seam carries a
 key for every shipped module — ``true`` only while the module is installed and
-its ``QUICKSCALE_<MODULE>_ENABLED`` setting is on — and a ``modulePaths`` entry
-per path-bearing module whose named route resolves at request time, never a
-mount literal.  Rule 41: the seam carries each API-bearing module's base in
+its ``QUICKSCALE_<MODULE>_ENABLED`` setting is on — a ``modulePaths`` entry per
+path-bearing module whose named route resolves at request time, never a mount
+literal, and a ``moduleDocumentPaths`` entry per module-owned server-rendered
+document the theme's launcher pages link to.  Rule 41: the seam carries each API-bearing module's base in
 ``moduleApiPaths`` the same way, cut at rule 7's ``<mount>api/`` boundary, so
 the theme's API clients never write ``/<mount>/api`` themselves.
 
@@ -41,12 +42,15 @@ __all__ = [
     "SeamModule",
     "SeamRoute",
     "render_module_api_paths",
+    "render_module_document_paths",
     "render_module_flags",
     "render_module_paths",
     "render_seam_declaration",
     "render_seam_key_manifest",
     "seam_api_path_names",
+    "seam_document_path_names",
     "seam_module_api_paths",
+    "seam_module_document_paths",
     "seam_module_flags",
     "seam_module_paths",
     "seam_modules",
@@ -70,7 +74,7 @@ _NON_SEAM_MODULES = frozenset({"orgs"})
 
 @dataclass(frozen=True)
 class SeamRoute:
-    """One candidate named route of a seam ``modulePaths`` entry."""
+    """One candidate named route of a seam path-table entry."""
 
     route: str
     #: Empty while the route always applies; otherwise the settings name that
@@ -81,12 +85,15 @@ class SeamRoute:
 #: The theme's server-resolved path table (rule 31): module name -> candidate
 #: routes in preference order.  A route with an ``enabled_setting`` applies
 #: only while that setting is on; the first applicable route wins, and the
-#: first entry is the default when none applies.  crm and analytics resolve
-#: one route; social renders the link tree by default and the embeds page
-#: while the link tree is off and embeds is on.  These three names are the
-#: theme's own module surface, which rule 37 lists as its allowed literal-name
-#: exception; the mount a module actually uses stays in its manifest (rule 7).
+#: first entry is the default when none applies.  blog, listings, crm, and
+#: analytics resolve one route each; social renders the link tree by default
+#: and the embeds page while the link tree is off and embeds is on.  These
+#: names are the theme's own module surface, which rule 37 lists as its
+#: allowed literal-name exception; the mount a module actually uses stays in
+#: its manifest (rule 7).
 _SEAM_MODULE_PATHS: tuple[tuple[str, tuple[SeamRoute, ...]], ...] = (
+    ("blog", (SeamRoute("quickscale_blog_shell"),)),
+    ("listings", (SeamRoute("quickscale_listings_shell"),)),
     ("crm", (SeamRoute("quickscale_crm_shell"),)),
     (
         "social",
@@ -139,15 +146,23 @@ def seam_module_flags(settings_obj: Any) -> dict[str, bool]:
     }
 
 
-def _path_route(name: str, settings_obj: Any) -> str:
-    """Return the named route one seam path entry resolves against the settings."""
-    routes = dict(_SEAM_MODULE_PATHS)[name]
+def _applicable_route(routes: tuple[SeamRoute, ...], settings_obj: Any) -> str:
+    """Return the first applicable route of one seam path entry's candidates.
+
+    The first entry is the default when none applies, so a candidate table
+    always names the route the entry falls back to.
+    """
     for route in routes:
         if not route.enabled_setting or getattr(
             settings_obj, route.enabled_setting, False
         ):
             return route.route
     return routes[0].route
+
+
+def _path_route(name: str, settings_obj: Any) -> str:
+    """Return the named route one seam path entry resolves against the settings."""
+    return _applicable_route(dict(_SEAM_MODULE_PATHS)[name], settings_obj)
 
 
 def seam_module_paths(
@@ -166,6 +181,58 @@ def seam_module_paths(
         name: reverse_func(_path_route(name, settings_obj) if flags[name] else "home")
         for name in seam_path_names()
     }
+
+
+#: The theme's server-resolved document-path table (rule 31): flat key ->
+#: owning module -> candidate named routes in preference order, resolved the
+#: way ``modulePaths`` is.  These are the module-owned server-rendered
+#: documents the theme's launcher pages link to, so a document link follows
+#: the module's URL names instead of a mount written by hand.  The blog feed
+#: route exists only while its rss feature setting is on, so the entry falls
+#: back to the module's index — the same table shape the social path uses.
+_SEAM_DOCUMENT_PATHS: tuple[tuple[str, str, tuple[SeamRoute, ...]], ...] = (
+    ("blogIndex", "blog", (SeamRoute("quickscale_blog:post_list"),)),
+    (
+        "blogFeed",
+        "blog",
+        (
+            SeamRoute("quickscale_blog:feed", "QUICKSCALE_BLOG_RSS_ENABLED"),
+            SeamRoute("quickscale_blog:post_list"),
+        ),
+    ),
+    ("listingsIndex", "listings", (SeamRoute("quickscale_listings:listing_list"),)),
+    ("crmDashboard", "crm", (SeamRoute("quickscale_crm:dashboard"),)),
+)
+
+
+def seam_document_path_names() -> tuple[str, ...]:
+    """Return the theme's document-path keys, in table order."""
+    return tuple(name for name, _module, _routes in _SEAM_DOCUMENT_PATHS)
+
+
+def seam_module_document_paths(
+    settings_obj: Any,
+    reverse_func: Callable[[str], str],
+) -> dict[str, str]:
+    """Resolve ``window.__QUICKSCALE__.moduleDocumentPaths`` against *settings_obj*.
+
+    An entry resolves its module's named route only while the module is
+    installed and enabled; otherwise it resolves the project's always-present
+    ``home`` route, because the seam validator requires a non-empty string for
+    every path field even when the module is absent.
+    """
+    installed_apps = getattr(settings_obj, "INSTALLED_APPS", ())
+    resolved: dict[str, str] = {}
+    for name, module, routes in _SEAM_DOCUMENT_PATHS:
+        installed = f"quickscale_modules_{module}" in installed_apps
+        enabled = bool(
+            getattr(settings_obj, f"QUICKSCALE_{module.upper()}_ENABLED", False)
+        )
+        if installed and enabled:
+            resolved[name] = reverse_func(_applicable_route(routes, settings_obj))
+        else:
+            resolved[name] = reverse_func("home")
+    return resolved
 
 
 #: The theme's API-base table (rule 41): module name -> the named route of one
@@ -263,6 +330,13 @@ def render_module_api_paths(
     return _render_path_object(paths, indent)
 
 
+def render_module_document_paths(
+    paths: Mapping[str, str], indent: str = "          "
+) -> str:
+    """Render the ``moduleDocumentPaths`` object's JS body (rule 31)."""
+    return _render_path_object(paths, indent)
+
+
 #: Project-relative path of the theme's managed seam declaration (SA276).
 #: Generation emits it from :func:`render_seam_declaration`, and
 #: ``quickscale apply``/``quickscale update`` regenerate it under the
@@ -281,6 +355,9 @@ def render_seam_declaration() -> str:
     module_flags = "\n".join(f"  {module.name}: boolean" for module in seam_modules())
     module_paths = "\n".join(f"  {name}: string" for name in seam_path_names())
     api_paths = "\n".join(f"  {name}: string" for name in seam_api_path_names())
+    document_paths = "\n".join(
+        f"  {name}: string" for name in seam_document_path_names()
+    )
     return (
         "// QuickScale managed seam declaration.\n"
         "//\n"
@@ -298,6 +375,10 @@ def render_seam_declaration() -> str:
         "\n"
         "export interface QuickScaleModuleApiPaths {\n"
         f"{api_paths}\n"
+        "}\n"
+        "\n"
+        "export interface QuickScaleModuleDocumentPaths {\n"
+        f"{document_paths}\n"
         "}\n"
     )
 
@@ -330,6 +411,7 @@ def render_seam_key_manifest() -> str:
     )
     path_keys = _render_ts_string_array(seam_path_names())
     api_keys = _render_ts_string_array(seam_api_path_names())
+    document_keys = _render_ts_string_array(seam_document_path_names())
     return (
         "// QuickScale managed seam key manifest.\n"
         "//\n"
@@ -342,4 +424,6 @@ def render_seam_key_manifest() -> str:
         f"export const SEAM_MODULE_PATH_KEYS = {path_keys} as const\n"
         "\n"
         f"export const SEAM_MODULE_API_PATH_KEYS = {api_keys} as const\n"
+        "\n"
+        f"export const SEAM_MODULE_DOCUMENT_PATH_KEYS = {document_keys} as const\n"
     )

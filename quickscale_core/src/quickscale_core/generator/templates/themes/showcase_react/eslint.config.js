@@ -33,6 +33,32 @@ export default tseslint.config(
     },
   },
   {
+    // One request layer (rule 31): hook requests go through `apiRequest`,
+    // which owns CSRF, the JSON contract, and the one QuickScale error shape.
+    files: ['src/hooks/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.name='fetch']",
+          message: 'Use apiRequest from @/hooks/useApi instead of a raw fetch().',
+        },
+        {
+          selector: "CallExpression[callee.property.name='fetch']",
+          message: 'Use apiRequest from @/hooks/useApi instead of a raw fetch().',
+        },
+      ],
+    },
+  },
+  {
+    // The one sanctioned request layer: the only hook that may call the
+    // global fetch directly.
+    files: ['src/hooks/useApi.ts'],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
+  {
     // Bootstrap seam: exports a render factory (not a component) alongside
     // module-level lazy() components, which fast refresh cannot track.
     // This file is only ever called once at mount, so refresh is moot.

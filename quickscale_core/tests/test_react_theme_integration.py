@@ -1050,6 +1050,10 @@ class TestReactThemeModuleActivationMatrix:
         modules_block = index_html.split("modules: {", 1)[1].split("owner: {", 1)[0]
         assert "{% seam_module_flags %}" in modules_block
         assert "{% seam_module_paths %}" in index_html.split("modulePaths: {", 1)[1]
+        assert (
+            "{% seam_module_document_paths %}"
+            in index_html.split("moduleDocumentPaths: {", 1)[1]
+        )
         # Rule 31: neither an activation test nor a per-module key stays in the
         # emitted file; the runtime tag owns both.
         assert "INSTALLED_APPS" not in index_html
@@ -1709,18 +1713,33 @@ class TestReactThemeModuleActivationMatrix:
 
         app_tsx = (output_path / "frontend" / "src" / "App.tsx").read_text()
 
-        for path in ["/blog", "/listings", "/profile", "/orgs", "/orgs/new"]:
+        # Rule 31: module page routes take their paths from the seam.
+        for module_route in (
+            "{modules.blog && <Route path={modulePaths.blog}",
+            "{modules.listings && <Route path={modulePaths.listings}",
+            "{modules.crm && <Route path={modulePaths.crm}",
+        ):
+            assert module_route in app_tsx, f"Missing seam-backed route: {module_route}"
+        for path in ["/profile", "/orgs", "/orgs/new"]:
             assert f'path="{path}"' in app_tsx, f"Missing route for {path}"
         for nested_path in [
             'path="/orgs/:orgSlug"',
-            'path="blog"',
-            'path="listings"',
             'path="members"',
             'path="settings"',
         ]:
             assert nested_path in app_tsx, f"Missing route for {nested_path}"
+        # The saas workspace mounts blog and listings under the org route
+        # through the module's own seam path, so the nested members stay
+        # derived too.
+        assert (
+            "{modules.blog && <Route path={orgModuleRoute(modulePaths.blog)}" in app_tsx
+        )
+        assert (
+            "{modules.listings && <Route path={orgModuleRoute(modulePaths.listings)}"
+            in app_tsx
+        )
         # T1.20: CRM is flat-only — not nested under orgs.
-        assert 'path="/crm"' in app_tsx
+        assert 'path="/crm"' not in app_tsx
         assert 'path="crm"' not in app_tsx
         assert 'path="/forms/:slug"' in app_tsx
         assert "LegacySaasRedirect" in app_tsx

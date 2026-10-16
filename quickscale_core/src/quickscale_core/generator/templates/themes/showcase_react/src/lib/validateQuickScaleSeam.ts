@@ -1,6 +1,7 @@
 import type { QuickScaleConfig } from '@/hooks/useModules'
 import {
   SEAM_MODULE_API_PATH_KEYS,
+  SEAM_MODULE_DOCUMENT_PATH_KEYS,
   SEAM_MODULE_FLAG_KEYS,
   SEAM_MODULE_PATH_KEYS,
 } from '@/quickscaleSeam.keys'
@@ -18,6 +19,7 @@ import {
  *   - modules must carry an own boolean flag for every module key
  *   - modulePaths must carry a non-empty string for every module path key
  *   - moduleApiPaths must carry a non-empty string for every API-base key
+ *   - moduleDocumentPaths must carry a non-empty string for every document-path key
  *   - owner must be an object with mode ('solo'|'saas') and currentOrgSlug (string|null)
  *
  * The key sets are the generated seam key manifest's
@@ -108,6 +110,28 @@ export function validateQuickScaleConfig(): QuickScaleConfig {
     if (typeof value !== 'string' || value.trim() === '') {
       throw new Error(
         `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.moduleApiPaths.${field} ` +
+        `must be a non-empty string.`,
+      )
+    }
+  }
+
+  // ── moduleDocumentPaths (required) ──────────────────────────────
+  if (
+    !seam.moduleDocumentPaths ||
+    typeof seam.moduleDocumentPaths !== 'object' ||
+    Array.isArray(seam.moduleDocumentPaths)
+  ) {
+    throw new Error(
+      'QuickScale runtime configuration is malformed: window.__QUICKSCALE__.moduleDocumentPaths ' +
+      'must be an object with string values.',
+    )
+  }
+
+  for (const field of SEAM_MODULE_DOCUMENT_PATH_KEYS) {
+    const value = (seam.moduleDocumentPaths as unknown as Record<string, unknown>)[field]
+    if (typeof value !== 'string' || value.trim() === '') {
+      throw new Error(
+        `QuickScale runtime configuration is malformed: window.__QUICKSCALE__.moduleDocumentPaths.${field} ` +
         `must be a non-empty string.`,
       )
     }

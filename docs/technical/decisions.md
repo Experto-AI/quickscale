@@ -1158,8 +1158,9 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
 
 **31. The theme seam.**
 - ✅ The seam's producer is the versioned runtime library: the theme's `index.html.j2` and its two
-  public social pages render `window.__QUICKSCALE__.modules`, `modulePaths`, and — for the
-  theme's API clients — `moduleApiPaths` (rule 41) through
+  public social pages render `window.__QUICKSCALE__.modules`, `modulePaths`,
+  `moduleDocumentPaths` (the module-owned server-rendered documents the launcher pages link to),
+  and — for the theme's API clients — `moduleApiPaths` (rule 41) through
   `quickscale_core.runtime`'s `quickscale_seam` template tag, resolved at request time from the
   discovered module set (rule 37) and the live settings, so `modules` carries a key for every
   shipped module, as the seam validator requires through the generated key manifest
@@ -1169,17 +1170,26 @@ named `<purpose>_app/`. Shipped module source and `module.yml` follow the same n
   hand-written per-module line or `INSTALLED_APPS` test lives in `index.html.j2` (the two public
   social pages keep their installed-and-enabled hydration guards). The seam itself is unchanged
   (§[Frontend Theme Source De-Specialization](#frontend-theme-despecialization-dormant-files)).
+- ✅ The theme's requests go through one client (`apiRequest`), which owns transport, CSRF, and
+  the one QuickScale error shape — nothing else is parsed: the retired pre-convention
+  `{"error": "<message>"}` and `{"errors": {...}}` bodies are treated as unshaped. ✅ The theme's
+  module paths come from the seam: the SPA's page routes and navigation read `modulePaths`, and
+  the launcher pages' links to a module's server-rendered documents read `moduleDocumentPaths`
+  (each entry resolved from the document's named route, the blog feed falling back to the
+  module's index while its rss setting is off) — never a module mount path written as a literal.
 - ✅ The theme's module-set type and validator key list are generated: the managed
   `frontend/src/quickscaleSeam.d.ts` renders the `QuickScaleModules`/`QuickScaleModulePaths`/
-  `QuickScaleModuleApiPaths` interfaces and the managed `frontend/src/quickscaleSeam.keys.ts`
+  `QuickScaleModuleApiPaths`/`QuickScaleModuleDocumentPaths` interfaces and the managed
+  `frontend/src/quickscaleSeam.keys.ts`
   renders the validator's required key manifest, both from the shipped set (SA276), so a module
   that joins the set changes no user-owned theme file. The theme's SPA pages and presentation
   tables still name the modules that have React surfaces, as [frontend.md](frontend.md) § Module
   frontend surfaces records; a module with a React surface adds itself there.
 - ✅ The generated `templates/index.html` is user-owned (U3), so the change reaches new projects and
   the release notes carry the step for existing ones.
-- ❌ Hand-written per-module lines or `INSTALLED_APPS` tests in `index.html.j2`, or mount paths
-  written as literals.
+- ❌ Hand-written per-module lines or `INSTALLED_APPS` tests in `index.html.j2`, mount paths
+  written as literals, a raw `fetch(` in the theme's hooks (`src/hooks`), or parsing a retired
+  error shape the one client no longer answers.
 
 **32. Throttles.**
 - ✅ A DRF throttle scope is `quickscale_<module>_<purpose>` (rule 2); its rate is the module's

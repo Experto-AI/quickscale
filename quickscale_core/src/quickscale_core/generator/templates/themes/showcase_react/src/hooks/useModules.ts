@@ -1,5 +1,6 @@
 import type {
   QuickScaleModuleApiPaths,
+  QuickScaleModuleDocumentPaths,
   QuickScaleModulePaths,
   QuickScaleModules,
 } from '@/quickscaleSeam'
@@ -31,6 +32,7 @@ export interface QuickScaleConfig {
   modules: QuickScaleModules
   modulePaths: QuickScaleModulePaths
   moduleApiPaths: QuickScaleModuleApiPaths
+  moduleDocumentPaths: QuickScaleModuleDocumentPaths
   owner: QuickScaleOwnerConfig
   publicPage?: QuickScalePublicPageConfig
 }
