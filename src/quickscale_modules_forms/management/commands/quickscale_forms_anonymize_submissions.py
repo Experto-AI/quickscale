@@ -37,7 +37,10 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         from django.db import transaction
 
-        from quickscale_modules_orgs.current_org import operator_access, org_scope
+        from quickscale_modules_orgs.current_org import (
+            operator_access_for_command,
+            org_scope,
+        )
 
         trigger = str(options.get("trigger") or "manual")
         if trigger == "scheduled" and not bool(settings.QUICKSCALE_FORMS_ENABLED):
@@ -53,10 +56,14 @@ class Command(BaseCommand):
         now = timezone.now()
 
         with transaction.atomic():
-            # Phase 1 — Read form inventory with operator_access (SELECT-only
-            # cross-tenant read).  Ensures every form is visited regardless
-            # of which org the GUC is set to.
-            with operator_access(reason="forms_anonymize: read form inventory"):
+            # Phase 1 — Read form inventory with operator_access_for_command
+            # (SELECT-only cross-tenant read).  Ensures every form is visited
+            # regardless of which org the GUC is set to; the command variant
+            # records this command's name in the audit log.
+            with operator_access_for_command(
+                command="quickscale_forms_anonymize_submissions",
+                reason="forms_anonymize: read form inventory",
+            ):
                 forms = list(Form.all_objects.all())
 
             for form in forms:
@@ -67,9 +74,13 @@ class Command(BaseCommand):
                 cutoff = now - timedelta(days=form.data_retention_days)
 
                 # Phase 2 — Read old submission PKs within the form's org via
-                # operator_access.  The update itself runs under org_scope so
-                # FORCE RLS write-path policy allows the modification.
-                with operator_access(reason="forms_anonymize: read old submission PKs"):
+                # the command operator scope.  The update itself runs under
+                # org_scope so FORCE RLS write-path policy allows the
+                # modification.
+                with operator_access_for_command(
+                    command="quickscale_forms_anonymize_submissions",
+                    reason="forms_anonymize: read old submission PKs",
+                ):
                     old_pks = list(
                         FormSubmission.all_objects.filter(
                             form=form,
