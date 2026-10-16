@@ -1,8 +1,11 @@
 """Operator_access context manager and RLS template refresh tests.
 
 Tests for:
-    * ``operator_access(reason=...)`` context manager (GUC setting, audit
-      logging, lifecycle, nesting safety).
+    * ``operator_access(user=..., reason=...)`` context manager (operator
+      gate and refusal, GUC setting, audit logging, lifecycle, nesting
+      safety).
+    * ``operator_access_for_command(command=..., reason=...)`` — the
+      command-only variant that records the command in the audit log.
     * Operator_access grants cross-tenant **read** only
       (not write or delete visibility).
     * Nested operator_access() correctly restores prior
@@ -15,10 +18,11 @@ Tests for:
 from __future__ import annotations
 
 from collections.abc import Generator
+from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 import pytest
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 
 from quickscale_modules_orgs.tenancy import (
     TenantTableStatus,
@@ -28,9 +32,15 @@ from quickscale_modules_orgs.tenancy import (
 from tests._tenant_table_registry import TENANT_TABLE_REGISTRY
 from quickscale_modules_orgs.current_org import (
     operator_access,
+    operator_access_for_command,
     reset_current_org_id,
     set_current_org_id,
 )
+
+
+def _operator(*, is_superuser: bool = True, pk: int | None = 1) -> SimpleNamespace:
+    """Return a minimal user stub for the mocked-connection unit tests."""
+    return SimpleNamespace(is_superuser=is_superuser, pk=pk)
 
 
 # =========================================================================
@@ -74,7 +84,7 @@ class TestOperatorAccessGucLifecycle:
         with patch("django.db.connection", mock_conn):
             cursor = mock_conn.cursor.return_value.__enter__.return_value
 
-            with operator_access(reason="test-reason"):
+            with operator_access(user=_operator(), reason="test-reason"):
                 cursor.execute.assert_any_call(
                     "SET LOCAL app.operator_access = %s",
                     ["on"],
@@ -89,7 +99,7 @@ class TestOperatorAccessGucLifecycle:
         with patch("django.db.connection", mock_conn):
             cursor = mock_conn.cursor.return_value.__enter__.return_value
 
-            with operator_access(reason="test-reason"):
+            with operator_access(user=_operator(), reason="test-reason"):
                 cursor.reset_mock()
 
             # Prior was "" (empty string), so the exit call restores "".
@@ -105,7 +115,7 @@ class TestOperatorAccessGucLifecycle:
             cursor = mock_conn.cursor.return_value.__enter__.return_value
             cursor.execute.reset_mock()
 
-            with operator_access(reason="test-reason"):
+            with operator_access(user=_operator(), reason="test-reason"):
                 pass
 
             assert cursor.execute.call_count >= 2
@@ -120,14 +130,14 @@ class TestOperatorAccessGucLifecycle:
         with patch("django.db.connection", mock_conn):
             cursor = mock_conn.cursor.return_value.__enter__.return_value
 
-            with operator_access(reason="test-reason"):
+            with operator_access(user=_operator(), reason="test-reason"):
                 cursor.execute.assert_not_called()
 
     def test_yields_none(self) -> None:
         """The context manager yields None."""
         mock_conn = self._make_conn()
         with patch("django.db.connection", mock_conn):
-            with operator_access(reason="test-reason") as result:
+            with operator_access(user=_operator(), reason="test-reason") as result:
                 assert result is None
 
     def test_nesting_restores_outer_scope(self) -> None:
@@ -165,7 +175,7 @@ class TestOperatorAccessGucLifecycle:
                     cursor = mock_conn.cursor.return_value.__enter__.return_value
 
                     # Outer scope: prior GUC is '' (default), sets to 'on'.
-                    with operator_access(reason="outer"):
+                    with operator_access(user=_operator(), reason="outer"):
                         assert _guc_state[0] == "on", (
                             f"After outer entry, GUC should be 'on', "
                             f"got {_guc_state[0]!r}"
@@ -174,7 +184,7 @@ class TestOperatorAccessGucLifecycle:
 
                         # Inner scope: saves prior ('on'), sets to 'on',
                         # restores prior ('on').
-                        with operator_access(reason="inner"):
+                        with operator_access(user=_operator(), reason="inner"):
                             assert _guc_state[0] == "on", (
                                 f"During inner scope, GUC should be 'on', "
                                 f"got {_guc_state[0]!r}"
@@ -234,10 +244,10 @@ class TestOperatorAccessAuditLogging:
                 mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
                     "",
                 )
-                with operator_access(reason="ticket-42"):
+                with operator_access(user=_operator(), reason="ticket-42"):
                     mock_logger.info.assert_any_call(
                         "operator_access activated",
-                        extra={"reason": "ticket-42"},
+                        extra={"reason": "ticket-42", "user_id": 1},
                     )
 
     def test_logs_deactivation(self) -> None:
@@ -249,11 +259,11 @@ class TestOperatorAccessAuditLogging:
                 mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
                     "",
                 )
-                with operator_access(reason="ticket-42"):
+                with operator_access(user=_operator(), reason="ticket-42"):
                     pass
             mock_logger.info.assert_any_call(
                 "operator_access deactivated",
-                extra={"reason": "ticket-42"},
+                extra={"reason": "ticket-42", "user_id": 1},
             )
 
     def test_reason_propagated_in_both_events(self) -> None:
@@ -265,7 +275,7 @@ class TestOperatorAccessAuditLogging:
                 mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
                     "",
                 )
-                with operator_access(reason="nightly-maintenance"):
+                with operator_access(user=_operator(), reason="nightly-maintenance"):
                     pass
             reasons = {
                 c.kwargs.get("extra", {}).get("reason")
@@ -273,6 +283,121 @@ class TestOperatorAccessAuditLogging:
                 if isinstance(c.args[0], str) and "operator_access" in c.args[0]
             }
             assert "nightly-maintenance" in reasons
+
+
+# =========================================================================
+# operator_access context manager — refusal of non-operators
+# =========================================================================
+
+
+class TestOperatorAccessRefusal:
+    """A non-operator user is refused before the setting changes."""
+
+    def test_refuses_non_operator_before_setting_changes(self) -> None:
+        """The refusal is audit-logged and raised before any GUC statement."""
+        mock_conn = MagicMock()
+        mock_conn.vendor = "postgresql"
+        mock_conn.in_atomic_block = True
+        with (
+            patch("django.db.connection", mock_conn),
+            patch(
+                "quickscale_modules_orgs.current_org._get_operator_access"
+            ) as mock_get,
+            patch(
+                "quickscale_modules_orgs.current_org._set_operator_access"
+            ) as mock_set,
+            patch("quickscale_modules_orgs.current_org.logger") as mock_logger,
+        ):
+            cursor = mock_conn.cursor.return_value.__enter__.return_value
+            with pytest.raises(PermissionDenied):
+                with operator_access(
+                    user=_operator(is_superuser=False, pk=7),
+                    reason="ticket-1",
+                ):
+                    pass  # pragma: no cover
+
+            # The setting stays untouched: neither read nor written.
+            mock_get.assert_not_called()
+            mock_set.assert_not_called()
+            cursor.execute.assert_not_called()
+        mock_logger.warning.assert_any_call(
+            "operator_access refused for non-operator user",
+            extra={"reason": "ticket-1", "user_id": 7},
+        )
+
+    def test_refuses_user_without_the_flag(self) -> None:
+        """A user object without ``is_superuser`` (anonymous included) is refused."""
+        with (
+            patch("quickscale_modules_orgs.current_org.logger") as mock_logger,
+            pytest.raises(PermissionDenied),
+        ):
+            with operator_access(
+                user=SimpleNamespace(pk=None),
+                reason="ticket-2",
+            ):
+                pass  # pragma: no cover
+        mock_logger.warning.assert_any_call(
+            "operator_access refused for non-operator user",
+            extra={"reason": "ticket-2", "user_id": None},
+        )
+
+
+# =========================================================================
+# operator_access_for_command — the command-only variant
+# =========================================================================
+
+
+class TestOperatorAccessForCommand:
+    """The command-only variant records the command and needs no user."""
+
+    def _make_conn(self) -> MagicMock:
+        conn = MagicMock()
+        conn.vendor = "postgresql"
+        conn.in_atomic_block = True
+        conn.cursor.return_value.__enter__.return_value.fetchone.return_value = ("",)
+        return conn
+
+    def test_sets_guc_and_logs_command(self) -> None:
+        """Activation and deactivation carry the command and reason fields."""
+        mock_conn = self._make_conn()
+        with (
+            patch("django.db.connection", mock_conn),
+            patch("quickscale_modules_orgs.current_org.logger") as mock_logger,
+        ):
+            cursor = mock_conn.cursor.return_value.__enter__.return_value
+            with operator_access_for_command(
+                command="quickscale_demo_seed",
+                reason="nightly-maintenance",
+            ):
+                cursor.execute.assert_any_call(
+                    "SET LOCAL app.operator_access = %s",
+                    ["on"],
+                )
+            cursor.execute.assert_called_with(
+                "SET LOCAL app.operator_access = %s",
+                [""],
+            )
+        expected_extra = {
+            "reason": "nightly-maintenance",
+            "command": "quickscale_demo_seed",
+        }
+        mock_logger.info.assert_any_call(
+            "operator_access activated",
+            extra=expected_extra,
+        )
+        mock_logger.info.assert_any_call(
+            "operator_access deactivated",
+            extra=expected_extra,
+        )
+
+    def test_command_and_reason_are_required_keywords(self) -> None:
+        """Both arguments are keyword-only and required."""
+        with pytest.raises(TypeError):
+            with operator_access_for_command(reason="missing-command"):  # type: ignore[call-arg]
+                pass  # pragma: no cover
+        with pytest.raises(TypeError):
+            with operator_access_for_command(command="quickscale_demo_seed"):  # type: ignore[call-arg]
+                pass  # pragma: no cover
 
 
 # =========================================================================
@@ -295,8 +420,8 @@ class TestOperatorAccessEdgeCases:
         yield
         patcher.stop()
 
-    def test_reason_is_required_keyword(self) -> None:
-        """``reason`` is a required keyword argument."""
+    def test_user_and_reason_are_required_keywords(self) -> None:
+        """``user`` and ``reason`` are required keyword arguments."""
         with patch("django.db.connection") as mock_conn:
             mock_conn.vendor = "postgresql"
             mock_conn.in_atomic_block = True
@@ -304,7 +429,10 @@ class TestOperatorAccessEdgeCases:
                 "",
             )
             with pytest.raises(TypeError):
-                with operator_access():  # type: ignore[call-arg]
+                with operator_access(reason="missing-user"):  # type: ignore[call-arg]
+                    pass  # pragma: no cover
+            with pytest.raises(TypeError):
+                with operator_access(user=_operator()):  # type: ignore[call-arg]
                     pass  # pragma: no cover
 
     def test_reason_empty_string(self) -> None:
@@ -315,7 +443,7 @@ class TestOperatorAccessEdgeCases:
             mock_conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (
                 "",
             )
-            with operator_access(reason=""):
+            with operator_access(user=_operator(), reason=""):
                 pass  # should not raise
 
     def test_long_reason(self) -> None:
@@ -327,7 +455,7 @@ class TestOperatorAccessEdgeCases:
                 "",
             )
             long_reason = "x" * 1000
-            with operator_access(reason=long_reason):
+            with operator_access(user=_operator(), reason=long_reason):
                 pass  # should not raise
 
 
@@ -1344,7 +1472,7 @@ class TestOperatorAccessAtomicGuard:
             mock_conn.in_atomic_block = False
 
             with pytest.raises(ImproperlyConfigured) as exc_info:
-                with operator_access(reason="outside-atomic"):
+                with operator_access(user=_operator(), reason="outside-atomic"):
                     pass  # pragma: no cover
 
             msg = str(exc_info.value)
