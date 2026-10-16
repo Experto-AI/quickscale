@@ -372,7 +372,9 @@ project or cron job updates with this release:
 - Module APIs answer JSON by default through one composed default: generated settings install
   `JSONRenderer` and `JSONParser` as the composed `REST_FRAMEWORK` renderer and parser defaults,
   so CRM's and forms' write APIs refuse a form-encoded body with `415` where they previously
-  accepted one, while the blog media upload keeps its multipart parser policy.
+  accepted one, and module views pin no renderer or parser of their own — the blog media upload
+  keeps its multipart parser policy and a webhook reads its raw body, so one composed default
+  sets every module API's content contract.
 - Module JSON lists page through one core paginator: each list is sized by its `<THING>_PER_PAGE`
   setting and returns only the requested page — billing's ledger (`transactions_per_page`, was a
   fixed `25`) and plan catalog (`plans_per_page`), CRM's tags, companies, stages, and note lists,

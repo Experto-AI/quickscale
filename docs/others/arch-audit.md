@@ -194,7 +194,7 @@ first-party Django modules**, in one monorepo: `quickscale` (meta), `quickscale_
 | Core and CLI hold no module names | rule 37 detector plus reasoned exceptions | gated | open by exception list | decision text unchanged; list not recounted |
 | Privileged DB command set | four literal declarations; `test_privileged_command_contract.py` | gated | closed (equality) | unchanged |
 | Stripe API version | one authored constant (`billing/_settings.py`), rendered into the manifest and the operations guide | **structural** | — | **5 stations → 1** (SA280 (a)) |
-| Shipped migrations immutable | `check-migration-freeze` against `scripts/migration_hashes.json` | **gated** | closed over recorded files, **but the same change may regenerate the manifest with `--write`** | **new** (SA204 (c)); was "none" |
+| Shipped migrations immutable | `check-migration-freeze` against `scripts/migration_hashes.json`, append-only against the latest release tag | **gated** | closed over recorded files and released values | **new** (SA204 (c), (h)); was "none" |
 | Schema identity a backup restores against | per-module migration hashes recorded with every backup; `recovery.py:231–275` refuses changed, missing, or unrecorded identity, including the bare file | **structural** | — | **new** (SA204 (d)); was label-keyed |
 | Schema identity across `quickscale update` | content compared **only when the version label is equal** (`_module_update.py:286–297`, `:365`) | **convention** across a label change | — | **partly new** (SA204 (e)) |
 | Generated-project contract adoption | recorded adoption id (`contract_vintage.py:38`, `--confirm-contract-adoption`) | **convention** (honor system) | — | one mechanism (SA282); **40 → 46 steps** |
@@ -214,7 +214,7 @@ change and adoption; SA285 (b) moved the build-entrypoint materializer row to st
 | Rank | ID | Title | Horizon | Confidence | Size | Reversibility | Problem |
 |---|---|---|---|---|---|---|---|
 | 1 | `generated-file-ownership-unmodeled` | Module-facing contracts live in user-owned generated files | now | High | M | two-way door | Seam types are now managed, but theme pages, CI workflow, and docs still carry module contracts; steps 40 → 46 in 3 days, 12 pending on `bap-web-new` |
-| 2 | `clean-break-schema-no-data-path` | Module schemas have no verified data upgrade path | now | High | S | one-way door | The freeze and content identity landed; `update` still checks content only under an equal label, and rule 1 still forbids `0002` |
+| 2 | `clean-break-schema-no-data-path` | Module schemas have no verified data upgrade path | now | High | S | one-way door | The freeze and append-only content identity landed; `update` checks content only under an equal label until `MIGRATION_FREEZE_VINTAGE` is set, and rule 1 still forbids `0002` |
 | 3 | `rules-held-by-parity-not-derivation` | Rules are kept as hand-synced copies | 6–18 months | High | S | two-way door | Copies are derived or deleted; the materializer runs through one shared core-build step, and the gate oracles keep their one deliberate hand count pin (SA285) |
 
 ---
@@ -393,18 +393,22 @@ items:
      Rewrites dropped from 13 in five days to **0 since the gate**.
   2. **Sound decisions:** preserved. Each tenant `0001` still installs its own RLS, and the DR
      fail direction is now closed on every path read.
-  3. **New commitment:** none minted. **Two branches still key on labels or authorship**:
+  3. **New commitment:** none minted. **One branch still keys on labels or authorship** (the
+     other closed by SA204 (h)):
      - **`update` checks content only under an equal label.**
        `_module_update.py:286–289`: "A label change is … fresh-database path, so only an equal
        label compares content". `:365`: `if installed_version == applied_version:`. After
        SA204 (g) lifts rule 1, the *cross-release* update is exactly the upgrade the freeze
        exists to make safe, and it is the one path that does not compare the applied migration
-       files with the pulled ones. SA204 (g) is scoped to "docs and the manifest", so nothing
-       flips this branch.
+       files with the pulled ones. SA204 (g) landed the vintage-keyed guard
+       (`MIGRATION_FREEZE_VINTAGE`, still unset): the branch flips when SA204 (j) sets it.
      - **The manifest re-freezes on demand.** `sync_migration_hashes.py --write` regenerates
        every recorded hash from disk. An edited `0001` plus `--write` in one commit passes
        `check-migration-freeze`. The gate catches drift, not intent. Immutability then rests on
-       review noticing a changed line in `migration_hashes.json`.
+       review noticing a changed line in `migration_hashes.json`. *(Closed by SA204 (h): the
+       gate compares the checked-in manifest with `scripts/migration_hashes.json` at the latest
+       release tag, refuses a changed or removed released value even after `--write`, excludes
+       the release being tagged, and fetches the one baseline tag in a shallow clone.)*
 - **Rank rationale:** High blast radius, High likelihood, linear compounding (down from steep).
   - **Blast radius:** data in the first non-reseedable database.
   - **Likelihood:** SA204 (g) is next, and SA153 follows.
@@ -439,6 +443,7 @@ items:
     none.
   - Searched for an append-only check on `migration_hashes.json` (for example, against the merge
     base): none. The gate deliberately needs no Git history (`check_migration_freeze.py:11`).
+    *(SA204 (h) added the append-only comparison against the release baseline; see §16.)*
 - **Why it compounds:**
   - **Growth variable:** releases × applied migration files on deployed databases.
   - **The mechanism:** each post-freeze release that a project updates to crosses a label
@@ -448,7 +453,8 @@ items:
     restore-forward contract.
 - **Detection signal:** `InconsistentMigrationHistory` or a missing-column `ProgrammingError` on
   `migrate` after an update. A diff in `migration_hashes.json` that changes an existing value
-  rather than adding a key. Instrument the second: today nothing flags it.
+  rather than adding a key. Instrument the second: today nothing flags it. *(SA204 (h) flags it:
+  a changed recorded value fails the freeze gate; see §16.)*
 - **Steelman:** Before (g), every label change *is* a fresh-database upgrade by decision, so
   checking content across labels would refuse the only supported path. The `--write` escape is
   how the maintainer intentionally freezes new files, and on a single-maintainer repository a
@@ -616,7 +622,7 @@ items:
 |---|---|---|
 | **Adding one gate** (re-run; instance: `check-migration-freeze`, `518cc377`; re-checked after SA285 (a)) | Authored: the registry row. Generated: `gates.mk`, the `ci.yml` and `publish.yml` regions, the local arms, the Makefile help, and the docs table. Hand-held: one count pin | **Finding evidence** → Finding 3 (≈8 → **1 + 1** after SA285 (a); was 1 + 4 on `518cc377`) |
 | **A module contract change reaching a deployed project** (re-run; instance: SA274's crm stats) | Module endpoint; user-owned `CrmPage.tsx`; a `project_contract.yml` step; the vintage gate; the operator's `--confirm-contract-adoption`; and the embedded crm must update in the same move | **Finding evidence** → Finding 1 |
-| **SA153's first `0002` in a module, then `update` on `bap-web`** (new) | (1) the migration file; (2) `sync_migration_hashes.py --write`; (3) the freeze gate passes; (4) release; (5) `update` crosses a label change, so **no content comparison**; (6) `migrate` applies forward. A concurrent edit to the frozen `0001` re-frozen at step (2) also passes (3) and (5) | **Finding evidence** → Finding 2 |
+| **SA153's first `0002` in a module, then `update` on `bap-web`** (new) | (1) the migration file; (2) `sync_migration_hashes.py --write`; (3) the freeze gate passes; (4) release; (5) `update` crosses a label change, so **no content comparison**; (6) `migrate` applies forward. A concurrent edit to the frozen `0001` re-frozen at step (2) also passes (3) and (5) *(measured on the re-run pass; SA204 (h) now fails step (3) when the edited value is recorded at the latest release tag, and step (5)'s cross-label content gap remains until `MIGRATION_FREEZE_VINTAGE` is set)* | **Finding evidence** → Finding 2 (authoring half closed by SA204 (h)) |
 | **Repin `bap-web-new` to the published 0.89.0** (re-run) | Wheel repin; **12** pending steps; subtree pulls; fresh rebuild and reseed | **Finding evidence** → Finding 1; the rebuild contains Finding 2 at cutover |
 | **SA153 gallery child table in a project app** (carried) | `TenantModel`; project migration with `apply_force_rls`; W007; classification and obligation declarations; boundary tests | **Exonerating** (§8.2) |
 | **Adding a module option** (re-checked against SA281) | `module.yml` option, `validation`, and `django_setting`; the hook receives typed resolved options | **Exonerated**, now with no detector cost |
@@ -813,7 +819,7 @@ Append-only. One dated line per ID per pass. Placements before 2026-10-13 are in
 - 2026-10-13 — Prior question 2 (SA204 before SA153): answered (dependency edge) and retired.
 - 2026-10-13 — Coherence hand-off "markdownx_urls copy-pair": resolved (SA261).
 - 2026-10-16 — `generated-file-ownership-unmodeled`: still-open, rank 2 → 1. SA276 resolved the theme-type half (fix-regression passed for it); SA282 unified adoption; steps 40 → 46; 12 pending on `bap-web-new`; contracts now arrive via user-owned pages, CI, and docs.
-- 2026-10-16 — `clean-break-schema-no-data-path`: still-open, rank 1 → 2, size M → S. SA204 (a–f) removed most of the mechanism (freeze gate, content-keyed restore, bare-file closed, 0 rewrites since the gate); residual: `update` compares content only under an equal label, the manifest re-freezes via `--write`, and decision rule 1 still forbids `0002`.
+- 2026-10-16 — `clean-break-schema-no-data-path`: still-open, rank 1 → 2, size M → S. SA204 (a–f) removed most of the mechanism (freeze gate, content-keyed restore, bare-file closed, 0 rewrites since the gate); SA204 (g) keys the update guard on the freeze vintage, and SA204 (h) closes the `--write` re-freeze branch (the gate is append-only against the latest release tag, excludes the release being tagged, and acquires that one tag in a shallow clone); residual: `MIGRATION_FREEZE_VINTAGE` is still unset — the cross-release update compares content only under an equal label until SA204 (j) — and decision rule 1 still forbids `0002`.
 - 2026-10-16 — `rules-held-by-parity-not-derivation`: resolved (SA285 (b)), horizon 6–18 months, size S. SA275, SA278, SA279, SA280 (a), SA281, SA285 (a), and SA285 (b) removed their copies; the materializer now runs through one shared core-build step every build entrypoint routes through (`scripts/build_core_wheel.sh`, guarded by `scripts/check_core_build_routing.py`); the gate oracles keep their one deliberate hand count pin and the publish artifact stays content-checked (SA284).
 - 2026-10-16 — `lockstep-release-unit`: accepted, carried (not fired).
 - 2026-10-16 — `privileged-command-four-stations`: accepted, carried (not fired).

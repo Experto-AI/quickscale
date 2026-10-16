@@ -14,7 +14,7 @@ from django.utils.html import escape
 from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
 from rest_framework.exceptions import ValidationError
-from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -152,7 +152,8 @@ class BlogApiBaseView(APIView):
     core's class provides (rule 32): its rate is the module's
     ``api_rate_limit`` option, and the bucket follows the authenticated user.
     Every error goes through the one QuickScale exception handler the
-    generated settings install.
+    generated settings install, and the composed ``REST_FRAMEWORK`` defaults
+    make the payload endpoints JSON-only (rule 9).
     """
 
     authentication_classes = [QuickscaleSessionAuthentication]
@@ -169,6 +170,9 @@ class MediaUploadAPIView(BlogApiBaseView):
     restores the prior org context on exit.
     """
 
+    # A file upload needs multipart parsing; the composed REST_FRAMEWORK
+    # defaults are JSON-only, and rule 9 keeps a file upload's multipart
+    # parser policy.
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -203,8 +207,6 @@ class PostPublishAPIView(BlogApiBaseView):
     belong to the same organization.  The prior org context is restored on
     exit through :func:`_blog_org_scope`.
     """
-
-    parser_classes = [JSONParser]
 
     def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         del args, kwargs

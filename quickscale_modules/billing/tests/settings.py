@@ -68,9 +68,16 @@ MODULE_SETTINGS_SCHEMA = {
 
 ROOT_URLCONF = "tests.urls"
 
-# The generated settings install the shared rule 9 handler; the module suite
-# mirrors it so error responses assert the shipped shape.
+# The generated settings install the shared rule 9 handler and compose the
+# JSON renderer and parser defaults (rule 9); the module suite mirrors both so
+# content-negotiation and parsing assert the shipped shape.
 REST_FRAMEWORK = {
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+    ],
     "EXCEPTION_HANDLER": "quickscale_core.runtime.conventions.exception_handler",
 }
 

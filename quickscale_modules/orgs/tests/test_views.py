@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 from types import SimpleNamespace
+from urllib.parse import urlencode
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -2304,6 +2305,48 @@ def test_org_api_settings_updates_slug_and_returns_json(client, settings) -> Non
     }
     assert organization.name == "Beacon Labs"
     assert organization.slug == "beacon-labs"
+
+
+@pytest.mark.django_db
+def test_org_api_settings_refuses_a_form_encoded_body(client, settings) -> None:
+    """The composed JSON parser default refuses a form-encoded body with 415."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+    organization = Organization.objects.create(name="Beacon Form", slug="beacon-form")
+    admin_user = get_user_model().objects.create_user(
+        username="beacon-form-admin",
+        email="beacon-form-admin@example.com",
+        password="secret123",
+    )
+    OrganizationMembership.objects.create(
+        user=admin_user,
+        organization=organization,
+        role=OrgRole.ADMIN,
+    )
+    client.force_login(admin_user)
+
+    response = client.post(
+        f"/orgs/api/{organization.slug}/settings/",
+        data=urlencode({"name": "Beacon Labs", "slug": "beacon-labs"}),
+        content_type="application/x-www-form-urlencoded",
+    )
+
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "unsupported_media_type"
+
+
+def test_org_api_refuses_an_html_preference(client, settings) -> None:
+    """An HTML-preferring client gets the one error shape, not a browser page."""
+    settings.QUICKSCALE_ORGS_MODE = "saas"
+
+    response = client.post(
+        "/orgs/api/beacon/settings/",
+        data=json.dumps({}),
+        content_type="application/json",
+        HTTP_ACCEPT="text/html",
+    )
+
+    assert response.status_code == 406
+    assert response.json()["error"]["code"] == "not_acceptable"
 
 
 # ---------------------------------------------------------------------------

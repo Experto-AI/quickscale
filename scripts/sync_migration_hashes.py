@@ -90,6 +90,44 @@ def _is_strict_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def parse_manifest_text(text: str, source: str) -> dict[str, dict[str, str]]:
+    """
+    Validate one manifest document and return its ``modules`` mapping.
+
+    The freeze gate (``scripts/check_migration_freeze.py``) consumes this
+    parser for the checked-in manifest and for the copy it reads at the latest
+    release tag, so every comparison shares one manifest schema.  ``source``
+    names the document's origin -- a path, or a ``<tag>:<path>`` revision --
+    for diagnostics.
+
+    Raises:
+        ManifestError: If the document is not a strict JSON object with the
+            expected schema version, module records, and digest strings.
+
+    """
+    try:
+        payload = json.loads(
+            text,
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_constant,
+        )
+    except json.JSONDecodeError as exc:
+        raise ManifestError(f"{source}: not valid JSON: {exc}") from exc
+    schema_version = payload.get("schema_version") if isinstance(payload, dict) else None
+    if not _is_strict_int(schema_version) or schema_version != _SCHEMA_VERSION:
+        raise ManifestError(f"{source}: expected schema_version {_SCHEMA_VERSION}")
+    modules = payload.get("modules")
+    if not isinstance(modules, dict):
+        raise ManifestError(f"{source}: expected a 'modules' object")
+    for module_name, migrations in modules.items():
+        if not isinstance(module_name, str) or not isinstance(migrations, dict):
+            raise ManifestError(f"{source}: every module record must be an object")
+        for filename, digest in migrations.items():
+            if not isinstance(filename, str) or not isinstance(digest, str):
+                raise ManifestError(f"{source}: module '{module_name}' has a non-string entry")
+    return modules
+
+
 def load_manifest_modules(manifest_path: Path) -> dict[str, dict[str, str]]:
     """
     Validate the checked-in manifest and return its ``modules`` mapping.
@@ -102,30 +140,7 @@ def load_manifest_modules(manifest_path: Path) -> dict[str, dict[str, str]]:
             expected schema version, module records, and digest strings.
 
     """
-    text = manifest_path.read_text(encoding="utf-8")
-    try:
-        payload = json.loads(
-            text,
-            object_pairs_hook=_reject_duplicate_keys,
-            parse_constant=_reject_constant,
-        )
-    except json.JSONDecodeError as exc:
-        raise ManifestError(f"{manifest_path}: not valid JSON: {exc}") from exc
-    schema_version = payload.get("schema_version") if isinstance(payload, dict) else None
-    if not _is_strict_int(schema_version) or schema_version != _SCHEMA_VERSION:
-        raise ManifestError(f"{manifest_path}: expected schema_version {_SCHEMA_VERSION}")
-    modules = payload.get("modules")
-    if not isinstance(modules, dict):
-        raise ManifestError(f"{manifest_path}: expected a 'modules' object")
-    for module_name, migrations in modules.items():
-        if not isinstance(module_name, str) or not isinstance(migrations, dict):
-            raise ManifestError(f"{manifest_path}: every module record must be an object")
-        for filename, digest in migrations.items():
-            if not isinstance(filename, str) or not isinstance(digest, str):
-                raise ManifestError(
-                    f"{manifest_path}: module '{module_name}' has a non-string entry"
-                )
-    return modules
+    return parse_manifest_text(manifest_path.read_text(encoding="utf-8"), str(manifest_path))
 
 
 def _expected_manifest_text() -> str:

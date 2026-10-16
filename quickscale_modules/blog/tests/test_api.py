@@ -3,6 +3,7 @@
 import json
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlencode
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -361,6 +362,31 @@ class TestPublishPostApi:
 
         assert response.status_code == 400
         assert _error(response)["code"] == "parse_error"
+
+    def test_publish_post_api_refuses_a_form_encoded_body(self, client, member_user):
+        """The composed JSON parser default refuses a form-encoded body with 415."""
+        _login_with_org(client, member_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=urlencode({"title": "Post", "content": "Body"}),
+            content_type="application/x-www-form-urlencoded",
+        )
+
+        assert response.status_code == 415
+        assert _error(response)["code"] == "unsupported_media_type"
+
+    def test_publish_post_api_refuses_an_html_preference(self, client):
+        """An HTML-preferring client gets the one error shape, not a browser page."""
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "Post", "content": "Body"}),
+            content_type="application/json",
+            HTTP_ACCEPT="text/html",
+        )
+
+        assert response.status_code == 406
+        assert _error(response)["code"] == "not_acceptable"
 
     def test_publish_post_api_non_object_payload_returns_400(self, client, staff_user):
         """Test API requires JSON object payload"""

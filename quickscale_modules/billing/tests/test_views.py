@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 import json
 from typing import Any
+from urllib.parse import urlencode
 
 import pytest
 from django.conf import settings
@@ -147,6 +148,36 @@ def test_checkout_view_returns_json_401_for_anonymous_requests() -> None:
             "message": "Authentication credentials were not provided.",
         }
     }
+
+
+def test_checkout_view_refuses_an_html_preference(client: Client) -> None:
+    """An HTML-preferring client gets the one error shape, not a browser page."""
+    response = client.post(
+        reverse("quickscale_billing:purchase_checkout"),
+        data=json.dumps({"plan_slug": "credits-pack"}),
+        content_type="application/json",
+        HTTP_ACCEPT="text/html",
+    )
+
+    assert response.status_code == 406
+    assert response.json()["error"]["code"] == "not_acceptable"
+
+
+@pytest.mark.django_db
+def test_checkout_view_refuses_a_form_encoded_body(
+    client: Client, user, mock_org_resolution
+) -> None:
+    """The composed JSON parser default refuses a form-encoded body with 415."""
+    client.force_login(user)
+
+    response = client.post(
+        reverse("quickscale_billing:purchase_checkout"),
+        data=urlencode({"plan_slug": "credits-pack"}),
+        content_type="application/x-www-form-urlencoded",
+    )
+
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "unsupported_media_type"
 
 
 @pytest.mark.django_db
