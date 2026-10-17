@@ -291,6 +291,30 @@ def _golden_module(name: str = "demo") -> Module:
     )
 
 
+#: The capability vocabulary the synthetic corpora carry.  The rule 4
+#: detectors parse it in place of a harness literal (SA296 (d)); a corpus that
+#: needs a different vocabulary replaces ``core_conventions_text``, and the
+#: live-tree control pins the parse against core's shipped declaration.
+CORE_CONVENTIONS = """\
+from enum import Enum
+from types import MappingProxyType
+
+
+class CapabilityShape(Enum):
+    ITERABLE = "iterable"
+    MAPPING = "mapping"
+    STRING = "string"
+
+
+CAPABILITIES: dict[str, CapabilityShape] = MappingProxyType(
+    {
+        "anonymize_handlers": CapabilityShape.ITERABLE,
+        "removal_obligations": CapabilityShape.ITERABLE,
+    }
+)
+"""
+
+
 def _corpus(*modules: Module, extra_dirs: tuple[str, ...] = ()) -> Corpus:
     names = tuple(module.name for module in modules) + extra_dirs
     mypy_ini = "\n".join(
@@ -307,6 +331,7 @@ def _corpus(*modules: Module, extra_dirs: tuple[str, ...] = ()) -> Corpus:
         cli_files={},
         script_files={},
         mypy_ini=mypy_ini,
+        core_conventions_text=CORE_CONVENTIONS,
     )
 
 

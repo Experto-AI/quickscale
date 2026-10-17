@@ -32,6 +32,11 @@ MYPY_INI_NAME = "mypy.ini"
 #: (SA296 (c)).
 DECISIONS_DOC_RELATIVE_PATH = Path("docs/technical/decisions.md")
 
+#: Core's conventions module, relative to :data:`CORE_PACKAGE`.  The corpus
+#: carries its text so rule 4 reads core's one capability declaration instead
+#: of keeping a second literal (SA296 (d)).
+CORE_CONVENTIONS_RELATIVE_PATH = Path("runtime") / "conventions.py"
+
 # Rule 5 <-> rule 43: the modules a manifest declares itself to require.
 MODULE_REQUIRED_NAME = "required_modules"
 
@@ -93,6 +98,10 @@ class Corpus:
     script_files: Mapping[str, str]
     mypy_ini: str
     decisions_text: str = ""
+    #: Core's ``runtime/conventions.py`` text, the one authority rule 4's
+    #: capability vocabulary is parsed from (SA296 (d)); empty when the file
+    #: is absent, which the rule reports as unreadable.
+    core_conventions_text: str = ""
 
 
 def _credential_reference_options(module: Module) -> set[str]:
@@ -238,6 +247,12 @@ def load_corpus(repo_root: Path) -> Corpus:
         if decisions_path.is_file()
         else ""
     )
+    conventions_path = repo_root / CORE_PACKAGE / CORE_CONVENTIONS_RELATIVE_PATH
+    core_conventions_text = (
+        conventions_path.read_text(encoding="utf-8", errors="replace")
+        if conventions_path.is_file()
+        else ""
+    )
     return Corpus(
         modules=tuple(modules),
         module_dir_names=tuple(dir_names),
@@ -246,4 +261,5 @@ def load_corpus(repo_root: Path) -> Corpus:
         script_files=_read_tree(repo_root / "scripts", repo_root),
         mypy_ini=mypy_ini,
         decisions_text=decisions_text,
+        core_conventions_text=core_conventions_text,
     )

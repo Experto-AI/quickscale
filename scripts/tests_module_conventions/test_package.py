@@ -8,6 +8,8 @@ from dataclasses import replace
 from scripts import check_module_conventions as checker
 from scripts.check_module_conventions import Corpus, Module
 from scripts.tests_module_conventions._support import (
+    CORE_CONVENTIONS,
+    REPO_ROOT,
     _corpus,
     _golden_module,
     _violations,
@@ -870,6 +872,102 @@ def test_listed_capability_name_and_constant_pass() -> None:
         ),
     )
     assert _violations(checker.rule_4_public_surface, listed) == []
+
+
+def test_capability_vocabulary_is_read_from_core() -> None:
+    """Rule 4: the closed set is core's declaration, not a harness literal (SA296 (d))."""
+
+    def _collect(name: str) -> Module:
+        return _with_files(
+            _golden_module(),
+            views=(
+                "from quickscale_core.runtime import collect_capabilities\n\n\n"
+                "def handlers() -> tuple[object, ...]:\n"
+                f"    return collect_capabilities('{name}')\n"
+            ),
+        )
+
+    synthetic = CORE_CONVENTIONS.replace('"anonymize_handlers"', '"demo_hooks"')
+    alternate = replace(_corpus(_collect("demo_hooks")), core_conventions_text=synthetic)
+    assert checker.rule_4_public_surface(alternate) == []
+    shipped = replace(_corpus(_collect("anonymize_handlers")), core_conventions_text=synthetic)
+    assert any(
+        "not in CAPABILITIES" in violation for violation in checker.rule_4_public_surface(shipped)
+    )
+
+
+def test_capability_declaration_vocabulary_control() -> None:
+    """Rule 4: an AppConfig member core's CAPABILITIES does not list is refused."""
+    module = _golden_module()
+    assert _violations(checker.rule_4_public_surface, module) == []
+    broken = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "    def ready(self) -> None:",
+            "    def anonimize_handlers(self) -> tuple[object, ...]:\n"
+            "        return ()\n\n"
+            "    def ready(self) -> None:",
+        ),
+    )
+    assert any(
+        "apps.py:10 declares 'anonimize_handlers', which is not in CAPABILITIES" in violation
+        for violation in _violations(checker.rule_4_public_surface, broken)
+    )
+
+
+def test_capability_declaration_hook_names_control() -> None:
+    """Rule 4: a listed capability and a driven hook both declare legally."""
+    module = _golden_module()
+    listed = _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "    def ready(self) -> None:",
+            "    def anonymize_handlers(self) -> tuple[object, ...]:\n"
+            "        return ()\n\n"
+            "    def ready(self) -> None:",
+        ),
+    )
+    assert _violations(checker.rule_4_public_surface, listed) == []
+    hook_apps = listed.files["apps.py"].replace(
+        "anonymize_handlers", "invalidate_organization_cache"
+    )
+    named = _with_files(
+        listed, apps=hook_apps, views='HOOKS = ("invalidate_organization_cache",)\n'
+    )
+    assert _violations(checker.rule_4_public_surface, named) == []
+    unnamed = _with_files(listed, apps=hook_apps)
+    assert any(
+        "declares 'invalidate_organization_cache', which is not in CAPABILITIES" in violation
+        for violation in _violations(checker.rule_4_public_surface, unnamed)
+    )
+    unrelated = _with_files(
+        listed, apps=hook_apps, views='FIELD_NAME = "invalidate_organization_cache"\n'
+    )
+    assert any(
+        "declares 'invalidate_organization_cache', which is not in CAPABILITIES" in violation
+        for violation in _violations(checker.rule_4_public_surface, unrelated)
+    )
+
+
+def test_unreadable_core_capabilities_fail_closed() -> None:
+    """Rule 4: a vocabulary the harness cannot read is reported, never guessed."""
+    absent = replace(_corpus(_golden_module()), core_conventions_text="")
+    assert checker.rule_4_public_surface(absent) == [
+        "rule 4: core CAPABILITIES unreadable: core has no "
+        f"{checker.CORE_CONVENTIONS_RELATIVE_PATH}"
+    ]
+    malformed = replace(_corpus(_golden_module()), core_conventions_text="CAPABILITIES = {}\n")
+    assert checker.rule_4_public_surface(malformed) == [
+        "rule 4: core CAPABILITIES unreadable: core declares no CAPABILITIES mapping"
+    ]
+
+
+def test_capabilities_mirror_the_shipped_core_mapping() -> None:
+    """The harness parse and core's runtime CAPABILITIES are the same set."""
+    from quickscale_core.runtime.conventions import CAPABILITIES
+
+    corpus = checker.load_corpus(REPO_ROOT)
+    assert checker.core_capabilities(corpus.core_conventions_text) == frozenset(CAPABILITIES)
 
 
 def test_app_config_walk_control() -> None:

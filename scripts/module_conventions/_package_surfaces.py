@@ -12,7 +12,6 @@ import ast
 
 from scripts.module_conventions.core import (
     APP_CONFIG_WALK_SEAMS,
-    CAPABILITY_NAMES,
     MODULE_IMPORT_PREFIX,
     ORG_PUBLIC_SURFACE,
     Module,
@@ -304,7 +303,9 @@ def _app_config_getattr_findings(module: Module, rel: str, tree: ast.Module) -> 
     return findings
 
 
-def _file_surface_violations(module: Module, rel: str, text: str) -> list[str]:
+def _file_surface_violations(
+    module: Module, rel: str, text: str, capabilities: frozenset[str]
+) -> list[str]:
     """Return one package file's rule 4 findings, in report order."""
     tree = _parse(text)
     violations = _import_surface_violations(module, rel, tree, rel.startswith("migrations/"))
@@ -319,7 +320,7 @@ def _file_surface_violations(module: Module, rel: str, text: str) -> list[str]:
                 f"rule 4: {module.name}: {rel}:{lineno} reads {owner}'s setting {attribute}"
             )
     for capability, lineno in _capability_arguments(tree, module):
-        if capability in CAPABILITY_NAMES:
+        if capability in capabilities:
             continue
         described = repr(capability) if capability is not None else "an unresolved name"
         violations.append(

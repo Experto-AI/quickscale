@@ -94,6 +94,8 @@ from scripts.module_conventions.rules_models import (
     rule_25_constraint_names,
 )
 from scripts.module_conventions.rules_package import (
+    CORE_CONVENTIONS_RELATIVE_PATH,
+    core_capabilities,
     rule_4_public_surface,
     rule_6_no_legacy_names,
     rule_11_package_files,
@@ -130,6 +132,7 @@ from scripts.module_conventions.rules_webhooks import (
 
 __all__ = [
     "AuthorityError",
+    "CORE_CONVENTIONS_RELATIVE_PATH",
     "CREDENTIAL_REFERENCE_NAMES",
     "Corpus",
     "DECISIONS_DOC_RELATIVE_PATH",
@@ -142,6 +145,7 @@ __all__ = [
     "THEME_SEAM_TEMPLATE",
     "THEME_SEAM_TEMPLATES",
     "check_conventions",
+    "core_capabilities",
     "decisions_layer_table",
     "decisions_rule_numbers",
     "layer_table_findings",
