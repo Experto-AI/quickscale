@@ -1535,9 +1535,6 @@ its private siblings one way and re-exports public names only.
   billing `services` (`test_services_facade_surface.py`) each carry a surface test that pins
   public names only.
 
-Evidence and options weighed: [arch audit § Finding 2](../others/arch-audit.md)
-(`split-facades-patch-coupled`, option 1 with option 3's ratchet re-key).
-
 ---
 
 ### Frontend Rendering Decisions (SA241) {#frontend-rendering-decisions-sa241}

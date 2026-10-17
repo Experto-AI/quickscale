@@ -14,7 +14,7 @@ their value.
 **Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
-with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#11-watchlist-and-accepted-trade-offs)).
+with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#watchlist-latent-act-only-when-the-trigger-fires)).
 SA284, 0.89.0's one release requirement, has landed: the release build content-checks the wheel
 it uploads for the bundled manifests (arch `rules-held-by-parity-not-derivation`, §7).
 Upgrading a live 0.88.0 install is not supported (maintainer decision, 2026-10-16, answering

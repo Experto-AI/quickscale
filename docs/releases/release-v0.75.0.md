@@ -1,23 +1,12 @@
 # Release v0.75.0 - Forms Module
 
-**Release Date:** 2026-02-23
-**Status:** ✅ Released
+**Date:** 2026-02-23 · **Status:** ✅ Released
 
 ## Summary
 
 This release introduces the **`quickscale-module-forms`** package — a generic, fully customizable form-builder module for Django SaaS projects. Developers can define, render, and manage any kind of form (contact, feedback, support, newsletter) through a data-driven admin interface with zero code changes. The primary production use case is contact/inquiry pages with email notifications.
 
-**Related docs:** [Roadmap](../technical/roadmap.md) | [Technical Decisions](../technical/decisions.md)
-
-## Completed Tasks
-
-- [x] Added the `quickscale_modules.forms` backend package with data models, serializers, views, admin, and URLs.
-- [x] Added React-facing form rendering support and a Django mount-point template for the default React stack.
-- [x] Wired the forms module into QuickScale CLI planning and apply flows.
-- [x] Added spam protection, rate limiting, notifications, anonymization, and preset-seeding workflows.
-- [x] Validated the release with automated tests, linting, and migration checks.
-
-## What's New
+## Highlights
 
 ### Features
 
@@ -61,28 +50,6 @@ FormSubmission (form[PROTECT], status, is_spam, ip_address, user_agent, submitte
 
 Historical data is preserved when fields are deleted: `FormFieldValue.field` uses `SET_NULL` and denormalizes `field_name` at submission time.
 
-## Breaking Changes
+## Breaking changes
 
 None — this is a new additive module with no impact on existing modules.
-
-## Validation
-
-- ✅ 82 tests passing
-- ✅ 97.78% coverage (threshold: 90%)
-- ✅ `ruff check` — 0 linting errors
-- ✅ Migration successfully generated and applied
-
-## Validation Commands
-
-```bash
-cd quickscale_modules/forms
-poetry install
-poetry run pytest          # 82 passed, 97.78% coverage
-poetry run ruff check src/ tests/  # 0 errors
-```
-
-## Next Steps
-
-- Keep future module-planning work aligned with the active roadmap in [docs/technical/roadmap.md](../technical/roadmap.md).
-- Reuse the forms module as a dependency pattern for future feature modules that need public submissions or admin-managed schemas.
-- Maintain release-specific follow-up in release documents instead of re-expanding completed scope in the roadmap.

@@ -97,7 +97,7 @@ The generated-project proof is non-skippable: acceptance is **one pass, zero ski
 
 #### 1.3.1 Release-note format
 
-A release note is reader-facing and at most ~40 lines. It contains exactly these sections:
+A release note is reader-facing. It contains exactly these sections. Upgrade steps are complete, however long. Every other section is brief:
 
 ```markdown
 # Release vX.Y.Z — <name>
