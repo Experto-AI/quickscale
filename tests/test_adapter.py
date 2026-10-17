@@ -16,6 +16,7 @@ from quickscale_modules_notifications.adapter import (
     _notifications_manifest_adapter,
     get_manifest_adapter,
     notifications_live_delivery_configured,
+    option_validation_guidance,
 )
 
 
@@ -176,3 +177,30 @@ def test_live_delivery_requires_a_declared_sender_name_type() -> None:
     }
     assert not notifications_live_delivery_configured({**complete, "sender_name": 123})
     assert not notifications_live_delivery_configured({**complete, "sender_name": None})
+
+
+def test_option_validation_guidance_names_live_delivery_targets() -> None:
+    """A live-targeted configuration gets the stronger remediation text."""
+    guidance = option_validation_guidance(
+        {
+            "sender_name": "QuickScale",
+            "sender_email": "noreply@example.com",
+            "resend_domain": "mg.example.com",
+        }
+    )
+
+    assert guidance is not None
+    assert "targets live Resend delivery" in guidance
+
+
+def test_option_validation_guidance_defers_when_not_live_targeted() -> None:
+    """A console-safe or disabled configuration defers to the shared hint."""
+    assert option_validation_guidance({}) is None
+    assert option_validation_guidance({"resend_domain": ""}) is None
+    assert option_validation_guidance(None) is None
+    assert (
+        option_validation_guidance(
+            {"enabled": False, "resend_domain": "mg.example.com"}
+        )
+        is None
+    )
