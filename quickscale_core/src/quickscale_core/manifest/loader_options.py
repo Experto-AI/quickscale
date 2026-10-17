@@ -16,6 +16,7 @@ from quickscale_core.manifest.loader_errors import ManifestError
 from quickscale_core.manifest.option_validation import (
     ALLOWED_VALIDATION_KEYS,
     OPTION_TYPE_LABELS,
+    VALIDATION_KEY_TYPES,
     option_type_matches,
 )
 from quickscale_core.manifest.schema import ConfigOption
@@ -335,6 +336,31 @@ def _validate_validation_block(
             validator(validation, option_name, module_name)
 
 
+def _validate_validation_key_types(
+    validation: dict[str, Any],
+    option_type: str,
+    option_name: str,
+    module_name: str | None,
+) -> None:
+    """Reject a validation key that cannot apply to the option's type.
+
+    The key vocabulary is type-aware (``pattern`` checks a string,
+    ``min``/``max`` a number, ``not_empty`` a string or list,
+    ``subset_of``/``intersects`` a list, ``excludes`` a scalar); a key
+    declared for a type it cannot check would be a declaration the engine
+    can never apply, so it fails the load.
+    """
+    for key in validation:
+        allowed = VALIDATION_KEY_TYPES.get(key)
+        if allowed is not None and option_type not in allowed:
+            applies_to = ", ".join(sorted(allowed))
+            raise ManifestError(
+                f"Option '{option_name}' validation.{key} cannot be used "
+                f"with a '{option_type}' option (allowed types: {applies_to})",
+                module_name,
+            )
+
+
 def _condition_references(condition: Any) -> list[str]:
     """Return the option names a condition mapping references."""
     if not isinstance(condition, dict):
@@ -411,6 +437,7 @@ def _parse_config_option(
             module_name,
         )
     _validate_validation_block(validation, name, module_name)
+    _validate_validation_key_types(validation, option_type, name, module_name)
 
     if "default" not in data:
         raise ManifestError(

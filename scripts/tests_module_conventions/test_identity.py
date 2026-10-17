@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import replace
+
+import pytest
 
 from scripts import check_module_conventions as checker
 from scripts.tests_module_conventions._support import (
@@ -10,6 +13,7 @@ from scripts.tests_module_conventions._support import (
     _golden_module,
     _violations,
     _with_files,
+    _with_option,
 )
 
 
@@ -1184,3 +1188,39 @@ def test_manifest_ticket_control() -> None:
     assert any(
         "module.yml" in violation for violation in _violations(checker.rule_29_test_names, broken)
     )
+
+
+def test_manifest_description_ticket_control() -> None:
+    module = _golden_module()
+    option = copy.deepcopy(module.manifest["config"]["mutable"]["backend"])
+    option["description"] = "Backend selected by SA999 rollout."
+    broken = _with_option(module, "backend", option)
+    assert any(
+        "description carries a ticket id" in violation
+        for violation in _violations(checker.rule_29_test_names, broken)
+    )
+    assert _violations(checker.rule_29_test_names, module) == []
+
+
+@pytest.mark.parametrize("stamp", ["v0.80.0", "v0.80", "0.80.0"])
+def test_manifest_description_release_stamp_control(stamp: str) -> None:
+    module = _golden_module()
+    option = copy.deepcopy(module.manifest["config"]["mutable"]["backend"])
+    option["description"] = f"Backend selector available since {stamp}."
+    broken = _with_option(module, "backend", option)
+    assert any(
+        "release stamp" in violation
+        for violation in _violations(checker.rule_29_test_names, broken)
+    )
+    assert _violations(checker.rule_29_test_names, module) == []
+
+
+def test_manifest_contract_vintage_id_is_not_description_prose() -> None:
+    module = _golden_module()
+    manifest = copy.deepcopy(module.manifest)
+    manifest["contract_vintage"] = {
+        "id": "sa282-demo-adoption",
+        "minimum": "0.87.0",
+        "manual_adoption_steps": ["Adopt the demo step."],
+    }
+    assert _violations(checker.rule_29_test_names, replace(module, manifest=manifest)) == []

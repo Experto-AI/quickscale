@@ -333,6 +333,84 @@ description: Module without name
         with pytest.raises(ManifestError, match="not a valid"):
             load_manifest(yaml_content, "mymod")
 
+    @pytest.mark.parametrize(
+        ("option_type", "default", "validation", "key"),
+        [
+            ("integer", "1", "pattern: '^1$'", "pattern"),
+            ("string", "''", "min: 1", "min"),
+            ("boolean", "true", "not_empty: true", "not_empty"),
+            ("string", "''", "subset_of: other", "subset_of"),
+            ("string", "''", "intersects: {values: [local]}", "intersects"),
+            ("list", "[]", "excludes: {values: [local]}", "excludes"),
+        ],
+    )
+    def test_load_manifest_option_validation_key_type_mismatch_raises(
+        self, option_type: str, default: str, validation: str, key: str
+    ) -> None:
+        """A validation key the option's type cannot check fails the load."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    other:\n"
+            "      type: list\n"
+            "      default: []\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    my_option:\n"
+            f"      type: {option_type}\n"
+            f"      default: {default}\n"
+            "      description: A description\n"
+            f"      validation:\n        {validation}\n"
+        )
+        with pytest.raises(
+            ManifestError,
+            match=rf"validation\.{key} cannot be used with a '{option_type}'",
+        ):
+            load_manifest(yaml_content, "mymod")
+
+    def test_load_manifest_option_validation_key_type_match_loads(self) -> None:
+        """Every key loads on a type it can check (the mismatch control)."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            "config:\n  immutable:\n"
+            "    enabled:\n"
+            "      type: boolean\n"
+            "      default: true\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+            "    label:\n"
+            "      type: string\n"
+            "      default: ''\n"
+            "      description: A description\n"
+            "      validation:\n"
+            "        pattern: '^[a-z]*$'\n"
+            "        not_empty: true\n"
+            "        excludes: {values: [retired]}\n"
+            "        required_when:\n          enabled: true\n"
+            "    count:\n"
+            "      type: integer\n"
+            "      default: 1\n"
+            "      description: A description\n"
+            "      validation:\n"
+            "        min: 0\n        max: 10\n        choices: [1, 2]\n"
+            "    tags:\n"
+            "      type: list\n"
+            "      default: [local]\n"
+            "      description: A description\n"
+            "      validation:\n"
+            "        not_empty: true\n"
+            "        subset_of: other\n"
+            "        intersects: {values: [local]}\n"
+            "        any_of: [label]\n"
+            "    other:\n"
+            "      type: list\n"
+            "      default: [local]\n"
+            "      description: A description\n"
+            "      validation: {}\n"
+        )
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.get_option("tags") is not None
+
     def test_load_manifest_option_required_when_accepts_multiple_entries(self) -> None:
         """required_when entries all hold, and {not_empty: true} is a value."""
         yaml_content = (
