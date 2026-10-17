@@ -55,6 +55,7 @@ from scripts.module_conventions._models_constraints import (
     _token_matches,
 )
 from scripts.module_conventions._models_tenancy import (
+    _admin_registration_violations,
     _tenant_meta_violations,
     _tenant_reference_violations,
 )
@@ -136,6 +137,7 @@ __all__ = (
 def rule_13_tenant_models(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
+        violations.extend(_admin_registration_violations(module))
         for rel, text in module.files.items():
             if not rel.endswith(".py") or rel.startswith("migrations/"):
                 continue

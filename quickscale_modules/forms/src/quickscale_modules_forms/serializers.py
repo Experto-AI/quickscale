@@ -199,7 +199,7 @@ class FormSubmissionCreateSerializer(serializers.Serializer):
                 continue
 
             # Email type validation
-            if field.field_type == "email":
+            if field.field_type == FormField.FieldType.EMAIL:
                 email_pattern = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
                 if not re.match(email_pattern, submitted_value):
                     errors[field.name] = ["Enter a valid email address."]

@@ -48,14 +48,13 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | — | Optional |
-| SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (repin on v89) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA287 (a, b) ──► SA277
-Track 3: SA296 (a…f)
+Track 3: — (SA296 landed)
      release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
      critical path: SA191 repin ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
@@ -67,7 +66,7 @@ SA277 waits on SA191's cutover, whose evidence draws the line between what `beta
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA296 has no unmet dependency, and SA287 starts now that SA291 has landed; each track takes one at a time,
+**Parallel start.** SA287 starts now that SA291 has landed; each track takes one at a time,
 in queue order. SA286 landed ahead
 of SA191 in Track 1's queue because every adoption step it removed before the repin is applied
 once, offline, instead of on a live site.
@@ -95,7 +94,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA287 | yes | yes | yes | yes | no |
-| 3 | SA296 | yes | yes | yes | yes | no |
+| 3 | — (SA296 landed) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -494,43 +493,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA294 — Record the structured-log-field convention.**
 
-- [ ] **SA296 — Close the rule-audit enforcement gaps the 2026-10-16 census found.**
-
-  Closes coherence gaps 17 and 20–25, which no item carries.
-
-  **Context:** rule 13's `TenantModelAdmin` registration and rule 11's
-  compare-against-members clause have no detector;
-  [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
-  these places" checklist omits the seam tables, `runtime/urls.py`, and the layer choice; and
-  rule 30 forbids name-order-dependent settings while apps and middleware compose in module-name
-  order.
-
-  **Acceptance:** every rule clause either has a detector with a control or is reworded to what
-  is checked, and the checklist matches the core edits a new module needs.
-
-  **Slices:**
-  - [x] (a): landed as the module-conventions harness's rule 17 `BaseCommand`/`CommandError`
-    detector, with control cases and exact-findings rows; decisions rule 40 drops the unchecked
-    "unlisted core ports" claim.
-  - [x] (b): landed as the destructive duty keyed on the operation named in the command's own
-    code — a deleting, anonymizing, or overwriting operation, the adapter registry's callable
-    key included — with `--dry-run` checked as a declared flag; `_reset`/`_wipe` controls and
-    exact-findings rows pin it. A computed-name dispatch such as the backups DR bridge's stays
-    outside the detector, recorded in coherence gap 21.
-  - [x] (c): landed as the harness's layer-table check: a shipped module missing from
-    `MODULE_LAYERS`, an entry naming no module, and any disagreement with decisions' layer
-    table fail the check, with control cases and a fail-closed table parser.
-  - [x] (d): landed as the harness reading core's `CAPABILITIES` instead of its own literal —
-    the corpus carries core's `runtime/conventions.py` text and rule 4 parses it fail-closed —
-    with `AppConfig` declarations checked against that set: a public member that is not a
-    Django `AppConfig` member, a listed capability, or a hook name the tree names where a
-    declaration drives it fails the check. Control cases pin the vocabulary source, the
-    misspelled declaration, the named hook, and the unreadable shapes; a live-tree control
-    matches the parse to core's runtime mapping. (e, f) are next.
-  - [ ] (e, f) One session: detectors for rule 13's admin registration and rule 11's
-    compare-against-members clause, and the docs — the checklist lists the seam tables,
-    `runtime/urls.py`, and the layer choice, and rule 30 names the module-name composition order
-    as its exception (Tier 2-full: two detectors plus the decisions and checklist rewording).
+- [x] **SA296 — Close the rule-audit enforcement gaps the 2026-10-16 census found.**
 
 ## Deferred constraints and references
 

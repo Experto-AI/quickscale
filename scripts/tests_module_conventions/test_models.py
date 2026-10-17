@@ -11,6 +11,14 @@ from scripts.tests_module_conventions._support import (
     _with_files,
 )
 
+NON_TENANT_MODELS = (
+    _golden_module().files["models.py"] + "\n\nclass Gadget(models.Model):\n"
+    "    class Meta:\n"
+    "        ordering = ['pk']\n\n"
+    "    def __str__(self) -> str:\n"
+    "        return 'gadget'\n"
+)
+
 
 def test_tenant_meta_control() -> None:
     module = _golden_module()
@@ -26,6 +34,168 @@ def test_tenant_meta_control() -> None:
         ),
     )
     assert _violations(checker.rule_13_tenant_models, broken)
+
+
+def test_admin_registration_controls() -> None:
+    module = _golden_module()
+    tenant_admin = (
+        "from django.contrib import admin\n"
+        "from quickscale_modules_orgs.admin import TenantModelAdmin\n\n"
+        "from quickscale_modules_demo.models import Widget\n\n\n"
+        "@admin.register(Widget)\n"
+        "class WidgetAdmin(TenantModelAdmin):\n"
+        "    pass\n"
+    )
+    accepted = _with_files(module, **{"admin.py": tenant_admin})
+    assert _violations(checker.rule_13_tenant_models, accepted) == []
+
+    plain_admin = (
+        "from django.contrib import admin\n"
+        "from quickscale_modules_demo.models import Widget\n\n\n"
+        "@admin.register(Widget)\n"
+        "class WidgetAdmin(admin.ModelAdmin):\n"
+        "    pass\n"
+    )
+    refused = _with_files(module, **{"admin.py": plain_admin})
+    assert any(
+        "use TenantModelAdmin" in violation
+        for violation in _violations(checker.rule_13_tenant_models, refused)
+    )
+
+
+def test_admin_non_tenant_registration_control() -> None:
+    module = _with_files(_golden_module(), models=NON_TENANT_MODELS)
+    tenant_admin = (
+        "from django.contrib import admin\n"
+        "from quickscale_modules_orgs.admin import TenantModelAdmin\n"
+        "from quickscale_modules_demo.models import Gadget\n\n\n"
+        "@admin.register(Gadget)\n"
+        "class GadgetAdmin(TenantModelAdmin):\n"
+        "    pass\n"
+    )
+    refused = _with_files(module, **{"admin.py": tenant_admin})
+    assert any(
+        "use admin.ModelAdmin" in violation
+        for violation in _violations(checker.rule_13_tenant_models, refused)
+    )
+
+    plain_admin = (
+        "from django.contrib import admin\n"
+        "from quickscale_modules_demo.models import Gadget\n\n\n"
+        "@admin.register(Gadget)\n"
+        "class GadgetAdmin(admin.ModelAdmin):\n"
+        "    pass\n"
+    )
+    accepted = _with_files(module, **{"admin.py": plain_admin})
+    assert _violations(checker.rule_13_tenant_models, accepted) == []
+
+
+def test_admin_multi_model_registration_control() -> None:
+    module = _with_files(_golden_module(), models=NON_TENANT_MODELS)
+    mixed = (
+        "from django.contrib import admin\n"
+        "from quickscale_modules_orgs.admin import TenantModelAdmin\n"
+        "from quickscale_modules_demo.models import Gadget, Widget\n\n\n"
+        "@admin.register(Widget, Gadget)\n"
+        "class MixedAdmin(TenantModelAdmin):\n"
+        "    pass\n"
+    )
+    refused = _with_files(module, **{"admin.py": mixed})
+    violations = _violations(checker.rule_13_tenant_models, refused)
+    assert any("non-tenant model Gadget" in violation for violation in violations)
+    assert not any("tenant model Widget" in violation for violation in violations)
+
+
+def test_admin_registration_spelling_and_origin_controls() -> None:
+    module = _golden_module()
+    site_call = _with_files(
+        module,
+        **{
+            "admin.py": (
+                "from django.contrib import admin\n"
+                "from quickscale_modules_demo.models import Widget\n\n"
+                "admin.site.register(Widget)\n"
+            )
+        },
+    )
+    assert any(
+        "use @admin.register" in violation
+        for violation in _violations(checker.rule_13_tenant_models, site_call)
+    )
+
+    local_base = _with_files(
+        module,
+        **{
+            "admin.py": (
+                "from django.contrib import admin\n"
+                "from quickscale_modules_demo.models import Widget\n\n\n"
+                "class TenantModelAdmin:\n"
+                "    pass\n\n\n"
+                "@admin.register(Widget)\n"
+                "class WidgetAdmin(TenantModelAdmin):\n"
+                "    pass\n"
+            )
+        },
+    )
+    assert any(
+        "use TenantModelAdmin" in violation
+        for violation in _violations(checker.rule_13_tenant_models, local_base)
+    )
+
+    undefined = _with_files(
+        module,
+        **{
+            "admin.py": (
+                "from django.contrib import admin\n"
+                "from quickscale_modules_orgs.models import Organization\n\n\n"
+                "@admin.register(Organization)\n"
+                "class OrganizationAdmin(admin.ModelAdmin):\n"
+                "    pass\n"
+            )
+        },
+    )
+    assert any(
+        "does not define" in violation
+        for violation in _violations(checker.rule_13_tenant_models, undefined)
+    )
+
+
+def test_admin_base_chain_and_alias_controls() -> None:
+    module = _golden_module()
+    chained = _with_files(
+        module,
+        **{
+            "admin.py": (
+                "from django.contrib import admin\n"
+                "from ._admin_base import WidgetAdminBase\n\n"
+                "from quickscale_modules_demo.models import Widget\n\n\n"
+                "@admin.register(Widget)\n"
+                "class WidgetAdmin(WidgetAdminBase):\n"
+                "    pass\n"
+            ),
+            "_admin_base.py": (
+                "from quickscale_modules_orgs.admin import TenantModelAdmin\n\n\n"
+                "class WidgetAdminBase(TenantModelAdmin):\n"
+                "    pass\n"
+            ),
+        },
+    )
+    assert _violations(checker.rule_13_tenant_models, chained) == []
+
+    aliased = _with_files(
+        module,
+        **{
+            "admin.py": (
+                "from django.contrib import admin\n"
+                "from quickscale_modules_orgs.admin import TenantModelAdmin as OrgsAdmin\n"
+                "from quickscale_modules_demo.models import Widget\n\n\n"
+                "@admin.register(Widget)\n"
+                "class WidgetAdmin(OrgsAdmin):\n"
+                "    pass\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_13_tenant_models, aliased) == []
 
 
 def test_model_str_control() -> None:

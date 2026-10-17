@@ -1171,7 +1171,10 @@ rather than the release that introduced it.
   `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]` from a module: any other `REST_FRAMEWORK` sub-key
   fails the merge, so no module can replace the project-wide handler, permission, authentication,
   or throttle classes by wiring.
-- ❌ A setting whose value depends on the order of module names.
+- ❌ A setting whose value depends on the order of module names. Listed exception: core composes
+  `INSTALLED_APPS` and `MIDDLEWARE` in sorted module-name order (`_sort_module_items`), because
+  that order is fixed by the module set and no module selects it; the composition offers no
+  `before`/`after` override.
 
 **31. The theme seam.**
 - ✅ The seam's producer is the versioned runtime library: the theme's `index.html.j2` and its two

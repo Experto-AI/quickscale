@@ -1564,6 +1564,68 @@ def test_package_file_controls() -> None:
     )
 
 
+CHOICE_MODELS = (
+    "from django.db import models\n"
+    "from quickscale_modules_orgs.models import TenantModel\n\n\n"
+    "class Widget(TenantModel):\n"
+    "    class Status(models.TextChoices):\n"
+    "        DRAFT = 'draft', 'Draft'\n"
+    "        PUBLISHED = 'published', 'Published'\n\n"
+    "    status = models.CharField(max_length=16, choices=Status.choices)\n\n"
+    "    class Meta(TenantModel.Meta):\n"
+    "        ordering = ['pk']\n\n"
+    "    def __str__(self) -> str:\n"
+    "        return 'widget'\n"
+)
+
+
+def _choice_module(**files: str) -> Module:
+    return _with_files(_golden_module(), models=CHOICE_MODELS, **files)
+
+
+def test_choice_member_comparison_controls() -> None:
+    module = _choice_module()
+    assert _violations(checker.rule_11_package_files, module) == []
+    member_style = _choice_module(
+        views=("def is_published(widget):\n    return widget.status == Widget.Status.PUBLISHED\n")
+    )
+    assert _violations(checker.rule_11_package_files, member_style) == []
+    literal = _choice_module(
+        views=("def is_published(widget):\n    return widget.status == 'published'\n")
+    )
+    assert any(
+        "use Status.PUBLISHED instead" in violation
+        for violation in _violations(checker.rule_11_package_files, literal)
+    )
+    membership = _choice_module(
+        views=("def is_live(widget):\n    return widget.status in ('draft', 'published')\n")
+    )
+    assert any(
+        "use Status.DRAFT instead" in violation
+        for violation in _violations(checker.rule_11_package_files, membership)
+    )
+    other_literal = _choice_module(
+        views=("def is_published(widget):\n    return widget.status == 'archived'\n")
+    )
+    assert _violations(checker.rule_11_package_files, other_literal) == []
+
+
+def test_choice_member_comparison_boundary_controls() -> None:
+    """A plain name, a query lookup, and a non-choice field stay outside."""
+    plain_name = _choice_module(
+        views=("def is_published(status):\n    return status == 'published'\n")
+    )
+    assert _violations(checker.rule_11_package_files, plain_name) == []
+    lookup = _choice_module(
+        views=("def live():\n    return Widget.objects.filter(status='published')\n")
+    )
+    assert _violations(checker.rule_11_package_files, lookup) == []
+    non_choice = _choice_module(
+        views=("def named(widget):\n    return widget.slug == 'published'\n")
+    )
+    assert _violations(checker.rule_11_package_files, non_choice) == []
+
+
 def test_command_flag_conventions_controls() -> None:
     module = _golden_module()
     format_flag = _with_files(

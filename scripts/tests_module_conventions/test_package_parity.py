@@ -95,8 +95,47 @@ def _declaration_module(method: str) -> Module:
     )
 
 
+CHOICE_MODELS = (
+    "from django.db import models\n"
+    "from quickscale_modules_orgs.models import TenantModel\n\n\n"
+    "class Widget(TenantModel):\n"
+    "    class Status(models.TextChoices):\n"
+    "        DRAFT = 'draft', 'Draft'\n"
+    "        PUBLISHED = 'published', 'Published'\n\n"
+    "    status = models.CharField(max_length=16, choices=Status.choices)\n\n"
+    "    class Meta(TenantModel.Meta):\n"
+    "        ordering = ['pk']\n\n"
+    "    def __str__(self) -> str:\n"
+    "        return 'widget'\n"
+)
+
+CHOICE_VIEWS_MEMBER = (
+    "def is_published(widget):\n    return widget.status == Widget.Status.PUBLISHED\n"
+)
+
+CHOICE_VIEWS_LITERAL = "def is_published(widget):\n    return widget.status == 'published'\n"
+
+CHOICE_VIEWS_MEMBERSHIP = (
+    "def is_live(widget):\n    return widget.status in ('draft', 'published')\n"
+)
+
+CHOICE_VIEWS_PLAIN_NAME = "def is_published(status):\n    return status == 'published'\n"
+
+
 CASE_BUILDERS = {
     "clean": lambda: _corpus(_golden_module()),
+    "choice_member_ok": lambda: _corpus(
+        _with_files(_golden_module(), models=CHOICE_MODELS, views=CHOICE_VIEWS_MEMBER)
+    ),
+    "choice_plain_name": lambda: _corpus(
+        _with_files(_golden_module(), models=CHOICE_MODELS, views=CHOICE_VIEWS_PLAIN_NAME)
+    ),
+    "choice_literal": lambda: _corpus(
+        _with_files(_golden_module(), models=CHOICE_MODELS, views=CHOICE_VIEWS_LITERAL)
+    ),
+    "choice_membership": lambda: _corpus(
+        _with_files(_golden_module(), models=CHOICE_MODELS, views=CHOICE_VIEWS_MEMBERSHIP)
+    ),
     "import_outside_surface": lambda: _corpus(
         _with_files(
             _golden_module(),
@@ -878,6 +917,26 @@ EXACT_FINDINGS = (
         "no_is_enabled",
         "rule_11_package_files",
         ("rule 11: demo: services.py does not publish is_enabled()",),
+    ),
+    ("choice_member_ok", "rule_11_package_files", ()),
+    ("choice_plain_name", "rule_11_package_files", ()),
+    (
+        "choice_literal",
+        "rule_11_package_files",
+        (
+            "rule 11: demo: views.py:2 compares status against the literal 'published'; "
+            "use Status.PUBLISHED instead",
+        ),
+    ),
+    (
+        "choice_membership",
+        "rule_11_package_files",
+        (
+            "rule 11: demo: views.py:2 compares status against the literal 'draft'; "
+            "use Status.DRAFT instead",
+            "rule 11: demo: views.py:2 compares status against the literal 'published'; "
+            "use Status.PUBLISHED instead",
+        ),
     ),
     ("clean", "rule_15_package_root", ()),
     (

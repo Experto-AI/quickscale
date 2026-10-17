@@ -232,8 +232,123 @@ NO_META_INHERIT_MODELS = (
     "        return 'widget'\n"
 )
 
+NON_TENANT_MODELS = (
+    _golden_module().files["models.py"] + "\n\nclass Gadget(models.Model):\n"
+    "    class Meta:\n"
+    "        ordering = ['pk']\n\n"
+    "    def __str__(self) -> str:\n"
+    "        return 'gadget'\n"
+)
+
+ADMIN_TENANT_OK = (
+    "from django.contrib import admin\n"
+    "from quickscale_modules_orgs.admin import TenantModelAdmin\n\n"
+    "from quickscale_modules_demo.models import Widget\n\n\n"
+    "@admin.register(Widget)\n"
+    "class WidgetAdmin(TenantModelAdmin):\n"
+    "    pass\n"
+)
+
+ADMIN_TENANT_ON_MODEL_ADMIN = (
+    "from django.contrib import admin\n"
+    "from quickscale_modules_demo.models import Widget\n\n\n"
+    "@admin.register(Widget)\n"
+    "class WidgetAdmin(admin.ModelAdmin):\n"
+    "    pass\n"
+)
+
+ADMIN_NON_TENANT_OK = (
+    "from django.contrib import admin\n"
+    "from quickscale_modules_demo.models import Gadget\n\n\n"
+    "@admin.register(Gadget)\n"
+    "class GadgetAdmin(admin.ModelAdmin):\n"
+    "    pass\n"
+)
+
+ADMIN_NON_TENANT_ON_TENANT_ADMIN = (
+    "from django.contrib import admin\n"
+    "from quickscale_modules_orgs.admin import TenantModelAdmin\n"
+    "from quickscale_modules_demo.models import Gadget\n\n\n"
+    "@admin.register(Gadget)\n"
+    "class GadgetAdmin(TenantModelAdmin):\n"
+    "    pass\n"
+)
+
+ADMIN_SITE_REGISTER = (
+    "from django.contrib import admin\n"
+    "from quickscale_modules_demo.models import Widget\n\n"
+    "admin.site.register(Widget)\n"
+)
+
+ADMIN_UNDEFINED_MODEL = (
+    "from django.contrib import admin\n"
+    "from quickscale_modules_orgs.models import Organization\n\n\n"
+    "@admin.register(Organization)\n"
+    "class OrganizationAdmin(admin.ModelAdmin):\n"
+    "    pass\n"
+)
+
+ADMIN_CHAIN_OK = (
+    "from django.contrib import admin\n"
+    "from ._admin_base import WidgetAdminBase\n\n"
+    "from quickscale_modules_demo.models import Widget\n\n\n"
+    "@admin.register(Widget)\n"
+    "class WidgetAdmin(WidgetAdminBase):\n"
+    "    pass\n"
+)
+
+ADMIN_CHAIN_BASE = (
+    "from quickscale_modules_orgs.admin import TenantModelAdmin\n\n\n"
+    "class WidgetAdminBase(TenantModelAdmin):\n"
+    "    pass\n"
+)
+
+ADMIN_MULTI_MODEL_MIXED = (
+    "from django.contrib import admin\n"
+    "from quickscale_modules_orgs.admin import TenantModelAdmin\n"
+    "from quickscale_modules_demo.models import Gadget, Widget\n\n\n"
+    "@admin.register(Widget, Gadget)\n"
+    "class MixedAdmin(TenantModelAdmin):\n"
+    "    pass\n"
+)
+
 CASE_BUILDERS = {
     "clean": lambda: _corpus(_golden_module()),
+    "admin_tenant_ok": lambda: _corpus(
+        _with_files(_golden_module(), **{"admin.py": ADMIN_TENANT_OK})
+    ),
+    "admin_chain_ok": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            **{"admin.py": ADMIN_CHAIN_OK, "_admin_base.py": ADMIN_CHAIN_BASE},
+        )
+    ),
+    "admin_tenant_on_model_admin": lambda: _corpus(
+        _with_files(_golden_module(), **{"admin.py": ADMIN_TENANT_ON_MODEL_ADMIN})
+    ),
+    "admin_non_tenant_ok": lambda: _corpus(
+        _with_files(_golden_module(), models=NON_TENANT_MODELS, **{"admin.py": ADMIN_NON_TENANT_OK})
+    ),
+    "admin_non_tenant_on_tenant_admin": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            models=NON_TENANT_MODELS,
+            **{"admin.py": ADMIN_NON_TENANT_ON_TENANT_ADMIN},
+        )
+    ),
+    "admin_site_register": lambda: _corpus(
+        _with_files(_golden_module(), **{"admin.py": ADMIN_SITE_REGISTER})
+    ),
+    "admin_undefined_model": lambda: _corpus(
+        _with_files(_golden_module(), **{"admin.py": ADMIN_UNDEFINED_MODEL})
+    ),
+    "admin_multi_model_mixed": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            models=NON_TENANT_MODELS,
+            **{"admin.py": ADMIN_MULTI_MODEL_MIXED},
+        )
+    ),
     "tenant_meta_no_inherit": lambda: _corpus(_models(_golden_module(), NO_META_INHERIT_MODELS)),
     "tenant_reference_calls": lambda: _corpus(
         _with_files(_golden_module(), views=TENANT_REFERENCES)
@@ -568,6 +683,49 @@ EXACT_FINDINGS = (
         "abstract_constraint_unnamed",
         "rule_25_constraint_names",
         ("rule 25: demo: models.py:7 UniqueConstraint without a name",),
+    ),
+    ("admin_tenant_ok", "rule_13_tenant_models", ()),
+    ("admin_chain_ok", "rule_13_tenant_models", ()),
+    (
+        "admin_tenant_on_model_admin",
+        "rule_13_tenant_models",
+        (
+            "rule 13: demo: admin.py:6 registers tenant model Widget with WidgetAdmin; "
+            "use TenantModelAdmin",
+        ),
+    ),
+    ("admin_non_tenant_ok", "rule_13_tenant_models", ()),
+    (
+        "admin_non_tenant_on_tenant_admin",
+        "rule_13_tenant_models",
+        (
+            "rule 13: demo: admin.py:7 registers non-tenant model Gadget with GadgetAdmin; "
+            "use admin.ModelAdmin",
+        ),
+    ),
+    (
+        "admin_site_register",
+        "rule_13_tenant_models",
+        (
+            "rule 13: demo: admin.py:4 registers Widget through admin.site.register; "
+            "use @admin.register",
+        ),
+    ),
+    (
+        "admin_undefined_model",
+        "rule_13_tenant_models",
+        (
+            "rule 13: demo: admin.py:6 registers Organization, which the module's package "
+            "does not define",
+        ),
+    ),
+    (
+        "admin_multi_model_mixed",
+        "rule_13_tenant_models",
+        (
+            "rule 13: demo: admin.py:7 registers non-tenant model Gadget with MixedAdmin; "
+            "use admin.ModelAdmin",
+        ),
     ),
 )
 

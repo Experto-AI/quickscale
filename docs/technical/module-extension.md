@@ -648,12 +648,25 @@ Conventions rule 37):
 - [ ] `make manifest-sync` — materialize the bundled manifests under
       `quickscale_core/src/quickscale_core/data/manifests/` from the new module's root
       `module.yml`; the wheel build derives them from the module manifests
+- [ ] `quickscale_core/src/quickscale_core/runtime/seam.py` — add the module's rows to the seam
+      tables its theme surface needs: `_SEAM_MODULE_PATHS` for a shell route or public page the
+      theme links to, `_SEAM_MODULE_API_PATHS` for a theme-visible API base, and
+      `_SEAM_DOCUMENT_PATHS` for a server-rendered document the launcher pages link to. Each
+      table is server-resolved presentation data and a recorded rule 37 exception (rules 31, 41)
+- [ ] `quickscale_core/src/quickscale_core/runtime/urls.py` — add the module's
+      `_TEMPLATE_MODULE_URLS` row when the Django-rendered shell links the module's named routes,
+      the server-side sibling of the seam's path table (rule 41)
 
 Every other per-module constant or module-name branch in core or the CLI is rejected by the
 conformance harness; the recorded exceptions are each listed with their reason in
 [decisions.md § Module Conventions](decisions.md#module-conventions) (rule 37). The CLI needs
 no edit for a new module: `AVAILABLE_MODULES` is discovery-derived and every wiring decision
 comes from the module's own `module.yml` and `adapter.py`.
+
+The module's rule 5 layer is recorded in two places: the layer table in
+[decisions.md § Module Conventions](decisions.md#module-conventions) and the `MODULE_LAYERS`
+mapping in `scripts/module_conventions/core.py`. The conformance check fails when the two
+disagree, and when a shipped module carries no entry in one of them.
 
 - [ ] Confirm the module resolves end to end: `refresh_managed_adapters()` registers it,
       and its adapter returns a `ModuleWiringSpec` whose `apps` matches the manifest
@@ -696,8 +709,8 @@ SA170's final ordered serial and concurrent campaigns passed against retained pr
 closed; their final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 
 **5. Template Integration (showcase_react theme):**
-- [ ] The seam's producer (the `quickscale_seam` runtime tag) renders from the discovered module set, so the module's `window.__QUICKSCALE__` flag (installed and `QUICKSCALE_<MODULE>_ENABLED`) and its path (from its URL names) need no hand-written line; nor does any list in core, the CLI, or `scripts/`, which derive the module set from discovery (Module Conventions rules 31 and 37)
-- [ ] A module with a React surface adds its page and any presentation entry in the theme; its `modules` flag, path, and API-base keys are generated into the managed seam declaration and key manifest from the shipped set, so the type and the validator's key list need no hand edit ([frontend.md § Module frontend surfaces](frontend.md#module-frontend-surfaces))
+- [ ] The seam's producer (the `quickscale_seam` runtime tag) renders from the discovered module set, so the module's `window.__QUICKSCALE__` flag (installed and `QUICKSCALE_<MODULE>_ENABLED`) needs no hand-written line; its theme-visible path, API base, and document routes come from the seam tables section 4 lists (Module Conventions rules 31 and 37)
+- [ ] A module with a React surface adds its page and any presentation entry in the theme; its `modules` flag, path, API base, and document keys are generated into the managed seam declaration and key manifest from the seam tables and the shipped set, so the type and the validator's key list need no hand edit ([frontend.md § Module frontend surfaces](frontend.md#module-frontend-surfaces))
 
 **6. Testing:**
 - [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
