@@ -360,7 +360,7 @@ foundational model lives in updateable module code.
 Overview, Configuration (every manifest option), Public surface, URLs, Management commands,
 Operations, Extending — in that order, with no versions in headings. Rule 38 adds that the
 Configuration heading names every manifest option key and the Management commands heading
-names every command the module ships.
+names every command the module ships and every flag those commands declare.
 
 The extension contract belongs inside the README's Extending section, covering:
 
@@ -721,7 +721,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 - [ ] `on_delete` on `User` is `SET_NULL` (never `PROTECT`), `CASCADE` only on the listed fields (rule 27; the user-FK conformance gate); package files use the allowed names or a private `_<name>.py` (rule 28); test files are `test_<subject>.py`, with no ticket number in the name, docstrings, comments, identifiers, or string literals, and a manifest description carries no ticket number or release stamp (rule 29)
 - [ ] Wiring writes a Django or third-party setting another module also writes only with the same value, or `apply` fails (rule 30); throttle scopes are `quickscale_<module>_<purpose>` with the rate from a `_RATE_LIMIT` option (rule 32); every name in a namespace shared with the project carries the `quickscale_<module>` stem (rule 33)
 - [ ] The module names no higher-layer module anywhere in its source — by import, app label, `get_model`, or `is_installed` (rule 34); secrets arrive as settings rendered by `apply` from the `_ENV_VAR` option, never through `os.getenv`, and `checks.py` fails startup when a needed secret is empty (rule 35)
-- [ ] The README names every option key under Configuration and every command under Management commands (rule 38); `required_modules` lists bare names, with no version floor and no `implies` (rule 39)
+- [ ] The README names every option key under Configuration and every command and flag under Management commands (rule 38); `required_modules` lists bare names, with no version floor and no `implies` (rule 39)
 - [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
 
 **7. Split Branch Publishing:**

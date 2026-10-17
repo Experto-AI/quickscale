@@ -853,7 +853,8 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   ❌ `*_CHOICES` tuple lists written out as literals.
 - ✅ README headings, in order: Overview, Configuration (every manifest option), Public surface,
   URLs, Management commands, Operations, Extending. No versions in headings. The test checks the
-  headings and, under rule 38, that every option key and command name appears.
+  headings and, under rule 38, that every option key, command name, and declared command flag
+  appears.
 
 **12. Manifest option schema.**
 - ✅ Every option has `type`, `default`, and `description`. A mutable option has `django_setting`;
@@ -1325,9 +1326,9 @@ rather than the release that introduced it.
   suite.
 
 **38. README content.** Rule 11's Configuration heading names every manifest option key, and its
-Management commands heading every command the module ships; the test checks both, besides the
-headings. A module whose views authorize through orgs' role tools lists the minimum role per
-action in its README's Public surface (rule 19).
+Management commands heading every command the module ships and every flag those commands declare;
+the test checks all three, besides the headings. A module whose views authorize through
+orgs' role tools lists the minimum role per action in its README's Public surface (rule 19).
 
 **39. Module dependencies.**
 - ✅ `required_modules` and `dependencies` are always present; an empty list declares none.

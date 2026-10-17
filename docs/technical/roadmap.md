@@ -51,15 +51,14 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
 | SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
-| SA292 | One command off-refusal helper, service-owned transactions, complete README flags | 3 | — | Optional |
-| SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | SA292 | Optional |
+| SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (repin on v89) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA291 (a…c) ──► SA287 (a, b) ──► SA277
-Track 3: SA292 (a, b) ──► SA296 (a…f)
+Track 3: SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
      critical path: SA191 repin ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
@@ -68,12 +67,12 @@ Arrows within a track are queue order; the table holds the dependency edges. Cro
 SA191's cutover (not its repin) waits on the 0.89.0 publication, and SA153 (f) waits on the cutover; SA291 waited on SA288, which has landed (both rewrote
 the composed `REST_FRAMEWORK`, `runtime/settings.compose_rest_framework`), and SA287 waits on
 SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
-SA296 waits on SA292 because both rewrite harness rule 17;
+SA296 waited on SA292, which has landed (both rewrite harness rule 17);
 SA277 waits on SA191's cutover, whose evidence draws the line between what `beta_migration`
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA291 and SA292 have no unmet dependency; each track takes one at a time,
+**Parallel start.** SA291 and SA296 have no unmet dependency; each track takes one at a time,
 in queue order. SA286 landed ahead
 of SA191 in Track 1's queue because every adoption step it removed before the repin is applied
 once, offline, instead of on a live site (arch audit §7).
@@ -101,7 +100,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA291 | yes | yes | yes | yes | no |
-| 3 | SA292 | yes | yes | yes | yes | no |
+| 3 | SA296 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -526,27 +525,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA297 — `operator_access` checks the platform operator itself.**
 
-- [ ] **SA292 — One command off-refusal helper, service-owned transactions, complete README flags.**
-
-  Closes coherence `command-off-refusal-and-atomic` and `readme-flag-coverage` (items 35, 31),
-  merges coherence §6 proposal 56 into decisions rules 17 and 38, and takes the tech §12 hand-off on `quickscale_backups_restore --file`.
-
-  **Acceptance:** rules 17 and 38 carry proposal 56. One core helper refuses a `--trigger scheduled` run
-  while the module is off, used by backups create and prune and forms anonymize; forms' two
-  commands and orgs purge open their transaction in the service; harness rule 17 requires the
-  helper where `--trigger` exists. The rule 38 README test compares every argparse option with
-  the README entry; backups, forms, and orgs document every flag; `quickscale_backups_restore`'s
-  help and usage errors agree with the guard that always refuses `--file`.
-
-  **Slices:**
-  - [x] (a) The helper, the transaction moves, and the rule 17 clause (Tier 2-fast). Landed: one
-    core helper (`quickscale_core.runtime.require_scheduled_module_enabled`) refuses a
-    `--trigger scheduled` run while the module is off, used by backups create and prune and forms
-    anonymize; the forms seeding and retention operations and the orgs purge open their
-    `transaction.atomic()` below the command, with the command scans treating underscore-prefixed
-    support modules the way Django does; harness rule 17 requires the helper call wherever
-    `--trigger` exists, with controls; decisions rule 17 carries the clause. (b) is next.
-  - [ ] (b) The flag test, the README rows, and the `--file` help (Tier 2-fast).
+- [x] **SA292 — One command off-refusal helper, service-owned transactions, complete README flags.**
 
 - [x] **SA294 — Record the structured-log-field convention.**
 

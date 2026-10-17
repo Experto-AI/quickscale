@@ -125,7 +125,8 @@ module's paths are:
   to run multiple times.
 - `quickscale_forms_anonymize_submissions` — nulls `ip_address` and clears `user_agent` for
   submissions older than each form's `data_retention_days`; a GDPR compliance helper. `--trigger`
-  defaults to `manual`; a `scheduled` run refuses while the module is switched off.
+  defaults to `manual`; a `scheduled` run refuses while the module is switched off. `--dry-run`
+  reports the submissions that would be anonymized without changing them.
 
 ## Operations
 

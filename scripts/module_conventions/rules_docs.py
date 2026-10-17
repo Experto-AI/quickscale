@@ -51,9 +51,9 @@ def rule_38_readme_content(corpus: Corpus) -> list[str]:
     Rule 38: each module's README carries the required sections and their facts.
 
     The README names the seven required level-two headings in order, carries
-    no versioned heading, names every manifest option and management command,
-    and — when the module authorizes through orgs' role tools — lists the
-    minimum role in its public surface.
+    no versioned heading, names every manifest option, every management command,
+    and every flag each command declares, and — when the module authorizes
+    through orgs' role tools — lists the minimum role in its public surface.
     """
     violations: list[str] = []
     for module in corpus.modules:
