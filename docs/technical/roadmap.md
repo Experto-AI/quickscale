@@ -554,7 +554,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   help and usage errors agree with the guard that always refuses `--file`.
 
   **Slices:**
-  - [ ] (a) The helper, the transaction moves, and the rule 17 clause (Tier 2-fast).
+  - [x] (a) The helper, the transaction moves, and the rule 17 clause (Tier 2-fast). Landed: one
+    core helper (`quickscale_core.runtime.require_scheduled_module_enabled`) refuses a
+    `--trigger scheduled` run while the module is off, used by backups create and prune and forms
+    anonymize; the forms seeding and retention operations and the orgs purge open their
+    `transaction.atomic()` below the command, with the command scans treating underscore-prefixed
+    support modules the way Django does; harness rule 17 requires the helper call wherever
+    `--trigger` exists, with controls; decisions rule 17 carries the clause. (b) is next.
   - [ ] (b) The flag test, the README rows, and the `--file` help (Tier 2-fast).
 
 - [x] **SA294 — Record the structured-log-field convention.**

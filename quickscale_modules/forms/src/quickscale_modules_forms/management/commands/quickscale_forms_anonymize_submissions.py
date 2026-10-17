@@ -1,13 +1,13 @@
 """Management command to anonymize old form submissions for GDPR compliance"""
 
-from datetime import timedelta
 from typing import Any
 
-from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
-from django.utils import timezone
+from django.core.management.base import BaseCommand
 
-from quickscale_modules_forms.models import Form, FormSubmission
+from quickscale_core.runtime import require_scheduled_module_enabled
+from quickscale_modules_forms.management.commands._retention import (
+    anonymize_expired_submissions,
+)
 
 
 class Command(BaseCommand):
@@ -35,87 +35,21 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
-        from django.db import transaction
-
-        from quickscale_modules_orgs.current_org import (
-            operator_access_for_command,
-            org_scope,
-        )
-
         trigger = str(options.get("trigger") or "manual")
-        if trigger == "scheduled" and not bool(settings.QUICKSCALE_FORMS_ENABLED):
-            # Rule 1 (D3): a module switched off runs none of its scheduled
-            # jobs; the retention anonymizer is the forms module's only one.
-            raise CommandError(
-                "The forms module is disabled (QUICKSCALE_FORMS_ENABLED is "
-                "False); scheduled retention runs do not run."
-            )
+        require_scheduled_module_enabled(trigger, module_name="forms")
 
         dry_run = bool(options.get("dry_run", False))
-        total_anonymized = 0
-        now = timezone.now()
+        per_form = anonymize_expired_submissions(dry_run=dry_run)
 
-        with transaction.atomic():
-            # Phase 1 — Read form inventory with operator_access_for_command
-            # (SELECT-only cross-tenant read).  Ensures every form is visited
-            # regardless of which org the GUC is set to; the command variant
-            # records this command's name in the audit log.
-            with operator_access_for_command(
-                command="quickscale_forms_anonymize_submissions",
-                reason="forms_anonymize: read form inventory",
-            ):
-                forms = list(Form.all_objects.all())
+        for slug, count in per_form:
+            if dry_run:
+                self.stdout.write(
+                    f"  Would anonymize {count} submissions for form: {slug}"
+                )
+            else:
+                self.stdout.write(f"  Anonymized {count} submissions for form: {slug}")
 
-            for form in forms:
-                if form.data_retention_days == 0:
-                    # 0 = keep forever
-                    continue
-
-                cutoff = now - timedelta(days=form.data_retention_days)
-
-                # Phase 2 — Read old submission PKs within the form's org via
-                # the command operator scope.  The update itself runs under
-                # org_scope so FORCE RLS write-path policy allows the
-                # modification.
-                with operator_access_for_command(
-                    command="quickscale_forms_anonymize_submissions",
-                    reason="forms_anonymize: read old submission PKs",
-                ):
-                    old_pks = list(
-                        FormSubmission.all_objects.filter(
-                            form=form,
-                            submitted_at__lt=cutoff,
-                        )
-                        .exclude(ip_address=None)
-                        .values_list("pk", flat=True)
-                    )
-
-                if not old_pks:
-                    continue
-
-                if dry_run:
-                    total_anonymized += len(old_pks)
-                    self.stdout.write(
-                        f"  Would anonymize {len(old_pks)} submissions for form: "
-                        f"{form.slug}"
-                    )
-                    continue
-
-                # Phase 3 — Update inside the form's owning org scope.
-                # Every write uses the public ``objects`` manager under
-                # ``org_scope`` so FORCE RLS sees the correct
-                # ``app.current_org_id`` (write-path policy).
-                with org_scope(form.organization):
-                    count = (
-                        FormSubmission.objects.filter(pk__in=old_pks)
-                        .exclude(ip_address=None)
-                        .update(ip_address=None, user_agent="")
-                    )
-                    total_anonymized += count
-                    self.stdout.write(
-                        f"  Anonymized {count} submissions for form: {form.slug}"
-                    )
-
+        total_anonymized = sum(count for _, count in per_form)
         if dry_run:
             self.stdout.write(
                 self.style.SUCCESS(

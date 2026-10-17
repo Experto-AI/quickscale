@@ -57,6 +57,11 @@ DESTRUCTIVE_COMMAND_KEYWORDS = (
     "promote",
 )
 
+#: Rule 17: the one scheduled-off refusal.  A command whose ``--trigger``
+#: option exists calls this core helper before any other work, so the refusal
+#: reads the same everywhere and no command module spells its own.
+SCHEDULED_REFUSAL_HELPER = "require_scheduled_module_enabled"
+
 #: Rule 17: the one organization-selector spelling.  A command that selects a
 #: single organization declares ``--organization-id`` and validates the value
 #: as a UUID; any other ``--org``/``--organization`` spelling of that selector
@@ -118,6 +123,14 @@ def _flag_findings(module_name: str, command: str, flags: dict[str, ast.Call]) -
     return violations
 
 
+def _refuses_scheduled_runs(tree: ast.Module) -> bool:
+    """Return whether a command calls the one scheduled-off refusal helper."""
+    return any(
+        isinstance(node, ast.Call) and _call_func_name(node) == SCHEDULED_REFUSAL_HELPER
+        for node in ast.walk(tree)
+    )
+
+
 def _call_findings(module_name: str, command: str, tree: ast.Module) -> list[str]:
     """Return the print() and sys.exit() findings in a command's body."""
     violations: list[str] = []
@@ -139,6 +152,11 @@ def _command_findings(module_name: str, command: str, tree: ast.Module, text: st
     """Return one management command's rule 17 findings, in report order."""
     flags = _command_flags(tree)
     violations = _flag_findings(module_name, command, flags)
+    if "--trigger" in flags and not _refuses_scheduled_runs(tree):
+        violations.append(
+            f"rule 17: {module_name}: {command} --trigger must refuse scheduled "
+            f"runs through {SCHEDULED_REFUSAL_HELPER}"
+        )
     violations.extend(_call_findings(module_name, command, tree))
     if any(keyword in command for keyword in DESTRUCTIVE_COMMAND_KEYWORDS):
         if "--dry-run" not in text:

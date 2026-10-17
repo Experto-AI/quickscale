@@ -3,27 +3,18 @@
 import json
 from typing import Any
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from quickscale_core.runtime import ADAPTER_FUNCTIONS, BackupError
+from quickscale_core.runtime import (
+    ADAPTER_FUNCTIONS,
+    BackupError,
+    require_scheduled_module_enabled,
+)
 
 
 def _resolve_backup_trigger(options: dict[str, Any]) -> str:
     """Resolve the trigger provenance from the explicit option."""
     return str(options.get("trigger") or "manual")
-
-
-def _require_scheduled_module_enabled(trigger: str) -> None:
-    """Refuse scheduled runs while the module is switched off."""
-    if trigger == "scheduled" and not bool(settings.QUICKSCALE_BACKUPS_ENABLED):
-        # Rule 1 (D3): a module switched off runs none of its scheduled
-        # jobs; operator and admin invocations stay available like the
-        # retained admin.
-        raise CommandError(
-            "The backups module is disabled (QUICKSCALE_BACKUPS_ENABLED "
-            "is False); scheduled backup runs do not run."
-        )
 
 
 def _write_capture_report(
@@ -84,7 +75,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
         trigger = _resolve_backup_trigger(options)
-        _require_scheduled_module_enabled(trigger)
+        require_scheduled_module_enabled(trigger, module_name="backups")
         resume_snapshot_id = (
             str(options.get("resume_snapshot_id") or "").strip() or None
         )

@@ -32,8 +32,12 @@ Contract rules enforced by this command:
 Module Conventions rule 28: the FK-safe ordering, label disambiguation, and
 queryset helpers live in ``_purge_plan`` and are re-exported here.  The
 ``Command.handle`` entry point the rule 34 boundary check follows stays
-physically in this module, as does ``_resolve_models`` and ``_model_label``
-because tests patch ``get_tenant_models`` and ``_model_label`` on this module.
+physically in this module, as do the ``RemovalCoordinator`` discharge calls,
+``_resolve_models``, and ``_model_label`` because tests patch
+``get_tenant_models`` and ``_model_label`` on this module.  The purge,
+dry-run, and guarded ownership-map transactions live in ``_purge_support``'s
+execution helpers below the command (rule 17), so this module opens no
+transaction.
 """
 
 from __future__ import annotations
@@ -47,7 +51,7 @@ from typing import Any, Callable, cast
 
 from django.core.exceptions import FieldDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
-from django.db import models, transaction
+from django.db import models
 
 from quickscale_core.runtime import collect_capabilities
 from quickscale_modules_orgs._purge_plan import (
@@ -64,15 +68,10 @@ from quickscale_modules_orgs._purge_plan import (
     _topologically_order_models as _topologically_order_models,
 )
 from quickscale_modules_orgs._purge_support import _PurgeSupportMixin
-from quickscale_modules_orgs.current_org import (
-    reset_current_org_id,
-    set_current_org_for_context,
-)
 from quickscale_modules_orgs.models import (
     Organization,
     OrganizationInvitation,
     OrganizationMembership,
-    OrganizationTombstone,
 )
 from quickscale_modules_orgs.removal import (
     REMOVAL_LABEL_PREFIX_ATTRIBUTE as REMOVAL_LABEL_PREFIX_ATTRIBUTE,
@@ -264,23 +263,16 @@ class Command(_PurgeSupportMixin, BaseCommand):
 
         A dry run is not a removal boundary: it rehearses the refusal stage
         and performs no removal, so it discharges the refusal obligations it
-        honors without claiming the destructive ones.
+        honors without claiming the destructive ones.  The transaction lives
+        below the command in ``_execute_dry_run_transaction`` (rule 17); the
+        ``REFUSE`` discharge stays on this module so the declared
+        ``Command.handle`` entry path keeps routing every stage (rule 34).
         """
         try:
-            with transaction.atomic():
-                organization = self._lock_organization(org_id)
-                self._guard_reserved_org(organization)
-                set_current_org_for_context(org_id=organization.pk)
-                try:
-                    self._guard_boundary_provider_state(
-                        organization,
-                        provider_expired_checkouts=provider_expired_checkouts or {},
-                    )
-                    self._guard_provider_backed_fields(organization)
-                    coordinator.discharge_stage(RemovalAction.REFUSE)
-                    ownership_map = self._build_ownership_map(organization)
-                finally:
-                    reset_current_org_id()
+            organization, ownership_map = self._execute_dry_run_transaction(
+                org_id,
+                provider_expired_checkouts=provider_expired_checkouts,
+            )
         except Organization.DoesNotExist:
             self._check_tombstone(
                 org_id,
@@ -292,6 +284,7 @@ class Command(_PurgeSupportMixin, BaseCommand):
                 "No tombstone exists for this UUID either."
             )
 
+        coordinator.discharge_stage(RemovalAction.REFUSE)
         self._print_ownership_summary(organization, ownership_map)
         self.stdout.write(
             self.style.WARNING(
@@ -317,71 +310,16 @@ class Command(_PurgeSupportMixin, BaseCommand):
         The boundary discharges every discovered obligation through one
         coordinator and calls ``finish`` after the last one, so an obligation
         this boundary never performed fails the purge instead of passing
-        silently.
+        silently.  The transaction lives below the command in
+        ``_execute_purge_transaction`` (rule 17); the discharge calls stay on
+        this module so the declared ``Command.handle`` entry path keeps
+        routing every stage (rule 34).
         """
         ownership_map: dict[str, int] = {}
         try:
-            with transaction.atomic():
-                # This row is the per-organization billing mutation mutex.
-                # Lock it before checking provider state and keep the lock
-                # through deletion so a concurrent billing writer either
-                # commits first and is observed or waits and then fails closed.
-                organization = self._lock_organization(org_id)
-                self._guard_reserved_org(organization)
-                if confirm is None or confirm not in {
-                    organization.slug,
-                    str(organization.pk),
-                }:
-                    raise CommandError(
-                        "--confirm must exactly match the organization's slug or "
-                        f"UUID ({organization.slug!r} or {organization.pk}) before a "
-                        "purge may proceed."
-                    )
-
-                # Establish consistent org context for RLS-protected tables
-                # BEFORE checking, counting, or deleting. Under PostgreSQL
-                # FORCE-RLS the runtime role cannot see rows without
-                # app.current_org_id set.
-                set_current_org_for_context(org_id=organization.pk)
-                try:
-                    self._guard_boundary_provider_state(organization)
-                    self._guard_provider_backed_fields(organization)
-                    coordinator.discharge_stage(RemovalAction.REFUSE)
-
-                    # Build the map inside the atomic block so counts match
-                    # the pre-delete snapshot with org context already active.
-                    ownership_map = self._build_ownership_map(organization)
-
-                    # Cross-module owned rows (FK-safe delete order).
-                    self._delete_owned_rows(organization)
-                    coordinator.discharge_stage(RemovalAction.DELETE)
-
-                    # Org-level rows — use _raw_delete to bypass model delete()
-                    # and signal receivers (notably the pre_delete backstop
-                    # on OrganizationMembership). The purge is intentionally
-                    # destroying the org and all its rows; individual row-level
-                    # protections are irrelevant here.
-                    OrganizationInvitation.objects.filter(
-                        organization=organization
-                    )._raw_delete(OrganizationInvitation.objects.db)
-                    OrganizationMembership.objects.filter(
-                        organization=organization
-                    )._raw_delete(OrganizationMembership.objects.db)
-
-                    # All known FK-referencing rows — the tenant plan, the
-                    # non-tenant organization children, and the org-owned rows
-                    # below — are already deleted, so bypass Django's cascade
-                    # collector for the org row too.
-                    Organization.objects.filter(pk=organization.pk)._raw_delete(
-                        Organization.objects.db
-                    )
-
-                    OrganizationTombstone.objects.create(
-                        organization_id=org_id,
-                    )
-                    coordinator.discharge_stage(RemovalAction.RECORD)
-                finally:
-                    reset_current_org_id()
+            organization, ownership_map = self._execute_purge_transaction(
+                org_id, confirm=confirm
+            )
         except Organization.DoesNotExist:
             self._check_tombstone(
                 org_id,
@@ -393,6 +331,10 @@ class Command(_PurgeSupportMixin, BaseCommand):
                 "No tombstone exists for this UUID either."
             )
 
+        coordinator.discharge_stage(RemovalAction.REFUSE)
+        coordinator.discharge_stage(RemovalAction.DELETE)
+        coordinator.discharge_stage(RemovalAction.RECORD)
+
         # Cache backends may be remote. Keep this network effect outside the
         # database transaction; a tombstone retry heals any failure here.
         self._invalidate_organization_caches(organization.pk, coordinator=coordinator)
@@ -403,27 +345,6 @@ class Command(_PurgeSupportMixin, BaseCommand):
     # ------------------------------------------------------------------
     # Shared ownership map (single source of truth for counts)
     # ------------------------------------------------------------------
-
-    def _build_ownership_map_guarded(
-        self, organization: Organization
-    ) -> dict[str, int]:
-        """Build the ownership map with org context established.
-
-        Wraps :meth:`_build_ownership_map` inside ``transaction.atomic()``
-        with ``set_current_org_for_context()`` already active.  Under
-        PostgreSQL FORCE-RLS the runtime role cannot count rows on
-        RLS-protected tables without ``app.current_org_id`` set.
-
-        The ContextVar is always reset in ``finally``; the DB-side
-        ``SET LOCAL`` is automatically undone when the atomic block
-        commits or rolls back.
-        """
-        with transaction.atomic():
-            set_current_org_for_context(org_id=organization.pk)
-            try:
-                return self._build_ownership_map(organization)
-            finally:
-                reset_current_org_id()
 
     def _build_ownership_map(self, organization: Organization) -> dict[str, int]:
         """Build a single source-of-truth count map for *organization*.

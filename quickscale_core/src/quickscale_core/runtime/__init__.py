@@ -14,7 +14,8 @@ adapters.  It re-exports all symbols from its sub-modules:
   route table, and flag/path resolution (Module Conventions rule 31).  Pure
   functions over a settings-like object, loaded only when requested.
 * ``runtime.conventions`` — the shared module-convention helpers (capability
-  collection, startup checks, the one DRF error shape).  Loaded only when one
+  collection, startup checks, the one DRF error shape, and the scheduled-off
+  refusal helper).  Loaded only when one
   of its symbols is requested, so a process without Django never imports it.
 * ``runtime.drf`` — the shared Django REST Framework helper classes (the one
   session authentication class, rule 9; the one list paginator, rule 9; and
@@ -73,6 +74,7 @@ _LAZY_CONVENTIONS_SYMBOLS: frozenset[str] = frozenset(
         "module_settings_are_supplied",
         "register_module_checks",
         "register_module_settings_check",
+        "require_scheduled_module_enabled",
     }
 )
 
@@ -222,6 +224,7 @@ __all__ = [
     "module_settings_are_supplied",
     "register_module_checks",
     "register_module_settings_check",
+    "require_scheduled_module_enabled",
     # Shared admin behavior (from admin)
     "ReadOnlyAdminMixin",
     # Shared DRF helpers (from drf)

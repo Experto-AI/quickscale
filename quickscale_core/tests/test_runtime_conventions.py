@@ -11,8 +11,9 @@ import re
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
+from django.core.management.base import CommandError
 
-from quickscale_core.runtime import conventions
+from quickscale_core.runtime import _scheduled_off, conventions
 
 SNAKE_CASE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -987,6 +988,77 @@ class TestRegisterModuleSettingsCheck:
                 "listings",
                 retired_settings={"LISTINGS_PER_PAGE": ""},
             )
+
+
+# ===================================================================
+# require_scheduled_module_enabled — rule 17
+# ===================================================================
+
+
+class _FakeSettings:
+    """A settings stand-in carrying only the attributes a test supplies."""
+
+
+class TestRequireScheduledModuleEnabled:
+    def _fake_settings(self, monkeypatch: pytest.MonkeyPatch, **values: object) -> None:
+        fake = _FakeSettings()
+        for name, value in values.items():
+            setattr(fake, name, value)
+        monkeypatch.setattr(_scheduled_off, "settings", fake)
+
+    def test_scheduled_run_refuses_while_the_module_is_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._fake_settings(monkeypatch, QUICKSCALE_DEMO_ENABLED=False)
+
+        with pytest.raises(CommandError) as excinfo:
+            conventions.require_scheduled_module_enabled(
+                "scheduled", module_name="demo"
+            )
+
+        message = str(excinfo.value)
+        assert "QUICKSCALE_DEMO_ENABLED" in message
+        assert "scheduled runs do not run" in message
+
+    def test_scheduled_run_passes_while_the_module_is_on(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._fake_settings(monkeypatch, QUICKSCALE_DEMO_ENABLED=True)
+
+        conventions.require_scheduled_module_enabled("scheduled", module_name="demo")
+
+    def test_manual_run_passes_while_the_module_is_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._fake_settings(monkeypatch, QUICKSCALE_DEMO_ENABLED=False)
+
+        conventions.require_scheduled_module_enabled("manual", module_name="demo")
+
+    def test_admin_run_passes_while_the_module_is_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._fake_settings(monkeypatch, QUICKSCALE_DEMO_ENABLED=False)
+
+        conventions.require_scheduled_module_enabled("admin", module_name="demo")
+
+    def test_control_missing_enabled_setting_refuses_a_scheduled_run(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A setting the module never supplied fails closed, never open."""
+        self._fake_settings(monkeypatch)
+
+        with pytest.raises(CommandError, match="QUICKSCALE_DEMO_ENABLED is False"):
+            conventions.require_scheduled_module_enabled(
+                "scheduled", module_name="demo"
+            )
+
+    def test_control_empty_module_name_fails_loudly(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._fake_settings(monkeypatch, QUICKSCALE_DEMO_ENABLED=True)
+
+        with pytest.raises(ValueError, match="non-empty module name"):
+            conventions.require_scheduled_module_enabled("scheduled", module_name="")
 
 
 # ===================================================================

@@ -298,6 +298,9 @@ CASE_BUILDERS = {
     "conforming_command": lambda: _corpus(
         _command_module(
             "purge",
+            "from quickscale_core.runtime import require_scheduled_module_enabled\n"
+            "\n"
+            "\n"
             "class Command:\n"
             "    def add_arguments(self, parser):\n"
             "        parser.add_argument('--confirm')\n"
@@ -306,7 +309,35 @@ CASE_BUILDERS = {
             "        parser.add_argument('--slug')\n"
             "        parser.add_argument('--trigger', choices=['manual', 'scheduled'], "
             "default='manual')\n"
-            "        parser.add_argument('--json', action='store_true')\n",
+            "        parser.add_argument('--json', action='store_true')\n"
+            "\n"
+            "    def handle(self, *args, **options):\n"
+            "        require_scheduled_module_enabled(options['trigger'], "
+            "module_name='demo')\n",
+        )
+    ),
+    "trigger_without_helper": lambda: _corpus(
+        _command_module(
+            "report",
+            "class Command:\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('--trigger', choices=['manual', 'scheduled'], "
+            "default='manual')\n",
+        )
+    ),
+    "private_support_module": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            **{
+                "management/commands/_support.py": (
+                    "class Command:\n"
+                    "    def add_arguments(self, parser):\n"
+                    "        parser.add_argument('--format')\n"
+                    "        parser.add_argument('--trigger', choices=['scheduled'])\n"
+                    "    def handle(self, *args, **options):\n"
+                    "        print('x')\n"
+                )
+            },
         )
     ),
     "missing_all": lambda: _corpus(
@@ -501,6 +532,8 @@ EXACT_FINDINGS = (
         (
             "rule 17: demo: quickscale_demo_report --trigger must offer manual and scheduled",
             "rule 17: demo: quickscale_demo_report --trigger must default to manual",
+            "rule 17: demo: quickscale_demo_report --trigger must refuse scheduled "
+            "runs through require_scheduled_module_enabled",
         ),
     ),
     (
@@ -551,6 +584,15 @@ EXACT_FINDINGS = (
         ("rule 17: demo: quickscale_demo_run calls sys.exit()",),
     ),
     ("conforming_command", "rule_17_management_commands", ()),
+    (
+        "trigger_without_helper",
+        "rule_17_management_commands",
+        (
+            "rule 17: demo: quickscale_demo_report --trigger must refuse scheduled "
+            "runs through require_scheduled_module_enabled",
+        ),
+    ),
+    ("private_support_module", "rule_17_management_commands", ()),
     ("clean", "rule_23_service_surface", ()),
     (
         "missing_all",
