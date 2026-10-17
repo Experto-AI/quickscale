@@ -365,12 +365,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
   check.
 
   **Slices:**
-  - [ ] (a, b) Backend, one session: models — property fields, currency labels, and ordered
-    gallery child tables, with forced RLS, boundary tests, SA208 classification, and purge
-    coverage, as `0002+` migrations, every tenant-to-tenant FK (gallery → property, inquiry →
-    listing) carrying the composite organization constraint that orgs' composite-FK check
-    requires — and the read API: published listings of the requested organization, with
-    server-side keyword and attribute filters, and API-level isolation tests (Tier 2-full).
+  - [x] (a, b): landed on `bap-web-new` as the explicit `currency` label (seeded, API `currency`
+    + `currencyLabel`) and the `PropertyImage`/`PropertyFeature` children as tenant-owned tables
+    (own `organization_id`, forced RLS, composite `(property_id, organization_id)` FKs)
+    backfilled and RLS-proven on a `bap_cutover_rehearsal` clone, with a tenant-scoped
+    `PropertyListing.objects` and API-level organization-isolation tests; `manage.py check`
+    reports zero findings, `check_tenant_isolation` passes on the three property tables, and the
+    suite is 68/0 at 93.94%. (c, d, e) is next; inquiry → listing lands with it under the same
+    composite-FK rule.
   - [ ] (c, d, e) Frontend, one session: React catalog and detail pages in Spanish on the app's
     design; listing inquiry into a CRM record with a listing reference, and the search → detail
     → inquiry journey; prerender or server render, Open Graph tags, sitemap, and `robots.txt`,
