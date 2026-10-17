@@ -21,10 +21,11 @@ _TEMPLATE_QUOTED_NAME = re.compile(r"['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]")
 
 _TEMPLATE_PIPE_GROUP = re.compile(r"\((?:\?:)?([A-Za-z0-9_|]+)\)")
 
-#: Rule 37's comparison operators that make a per-module branch: an equality
-#: or inequality test against one module's name.  Membership tests read the
-#: configured set, which is a reference to it, not a branch on one module.
-RULE_37_BRANCH_OPERATORS = (ast.Eq, ast.NotEq)
+#: Rule 37's comparison operators that make a per-module branch: an equality,
+#: inequality, or membership test against one module's name.  A membership
+#: test names one module keyed into the configured set, so it is the same
+#: per-module branch an equality test is (SA287 (b)).
+RULE_37_BRANCH_OPERATORS = (ast.Eq, ast.NotEq, ast.In, ast.NotIn)
 
 #: Rule 37's branch operands: anything that can carry a module name in an
 #: expression -- a plain name, an attribute, a subscript (``entry['name']``),
@@ -163,25 +164,56 @@ def _template_module_literals(text: str, vocabulary: set[str]) -> list[tuple[int
     return found
 
 
+def _comparison_module_names(compare: ast.Compare, vocabulary: set[str]) -> list[str]:
+    """Return the module names an equality, inequality, or membership test names."""
+    names: list[str] = []
+    if not any(isinstance(op, RULE_37_BRANCH_OPERATORS) for op in compare.ops):
+        return names
+    parts = [compare.left, *compare.comparators]
+    for part in parts:
+        if not (isinstance(part, ast.Constant) and isinstance(part.value, str)):
+            continue
+        if part.value not in vocabulary:
+            continue
+        others = [candidate for candidate in parts if candidate is not part]
+        if others and all(isinstance(candidate, RULE_37_BRANCH_OPERANDS) for candidate in others):
+            names.append(part.value)
+    return names
+
+
+def _lookup_module_name(node: ast.Call | ast.Subscript, vocabulary: set[str]) -> str | None:
+    """Return the module name a ``.get()`` call or a subscript looks up, if any."""
+    if isinstance(node, ast.Call):
+        function = node.func
+        if not (isinstance(function, ast.Attribute) and function.attr == "get"):
+            return None
+        if not node.args:
+            return None
+        key = node.args[0]
+    else:
+        key = node.slice
+    if isinstance(key, ast.Constant) and isinstance(key.value, str) and key.value in vocabulary:
+        return key.value
+    return None
+
+
 def _module_name_branches(tree: ast.Module, vocabulary: set[str]) -> list[tuple[int, str, str]]:
-    """Return equality comparisons against a discovered module name."""
+    """
+    Return comparisons, lookups, and subscripts against a discovered module name.
+
+    An equality, inequality, or membership comparison names one module; so do
+    ``mapping.get("<name>")`` and ``mapping["<name>"]``, the lookup spellings
+    of the same per-module branch (SA287 (b)).
+    """
     found: list[tuple[int, str, str]] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Compare):
-            continue
-        if not any(isinstance(op, RULE_37_BRANCH_OPERATORS) for op in node.ops):
-            continue
-        parts = [node.left, *node.comparators]
-        for part in parts:
-            if not (isinstance(part, ast.Constant) and isinstance(part.value, str)):
-                continue
-            if part.value not in vocabulary:
-                continue
-            others = [candidate for candidate in parts if candidate is not part]
-            if others and all(
-                isinstance(candidate, RULE_37_BRANCH_OPERANDS) for candidate in others
-            ):
-                found.append((node.lineno, ast.unparse(node), part.value))
+        if isinstance(node, ast.Compare):
+            for name in _comparison_module_names(node, vocabulary):
+                found.append((node.lineno, ast.unparse(node), name))
+        elif isinstance(node, (ast.Call, ast.Subscript)):
+            name = _lookup_module_name(node, vocabulary)
+            if name is not None:
+                found.append((node.lineno, ast.unparse(node), name))
     return found
 
 

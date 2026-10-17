@@ -919,6 +919,14 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     carries, not only the declared options, so a stale wiring fails startup naming the setting and
     `quickscale apply`; module checks no longer re-test those names, and a `checks.py` that calls
     `projected_setting_names` fails the module-conventions gate.
+  - **Option validation covers every configured module.** `plan` and `apply` judge each
+    configured module's option values against the checks its `module.yml` declares and refuse
+    an incomplete configuration with one shared remediation hint; a module adapter may replace
+    that hint, as notifications does for live Resend delivery.
+  - **Module-name branches face the full module-conventions detector.** The harness rejects
+    membership tests, `.get("<module>")` calls, and subscripts that name a module in core or the
+    CLI, not only equality comparisons, and the remaining recorded sites are listed with their
+    reasons in decisions rule 37.
   - **Module-conventions gaps close in the harness and the authoring checklist.** The gate
     refuses a tenant model registered outside `TenantModelAdmin`, a non-tenant model registered
     on it, a registration that bypasses `@admin.register`, and a choice-field value compared

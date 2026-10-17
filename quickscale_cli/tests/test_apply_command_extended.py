@@ -1512,6 +1512,7 @@ class TestLoadAndValidateConfig:
         error_output = capsys.readouterr().err
         assert "noreply@example.com" in error_output
         assert "sender_email" in error_output
+        assert "targets live Resend delivery" in error_output
 
     def test_console_safe_notifications_allow_placeholder_sender_email(
         self,
@@ -9136,22 +9137,55 @@ class TestConfirmDestructiveRemotePhase:
         )
 
 
-class TestNotificationsAdapterModuleAccessor:
-    """The CLI reaches module-owned runtime predicates through the adapter loader."""
+class TestModuleAdapterHookAccess:
+    """The CLI reaches module-owned behaviour through the generic adapter hook."""
 
-    def test_returns_the_notifications_adapter_module(self) -> None:
-        from quickscale_cli.commands.apply_support import notifications_adapter_module
+    def test_module_adapter_module_returns_the_named_adapter(self) -> None:
+        from quickscale_cli.commands.apply_support import module_adapter_module
 
-        module = notifications_adapter_module()
+        module = module_adapter_module("notifications")
         assert module is not None
+        assert callable(module.option_validation_guidance)
         assert callable(module.notifications_production_targeted)
 
-    def test_returns_none_when_module_source_is_unreachable(self) -> None:
+    def test_module_adapter_module_returns_none_when_source_is_unreachable(
+        self,
+    ) -> None:
         from quickscale_core.contracts.module_discovery import ImproperlyConfigured
-        from quickscale_cli.commands.apply_support import notifications_adapter_module
+        from quickscale_cli.commands.apply_support import module_adapter_module
 
         with patch(
             "quickscale_core.manifest.entry_point.load_managed_adapter_module",
             side_effect=ImproperlyConfigured("no module source"),
         ):
-            assert notifications_adapter_module() is None
+            assert module_adapter_module("notifications") is None
+
+    def test_module_option_guidance_reads_the_adapter_hook(self) -> None:
+        from quickscale_cli.commands.apply_support import module_option_guidance
+
+        guidance = module_option_guidance(
+            "notifications", {"resend_domain": "mg.example.com"}
+        )
+        assert guidance is not None
+        assert "targets live Resend delivery" in guidance
+
+    def test_module_option_guidance_defers_without_a_hook(self) -> None:
+        from quickscale_cli.commands.apply_support import module_option_guidance
+
+        assert module_option_guidance("backups", {"retention_days": -1}) is None
+
+    def test_module_option_guidance_defers_when_console_safe(self) -> None:
+        from quickscale_cli.commands.apply_support import module_option_guidance
+
+        assert module_option_guidance("notifications", {"resend_domain": ""}) is None
+
+    def test_module_option_guidance_defers_for_a_retired_key(self) -> None:
+        from quickscale_cli.commands.apply_support import module_option_guidance
+
+        assert (
+            module_option_guidance(
+                "notifications",
+                {"resend_domain": "mg.example.com", "resend_api_key": "raw"},
+            )
+            is None
+        )

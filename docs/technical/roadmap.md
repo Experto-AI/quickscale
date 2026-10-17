@@ -47,26 +47,24 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA153 | Deliver the first property portal using project-owned extensions | 1 | SA191 | Optional |
 | SA154 | Property-portal capabilities to promote when a project needs them | 1 | SA153 | Inventory only |
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
-| SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (repin on v89) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
-Track 2: SA287 (a, b) ──► SA277
+Track 2: SA277
 Track 3: — (SA296 landed)
      release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
      critical path: SA191 repin ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Cross-track edges:
-SA191's cutover (not its repin) waits on the 0.89.0 publication, and SA153 (f) waits on the cutover; SA291 landed, so SA287 starts — it consumes the
-notifications adapter's validation copies at `apply_support.py:104`; SA296 waited on SA292, which has landed (both rewrite harness rule 17);
+SA191's cutover (not its repin) waits on the 0.89.0 publication, and SA153 (f) waits on the cutover; SA296 waited on SA292, which has landed (both rewrite harness rule 17);
 SA277 waits on SA191's cutover, whose evidence draws the line between what `beta_migration`
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA287 starts now that SA291 has landed; each track takes one at a time,
+**Parallel start.** Each track takes one at a time,
 in queue order. SA286 landed ahead
 of SA191 in Track 1's queue because every adoption step it removed before the repin is applied
 once, offline, instead of on a live site.
@@ -93,7 +91,7 @@ A track is **truly green** only when all three states are yes.
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
-| 2 | SA287 | yes | yes | yes | yes | no |
+| 2 | SA277 | no | no | yes | no | no |
 | 3 | — (SA296 landed) | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
@@ -364,12 +362,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
   check.
 
   **Slices:**
-  - [ ] (a, b) Backend, one session: models — property fields, currency labels, and ordered
-    gallery child tables, with forced RLS, boundary tests, SA208 classification, and purge
-    coverage, as `0002+` migrations, every tenant-to-tenant FK (gallery → property, inquiry →
-    listing) carrying the composite organization constraint that orgs' composite-FK check
-    requires — and the read API: published listings of the requested organization, with
-    server-side keyword and attribute filters, and API-level isolation tests (Tier 2-full).
+  - [x] (a, b): landed on `bap-web-new` as the explicit `currency` label (seeded, API `currency`
+    + `currencyLabel`) and the `PropertyImage`/`PropertyFeature` children as tenant-owned tables
+    (own `organization_id`, forced RLS, composite `(property_id, organization_id)` FKs)
+    backfilled and RLS-proven on a `bap_cutover_rehearsal` clone, with a tenant-scoped
+    `PropertyListing.objects` and API-level organization-isolation tests; `manage.py check`
+    reports zero findings, `check_tenant_isolation` passes on the three property tables, and the
+    suite is 68/0 at 93.94%. (c, d, e) is next; inquiry → listing lands with it under the same
+    composite-FK rule.
   - [ ] (c, d, e) Frontend, one session: React catalog and detail pages in Spanish on the app's
     design; listing inquiry into a CRM record with a listing reference, and the search → detail
     → inquiry journey; prerender or server render, Open Graph tags, sitemap, and `robots.txt`,
@@ -447,27 +447,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA291 — The manifest owns option validation and throttle rates.**
 
-- [ ] **SA287 — The CLI reaches module behaviour through manifest fields and hooks.**
-
-  Closes coherence `cli-module-name-branches` (option C) and merges coherence
-  proposal 51 into decisions rule 37;
-  hands its residue to arch watchlist `core-holds-module-vocabulary`.
-
-  **Context:** five CLI sites branch on module names outside rule 37's list
-  (`_finalize.py:68–76`, `_config.py:402`, `_runtime.py`, `apply_support.py:104`,
-  `_plan_validation.py:38–48`), and harness rule 37 matches only `==`/`!=`, so `in` and
-  `.get("<m>")` pass.
-
-  **Acceptance:** rule 37 carries proposal 51. Option validation in `_config`, `_plan_validation`, and
-  `apply_support` runs through a generic adapter hook; operator next-steps text in `_finalize`
-  and `_runtime` is listed as a reasoned rule 37 exception. Harness rule 37 also matches `in`,
-  `not in`, and `.get()`/subscript with a module-name constant, with the control
-  `if "billing" in modules:`.
-
-  **Slices:**
-  - [ ] (a) Validation behind the generic hook (Tier 2-full: the hook's callers across plan and
-    apply need discovery).
-  - [ ] (b) The listed exceptions and the widened detector (Tier 2-fast).
+- [x] **SA287 — The CLI reaches module behaviour through manifest fields and hooks.**
 
 ### Track 3 — Track 3 hardening, API and theme conventions, and harness by construction
 

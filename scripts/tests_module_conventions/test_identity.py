@@ -994,10 +994,44 @@ def test_module_knowledge_branch_and_constant_controls() -> None:
         for violation in checker.rule_37_module_lists(attribute)
     )
     membership = replace(
-        corpus,
-        cli_files={"commands/select.py": "def pick(modules):\n    return 'alpha' in modules\n"},
+        _corpus(_golden_module("billing")),
+        cli_files={
+            "commands/select.py": (
+                "def enabled(modules):\n"
+                "    if 'billing' in modules:\n"
+                "        return True\n"
+                "    return False\n"
+            )
+        },
     )
-    assert checker.rule_37_module_lists(membership) == []
+    assert any(
+        "branches on module name 'billing': 'billing' in modules" in violation
+        for violation in checker.rule_37_module_lists(membership)
+    )
+    non_membership = replace(
+        corpus,
+        cli_files={"commands/select.py": "def pick(modules):\n    return 'beta' not in modules\n"},
+    )
+    assert any(
+        "branches on module name 'beta': 'beta' not in modules" in violation
+        for violation in checker.rule_37_module_lists(non_membership)
+    )
+    lookup = replace(
+        corpus,
+        cli_files={"commands/select.py": "def pick(modules):\n    return modules.get('alpha')\n"},
+    )
+    assert any(
+        "branches on module name 'alpha': modules.get('alpha')" in violation
+        for violation in checker.rule_37_module_lists(lookup)
+    )
+    module_subscript = replace(
+        corpus,
+        cli_files={"commands/select.py": "def pick(modules):\n    return modules['beta']\n"},
+    )
+    assert any(
+        "branches on module name 'beta': modules['beta']" in violation
+        for violation in checker.rule_37_module_lists(module_subscript)
+    )
     subscript = replace(
         corpus,
         cli_files={"commands/select.py": "def pick(entry):\n    return entry['name'] == 'alpha'\n"},
@@ -1047,6 +1081,32 @@ def test_module_knowledge_branch_and_constant_controls() -> None:
         core_files={"manifest/social_manifest.py": "SOCIAL_STATUS_ENABLED = 'enabled'\n"},
     )
     assert checker.rule_37_module_lists(social) == []
+    operator_text = replace(
+        _corpus(_golden_module("backups")),
+        cli_files={
+            "commands/_finalize.py": (
+                "def next_steps(modules):\n"
+                "    if 'backups' in modules:\n"
+                "        return modules['backups']\n"
+                "    return None\n"
+            )
+        },
+    )
+    assert checker.rule_37_module_lists(operator_text) == []
+    runtime_lookup = replace(
+        _corpus(_golden_module("backups")),
+        cli_files={
+            "commands/_runtime.py": (
+                "def gitignore(config):\n    return config.modules.get('backups')\n"
+            )
+        },
+    )
+    assert checker.rule_37_module_lists(runtime_lookup) == []
+    media_descriptor = replace(
+        _corpus(_golden_module("storage")),
+        core_files={"dr_engine/_media.py": "def copy(runtime):\n    return runtime['storage']\n"},
+    )
+    assert checker.rule_37_module_lists(media_descriptor) == []
 
 
 def test_module_list_template_control() -> None:
