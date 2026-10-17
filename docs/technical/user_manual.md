@@ -13,10 +13,10 @@ What belongs in this file:
 What does NOT belong in this file (and where to put it):
 - Architectural decisions, implementation scope, and tie-breakers → `decisions.md` (authoritative).
 - Long-term roadmap, release milestones, and planning → `roadmap.md`.
-- Package and generator scaffolding details (templates, deep structure) → `scaffolding.md` and template files in `quickscale_core`.
+- Package and generator scaffolding details (templates, deep structure) → `generated_project_structure.md` and template files in `quickscale_core`.
 - User-facing getting-started narrative and marketing material → top-level `README.md`.
 
-Keep this doc short and actionable. When in doubt, link to the authoritative doc (decisions.md / roadmap.md / scaffolding.md) for details.
+Keep this doc short and actionable. When in doubt, link to the authoritative doc (decisions.md / roadmap.md / generated_project_structure.md) for details.
 -->
 
 ## Installation Methods
@@ -235,7 +235,7 @@ poetry run python manage.py migrate
 poetry run python manage.py runserver
 ```
 
-The generated project is meant to be fully owned by the user — templates and guidance are in `scaffolding.md` and generated README files.
+The generated project is meant to be fully owned by the user — templates and guidance are in `generated_project_structure.md` and generated README files.
 
 ### 4.1) Development Commands
 
@@ -1099,7 +1099,7 @@ git branch -r  # Shows remote branches
 ## 9) Where to find more information
 
 - Technical decisions and authoritative feature scope: [decisions.md](./decisions.md)
-- Scaffolding and generated project structure: [scaffolding.md](./scaffolding.md)
+- Scaffolding and generated project structure: [generated_project_structure.md](./generated_project_structure.md)
 - Roadmap and release milestones: [roadmap.md](./roadmap.md)
 - Generator templates (look under `quickscale_core/src/quickscale_core/scaffold/templates/`)
 - Top-level README for newcomer guidance: [README.md](../../README.md)

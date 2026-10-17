@@ -1,24 +1,12 @@
 # Release v0.86.0 - Organizations Module
 
-**Release Date:** 2026-05-22
-**Status:** ✅ Released
-
-**Release Artifact:** This document is the official public release note linked from the GitHub tag and release PR for v0.86.0.
+**Date:** 2026-05-22 · **Status:** ✅ Released
 
 ## Summary
 
 v0.86.0 delivers the QuickScale organizations milestone and completes SaaS parity. The `quickscale_modules.orgs` module introduces multi-tenancy with a `QUICKSCALE_MODE` runtime switch between Solo mode (personal org auto-created, flat URLs) and SaaS mode (multi-org, `/orgs/<slug>/` routing, invitations). Billing models are extended with authoritative org ownership fields, plan-level feature gates gate downstream module access, and the billing wiring regression discovered during integration is permanently closed by a planner/apply guard test.
 
-**Related docs:** [Changelog](../../CHANGELOG.md) | [Roadmap](../technical/roadmap.md) | [Technical Decisions](../technical/decisions.md) | [Organizations Design](../technical/organizations.md)
-
 ## Highlights
-
-- Organizations module ships as a first-class QuickScale module with Solo and SaaS runtime modes, org-scoped membership and RBAC, invitation flow, billing bridge, and React org management pages.
-- Billing models gain authoritative `organization` ownership fields; `migrate_billing_to_orgs` and `promote_to_saas` management commands handle existing-project migration idempotently.
-- Billing wiring regression fixed: `_billing_wiring` added to `MODULE_WIRING_BUILDERS`; regression guard test added to `test_module_manifest_contract.py` to catch future omissions.
-- All quality gates passed: `make lint`, `make typecheck`, `make test-unit`, and `make version-check`.
-
-## What's New
 
 ### Features
 
@@ -37,37 +25,15 @@ v0.86.0 delivers the QuickScale organizations milestone and completes SaaS parit
 - **Last-owner invariant**: Enforced at both model save/delete time and view layer; the last OWNER cannot be demoted, removed, or have a second OWNER assigned without explicit transfer.
 - **Superuser operator path**: Superusers can access org-scoped admin routes without a membership row; documented explicitly without assuming database-level RLS bypass.
 
-### Deferred to later milestone
-
-- PostgreSQL RLS activation: application-layer isolation is the current contract; RLS activation is deferred until downstream tenant tables carry concrete `organization_id` columns.
-- Seat pricing fields (`Plan.max_seats`, `Plan.seat_price_id`) and related admin UI remain follow-on work.
-- Billing env-example sync (`STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `QUICKSCALE_BILLING_WEBHOOK_SECRET`) in `apply_command.py` remains a follow-on task.
-
-## Breaking Changes
+## Breaking changes
 
 - The `orgs` module is now auto-materialized alongside `billing` by the planner/apply pipeline; standalone billing projects should add `orgs` to their `quickscale.yml` module list.
 - `Subscription.user` and `CreditBalance.user` are now nullable provenance-only fields; `organization` is the authoritative ownership field. Existing data is migrated by `python manage.py migrate_billing_to_orgs`.
 - Org invitation URLs are slugless (`/orgs/invitations/<token>/accept/`) and Solo-mode returns 404 for all `/orgs/*` routes.
 
-## Migration Guide
+## Upgrade steps
 
 1. Add the `orgs` module to `quickscale.yml` alongside `billing` and `auth`, then run `quickscale apply`.
 2. Run `python manage.py migrate` to apply the billing org-ownership migration.
 3. Run `python manage.py migrate_billing_to_orgs` to backfill authoritative org fields for existing billing rows.
 4. To switch to SaaS mode, run `python manage.py promote_to_saas` to ensure all personal orgs have valid unique slugs, then set `QUICKSCALE_MODE = 'saas'` in your settings.
-
-## Validation
-
-- ✅ `make lint` passed.
-- ✅ `make typecheck` passed.
-- ✅ `make test-unit` passed across all modules (orgs: 158 passed 1 skipped, billing: 242 passed, backups: 187 passed, blog: 140 passed, forms: 110 passed, listings: 92 passed, notifications: 33 passed, social: 32 passed, storage: 23 passed).
-- ✅ `make version-check` passed, v0.86.0 parity confirmed for `quickscale`, `quickscale_core`, `quickscale_cli`, and the `orgs` module.
-
-## Validation Commands
-
-```bash
-make lint
-make typecheck
-make test-unit
-make version-check
-```

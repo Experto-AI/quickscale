@@ -1,7 +1,6 @@
 # Validation Policy (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) -> [Technical](../index.md) -> **Validation Policy**
-> **Related docs**: [Decisions](decisions.md) | [Implementation Contract](implementation_contract.md) | [Scaffolding](scaffolding.md)
+> **Related docs**: [Decisions](decisions.md) | [Implementation Contract](implementation_contract.md)
 
 This companion owns repository validation entrypoints, testing standards, coverage expectations, isolation rules, and E2E infrastructure guidance. [decisions.md](./decisions.md) remains the repository-wide tie-breaker for cross-cutting policy and prohibitions.
 
@@ -9,7 +8,7 @@ This companion owns repository validation entrypoints, testing standards, covera
 ## Repository Command Reference
 
 **Validation entrypoints:**
-- Prefer repository `make` targets over lower-level helper scripts.
+- Shared workflows run through repository `make` targets, never lower-level helper scripts directly.
 - Use the narrowest relevant validation first, then widen only as needed.
 
 **Shared commands:**
@@ -37,7 +36,6 @@ This companion owns repository validation entrypoints, testing standards, covera
 - `make publish-module MODULE=<name> EXPECTED_REMOTE_SHA=<40-hex-remote-sha>` - Maintainer helper for split-branch publishing with force-with-lease safety (SA117 Phase 4). Each mutable split-branch update requires a freshly observed exact 40-hex remote SHA. The accepted SA145 exact-SHA contract forbids `ABSENT`; it is not a valid input. The ordered release sequence that invokes it, and the pre-publish quality gate, live in [publish_procedure.md](publish_procedure.md).
 
 **Assistant guidance:**
-- Prefer `make` targets for shared repository workflows instead of calling lower-level helper scripts directly.
 - Use `make lint` and `make format` for repo-wide lint and format guidance.
 - Select the test command from the validation tier below rather than defaulting to the widest one. `make test` is a `task`/`release`-tier command and is never the per-change check.
 - Scope a run with the target's own variables rather than hand-rolling a pytest invocation: `K=<expr>` narrows by keyword, `ARGS=<flags>` forwards raw pytest flags, and both compose with `SECTIONS=`/`MODULE=`. See [Scoping and Rerun Variables](#scoping-and-rerun-variables).
@@ -345,7 +343,7 @@ closeout then runs `make test-integration`, `make typecheck`, and the serial
 closeout; see [Validation Tiers](#validation-tiers).
 
 **Running them:** `make release-gate` runs both commands above followed by those
-closeout lanes, aborting at the first failure. Prefer it to retyping the literals —
+closeout lanes, aborting at the first failure. Use it instead of retyping the literals —
 the `-o addopts= --no-cov` suffix is easy to drop by hand, and dropping it silently
 re-enables the full-core coverage addopts this guard exists to bypass.
 

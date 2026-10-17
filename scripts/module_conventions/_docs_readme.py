@@ -12,7 +12,8 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 
-from scripts.module_conventions.core import Module
+from scripts.module_conventions._package_commands import _command_flags
+from scripts.module_conventions.core import Module, _parse
 
 #: Rule 38's role-listing trigger: the orgs role tools a module's views use.
 _ORG_ROLE_TOKENS = re.compile(r"\b(?:HasOrgRole|OrgRoleMixin|min_org_role|user_has_org_role)\b")
@@ -166,6 +167,33 @@ def _command_violations(module: Module, commands: str) -> list[str]:
     return violations
 
 
+def _command_option_strings(text: str) -> set[str]:
+    """
+    Return the flags a command module's ``add_argument`` calls declare.
+
+    Rule 17's ``_command_flags`` maps every literal ``add_argument`` argument,
+    positionals included; the flags are its ``-``-prefixed subset.
+    """
+    return {flag for flag in _command_flags(_parse(text)) if flag.startswith("-")}
+
+
+def _flag_violations(module: Module, commands: str) -> list[str]:
+    """Return one finding per command flag the Management commands section omits."""
+    violations: list[str] = []
+    for rel, text in module.files.items():
+        if not rel.startswith("management/commands/") or not rel.endswith(".py"):
+            continue
+        command = Path(rel).stem
+        if command == "__init__" or command.startswith("_"):
+            continue
+        for flag in sorted(_command_option_strings(text)):
+            if flag not in commands:
+                violations.append(
+                    f"rule 38: {module.name}: Management commands does not name flag {flag!r}"
+                )
+    return violations
+
+
 def _role_listing_violations(module: Module, public_surface: str) -> list[str]:
     """Return the role-listing finding for a module that uses orgs' role tools."""
     if _uses_org_roles(module) and not _lists_role_requirement(public_surface):
@@ -180,10 +208,12 @@ def _readme_violations(module: Module) -> list[str]:
         return [f"rule 38: {module.name}: README.md is missing"]
     headings = _readme_headings(readme)
     sections = _readme_sections(readme)
+    commands = sections.get("Management commands", "")
     return [
         *_heading_violations(module, headings),
         *_versioned_heading_violations(module, headings),
         *_configuration_violations(module, sections.get("Configuration", "")),
-        *_command_violations(module, sections.get("Management commands", "")),
+        *_command_violations(module, commands),
+        *_flag_violations(module, commands),
         *_role_listing_violations(module, sections.get("Public surface", "")),
     ]

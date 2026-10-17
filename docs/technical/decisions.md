@@ -22,8 +22,7 @@ CI engineers.
 
 # Technical Decisions (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Decisions** (Authoritative)
-> **Related docs**: [Scaffolding](scaffolding.md) | [Roadmap](roadmap.md) | [Glossary](../../GLOSSARY.md) | [Start Here](../../START_HERE.md)
+> **Related docs**: [Roadmap](roadmap.md) | [Glossary](../../GLOSSARY.md) | [Start Here](../../START_HERE.md)
 
 **Purpose:** Repository-wide policy and tie-breaker hub for QuickScale architecture and development standards. Narrow companion docs under `docs/technical/` own the current implementation contract, validation policy, and structure references.
 
@@ -37,13 +36,12 @@ rules that shipped surface must obey; it is not a description of it.
 ## Critical Rules
 
 **Documentation Hierarchy:**
-- ✅ decisions.md is authoritative - always wins conflicts
-- ✅ `docs/technical/implementation_contract.md`, `validation_policy.md`, `generated_project_structure.md`, and `repository_layout.md` are the narrow-owner companion docs for current contract, validation, and structure detail
-- ✅ Update decisions.md FIRST, then other docs
-- ✅ Contributing guides: `docs/contrib/*.md`
+- ✅ decisions.md is authoritative and wins every conflict; [§ Document Responsibilities](#document-responsibilities) names the single owner of each other topic
+- ✅ A change updates the owning document first, and decisions.md in the same change when policy, a tie-breaker or the ownership map changes
+- ✅ Contributor engineering rules: `docs/contrib/rules.md`; stage guides: `docs/contrib/{plan,code,review,testing,debug}.md`
 - ✅ `CHANGELOG.md` is the canonical release history index for all versions
 - ✅ Release notes: `docs/releases/release-vX.XX.X.md` are the single public-facing release document for a version and may exist either as a clearly labeled release-prepared artifact before publish or as the linked note after tag/release publication
-- ✅ Use `docs/technical/release_summary_template.md` for every public release note, including prepared artifacts that are awaiting manual publish
+- ✅ Every public release note follows [publish_procedure.md §1.3.1](publish_procedure.md#131-release-note-format), including prepared artifacts awaiting manual publish
 - ✅ Public release notes stay reader-facing and outcome-oriented; keep maintainer-only closeout detail in the release PR or active roadmap section instead of a second repository doc
 - ✅ Unreleased or internal-only versions stay in `roadmap.md` and `CHANGELOG.md` until a maintainer intentionally prepares the single public release note for that version or publishes the tag/release
 - ❌ Do not maintain separate implementation/review release docs or release-archive trees
@@ -147,9 +145,7 @@ Adding or swapping a frontend dependency requires a decision entry here.
   `quickscale apply` selection
 
 **Teams tie-breaker:** `teams` is not a shipped module and nothing is committed
-— no timeline, no kickoff date. Its preserved planning note lives at
-[docs/planning/teams.md](../planning/teams.md); the former README-only
-placeholder directory under `quickscale_modules/` has been deleted.
+— no timeline, no kickoff date, and no planning note in the repo.
 Any [arch-audit.md](../others/arch-audit.md) finding whose horizon keys off "teams
 kickoff" describes a condition that applies *if and when* teams is scheduled. Treat
 every such finding as open-ended and deferred — not a roadmap item on a clock —
@@ -461,7 +457,6 @@ with backend and blank-name presence guards. No guard reads secret material.
 Type reference:
 [implementation_contract.md §Manifest Adapter Architecture](./implementation_contract.md#manifest-adapter-architecture).
 
-
 ### Module Wiring Authority {#module-wiring-authority}
 
 **Rule:** A QuickScale module is a **standard Django app** plus **one declarative
@@ -501,7 +496,7 @@ ordinary Django.
   writes a middleware literal
 - ✅ A module that ships models or a migration MUST declare at least one Django app.
   This is enforced by a conformance gate, not by review
-- ✅ Adapters SHOULD route through `build_generic_manifest_spec()` so `apps` is read
+- ✅ Adapters MUST route through `build_generic_manifest_spec()` so `apps` is read
   from the manifest. A hand-built `ResolverResult` is permitted only for a
   module needing a custom post-hook, and MUST still source `apps` from the manifest —
   never as a Python literal in the adapter
@@ -524,26 +519,12 @@ ordinary Django.
 **Tie-breaker:** When two places state which apps a module contributes, the module's
 own `module.yml` wins and the other copy is deleted, not reconciled.
 
-**Known deviations and completed boundary work (updated 2026-08-25).** This section records
-the current state of the target rule. Completed work is retained as evidence; each remaining
-deviation has an owner:
-
-The remaining deviations are scheduled inside v88; none is deferred.
-
-| Deviation | Owner |
-|---|---|
-| Five modules (auth, backups, notifications, orgs, storage) now declare their app lists in their own manifests; core reads those projections | **SA167a** — completed v88, merge #8 |
-| All twelve shipped modules own their adapters and consume the public `quickscale_core.runtime` facade or its `runtime.manifest` subfacade; `quickscale_core/.../manifest/entry_point.py` contains only generic registry/dispatch logic | **SA167b** — completed v88, merge #17; implementation, P4 acceptance, convergence, attestation, and merge-back are complete |
-| The settled CLI product bytes no longer hold per-module wiring logic | **SA167d** — completed v88; evidence in [CHANGELOG.md](../../CHANGELOG.md). |
-| `django_apps:` was parsed by `manifest/loader.py` and read by no production code path; the declaration gate now enforces app projections | **SA167c** — completed v88, merge #21; phases A-F accepted, evidence in [CHANGELOG.md](../../CHANGELOG.md). |
-
 Type reference:
 [implementation_contract.md §Manifest Adapter Architecture](./implementation_contract.md#manifest-adapter-architecture).
 Authoring mechanics:
 [module-extension.md §Building a Module](./module-extension.md#building-a-module-authoring-checklist).
 
-
-### Module Conventions (SA215) {#module-conventions}
+### Module Conventions {#module-conventions}
 
 **Rule:** Every first-party module follows one convention for its settings, its identity names,
 how it reads configuration, how it depends on and talks to other modules, how it exposes URLs,
@@ -553,8 +534,7 @@ effects, names analytics events, declares its service surface, names constraints
 webhooks, deletes related rows, and names its files and tests, and how its wiring shares settings,
 how the theme sees it, how it throttles, stems shared names, refers to other modules, receives
 secrets, is type-checked, is listed outside itself, documents its options, and declares its
-dependencies. A conformance test enforces each rule. Evidence and the options weighed:
-[module-conventions-inventory.md](../planning/module-conventions-inventory.md).
+dependencies. A conformance test enforces each rule.
 
 **Why.** The modules grew one at a time and each invented its own naming, settings reader, and
 cross-module coupling. The recorded boundary rules cover core ↔ module only; nothing governed
@@ -856,7 +836,8 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   ❌ `*_CHOICES` tuple lists written out as literals.
 - ✅ README headings, in order: Overview, Configuration (every manifest option), Public surface,
   URLs, Management commands, Operations, Extending. No versions in headings. The test checks the
-  headings and, under rule 38, that every option key and command name appears.
+  headings and, under rule 38, that every option key, command name, and declared command flag
+  appears.
 
 **12. Manifest option schema.**
 - ✅ Every option has `type`, `default`, and `description`. A mutable option has `django_setting`;
@@ -1006,12 +987,10 @@ public surface is `services.py` (rule 4).
 - ✅ A command that deletes, anonymizes, or overwrites data takes `--dry-run`, which reports what
   would change and writes nothing; database-only work runs in `transaction.atomic()` in the
   service or command-support module the command calls, never in the command module itself.
-- ✅ Modules ship no scheduler. A command a site should run periodically is listed under the
+- ✅ Modules ship no scheduler. A command meant to run periodically is listed under the
   README's Operations heading with a suggested interval; the operator's cron or platform scheduler
   runs it (backups' `schedule` and `automation_enabled` options already only document this).
-- ✅ A retired command is deleted, not kept behind a guard (rule 6). `migrate_billing_to_orgs`
-  is deleted with its recovery documentation: its 2026-09-16 retirement already stated current
-  installs cannot hold the shape it repairs.
+- ✅ A retired command is deleted, not kept behind a guard (rule 6).
 - ❌ `print()`, `sys.exit()`, or returning normally after a failure; an inline scheduled-off
   refusal, or a `transaction.atomic()` in a command module.
 
@@ -1036,9 +1015,8 @@ public surface is `services.py` (rule 4).
   `BASE_TEST_SETTINGS_KEYS`; the harness diffs each module's top-level keys against the tuple,
   so no suite silently drops a base key.
 - ✅ Every directory under `quickscale_modules/` is a module with a `module.yml`; there are no
-  placeholder directories. The `teams` placeholder is deleted, its README moved to
-  `docs/planning/teams.md`, and core's placeholder handling (the catalog's `teams` entry and the
-  skips in module discovery and constraint validation) is gone with it.
+  placeholder directories, and core has no placeholder handling (no catalog entry, no skips in
+  module discovery or constraint validation).
 
 **19. Authorization.**
 - ✅ Every module page and API declares an enforced guard on the view. An API declares it with
@@ -1055,8 +1033,8 @@ public surface is `services.py` (rule 4).
   `HasOrgRole(min_role)` beside them, delegating to the same `user_has_org_role` that
   `OrgApiBaseView`'s `min_org_role` uses, so rule 9's base keeps its logic and there is one role
   check). Each module fixes the minimum role per action in code and lists it in its README under
-  Public surface (rule 38). This extends [organizations.md](organizations.md)'s "no tenant should
-  ever have `is_staff`" (org administration happens through org roles) to module back offices.
+  Public surface (rule 38). This extends the [organizations.md](organizations.md) rule that no tenant ever has
+  `is_staff` (org administration happens through org roles) to module back offices.
 - ✅ "Logged in" is `LoginRequiredMixin`, `login_required`, or DRF `IsAuthenticated`.
 - ✅ `is_staff` / `is_superuser` gate only Django admin and `operator_access` paths; forms' "every
   organization" branch moves under `operator_access`. analytics' `EXCLUDE_STAFF` reads `is_staff`
@@ -1333,9 +1311,9 @@ rather than the release that introduced it.
   suite.
 
 **38. README content.** Rule 11's Configuration heading names every manifest option key, and its
-Management commands heading every command the module ships; the test checks both, besides the
-headings. A module whose views authorize through orgs' role tools lists the minimum role per
-action in its README's Public surface (rule 19).
+Management commands heading every command the module ships and every flag those commands declare;
+the test checks all three, besides the headings. A module whose views authorize through
+orgs' role tools lists the minimum role per action in its README's Public surface (rule 19).
 
 **39. Module dependencies.**
 - ✅ `required_modules` and `dependencies` are always present; an empty list declares none.
@@ -1521,7 +1499,7 @@ mapping that mirrors this section.
 
 ---
 
-### Split-Facade Seams (SA234) {#split-facade-seams}
+### Split-Facade Seams {#split-facade-seams}
 
 **Rule:** A test's seam is the module that defines the name (or an injected collaborator),
 never the re-export path. A private module (`_<name>.py`) imports the sibling modules that
@@ -1542,12 +1520,9 @@ its private siblings one way and re-exports public names only.
   billing `services` (`test_services_facade_surface.py`) each carry a surface test that pins
   public names only.
 
-Evidence and options weighed: [arch audit § Finding 2](../others/arch-audit.md)
-(`split-facades-patch-coupled`, option 1 with option 3's ratchet re-key).
-
 ---
 
-### Frontend Rendering Decisions (SA241) {#frontend-rendering-decisions-sa241}
+### Frontend Rendering Decisions {#frontend-rendering-decisions-sa241}
 
 **Decision 1 — Frontend split.** React is the standard frontend for new
 application and public pages — including a public page whose crawlable first
@@ -1673,7 +1648,7 @@ templates, registration steps, and the per-component checklist are in
 
 ---
 
-**Extended package-layout note:** See [scaffolding.md §4](./scaffolding.md#post-mvp-structure) for maintainer-side namespace and package-layout reference material. It is not part of the current generated-project contract unless a release note and this file say otherwise.
+**Extended package-layout note:** See [repository_layout.md](./repository_layout.md#post-mvp-structure) for maintainer-side namespace and package-layout reference material. It is not part of the current generated-project contract unless a release note and this file say otherwise.
 
 <a id="mvp-feature-matrix-authoritative"></a>
 ## Implementation Surface Matrix (authoritative)
@@ -1755,7 +1730,7 @@ to the module requires a decision entry here.
 
 ---
 
-#### Disaster Recovery Engine Boundary Contract (F5 / M10)
+#### Disaster Recovery Engine Boundary Contract {#disaster-recovery-engine-boundary-contract-f5--m10}
 
 **Why:** The embeddable `backups` module must not carry platform-level
 backup/restore orchestration or talk to the CLI through a hidden
@@ -1811,36 +1786,42 @@ implicit env-var/stdout-JSON coupling.
 - No change to the user-facing `quickscale dr {capture,plan,execute,report}` CLI
   surface.
 - The protocol replacement is a maintainer-internal boundary and needs no
-  backward-compatibility shim; generated-project migration guidance is
-  documented in `docs/technical/dr_engine_migration.md`.
+  backward-compatibility shim. Generated-project dependency resolution is
+  documented in the backups module README.
 
 ---
 
 ## Document Responsibilities
 
-- **decisions.md**: Repo-wide policy, tie-breakers, prohibitions, and document ownership map (authoritative)
-- **implementation_contract.md**: Current shipped implementation contract, CLI surface, and architecture-boundary reference
-- **validation_policy.md**: Validation entrypoints, validation tiers, candidate review and integration, testing standards, coverage expectations, and E2E guidance
-- **generated_project_structure.md**: Generated-project layout, artifact placement, and generation guardrails
-- **repository_layout.md**: Maintainer-repository layout and naming/import matrix
-- **scaffolding.md**: Concise structure hub plus compatibility anchors and backlinks into the structure companions
-- **plan-apply-system.md**: Plan/apply schemas, state management, and execution order
-- **module-extension.md**: Module extension contract and the module-authoring checklist
-- **generated_file_ownership.md**: Beta-migration `INTENTIONALLY_UNMANAGED` category inventory
-- **quality_tools.md**: Quality analyzers plus the fixed fail/warn threshold gate specification
-- **dr_engine_migration.md**: DR engine architecture and generated-project migration guidance
-- **user_manual.md**: CLI workflows and worked examples
-- **CHANGELOG.md**: Canonical all-version release history index
-- **docs/releases/**: Single public release notes, whether they are clearly labeled prepared artifacts awaiting publish or notes already linked from GitHub tags and release PRs
-- **docs/technical/release_summary_template.md**: Template for public release notes and release-prepared artifacts
-- **publish_procedure.md**: Authoritative pre-publish quality gate and the ordered release phases — version stamping, split-branch publication, verification by generated project and deployment, sealing, and the irreversible publication step. Other documents link to it instead of restating release commands; this file keeps the lockstep *rules* it executes
-- **versioning.md**: `VERSION` single-source declaration and propagation semantics, including what the version tool does not derive. Carries no release or publication sequence
-- **roadmap.md**: Open work and active or unreleased release closeout status; its scheduling table is the canonical source for task tracks, dependencies, release requirements, and next actions. Completed work is removed and archived in CHANGELOG.md
-- **docs/others/arch-audit.md**: Live structural findings only — the current open set, each with its promotion trigger. Not a ledger: closed findings, prior-pass narratives, and reconciliation history belong in CHANGELOG.md. Finding numbers are pass-local and MUST NOT be cited as stable identifiers from any other document, test, or source comment
-- **docs/others/tech-audit.md**: Live defect posture only, and the SSOT for found-not-yet-fixed fail-hard violations. Same rule as above: remediated findings are dropped, not archived in place, and no other artifact may pin its finding counts or IDs
-- **README.md**: Project overview, user guide, repo-level navigation
-- **package README.md files**: Package-local installation and responsibility summaries (informational only)
-- **commercial.md**: Commercial distribution background and constraints
+This is the only document-ownership map. Every fact has one owner, and other documents link to
+the owner instead of restating it. **A** = authoritative: rules are binding and are written as
+MUST / MUST NOT (enforced by `quickscale_core/tests/test_doc_phrasing.py`).
+
+| Document | Owns | |
+|---|---|---|
+| decisions.md | repo-wide policy, tie-breakers, prohibitions, this map | **A** |
+| implementation_contract.md | shipped contract, feature matrix, CLI surface | **A** |
+| validation_policy.md | validation entrypoints and tiers, candidate integration, coverage, E2E | **A** |
+| generated_project_structure.md | generated-project layout, artifact placement, generation guardrails | **A** |
+| repository_layout.md | maintainer-repo layout, naming/import matrix | **A** |
+| module-extension.md | module extension contract, module-authoring checklist | **A** |
+| generated_file_ownership.md | beta-migration `INTENTIONALLY_UNMANAGED` inventory | **A** |
+| publish_procedure.md | pre-publish gate, ordered release phases, release-note format | **A** |
+| ai_hydration_topology.md | `adaptive.rules.md` include graph and its change rules | **A** |
+| GLOSSARY.md | terminology | **A** |
+| docs/contrib/rules.md | contributor engineering rules | **A** |
+| plan-apply-system.md | plan/apply schemas, state, execution order | |
+| quality_tools.md | quality analyzers, threshold gate spec | |
+| versioning.md | `VERSION` single source and propagation | |
+| user_manual.md | CLI workflows and worked examples | |
+| roadmap.md | open work; its scheduling table is canonical for tracks, dependencies, next actions. Completed work moves to CHANGELOG.md | |
+| CHANGELOG.md | release history, one entry per version | |
+| docs/releases/ | one public note per version | |
+| docs/others/*-audit.md | open findings only; finding numbers are pass-local and MUST NOT be cited elsewhere | |
+| ai_context.md | derived AI baseline; on conflict the owner above wins | |
+| README.md | overview, quick start, package table; wins over package READMEs | |
+| START_HERE.md, docs/index.md | navigation | |
+| package and module README.md | package-local install and surface; never contradicts an **A** doc | |
 
 **Rule:** Update the narrow owner first when changing its slice. Update decisions.md in the same change when the repository-wide ownership map, policy, or tie-breakers change.
 
@@ -1853,36 +1834,10 @@ and historical reviews and scheduling decisions in CHANGELOG.md.
 
 ### Release scope safeguards
 
-The v88 cleanup does not authorize teams, another theme, or a third
-generated-project updater. `quickscale_devtools` remains maintainer-internal and
-must not enter the public publish package list. Architecture watchlist findings
-retain their growth triggers; only an explicitly scoped, trigger-independent
-step may proceed before its trigger fires. Such a step does not authorize typed
-disposition metadata, ownership-manifest generation, taxonomy derivation, or
-changes to existing file dispositions.
-
-Preserve the settled module-presence contract and manifest dispatch, local
-wheelhouse version checks, migration baseline, and provisioning behavior. The
-current cleanup grants no edits to `quickscale_core/contracts/` or
-`quickscale_core/manifest/`; any newly authorized behavioral change there must
-be announced in the merge queue because every track consumes those contracts.
-The gate registry and module manifests retain one assigned owning track; do
-not spread their implementation across worktrees. New scope requires its own
-ticket rather than expansion of a cleanup delivery.
-
-**Recorded disposition drift (SA207).** `INTENTIONALLY_UNMANAGED` grew from 78
-to 89 entries across `e12e9867` (78→79) and SA194's closeout `45ca0c0a`
-(79→89) without an update here, and the 2026-09-23 architecture audit classifies
-that growth as decision-record drift against the paragraph above. The ten
-dispositions SA194 added are `.pre-commit-config.yaml`, `frontend/vite.config.ts`,
-`frontend/tsconfig.json`, `frontend/eslint.config.js`,
-`frontend/postcss.config.js`, `frontend/src/lib/validateQuickScaleSeam.ts`,
-`frontend/src/pages/FormsPage.tsx`,
-`frontend/src/pages/SocialLinkTreePublicPage.tsx`,
-`frontend/src/pages/SocialEmbedsPublicPage.tsx`, and
-`frontend/src/hooks/usePublicSocialSurface.ts`. Recording the drift here does
-not authorize further disposition changes; new scope still requires its own
-ticket.
+- ❌ `quickscale_devtools` in the public publish package list; it is maintainer-internal.
+- ✅ A watchlist finding is acted on only when its trigger fires, or by an explicitly scoped,
+  trigger-independent ticket.
+- ✅ New scope requires its own ticket; it never expands an existing delivery.
 
 ## Unit/Integration Gate Split
 
@@ -1983,15 +1938,9 @@ set as inline command prefixes — never as persistent environment configuration
 | ``QUICKSCALE_PRIVILEGED_COMMAND`` | ``migrate``, ``createcachetable`` | ``start.sh`` / ``quickscale manage`` (inline prefix) | ``DATABASE_URL`` (superuser) |
 | ``QUICKSCALE_NON_DB_COMMAND`` | ``collectstatic``, ``compilemessages`` | ``Dockerfile`` build step (inline prefix) | Dummy ``postgresql://`` URL |
 
-**2026-09-16 retirement decision:** ``migrate_billing_to_orgs`` is not a
-permanent privileged command. Current installs cannot contain its historical
-nullable ownership shape, so the command received no automatic superuser
-connection and is now deleted with its recovery documentation. The sanctioned
-set is permanently the two stable Django built-ins above. Each of the four
-enforcing stations keeps an independent fail-closed refusal, with a
-cross-station regression requiring their declarations to agree. This dated
-decision supersedes the informal 2026-08-31 “permanent two” answer and the
-intervening three-command contract.
+The sanctioned privileged set is exactly the two Django built-ins above. Each of
+the four enforcing stations keeps an independent fail-closed refusal, and a
+cross-station regression test requires their declarations to agree.
 
 **Related:** [Fail-Hard Principle](#fail-hard-principle) (the mutual-exclusion
 check and missing-arg validation follow fail-hard); [Multi-tenant SaaS
@@ -2125,6 +2074,19 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - Runtime backend selection stays on Django's console email backend until live Resend delivery is fully configured. If the live Resend backend is active anyway and the placeholder sender or resolved API key is still missing, queued deliveries fail explicitly rather than degrading silently.
 - Delivery tracking is recipient-granular. A multi-recipient send fans out into one tracked provider send/message ID per recipient delivery record.
 - Provider-visible tags/metadata are optional and limited to a tiny non-sensitive allowlist. Internal correlation identifiers stay local to QuickScale-owned records.
+
+**Provider choice.** Resend is the only first-class sender, delivered through Django Anymail
+on the standard Django email path, with app-owned templates and an app-owned dispatch record.
+Direct Resend API integration is rejected (weaker portability, more provider code). Fallbacks,
+in order, if inbound email becomes required or cost-at-scale dominates: Postmark, then Amazon SES.
+
+### Analytics Provider {#analytics-provider}
+
+PostHog is the only approved analytics provider: zero cost floor, an official Django SDK,
+SPA fit, and server-side capture. Settings are flat, and the backend exposes service-style
+helpers. Existing projects adopt the frontend manually. Fallbacks, in order, if the free tier
+disappears or a privacy-first/EU-only default becomes policy: Plausible, then Matomo
+(self-hosted). Umami, Fathom and GA4 are not approved.
 
 ### Multi-tenant SaaS Architecture {#multitenant-saas-architecture}
 
@@ -2416,8 +2378,7 @@ above and `beta-site-migration.md`'s two-repo migration workflow). No CI job,
 generator run, or agent session in this repo can open a shell in Railway or
 push to those repos. Treating this as a temporary blocker awaiting "access"
 mischaracterizes the boundary — access to another maintainer's private
-deployment infrastructure is not something this repo's tooling can or should
-grant itself.
+deployment infrastructure is not something this repo's tooling grants itself.
 
 **What stays in scope (and is not affected by this decision):** everything
 this repo *can* verify mechanically — the generator templates themselves,
@@ -2476,7 +2437,7 @@ plumbing layer.
 
 **Enforcement:** Any module conftest that defines a fixture whose
 documentation or identifier references resetting `app.current_org_id`,
-`SET ROLE`, execute-wrapper priming memo, or the Django cache should instead import
+`SET ROLE`, execute-wrapper priming memo, or the Django cache MUST import
 the shared `reset_test_state` fixture from `tests_shared.reset_state`.
 New cross-module test utilities must be placed in `tests_shared/` rather
 than duplicated across module conftests.
@@ -2485,7 +2446,7 @@ than duplicated across module conftests.
 
 ---
 
-### Rendered-Link Sanitization Ownership (SA98) {#rendered-link-sanitization-ownership-sa98}
+### Rendered-Link Sanitization Ownership {#rendered-link-sanitization-ownership-sa98}
 
 **Decision:** The orgs module owns the narrow shared rendered-link sanitization
 seam used by the blog and listings modules. The public API is
@@ -2533,7 +2494,7 @@ request time.
 ---
 
 <a id="af7-installed-wheel-module-discovery"></a>
-### Bundled Module Inventory and Source-Required Paths (AF7)
+### Bundled Module Inventory and Source-Required Paths {#bundled-module-inventory-and-source-required-paths-af7}
 
 **Architectural Decision (SA109):** Distinguish authoritative bundled manifest inventory
 from real module source. The installed-wheel context uses synchronized bundled manifests
@@ -2594,7 +2555,7 @@ catchers import Django's.
 
 ### Module Presence States {#module-presence-states}
 
-**Architectural Decision (2026-08-28, settling roadmap decision D3):** Module discovery
+**Architectural Decision:** Module discovery
 reports **what it observed**, and each consumer applies its own policy. Presence is a
 three-state fact, not a count.
 
@@ -2678,7 +2639,7 @@ differ. A version mismatch must never be allowed to surface as a downstream fail
 
 **Rule 2a — The comparison is canonical, not literal.** Version equality is decided on a
 canonical parse, so padded, whitespace-bearing, or otherwise non-canonical spellings
-(`0.87.0 `, `0.087.0`) do not satisfy a lockstep check they should fail. A version string
+(`0.87.0 `, `0.087.0`) do not satisfy a lockstep check; they fail it. A version string
 that cannot be canonically parsed is itself a hard error, never a fallback to literal
 string comparison — a permissive comparison is the same defect class as the missing
 assertion Rule 2 exists to close.
@@ -2735,8 +2696,7 @@ fail-closed post-push verification rereads both the tag target and branch and
 rejects any mismatch. The seal target accepts no pre-authorized SHA or
 `ABSENT` value; branch-publication expectations belong only to the preceding
 `publish-module` loop. The narrow reread-to-push race window is accepted and
-detected rather than eliminated; the 2026-08-07 re-scope accepted it because
-that window is strictly smaller than the already accepted residual risk that a
+detected rather than eliminated, because that window is strictly smaller than the already accepted residual risk that a
 force-privileged maintainer can move a tag.
 
 **Known limitation (accepted residual):** split-tag permanence is enforced by client-side
@@ -2837,7 +2797,7 @@ ticket.
 
 ---
 
-### Quality Thresholds Gate (SA243) {#quality-thresholds-gate}
+### Quality Thresholds Gate {#quality-thresholds-gate}
 
 **Rule:** `make quality` has no accepted-debt baseline. Each metric carries one
 fixed fail line and one advisory warn band:
@@ -2972,6 +2932,6 @@ quickscale_themes/ecommerce/src/quickscale_themes/ecommerce/...
 core-compatibility = ">=2.0.0,<3.0.0"
 ```
 
-Full naming/import matrix: [scaffolding.md §6](./scaffolding.md#6-naming-import-matrix-summary).
+Full naming/import matrix: [repository_layout.md](./repository_layout.md#6-naming-import-matrix-summary).
 Module responsibility boundaries:
 [implementation_contract.md §Module Boundaries](./implementation_contract.md#module-boundaries).

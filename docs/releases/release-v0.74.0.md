@@ -1,12 +1,11 @@
 # Release v0.74.0 - React Default Theme (showcase_react)
 
-**Release Date:** 2026-02-05
-**Status:** ✅ Released
+**Date:** 2026-02-05 · **Status:** ✅ Released
 
 ## Summary
 This release marks a major milestone in QuickScale's evolution by establishing **React + shadcn/ui** as the default frontend foundation. All new projects generated with QuickScale now benefit from a modern, performant, and highly customizable React stack out of the box.
 
-## What's New
+## Highlights
 
 ### Features
 - **Brand New `showcase_react` Theme**: A full-featured React template powered by Vite, TypeScript, and Tailwind CSS.
@@ -25,19 +24,13 @@ This release marks a major milestone in QuickScale's evolution by establishing *
 - Fixed CLI path issues when generating deep nested directory structures for React templates.
 - Corrected Jinja2 template rendering for `package.json` to ensure valid versioning strings.
 
-## Breaking Changes
+## Breaking changes
 - **Default Theme Change**: The default theme for new projects is now `showcase_react`. Users who prefer the classic HTML approach can still choose `showcase_html` during `quickscale plan`, but React is now the primary path.
 
-## Migration Guide
+## Upgrade steps
 1. **Existing Projects**: No automatic migration is provided. Existing projects built with `showcase_html` will continue to work.
 2. **Adopting React**: To move an existing project to the new React foundation, we recommend creating a new project with v0.74.0 and migrating your custom business logic.
 3. **Removed HTMX Placeholder**: Any saved `quickscale.yml` using `theme: showcase_htmx` must be updated to `showcase_react` or `showcase_html` before running `quickscale apply`.
 
 ## Known Issues
 - `pnpm` is required on the user's system to install dependencies in the generated project automatically. If missing, users must install it or manually use `npm`/`yarn`.
-
-## Validation
-- ✅ Full Python test suite passing (./scripts/test_all.sh)
-- ✅ Linting passing (./scripts/lint.sh)
-- ✅ Manual verification of generated React projects
-- ✅ E2E validation of `quickscale apply` with the new theme

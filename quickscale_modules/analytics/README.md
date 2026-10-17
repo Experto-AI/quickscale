@@ -101,6 +101,5 @@ This module ships no management commands.
 
 - The template tags are the supported manual adoption path for server-rendered templates;
   they do not rewrite templates automatically.
-- Related documentation: [roadmap](../../docs/technical/roadmap.md),
-  [analytics provider comparison](../../docs/planning/analytics-provider-comparison.md), and
-  the [module workspace README](../README.md).
+- Related documentation: [provider decision](../../docs/technical/decisions.md#analytics-provider)
+  and the [module workspace README](../README.md).

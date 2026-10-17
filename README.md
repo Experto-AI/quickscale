@@ -8,7 +8,6 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Experto-AI/quickscale?color=green)](https://github.com/Experto-AI/quickscale/releases)
 [![Code style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-> **You are here**: **QuickScale README** (Project Overview)
 > **Related docs**: [Start Here](START_HERE.md) | [Glossary](GLOSSARY.md) | [Decisions](docs/technical/decisions.md) | [User Manual](docs/technical/user_manual.md)
 
 <!--
@@ -55,7 +54,7 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - 🚀 **Deploying to Railway?** See [railway.md](./docs/deployment/railway.md) for Railway deployment guide
 - 📋 **Planning a feature?** Check [decisions.md](./docs/technical/decisions.md) for the authoritative implementation scope and technical rules
 - 🗓️ **Timeline & tasks?** See [roadmap.md](./docs/technical/roadmap.md)
-- 🏗️ **Project structure?** See [scaffolding.md](./docs/technical/scaffolding.md) for complete directory layouts
+- 🏗️ **Project structure?** See [generated_project_structure.md](./docs/technical/generated_project_structure.md) for complete directory layouts
 - ⚛️ **Working on the frontend?** See [frontend.md](./docs/technical/frontend.md) for the Django/React seam, URL ownership, and the static pipeline
 - 🎯 **Why QuickScale?** See [quickscale.md](./docs/overview/quickscale.md) for competitive positioning
 
@@ -64,7 +63,7 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - **Release history** = [CHANGELOG.md](./CHANGELOG.md) plus official tagged release notes in `docs/releases/`
 - **Generated Project** = Output of `quickscale plan`, then entering the generated directory and running `quickscale apply`
 
-See [decisions.md - Document Responsibilities](./docs/technical/decisions.md#document-responsibilities) for complete terminology and Single Source of Truth reference
+Terms: [GLOSSARY.md](./GLOSSARY.md). Which document owns what: [decisions.md § Document Responsibilities](./docs/technical/decisions.md#document-responsibilities). Every document: [docs/index.md](./docs/index.md).
 
 **Package reference docs (informational context only):**
 - [quickscale/README.md](./quickscale/README.md) - meta-package packaging notes
@@ -72,7 +71,6 @@ See [decisions.md - Document Responsibilities](./docs/technical/decisions.md#doc
 - [quickscale_core/README.md](./quickscale_core/README.md) - core scaffolding package boundaries
 
 If package README text differs from repo docs, [README.md](./README.md) and [decisions.md](./docs/technical/decisions.md) win.
-
 
 ### Primary Use Cases:
 - **Solo Developer**: Build client projects faster with production-ready foundations
@@ -111,7 +109,7 @@ Running `quickscale plan myapp`, entering the generated directory, and then runn
 
 **Note**: The `showcase_html` (pure HTML/CSS) theme option was removed in SA94. `showcase_react` is the sole supported theme.
 
-**See the complete project structure:** [scaffolding.md - Generated Project Output](./docs/technical/scaffolding.md#5-generated-project-output)
+**See the complete project structure:** [generated_project_structure.md](./docs/technical/generated_project_structure.md#generated-project-output)
 
 The generated project is **yours to own and modify** - no vendor lock-in, just Django best practices.
 
@@ -357,6 +355,16 @@ cat .quickscale/quality_gate_status.json  # Gate verdict summary
 - Code duplication (6+ similar lines warning, >=20 fail)
 
 **Exit codes:** 0 (no fail-column finding; warn-column findings print as advisories), 1 (a fail-column finding, a missing analyzer dependency, or unreadable analyzer output). GNU Make reports a failed recipe as its own exit 2.
+
+## Packages
+
+| Directory | Role |
+|---|---|
+| `quickscale` | meta-package that installs the CLI and core |
+| `quickscale_cli` | the `quickscale` command |
+| `quickscale_core` | generator, templates, shared runtime (`dr_engine`, settings facade) |
+| `quickscale_devtools` | maintainer tooling; never shipped into generated projects |
+| `quickscale_modules/<name>` | one first-party module; Python package and Django app label `quickscale_modules_<name>` |
 
 ## Learn More
 

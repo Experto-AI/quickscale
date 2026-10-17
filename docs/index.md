@@ -1,63 +1,49 @@
 # QuickScale Documentation
 
-**Quick Start**: New to QuickScale? Start with [../START_HERE.md](../START_HERE.md)
+New here: [START_HERE.md](../START_HERE.md). **A** marks an authoritative document. Its
+rules are binding and use MUST / MUST NOT wording. decisions.md wins any conflict, and
+[§ Document Responsibilities](technical/decisions.md#document-responsibilities) names each topic's owner.
 
----
+## Entry points
+- [README.md](../README.md): overview, quick start, packages
+- [GLOSSARY.md](../GLOSSARY.md) **A**: terminology
+- [CHANGELOG.md](../CHANGELOG.md): release history; [releases/](releases/): one note per version
 
-## Core Documentation
+## Technical
+- [decisions.md](technical/decisions.md) **A**: repo-wide rules, prohibitions, document ownership
+- [implementation_contract.md](technical/implementation_contract.md) **A**: shipped contract and CLI surface
+- [validation_policy.md](technical/validation_policy.md) **A**: validation entrypoints, testing and coverage
+- [generated_project_structure.md](technical/generated_project_structure.md) **A**: generated-project layout
+- [repository_layout.md](technical/repository_layout.md) **A**: maintainer-repo layout, naming and imports
+- [module-extension.md](technical/module-extension.md) **A**: module extension contract and authoring checklist
+- [generated_file_ownership.md](technical/generated_file_ownership.md) **A**: beta-migration unmanaged-file inventory
+- [publish_procedure.md](technical/publish_procedure.md) **A**: pre-publish gate, release phases, release-note format
+- [plan-apply-system.md](technical/plan-apply-system.md): plan/apply schemas and execution order
+- [frontend.md](technical/frontend.md): Django/React seam, URL ownership, static pipeline
+- [organizations.md](technical/organizations.md): multi-tenant orgs model
+- [quality_tools.md](technical/quality_tools.md): analyzers and threshold gate
+- [versioning.md](technical/versioning.md): `VERSION` single source
+- [roadmap.md](technical/roadmap.md): open work and scheduling
+- [user_manual.md](technical/user_manual.md): commands and workflows
+- [development.md](technical/development.md): dev environment
+- [docker_workflows.md](technical/docker_workflows.md): Docker workflows
+- [local-wheelhouse.md](technical/local-wheelhouse.md): local wheelhouse
+- [ai_context.md](technical/ai_context.md): compact AI hydration baseline (derived, never authoritative)
+- [ai_hydration_topology.md](technical/ai_hydration_topology.md) **A**: Adaptive wiring and which docs each agent role hydrates
 
-- **Getting Started**
-  - [START_HERE.md](../START_HERE.md) - Documentation guide with decision tree
-  - [README.md](../README.md) - Project overview and quick start
-  - [GLOSSARY.md](../GLOSSARY.md) - Centralized terminology reference
+## Contributing
+- [contrib/contributing.md](contrib/contributing.md): guide map
+- [contrib/rules.md](contrib/rules.md) **A**: contributor engineering rules
+- Stage guides: [plan](contrib/plan.md), [code](contrib/code.md), [review](contrib/review.md), [testing](contrib/testing.md), [debug](contrib/debug.md)
 
-- **Technical**
-  - [Decisions (authoritative)](technical/decisions.md) - Technical rules and architectural decisions
-  - [Scaffolding (layout & templates)](technical/scaffolding.md) - Directory structures and file layouts
-  - [Roadmap](technical/roadmap.md) - Development timeline and current tasks
-  - [User Manual](technical/user_manual.md) - Commands and workflows
-  - [Development](technical/development.md) - Dev environment setup
-  - [Plan/Apply System](technical/plan-apply-system.md) - Terraform-style workflow
-  - [Module Extension Contract](technical/module-extension.md) - Extension surfaces, support tiers, and per-module contracts
-  - [Frontend Architecture](technical/frontend.md) - Django/React seam, URL ownership, static pipeline, and template roles
-  - [Publish Procedure (authoritative)](technical/publish_procedure.md) - Pre-publish quality gate and the ordered release phases
-  - [Versioning](technical/versioning.md) - `VERSION` single source and propagation
+## Overview
+- [quickscale.md](overview/quickscale.md): strategy and positioning
+- [competitive_analysis.md](overview/competitive_analysis.md): comparison with alternatives
+- [commercial.md](overview/commercial.md): commercial-use rights
 
-- **Overview**
-  - [QuickScale Strategic Vision](overview/quickscale.md) - Creator-led positioning and current evolution rationale
-  - [Competitive Analysis](overview/competitive_analysis.md) - Concise comparison with Django starter alternatives
-  - [Commercial Extensions](overview/commercial.md) - Current commercial-use rights and constraints
-  - [Packages](overview/packages.md) - Current package naming and surface notes
+## Operations
+- [deployment/railway.md](deployment/railway.md): deploy to Railway
+- [planning/beta-site-migration.md](planning/beta-site-migration.md): keep `bap-web` current with releases
 
-- **Contributing**
-  - [Contributing Guide](contrib/contributing.md) - Development workflow overview
-  - [Code Guide](contrib/code.md) - Implementation principles
-  - [Review Guide](contrib/review.md) - Quality control
-  - [Testing Guide](contrib/testing.md) - Test generation
-  - [Debug Guide](contrib/debug.md) - Debugging and root cause analysis
-
-- **Planning**
-  - [Beta Site Migration Playbook](planning/beta-site-migration.md) - Step-by-step guide for keeping bap-web current with new QuickScale releases
-  - [Analytics Provider Comparison](planning/analytics-provider-comparison.md) - Decision record for the provider and implementation contract behind the shipped analytics module
-  - [Email Sender Comparison](planning/email-sender-comparison.md) - Decision record for the Anymail + Resend path behind the shipped notifications module
-  - [Frontend E2E Coverage](planning/frontend-e2e-coverage.md) - Status, gap analysis, and options for React-theme browser and journey testing
-
-- **Others** (working notes; not authoritative)
-  - [Architectural Audit](others/arch-audit.md) - Live structural findings
-  - [Technical Audit](others/tech-audit.md) - Live defect posture
-  - [Adaptive](others/adaptive.md) - Adaptive agent pipeline notes
-  - [Automation](others/automation.md) - Automation notes
-
-- **Deployment**
-  - [Railway Deployment](deployment/railway.md) - Deploy to Railway platform
-
-- **Releases**
-  - [Release Notes](releases/) - Official tagged GitHub release notes for published releases
-  - [Release Summary Template](technical/release_summary_template.md) - Template for the single public release-note workflow
-
----
-
-**Documentation Principles**:
-- [decisions.md](technical/decisions.md) is authoritative for technical rules
-- [GLOSSARY.md](../GLOSSARY.md) is authoritative for terminology
-- Update Tier 1 docs first, then propagate changes
+## Audits (open findings only; not authoritative)
+- [arch-audit.md](others/arch-audit.md), [tech-audit.md](others/tech-audit.md), [coherence-audit.md](others/coherence-audit.md)

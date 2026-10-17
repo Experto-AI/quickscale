@@ -1,9 +1,8 @@
 # Repository Layout (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) -> [Technical](../index.md) -> **Repository Layout**
-> **Related docs**: [Scaffolding](scaffolding.md) | [Implementation Contract](implementation_contract.md) | [Generated Project Structure](generated_project_structure.md)
+> **Related docs**: [Implementation Contract](implementation_contract.md) | [Generated Project Structure](generated_project_structure.md)
 
-This companion owns the maintainer-side repository layout, package-placement reference, and naming/import matrix. [scaffolding.md](./scaffolding.md) remains the structure hub and compatibility-anchor map; [decisions.md](./decisions.md) remains the tie-breaker for policy disputes.
+This companion owns the maintainer-side repository layout, package-placement reference, and naming/import matrix. [decisions.md](./decisions.md) remains the tie-breaker for policy disputes.
 
 <a id="post-mvp-structure"></a>
 ## Current Maintainer Repository Layout
@@ -77,7 +76,7 @@ Use this pattern only when you are intentionally maintaining shared code across 
 
 Rules:
 - Dotted import paths map to underscore-qualified Django app labels where needed.
-- Generated projects should favor standard Django import patterns.
+- Generated projects use standard Django import patterns.
 - Do not introduce alternate naming systems when the existing package and app-label pattern is sufficient.
 - The narrow shared rendered-link seam is imported as
   `quickscale_modules_orgs.sanitization` by

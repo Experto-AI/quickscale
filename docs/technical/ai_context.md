@@ -2,19 +2,17 @@
 
 Compact baseline for AI hydration in QuickScale. This file is derivative and intentionally non-navigational. It summarizes repository-wide facts that every AI role should share; it does not replace the authoritative sources.
 
-> **Drift notice**: This file is a best-effort derivative of `decisions.md` and the companion technical docs. It may lag behind those canonical sources. If any fact here conflicts with `decisions.md`, `implementation_contract.md`, `validation_policy.md`, `generated_project_structure.md`, `repository_layout.md`, or `scaffolding.md`, treat those documents as authoritative immediately — before this file is corrected.
+> **Drift notice**: This file is a best-effort derivative of `decisions.md` and the companion technical docs. It may lag behind those canonical sources. If any fact here conflicts with `decisions.md`, `implementation_contract.md`, `validation_policy.md`, `generated_project_structure.md`, or `repository_layout.md`, treat those documents as authoritative immediately — before this file is corrected.
 
 ## Authority Order
 
-1. [decisions.md](./decisions.md) owns repo-wide policy, tie-breakers, prohibitions, and the document ownership map.
+1. [decisions.md](./decisions.md) owns repo-wide policy, tie-breakers, prohibitions, and the document ownership map ([§ Document Responsibilities](./decisions.md#document-responsibilities) names the owner of every other document).
 2. [implementation_contract.md](./implementation_contract.md) owns the current shipped contract, feature matrix, CLI surface summary, and architecture-boundary notes.
 3. [validation_policy.md](./validation_policy.md) owns validation entrypoints, testing standards, coverage expectations, and E2E guidance.
 4. [generated_project_structure.md](./generated_project_structure.md) owns generated-project structure, generated artifact placement, and generation guardrails.
 5. [repository_layout.md](./repository_layout.md) owns maintainer-repository layout plus naming and import guidance.
-6. [scaffolding.md](./scaffolding.md) is the concise structure hub that preserves backlinks and compatibility anchors into the companion docs.
-7. Role-specific guides in `docs/contrib/*.md` add stage-local execution guidance when they do not conflict with the technical authorities above.
-
-Shared rule sources in `docs/contrib/shared/` remain the normative workflow-agnostic contributor guidance. Stage guides in `docs/contrib/*.md` apply that guidance stage-locally and do not prescribe a required workflow order.
+6. [docs/contrib/rules.md](../contrib/rules.md) owns contributor engineering rules (scope, design, failure handling, style, testing, debugging, documentation).
+7. Stage guides in `docs/contrib/*.md` apply those rules and prescribe no workflow order; they never override the authorities above.
 Package READMEs, root `README.md`, `START_HERE.md`, and contributor-router docs are informational or human-first references and do not override the technical authorities above.
 
 ## Workflow Baseline
@@ -36,7 +34,7 @@ Package READMEs, root `README.md`, `START_HERE.md`, and contributor-router docs 
 
 ## Validation Entry Points
 
-- Prefer repository `make` targets over lower-level helper scripts.
+- Shared workflows run through repository `make` targets, never lower-level helper scripts directly.
 - Use the narrowest relevant validation first, then widen only as needed.
 - Depth is chosen by tier, and the tier bounds the obligation — see
   [validation_policy.md §Validation Tiers](./validation_policy.md#validation-tiers),

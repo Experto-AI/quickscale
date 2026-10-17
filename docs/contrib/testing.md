@@ -1,8 +1,8 @@
 # Testing Guide
 
 Use this guide for QuickScale-specific test selection, locations, commands,
-fixtures, and contamination-prevention reminders. Shared testing and debugging
-standards remain authoritative for the normative rules.
+fixtures, and contamination-prevention reminders. [rules.md §6–7](rules.md#6-testing)
+is authoritative for the testing and debugging rules.
 
 ## Test Category Decision Tree
 

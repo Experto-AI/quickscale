@@ -1,7 +1,6 @@
-# QuickScale v0.89.0 — Development Maintenance
+# Release v0.89.0 — Development Maintenance
 
-> **Release status:** prepared for the v0.89.0 development line, not published. No v0.89.0 tag,
-> GitHub release, or package upload is implied by this note.
+**Date:** unreleased · **Status:** Prepared release artifact (no tag, GitHub release or package upload exists)
 
 ## Summary
 
@@ -50,7 +49,7 @@ which the generated `settings/base.py` passes to `compose_rest_framework` as
 then the declared module scopes, then a project's own contribution, and a module `adapter.py` that
 writes a `DEFAULT_THROTTLE_RATES` literal fails the conformance gate.
 
-## Adoption
+## Upgrade steps
 
 A project-owned model inherits `TenantModel` (directly or through a module's abstract base) and
 calls `apply_force_rls()` from its initial migration to install the exact pair required by
@@ -212,7 +211,7 @@ import and call are adopted by hand. Until then a module view that attaches its 
 `throttle_scope` fails loudly — DRF raises `No default throttle rate set for '<scope>' scope` on
 the first request — rather than serving unthrottled.
 
-## Compatibility
+## Breaking changes
 
 The validation-source changes affect repository tests only. The tenant-enrollment capability keeps
 existing organization ownership and FORCE RLS requirements in place, but this release does rename
@@ -262,13 +261,6 @@ satisfy that request, where it previously completed in plaintext. Operators who 
 must carry those parameters on `RUNTIME_DATABASE_URL`, not only on `DATABASE_URL`, and re-check that
 URL after `quickscale deploy railway`, which rewrites the runtime URL on services it manages.
 
-This maintenance release also adds maintainer-only beta-migration compatibility validation and
-effective runtime provenance to report output; incompatible launcher, settings, and package
-combinations now fail before recipient mutation, fresh-first identity changes reconcile raw and
-derived slug/package values across the generated scaffold, and a run that completes its
-verification stack writes a report-derived `MIGRATION_PROMPT.md` handoff into the recipient. Those
-beta-migration-only additions do not themselves change generated-project output, public package
-APIs, or upgrade requirements; the shared-design generated-file boundary is described above.
 
 **Moved URLs.** The organizations module now serves its JSON API under its mount: `/api/orgs/...`
 moves to `/orgs/api/...` (organization list/create at `/orgs/api/`, org-scoped endpoints under
@@ -418,73 +410,3 @@ project or cron job updates with this release:
   list, and the generated social payload endpoints are DRF views that answer the standard error
   shape without echoing exception text. Lists that previously returned every row now return their
   first page unless the client asks for another.
-
-## Delivery provenance
-
-The SA195/SA192 delivery was synchronized with `v89` at
-`6e8b24036bb26a74b585aa78cd9e53d54cd29e88`. It changes the shared module-test shell; the auth,
-billing, blog, CRM, and listings templates and stylesheets; the generated React/Django shell,
-frontend-origin settings, Vite proxy, and Compose workflow; their source/embedded module manifests;
-the exact-emission fixture; focused contract and E2E coverage; and the corresponding changelog,
-roadmap, frontend architecture, and user-manual documentation. No dependency was added.
-
-The credential-contract derivation followed on the same line: the generated `.env.example` now
-renders one managed block per enabled credential-bearing module from that module's declared
-environment-variable options, the static notifications block left the template, and enabling
-`storage` or `backups` adds their credential placeholders on the next `apply`. That changes the
-fresh-generation `.env.example` bytes for every variant, so the hash row below is the current
-emission; the other rows are the SA195/SA192 delivery's.
-
-The frontend-startup resilience change followed later on the same line: the generated
-`docker-compose.yml` frontend service now passes `--config.fetch-retries=5` to its `pnpm install`,
-so a single stalled registry request does not abort the dev install and leave `quickscale up` with
-a failed-to-start frontend. That changes the fresh-generation `docker-compose.yml` bytes for every
-variant, so its hash row is also the current emission.
-
-The exact-emission hashes below apply identically to `react_default`, `react_empty`, and
-`react_selected`; all paths not listed remain unchanged in those manifests.
-
-| Generated path | SHA-256 |
-|---|---|
-| `.env.example` | `e81448025b9c55d84a0770a205235ec004a2a15516da742474e63443dda3e265` |
-| `README.md` | `1e1778dec8bd438dd06573df0204b20b63776bbfaf8bf587504e8ad697c57387` |
-| `docker-compose.yml` | `147671e902ac3123931e8b9be1ccff80247db08f8a83211ed904a81519329148` |
-| `frontend/src/test/viteAssetRouting.test.ts` | `c51b723eda4a3c84d70db43a6886c55a1fd5439ca08159b736af8e472124e016` |
-| `frontend/vite.config.ts` | `f658677187822a51078f405f690a313a83900ffc654ad062e2be1763e176c82e` |
-| `templates/base.html` | `dbc8e9669c906fab12f46cdc572e7e1bb0f6ec80ec040b22bba6ddcfcb7e2668` |
-| `templates/index.html` | `143967305c394178a6283ee75ac723f46f8e024e87d7ea525c0b01da2a3e1cf3` |
-| `templates/social/embeds.html` | `72c05317c6a7c507412b7a942ecc19abc1a0ae5272952aba0a4d03fe99e71f82` |
-| `templates/social/link_tree.html` | `2c716821493cf08bf136438475979a0b1b122b340a67ecc7870b899df02577cb` |
-| `testproject/settings/base.py` | `63366e3ee9f038aeeb807c1ed80afda5c253d90c406ceb3d9ffb244f95740e99` |
-| `testproject/settings/local.py` | `cb15c6d4bf76805285683dfa552843b62fb2d534e17ed2e8f1c94ece8f8189c9` |
-| `testproject/urls.py` | `3b8239c90c47b3c74f9440222ea8626501e815b0d04db02df4789f45f09fe622` |
-
-`.env` is excluded from the hash table: it embeds the invoking host's `DOCKER_UID`/`DOCKER_GID`,
-so the emission fixture pins only its presence and mode.
-
-## Validation
-
-The task-tier and release-tier validation commands for this prepared capability are:
-
-```text
-make check QUIET=1
-make ci-e2e
-make release-gate
-```
-
-This task-tier gate includes the registered beta-migration generated-project smoke check, its CLI
-regression suite, and repository gate-parity checks.
-
-One Stripe test-mode checkout completed from the billing API view at this prepared line: the
-purchase checkout built its success and cancel URLs from the request as absolute URLs, Stripe
-accepted the session (`cs_test_a1DNFnZGrbMnE2NjZM8uvMRiujLwIVgYjsx6nrQLDu8txIGZpwjdMpu0Os`,
-`status=complete`, `payment_status=paid`, 1900 usd), and the recipient processed the
-completed-checkout event into a completed purchase reservation and a 100-credit balance. That
-last step ran on a locally resubmitted copy of the event: its `api_version` was set locally to
-the endpoint's required `2026-06-24.dahlia` release and the replay was signed locally with the
-endpoint secret, not delivered by a Stripe-origin endpoint pinned at that version. The checkout
-fix this note records is the absolute-return-URL repair: checkout, subscription, and portal
-sessions no longer hand Stripe the relative URLs it rejects, and the client refuses one before
-any provider call.
-
-This note does not claim release-tier validation, publication, or a v0.89.0 tag.

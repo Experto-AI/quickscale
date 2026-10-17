@@ -17,7 +17,7 @@ Two sentences maximum. Name the setting, command, or file a reader would touch.
 
 **Never put in a changelog entry:** ticket IDs (`SA160`, `TA67`, `EV-8`), commit SHAs, branch or worktree names, dates inside sub-bullets, test/pass/skip counts, coverage percentages, timings, exit codes, evidence paths, or review, attestation, and authorization status. No planning narration — rebalance passes, track moves, "retained partial", "ticket remains open", "no-verdict", what was superseded or corrected in a later pass.
 
-Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`; validation evidence in the release note's Validation section; process history in Git.
+Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`; validation evidence in the release PR; process history in Git.
 
 **The test:** if the change cannot be stated without naming a ticket or a run, it is process, not a change, and it does not go here. Write for someone upgrading QuickScale who never saw the work happen. One bullet per change — describe the end state only, not the path to it, and amend the existing bullet rather than appending a correction.
 
@@ -265,8 +265,7 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `choices`, `subset_of`, `excludes`, `intersects`, multi-entry conditions, and `slug`/`list`
     normalization.
   - **The `teams` placeholder is removed.** `quickscale_modules/teams/` no longer exists,
-    `teams` is refused as an unknown module in `quickscale plan` and `quickscale.yml`, and the
-    planning note lives at `docs/planning/teams.md`.
+    and `teams` is refused as an unknown module in `quickscale plan` and `quickscale.yml`.
   - **Module wiring refuses conflicting settings.** `apply` fails and names both modules and the
     setting when two modules contribute one wiring key with different values, while
     `REST_FRAMEWORK` contributions merge key by key so one module's throttle rates cannot replace
@@ -904,6 +903,11 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     and the module-conventions gate requires that call wherever `--trigger` exists; the forms
     seeding and retention operations and the organization purge open their `transaction.atomic()`
     below the command instead of in it.
+  - **Every management-command flag is documented, and the restore help agrees with its guard.**
+    The module-conventions README gate compares each command's declared flags with its README's
+    Management commands entry, so the backups, forms, and orgs READMEs name every flag; the
+    `quickscale_backups_restore` help and usage errors no longer offer `--file` as a restore
+    source, because a file restore records no migration content identity and is always refused.
   - **Modules declare their throttle scopes once.** Each throttled module declares its DRF
     scopes and the `_RATE_LIMIT` option behind each in its `module.yml`, the managed
     `settings/modules.py` carries the merged `MODULE_THROTTLE_SCOPES`, and the composed

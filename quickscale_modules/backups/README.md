@@ -20,6 +20,14 @@ dumps. JSON artifacts are export-only: they are useful for non-PostgreSQL develo
 fixture export and for operator inspection, but they are not a supported restore input for
 generated PostgreSQL projects.
 
+## Dependency on quickscale-core
+
+The module imports `quickscale_core.dr_engine` at runtime. Fresh projects already declare the
+bounded `quickscale-core` lockstep pin. For an older project, `quickscale apply` adds the bounded
+spec (`>=X.Y.Z,<X.(Y+1).0`) to the root `pyproject.toml`. That spec must resolve from a package
+index or the staged local wheelhouse before `poetry install` succeeds. `quickscale update` does
+not add root dependency constraints.
+
 ## Configuration
 
 The module declares the options below in `module.yml`; `quickscale plan` and `quickscale apply`
@@ -98,35 +106,49 @@ This module ships no URLs.
 ## Management commands
 
 - `quickscale_backups_create` — create a private database backup artifact. `--trigger`
-  takes `manual` (the default), `scheduled`, or the admin UI's `admin`.
+  takes `manual` (the default), `scheduled`, or the admin UI's `admin`. `--resume SNAPSHOT_ID`
+  resumes an existing snapshot capture by snapshot id, and `--json` emits the structured
+  capture report for automation.
 - `quickscale_backups_dr_adapter_call` — thin CLI bridge to call DR adapter functions from
-  within a Docker context; not for admin use.
+  within a Docker context; not for admin use. `--args-json` carries the adapter's keyword
+  arguments as one JSON object (deprecated; piped stdin is preferred).
 - `quickscale_backups_pin` — set or clear a rollback pin on one stored backup snapshot.
+  Setting a pin requires `--hours N` and `--reason TEXT`; `--clear` clears an active pin
+  instead; `--json` emits the structured pin report.
 - `quickscale_backups_prune` — delete expired backup files and mark their metadata as deleted,
   according to the active retention policy. `--trigger` defaults to `manual`; `--trigger
   scheduled` refuses while the module is switched off, and `--trigger manual` / `--trigger
-  admin` (the admin action) stay available.
+  admin` (the admin action) stay available. `--dry-run` reports the expired artifacts without
+  deleting them.
 - `quickscale_backups_record_verification` — record one plan or execute verification report
-  for a backup snapshot.
-- `quickscale_backups_report` — report one stored backup snapshot by `snapshot_id`.
+  for a backup snapshot. `--route`, `--phase` (`plan` or `execute`), `--status`, and
+  `--payload-json` are required; `--json` emits the updated snapshot report.
+- `quickscale_backups_report` — report one stored backup snapshot by its positional
+  `snapshot_id`. `--sidecar-payload` includes one parsed sidecar payload in the `--json`
+  output and may be supplied multiple times.
 - `quickscale_backups_restore` — validate or execute a guarded restore for a backup artifact
-  or file.
+  or snapshot. `--snapshot-id SNAPSHOT_ID` selects a stored snapshot; `--confirm` is required
+  and must exactly match the backup filename or the supplied file basename; `--dry-run`
+  validates without executing; `--local-only` forbids remote materialization, and
+  `--allow-production` records explicit destructive-restore intent.
 - `quickscale_backups_sync_media` — dry-run or execute media sync for a stored backup
-  snapshot.
+  snapshot. `--dry-run` validates the inputs without copying objects; `--target-runtime-json`
+  carries the target runtime settings as a JSON object, and `--json` emits the structured
+  sync report.
 - `quickscale_backups_validate` — validate checksum and local availability for a backup
-  artifact.
+  artifact by its positional `artifact_id`.
 
 `quickscale_backups_validate` only accepts the recorded artifact id; it does not accept a file
 path and does not use `--confirm`. Only restore uses `--confirm`, which must exactly match the
 backup filename or the supplied file basename.
 
 `quickscale_backups_restore` requires exactly one restore source: either the positional
-`artifact_id`, `--snapshot-id SNAPSHOT_ID`, or `--file PATH`. The guarded restore surfaces
+`artifact_id` or `--snapshot-id SNAPSHOT_ID`. The guarded restore surfaces
 include the `BackupPolicy` admin for row-backed local artifacts already present on disk or a
 staff-uploaded PostgreSQL custom dump, and the CLI entrypoint for a stored artifact id or a
-snapshot id. An operator-supplied `--file` restore records no capture identity and is refused.
-JSON artifacts remain export-only and are not a supported restore input for generated
-PostgreSQL projects.
+snapshot id. `--file PATH` stays a declared option, but an operator-supplied `--file` restore
+records no capture identity and is always refused. JSON artifacts remain export-only and are
+not a supported restore input for generated PostgreSQL projects.
 
 ```bash
 python manage.py quickscale_backups_create
@@ -208,8 +230,9 @@ Limitations:
 
 - Admin download and validate only work when the local file is present; admin restore also
   accepts a quarantined uploaded dump that must resolve to trusted recorded artifact metadata.
-- Operator-supplied filesystem-path restore remains CLI-only; the admin restore surface accepts
-  a file upload instead of an arbitrary server path.
+- Operator-supplied filesystem-path restore stays a declared CLI option, but it is always
+  refused because a file source records no capture identity; the admin restore surface accepts a
+  file upload instead of an arbitrary server path.
 - Scheduler orchestration remains external to the module.
 - Additional at-rest encryption is deferred: it would add key-management and restore-UX scope.
 

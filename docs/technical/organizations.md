@@ -1,6 +1,5 @@
 # QuickScale Organizations Module: Design Document
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Organizations Design**
 > **Related docs**: [Roadmap](roadmap.md) | [Decisions](decisions.md) | [Railway Deployment](../deployment/railway.md)
 
 ## Purpose and Scope
@@ -407,7 +406,6 @@ Views check feature access via a decorator:
 ```python
 from quickscale_modules_billing.services import require_org_feature
 
-
 @require_org_feature("crm")
 def crm_index(request): ...
 ```
@@ -807,7 +805,7 @@ No async job path should use the default tenant manager without first establishi
 
 - [`quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py`](../../quickscale_modules/orgs/src/quickscale_modules_orgs/tenancy.py) — shipped RLS and org-context implementation
 - [`quickscale_modules/orgs/src/quickscale_modules_orgs/removal.py`](../../quickscale_modules/orgs/src/quickscale_modules_orgs/removal.py) — app-declared organization-removal obligations, the shared discharge coordinator, and provider-ID conformance
-- [`quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py`](../../quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/purge_organization.py) — marker-derived, FK-ordered destructive purge
+- [`quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_purge_organization.py`](../../quickscale_modules/orgs/src/quickscale_modules_orgs/management/commands/quickscale_orgs_purge_organization.py) — marker-derived, FK-ordered destructive purge
 - [`docs/deployment/railway.md`](../deployment/railway.md) — Railway deployment contract (connection pooling notes, future subdomain config)
 - [`docs/technical/decisions.md`](decisions.md) — architecture decision log
 - [`quickscale_modules/billing/`](../../quickscale_modules/billing/) — billing models to extend

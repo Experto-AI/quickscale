@@ -1,7 +1,6 @@
 # Publish Quality Check and Release Procedure (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Publish Procedure**
-> **Related docs**: [Decisions](decisions.md#module-version-lockstep) | [Validation policy](validation_policy.md) | [Versioning](versioning.md) | [Railway deployment](../deployment/railway.md) | [Release note template](release_summary_template.md) | [Changelog](../../CHANGELOG.md)
+> **Related docs**: [Decisions](decisions.md#module-version-lockstep) | [Validation policy](validation_policy.md) | [Versioning](versioning.md) | [Railway deployment](../deployment/railway.md) | [Changelog](../../CHANGELOG.md)
 
 This document is the single source of truth for **how a QuickScale release is quality-checked and
 published**. It is version-generic: substitute `X.Y.Z` for the release being published.
@@ -17,7 +16,7 @@ re-entrancy rules, and the irreversibility boundary.
 | Validation tiers and what each command covers | [validation_policy.md](validation_policy.md#validation-tiers) |
 | `VERSION` single-source semantics and the version tool's scope | [versioning.md](versioning.md) |
 | Railway mechanics, runtime role SQL, troubleshooting | [railway.md](../deployment/railway.md) |
-| Public release-note shape | [release_summary_template.md](release_summary_template.md) |
+| Public release-note shape | [§1.3.1 below](#131-release-note-format) |
 | Current release status | [roadmap.md](roadmap.md) and [CHANGELOG.md](../../CHANGELOG.md) |
 
 ---
@@ -86,7 +85,7 @@ The generated-project proof is non-skippable: acceptance is **one pass, zero ski
 
 ### 1.3 Release artifacts
 
-- [ ] `docs/releases/release-vX.Y.Z.md` exists, follows [the template](release_summary_template.md),
+- [ ] `docs/releases/release-vX.Y.Z.md` exists, follows [§1.3.1](#131-release-note-format),
       and is labelled a prepared artifact while the tag does not yet exist. It is the **only** file
       created in `docs/releases/` for this version, and it is the note linked from the GitHub tag
       and the release PR. Keep maintainer-only review detail in the release PR or the roadmap —
@@ -94,6 +93,32 @@ The generated-project proof is non-skippable: acceptance is **one pass, zero ski
 - [ ] `CHANGELOG.md` carries a version-ordered `- vX.Y.Z` entry. **The publish workflow greps
       `^- v?X.Y.Z\b` and uses that single line as the GitHub Release body**, so it must read as a
       published release before the tag is pushed (see [Phase 6](#phase-6--publish)).
+
+#### 1.3.1 Release-note format
+
+A release note is reader-facing. It contains exactly these sections. Upgrade steps are complete, however long. Every other section is brief:
+
+```markdown
+# Release vX.Y.Z — <name>
+
+**Date:** YYYY-MM-DD · **Status:** Prepared release artifact | Released
+
+## Summary
+1–2 paragraphs: what shipped and what changed for adopters.
+
+## Highlights
+- **<Capability>.** One sentence of observable behavior.
+
+## Breaking changes
+- <change and impact>, or `- None.`
+
+## Upgrade steps
+1. <step>, or `None.`
+```
+
+Ticket IDs, validation commands and results, completed-task checklists, deferred follow-ups and
+maintainer publish steps are prohibited in a release note. They belong in the release PR or
+the roadmap.
 
 ### 1.4 What CI re-checks at publish time
 
@@ -191,7 +216,7 @@ Keep credentials in the helper or an SSH agent — never in a remote URL or comm
 
 Publish every module that status reports as outdated. On a normal first pass that is all twelve
 existing split branches; an absent or unobservable branch must be recovered first. On a re-entry
-from [Phase 4a/4b](#re-entry-loop-for-phase-4a4b-defects) the outdated set is usually a subset.
+from [Phase 4a/4b](#re-entry-loop-for-phase-4a4b-defects) the outdated set is normally a subset.
 One command handles that set:
 
 ```bash
@@ -356,7 +381,7 @@ coding assistant.
 
 Nothing is consumed by iterating: split branches are mutable, no tag is pushed, and the version is not spent
 until [Phase 6](#phase-6--publish). If the same defect survives two passes, stop and escalate rather than
-looping again — a repeating failure usually means the cause was located in the wrong layer at step 2.
+looping again — a repeating failure means the cause was located in the wrong layer at step 2.
 
 This loop runs **before** any tag is sealed. The superficially similar loop for a mistake discovered *after*
 sealing is narrower and is described in [Phase 5](#phase-5--seal-the-split-tags) and the

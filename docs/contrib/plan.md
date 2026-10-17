@@ -1,7 +1,7 @@
 # PLAN - Planning and Analysis Guide
 
-Use the shared authority map first, then pull in technical docs such as
-`decisions.md`, `scaffolding.md`, `README.md`, or `user_manual.md` only when
+Applies [rules.md](rules.md) to planning. Pull in technical docs such as
+`decisions.md`, `generated_project_structure.md`, `README.md`, or `user_manual.md` only when
 the task touches those surfaces. This guide keeps the planning-stage checklist
 and questions.
 
@@ -23,7 +23,7 @@ Before implementation starts, make sure the plan captures:
 
 ## Applied Planning Questions
 
-Use these prompts while translating the shared rules into a concrete plan:
+Use these prompts while translating [rules.md](rules.md) into a concrete plan:
 
 - Responsibility boundaries: which responsibilities belong together, and which should remain in separate layers or modules?
 - Existing seams: which current service, adapter, helper, or managed wiring seam can be reused before introducing a new abstraction?

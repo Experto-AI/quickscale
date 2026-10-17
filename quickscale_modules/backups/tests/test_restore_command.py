@@ -11,6 +11,9 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from quickscale_core.runtime import BackupError
+from quickscale_modules_backups.management.commands.quickscale_backups_restore import (
+    Command as RestoreCommand,
+)
 from quickscale_modules_backups.models import BackupArtifact
 
 
@@ -21,7 +24,7 @@ class TestBackupsRestoreCommand:
     def test_command_requires_one_restore_source(self) -> None:
         with pytest.raises(
             CommandError,
-            match="Provide either an artifact_id, --snapshot-id, or --file PATH",
+            match="Provide either an artifact_id or --snapshot-id",
         ):
             call_command(
                 "quickscale_backups_restore",
@@ -30,6 +33,23 @@ class TestBackupsRestoreCommand:
                 stdout=StringIO(),
                 stderr=StringIO(),
             )
+
+    def test_help_and_usage_errors_agree_that_file_restores_are_refused(self) -> None:
+        """The help no longer offers --file as an accepted restore source."""
+        help_text = " ".join(
+            RestoreCommand()
+            .create_parser("manage.py", "quickscale_backups_restore")
+            .format_help()
+            .split()
+        )
+        assert (
+            "A file restore records no migration content identity and is always refused"
+            in help_text
+        )
+        assert "--file PATH" not in help_text
+        assert RestoreCommand.help == (
+            "Validate or execute a guarded restore for a backup artifact or snapshot"
+        )
 
     def test_command_rejects_multiple_restore_sources(
         self,

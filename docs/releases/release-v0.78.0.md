@@ -1,24 +1,12 @@
 # Release v0.78.0 - Notifications Module
 
-**Release Date:** 2026-03-30
-**Status:** ✅ Released
-
-**Release Artifact:** This document is the official public release note linked from the GitHub tag and release PR for v0.78.0.
+**Date:** 2026-03-30 · **Status:** ✅ Released
 
 ## Summary
 
 This release ships **`quickscale_modules.notifications`** and adds a transactional email foundation to the published QuickScale stack. The new module provides app-owned template rendering, a read-only operational settings snapshot backed by generated Django settings and environment variables, recipient-granular delivery tracking, Django email compatibility with the Anymail Resend backend, signed replay-safe webhook ingestion for delivery events, and generated-project wiring through QuickScale's planner and apply flows.
 
-**Related docs:** [Changelog](../../CHANGELOG.md) | [Roadmap](../technical/roadmap.md) | [Technical Decisions](../technical/decisions.md)
-
 ## Highlights
-
-- Introduced `quickscale_modules.notifications` as QuickScale's first published notifications module.
-- Standardized transactional-email delivery around Django email compatibility with the Anymail Resend backend.
-- Added app-owned rendering, recipient-granular delivery tracking, and signed webhook ingestion for delivery events.
-- Wired notifications through planner or apply configuration, generated settings, `.env.example`, and forms submission delivery while keeping runtime configuration authoritative in generated settings and environment variables.
-
-## What's New
 
 ### Features
 
@@ -36,25 +24,6 @@ This release ships **`quickscale_modules.notifications`** and adds a transaction
 - **Current Module Set Updated**: Public docs now reflect notifications alongside auth, backups, blog, crm, forms, listings, and storage as the current first-party module set.
 - **Runtime Guardrails**: Production-targeted notifications configurations now fail loudly when live-delivery requirements are incomplete instead of silently falling back to console email.
 
-## Breaking Changes
+## Breaking changes
 
 None — this is a new additive module and release-metadata synchronization cut.
-
-## Validation
-
-- ✅ Repository quality gate previously passed via `make check`
-- ✅ Public release docs and package metadata are synchronized to `0.78.0`
-
-## Validation Commands
-
-```bash
-make check
-```
-
-## Deferred Follow-up
-
-The following items remain deferred to later milestones:
-
-- inbound or reply workflows
-- provider-hosted templates, broadcast or newsletter tooling, and multi-provider failover
-- shared async worker extraction if notifications later needs to converge with another recurring background-work consumer

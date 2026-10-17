@@ -1,9 +1,8 @@
 # Current Implementation Contract (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) -> [Technical](../index.md) -> **Implementation Contract**
 > **Related docs**: [Decisions](decisions.md) | [Validation Policy](validation_policy.md) | [Generated Project Structure](generated_project_structure.md) | [Repository Layout](repository_layout.md)
 
-This companion owns the current shipped implementation contract, feature-level in/out matrix, CLI surface summary, and architecture-boundary notes that planning, implementation, and review work should treat as current. [decisions.md](./decisions.md) remains the repository-wide tie-breaker for cross-cutting policy, prohibitions, and document precedence.
+This companion owns the current shipped implementation contract, feature-level in/out matrix, CLI surface summary, and architecture-boundary notes. [decisions.md](./decisions.md) remains the repository-wide tie-breaker for cross-cutting policy, prohibitions, and document precedence.
 
 Use this file when you need:
 - the current shipped surface and feature matrix
@@ -24,7 +23,7 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 - Client identity: generated request middleware validates trusted-proxy settings and normalizes forwarding state before any module or DRF consumer runs
 - First-party modules and starter themes that are implemented in-repo and documented per release
 
-**Historical note:** Older docs may still use legacy release-era shorthand from earlier planning. Treat those labels as historical context only; active documentation should describe the implemented surface directly.
+Legacy release-era labels in older text are historical only. Documentation describes the implemented surface directly.
 
 **Current Generated Output:** See [generated_project_structure.md](./generated_project_structure.md#mvp-structure).
 
@@ -62,7 +61,7 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 
 - Modules are selected during `quickscale plan` and configured through `quickscale.yml` before `quickscale apply` runs.
 - `quickscale apply` owns the managed backend/runtime wiring for installed modules, including settings and URL integration where the shipped contract defines them.
-- Users should not need to manually edit generated `settings.py`, `urls.py`, or Poetry metadata for supported module configuration paths.
+- Supported module configuration never requires a manual edit of generated `settings.py`, `urls.py`, or Poetry metadata.
 - If a desired-config rule changes, update this file and the owning module documentation in the same change.
 
 <a id="module-manifest-architecture"></a>
@@ -70,7 +69,7 @@ Use [validation_policy.md](./validation_policy.md) for test and validation requi
 
 - `module.yml` is the **required** source for module identity, installed-version tracking, and configuration contract. The CLI adapter files (`*_manifest.py`) do not carry per-module config normalization/validation/derivation; all callers resolve module configuration through the shared resolver in `quickscale_core.manifest.resolver`.
 - Mutable options are applied through the documented plan/apply flow; immutable options remain embed-time contract and must not be rewritten silently.
-- Module discovery is now manifest-backed: the authoritative shipped-module inventory comes from scanning `quickscale_modules/*/module.yml` via `module_discovery.py`. A module directory that lacks a `module.yml` is reported as `INCOMPLETE` and fails closed rather than being silently excluded ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 18). The static `MODULE_CATALOG` is supplemented but callers should prefer `get_discovered_module_entries()` for the authoritative list.
+- Module discovery is now manifest-backed: the authoritative shipped-module inventory comes from scanning `quickscale_modules/*/module.yml` via `module_discovery.py`. A module directory that lacks a `module.yml` is reported as `INCOMPLETE` and fails closed rather than being silently excluded ([decisions.md § Module Conventions](decisions.md#module-conventions) rule 18). The static `MODULE_CATALOG` is supplementary; callers MUST use `get_discovered_module_entries()` for the authoritative list.
 - Manifest adapters are module-owned. Each module ships its own ``adapter.py`` and declares its wiring in its own ``module.yml``; core discovers and executes adapters but holds no per-module wiring. There is no fallback adapter path. See [Manifest Adapter Architecture](#manifest-adapter-architecture) and [decisions.md §Module Wiring Authority](./decisions.md#module-wiring-authority).
 - Generated projects remain standalone even when modules are embedded.
 - When manifest behavior changes, keep the shipped contract here aligned with the detailed module implementation docs.
@@ -181,7 +180,7 @@ This matrix is the authoritative source of truth for what is shipped, optional, 
 - Backend modules are reusable Django apps embedded into generated projects and updated through the current git-subtree workflow.
 - Themes are starting points that users own after generation.
 - Frontends remain directory-based presentation layers.
-- Proven Django foundations stay preferred over custom abstractions.
+- Proven Django foundations are used instead of custom abstractions.
 
 **Current Shipped Surfaces:**
 - `quickscale_core`: scaffolding, templates, and shared generator/runtime support, plus the `quickscale_core.runtime` public re-export facade (extended with the backups-module-facing DR orchestration/compatibility surface and the module-convention helpers).
@@ -302,7 +301,6 @@ SA170's final ordered serial and concurrent campaigns passed against retained pr
 closed; their final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 The SA167a ownership guard checks executable source rather than one constructor shape,
 including helper, variable, and alternate-constructor forms.
-
 
 #### Module Derivation Schema Types
 

@@ -1,6 +1,5 @@
 # QuickScale Development Roadmap
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap**
 > **Related docs**: [Decisions](decisions.md) | [Validation policy](validation_policy.md) | [Changelog](../../CHANGELOG.md)
 
 ## Goal and finish line
@@ -14,17 +13,16 @@ their value.
 **Release status.** 0.88.0 is published with S1 billing defects (with real Stripe keys, every
 webhook and every checkout fails). The fixes are on `v89` and ship in 0.89.0
 ([publish_procedure.md](publish_procedure.md)); the `v89` task tree passes `make release-gate`
-with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#11-watchlist-and-accepted-trade-offs)).
+with an isolated Poetry cache (evidence in the [technical audit](../others/tech-audit.md#watchlist-latent-act-only-when-the-trigger-fires)).
 SA284, 0.89.0's one release requirement, has landed: the release build content-checks the wheel
-it uploads for the bundled manifests (arch `rules-held-by-parity-not-derivation`, §7).
-Upgrading a live 0.88.0 install is not supported (maintainer decision, 2026-10-16, answering
-tech audit §13 Q1): 0.88.0 and earlier move to 0.89.0 on a fresh database, the 0.89.0 release
+it uploads for the bundled manifests (arch `rules-held-by-parity-not-derivation`).
+Upgrading a live 0.88.0 install is not supported (maintainer decision, 2026-10-16): 0.88.0 and earlier move to 0.89.0 on a fresh database, the 0.89.0 release
 notes say so, and `initial-migration-edited-in-place` stays a watch item. Publication remains a
 maintainer action.
 
 Audit tickets name the [arch](../others/arch-audit.md), [tech](../others/tech-audit.md), or
 [coherence](../others/coherence-audit.md) IDs they close; the audits keep the evidence. Coherence
-tickets merge the matching coherence §6 rule into decisions with a harness detector, or record a
+tickets merge the matching coherence proposal into decisions with a harness detector, or record a
 review-only clause without one.
 
 The scheduling table owns track, dependencies, and release requirement. Ticket bodies own
@@ -51,15 +49,14 @@ one-way or high-risk step stands alone behind the slices that prove it.
 | SA277 | Define the upgrade path as `beta_migration` code plus a prompt for the remainder | 2 | SA191 | Optional |
 | SA291 | The manifest owns option validation and throttle rates | 2 | — | Optional |
 | SA287 | The CLI reaches module behaviour through manifest fields and hooks | 2 | SA291 | Optional |
-| SA292 | One command off-refusal helper, service-owned transactions, complete README flags | 3 | — | Optional |
-| SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | SA292 | Optional |
+| SA296 | Close the rule-audit enforcement gaps the 2026-10-16 census found | 3 | — | Optional |
 
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
 Track 1: SA191 (repin on v89) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA291 (a…c) ──► SA287 (a, b) ──► SA277
-Track 3: SA292 (a, b) ──► SA296 (a…f)
+Track 3: SA296 (a…f)
      release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
      critical path: SA191 repin ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
@@ -68,15 +65,15 @@ Arrows within a track are queue order; the table holds the dependency edges. Cro
 SA191's cutover (not its repin) waits on the 0.89.0 publication, and SA153 (f) waits on the cutover; SA291 waited on SA288, which has landed (both rewrote
 the composed `REST_FRAMEWORK`, `runtime/settings.compose_rest_framework`), and SA287 waits on
 SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
-SA296 waits on SA292 because both rewrite harness rule 17;
+SA296 waited on SA292, which has landed (both rewrite harness rule 17);
 SA277 waits on SA191's cutover, whose evidence draws the line between what `beta_migration`
 automates and what the prompt handles. Inside Track 1, SA204 (j) and SA153 (f) are interleaved
 slices of two tickets: the freeze lands after SA153's build slices and before its go-live.
 
-**Parallel start.** SA291 and SA292 have no unmet dependency; each track takes one at a time,
+**Parallel start.** SA291 and SA296 have no unmet dependency; each track takes one at a time,
 in queue order. SA286 landed ahead
 of SA191 in Track 1's queue because every adoption step it removed before the repin is applied
-once, offline, instead of on a live site (arch audit §7).
+once, offline, instead of on a live site.
 
 **Slices.** Large tickets list `Slices:` in their body. Each slice is one implementer session
 with a fresh context, scoped to that slice's text and named surfaces, and ends with a short
@@ -90,8 +87,8 @@ non-reseedable tenant data on `bap-web`. SA153's own tables live in the project-
 whose migrations are `0002+` from the start either way. Any module `0001` edit made before the
 freeze is applied to `bap-web` by hand or by a reseed. No open ticket changes a module schema.
 SA154 is an inventory, not work. SA191's repin pins the unpublished `v89` tree and does not wait for 0.89.0; its cutover does, and SA204's remaining slice (j) waits for SA153 (e). SA276 has
-landed, so `bap-web-new` adopts its steps once at the repin instead of on a live site
-(arch audit §7); it is not a release requirement.
+landed, so `bap-web-new` adopts its steps once at the repin instead of on a live site;
+it is not a release requirement.
 
 ### Track states
 
@@ -101,7 +98,7 @@ A track is **truly green** only when all three states are yes.
 |---|---|---|---|---|---|---|
 | 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA291 | yes | yes | yes | yes | no |
-| 3 | SA292 | yes | yes | yes | yes | no |
+| 3 | SA296 | yes | yes | yes | yes | no |
 
 ### Ownership and merge coordination
 
@@ -257,8 +254,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
     two known `W006` properties warnings — matching the SA191 baseline; no carried module's
     migration changed since the rebuild (SA270's billing and SA204(a)'s blog are not carried).
     (j) is next.
-  The 2026-10-16 arch pass found two branches that still key on labels or authorship (Finding 2,
-  option 1; it answers arch §12 Q2): `quickscale update` compares content only under an equal
+  The 2026-10-16 arch pass found two branches that still key on labels or authorship (arch `clean-break-schema-no-data-path`): `quickscale update` compares content only under an equal
   label (`_module_update.py:286–297`, `:365`), so the cross-release update the freeze exists to
   make safe is the one path left unverified; and `sync_migration_hashes.py --write` re-freezes an
   edited `0001` in the same commit that edits it, so the gate catches drift, not intent. Both
@@ -304,14 +300,24 @@ suite, and merge only the reviewed delivery through the serialized queue.
   restricted runtime role; billing stays disabled.
 
   **Remaining:** (1) repin (agent, no publication needed): pin `bap-web-new` to the `v89` tree
-  (git or path pin) and re-run the rehearsal; SA153 (a…e) builds on this pin, re-pinned at each
-  `v89` merge that touches modules, with any module `0001` change applied by a reseed. (2) cutover:
-  after 0.89.0 is published, swap the pin to `0.89.0` and re-run the rehearsal, so the unpublished
-  pin never reaches production; then the maintainer runs the Railway cutover, carries media, re-invites users, and
-  archives the old repository. The pre-cutover database is retained until the reseeded site is
-  verified. The production dump at `/home/victor/code/bap-web-prod.dump` holds real user data and
-  stays out of every repository.
-
+  and re-run the rehearsal; SA153 (a…e) builds on this pin, re-pinned at each `v89` merge that
+  touches modules, with any module `0001` change applied by a reseed. Slice 1 landed (bap-web-new
+  `cecc0fe`, 2026-10-17): the Oct-9 frozen core wheel pin is now a path pin on the checkout's
+  `quickscale_core` (`develop = true`); a git rev pin was probed and refuted — an installed clone
+  carries no bundled manifests and no monorepo manifest path, so every manifest read fails. The
+  rehearsal re-ran green on a reset `bap_cutover_rehearsal`: exit 0 twice, catalog 3/12/48/60 and
+  the six service forms in the System org scope, unscoped reads 0, tenant isolation 6/6, only the
+  two known `W006` warnings (runbook port 32768). Intermediate state: with the pinned core, the three
+  SPA-shell project tests are red (`index.html`'s runtime seam cannot reverse
+  `quickscale_listings_shell`) until the managed-URLconf adoption lands, so the URLconf step is
+  required for the SPA shell, not optional. Next: re-embed the six Oct-9 embedded modules
+  from refreshed split branches (`make publish-modules`), adopt the 16 pending contract steps
+  (regenerate `urls_modules.py`, then the `urls.py` adoption), re-run the rehearsal and the
+  project suite. (2) cutover: after 0.89.0 is published, swap the pin to `0.89.0` and
+  re-run the rehearsal, so the unpublished pin never reaches production; then the maintainer runs
+  the Railway cutover, carries media, re-invites users, and archives the old repository. The
+  pre-cutover database is retained until the reseeded site is verified. The production dump at
+  `/home/victor/code/bap-web-prod.dump` holds real user data and stays out of every repository.
 
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
@@ -395,7 +401,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA286 — Render module-owned CI environment and operations text into managed includes.**
 
-
 ### Track 2 — gate derivation, release integrity, upgrade path, and manifest conventions
 
 - [x] **SA275 — Derive gate wiring from the registry instead of holding copies equal.**
@@ -447,7 +452,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 - [ ] **SA291 — The manifest owns option validation and throttle rates.**
 
   Closes coherence `adapter-restates-manifest-validation`, `throttle-rate-merge-copies`, and
-  `startup-presence-guard-copies` (items 32–34) and merges coherence §6 proposal 55 into decisions rules 10, 12, and 32.
+  `startup-presence-guard-copies` and merges coherence proposal 55 into decisions rules 10, 12, and 32.
 
   **Context:** notifications' `adapter.py:20–70` re-implements four manifest patterns, its domain
   check by hand; five adapters hand-merge `DEFAULT_THROTTLE_RATES`; three `checks.py` re-test a
@@ -483,7 +488,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [ ] **SA287 — The CLI reaches module behaviour through manifest fields and hooks.**
 
-  Closes coherence `cli-module-name-branches` (item 27, option C) and merges coherence §6
+  Closes coherence `cli-module-name-branches` (option C) and merges coherence
   proposal 51 into decisions rule 37;
   hands its residue to arch watchlist `core-holds-module-vocabulary`.
 
@@ -523,39 +528,19 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
 - [x] **SA297 — `operator_access` checks the platform operator itself.**
 
-- [ ] **SA292 — One command off-refusal helper, service-owned transactions, complete README flags.**
-
-  Closes coherence `command-off-refusal-and-atomic` and `readme-flag-coverage` (items 35, 31),
-  merges coherence §6 proposal 56 into decisions rules 17 and 38, and takes the tech §12 hand-off on `quickscale_backups_restore --file`.
-
-  **Acceptance:** rules 17 and 38 carry proposal 56. One core helper refuses a `--trigger scheduled` run
-  while the module is off, used by backups create and prune and forms anonymize; forms' two
-  commands and orgs purge open their transaction in the service; harness rule 17 requires the
-  helper where `--trigger` exists. The rule 38 README test compares every argparse option with
-  the README entry; backups, forms, and orgs document every flag; `quickscale_backups_restore`'s
-  help and usage errors agree with the guard that always refuses `--file`.
-
-  **Slices:**
-  - [x] (a) The helper, the transaction moves, and the rule 17 clause (Tier 2-fast). Landed: one
-    core helper (`quickscale_core.runtime.require_scheduled_module_enabled`) refuses a
-    `--trigger scheduled` run while the module is off, used by backups create and prune and forms
-    anonymize; the forms seeding and retention operations and the orgs purge open their
-    `transaction.atomic()` below the command, with the command scans treating underscore-prefixed
-    support modules the way Django does; harness rule 17 requires the helper call wherever
-    `--trigger` exists, with controls; decisions rule 17 carries the clause. (b) is next.
-  - [ ] (b) The flag test, the README rows, and the `--file` help (Tier 2-fast).
+- [x] **SA292 — One command off-refusal helper, service-owned transactions, complete README flags.**
 
 - [x] **SA294 — Record the structured-log-field convention.**
 
 - [ ] **SA296 — Close the rule-audit enforcement gaps the 2026-10-16 census found.**
 
-  Closes coherence §7 gaps 17 and 20–25, which no item carries.
+  Closes coherence gaps 17 and 20–25, which no item carries.
 
   **Context:** rule 40 claims `CommandError`/`BaseCommand` and "unlisted core ports" checks that
   do not exist; rule 17's destructive duty keys on command-name keywords; rules 5 and 34 skip a
   module missing from `MODULE_LAYERS`; `AppConfig` capability declarations are open-world, with
   literal sets in both the harness and core; rule 13's `TenantModelAdmin` registration and rule
-  11's compare-against-members clause have no detector; `module-extension.md:601`'s "exactly
+  11's compare-against-members clause have no detector; [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
   these places" checklist omits the seam tables, `runtime/urls.py`, and the layer choice; and
   rule 30 forbids name-order-dependent settings while apps and middleware compose in module-name
   order.
@@ -584,6 +569,14 @@ deferred findings, watch notes, and their growth triggers; items stay there unti
 Standing scope rules, presence contracts, and resource safeguards
 live in [decisions](decisions.md) and
 [validation policy](validation_policy.md#candidate-review-and-integration).
+
+**Unscheduled — React-theme browser coverage.** No test drives `showcase_react` in a real
+browser against a real backend. jsdom route tests (`src/test/*.tsx`) already cover route mounting.
+The repo's Playwright E2E asserts only status 200, the title and the first stylesheet. The
+generated `e2e/home.spec.ts.j2` is stale and no CI runs it. Order when scheduled: (1) fix the
+stub and add `pnpm test:e2e` to `ci.yml.j2`; (2) write the named user journeys; (3) a depth-capped
+link crawler in `test_e2e_full_workflow.py`; (4) full journey E2E against the Docker stack, only
+if it fits the E2E time budget in validation_policy.md.
 
 Changes to this schedule must pass
 `poetry run pytest quickscale_core/tests/test_roadmap_consistency.py -q -o addopts= --no-cov`.

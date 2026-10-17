@@ -1,7 +1,6 @@
 # Module Extension Contract
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Technical** → Module Extension Contract
-> **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [User Manual](user_manual.md) | [Frontend Architecture](frontend.md)
+> **Related docs**: [Decisions](decisions.md) | [User Manual](user_manual.md) | [Frontend Architecture](frontend.md)
 
 ## Goal
 
@@ -10,8 +9,8 @@ Define a standard, Django-native way for QuickScale modules to be extended in ge
 - QuickScale provides reusable backend modules plus a showcase theme.
 - The user customizes the frontend freely.
 - The user can extend the backend for project-specific behavior.
-- Installed modules should still be able to receive future upstream updates.
-- User-owned extension code should remain isolated enough that module updates are adoptable rather than destructive.
+- Installed modules MUST keep receiving upstream updates.
+- User-owned extension code MUST stay isolated, so a module update is adoptable, never destructive.
 
 ## Decision
 
@@ -37,9 +36,9 @@ When a project adopts a project-owned extension app, it is the canonical place f
 - orchestration across modules
 - project-only service wrappers
 - optional integrations
-- glue code that should survive module updates untouched
+- glue code that survives module updates untouched
 
-This pattern is the preferred home for project-specific backend customization when a module needs project-owned glue, but QuickScale does not require every module or milestone to generate or depend on it.
+Project-owned glue for a module lives in this app. However, QuickScale does not require every module or milestone to generate or depend on it.
 
 Analytics is the current example of the narrower service-style contract:
 - QuickScale owns flat `QUICKSCALE_ANALYTICS_*` settings and analytics service APIs
@@ -82,7 +81,6 @@ no manager declarations — the base owns the contract:
 ```python
 from quickscale_modules_listings.models import AbstractListing
 
-
 class ProjectListing(AbstractListing):
     class Meta(AbstractListing.Meta):
         abstract = False
@@ -104,7 +102,7 @@ policy metadata is absent or ambiguous.
 
 The resulting project-owned model participates in the same W003/W004 system
 check and `check_tenant_isolation` command as shipped module models. Their
-human-readable output and JSON results should include the model. The shipped
+human-readable output and JSON results include the model. The shipped
 module registry is a test-owned CI parity oracle for shipped modules only; it
 is not an enrollment API for project-owned extensions.
 
@@ -188,7 +186,6 @@ from quickscale_modules_orgs.removal import (
     RemovalAction,
 )
 
-
 class PropertiesConfig(AppConfig):
     name = "properties"
 
@@ -262,7 +259,6 @@ from django.apps import AppConfig
 
 from quickscale_core.runtime import PersonalDataField, PersonalDataTreatment
 
-
 class PropertiesConfig(AppConfig):
     name = "properties"
 
@@ -298,7 +294,7 @@ link on the message, where account anonymization selects it, so a sender
 cannot omit it silently; Module Conventions rule 50 reserves the retired
 `actor_user_id` spelling — the harness fails any module source that writes it
 as a mapping key, a subscript key, or a call keyword — and a project app
-should pass the keyword the same way:
+MUST pass the keyword the same way:
 
 ```python
 from quickscale_modules_notifications.services import send_notification
@@ -317,7 +313,7 @@ those fallbacks; new sends use the keyword.
 
 ## Module Categories
 
-| Module category | Preferred extension model | Example modules |
+| Module category | Extension model | Example modules |
 | --- | --- | --- |
 | Foundation/auth | Project-owned foundational model plus module integration surfaces | `auth` |
 | Domain/content | Optional abstract models and admin bases, templates, settings | `listings`, parts of `blog`, future vertical modules |
@@ -337,8 +333,8 @@ arbitrary new module HTTP APIs.
 
 | Tier | Meaning | Upgrade expectation |
 | --- | --- | --- |
-| Tier 1: Stable | Project-owned app when adopted, settings, template overrides, documented helper/service APIs, documented signals | Should survive normal module updates with minimal or no merge work |
-| Tier 2: Structured | Module-specific subclassing such as abstract models or admin bases | Usually survivable across minor updates if the contract is documented and versioned |
+| Tier 1: Stable | Project-owned app when adopted, settings, template overrides, documented helper/service APIs, documented signals | Survives normal module updates with little or no merge work |
+| Tier 2: Structured | Module-specific subclassing such as abstract models or admin bases | Survives minor updates while the contract is documented and versioned |
 
 Any direct edit to files under `modules/<name>/` is outside the supported extension contract. Users who make such edits accept responsibility for manual reconciliation during `quickscale update`.
 
@@ -346,25 +342,13 @@ A template override survives updates because updates never touch it, which also 
 
 ## Special Case: Auth
 
-Auth is the strongest case where QuickScale should align closely with mainstream Django guidance.
+The auth module owns the user model (`AUTH_USER_MODEL = "quickscale_auth.User"`), so this
+foundational model lives in updateable module code.
 
-### Current Problem
-
-Today the auth module wiring sets `AUTH_USER_MODEL` to a module-owned user class. That creates two problems:
-
-1. It makes a foundational project model live inside updateable module code.
-2. It encourages the user to modify code that QuickScale later wants to update.
-
-### Recommended Direction
-
-QuickScale should move toward this model:
-
-- the project owns the primary custom user model
-- auth module code references `settings.AUTH_USER_MODEL`
-- auth module continues to own its forms, adapters, templates, URLs, and signal helpers
-- project-specific user fields live in project-owned code, not in `modules/auth`
-
-If that transition cannot happen immediately, the documentation should still state clearly that direct editing of `modules/auth/models.py` is outside the supported extension contract and is not recommended. The preferred short-term pattern is project-owned related models and project-level signal wiring.
+- Editing `modules/auth/models.py` directly is outside the supported extension contract.
+- Project-specific user data goes in project-owned models related to the user, wired with
+  project-level signals.
+- Module code refers to the user model only through `settings.AUTH_USER_MODEL`.
 
 ## Standard Documentation Contract for Every Module
 
@@ -372,7 +356,7 @@ If that transition cannot happen immediately, the documentation should still sta
 Overview, Configuration (every manifest option), Public surface, URLs, Management commands,
 Operations, Extending — in that order, with no versions in headings. Rule 38 adds that the
 Configuration heading names every manifest option key and the Management commands heading
-names every command the module ships.
+names every command the module ships and every flag those commands declare.
 
 The extension contract belongs inside the README's Extending section, covering:
 
@@ -437,7 +421,7 @@ Suggested material for that section:
 
 ## Final Rule
 
-> Extend QuickScale through a **project-owned extension app** when a module requires project-owned glue, and otherwise through the module's **documented extension surfaces**. Use abstract base classes only for modules that are explicitly designed for subclassing. Avoid editing embedded module source directly; extension should happen through the module's documented surfaces rather than ad hoc edits inside embedded module code.
+> Extend QuickScale through a **project-owned extension app** when a module requires project-owned glue, and otherwise through the module's **documented extension surfaces**. Use abstract base classes only for modules that are explicitly designed for subclassing. Embedded module source MUST NOT be edited directly.
 
 ## Building a Module (Authoring Checklist) {#building-a-module-authoring-checklist}
 
@@ -583,7 +567,7 @@ disable_error_code = var-annotated
 - [ ] `migrations/__init__.py` — Migrations package init (only when migrations exist)
 - [ ] `adapter.py` — **Required.** Exposes `get_manifest_adapter()`, which core's
   `refresh_managed_adapters()` discovers by importing
-  `quickscale_modules_<name>.adapter`. Prefer delegating to
+  `quickscale_modules_<name>.adapter`. It delegates to
   `build_generic_manifest_spec()` so wiring is read from `module.yml` rather than
   written in Python. Hand-build a `ResolverResult` only when the module needs a custom
   post-hook — and even then, source `apps` from the manifest, never as a literal.
@@ -733,7 +717,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 - [ ] `on_delete` on `User` is `SET_NULL` (never `PROTECT`), `CASCADE` only on the listed fields (rule 27; the user-FK conformance gate); package files use the allowed names or a private `_<name>.py` (rule 28); test files are `test_<subject>.py`, with no ticket number in the name, docstrings, comments, identifiers, or string literals, and a manifest description carries no ticket number or release stamp (rule 29)
 - [ ] Wiring writes a Django or third-party setting another module also writes only with the same value, or `apply` fails (rule 30); throttle scopes are `quickscale_<module>_<purpose>` with the rate from a `_RATE_LIMIT` option (rule 32); every name in a namespace shared with the project carries the `quickscale_<module>` stem (rule 33)
 - [ ] The module names no higher-layer module anywhere in its source — by import, app label, `get_model`, or `is_installed` (rule 34); secrets arrive as settings rendered by `apply` from the `_ENV_VAR` option, never through `os.getenv`, and `checks.py` fails startup when a needed secret is empty (rule 35)
-- [ ] The README names every option key under Configuration and every command under Management commands (rule 38); `required_modules` lists bare names, with no version floor and no `implies` (rule 39)
+- [ ] The README names every option key under Configuration and every command and flag under Management commands (rule 38); `required_modules` lists bare names, with no version floor and no `implies` (rule 39)
 - [ ] `tests/settings.py` uses `django.db.backends.postgresql` only — SQLite in test settings is prohibited per Database Policy
 
 **7. Split Branch Publishing:**
@@ -747,7 +731,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 ### Internal QuickScale References
 
 - [docs/technical/decisions.md](decisions.md)
-- [docs/technical/scaffolding.md](scaffolding.md)
+- [docs/technical/generated_project_structure.md](generated_project_structure.md)
 - [docs/technical/user_manual.md](user_manual.md)
 - [examples/client_extensions/README.md](../../examples/client_extensions/README.md)
 - [quickscale_core/src/quickscale_core/module_wiring.py](../../quickscale_core/src/quickscale_core/module_wiring.py)
