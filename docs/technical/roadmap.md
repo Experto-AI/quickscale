@@ -307,13 +307,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   carries no bundled manifests and no monorepo manifest path, so every manifest read fails. The
   rehearsal re-ran green on a reset `bap_cutover_rehearsal`: exit 0 twice, catalog 3/12/48/60 and
   the six service forms in the System org scope, unscoped reads 0, tenant isolation 6/6, only the
-  two known `W006` warnings (runbook port 32768). Intermediate state: with the pinned core, the three
-  SPA-shell project tests are red (`index.html`'s runtime seam cannot reverse
-  `quickscale_listings_shell`) until the managed-URLconf adoption lands, so the URLconf step is
-  required for the SPA shell, not optional. Next: re-embed the six Oct-9 embedded modules
-  from refreshed split branches (`make publish-modules`), adopt the 16 pending contract steps
-  (regenerate `urls_modules.py`, then the `urls.py` adoption), re-run the rehearsal and the
-  project suite. (2) cutover: after 0.89.0 is published, swap the pin to `0.89.0` and
+  two known `W006` warnings (runbook port 32768). Slice 2 landed (bap-web-new `0061215`,
+  2026-10-17): the split branches were refreshed from a locally tagged v89 HEAD
+  (`make publish-modules`), the six modules re-embedded from them, and the 16 pending contract
+  steps adopted and recorded — including the managed URLconf that restores the SPA shell and
+  `storage`, which the v89 listings requires. Project suite 57/0 (coverage 93.94%), frontend 387
+  tests and its coverage gate green, rehearsal exit 0 twice on a reset `bap_cutover_rehearsal`.
+  (2) cutover: after 0.89.0 is published, swap the pin to `0.89.0` and
   re-run the rehearsal, so the unpublished pin never reaches production; then the maintainer runs
   the Railway cutover, carries media, re-invites users, and archives the old repository. The
   pre-cutover database is retained until the reseeded site is verified. The production dump at
