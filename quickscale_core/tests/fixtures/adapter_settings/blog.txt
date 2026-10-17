@@ -14,8 +14,7 @@ MODULE_SETTINGS: dict[str, object] = {'QUICKSCALE_BLOG_API_ALLOWED_IMAGE_FORMATS
  'QUICKSCALE_BLOG_API_UPLOAD_MAX_WIDTH': 4096,
  'QUICKSCALE_BLOG_ENABLED': True,
  'QUICKSCALE_BLOG_POSTS_PER_PAGE': 10,
- 'QUICKSCALE_BLOG_RSS_ENABLED': False,
- 'REST_FRAMEWORK': {'DEFAULT_THROTTLE_RATES': {'quickscale_blog_api': '60/hour'}}}
+ 'QUICKSCALE_BLOG_RSS_ENABLED': False}
 
 MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'blog': {'api_allowed_image_formats': {'setting': 'QUICKSCALE_BLOG_API_ALLOWED_IMAGE_FORMATS',
                                         'type': 'list',
@@ -45,3 +44,5 @@ MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'blog': {'api
           'rss_enabled': {'setting': 'QUICKSCALE_BLOG_RSS_ENABLED',
                           'type': 'boolean',
                           'validation': {}}}}
+
+MODULE_THROTTLE_SCOPES: dict[str, str] = {'quickscale_blog_api': '60/hour'}

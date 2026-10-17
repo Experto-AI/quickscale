@@ -1,9 +1,9 @@
 """Throttling contract tests for the billing module.
 
-The generated settings compose the billing-contributed
+The generated settings compose the billing-declared
 ``quickscale_billing_checkout`` and ``quickscale_billing_portal`` scopes over
 their conservative ``user``/``anon`` defaults.  These tests pin that
-contribution and prove a Stripe-calling view throttles past its scope rate
+declaration and prove a Stripe-calling view throttles past its scope rate
 with a 429.
 """
 
@@ -17,15 +17,10 @@ from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 
-from quickscale_core.manifest import ResolvedOptions
 from quickscale_core.runtime import QuickscaleScopedRateThrottle
 
 import quickscale_modules_billing.views as billing_views
-from quickscale_core.module_wiring import ModuleWiringSpec
-from quickscale_modules_billing.adapter import (
-    _billing_manifest_adapter,
-    _billing_post_hook,
-)
+from quickscale_modules_billing.adapter import _billing_manifest_adapter
 from quickscale_modules_billing.views import (
     CancelSubscriptionView,
     CreateBillingPortalSessionView,
@@ -46,29 +41,19 @@ THROTTLE_RATES = {
 }
 
 
-def test_billing_wiring_contributes_tighter_throttle_scopes() -> None:
+def test_billing_wiring_declares_both_throttle_scopes() -> None:
     """The billing wiring spec ships both Stripe-calling throttle scopes."""
-    spec = _billing_post_hook(
-        ModuleWiringSpec(
-            settings={
-                "QUICKSCALE_BILLING_ENABLED": True,
-                "QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour",
-            }
-        ),
-        ResolvedOptions({"enabled": True}),
-    )
+    spec = _billing_manifest_adapter({})
 
-    rest_framework = spec.settings["REST_FRAMEWORK"]
-    assert rest_framework["DEFAULT_THROTTLE_RATES"] == BILLING_SCOPE_RATES
+    assert dict(spec.throttle_scopes) == BILLING_SCOPE_RATES
 
 
 def test_billing_wiring_carries_the_configured_rate() -> None:
     """Both scopes take the manifest-canonical api_rate_limit value."""
     spec = _billing_manifest_adapter({"api_rate_limit": " 7/hour "})
 
-    rest_framework = spec.settings["REST_FRAMEWORK"]
     assert spec.settings["QUICKSCALE_BILLING_API_RATE_LIMIT"] == "7/hour"
-    assert rest_framework["DEFAULT_THROTTLE_RATES"] == {
+    assert dict(spec.throttle_scopes) == {
         "quickscale_billing_checkout": "7/hour",
         "quickscale_billing_portal": "7/hour",
     }

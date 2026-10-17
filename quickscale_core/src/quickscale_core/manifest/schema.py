@@ -267,6 +267,18 @@ class ModuleManifest:
     settings still define, so ``module.yml`` is the single home of a retired
     setting's refusal."""
 
+    throttle_scopes: dict[str, str] = field(default_factory=dict)
+    """Declared DRF throttle scopes mapped to the option carrying their rate.
+
+    Populated when the loader encounters a top-level ``throttle_scopes``
+    section: each key is a ``quickscale_<module>_<purpose>`` DRF scope
+    (Module Conventions rules 2 and 32) and each value names a declared
+    string option whose resolved value is that scope's rate (rule 1's
+    ``_RATE_LIMIT`` option).  The resolver projects the resolved rates into
+    ``ModuleWiringSpec.throttle_scopes``, so no adapter writes the rate
+    map and ``module.yml`` is the single home of a module's throttle
+    scopes."""
+
     # ------------------------------------------------------------------ #
     # Contract-vintage metadata (SA10.2)
     #

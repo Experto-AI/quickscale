@@ -1,8 +1,8 @@
 """Focused tests for the listings manifest adapter.
 
 The generic manifest boundary owns listings' option defaults, normalization,
-checks, and settings surface; these tests pin the adapter's remaining
-contract — the throttle scope and the off-switch transformation.  The one
+checks, settings surface, and declared throttle scope; these tests pin the
+adapter's remaining contract — the off-switch transformation.  The one
 shared staff-guarded Markdownx editor mount and its global settings are
 storage's (rule 41).
 """
@@ -46,9 +46,7 @@ def test_manifest_projects_settings_and_throttle_scope() -> None:
 
     assert result.settings["QUICKSCALE_LISTINGS_PER_PAGE"] == 12
     assert result.settings["QUICKSCALE_LISTINGS_API_RATE_LIMIT"] == "7/hour"
-    assert result.settings["REST_FRAMEWORK"] == {
-        "DEFAULT_THROTTLE_RATES": {"quickscale_listings_api": "7/hour"},
-    }
+    assert dict(result.throttle_scopes) == {"quickscale_listings_api": "7/hour"}
     # Rule 41: the shared Markdownx mount and its global settings are
     # storage's; listings writes none of them.
     assert "MARKDOWNX_MEDIA_PATH" not in result.settings
@@ -71,6 +69,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
                 ("listings/", "quickscale_modules_listings.urls"),
                 ("markdownx/", "quickscale_modules_listings.markdownx_urls"),
             ),
+            throttle_scopes={"quickscale_listings_api": "5/hour"},
         ),
         ResolvedOptions({"enabled": False}),
     )
@@ -86,9 +85,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
         "markdownx",
         "quickscale_modules_listings",
     )
-    assert result.settings["REST_FRAMEWORK"] == {
-        "DEFAULT_THROTTLE_RATES": {"quickscale_listings_api": "5/hour"},
-    }
+    assert dict(result.throttle_scopes) == {"quickscale_listings_api": "5/hour"}
 
 
 @patch("quickscale_modules_listings.adapter.build_generic_manifest_spec")

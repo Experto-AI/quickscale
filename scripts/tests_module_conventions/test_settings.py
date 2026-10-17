@@ -433,6 +433,26 @@ def test_adapter_compiled_pattern_control() -> None:
         assert any("adapter.py:3" in violation for violation in violations), source
 
 
+def test_adapter_default_throttle_rates_control() -> None:
+    """Rule 12: adapters declare throttle scopes, never the rate-map literal."""
+    source = (
+        "settings = {}\n"
+        "settings['REST_FRAMEWORK'] = {'DEFAULT_THROTTLE_RATES': {'demo_api': rate}}\n"
+    )
+    module = _with_files(_golden_module(), adapter=source)
+    violations = _violations(checker.rule_12_manifest_options, module)
+    assert any(
+        "adapter.py:2: writes a DEFAULT_THROTTLE_RATES literal" in violation
+        for violation in violations
+    ), violations
+
+    # The same wiring shape without the banned literal stays clean: the ban is
+    # the exact rate-map key, not adapter settings writes in general.
+    clean_source = "settings = {}\nsettings['OTHER_SETTING'] = {'DEFAULT_THROTTLE_': 'RATES'}\n"
+    clean = _with_files(_golden_module(), adapter=clean_source)
+    assert _violations(checker.rule_12_manifest_options, clean) == []
+
+
 def test_malformed_nested_config_shape_is_a_violation() -> None:
     module = _golden_module()
     broken = replace(module, manifest={**module.manifest, "config": [1]})

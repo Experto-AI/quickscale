@@ -71,3 +71,5 @@ MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'storage': {'
                                            'validation': {'pattern': '^(?:[A-Z][A-Z0-9_]*)?$',
                                                           'required_when': {'backend': ['s3',
                                                                                         'r2']}}}}}
+
+MODULE_THROTTLE_SCOPES: dict[str, str] = {}

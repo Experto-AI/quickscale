@@ -112,6 +112,7 @@ def _notifications_post_hook(
         pre_home_url_includes=spec.pre_home_url_includes,
         url_includes=spec.url_includes,
         managed_files=spec.managed_files,
+        throttle_scopes=spec.throttle_scopes,
     )
 
 

@@ -13,8 +13,7 @@ MODULE_SETTINGS: dict[str, object] = {'QUICKSCALE_FORMS_API_ENABLED': True,
  'QUICKSCALE_FORMS_RATE_LIMIT': '20/minute',
  'QUICKSCALE_FORMS_RETENTION_DAYS': 365,
  'QUICKSCALE_FORMS_SPAM_PROTECTION_ENABLED': True,
- 'QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE': 25,
- 'REST_FRAMEWORK': {'DEFAULT_THROTTLE_RATES': {'quickscale_forms_submit': '20/minute'}}}
+ 'QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE': 25}
 
 MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'forms': {'api_enabled': {'setting': 'QUICKSCALE_FORMS_API_ENABLED',
                            'type': 'boolean',
@@ -37,3 +36,5 @@ MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'forms': {'ap
            'submissions_per_page': {'setting': 'QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE',
                                     'type': 'integer',
                                     'validation': {'min': 1}}}}
+
+MODULE_THROTTLE_SCOPES: dict[str, str] = {'quickscale_forms_submit': '20/minute'}

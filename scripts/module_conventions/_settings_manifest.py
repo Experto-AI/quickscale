@@ -220,3 +220,38 @@ def _adapter_pattern_compilation_violations(module: Module) -> list[str]:
         "re.compile instead of evaluating the manifest's declared validation"
         for line in _compiled_pattern_lines(_parse(source))
     ]
+
+
+#: Rule 32's adapter clause (coherence proposal 55): a module declares its DRF
+#: throttle scopes in its manifest's ``throttle_scopes`` projection, so a
+#: ``DEFAULT_THROTTLE_RATES`` literal in ``adapter.py`` is refused.
+_DEFAULT_THROTTLE_RATES_LITERAL = "DEFAULT_THROTTLE_RATES"
+
+
+def _default_throttle_rates_literal_lines(tree: ast.Module) -> list[int]:
+    """
+    Return the source lines of ``DEFAULT_THROTTLE_RATES`` string literals.
+
+    The literal is looked up as a string constant, so both the bare key and
+    the ``REST_FRAMEWORK`` sub-key spelling are caught.  A name computed at
+    runtime (a concatenation, a ``getattr``) stays outside this static scan's
+    scope; no shipped adapter uses one.
+    """
+    return sorted(
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and node.value == _DEFAULT_THROTTLE_RATES_LITERAL
+    )
+
+
+def _adapter_default_throttle_rates_violations(module: Module) -> list[str]:
+    """Rule 32: ``adapter.py`` writes no ``DEFAULT_THROTTLE_RATES`` literal."""
+    source = module.files.get(_ADAPTER_FILE)
+    if not source:
+        return []
+    return [
+        f"rule 12: {module.name}: {_ADAPTER_FILE}:{line}: writes a "
+        "DEFAULT_THROTTLE_RATES literal instead of declaring the module's "
+        "throttle_scopes in its manifest"
+        for line in _default_throttle_rates_literal_lines(_parse(source))
+    ]

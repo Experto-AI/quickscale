@@ -57,7 +57,8 @@
       "sa289": "Regenerated 2026-10-16 \u2014 the theme's useApi parser reads only the one QuickScale error shape {\"error\": {\"code\", \"message\", \"fields\"}} and no longer parses the retired pre-convention {\"error\": \"<message>\"} and {\"errors\": {...}} shapes (SA289 slice a). 2 fixture hashes updated per variant: frontend/src/hooks/useApi.ts, frontend/src/test/useApiErrors.test.ts (all 3 variants). All unrelated paths, hashes, and modes remain authoritative.",
       "sa289-b-theme-request-client-and-seam-paths": "Regenerated 2026-10-16 \u2014 the theme's hooks send every request through the shared apiRequest client, the SPA's blog, listings, and crm page routes, navigation, and Dashboard card links take their paths from the seam's modulePaths (which gains blog and listings entries), and the launcher pages' server-rendered document links take theirs from the new moduleDocumentPaths table (blogIndex, blogFeed, listingsIndex, crmDashboard) in every mode, so no module path is written by hand; the theme's ESLint config rejects a raw fetch( in src/hooks outside useApi.ts (SA289 slice b). 30 fixture hashes updated per variant: frontend/eslint.config.js, frontend/src/App.tsx, frontend/src/hooks/useFormSchema.ts, frontend/src/hooks/useModules.ts, frontend/src/hooks/useOrgNavigation.ts, frontend/src/hooks/usePublicSocialSurface.ts, frontend/src/lib/validateQuickScaleSeam.ts, frontend/src/pages/Dashboard.tsx, frontend/src/quickscaleSeam.d.ts, frontend/src/quickscaleSeam.keys.ts, the frontend/src/test suite (App, AppRoutes, FormRenderer, PublicSocialPages, RootDispatch, csrf, formFields, layoutComponents, orgComponents, orgListPage, seamFixtures, settingsPage, socialLinkTreeStates, useModules, useOrgNavigation, useOrgs, validateQuickScaleSeam), and templates/index.html, templates/social/embeds.html, templates/social/link_tree.html. All unrelated paths, hashes, and modes remain authoritative.",
       "sa286": "Regenerated 2026-10-16 \u2014 the generated .github/workflows/ci.yml no longer carries the module credential placeholders: it loads the managed .github/quickscale-ci-env file in one step, and that new generated path renders each module's declared ci_env placeholders (SA286). New generated path: .github/quickscale-ci-env; re-hashed per variant: .github/workflows/ci.yml. All unrelated paths, hashes, and modes remain authoritative.",
-      "sa286-b-managed-operations-page": "Regenerated 2026-10-16 \u2014 OPERATIONS.md links one managed quickscale-operations.md page instead of carrying the billing module's Stripe operations text (SA286 slice b): the new generated path renders each installed module's declared operations text, with the declared values, the core contract tokens, and the configured options resolved. New generated path: quickscale-operations.md; re-hashed per variant: OPERATIONS.md. All unrelated paths, hashes, and modes remain authoritative."
+      "sa286-b-managed-operations-page": "Regenerated 2026-10-16 \u2014 OPERATIONS.md links one managed quickscale-operations.md page instead of carrying the billing module's Stripe operations text (SA286 slice b): the new generated path renders each installed module's declared operations text, with the declared values, the core contract tokens, and the configured options resolved. New generated path: quickscale-operations.md; re-hashed per variant: OPERATIONS.md. All unrelated paths, hashes, and modes remain authoritative.",
+      "sa291-declared-throttle-scopes": "Regenerated 2026-10-17 \u2014 the generated settings carry the manifest-declared DRF throttle scopes: settings/modules.py emits the merged MODULE_THROTTLE_SCOPES map (each installed module's declared scope to its resolved rate) instead of contributing REST_FRAMEWORK[\"DEFAULT_THROTTLE_RATES\"] through MODULE_SETTINGS, and settings/base.py imports the map and passes throttle_scopes=MODULE_THROTTLE_SCOPES to compose_rest_framework (SA291 slice b). 2 fixture hashes updated per variant: testproject/settings/base.py, testproject/settings/modules.py. All unrelated paths, hashes, and modes remain authoritative."
     },
     "description": "Independent exact path/hash/mode manifests for three React-only generator variants.  Not derived from get_generator_emission_mapping or production output at test runtime.  Built from current template generation, normalized to deterministic project/package inputs (project_name=\"testproject\").  poetry.lock is excluded \u2014 it is a dynamically generated artifact whose content varies per environment.  Regenerate this fixture when deliberate template changes alter emitted output.",
     "normalization_notes": [
@@ -609,7 +610,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "0ac179955f5358a674a0f367c2898a4725ec4d6006f47e2770ac2b7ef449892d"
+      "sha256": "54e96d58db90ac7eaee72a2f0bfb2dbc46b58fe7aab1a0ae834b4a916df48403"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -617,7 +618,7 @@
     },
     "testproject/settings/modules.py": {
       "mode": "644",
-      "sha256": "9137ef468d18423b0aaeb8c9581f9447c8060d09b635223c263c039f792b2478"
+      "sha256": "4a9ec2616a396308ec408e51ac124f17cab8f2ae4ed6c47d65d298de52af070a"
     },
     "testproject/settings/production.py": {
       "mode": "644",
@@ -1179,7 +1180,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "0ac179955f5358a674a0f367c2898a4725ec4d6006f47e2770ac2b7ef449892d"
+      "sha256": "54e96d58db90ac7eaee72a2f0bfb2dbc46b58fe7aab1a0ae834b4a916df48403"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -1187,7 +1188,7 @@
     },
     "testproject/settings/modules.py": {
       "mode": "644",
-      "sha256": "9137ef468d18423b0aaeb8c9581f9447c8060d09b635223c263c039f792b2478"
+      "sha256": "4a9ec2616a396308ec408e51ac124f17cab8f2ae4ed6c47d65d298de52af070a"
     },
     "testproject/settings/production.py": {
       "mode": "644",
@@ -1749,7 +1750,7 @@
     },
     "testproject/settings/base.py": {
       "mode": "644",
-      "sha256": "0ac179955f5358a674a0f367c2898a4725ec4d6006f47e2770ac2b7ef449892d"
+      "sha256": "54e96d58db90ac7eaee72a2f0bfb2dbc46b58fe7aab1a0ae834b4a916df48403"
     },
     "testproject/settings/local.py": {
       "mode": "644",
@@ -1757,7 +1758,7 @@
     },
     "testproject/settings/modules.py": {
       "mode": "644",
-      "sha256": "9137ef468d18423b0aaeb8c9581f9447c8060d09b635223c263c039f792b2478"
+      "sha256": "4a9ec2616a396308ec408e51ac124f17cab8f2ae4ed6c47d65d298de52af070a"
     },
     "testproject/settings/production.py": {
       "mode": "644",

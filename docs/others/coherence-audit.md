@@ -337,8 +337,10 @@ items:
      closed_world: true, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-17}
   - {id: startup-presence-guard-copies, status: open, aspect: B, cost: [tax], members_diverging: [analytics, billing, notifications], population: checks-modules(7),
      rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: throttle-rate-merge-copies, status: open, aspect: B, cost: [tax], members_diverging: [billing, blog, forms, listings, orgs], population: throttled-modules(5),
-     rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: throttle-rate-merge-copies, status: resolved, aspect: B, cost: [tax], members_diverging: [], population: throttled-modules(5),
+     rule: "rule 32 (the manifest declares throttle_scopes; core merges the declared rates)",
+     check: "harness rule 12 (DEFAULT_THROTTLE_RATES banned in adapter.py, with controls); 0 of 5 throttled adapters hand-merge a rate map",
+     closed_world: true, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-17}
   - {id: command-off-refusal-and-atomic, status: resolved, aspect: J, cost: [tax], members_diverging: [], population: commands(16),
      rule: "rule 17 (one scheduled-off refusal helper; the transaction opens below the command)", check: "harness rule 17 (the helper call is required wherever --trigger exists, with controls); 3/3 commands declaring --trigger conform", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-17}
   - {id: theme-request-paths, status: resolved, aspect: P, cost: [tax], members_diverging: [],
@@ -517,7 +519,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 31 | `readme-flag-coverage` | O | ambiguity, tax | 3 / 4 command modules | open (2026-10-16) |
 | 32 | `adapter-restates-manifest-validation` | B | tax | 0 / 12 adapters | resolved (SA291 (a)) |
 | 33 | `startup-presence-guard-copies` | B | tax | 3 / 7 `checks.py` | open (2026-10-16) |
-| 34 | `throttle-rate-merge-copies` | B | tax | 5 / 5 throttled adapters | open (2026-10-16) |
+| 34 | `throttle-rate-merge-copies` | B | tax | 0 / 5 throttled adapters | resolved (SA291 (b)) |
 | 35 | `command-off-refusal-and-atomic` | J | tax | 3 / 16 commands | resolved (SA292 (a)) |
 | 36 | `theme-request-paths` | P | tax | 2 raw `fetch` + literal paths | resolved (SA289 (b)) |
 | 37 | `test-ticket-ids-in-identifiers` | M | tax | 5 / 12 | resolved (SA293 (a)) |
@@ -2592,6 +2594,7 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-17 — `manifest-option-residue`: resolved (SA293 (d) — the three release stamps left analytics' and social's option descriptions and notifications' integer `webhook_ttl_seconds` dropped the string `pattern` beside its `min`; harness rule 29 scans every `module.yml` description for ticket ids (any case, embedded included, the contract-vintage id outside it) and rule 12 checks each validation key against the option's type, both with controls; the manifest loader refuses a type-mismatched key at load; proposal 57's manifest-text clause and rule 12's type-fit clause land here).
 - 2026-10-16 — `structured-log-fields`: resolved (SA294 — decisions rule 24 carries the convention: a security or audit event carries `extra=` fields and every other module log line stays message-only; orgs' operator-access and VIEW-AS audit logs are the recorded sites, and the clause stays a review rule).
 - 2026-10-17 — `adapter-restates-manifest-validation`: resolved (SA291 (a) — the notifications adapter's live-delivery predicate evaluates the manifest's declared validation through `collect_resolved_option_validation_issues`; the hand-written email, domain, and env-var-name patterns and the placeholder constant are gone, and harness rule 12 bans `re.compile` in `adapter.py`, alias spellings included, with controls; proposal 55's rule-12 clause lands here, items 33–34 with SA291 (b)–(c)).
+- 2026-10-17 — `throttle-rate-merge-copies`: resolved (SA291 (b) — each throttled module declares its DRF scopes as scope → `_RATE_LIMIT` option in the manifest's `throttle_scopes` block; core resolves the declared rates into the managed `MODULE_THROTTLE_SCOPES` and `compose_rest_framework` merges them between its conservative defaults and the project's own contribution, so the five throttled adapters hand-merge no `DEFAULT_THROTTLE_RATES` map; harness rule 12 bans the literal in `adapter.py`, with controls; proposal 55's throttle clause lands here, item 33 with SA291 (c)).
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).
 - 2026-10-16 — All other prior IDs: still resolved (harness pass at HEAD; delta has no convention-breaking commit).

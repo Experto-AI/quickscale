@@ -146,6 +146,7 @@ def _build_social_post_hook(project_package: str) -> Any:
             url_includes=url_includes,
             spa_routes=spec.spa_routes,
             managed_files=managed_content,
+            throttle_scopes=spec.throttle_scopes,
         )
 
     return _social_post_hook

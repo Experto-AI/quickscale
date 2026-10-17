@@ -19,7 +19,8 @@ Public API (SA206):
   composition: the fail-closed defaults (the one QuickScale error handler, the
   one session authentication class, the authenticated-only permission class,
   the JSON-only renderer and parser, and the throttle classes and rates), the
-  module-contributed keys, and the proxy-derived ``NUM_PROXIES``.
+  manifest-declared module throttle scopes, the module-contributed keys, and
+  the proxy-derived ``NUM_PROXIES``.
 * :func:`require_production_secret_key` — the production SECRET_KEY guard.
 * :data:`KNOWN_PRIVILEGED_COMMANDS`, :data:`KNOWN_NON_DB_COMMANDS`, and
   :func:`resolve_runtime_database_url` — the launcher one-shot command-mode
@@ -143,8 +144,8 @@ class ClientIdentityMiddleware:
 # The generated project's ``settings/base.py`` delegates its
 # ``REST_FRAMEWORK`` composition here, so the contract follows the versioned
 # ``quickscale-core`` lockstep pin instead of living in the user-owned file.
-# Module-contributed keys (rule 30's merged ``DEFAULT_THROTTLE_RATES``
-# included) win over every default below.
+# The merged declared throttle scopes (rule 32) and any module-contributed
+# keys (rule 30) win over every default below.
 
 _DEFAULT_DRF_EXCEPTION_HANDLER = "quickscale_core.runtime.conventions.exception_handler"
 # The composed defaults make a module API accept and answer JSON only, so a
@@ -165,8 +166,8 @@ _DEFAULT_DRF_THROTTLE_CLASSES = [
 ]
 # Conservative default rates an operator raises for their traffic profile:
 # above interactive use and legitimate polling, below a runaway or abusive
-# client.  A module that ships a tighter scope contributes its rate through
-# the module wiring and it merges in without losing these.
+# client.  A module that ships a tighter scope declares it in its manifest's
+# ``throttle_scopes`` projection and it merges in without losing these.
 _DEFAULT_DRF_THROTTLE_RATES: dict[str, str] = {
     "anon": "1200/hour",
     "user": "3000/hour",
@@ -176,14 +177,18 @@ _DEFAULT_DRF_THROTTLE_RATES: dict[str, str] = {
 def compose_rest_framework(
     contributed: Mapping[str, object] | None = None,
     *,
+    throttle_scopes: Mapping[str, str] | None = None,
     use_x_forwarded_for: bool,
     trusted_proxy_count: int,
 ) -> dict[str, object]:
     """Compose the generated project's ``REST_FRAMEWORK`` setting.
 
-    ``contributed`` is the value the managed wiring merged into
-    ``MODULE_SETTINGS['REST_FRAMEWORK']``; a key it sets wins.  Module wiring
-    reaches this helper only after ``collect_wiring`` admits
+    ``throttle_scopes`` is the merged ``scope -> rate`` map every installed
+    module declared in its manifest (rule 32), rendered into the managed
+    wiring as ``MODULE_THROTTLE_SCOPES``.  ``contributed`` is the value the
+    managed wiring merged into ``MODULE_SETTINGS['REST_FRAMEWORK']``, plus
+    anything a directly adopted project passes; a key it sets wins.  Module
+    wiring reaches this helper only after ``collect_wiring`` admits
     ``DEFAULT_THROTTLE_RATES`` (rule 30), so in a generated project the only
     module-contributed key is a rate; a directly adopted project that passes
     other keys still wins.  The
@@ -194,6 +199,11 @@ def compose_rest_framework(
     conservative anon/user rates — fill in only what a module left unset, so
     a project with no modules still fails closed.  ``NUM_PROXIES`` is derived from the trusted-proxy state, so
     DRF and the canonical client-IP resolver cannot disagree.
+
+    The rates merge in one pinned order: the conservative ``anon``/``user``
+    defaults first, then the manifest-declared module scopes, then whatever
+    ``contributed`` sets, so a project that overrides a declared scope's rate
+    itself still wins.
     """
     rest_framework: dict[str, object] = dict(contributed or {})
 
@@ -214,6 +224,12 @@ def compose_rest_framework(
         "DEFAULT_THROTTLE_CLASSES", list(_DEFAULT_DRF_THROTTLE_CLASSES)
     )
 
+    declared_rates = throttle_scopes if throttle_scopes is not None else {}
+    if not isinstance(declared_rates, Mapping):
+        raise TypeError(
+            "REST_FRAMEWORK declared throttle scopes must be a mapping, "
+            f"got {type(declared_rates).__name__}"
+        )
     contributed_rates = rest_framework.get("DEFAULT_THROTTLE_RATES", {})
     if not isinstance(contributed_rates, Mapping):
         raise TypeError(
@@ -222,6 +238,7 @@ def compose_rest_framework(
         )
     rest_framework["DEFAULT_THROTTLE_RATES"] = {
         **_DEFAULT_DRF_THROTTLE_RATES,
+        **declared_rates,
         **contributed_rates,
     }
 

@@ -200,6 +200,90 @@ def _parse_ci_environment(
     return declarations
 
 
+def _parse_throttle_scopes(
+    data: dict[str, Any],
+    declared_name: str,
+    options: Mapping[str, Any],
+) -> dict[str, str]:
+    """Parse and validate the optional top-level ``throttle_scopes`` section.
+
+    Each entry declares one DRF throttle scope the module's views attach by
+    ``throttle_scope``: the key is the scope name — ``quickscale_<module>
+    _<purpose>``, Module Conventions rules 2 and 32 — and the value names a
+    declared string option whose resolved value is that scope's rate (rule
+    1's ``_RATE_LIMIT`` option).  Core resolves the declared rates into the
+    module's wiring (``ModuleWiringSpec.throttle_scopes``) and merges them
+    when it composes the generated project's ``REST_FRAMEWORK``, so the
+    adapter carries no rate map and the option remains the rate's one
+    source.
+
+    A scope that does not carry the module stem, or a value that does not
+    name a declared string option, fails closed: either would silently
+    declare a rate for a scope the module cannot own or a rate with no
+    declared source.
+
+    Args:
+        data: The full parsed YAML data dictionary.
+        declared_name: The manifest's own declared ``name`` (required and
+            validated before this section is parsed).  The scope stem is
+            checked against it, never against a caller-supplied diagnostic
+            label, so a manifest read without one still validates scope
+            ownership.
+        options: The manifest's declared options (mutable and immutable).
+
+    Returns:
+        A dict mapping scope names to option names.  Returns an empty dict
+        when the section is absent.
+
+    Raises:
+        ManifestError: If the section is not a mapping, a scope name is not
+            a ``quickscale_<module>_<purpose>`` name, or a value does not
+            name a declared string option.
+    """
+    raw_section = data.get("throttle_scopes")
+    if raw_section is None:
+        return {}
+
+    if not isinstance(raw_section, dict):
+        raise ManifestError("'throttle_scopes' must be a mapping", declared_name)
+
+    stem = f"quickscale_{declared_name}_"
+    declarations: dict[str, str] = {}
+    for scope, option_name in raw_section.items():
+        if not isinstance(scope, str) or not scope:
+            raise ManifestError(
+                "'throttle_scopes' keys must be non-empty DRF scope names",
+                declared_name,
+            )
+        if not (scope.startswith(stem) and scope[len(stem) :]):
+            raise ManifestError(
+                f"throttle_scopes.{scope} must carry the module stem "
+                f"('{stem}<purpose>', Module Conventions rules 2 and 32)",
+                declared_name,
+            )
+        if not isinstance(option_name, str) or not option_name:
+            raise ManifestError(
+                f"throttle_scopes.{scope} must name the option whose "
+                "resolved value is the scope's rate",
+                declared_name,
+            )
+        option = options.get(option_name)
+        if option is None:
+            raise ManifestError(
+                f"throttle_scopes.{scope} does not name a declared option",
+                declared_name,
+            )
+        if option.option_type != "string":
+            raise ManifestError(
+                f"throttle_scopes.{scope} must name a string option "
+                f"(got type '{option.option_type}')",
+                declared_name,
+            )
+        declarations[scope] = option_name
+
+    return declarations
+
+
 #: The keys a top-level ``operations`` section may declare.
 _OPERATIONS_SECTION_KEYS = frozenset({"title", "text", "values"})
 

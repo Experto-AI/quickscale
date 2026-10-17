@@ -52,7 +52,7 @@ from quickscale_cli.utils._dependency_write import (
     _render_toml_literal,
     _update_dependency_entries,
 )
-from quickscale_core.module_wiring import collect_wiring
+from quickscale_core.module_wiring import collect_throttle_scopes, collect_wiring
 from quickscale_core.generator.runtime_pins import QUICKSCALE_CORE_PIN
 
 
@@ -1108,8 +1108,9 @@ class TestModuleWiringSpecs:
         assert settings["QUICKSCALE_FORMS_RATE_LIMIT"] == "10/minute"
         assert settings["QUICKSCALE_FORMS_RETENTION_DAYS"] == 14
         assert settings["QUICKSCALE_FORMS_API_ENABLED"] is False
-        assert settings["REST_FRAMEWORK"] == {
-            "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "10/minute"},
+        assert "REST_FRAMEWORK" not in settings
+        assert collect_throttle_scopes(specs) == {
+            "quickscale_forms_submit": "10/minute",
         }
 
     def test_crm_and_forms_wiring_do_not_collide_on_rest_framework(self):
@@ -1140,8 +1141,9 @@ class TestModuleWiringSpecs:
         assert settings["QUICKSCALE_CRM_CONTACTS_PER_PAGE"] == 20
         assert settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] == 15
         assert settings["QUICKSCALE_FORMS_API_ENABLED"] is True
-        assert settings["REST_FRAMEWORK"] == {
-            "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "10/minute"},
+        assert "REST_FRAMEWORK" not in settings
+        assert collect_throttle_scopes(specs) == {
+            "quickscale_forms_submit": "10/minute",
         }
         assert ("crm/", "quickscale_modules_crm.urls") in urls
         assert ("forms/", "quickscale_modules_forms.urls") in urls

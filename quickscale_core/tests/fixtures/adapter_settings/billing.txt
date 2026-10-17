@@ -19,9 +19,7 @@ MODULE_SETTINGS: dict[str, object] = {'QUICKSCALE_BILLING_API_RATE_LIMIT': '45/h
  'QUICKSCALE_BILLING_SECRET_KEY_ENV_VAR': 'STRIPE_SECRET_KEY',
  'QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE': 25,
  'QUICKSCALE_BILLING_WEBHOOK_SECRET': os.environ.get("QUICKSCALE_BILLING_WEBHOOK_SECRET", ""),
- 'QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR': 'QUICKSCALE_BILLING_WEBHOOK_SECRET',
- 'REST_FRAMEWORK': {'DEFAULT_THROTTLE_RATES': {'quickscale_billing_checkout': '45/hour',
-                                               'quickscale_billing_portal': '45/hour'}}}
+ 'QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR': 'QUICKSCALE_BILLING_WEBHOOK_SECRET'}
 
 MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'billing': {'api_rate_limit': {'setting': 'QUICKSCALE_BILLING_API_RATE_LIMIT',
                                 'type': 'string',
@@ -71,3 +69,5 @@ MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'billing': {'
              'webhook_secret_env_var': {'setting': 'QUICKSCALE_BILLING_WEBHOOK_SECRET_ENV_VAR',
                                         'type': 'string',
                                         'validation': {'pattern': '^(?:[A-Z][A-Z0-9_]*)?$'}}}}
+
+MODULE_THROTTLE_SCOPES: dict[str, str] = {'quickscale_billing_checkout': '45/hour', 'quickscale_billing_portal': '45/hour'}

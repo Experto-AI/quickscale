@@ -1,8 +1,8 @@
 """Focused tests for the forms manifest adapter.
 
 The generic manifest boundary owns forms' option defaults, normalization,
-checks, and projections; these tests pin the adapter's remaining contract —
-the throttle scope, the off-switch transformation, and the sentinel.
+checks, projections, and declared throttle scope; these tests pin the
+adapter's remaining contract — the off-switch transformation and the sentinel.
 """
 
 from __future__ import annotations
@@ -50,8 +50,8 @@ def test_manifest_projects_settings_and_throttle_scope() -> None:
     assert result.settings["QUICKSCALE_FORMS_RATE_LIMIT"] == "10/minute"
     assert result.settings["QUICKSCALE_FORMS_RETENTION_DAYS"] == 365
     assert result.settings["QUICKSCALE_FORMS_API_ENABLED"] is True
-    assert result.settings["REST_FRAMEWORK"] == {
-        "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "10/minute"},
+    assert dict(result.throttle_scopes) == {
+        "quickscale_forms_submit": "10/minute",
     }
 
 
@@ -63,6 +63,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
             settings={"QUICKSCALE_FORMS_RATE_LIMIT": "5/hour"},
             pre_home_url_includes=(),
             url_includes=(("forms/", "quickscale_modules_forms.urls"),),
+            throttle_scopes={"quickscale_forms_submit": "5/hour"},
         ),
         ResolvedOptions({"enabled": False}),
     )
@@ -73,9 +74,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
         "django_filters",
         "quickscale_modules_forms",
     )
-    assert result.settings["REST_FRAMEWORK"] == {
-        "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "5/hour"},
-    }
+    assert dict(result.throttle_scopes) == {"quickscale_forms_submit": "5/hour"}
 
 
 @patch("quickscale_modules_forms.adapter.build_generic_manifest_spec")

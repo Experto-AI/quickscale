@@ -125,7 +125,8 @@ def assemble_wiring_spec(
     from a manifest resolver result.
 
     Copies the resolver-projected wiring fields (apps, middleware,
-    url_includes, pre_home_url_includes) and derived settings directly into
+    url_includes, pre_home_url_includes), the declared DRF throttle scopes
+    (scope to resolved rate, rule 32), and derived settings directly into
     a frozen ``ModuleWiringSpec``.  The ``managed_files`` field is populated
     from the resolver result's manifest-declared managed-file declarations:
     each declaration's ``output_path`` maps to its ``renderer`` identifier.
@@ -170,6 +171,7 @@ def assemble_wiring_spec(
         url_includes=result.url_includes,
         spa_routes=result.spa_routes,
         managed_files=_build_managed_files_mapping(result),
+        throttle_scopes=dict(result.throttle_scopes),
     )
 
     if post_hook is not None:

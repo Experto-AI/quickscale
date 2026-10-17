@@ -65,6 +65,7 @@ from quickscale_core.manifest.loader_sections import (
     _parse_operations,
     _parse_project_contract_vintage,
     _parse_required_modules,
+    _parse_throttle_scopes,
     _validate_declared_minimum,
 )
 from quickscale_core.manifest.option_validation import (
@@ -253,6 +254,7 @@ _TOP_LEVEL_MANIFEST_KEYS = frozenset(
         "managed_files",
         "ci_env",
         "operations",
+        "throttle_scopes",
         "derivation",
         "contract_vintage",
     }
@@ -399,6 +401,14 @@ def load_manifest(
         data, module_name, {**mutable_options, **immutable_options}
     )
 
+    # Parse declared DRF throttle scopes (additive; empty when absent).
+    # The scope stem is validated against the manifest's own declared name,
+    # so an omitted or mismatched diagnostic ``module_name`` cannot disable
+    # the ownership check.
+    throttle_scopes = _parse_throttle_scopes(
+        data, name, {**mutable_options, **immutable_options}
+    )
+
     # Parse derivation section (T2.3+; additive; every field defaults to [])
     derivation = _parse_derivation_section(
         data, module_name, {**mutable_options, **immutable_options}
@@ -420,6 +430,7 @@ def load_manifest(
         managed_files=managed_files,
         ci_env=ci_env,
         operations=operations,
+        throttle_scopes=throttle_scopes,
         derivation_rules=derivation.get("normalization_rules", []),
         validation_rules=derivation.get("validation_rules", []),
         legacy_aliases=derivation.get("legacy_aliases", []),
@@ -561,6 +572,7 @@ __all__ = [
     "_parse_required_modules",
     "_parse_retired_options",
     "_parse_retired_settings",
+    "_parse_throttle_scopes",
     "_parse_yaml_content",
     "_selector_chain_yields_unhashable",
     "_validate_computed_template",

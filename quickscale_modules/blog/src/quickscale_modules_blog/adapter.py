@@ -14,42 +14,30 @@ from quickscale_core.runtime import (
 def _blog_post_hook(
     spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
-    """Contribute blog's throttle scope and apply its off-switch transformation.
+    """Apply blog's off-switch transformation.
 
     Rule 32 — the blog automation API's scope carries the module stem and its
-    rate is the module's ``api_rate_limit`` option, contributed here for rule
-    30's merge.  The option's canonical value arrives from the manifest
-    boundary; the hook never re-coerces or re-reads a raw option.  The one
+    rate is the module's ``api_rate_limit`` option, declared in the manifest's
+    ``throttle_scopes`` projection.  The option's canonical value reaches the
+    projected ``spec.throttle_scopes`` before this hook runs; the hook never
+    re-coerces or re-reads a raw option and contributes no rate map.  The one
     shared staff-guarded Markdownx editor mount, and its global settings,
     belong to storage (rule 41), so blog contributes neither for it.
     """
-    settings = dict(spec.settings)
-    settings["REST_FRAMEWORK"] = {
-        "DEFAULT_THROTTLE_RATES": {
-            "quickscale_blog_api": settings["QUICKSCALE_BLOG_API_RATE_LIMIT"],
-        },
-    }
-    if not resolved.enabled:
-        # Rule 1 (D3): off keeps the module installed — app, migrations,
-        # admin, and settings — and mounts none of its public URLs; the one
-        # shared staff-guarded Markdownx editor mount is storage's (rule 41).
-        return ModuleWiringSpec(
-            apps=spec.apps,
-            middleware=spec.middleware,
-            settings=settings,
-            pre_home_url_includes=(),
-            url_includes=(),
-            spa_routes=(),
-            managed_files=spec.managed_files,
-        )
+    if resolved.enabled:
+        return spec
+    # Rule 1 (D3): off keeps the module installed — app, migrations,
+    # admin, and settings — and mounts none of its public URLs; the one
+    # shared staff-guarded Markdownx editor mount is storage's (rule 41).
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=spec.pre_home_url_includes,
-        url_includes=spec.url_includes,
-        spa_routes=spec.spa_routes,
+        settings=spec.settings,
+        pre_home_url_includes=(),
+        url_includes=(),
+        spa_routes=(),
         managed_files=spec.managed_files,
+        throttle_scopes=spec.throttle_scopes,
     )
 
 

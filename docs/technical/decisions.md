@@ -1227,8 +1227,11 @@ rather than the release that introduced it.
 
 **32. Throttles.**
 - ✅ A DRF throttle scope is `quickscale_<module>_<purpose>` (rule 2); its rate is the module's
-  `_RATE_LIMIT` option (rule 1), contributed to `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`
-  through rule 30's merge.
+  `_RATE_LIMIT` option (rule 1), declared in the manifest's `throttle_scopes` projection
+  (scope → the option whose resolved value is its rate) and merged by core's
+  `compose_rest_framework` — the conservative `anon`/`user` defaults first, then the
+  manifest-declared scopes, then a project's own `REST_FRAMEWORK` contribution — so no adapter
+  carries the rate map.
 - ✅ A view attaches its DRF throttle by `throttle_scope` only, through core's one scoped throttle
   class (`QuickscaleScopedRateThrottle` in `quickscale_core.runtime`, the generated settings'
   default scoped throttle class): the bucket identity is the authenticated user's pk, else the
@@ -1239,7 +1242,8 @@ rather than the release that introduced it.
   and only when both allow, so a refused attempt spends neither budget, and the JSON API's
   default DRF classes still apply their conservative rates on top.
 - ❌ `throttle_classes` on a non-webhook view (a webhook keeps the empty literal rule 26
-  requires); a rate written in code or `adapter.py`; a table created by `RunSQL` (blog's
+  requires); a rate written in code or `adapter.py` (a `DEFAULT_THROTTLE_RATES` literal in
+  `adapter.py` fails harness rule 12); a table created by `RunSQL` (blog's
   throttle-counter table goes with its hand-written limiter, rule 9).
 
 **33. Shared-namespace stems.**

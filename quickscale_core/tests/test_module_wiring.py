@@ -11,6 +11,7 @@ from quickscale_core.module_wiring import (
     _merge_unique,
     _sort_module_items,
     collect_spa_routes,
+    collect_throttle_scopes,
     collect_wiring,
     collect_url_wiring,
     render_settings_modules_py,
@@ -451,6 +452,21 @@ class TestRenderSettingsModulesPy:
         assert "MODULE_INSTALLED_APPS: list[str] = []" in content
         assert "MODULE_MIDDLEWARE: list[str] = []" in content
         assert "MODULE_SETTINGS: dict[str, object] = {}" in content
+        assert "MODULE_THROTTLE_SCOPES: dict[str, str] = {}" in content
+
+    def test_render_settings_modules_py_with_throttle_scopes(self) -> None:
+        """Declared scopes render into MODULE_THROTTLE_SCOPES (rule 32)."""
+        specs = {
+            "billing": ModuleWiringSpec(
+                throttle_scopes={"quickscale_billing_checkout": "30/hour"}
+            )
+        }
+        content = render_settings_modules_py(specs)
+        namespace = _exec_rendered_modules(content)
+        assert namespace["MODULE_THROTTLE_SCOPES"] == {
+            "quickscale_billing_checkout": "30/hour"
+        }
+        assert "REST_FRAMEWORK" not in namespace["MODULE_SETTINGS"]
 
     def test_render_settings_modules_py_with_apps(self) -> None:
         """Apps appear in MODULE_INSTALLED_APPS."""
@@ -482,6 +498,50 @@ def _exec_rendered_modules(content: str) -> dict[str, object]:
     namespace: dict[str, object] = {}
     exec(compile(content, "<rendered-modules>", "exec"), namespace)
     return namespace
+
+
+class TestCollectThrottleScopes:
+    """Tests for collect_throttle_scopes (rule 32's declared-scope merge)."""
+
+    def test_empty_specs(self) -> None:
+        """No specs produce an empty scope map."""
+        assert collect_throttle_scopes({}) == {}
+
+    def test_scopes_merge_across_modules_sorted(self) -> None:
+        """Each module's declared scopes join one deterministic map."""
+        specs = {
+            "forms": ModuleWiringSpec(
+                throttle_scopes={"quickscale_forms_submit": "5/hour"}
+            ),
+            "billing": ModuleWiringSpec(
+                throttle_scopes={"quickscale_billing_checkout": "30/hour"}
+            ),
+        }
+        assert collect_throttle_scopes(specs) == {
+            "quickscale_billing_checkout": "30/hour",
+            "quickscale_forms_submit": "5/hour",
+        }
+
+    def test_equal_values_from_two_modules_are_allowed(self) -> None:
+        """Two modules may declare one scope with an equal rate."""
+        specs = {
+            "a": ModuleWiringSpec(throttle_scopes={"shared": "1/hour"}),
+            "b": ModuleWiringSpec(throttle_scopes={"shared": "1/hour"}),
+        }
+        assert collect_throttle_scopes(specs) == {"shared": "1/hour"}
+
+    def test_conflicting_scope_rates_fail_naming_both_modules(self) -> None:
+        """A differing rate fails the merge, naming both modules and the scope."""
+        specs = {
+            "a": ModuleWiringSpec(throttle_scopes={"shared": "1/hour"}),
+            "b": ModuleWiringSpec(throttle_scopes={"shared": "2/hour"}),
+        }
+        with pytest.raises(ValueError) as excinfo:
+            collect_throttle_scopes(specs)
+        message = str(excinfo.value)
+        assert "'a'" in message
+        assert "'b'" in message
+        assert "shared" in message
 
 
 class TestRenderSettingsModulesPyEnvMarkers:

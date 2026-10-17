@@ -34,6 +34,7 @@ def _analytics_post_hook(
         url_includes=(),
         spa_routes=(),
         managed_files=spec.managed_files,
+        throttle_scopes=spec.throttle_scopes,
     )
 
 

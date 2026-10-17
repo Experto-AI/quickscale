@@ -1,8 +1,8 @@
 """Focused tests for the blog manifest adapter.
 
 The generic manifest boundary owns blog's option defaults, normalization,
-checks, and settings surface; these tests pin the adapter's remaining
-contract — the throttle scope and the off-switch transformation.  The one
+checks, settings surface, and declared throttle scope; these tests pin the
+adapter's remaining contract — the off-switch transformation.  The one
 shared staff-guarded Markdownx editor mount and its global settings are
 storage's (rule 41).
 """
@@ -48,9 +48,7 @@ def test_manifest_projects_settings_and_throttle_scope() -> None:
     assert result.settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"] == 10
     assert result.settings["QUICKSCALE_BLOG_RSS_ENABLED"] is True
     assert result.settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "5/hour"
-    assert result.settings["REST_FRAMEWORK"] == {
-        "DEFAULT_THROTTLE_RATES": {"quickscale_blog_api": "5/hour"}
-    }
+    assert dict(result.throttle_scopes) == {"quickscale_blog_api": "5/hour"}
     # Rule 41: the shared Markdownx mount and its global settings are
     # storage's; blog writes none of them.
     assert "MARKDOWNX_MEDIA_PATH" not in result.settings
@@ -68,6 +66,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
                 ("blog/", "quickscale_modules_blog.urls"),
                 ("markdownx/", "quickscale_modules_blog.markdownx_urls"),
             ),
+            throttle_scopes={"quickscale_blog_api": "5/hour"},
         ),
         ResolvedOptions({"enabled": False}),
     )
@@ -78,9 +77,7 @@ def test_disabled_module_drops_url_mounts_and_keeps_apps() -> None:
     assert ("blog/", "quickscale_modules_blog.urls") not in result.url_includes
     assert result.pre_home_url_includes == ()
     assert result.apps == ("rest_framework", "markdownx", "quickscale_modules_blog")
-    assert result.settings["REST_FRAMEWORK"] == {
-        "DEFAULT_THROTTLE_RATES": {"quickscale_blog_api": "5/hour"}
-    }
+    assert dict(result.throttle_scopes) == {"quickscale_blog_api": "5/hour"}
 
 
 @patch("quickscale_modules_blog.adapter.build_generic_manifest_spec")

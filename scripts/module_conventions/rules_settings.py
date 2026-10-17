@@ -21,6 +21,7 @@ from typing import Any as Any
 from scripts.module_conventions._settings_manifest import (
     OPTION_TYPES,
     OPTION_VALIDATION_KEYS,
+    _adapter_default_throttle_rates_violations,
     _adapter_pattern_compilation_violations,
     _contains_key,
     _declares_option_blocks,
@@ -159,6 +160,7 @@ __all__ = (
     "_RULE_42_EXPORTED_SNAPSHOT",
     "_RULE_43_BEST_EFFORT_MODULES",
     "_RULE_43_SETTINGS_ATTRIBUTE",
+    "_adapter_default_throttle_rates_violations",
     "_attribute_binding_module",
     "_call_builds_settings_snapshot",
     "_call_other_module_service",
@@ -245,9 +247,11 @@ def rule_3_settings_reads(corpus: Corpus) -> list[str]:
 def rule_12_manifest_options(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
-        # The adapter clause is checked for every module, whatever shape its
-        # manifest is in: adapter code evaluates the declared validation.
+        # The adapter clauses are checked for every module, whatever shape its
+        # manifest is in: adapter code evaluates the declared validation and
+        # writes no throttle-rate literal of its own.
         violations.extend(_adapter_pattern_compilation_violations(module))
+        violations.extend(_adapter_default_throttle_rates_violations(module))
         manifest = module.manifest
         if not _declares_option_blocks(manifest):
             violations.append(f"rule 12: {module.name}: config must declare mutable and immutable")
