@@ -76,7 +76,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA153 (e2) | yes | yes | yes | yes | yes |
+| 1 | SA153 (e3) | yes | yes | yes | yes | yes |
 | 2 | SA277 (a) | no | no | yes | no | no |
 | 3 | — | yes | yes | yes | yes | no |
 
@@ -207,8 +207,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
     detail documents with Open Graph tags from that snapshot; Django serves them and the boot
     hydrates cache and markup (decision: image-build prerender from the committed snapshot,
     documents committed and served by Django). The chromium crawler test fetches both with
-    JavaScript disabled. (e2) is next.
-  - [ ] (e2) `sitemap.xml` and `robots.txt` from published listings (Tier 1).
+    JavaScript disabled.
+  - [x] (e2): landed on `bap-web-new` as the build step's crawler surface: the Node prerender
+    writes `sitemap.xml` (the catalog plus one URL per published listing) and `robots.txt`
+    (allow all, pointing at the sitemap) from the same committed snapshot, and Django serves
+    both ahead of the SPA catch-all; the sitemap fails closed with a 404 while public listings
+    are off or the artifact is missing or malformed. (e3) is next.
   - [ ] (e3) Rendered-page organization isolation and the journey test over the prerendered
     pages (Tier 2-fast).
   - [ ] (f) Go-live on `buenosairesproperties.com` after SA204 (j) and SA191's cutover; re-prove
