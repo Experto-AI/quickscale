@@ -216,7 +216,9 @@ modules:
         with pytest.raises(click.Abort):
             _load_and_validate_config(config)
 
-        assert expected_marker in capsys.readouterr().err
+        error_output = capsys.readouterr().err
+        assert expected_marker in error_output
+        assert "to correct the billing option values" in error_output
 
     def test_apply_billing_dependency_selection_is_not_a_prerequisite(self) -> None:
         """Billing prerequisites no longer refuse a missing auth: selection owns it.
@@ -354,6 +356,7 @@ modules:
         error_output = capsys.readouterr().err
         assert "Storage module configuration is incomplete for apply" in error_output
         assert expected_marker in error_output
+        assert "to correct the storage option values" in error_output
 
     def test_apply_storage_valid_options_pass(self, capsys):
         """Storage with valid options must pass preflight."""
@@ -400,6 +403,53 @@ modules:
         )
         # Should not raise
         _validate_module_prerequisites(qs_config)
+
+    def test_apply_every_configured_module_is_judged_by_its_manifest(self, capsys):
+        """A module outside the old per-module list is judged the same way."""
+        qs_config = SimpleNamespace(
+            modules={"blog": SimpleNamespace(options={"posts_per_page": 0})}
+        )
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert "Blog module configuration is incomplete for apply" in error_output
+        assert "QUICKSCALE_BLOG_POSTS_PER_PAGE" in error_output
+
+    def test_apply_adapter_guidance_replaces_the_shared_hint(self, capsys):
+        """The notifications adapter supplies its live-delivery remediation."""
+        qs_config = SimpleNamespace(
+            modules={
+                "notifications": SimpleNamespace(
+                    options={
+                        "sender_name": "QuickScale",
+                        "sender_email": "noreply@example.com",
+                        "resend_domain": "mg.example.com",
+                    }
+                )
+            }
+        )
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert "Notifications module configuration is incomplete" in error_output
+        assert "targets live Resend delivery" in error_output
+
+    def test_apply_shared_hint_names_the_module(self, capsys):
+        """A module whose adapter defines no hook gets the shared hint."""
+        qs_config = SimpleNamespace(
+            modules={"backups": SimpleNamespace(options={"retention_days": -1})}
+        )
+
+        with pytest.raises(click.Abort):
+            _validate_module_prerequisites(qs_config)
+
+        error_output = capsys.readouterr().err
+        assert "Backups module configuration is incomplete for apply" in error_output
+        assert "to correct the backups option values" in error_output
 
 
 # ---------------------------------------------------------------------------

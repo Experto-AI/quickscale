@@ -170,6 +170,7 @@ class TestPlanReconfigureWithState:
             assert result.exit_code != 0
             assert "Notifications module configuration is incomplete" in result.output
             assert "must not be one of: noreply@example.com" in result.output
+            assert "targets live Resend delivery" in result.output
             assert not Path("quickscale.yml").exists()
 
     def test_plan_reconfigure_aborts_for_invalid_manifest_option(self) -> None:
@@ -204,6 +205,10 @@ class TestPlanReconfigureWithState:
 
             assert result.exit_code != 0
             assert "QUICKSCALE_LISTINGS_PER_PAGE" in result.output
+            assert (
+                "Listings module configuration is incomplete for this planner update"
+                in result.output
+            )
             assert not Path("quickscale.yml").exists()
 
 

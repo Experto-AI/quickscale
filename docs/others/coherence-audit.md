@@ -12,15 +12,16 @@ gap N". These numbers come from the 2026-10-16 census and stay fixed until the e
 
 - **Drift.** Rule 37 forbids an equality branch on a module name in core or the CLI outside its
   listed exceptions. The harness (`scripts/module_conventions/_identity_module_lists.py`)
-  matches only `ast.Eq`/`ast.NotEq`, so `in` and `.get("<m>")` branches pass. There are 5
-  unlisted sites: `commands/_finalize.py` (backups, notifications, analytics, social, billing),
-  `commands/_config.py` (orgs), `commands/_runtime.py` (backups), and `apply_support.py` plus
-  `commands/_plan_validation.py` (notifications).
-- **Fix.** Option validation goes behind manifest fields or generic adapter hooks
-  (`_config`, `_plan_validation`, `apply_support`). Operator next-steps text either becomes
-  listed rule-37 exceptions or moves the same way. Extend `RULE_37_BRANCH_OPERATORS` to
-  `ast.In`/`ast.NotIn` and to `.get()`/subscript with a module-name constant. Control
-  fixture: `if "billing" in modules:`.
+  matches only `ast.Eq`/`ast.NotEq`, so `in` and `.get("<m>")` branches pass. SA287 (a) closed
+  the option-validation trio: `commands/_config.py` (orgs) and `apply_support.py` plus
+  `commands/_plan_validation.py` (notifications) now judge every configured module through its
+  manifest's declared checks and take module-specific remediation text from the generic
+  `option_validation_guidance` adapter hook. Two unlisted sites remain, both operator
+  next-steps text: `commands/_finalize.py` (backups, notifications, analytics, social, billing)
+  and `commands/_runtime.py` (backups).
+- **Fix.** Operator next-steps text either becomes listed rule-37 exceptions or moves the same
+  way. Extend `RULE_37_BRANCH_OPERATORS` to `ast.In`/`ast.NotIn` and to `.get()`/subscript with
+  a module-name constant. Control fixture: `if "billing" in modules:`.
 - **Related:** arch watchlist `core-holds-module-vocabulary`.
 
 ## Proposed rules (pending merge into decisions.md § Module Conventions)
@@ -41,8 +42,6 @@ gap N". These numbers come from the 2026-10-16 census and stay fixed until the e
     (SA296 (b)); a command that resolves its operation from a computed name (the backups DR
     bridge's `ADAPTER_FUNCTIONS.get(function_name)`) stays outside that detector and remains
     uncovered here.
-23. **Capability declarations are open-world.** A misspelled capability on an `AppConfig` is
-    never flagged, and the harness and core each keep a literal set with no cross-check.
 24. **Clauses with no detector:** rule 13's `TenantModelAdmin` registration and rule 11's
     compare-against-members clause.
 25. **The authoring checklist contradicts the code.**

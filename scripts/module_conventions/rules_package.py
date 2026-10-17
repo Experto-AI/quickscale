@@ -19,6 +19,17 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any as Any
 
+from scripts.module_conventions._package_capabilities import (
+    CORE_CONVENTIONS_RELATIVE_PATH as CORE_CONVENTIONS_RELATIVE_PATH,
+)
+from scripts.module_conventions._package_capabilities import (
+    DJANGO_APP_CONFIG_MEMBERS as DJANGO_APP_CONFIG_MEMBERS,
+)
+from scripts.module_conventions._package_capabilities import (
+    capability_declaration_findings,
+    core_capabilities,
+    named_hook_names,
+)
 from scripts.module_conventions._package_commands import (
     CONFIRM_COMMAND_KEYWORDS,
     DESTRUCTIVE_OPERATION_WORDS,
@@ -64,9 +75,6 @@ from scripts.module_conventions._package_surfaces import (
     _module_string_constants,
     _private_member_accesses,
     _public_surface,
-)
-from scripts.module_conventions.core import (
-    CAPABILITY_NAMES as CAPABILITY_NAMES,
 )
 from scripts.module_conventions.core import (
     MODULE_ABSTRACT_BASES as MODULE_ABSTRACT_BASES,
@@ -142,7 +150,9 @@ from scripts.module_conventions.core import (
 #: facade.
 __all__ = (
     "CONFIRM_COMMAND_KEYWORDS",
+    "CORE_CONVENTIONS_RELATIVE_PATH",
     "DESTRUCTIVE_OPERATION_WORDS",
+    "DJANGO_APP_CONFIG_MEMBERS",
     "ORGANIZATION_SELECTOR_FLAG",
     "RETIRED_SETTINGS_NAME",
     "RULE_11_ONE_OFF_FILES",
@@ -165,6 +175,9 @@ __all__ = (
     "_retired_declaration_keys",
     "_service_functions",
     "_settings_attribute_names",
+    "capability_declaration_findings",
+    "core_capabilities",
+    "named_hook_names",
     "rule_11_package_files",
     "rule_15_package_root",
     "rule_16_signals",
@@ -177,13 +190,27 @@ __all__ = (
 
 
 def rule_4_public_surface(corpus: Corpus) -> list[str]:
-    """Enforce the public-surface and capability-vocabulary rules (rule 4)."""
+    """
+    Enforce the public-surface and capability-vocabulary rules (rule 4).
+
+    The capability vocabulary is core's own ``CAPABILITIES``, parsed
+    fail-closed: an unreadable declaration is reported as such instead of
+    reading every collected or declared name as unknown.  Each module's
+    ``AppConfig`` declarations are checked against it, then every package file
+    for the surface, setting, and app-config-walk clauses.
+    """
+    try:
+        capabilities = core_capabilities(corpus.core_conventions_text)
+    except ValueError as exc:
+        return [f"rule 4: core CAPABILITIES unreadable: {exc}"]
+    named_hooks = named_hook_names(corpus)
     violations: list[str] = []
     for module in corpus.modules:
+        violations.extend(capability_declaration_findings(module, capabilities, named_hooks))
         for rel, text in module.files.items():
             if not rel.endswith(".py"):
                 continue
-            violations.extend(_file_surface_violations(module, rel, text))
+            violations.extend(_file_surface_violations(module, rel, text, capabilities))
     return violations
 
 

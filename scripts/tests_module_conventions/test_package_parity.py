@@ -22,6 +22,7 @@ import pytest
 
 from scripts.check_module_conventions import Module
 from scripts.module_conventions import (
+    _package_capabilities,
     _package_commands,
     _package_files,
     _package_legacy,
@@ -39,6 +40,7 @@ from scripts.tests_module_conventions._support import (
 )
 
 SPLIT_SIBLINGS = {
+    "_package_capabilities": _package_capabilities,
     "_package_commands": _package_commands,
     "_package_files": _package_files,
     "_package_legacy": _package_legacy,
@@ -76,6 +78,20 @@ def _command_module(name: str, source: str) -> Module:
     """Build the golden module with its numbered demo command replaced."""
     return _with_files(
         _golden_module(), **{f"management/commands/quickscale_demo_{name}.py": source}
+    )
+
+
+def _declaration_module(method: str) -> Module:
+    """Build the golden module with one extra ``AppConfig`` method declaration."""
+    module = _golden_module()
+    return _with_files(
+        module,
+        apps=module.files["apps.py"].replace(
+            "    def ready(self) -> None:",
+            f"    def {method}(self) -> tuple[object, ...]:\n"
+            "        return ()\n\n"
+            "    def ready(self) -> None:",
+        ),
     )
 
 
@@ -130,6 +146,13 @@ CASE_BUILDERS = {
                 "def collect(name: str) -> tuple[object, ...]:\n"
                 "    return collect_capabilities(name)\n"
             ),
+        )
+    ),
+    "unknown_capability_declaration": lambda: _corpus(_declaration_module("anonimize_handlers")),
+    "named_hook_declaration": lambda: _corpus(
+        _with_files(
+            _declaration_module("invalidate_organization_cache"),
+            views='HOOKS = ("invalidate_organization_cache",)\n',
         )
     ),
     "app_config_walk": lambda: _corpus(
@@ -639,6 +662,12 @@ EXACT_FINDINGS = (
             "collect the capability through collect_capabilities",
         ),
     ),
+    (
+        "unknown_capability_declaration",
+        "rule_4_public_surface",
+        ("rule 4: demo: apps.py:10 declares 'anonimize_handlers', which is not in CAPABILITIES",),
+    ),
+    ("named_hook_declaration", "rule_4_public_surface", ()),
     ("clean_retired", "rule_6_no_legacy_names", ()),
     (
         "python_retired",

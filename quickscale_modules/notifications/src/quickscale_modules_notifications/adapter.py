@@ -83,6 +83,33 @@ def notifications_runtime_email_backend(options: dict[str, Any] | None) -> str |
 
 
 # ---------------------------------------------------------------------------
+# Generic CLI hook
+# ---------------------------------------------------------------------------
+
+
+def option_validation_guidance(options: dict[str, Any] | None) -> str | None:
+    """Return operator remediation text for refused option values.
+
+    This is the CLI's generic adapter hook (Module Conventions rule 37): the
+    CLI calls ``option_validation_guidance`` when the manifest's declared
+    checks refuse a configured module's values, and the returned text
+    replaces the shared hint.  A configuration that targets live Resend
+    delivery cannot proceed on the console email backend, so completing the
+    missing settings is the first step.  ``None`` defers to the shared hint.
+    """
+    resolved = ResolvedOptions(
+        resolve_manifest_module_options("notifications", options)
+    )
+    if not _production_targeted(resolved):
+        return None
+    return (
+        "This configuration targets live Resend delivery; complete the "
+        "missing notifications settings, then re-run 'quickscale plan "
+        "--reconfigure --configure-modules' or edit quickscale.yml."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Wiring spec
 # ---------------------------------------------------------------------------
 

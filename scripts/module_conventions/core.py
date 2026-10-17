@@ -128,6 +128,9 @@ from scripts.module_conventions._core_corpus import (
     CLI_PACKAGE as CLI_PACKAGE,
 )
 from scripts.module_conventions._core_corpus import (
+    CORE_CONVENTIONS_RELATIVE_PATH as CORE_CONVENTIONS_RELATIVE_PATH,
+)
+from scripts.module_conventions._core_corpus import (
     CORE_PACKAGE as CORE_PACKAGE,
 )
 from scripts.module_conventions._core_corpus import (
@@ -314,27 +317,6 @@ MODULE_LAYERS: dict[str, int] = {
     "listings": 3,
     "social": 3,
 }
-
-# Rule 4's closed capability vocabulary, mirroring
-# ``quickscale_core.runtime.conventions.CAPABILITIES``: every name a module may
-# declare or collect through ``collect_capabilities``.  Adding a capability is
-# a decision edit plus both entries.
-CAPABILITY_NAMES: frozenset[str] = frozenset(
-    {
-        "account_deletion_handlers",
-        "anonymize_handlers",
-        "notification_templates",
-        "organization_cache_invalidation_hooks",
-        "organization_cache_keys",
-        "organization_pricing_url_hooks",
-        "personal_data_declarations",
-        "post_login_redirect_hooks",
-        "post_signup_redirect_hooks",
-        "removal_boundary_implementations",
-        "removal_label_prefix",
-        "removal_obligations",
-    }
-)
 
 # Rule 4's one recorded exception to the app-config-walk ban: auth's
 # undeclared-reconcile fallback, kept because deleting it changes which

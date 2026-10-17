@@ -168,7 +168,7 @@ def _display_notifications_next_steps(modules: Mapping[str, Any]) -> None:
         or ""
     )
     click.echo("\n  # Notifications setup")
-    notifications_adapter = _apply_support.notifications_adapter_module()
+    notifications_adapter = _apply_support.module_adapter_module("notifications")
     if bool(notifications_options.get("enabled", True)):
         if notifications_adapter is not None and (
             notifications_adapter.notifications_live_delivery_configured(

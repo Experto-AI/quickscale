@@ -10,11 +10,9 @@ from pathlib import Path
 
 from quickscale_core.schema.config_schema import QuickScaleConfig
 
-import quickscale_core.manifest.option_validation as _option_validation
 import quickscale_cli.commands.apply_support as _apply_support
 import quickscale_core.schema.config_schema as _config_schema
 import click
-import quickscale_core.contracts.resolvers as _resolvers
 import pathlib as _pathlib
 
 
@@ -35,56 +33,40 @@ def _abort_for_invalid_existing_config(config_path: Path, error: Exception) -> N
     raise click.Abort()
 
 
-def _validate_existing_project_notifications_or_abort(
+def _validate_existing_project_module_options_or_abort(
     config: QuickScaleConfig,
 ) -> None:
-    """Abort existing-project planner flows on invalid notifications settings."""
-    notifications_config = config.modules.get("notifications")
-    if notifications_config is None:
-        return
+    """Abort existing-project planner flows on invalid module option values.
 
-    notifications_options = notifications_config.options or {}
-    notification_issues = _option_validation.validate_module_options(
-        _resolvers.load_module_manifest_with_fallback("notifications"),
-        notifications_options,
-    )
-    if not notification_issues:
-        return
+    Every configured module's values are judged by its manifest-declared
+    checks, and a module whose adapter supplies operator guidance through the
+    generic hook carries its own remediation text; the planner refuses to
+    rewrite ``quickscale.yml`` until the refusal is fixed.
+    """
+    for module_name in sorted(config.modules):
+        options = config.modules[module_name].options or {}
+        issues = _apply_support.module_option_issues(module_name, options)
+        if not issues:
+            continue
 
-    click.secho(
-        "\n❌ Notifications module configuration is incomplete for this planner update:",
-        fg="red",
-        err=True,
-        bold=True,
-    )
-    for issue in notification_issues:
-        click.echo(f"  • {issue}", err=True)
-
-    notifications_adapter = _apply_support.notifications_adapter_module()
-    if notifications_adapter is not None and (
-        notifications_adapter.notifications_production_targeted(notifications_options)
-    ):
-        click.echo(
-            "\n💡 This configuration targets live Resend delivery, so planner "
-            "refuses to rewrite quickscale.yml until the missing notifications "
-            "settings are fixed. Re-run 'quickscale plan --reconfigure "
-            "--configure-modules' or edit quickscale.yml first.",
+        click.secho(
+            f"\n❌ {module_name.capitalize()} module configuration is "
+            "incomplete for this planner update:",
+            fg="red",
             err=True,
+            bold=True,
         )
-    else:
-        click.echo(
-            "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or "
-            "edit quickscale.yml to correct the notifications values.",
-            err=True,
-        )
+        for issue in issues:
+            click.echo(f"  • {issue}", err=True)
 
-    raise click.Abort()
+        _apply_support.echo_module_option_abort_hint(module_name, options)
+        raise click.Abort()
 
 
 def _validate_existing_project_config_or_abort(config: QuickScaleConfig) -> str:
     """Validate an updated existing-project configuration before it is saved.
 
-    Runs the notifications prerequisite check, renders the desired-state YAML,
+    Runs the module option prerequisite check, renders the desired-state YAML,
     and validates it through the same :func:`validate_config` the new-project
     flow uses — including each selected module's manifest-declared option
     checks.  An invalid value fails the planner instead of being written.
@@ -92,7 +74,7 @@ def _validate_existing_project_config_or_abort(config: QuickScaleConfig) -> str:
     Returns:
         The validated YAML text to preview and save.
     """
-    _validate_existing_project_notifications_or_abort(config)
+    _validate_existing_project_module_options_or_abort(config)
     yaml_content = _config_schema.generate_yaml(config)
 
     try:

@@ -40,9 +40,6 @@ from quickscale_core.contracts.module_catalog import (
 from quickscale_core.manifest.required_modules import (
     resolve_required_modules as resolve_required_modules,
 )
-from quickscale_cli.commands.apply_support import (
-    notifications_adapter_module as notifications_adapter_module,
-)
 from quickscale_cli.commands.contract_vintage import (
     declared_adoption_step_ids as declared_adoption_step_ids,
     enforce_shipped_contract_vintage as enforce_shipped_contract_vintage,
