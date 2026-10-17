@@ -41,8 +41,6 @@ gap N". These numbers come from the 2026-10-16 census and stay fixed until the e
     (SA296 (b)); a command that resolves its operation from a computed name (the backups DR
     bridge's `ADAPTER_FUNCTIONS.get(function_name)`) stays outside that detector and remains
     uncovered here.
-22. **Rules 5 and 34 skip a module missing from `MODULE_LAYERS`.** Only a pytest backstops
-    this, and the decisions.md layer table is never compared with `MODULE_LAYERS`.
 23. **Capability declarations are open-world.** A misspelled capability on an `AppConfig` is
     never flagged, and the harness and core each keep a literal set with no cross-check.
 24. **Clauses with no detector:** rule 13's `TenantModelAdmin` registration and rule 11's
