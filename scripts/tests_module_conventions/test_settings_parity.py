@@ -579,6 +579,24 @@ CASES: dict[str, tuple[object, str]] = {
         lambda: _corpus(_setting_pattern("cdn_url", "   ")),
         "rule_12_manifest_options",
     ),
+    "rule12_adapter_re_compile": (
+        lambda: _corpus(
+            _with_files(
+                _golden_module(),
+                adapter="import re\n\n_PATTERN = re.compile(r'^x$')\n",
+            )
+        ),
+        "rule_12_manifest_options",
+    ),
+    "rule12_adapter_re_compile_alias": (
+        lambda: _corpus(
+            _with_files(
+                _golden_module(),
+                adapter=("from re import compile as pattern\n\n_PATTERN = pattern(r'^x$')\n"),
+            )
+        ),
+        "rule_12_manifest_options",
+    ),
     # rule 42: settings snapshots
     "rule42_clean": (lambda: _corpus(_golden_module()), "rule_42_settings_snapshots"),
     "rule42_snapshot_outside": (
@@ -961,6 +979,26 @@ EXACT_FINDINGS = (
         "rule12_blank_pattern",
         "rule_12_manifest_options",
         ("rule 12: demo: option 'cdn_url' declares a blank validation pattern",),
+    ),
+    (
+        "rule12_adapter_re_compile",
+        "rule_12_manifest_options",
+        (
+            (
+                "rule 12: demo: adapter.py:3: compiles a pattern with re.compile "
+                "instead of evaluating the manifest's declared validation"
+            ),
+        ),
+    ),
+    (
+        "rule12_adapter_re_compile_alias",
+        "rule_12_manifest_options",
+        (
+            (
+                "rule 12: demo: adapter.py:3: compiles a pattern with re.compile "
+                "instead of evaluating the manifest's declared validation"
+            ),
+        ),
     ),
     ("rule42_clean", "rule_42_settings_snapshots", ()),
     (

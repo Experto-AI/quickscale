@@ -892,6 +892,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     conftest hooks from one core base and plugin, module `pyproject.toml` files follow one
     template, manifest descriptions carry no release stamps or ticket ids, and the manifest
     loader rejects a validation key that cannot apply to the option's type.
+  - **Adapters evaluate the declared validation instead of restating it.** The notifications
+    adapter's live-delivery predicate evaluates the rules declared beside the options in
+    `module.yml` — the email, domain, and environment-variable patterns and the placeholder-sender
+    exclusion — so one manifest edit changes both apply-time validation and runtime backend
+    selection, and a configuration the declared rules refuse no longer counts as live-ready; a
+    `re.compile` in any module `adapter.py` fails the module-conventions gate.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

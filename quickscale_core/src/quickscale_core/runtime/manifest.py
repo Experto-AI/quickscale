@@ -65,6 +65,9 @@ from quickscale_core.manifest.entry_point import (
 )
 from quickscale_core.manifest.loader import ManifestError as ManifestError
 from quickscale_core.manifest.option_validation import (
+    collect_resolved_option_validation_issues as collect_resolved_option_validation_issues,
+)
+from quickscale_core.manifest.option_validation import (
     validate_module_options as validate_module_options,
 )
 from quickscale_core.manifest.resolver import ResolverResult as ResolverResult

@@ -194,6 +194,7 @@ __all__ = [
     "ResolverResult",
     "assemble_wiring_spec",
     "build_generic_manifest_spec",
+    "collect_resolved_option_validation_issues",
     "load_module_manifest",
     "validate_module_options",
     "ManifestError",

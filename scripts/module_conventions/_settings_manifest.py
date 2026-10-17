@@ -7,6 +7,7 @@ that module owns rule 12's orchestration and re-exports this module's names.
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Mapping
 from typing import Any
 
@@ -14,6 +15,7 @@ from scripts.module_conventions.core import (
     SETTING_NAME_EXCEPTIONS,
     SNAKE_CASE,
     Module,
+    _parse,
 )
 from scripts.module_conventions.url_options import check_url_normalization
 
@@ -150,3 +152,71 @@ def _option_setting_violations(
             violations.append(f"{prefix} maps to {setting}, expected a QUICKSCALE_ suffix")
         if key.startswith(f"{module.name}_"):
             violations.append(f"{prefix} repeats the module name")
+
+
+#: Rule 12's adapter clause: adapter code evaluates the manifest's declared
+#: validation, so a compiled pattern in ``adapter.py`` is refused (coherence
+#: proposal 55).
+_ADAPTER_FILE = "adapter.py"
+
+_RE_MODULE = "re"
+
+_RE_COMPILE_NAME = "compile"
+
+
+def _re_bindings(tree: ast.Module) -> tuple[frozenset[str], frozenset[str]]:
+    """
+    Return the names bound to the ``re`` module and to its ``compile``.
+
+    The import spellings an adapter could compile a pattern with are gathered
+    from the import statements: ``import re [as <alias>]`` binds the module and
+    ``from re import compile [as <alias>]`` binds the function, so neither an
+    alias nor a direct import slips past the ban.  A later rebinding of an
+    imported name (``compiled = re.compile``) or a star import stays outside
+    this static scan's scope; no shipped adapter uses either.
+    """
+    module_names: set[str] = set()
+    compile_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == _RE_MODULE:
+                    module_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == _RE_MODULE:
+            for alias in node.names:
+                if alias.name == _RE_COMPILE_NAME:
+                    compile_names.add(alias.asname or alias.name)
+    return frozenset(module_names), frozenset(compile_names)
+
+
+def _compiled_pattern_lines(tree: ast.Module) -> list[int]:
+    """Return the source lines of ``re.compile`` calls in *tree*."""
+    module_names, compile_names = _re_bindings(tree)
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name):
+            if func.id in compile_names:
+                lines.append(node.lineno)
+        elif (
+            isinstance(func, ast.Attribute)
+            and func.attr == _RE_COMPILE_NAME
+            and isinstance(func.value, ast.Name)
+            and func.value.id in module_names
+        ):
+            lines.append(node.lineno)
+    return sorted(lines)
+
+
+def _adapter_pattern_compilation_violations(module: Module) -> list[str]:
+    """Rule 12: ``adapter.py`` compiles no pattern of its own."""
+    source = module.files.get(_ADAPTER_FILE)
+    if not source:
+        return []
+    return [
+        f"rule 12: {module.name}: {_ADAPTER_FILE}:{line}: compiles a pattern with "
+        "re.compile instead of evaluating the manifest's declared validation"
+        for line in _compiled_pattern_lines(_parse(source))
+    ]

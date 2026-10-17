@@ -123,6 +123,7 @@ class TestRuntimeAllExport:
 
     def test_all_contains_manifest_adapter_contract_surface(self) -> None:
         adapter_symbols = {
+            "collect_resolved_option_validation_issues",
             "load_module_manifest",
             "validate_module_options",
         }
@@ -193,6 +194,7 @@ class TestRuntimeAllExport:
             "capture_snapshot",
             "clear_backup_snapshot_rollback_pin",
             "collect_capabilities",
+            "collect_resolved_option_validation_issues",
             "create_artifact",
             "create_backup",
             "create_snapshot",

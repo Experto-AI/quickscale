@@ -13,8 +13,10 @@ import pytest
 from quickscale_core.manifest.loader import load_manifest_from_path
 from quickscale_core.manifest.option_validation import (
     collect_option_validation_issues,
+    collect_resolved_option_validation_issues,
     validate_module_options,
 )
+from quickscale_core.manifest.resolved_options import ResolvedOptions
 from quickscale_core.manifest.schema import ConfigOption, ModuleManifest
 from quickscale_core.schema.config_schema import ConfigValidationError, validate_config
 
@@ -125,6 +127,49 @@ class TestOptionValidationEngine:
             r"^\d+/(second|minute|hour|day)$"
         ]
         assert validate_module_options(manifest, {"rate_limit": "5/hour"}) == []
+
+    def test_resolved_values_evaluate_their_declared_rules(self) -> None:
+        """An already-resolved set is judged by the same declared validation."""
+        manifest = _manifest(
+            _option(
+                "sender_email",
+                default="noreply@example.com",
+                setting="SENDER_EMAIL",
+                validation={"pattern": r"^[^@\s]+@[^@\s]+\.[^@\s]+$"},
+            )
+        )
+        valid = ResolvedOptions({"sender_email": "ops@example.com"})
+        assert collect_resolved_option_validation_issues(manifest, valid) == []
+        invalid = ResolvedOptions({"sender_email": "not an address"})
+        issues = collect_resolved_option_validation_issues(manifest, invalid)
+        assert [issue.option_name for issue in issues] == ["sender_email"]
+
+    def test_resolved_values_carry_cross_option_conditions(self) -> None:
+        """A resolved set is the condition context, never a single value."""
+        manifest = _manifest(
+            _option(
+                "sender_email",
+                default="noreply@example.com",
+                setting="SENDER_EMAIL",
+                validation={
+                    "pattern": r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+                    "excludes": {
+                        "values": ["noreply@example.com"],
+                        "when": {"resend_domain": {"not_empty": True}},
+                    },
+                },
+            ),
+            _option("resend_domain", default="", setting="RESEND_DOMAIN"),
+        )
+        console_safe = ResolvedOptions(
+            {"sender_email": "noreply@example.com", "resend_domain": ""}
+        )
+        assert collect_resolved_option_validation_issues(manifest, console_safe) == []
+        targeted = ResolvedOptions(
+            {"sender_email": "noreply@example.com", "resend_domain": "mg.example.com"}
+        )
+        issues = collect_resolved_option_validation_issues(manifest, targeted)
+        assert [issue.option_name for issue in issues] == ["sender_email"]
 
     def test_required_when_fires_only_when_the_condition_holds(self) -> None:
         manifest = _manifest(

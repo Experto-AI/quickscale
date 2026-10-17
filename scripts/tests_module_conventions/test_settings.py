@@ -421,6 +421,18 @@ def test_immutable_django_setting_control() -> None:
     )
 
 
+def test_adapter_compiled_pattern_control() -> None:
+    """Rule 12: adapters evaluate declared validation, never compile patterns."""
+    for source in (
+        "import re\n\n_PATTERN = re.compile(r'^x$')\n",
+        "import re as rx\n\n_PATTERN = rx.compile(r'^x$')\n",
+        "from re import compile as pattern\n\n_PATTERN = pattern(r'^x$')\n",
+    ):
+        module = _with_files(_golden_module(), adapter=source)
+        violations = _violations(checker.rule_12_manifest_options, module)
+        assert any("adapter.py:3" in violation for violation in violations), source
+
+
 def test_malformed_nested_config_shape_is_a_violation() -> None:
     module = _golden_module()
     broken = replace(module, manifest={**module.manifest, "config": [1]})

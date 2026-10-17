@@ -457,8 +457,13 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `adapter.py` and presence re-checks in `checks.py`, each with a control.
 
   **Slices:**
-  - [ ] (a) Notifications' predicates evaluate declared validation, with the `re.compile` ban
-    (Tier 2-fast).
+  - [x] (a) Notifications' predicates evaluate declared validation, with the `re.compile` ban
+    (Tier 2-fast). Landed: the adapter's live-delivery / runtime-backend predicate evaluates the
+    declared `validation` of the sender, domain, and API-key options through the shared engine
+    (`collect_resolved_option_validation_issues`); production-targeted keeps its
+    enabled/non-blank-domain meaning, the hand-written patterns and the placeholder constant are
+    gone, and harness rule 12 bans `re.compile` in `adapter.py` — alias spellings included — with
+    controls; decisions rule 12 carries the clause. (b) is next.
   - [ ] (b) The `throttle_scopes` projection merged in `compose_rest_framework`, five adapters
     migrated, and the literal ban (Tier 2-full: the projection's schema and merge order with
     project overrides need design; it serves five modules, so the

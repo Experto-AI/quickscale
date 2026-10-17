@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 
 class ResolvedOptions:
@@ -71,6 +71,18 @@ class ResolvedOptions:
         values = object.__getattribute__(self, "_values")
         entries = ", ".join(f"{key}={value!r}" for key, value in values.items())
         return f"{type(self).__name__}({entries})"
+
+
+def _resolved_values(resolved: ResolvedOptions) -> Mapping[str, Any]:
+    """Return the frozen values of *resolved* for core-side evaluation.
+
+    The option-validation engine evaluates a manifest's declared rules against
+    an already-resolved option set (Module Conventions rule 12).  The accessor
+    is a module-private function rather than a method, so adapter hooks — which
+    hold only the :class:`ResolvedOptions` object — still cannot re-read an
+    option through a mapping surface (SA281's boundary by construction).
+    """
+    return cast("Mapping[str, Any]", object.__getattribute__(resolved, "_values"))
 
 
 __all__ = ["ResolvedOptions"]

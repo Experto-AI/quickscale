@@ -21,6 +21,7 @@ from typing import Any as Any
 from scripts.module_conventions._settings_manifest import (
     OPTION_TYPES,
     OPTION_VALIDATION_KEYS,
+    _adapter_pattern_compilation_violations,
     _contains_key,
     _declares_option_blocks,
     _manifest_key_violations,
@@ -244,6 +245,9 @@ def rule_3_settings_reads(corpus: Corpus) -> list[str]:
 def rule_12_manifest_options(corpus: Corpus) -> list[str]:
     violations: list[str] = []
     for module in corpus.modules:
+        # The adapter clause is checked for every module, whatever shape its
+        # manifest is in: adapter code evaluates the declared validation.
+        violations.extend(_adapter_pattern_compilation_violations(module))
         manifest = module.manifest
         if not _declares_option_blocks(manifest):
             violations.append(f"rule 12: {module.name}: config must declare mutable and immutable")

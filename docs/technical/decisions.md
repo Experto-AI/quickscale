@@ -920,7 +920,11 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
 - ✅ A runtime predicate that decides module behavior from resolved options — notifications'
   production-targeted / live-delivery checks that select the runtime email backend — is adapter
   code in the module's `adapter.py`, not an option validation rule: it constrains no supplied
-  value, so the option-validation engine never runs it.
+  value, so the option-validation engine never runs it. A predicate that judges those values
+  (the live-delivery check) evaluates the option's declared `validation` through the shared
+  engine (`collect_resolved_option_validation_issues`), so every pattern, exclusion, and
+  requirement keeps its one home in the manifest.
+- ❌ `re.compile` in `adapter.py`, or a declared `validation` rule restated in adapter code.
 - ❌ Option checks, defaults, or legacy option names written for a named module in core or the CLI
   (today `quickscale_core.contracts.resolvers`, `contracts.module_options`,
   `schema.config_schema`, and the CLI's `module_config`); option validation in module code — a

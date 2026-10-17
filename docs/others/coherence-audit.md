@@ -331,8 +331,10 @@ items:
      closed_world: true, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: readme-flag-coverage, status: open, aspect: O, cost: [ambiguity, tax], members_diverging: [backups, forms, orgs], population: command-modules(4),
      rule: "rule 38", check: "README test (command names only)", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: adapter-restates-manifest-validation, status: open, aspect: B, cost: [tax], members_diverging: [notifications], population: adapters(12),
-     rule: "rule 7 / Module Wiring Authority", check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: adapter-restates-manifest-validation, status: resolved, aspect: B, cost: [tax], members_diverging: [], population: adapters(12),
+     rule: "rule 12 (a value-judging runtime predicate evaluates the declared validation)",
+     check: "harness rule 12 (re.compile banned in adapter.py, alias spellings included, with controls); 0 of 12 adapters compile their own patterns",
+     closed_world: true, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-17}
   - {id: startup-presence-guard-copies, status: open, aspect: B, cost: [tax], members_diverging: [analytics, billing, notifications], population: checks-modules(7),
      rule: none, check: none, closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
   - {id: throttle-rate-merge-copies, status: open, aspect: B, cost: [tax], members_diverging: [billing, blog, forms, listings, orgs], population: throttled-modules(5),
@@ -513,7 +515,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 29 | `theme-retired-error-shapes` | P | ambiguity | 0 clients, 2 retired shapes | resolved (SA289 (a)) |
 | 30 | `superuser-escape-spelling` | E | ambiguity, tax | 1 / 2 spellings | resolved (SA290) |
 | 31 | `readme-flag-coverage` | O | ambiguity, tax | 3 / 4 command modules | open (2026-10-16) |
-| 32 | `adapter-restates-manifest-validation` | B | tax | 1 / 12 adapters | open (2026-10-16) |
+| 32 | `adapter-restates-manifest-validation` | B | tax | 0 / 12 adapters | resolved (SA291 (a)) |
 | 33 | `startup-presence-guard-copies` | B | tax | 3 / 7 `checks.py` | open (2026-10-16) |
 | 34 | `throttle-rate-merge-copies` | B | tax | 5 / 5 throttled adapters | open (2026-10-16) |
 | 35 | `command-off-refusal-and-atomic` | J | tax | 3 / 16 commands | open (2026-10-16) |
@@ -2589,6 +2591,7 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-16 — `pyproject-residue`: resolved (SA293 (c) — one pyproject template across the 12 modules: the stale "centralized in root" comments, orgs' `>=` dev floors, and the six `pythonpath` variants are gone, and the table order, the marker block, and every shared value are one; harness rule 18 diffs each file against the template, with controls; proposal 57's one-pyproject-template clause lands here).
 - 2026-10-17 — `manifest-option-residue`: resolved (SA293 (d) — the three release stamps left analytics' and social's option descriptions and notifications' integer `webhook_ttl_seconds` dropped the string `pattern` beside its `min`; harness rule 29 scans every `module.yml` description for ticket ids (any case, embedded included, the contract-vintage id outside it) and rule 12 checks each validation key against the option's type, both with controls; the manifest loader refuses a type-mismatched key at load; proposal 57's manifest-text clause and rule 12's type-fit clause land here).
 - 2026-10-16 — `structured-log-fields`: resolved (SA294 — decisions rule 24 carries the convention: a security or audit event carries `extra=` fields and every other module log line stays message-only; orgs' operator-access and VIEW-AS audit logs are the recorded sites, and the clause stays a review rule).
+- 2026-10-17 — `adapter-restates-manifest-validation`: resolved (SA291 (a) — the notifications adapter's live-delivery predicate evaluates the manifest's declared validation through `collect_resolved_option_validation_issues`; the hand-written email, domain, and env-var-name patterns and the placeholder constant are gone, and harness rule 12 bans `re.compile` in `adapter.py`, alias spellings included, with controls; proposal 55's rule-12 clause lands here, items 33–34 with SA291 (b)–(c)).
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).
 - 2026-10-16 — All other prior IDs: still resolved (harness pass at HEAD; delta has no convention-breaking commit).

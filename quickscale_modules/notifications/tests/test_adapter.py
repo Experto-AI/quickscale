@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import copy
+import importlib
+
 import pytest
 
-from quickscale_core.manifest import ManifestError, build_generic_manifest_spec
+from quickscale_core.manifest import (
+    ManifestError,
+    build_generic_manifest_spec,
+    load_module_manifest,
+)
 from quickscale_modules_notifications.adapter import (
     _notifications_manifest_adapter,
     get_manifest_adapter,
+    notifications_live_delivery_configured,
 )
 
 
@@ -112,3 +120,59 @@ def test_sender_aliases_arrive_from_the_manifest_boundary() -> None:
 
     assert spec.settings["DEFAULT_FROM_EMAIL"] == "noreply@example.com"
     assert spec.settings["SERVER_EMAIL"] == "noreply@example.com"
+
+
+def test_live_delivery_follows_the_manifest_declared_rules(monkeypatch) -> None:
+    """The predicate evaluates the declared validation, not a restated copy."""
+    adapter_module = importlib.import_module("quickscale_modules_notifications.adapter")
+    complete = {
+        "sender_name": "Ops",
+        "sender_email": "other@example.com",
+        "resend_domain": "mg.example.com",
+        "resend_api_key_env_var": "OPS_RESEND_API_KEY",
+    }
+    assert adapter_module.notifications_live_delivery_configured(complete)
+
+    manifest = copy.deepcopy(load_module_manifest("notifications"))
+    manifest.mutable_options["sender_email"].validation["pattern"] = (
+        r"^ops@example\.com$"
+    )
+    monkeypatch.setattr(adapter_module, "load_module_manifest", lambda _name: manifest)
+
+    assert not adapter_module.notifications_live_delivery_configured(complete)
+    assert adapter_module.notifications_live_delivery_configured(
+        {**complete, "sender_email": "ops@example.com"}
+    )
+
+
+def test_live_delivery_requires_a_usable_api_key_reference() -> None:
+    """A blank reference is refused by the declared required_when rule.
+
+    ``apply`` refuses this configuration too, so the predicate never counts a
+    manifest-invalid configuration as live-ready.
+    """
+    complete = {
+        "sender_name": "Ops",
+        "sender_email": "ops@example.com",
+        "resend_domain": "mg.example.com",
+    }
+    assert not notifications_live_delivery_configured(
+        {**complete, "resend_api_key_env_var": ""}
+    )
+    assert not notifications_live_delivery_configured(
+        {**complete, "resend_api_key_env_var": "   "}
+    )
+    assert notifications_live_delivery_configured(
+        {**complete, "resend_api_key_env_var": "OPS_RESEND_API_KEY"}
+    )
+
+
+def test_live_delivery_requires_a_declared_sender_name_type() -> None:
+    """The declared string type decides, not a ``str()`` coercion of it."""
+    complete = {
+        "sender_email": "ops@example.com",
+        "resend_domain": "mg.example.com",
+        "resend_api_key_env_var": "OPS_RESEND_API_KEY",
+    }
+    assert not notifications_live_delivery_configured({**complete, "sender_name": 123})
+    assert not notifications_live_delivery_configured({**complete, "sender_name": None})

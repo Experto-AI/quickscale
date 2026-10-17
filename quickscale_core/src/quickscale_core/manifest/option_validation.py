@@ -77,6 +77,10 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from quickscale_core.manifest.resolved_options import (
+    ResolvedOptions,
+    _resolved_values,
+)
 from quickscale_core.manifest.resolver import normalize_module_option_values
 from quickscale_core.manifest.schema import ConfigOption, ModuleManifest
 
@@ -683,6 +687,27 @@ def collect_option_validation_issues(
     return issues
 
 
+def collect_resolved_option_validation_issues(
+    manifest: ModuleManifest,
+    resolved: ResolvedOptions,
+) -> list[OptionValidationIssue]:
+    """Return declared-validation issues for an already-resolved option set.
+
+    ``plan`` and ``apply`` supply raw values; this entry serves adapter code
+    whose runtime predicate decides module behavior from values the resolver
+    already canonicalized — notifications' production-targeted / live-delivery
+    checks that select the runtime email backend (Module Conventions rule 12) —
+    so an adapter evaluates the manifest's declared ``validation`` instead of
+    restating its patterns, exclusions, and requirements.
+
+    The frozen
+    :class:`~quickscale_core.manifest.resolved_options.ResolvedOptions` object
+    is accepted directly: it exposes no mapping surface to adapter hooks
+    (SA281), so the values are read here, inside core.
+    """
+    return collect_option_validation_issues(manifest, _resolved_values(resolved))
+
+
 def validate_module_options(
     manifest: ModuleManifest,
     overrides: Mapping[str, Any] | None = None,
@@ -706,6 +731,7 @@ __all__ = [
     "VALIDATION_KEY_TYPES",
     "OptionValidationIssue",
     "collect_option_validation_issues",
+    "collect_resolved_option_validation_issues",
     "has_list_normalizer",
     "option_type_matches",
     "option_value_is_empty",
