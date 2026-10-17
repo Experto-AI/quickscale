@@ -265,7 +265,7 @@ Nothing is open. For the watchlist:
   - **E2E path filter dropping `generator/**` (`11da2d79`):** still covered by
     `quickscale_core/src/**`.
   - **`quickscale_backups_restore --file` always refused:** deliberate, documented
-    (`backups/README.md:141–142`), and pinned by
+    (`backups/README.md:149–150`), and pinned by
     `test_restore_file_mode_refuses_bare_file_without_recorded_identity`. The CLI help and usage
     errors no longer offer `--file` as a source (SA292 (b)). That was a coherence note, not a
     defect.
@@ -658,7 +658,7 @@ Prior Q2 (whether hosted E2E at release is relied on) is retired: the trigger is
   heuristic false positive annually).
 - 2026-10-17 — coherence hand-off `quickscale_backups_restore --file` help/behavior: fixed
   (SA292 (b)). Verified at
-  `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_restore.py:42,46,121–128`:
+  `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_restore.py:41,44,120–127`:
   both usage errors list only an artifact id or `--snapshot-id` as restore sources and the
   `--file` help states that a file restore records no migration content identity and is always
   refused, while the guard (`recovery.py` `_get_migration_content_issues`) is unchanged; the
