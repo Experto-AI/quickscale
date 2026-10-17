@@ -76,7 +76,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA153 (e1) | yes | yes | yes | yes | yes |
+| 1 | SA153 (e2) | yes | yes | yes | yes | yes |
 | 2 | SA277 (a) | no | no | yes | no | no |
 | 3 | — | yes | yes | yes | yes | no |
 
@@ -200,10 +200,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
   both checks passing in the project.
 
   **Slices** (in order):
-  - [ ] (e1) The render path: extend the `publicPage` seam to carry a properties surface and a
-    dehydrated react-query state, boot `StaticRouter` in the SSR entry, and prerender catalog and
-    detail with Open Graph tags from data available at build (no database in the Node stage);
-    a crawler test fetches both without JavaScript (Tier 2-full; the one design decision).
+  - [x] (e1): landed on `bap-web-new` as the build-time render path: the `publicPage` seam
+    carries a properties surface (catalog/detail) with the dehydrated react-query state the
+    document was rendered with, `StaticRouter` boots in the SSR entry, the snapshot command
+    exports the public API's exact JSON shape, and the Node prerender writes the catalog and
+    detail documents with Open Graph tags from that snapshot; Django serves them and the boot
+    hydrates cache and markup (decision: image-build prerender from the committed snapshot,
+    documents committed and served by Django). The chromium crawler test fetches both with
+    JavaScript disabled. (e2) is next.
   - [ ] (e2) `sitemap.xml` and `robots.txt` from published listings (Tier 1).
   - [ ] (e3) Rendered-page organization isolation and the journey test over the prerendered
     pages (Tier 2-fast).

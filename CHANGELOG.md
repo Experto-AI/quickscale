@@ -934,6 +934,13 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `runtime/urls.py`, and the layer-table entry a new module edits, and decisions rule 30
     records the module-name composition order of `INSTALLED_APPS` and `MIDDLEWARE` as its
     exception.
+  - **Prerendered public pages hydrate from the theme seam.** The
+    `window.__QUICKSCALE__.publicPage` seam accepts a prerendered project public page (module
+    `properties`, surface `catalog` or `detail`) that carries the document's route and the
+    dehydrated react-query state it was rendered with, so the theme's `src/main.tsx` boot seeds
+    its query cache from that state and adopts the served markup with `hydrateRoot` instead of
+    mounting a fresh client tree. `src/renderQuickScaleRoot.tsx` renders the app tree at a
+    caller-provided static location for an SSR entry while the browser keeps `BrowserRouter`.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -142,4 +142,21 @@ describe('renderQuickScaleRoot', () => {
     renderWithProviders(renderQuickScaleRoot(undefined))
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
   })
+
+  // ── Prerendered document boot (SA153 (e1)) ──────────────────────
+
+  it('boots the app tree at the requested static location for a prerendered properties document', () => {
+    applyConfig({
+      publicPage: {
+        module: 'properties',
+        surface: 'catalog',
+        path: '/properties',
+        dehydratedState: { mutations: [], queries: [] },
+      },
+    })
+    // jsdom's URL is '/', so rendering '/settings' proves the StaticRouter
+    // location drives the tree instead of the browser's location.
+    renderWithProviders(renderQuickScaleRoot(undefined, { staticLocation: '/settings' }))
+    expect(screen.getByText('Settings')).toBeInTheDocument()
+  })
 })

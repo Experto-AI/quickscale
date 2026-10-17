@@ -106,7 +106,7 @@ the shared navigation applies the same installed-and-enabled
 social condition before hydrating or linking. The three-place rule below is unchanged.
 | `owner.mode` | `"solo"` or `"saas"` — see [organizations.md](organizations.md) |
 | `owner.currentOrgSlug` | Current org slug, or `null` |
-| `publicPage` | Optional; present only on public non-SPA social surfaces |
+| `publicPage` | Optional; a discriminated object. On public non-SPA social surfaces: `module: "social"`, `surface: "link_tree"` or `"embeds"`, plus `endpoint` and `navigation`. On a prerendered project public page: `module: "properties"`, `surface: "catalog"` or `"detail"`, the document's `path`, and the `dehydratedState` (react-query mutations and queries) its markup was rendered with — the boot seeds the query cache from it and adopts the served markup with `hydrateRoot` instead of mounting a fresh client tree. |
 
 ### The validator is the contract
 
@@ -280,7 +280,7 @@ Each module surface is in one of three states, and **this is the most important 
 
 `social` is the one surface where React is mounted **outside** the SPA router. `templates/social/link_tree.html.j2` and `templates/social/embeds.html.j2` are separate Django-rendered pages that mount React via `renderQuickScaleRoot(surface)`. Given a `surface` argument and `modules.social`, the root renderer bypasses `BrowserRouter` entirely and lazy-renders a single public page. This is the mechanism to reuse for any future publicly-addressable, server-routed React surface.
 
-Public pages that must reach crawlers running no JavaScript go one step further: the project's build/deploy step prerenders the React page to HTML that carries its indexable content, Open Graph tags, and structured metadata, and React hydrates that document as the interactive layer. SA153's property catalog and detail pages are the first such surface, under [decisions.md § Frontend Rendering Decisions](decisions.md#frontend-rendering-decisions-sa241); the mechanism uses Vite's built-in SSR build with `react-dom/server` and adds no frontend dependency and no Node rendering runtime.
+Public pages that must reach crawlers running no JavaScript go one step further: the project's build/deploy step prerenders the React page to HTML that carries its indexable content, Open Graph tags, and structured metadata, and React hydrates that document as the interactive layer. SA153's property catalog and detail pages are the first such surface, under [decisions.md § Frontend Rendering Decisions](decisions.md#frontend-rendering-decisions-sa241); the mechanism uses Vite's built-in SSR build with `react-dom/server` and adds no frontend dependency and no Node rendering runtime. Such a document serves the seam's `publicPage` object (above) with its route and dehydrated state; the project's SSR entry renders the app tree at that static location and the browser boot hydrates the query cache and the markup in place.
 
 ---
 
