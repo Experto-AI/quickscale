@@ -21,9 +21,6 @@ from quickscale_core.contracts.resolvers import (
 from quickscale_core.manifest.option_validation import (
     validate_module_options as validate_module_options,
 )
-from quickscale_cli.commands.apply_support import (
-    notifications_adapter_module as notifications_adapter_module,
-)
 from quickscale_cli.commands.module_config import (
     MODULE_CONFIGURATOR_REGISTRY as MODULE_CONFIGURATOR_REGISTRY,
 )

@@ -1303,6 +1303,10 @@ rather than the release that introduced it.
   pending the arch watchlist `core-holds-module-vocabulary`; `utils/_dependency_io.py`'s storage
   cloud-extra selection, which has no generic manifest home yet; and
   `commands/_module_embed.py`'s auth migration gate, which runs before the module is importable.
+- ✅ The CLI reaches module-specific behaviour through a manifest field or a generic adapter
+  hook: option values are judged by each module's manifest-declared checks, and a module's
+  adapter may implement the generic `option_validation_guidance` hook to carry its own
+  operator remediation text for refused values.
 - ✅ `module-extension.md`'s authoring checklist states each core edit a new module needs.
 - ❌ A per-module constant, default, or equality branch on a module name in core or the CLI
   outside the listed exceptions.

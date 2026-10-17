@@ -457,7 +457,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Context:** five CLI sites branch on module names outside rule 37's list
   (`_finalize.py:68–76`, `_config.py:402`, `_runtime.py`, `apply_support.py:104`,
   `_plan_validation.py:38–48`), and harness rule 37 matches only `==`/`!=`, so `in` and
-  `.get("<m>")` pass.
+  `.get("<m>")` pass. (a) removed the option-validation trio's names: `_config.py`,
+  `apply_support.py`, and `_plan_validation.py` validate through the manifest engine and
+  the generic `option_validation_guidance` adapter hook. `_finalize.py` and `_runtime.py`
+  keep naming modules for operator next-steps text, which (b) lists as reasoned exceptions.
 
   **Acceptance:** rule 37 carries proposal 51. Option validation in `_config`, `_plan_validation`, and
   `apply_support` runs through a generic adapter hook; operator next-steps text in `_finalize`
@@ -466,8 +469,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   `if "billing" in modules:`.
 
   **Slices:**
-  - [ ] (a) Validation behind the generic hook (Tier 2-full: the hook's callers across plan and
-    apply need discovery).
+  - [x] (a): landed as one generic option-validation pass — every configured module is
+    judged by its manifest's declared checks, module-specific remediation text reaches
+    the CLI through the generic `option_validation_guidance` adapter hook, and the trio
+    names no module in those paths. Rule 37's mechanism clause carries proposal 51.
+    (b) is next.
   - [ ] (b) The listed exceptions and the widened detector (Tier 2-fast).
 
 ### Track 3 — Track 3 hardening, API and theme conventions, and harness by construction

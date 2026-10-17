@@ -21,11 +21,19 @@ from quickscale_core.utils.theme_validation import (
 
 class ConfigValidationError(Exception):
     def __init__(
-        self, message: str, line: int | None = None, suggestion: str | None = None
+        self,
+        message: str,
+        line: int | None = None,
+        suggestion: str | None = None,
+        module_name: str | None = None,
     ):
         self.message = message
         self.line = line
         self.suggestion = suggestion
+        #: The module whose option value the schema refused, when the refusal
+        #: is a manifest-declared option issue; callers render that module's
+        #: remediation hint from it.
+        self.module_name = module_name
         super().__init__(self._format_message())
 
     def _format_message(self) -> str:
@@ -453,6 +461,7 @@ def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, Module
                     "quickscale.yml; the module manifest declares the allowed "
                     "values."
                 ),
+                module_name=module_name,
             )
 
         _validate_declared_module_keys(module_name, module_options, yaml_content)
