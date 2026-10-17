@@ -1,7 +1,7 @@
 # PLAN - Planning and Analysis Guide
 
 Use the shared authority map first, then pull in technical docs such as
-`decisions.md`, `scaffolding.md`, `README.md`, or `user_manual.md` only when
+`decisions.md`, `generated_project_structure.md`, `README.md`, or `user_manual.md` only when
 the task touches those surfaces. This guide keeps the planning-stage checklist
 and questions.
 

@@ -17,7 +17,7 @@
 - 100% user-owned (no vendor lock-in)
 - Can embed modules via git subtree
 
-**See**: [scaffolding.md - Generated Project Output](./docs/technical/scaffolding.md#5-generated-project-output), [user_manual.md](./docs/technical/user_manual.md)
+**See**: [generated_project_structure.md](./docs/technical/generated_project_structure.md#generated-project-output), [user_manual.md](./docs/technical/user_manual.md)
 
 ---
 
@@ -86,7 +86,7 @@ quickscale/
 
 **Benefits**: Atomic commits across packages, shared tooling, simplified testing
 
-**See**: [scaffolding.md - Maintainer and Package Layout](./docs/technical/scaffolding.md#post-mvp-structure)
+**See**: [repository_layout.md](./docs/technical/repository_layout.md#post-mvp-structure)
 
 ---
 
@@ -204,7 +204,7 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 **QuickScale SSOTs**:
 - **Technical Rules**: [decisions.md](./docs/technical/decisions.md) - Authoritative for all architectural decisions and current implementation boundaries
 - **Terminology**: This glossary (GLOSSARY.md)
-- **Directory Structure**: [scaffolding.md](./docs/technical/scaffolding.md)
+- **Directory Structure**: [generated_project_structure.md](./docs/technical/generated_project_structure.md)
 - **Roadmap**: [roadmap.md](./docs/technical/roadmap.md)
 
 **Principle**: Update SSOT FIRST, then propagate to other docs. Never contradict the SSOT.
@@ -267,7 +267,7 @@ The former `showcase_html` (pure HTML + CSS secondary starter) was removed in SA
 ## Related Documentation
 
 - **[decisions.md](./docs/technical/decisions.md)** - Authoritative technical rules and architectural decisions
-- **[scaffolding.md](./docs/technical/scaffolding.md)** - Directory structures and file layouts
+- **[generated_project_structure.md](./docs/technical/generated_project_structure.md)** - Directory structures and file layouts
 - **[plan-apply-system.md](./docs/technical/plan-apply-system.md)** - Plan/apply workflow specification
 - **[quickscale.md](./docs/overview/quickscale.md)** - Current positioning and evolution rationale
 - **[roadmap.md](./docs/technical/roadmap.md)** - Development timeline and milestones

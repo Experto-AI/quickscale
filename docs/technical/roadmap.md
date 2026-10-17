@@ -588,5 +588,13 @@ Standing scope rules, presence contracts, and resource safeguards
 live in [decisions](decisions.md) and
 [validation policy](validation_policy.md#candidate-review-and-integration).
 
+**Unscheduled — React-theme browser coverage.** No test drives `showcase_react` in a real
+browser against a real backend. jsdom route tests (`src/test/*.tsx`) already cover route mounting.
+The repo's Playwright E2E asserts only status 200, the title and the first stylesheet. The
+generated `e2e/home.spec.ts.j2` is stale and no CI runs it. Order when scheduled: (1) fix the
+stub and add `pnpm test:e2e` to `ci.yml.j2`; (2) write the named user journeys; (3) a depth-capped
+link crawler in `test_e2e_full_workflow.py`; (4) full journey E2E against the Docker stack, only
+if it fits the E2E time budget in validation_policy.md.
+
 Changes to this schedule must pass
 `poetry run pytest quickscale_core/tests/test_roadmap_consistency.py -q -o addopts= --no-cov`.

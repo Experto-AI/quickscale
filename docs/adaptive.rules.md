@@ -7,8 +7,8 @@ merge_strategy: append
 <!-- Add reusable principles to be included by reference here -->
 - **Important context (always read)**: [docs/index.md](index.md) — the documentation nav hub and authority map for docs-scoped work.
 - This directory has two audiences: human contributors and AI hydration.
-- Human-first documents: README.md, START_HERE.md, docs/contrib/contributing.md,
-  docs/contrib/shared/README.md. Do not optimize these for AI consumption.
+- Human-first documents: README.md, START_HERE.md, docs/contrib/contributing.md.
+  Do not optimize these for AI consumption.
 - AI hydration documents: docs/technical/ai_context.md is the compact AI baseline;
   docs/technical/decisions.md is the policy authority; other technical docs
   are role-specific includes governed by docs/technical/ai_hydration_topology.md.

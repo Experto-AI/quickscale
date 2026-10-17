@@ -1,9 +1,9 @@
 # Generated Project Structure (Authoritative)
 
 > **You are here**: [QuickScale](../../START_HERE.md) -> [Technical](../index.md) -> **Generated Project Structure**
-> **Related docs**: [Scaffolding](scaffolding.md) | [Implementation Contract](implementation_contract.md) | [Validation Policy](validation_policy.md)
+> **Related docs**: [Implementation Contract](implementation_contract.md) | [Validation Policy](validation_policy.md)
 
-This companion owns the current generated-project layout, starter-theme output, generated artifact placement, and generation guardrails. [scaffolding.md](./scaffolding.md) remains the structure hub and compatibility-anchor map; [decisions.md](./decisions.md) remains the tie-breaker for policy disputes.
+This companion owns the current generated-project layout, starter-theme output, generated artifact placement, and generation guardrails. [decisions.md](./decisions.md) remains the tie-breaker for policy disputes.
 
 <a id="mvp-structure"></a>
 ## Current Generated Structure

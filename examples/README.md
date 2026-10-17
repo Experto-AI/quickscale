@@ -14,4 +14,4 @@ Examples in this directory are intentionally lightweight. They document patterns
 
 - Treat examples as reference material, not authoritative product scope.
 - Copy only the parts that fit a generated project's needs.
-- For repository-wide policy and generated-project rules, defer to [../README.md](../README.md), [../docs/technical/decisions.md](../docs/technical/decisions.md), and [../docs/technical/scaffolding.md](../docs/technical/scaffolding.md).
+- For repository-wide policy and generated-project rules, defer to [../README.md](../README.md), [../docs/technical/decisions.md](../docs/technical/decisions.md), and [../docs/technical/generated_project_structure.md](../docs/technical/generated_project_structure.md).

@@ -23,7 +23,7 @@ CI engineers.
 # Technical Decisions (Authoritative)
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Decisions** (Authoritative)
-> **Related docs**: [Scaffolding](scaffolding.md) | [Roadmap](roadmap.md) | [Glossary](../../GLOSSARY.md) | [Start Here](../../START_HERE.md)
+> **Related docs**: [Roadmap](roadmap.md) | [Glossary](../../GLOSSARY.md) | [Start Here](../../START_HERE.md)
 
 **Purpose:** Repository-wide policy and tie-breaker hub for QuickScale architecture and development standards. Narrow companion docs under `docs/technical/` own the current implementation contract, validation policy, and structure references.
 
@@ -43,7 +43,7 @@ rules that shipped surface must obey; it is not a description of it.
 - ✅ Contributing guides: `docs/contrib/*.md`
 - ✅ `CHANGELOG.md` is the canonical release history index for all versions
 - ✅ Release notes: `docs/releases/release-vX.XX.X.md` are the single public-facing release document for a version and may exist either as a clearly labeled release-prepared artifact before publish or as the linked note after tag/release publication
-- ✅ Use `docs/technical/release_summary_template.md` for every public release note, including prepared artifacts that are awaiting manual publish
+- ✅ Every public release note follows [publish_procedure.md §1.3.1](publish_procedure.md#131-release-note-format), including prepared artifacts awaiting manual publish
 - ✅ Public release notes stay reader-facing and outcome-oriented; keep maintainer-only closeout detail in the release PR or active roadmap section instead of a second repository doc
 - ✅ Unreleased or internal-only versions stay in `roadmap.md` and `CHANGELOG.md` until a maintainer intentionally prepares the single public release note for that version or publishes the tag/release
 - ❌ Do not maintain separate implementation/review release docs or release-archive trees
@@ -1665,7 +1665,7 @@ templates, registration steps, and the per-component checklist are in
 
 ---
 
-**Extended package-layout note:** See [scaffolding.md §4](./scaffolding.md#post-mvp-structure) for maintainer-side namespace and package-layout reference material. It is not part of the current generated-project contract unless a release note and this file say otherwise.
+**Extended package-layout note:** See [repository_layout.md](./repository_layout.md#post-mvp-structure) for maintainer-side namespace and package-layout reference material. It is not part of the current generated-project contract unless a release note and this file say otherwise.
 
 <a id="mvp-feature-matrix-authoritative"></a>
 ## Implementation Surface Matrix (authoritative)
@@ -1810,28 +1810,34 @@ implicit env-var/stdout-JSON coupling.
 
 ## Document Responsibilities
 
-- **decisions.md**: Repo-wide policy, tie-breakers, prohibitions, and document ownership map (authoritative)
-- **implementation_contract.md**: Current shipped implementation contract, CLI surface, and architecture-boundary reference
-- **validation_policy.md**: Validation entrypoints, validation tiers, candidate review and integration, testing standards, coverage expectations, and E2E guidance
-- **generated_project_structure.md**: Generated-project layout, artifact placement, and generation guardrails
-- **repository_layout.md**: Maintainer-repository layout and naming/import matrix
-- **scaffolding.md**: Concise structure hub plus compatibility anchors and backlinks into the structure companions
-- **plan-apply-system.md**: Plan/apply schemas, state management, and execution order
-- **module-extension.md**: Module extension contract and the module-authoring checklist
-- **generated_file_ownership.md**: Beta-migration `INTENTIONALLY_UNMANAGED` category inventory
-- **quality_tools.md**: Quality analyzers plus the fixed fail/warn threshold gate specification
-- **user_manual.md**: CLI workflows and worked examples
-- **CHANGELOG.md**: Canonical all-version release history index
-- **docs/releases/**: Single public release notes, whether they are clearly labeled prepared artifacts awaiting publish or notes already linked from GitHub tags and release PRs
-- **docs/technical/release_summary_template.md**: Template for public release notes and release-prepared artifacts
-- **publish_procedure.md**: Authoritative pre-publish quality gate and the ordered release phases — version stamping, split-branch publication, verification by generated project and deployment, sealing, and the irreversible publication step. Other documents link to it instead of restating release commands; this file keeps the lockstep *rules* it executes
-- **versioning.md**: `VERSION` single-source declaration and propagation semantics, including what the version tool does not derive. Carries no release or publication sequence
-- **roadmap.md**: Open work and active or unreleased release closeout status; its scheduling table is the canonical source for task tracks, dependencies, release requirements, and next actions. Completed work is removed and archived in CHANGELOG.md
-- **docs/others/arch-audit.md**: Live structural findings only — the current open set, each with its promotion trigger. Not a ledger: closed findings, prior-pass narratives, and reconciliation history belong in CHANGELOG.md. Finding numbers are pass-local and MUST NOT be cited as stable identifiers from any other document, test, or source comment
-- **docs/others/tech-audit.md**: Live defect posture only, and the SSOT for found-not-yet-fixed fail-hard violations. Same rule as above: remediated findings are dropped, not archived in place, and no other artifact may pin its finding counts or IDs
-- **README.md**: Project overview, user guide, repo-level navigation
-- **package README.md files**: Package-local installation and responsibility summaries (informational only)
-- **commercial.md**: Commercial distribution background and constraints
+This is the only document-ownership map. Every fact has one owner, and other documents link to
+the owner instead of restating it. **A** = authoritative: rules are binding and are written as
+MUST / MUST NOT (enforced by `scripts/check_doc_phrasing.py`).
+
+| Document | Owns | |
+|---|---|---|
+| decisions.md | repo-wide policy, tie-breakers, prohibitions, this map | **A** |
+| implementation_contract.md | shipped contract, feature matrix, CLI surface | **A** |
+| validation_policy.md | validation entrypoints and tiers, candidate integration, coverage, E2E | **A** |
+| generated_project_structure.md | generated-project layout, artifact placement, generation guardrails | **A** |
+| repository_layout.md | maintainer-repo layout, naming/import matrix | **A** |
+| module-extension.md | module extension contract, module-authoring checklist | **A** |
+| generated_file_ownership.md | beta-migration `INTENTIONALLY_UNMANAGED` inventory | **A** |
+| publish_procedure.md | pre-publish gate, ordered release phases, release-note format | **A** |
+| ai_hydration_topology.md | `adaptive.rules.md` include graph and its change rules | **A** |
+| GLOSSARY.md | terminology | **A** |
+| docs/contrib/rules.md | contributor engineering rules | **A** |
+| plan-apply-system.md | plan/apply schemas, state, execution order | |
+| quality_tools.md | quality analyzers, threshold gate spec | |
+| versioning.md | `VERSION` single source and propagation | |
+| user_manual.md | CLI workflows and worked examples | |
+| roadmap.md | open work; its scheduling table is canonical for tracks, dependencies, next actions. Completed work moves to CHANGELOG.md | |
+| CHANGELOG.md | release history, one entry per version | |
+| docs/releases/ | one public note per version | |
+| docs/others/*-audit.md | open findings only; finding numbers are pass-local and MUST NOT be cited elsewhere | |
+| ai_context.md | derived AI baseline; on conflict the owner above wins | |
+| README.md, START_HERE.md, docs/index.md | navigation and overview | |
+| package and module README.md | package-local install and surface; never contradicts an **A** doc | |
 
 **Rule:** Update the narrow owner first when changing its slice. Update decisions.md in the same change when the repository-wide ownership map, policy, or tie-breakers change.
 
@@ -1861,19 +1867,6 @@ The gate registry and module manifests retain one assigned owning track; do
 not spread their implementation across worktrees. New scope requires its own
 ticket rather than expansion of a cleanup delivery.
 
-**Recorded disposition drift (SA207).** `INTENTIONALLY_UNMANAGED` grew from 78
-to 89 entries across `e12e9867` (78→79) and SA194's closeout `45ca0c0a`
-(79→89) without an update here, and the 2026-09-23 architecture audit classifies
-that growth as decision-record drift against the paragraph above. The ten
-dispositions SA194 added are `.pre-commit-config.yaml`, `frontend/vite.config.ts`,
-`frontend/tsconfig.json`, `frontend/eslint.config.js`,
-`frontend/postcss.config.js`, `frontend/src/lib/validateQuickScaleSeam.ts`,
-`frontend/src/pages/FormsPage.tsx`,
-`frontend/src/pages/SocialLinkTreePublicPage.tsx`,
-`frontend/src/pages/SocialEmbedsPublicPage.tsx`, and
-`frontend/src/hooks/usePublicSocialSurface.ts`. Recording the drift here does
-not authorize further disposition changes; new scope still requires its own
-ticket.
 
 ## Unit/Integration Gate Split
 
@@ -2976,6 +2969,6 @@ quickscale_themes/ecommerce/src/quickscale_themes/ecommerce/...
 core-compatibility = ">=2.0.0,<3.0.0"
 ```
 
-Full naming/import matrix: [scaffolding.md §6](./scaffolding.md#6-naming-import-matrix-summary).
+Full naming/import matrix: [repository_layout.md](./repository_layout.md#6-naming-import-matrix-summary).
 Module responsibility boundaries:
 [implementation_contract.md §Module Boundaries](./implementation_contract.md#module-boundaries).

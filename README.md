@@ -55,7 +55,7 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - 🚀 **Deploying to Railway?** See [railway.md](./docs/deployment/railway.md) for Railway deployment guide
 - 📋 **Planning a feature?** Check [decisions.md](./docs/technical/decisions.md) for the authoritative implementation scope and technical rules
 - 🗓️ **Timeline & tasks?** See [roadmap.md](./docs/technical/roadmap.md)
-- 🏗️ **Project structure?** See [scaffolding.md](./docs/technical/scaffolding.md) for complete directory layouts
+- 🏗️ **Project structure?** See [generated_project_structure.md](./docs/technical/generated_project_structure.md) for complete directory layouts
 - ⚛️ **Working on the frontend?** See [frontend.md](./docs/technical/frontend.md) for the Django/React seam, URL ownership, and the static pipeline
 - 🎯 **Why QuickScale?** See [quickscale.md](./docs/overview/quickscale.md) for competitive positioning
 
@@ -111,7 +111,7 @@ Running `quickscale plan myapp`, entering the generated directory, and then runn
 
 **Note**: The `showcase_html` (pure HTML/CSS) theme option was removed in SA94. `showcase_react` is the sole supported theme.
 
-**See the complete project structure:** [scaffolding.md - Generated Project Output](./docs/technical/scaffolding.md#5-generated-project-output)
+**See the complete project structure:** [generated_project_structure.md](./docs/technical/generated_project_structure.md#generated-project-output)
 
 The generated project is **yours to own and modify** - no vendor lock-in, just Django best practices.
 
@@ -357,6 +357,16 @@ cat .quickscale/quality_gate_status.json  # Gate verdict summary
 - Code duplication (6+ similar lines warning, >=20 fail)
 
 **Exit codes:** 0 (no fail-column finding; warn-column findings print as advisories), 1 (a fail-column finding, a missing analyzer dependency, or unreadable analyzer output). GNU Make reports a failed recipe as its own exit 2.
+
+## Packages
+
+| Directory | Role |
+|---|---|
+| `quickscale` | meta-package that installs the CLI and core |
+| `quickscale_cli` | the `quickscale` command |
+| `quickscale_core` | generator, templates, shared runtime (`dr_engine`, settings facade) |
+| `quickscale_devtools` | maintainer tooling; never shipped into generated projects |
+| `quickscale_modules/<name>` | one first-party module; Python package and Django app label `quickscale_modules_<name>` |
 
 ## Learn More
 

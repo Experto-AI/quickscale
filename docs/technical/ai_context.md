@@ -2,7 +2,7 @@
 
 Compact baseline for AI hydration in QuickScale. This file is derivative and intentionally non-navigational. It summarizes repository-wide facts that every AI role should share; it does not replace the authoritative sources.
 
-> **Drift notice**: This file is a best-effort derivative of `decisions.md` and the companion technical docs. It may lag behind those canonical sources. If any fact here conflicts with `decisions.md`, `implementation_contract.md`, `validation_policy.md`, `generated_project_structure.md`, `repository_layout.md`, or `scaffolding.md`, treat those documents as authoritative immediately — before this file is corrected.
+> **Drift notice**: This file is a best-effort derivative of `decisions.md` and the companion technical docs. It may lag behind those canonical sources. If any fact here conflicts with `decisions.md`, `implementation_contract.md`, `validation_policy.md`, `generated_project_structure.md`, `repository_layout.md`, or `generated_project_structure.md`, treat those documents as authoritative immediately — before this file is corrected.
 
 ## Authority Order
 
@@ -11,10 +11,9 @@ Compact baseline for AI hydration in QuickScale. This file is derivative and int
 3. [validation_policy.md](./validation_policy.md) owns validation entrypoints, testing standards, coverage expectations, and E2E guidance.
 4. [generated_project_structure.md](./generated_project_structure.md) owns generated-project structure, generated artifact placement, and generation guardrails.
 5. [repository_layout.md](./repository_layout.md) owns maintainer-repository layout plus naming and import guidance.
-6. [scaffolding.md](./scaffolding.md) is the concise structure hub that preserves backlinks and compatibility anchors into the companion docs.
-7. Role-specific guides in `docs/contrib/*.md` add stage-local execution guidance when they do not conflict with the technical authorities above.
+6. Role-specific guides in `docs/contrib/*.md` add stage-local execution guidance when they do not conflict with the technical authorities above.
 
-Shared rule sources in `docs/contrib/shared/` remain the normative workflow-agnostic contributor guidance. Stage guides in `docs/contrib/*.md` apply that guidance stage-locally and do not prescribe a required workflow order.
+Contributor engineering rules live in `docs/contrib/rules.md`. Stage guides in `docs/contrib/*.md` apply them and prescribe no workflow order.
 Package READMEs, root `README.md`, `START_HERE.md`, and contributor-router docs are informational or human-first references and do not override the technical authorities above.
 
 ## Workflow Baseline

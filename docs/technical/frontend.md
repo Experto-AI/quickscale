@@ -1,7 +1,7 @@
 # Frontend Architecture
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Technical** → Frontend Architecture
-> **Related docs**: [Decisions](decisions.md) | [Module Extension Contract](module-extension.md) | [Generated Project Structure](generated_project_structure.md) | [Generated File Ownership](generated_file_ownership.md) | [Organizations](organizations.md) | [Frontend E2E Coverage](../planning/frontend-e2e-coverage.md)
+> **Related docs**: [Decisions](decisions.md) | [Module Extension Contract](module-extension.md) | [Generated Project Structure](generated_project_structure.md) | [Generated File Ownership](generated_file_ownership.md) | [Organizations](organizations.md)
 
 <!--
 frontend.md - Frontend Architecture Reference
@@ -295,7 +295,7 @@ Public pages that must reach crawlers running no JavaScript go one step further:
 | Browser E2E | Playwright | `frontend/e2e/` |
 | Lint / types | ESLint + `tsc --noEmit` | `pnpm lint:all` |
 
-`scripts/lint_frontend.sh` and `scripts/frontend_proof.sh` drive the repository-side checks against rendered theme output. Coverage status and gaps are tracked in [frontend-e2e-coverage.md](../planning/frontend-e2e-coverage.md).
+`scripts/lint_frontend.sh` and `scripts/frontend_proof.sh` drive the repository-side checks against rendered theme output. The open browser-coverage gap is tracked in [roadmap.md § Deferred](roadmap.md#deferred-constraints-and-references).
 
 ---
 

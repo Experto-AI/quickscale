@@ -31,4 +31,4 @@ Every directory here is a packaged module; there are no placeholder directories.
 
 - Use this README as a directory-level index only.
 - Use each per-module README for module-specific details.
-- For architecture, scope, and structural rules, defer to [../README.md](../README.md), [../docs/technical/decisions.md](../docs/technical/decisions.md), and [../docs/technical/scaffolding.md](../docs/technical/scaffolding.md).
+- For architecture, scope, and structural rules, defer to [../README.md](../README.md), [../docs/technical/decisions.md](../docs/technical/decisions.md), and [../docs/technical/generated_project_structure.md](../docs/technical/generated_project_structure.md).

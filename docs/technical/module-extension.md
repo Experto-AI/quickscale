@@ -1,7 +1,7 @@
 # Module Extension Contract
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Technical** → Module Extension Contract
-> **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [User Manual](user_manual.md) | [Frontend Architecture](frontend.md)
+> **Related docs**: [Decisions](decisions.md) | [User Manual](user_manual.md) | [Frontend Architecture](frontend.md)
 
 ## Goal
 
@@ -747,7 +747,7 @@ closed; their final and retained-partial evidence is archived in [CHANGELOG.md](
 ### Internal QuickScale References
 
 - [docs/technical/decisions.md](decisions.md)
-- [docs/technical/scaffolding.md](scaffolding.md)
+- [docs/technical/generated_project_structure.md](generated_project_structure.md)
 - [docs/technical/user_manual.md](user_manual.md)
 - [examples/client_extensions/README.md](../../examples/client_extensions/README.md)
 - [quickscale_core/src/quickscale_core/module_wiring.py](../../quickscale_core/src/quickscale_core/module_wiring.py)
