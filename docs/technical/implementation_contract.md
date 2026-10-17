@@ -1,6 +1,5 @@
 # Current Implementation Contract (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) -> [Technical](../index.md) -> **Implementation Contract**
 > **Related docs**: [Decisions](decisions.md) | [Validation Policy](validation_policy.md) | [Generated Project Structure](generated_project_structure.md) | [Repository Layout](repository_layout.md)
 
 This companion owns the current shipped implementation contract, feature-level in/out matrix, CLI surface summary, and architecture-boundary notes. [decisions.md](./decisions.md) remains the repository-wide tie-breaker for cross-cutting policy, prohibitions, and document precedence.
@@ -302,7 +301,6 @@ SA170's final ordered serial and concurrent campaigns passed against retained pr
 closed; their final and retained-partial evidence is archived in [CHANGELOG.md](../../CHANGELOG.md).
 The SA167a ownership guard checks executable source rather than one constructor shape,
 including helper, variable, and alternate-constructor forms.
-
 
 #### Module Derivation Schema Types
 

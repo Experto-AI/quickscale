@@ -17,7 +17,7 @@ Two sentences maximum. Name the setting, command, or file a reader would touch.
 
 **Never put in a changelog entry:** ticket IDs (`SA160`, `TA67`, `EV-8`), commit SHAs, branch or worktree names, dates inside sub-bullets, test/pass/skip counts, coverage percentages, timings, exit codes, evidence paths, or review, attestation, and authorization status. No planning narration — rebalance passes, track moves, "retained partial", "ticket remains open", "no-verdict", what was superseded or corrected in a later pass.
 
-Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`; validation evidence in the release note's Validation section; process history in Git.
+Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`; validation evidence in the release PR; process history in Git.
 
 **The test:** if the change cannot be stated without naming a ticket or a run, it is process, not a change, and it does not go here. Write for someone upgrading QuickScale who never saw the work happen. One bullet per change — describe the end state only, not the path to it, and amend the existing bullet rather than appending a correction.
 

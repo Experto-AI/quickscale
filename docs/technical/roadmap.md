@@ -1,6 +1,5 @@
 # QuickScale Development Roadmap
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap**
 > **Related docs**: [Decisions](decisions.md) | [Validation policy](validation_policy.md) | [Changelog](../../CHANGELOG.md)
 
 ## Goal and finish line
@@ -322,7 +321,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   pre-cutover database is retained until the reseeded site is verified. The production dump at
   `/home/victor/code/bap-web-prod.dump` holds real user data and stays out of every repository.
 
-
 - [ ] **SA153 — Deliver the first property portal using project-owned extensions.**
 
   Target `buenosairesproperties.com` with one React public property surface over a project-owned
@@ -404,7 +402,6 @@ suite, and merge only the reviewed delivery through the serialized queue.
   migration on SA204's frozen history. Close when every item is promoted or dropped with rationale.
 
 - [x] **SA286 — Render module-owned CI environment and operations text into managed includes.**
-
 
 ### Track 2 — gate derivation, release integrity, upgrade path, and manifest conventions
 

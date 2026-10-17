@@ -1,6 +1,5 @@
 # Versioning (single-source)
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Versioning**
 > **Related docs**: [Publish procedure](publish_procedure.md) | [Decisions](decisions.md#module-version-lockstep)
 
 This document owns one thing: how a version number is declared and propagated. **Releasing and

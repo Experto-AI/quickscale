@@ -1,6 +1,5 @@
 # QuickScale Commercial Use Notes
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Overview](../index.md) → **Commercial Use**
 > **Related docs**: [Decisions](../technical/decisions.md) | [Roadmap](../technical/roadmap.md) | [Start Here](../../START_HERE.md)
 
 ## Overview

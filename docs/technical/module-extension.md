@@ -1,6 +1,5 @@
 # Module Extension Contract
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Technical** → Module Extension Contract
 > **Related docs**: [Decisions](decisions.md) | [User Manual](user_manual.md) | [Frontend Architecture](frontend.md)
 
 ## Goal
@@ -81,7 +80,6 @@ no manager declarations — the base owns the contract:
 
 ```python
 from quickscale_modules_listings.models import AbstractListing
-
 
 class ProjectListing(AbstractListing):
     class Meta(AbstractListing.Meta):
@@ -188,7 +186,6 @@ from quickscale_modules_orgs.removal import (
     RemovalAction,
 )
 
-
 class PropertiesConfig(AppConfig):
     name = "properties"
 
@@ -261,7 +258,6 @@ installed:
 from django.apps import AppConfig
 
 from quickscale_core.runtime import PersonalDataField, PersonalDataTreatment
-
 
 class PropertiesConfig(AppConfig):
     name = "properties"

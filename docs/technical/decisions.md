@@ -22,7 +22,6 @@ CI engineers.
 
 # Technical Decisions (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Decisions** (Authoritative)
 > **Related docs**: [Roadmap](roadmap.md) | [Glossary](../../GLOSSARY.md) | [Start Here](../../START_HERE.md)
 
 **Purpose:** Repository-wide policy and tie-breaker hub for QuickScale architecture and development standards. Narrow companion docs under `docs/technical/` own the current implementation contract, validation policy, and structure references.
@@ -459,7 +458,6 @@ with backend and blank-name presence guards. No guard reads secret material.
 Type reference:
 [implementation_contract.md §Manifest Adapter Architecture](./implementation_contract.md#manifest-adapter-architecture).
 
-
 ### Module Wiring Authority {#module-wiring-authority}
 
 **Rule:** A QuickScale module is a **standard Django app** plus **one declarative
@@ -522,26 +520,12 @@ ordinary Django.
 **Tie-breaker:** When two places state which apps a module contributes, the module's
 own `module.yml` wins and the other copy is deleted, not reconciled.
 
-**Known deviations and completed boundary work (updated 2026-08-25).** This section records
-the current state of the target rule. Completed work is retained as evidence; each remaining
-deviation has an owner:
-
-The remaining deviations are scheduled inside v88; none is deferred.
-
-| Deviation | Owner |
-|---|---|
-| Five modules (auth, backups, notifications, orgs, storage) now declare their app lists in their own manifests; core reads those projections | **SA167a** — completed v88, merge #8 |
-| All twelve shipped modules own their adapters and consume the public `quickscale_core.runtime` facade or its `runtime.manifest` subfacade; `quickscale_core/.../manifest/entry_point.py` contains only generic registry/dispatch logic | **SA167b** — completed v88, merge #17; implementation, P4 acceptance, convergence, attestation, and merge-back are complete |
-| The settled CLI product bytes no longer hold per-module wiring logic | **SA167d** — completed v88; evidence in [CHANGELOG.md](../../CHANGELOG.md). |
-| `django_apps:` was parsed by `manifest/loader.py` and read by no production code path; the declaration gate now enforces app projections | **SA167c** — completed v88, merge #21; phases A-F accepted, evidence in [CHANGELOG.md](../../CHANGELOG.md). |
-
 Type reference:
 [implementation_contract.md §Manifest Adapter Architecture](./implementation_contract.md#manifest-adapter-architecture).
 Authoring mechanics:
 [module-extension.md §Building a Module](./module-extension.md#building-a-module-authoring-checklist).
 
-
-### Module Conventions (SA215) {#module-conventions}
+### Module Conventions {#module-conventions}
 
 **Rule:** Every first-party module follows one convention for its settings, its identity names,
 how it reads configuration, how it depends on and talks to other modules, how it exposes URLs,
@@ -1007,9 +991,7 @@ public surface is `services.py` (rule 4).
 - ✅ Modules ship no scheduler. A command meant to run periodically is listed under the
   README's Operations heading with a suggested interval; the operator's cron or platform scheduler
   runs it (backups' `schedule` and `automation_enabled` options already only document this).
-- ✅ A retired command is deleted, not kept behind a guard (rule 6). `migrate_billing_to_orgs`
-  is deleted with its recovery documentation: its 2026-09-16 retirement already stated current
-  installs cannot hold the shape it repairs.
+- ✅ A retired command is deleted, not kept behind a guard (rule 6).
 - ❌ `print()`, `sys.exit()`, or returning normally after a failure; an inline scheduled-off
   refusal, or a `transaction.atomic()` in a command module.
 
@@ -1514,7 +1496,7 @@ mapping that mirrors this section.
 
 ---
 
-### Split-Facade Seams (SA234) {#split-facade-seams}
+### Split-Facade Seams {#split-facade-seams}
 
 **Rule:** A test's seam is the module that defines the name (or an injected collaborator),
 never the re-export path. A private module (`_<name>.py`) imports the sibling modules that
@@ -1537,7 +1519,7 @@ its private siblings one way and re-exports public names only.
 
 ---
 
-### Frontend Rendering Decisions (SA241) {#frontend-rendering-decisions-sa241}
+### Frontend Rendering Decisions {#frontend-rendering-decisions-sa241}
 
 **Decision 1 — Frontend split.** React is the standard frontend for new
 application and public pages — including a public page whose crawlable first
@@ -1745,7 +1727,7 @@ to the module requires a decision entry here.
 
 ---
 
-#### Disaster Recovery Engine Boundary Contract (F5 / M10)
+#### Disaster Recovery Engine Boundary Contract {#disaster-recovery-engine-boundary-contract-f5--m10}
 
 **Why:** The embeddable `backups` module must not carry platform-level
 backup/restore orchestration or talk to the CLI through a hidden
@@ -1848,23 +1830,10 @@ and historical reviews and scheduling decisions in CHANGELOG.md.
 
 ### Release scope safeguards
 
-The v88 cleanup does not authorize teams, another theme, or a third
-generated-project updater. `quickscale_devtools` remains maintainer-internal and
-must not enter the public publish package list. Architecture watchlist findings
-retain their growth triggers; only an explicitly scoped, trigger-independent
-step may proceed before its trigger fires. Such a step does not authorize typed
-disposition metadata, ownership-manifest generation, taxonomy derivation, or
-changes to existing file dispositions.
-
-Preserve the settled module-presence contract and manifest dispatch, local
-wheelhouse version checks, migration baseline, and provisioning behavior. The
-current cleanup grants no edits to `quickscale_core/contracts/` or
-`quickscale_core/manifest/`; any newly authorized behavioral change there must
-be announced in the merge queue because every track consumes those contracts.
-The gate registry and module manifests retain one assigned owning track; do
-not spread their implementation across worktrees. New scope requires its own
-ticket rather than expansion of a cleanup delivery.
-
+- ❌ `quickscale_devtools` in the public publish package list; it is maintainer-internal.
+- ✅ A watchlist finding is acted on only when its trigger fires, or by an explicitly scoped,
+  trigger-independent ticket.
+- ✅ New scope requires its own ticket; it never expands an existing delivery.
 
 ## Unit/Integration Gate Split
 
@@ -1965,15 +1934,9 @@ set as inline command prefixes — never as persistent environment configuration
 | ``QUICKSCALE_PRIVILEGED_COMMAND`` | ``migrate``, ``createcachetable`` | ``start.sh`` / ``quickscale manage`` (inline prefix) | ``DATABASE_URL`` (superuser) |
 | ``QUICKSCALE_NON_DB_COMMAND`` | ``collectstatic``, ``compilemessages`` | ``Dockerfile`` build step (inline prefix) | Dummy ``postgresql://`` URL |
 
-**2026-09-16 retirement decision:** ``migrate_billing_to_orgs`` is not a
-permanent privileged command. Current installs cannot contain its historical
-nullable ownership shape, so the command received no automatic superuser
-connection and is now deleted with its recovery documentation. The sanctioned
-set is permanently the two stable Django built-ins above. Each of the four
-enforcing stations keeps an independent fail-closed refusal, with a
-cross-station regression requiring their declarations to agree. This dated
-decision supersedes the informal 2026-08-31 “permanent two” answer and the
-intervening three-command contract.
+The sanctioned privileged set is exactly the two Django built-ins above. Each of
+the four enforcing stations keeps an independent fail-closed refusal, and a
+cross-station regression test requires their declarations to agree.
 
 **Related:** [Fail-Hard Principle](#fail-hard-principle) (the mutual-exclusion
 check and missing-arg validation follow fail-hard); [Multi-tenant SaaS
@@ -2479,7 +2442,7 @@ than duplicated across module conftests.
 
 ---
 
-### Rendered-Link Sanitization Ownership (SA98) {#rendered-link-sanitization-ownership-sa98}
+### Rendered-Link Sanitization Ownership {#rendered-link-sanitization-ownership-sa98}
 
 **Decision:** The orgs module owns the narrow shared rendered-link sanitization
 seam used by the blog and listings modules. The public API is
@@ -2527,7 +2490,7 @@ request time.
 ---
 
 <a id="af7-installed-wheel-module-discovery"></a>
-### Bundled Module Inventory and Source-Required Paths (AF7)
+### Bundled Module Inventory and Source-Required Paths {#bundled-module-inventory-and-source-required-paths-af7}
 
 **Architectural Decision (SA109):** Distinguish authoritative bundled manifest inventory
 from real module source. The installed-wheel context uses synchronized bundled manifests
@@ -2588,7 +2551,7 @@ catchers import Django's.
 
 ### Module Presence States {#module-presence-states}
 
-**Architectural Decision (2026-08-28, settling roadmap decision D3):** Module discovery
+**Architectural Decision:** Module discovery
 reports **what it observed**, and each consumer applies its own policy. Presence is a
 three-state fact, not a count.
 
@@ -2729,8 +2692,7 @@ fail-closed post-push verification rereads both the tag target and branch and
 rejects any mismatch. The seal target accepts no pre-authorized SHA or
 `ABSENT` value; branch-publication expectations belong only to the preceding
 `publish-module` loop. The narrow reread-to-push race window is accepted and
-detected rather than eliminated; the 2026-08-07 re-scope accepted it because
-that window is strictly smaller than the already accepted residual risk that a
+detected rather than eliminated, because that window is strictly smaller than the already accepted residual risk that a
 force-privileged maintainer can move a tag.
 
 **Known limitation (accepted residual):** split-tag permanence is enforced by client-side
@@ -2831,7 +2793,7 @@ ticket.
 
 ---
 
-### Quality Thresholds Gate (SA243) {#quality-thresholds-gate}
+### Quality Thresholds Gate {#quality-thresholds-gate}
 
 **Rule:** `make quality` has no accepted-debt baseline. Each metric carries one
 fixed fail line and one advisory warn band:

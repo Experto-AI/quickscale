@@ -1,6 +1,5 @@
 # Generated-File Ownership Categories (Beta-Migration Taxonomy)
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Generated-File Ownership**
 > **Related docs**: [Decisions § Generated-File Ownership](decisions.md#generated-file-ownership-taxonomy) (authoritative rules) | [Generated Project Structure](generated_project_structure.md) | [Beta-site migration](../planning/beta-site-migration.md)
 
 **Purpose:** Inventory of the `INTENTIONALLY_UNMANAGED` replacement/merge

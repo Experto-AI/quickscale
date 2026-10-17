@@ -1,6 +1,5 @@
 # Frontend Architecture
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Docs](../index.md) → **Technical** → Frontend Architecture
 > **Related docs**: [Decisions](decisions.md) | [Module Extension Contract](module-extension.md) | [Generated Project Structure](generated_project_structure.md) | [Generated File Ownership](generated_file_ownership.md) | [Organizations](organizations.md)
 
 <!--

@@ -1,6 +1,5 @@
 # QuickScale Competitive Analysis
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Overview](../index.md) → **Competitive Analysis**
 > **Related docs**: [QuickScale Positioning](quickscale.md) | [Decisions](../technical/decisions.md) | [Roadmap](../technical/roadmap.md)
 
 ## Executive Summary
