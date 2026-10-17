@@ -504,8 +504,7 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   Closes coherence gaps 17 and 20–25, which no item carries.
 
-  **Context:** `AppConfig` capability declarations are open-world, with literal sets in both
-  the harness and core; rule 13's `TenantModelAdmin` registration and rule 11's
+  **Context:** rule 13's `TenantModelAdmin` registration and rule 11's
   compare-against-members clause have no detector;
   [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
   these places" checklist omits the seam tables, `runtime/urls.py`, and the layer choice; and
@@ -526,9 +525,14 @@ suite, and merge only the reviewed delivery through the serialized queue.
     outside the detector, recorded in coherence gap 21.
   - [x] (c): landed as the harness's layer-table check: a shipped module missing from
     `MODULE_LAYERS`, an entry naming no module, and any disagreement with decisions' layer
-    table fail the check, with control cases and a fail-closed table parser. (d) is next.
-  - [ ] (d) Capability declarations checked against core's `CAPABILITIES`, the harness reading
-    core's set instead of its own literal (Tier 2-fast).
+    table fail the check, with control cases and a fail-closed table parser.
+  - [x] (d): landed as the harness reading core's `CAPABILITIES` instead of its own literal —
+    the corpus carries core's `runtime/conventions.py` text and rule 4 parses it fail-closed —
+    with `AppConfig` declarations checked against that set: a public member that is not a
+    Django `AppConfig` member, a listed capability, or a hook name the tree names where a
+    declaration drives it fails the check. Control cases pin the vocabulary source, the
+    misspelled declaration, the named hook, and the unreadable shapes; a live-tree control
+    matches the parse to core's runtime mapping. (e, f) are next.
   - [ ] (e, f) One session: detectors for rule 13's admin registration and rule 11's
     compare-against-members clause, and the docs — the checklist lists the seam tables,
     `runtime/urls.py`, and the layer choice, and rule 30 names the module-name composition order
