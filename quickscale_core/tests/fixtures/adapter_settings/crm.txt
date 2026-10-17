@@ -44,3 +44,5 @@ MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'crm': {'api_
          'tags_per_page': {'setting': 'QUICKSCALE_CRM_TAGS_PER_PAGE',
                            'type': 'integer',
                            'validation': {'min': 1}}}}
+
+MODULE_THROTTLE_SCOPES: dict[str, str] = {}

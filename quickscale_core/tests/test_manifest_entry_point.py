@@ -2098,9 +2098,14 @@ class TestBlogManifestBoundary:
         assert spec.settings["QUICKSCALE_BLOG_POSTS_PER_PAGE"] == 10
         assert spec.settings["QUICKSCALE_BLOG_RSS_ENABLED"] is True
         assert spec.settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "5/hour"
-        assert spec.settings["REST_FRAMEWORK"] == {
-            "DEFAULT_THROTTLE_RATES": {"quickscale_blog_api": "5/hour"}
-        }
+        assert dict(spec.throttle_scopes) == {"quickscale_blog_api": "5/hour"}
+
+    def test_declared_scope_rate_follows_the_overridden_option(self) -> None:
+        """The declared scope carries the project's canonical option value."""
+        spec = build_manifest_wiring_spec("blog", {"api_rate_limit": " 45/minute "})
+
+        assert spec.settings["QUICKSCALE_BLOG_API_RATE_LIMIT"] == "45/minute"
+        assert dict(spec.throttle_scopes) == {"quickscale_blog_api": "45/minute"}
 
 
 class TestListingsManifestBoundary:
@@ -2121,9 +2126,7 @@ class TestListingsManifestBoundary:
         spec = build_manifest_wiring_spec("listings", {"per_page": 24})
 
         assert spec.settings["QUICKSCALE_LISTINGS_PER_PAGE"] == 24
-        assert spec.settings["REST_FRAMEWORK"] == {
-            "DEFAULT_THROTTLE_RATES": {"quickscale_listings_api": "5/hour"}
-        }
+        assert dict(spec.throttle_scopes) == {"quickscale_listings_api": "5/hour"}
 
 
 class TestFormsManifestBoundary:
@@ -2146,9 +2149,7 @@ class TestFormsManifestBoundary:
         spec = build_manifest_wiring_spec("forms", {"submissions_per_page": 25})
 
         assert spec.settings["QUICKSCALE_FORMS_SUBMISSIONS_PER_PAGE"] == 25
-        assert spec.settings["REST_FRAMEWORK"] == {
-            "DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "5/hour"}
-        }
+        assert dict(spec.throttle_scopes) == {"quickscale_forms_submit": "5/hour"}
 
 
 _SA167A_MANIFEST_APPS: dict[str, tuple[str, ...]] = {

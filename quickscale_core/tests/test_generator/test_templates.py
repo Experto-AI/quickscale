@@ -127,6 +127,7 @@ def _execute_rendered_settings(
     config_values: dict[str, object],
     module_settings: dict[str, object] | None = None,
     module_settings_schema: dict[str, object] | None = None,
+    module_throttle_scopes: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Execute rendered settings modules with lightweight import stubs."""
     settings_package_name = f"{package_name}.settings"
@@ -145,6 +146,11 @@ def _execute_rendered_settings(
         modules_module,
         "MODULE_SETTINGS_SCHEMA",
         dict(module_settings_schema or {}),
+    )
+    setattr(
+        modules_module,
+        "MODULE_THROTTLE_SCOPES",
+        dict(module_throttle_scopes or {}),
     )
 
     decouple_module = types.ModuleType("decouple")
@@ -1407,6 +1413,7 @@ class TestProductionReadyFeatures:
         setattr(modules_module, "MODULE_MIDDLEWARE", [])
         setattr(modules_module, "MODULE_SETTINGS", {})
         setattr(modules_module, "MODULE_SETTINGS_SCHEMA", {})
+        setattr(modules_module, "MODULE_THROTTLE_SCOPES", {})
 
         def fake_config(
             _key: str,
@@ -1535,8 +1542,10 @@ class TestDrfPermissionBaseline:
 
         call = output[output.index("REST_FRAMEWORK = compose_rest_framework(") :]
         assert 'globals().get("REST_FRAMEWORK")' in call
+        assert "throttle_scopes=MODULE_THROTTLE_SCOPES" in call
         assert "use_x_forwarded_for=USE_X_FORWARDED_FOR" in call
         assert "trusted_proxy_count=TRUSTED_PROXY_COUNT" in call
+        assert "    MODULE_THROTTLE_SCOPES,\n" in output
 
     def test_exception_handler_resolves_in_executed_settings(
         self,
@@ -1646,13 +1655,13 @@ class TestDrfPermissionBaseline:
             "user": "3000/hour",
         }
 
-    def test_module_supplied_throttle_rate_survives_composition(
+    def test_declared_throttle_scopes_survive_composition(
         self,
         jinja_env: Environment,
         test_context: dict[str, str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A module-contributed throttle rate must survive REST_FRAMEWORK composition."""
+        """A declared module throttle scope must survive REST_FRAMEWORK composition."""
         base_output = _render_template(
             jinja_env, "project_name/settings/base.py.j2", test_context
         )
@@ -1664,13 +1673,7 @@ class TestDrfPermissionBaseline:
             target_output=base_output,
             target_module_name="base",
             config_values={},
-            module_settings={
-                "REST_FRAMEWORK": {
-                    "DEFAULT_THROTTLE_RATES": {
-                        "quickscale_billing_checkout": "30/hour"
-                    },
-                },
-            },
+            module_throttle_scopes={"quickscale_billing_checkout": "30/hour"},
         )
 
         rest_framework = namespace["REST_FRAMEWORK"]
@@ -1682,6 +1685,39 @@ class TestDrfPermissionBaseline:
         assert rest_framework["DEFAULT_PERMISSION_CLASSES"] == [
             "rest_framework.permissions.IsAuthenticated",
         ]
+
+    def test_project_contribution_wins_over_a_declared_scope(
+        self,
+        jinja_env: Environment,
+        test_context: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The merge order ends with the project's own contribution."""
+        base_output = _render_template(
+            jinja_env, "project_name/settings/base.py.j2", test_context
+        )
+
+        namespace = _execute_rendered_settings(
+            monkeypatch=monkeypatch,
+            package_name=test_context["package_name"],
+            base_output=base_output,
+            target_output=base_output,
+            target_module_name="base",
+            config_values={},
+            module_throttle_scopes={"quickscale_billing_checkout": "30/hour"},
+            module_settings={
+                "REST_FRAMEWORK": {
+                    "DEFAULT_THROTTLE_RATES": {
+                        "quickscale_billing_checkout": "10/hour",
+                    },
+                },
+            },
+        )
+
+        rest_framework = namespace["REST_FRAMEWORK"]
+        assert isinstance(rest_framework, dict)
+        rates = rest_framework["DEFAULT_THROTTLE_RATES"]
+        assert rates["quickscale_billing_checkout"] == "10/hour"
 
     def test_module_supplied_drf_key_wins_composition(
         self,
@@ -2138,6 +2174,7 @@ class TestCorrelationIdFilterRuntime:
         setattr(modules_module, "MODULE_MIDDLEWARE", [])
         setattr(modules_module, "MODULE_SETTINGS", {})
         setattr(modules_module, "MODULE_SETTINGS_SCHEMA", {})
+        setattr(modules_module, "MODULE_THROTTLE_SCOPES", {})
 
         def fake_config(
             _key: str,
@@ -2203,6 +2240,7 @@ class TestCorrelationIdFilterRuntime:
         setattr(modules_module, "MODULE_MIDDLEWARE", [])
         setattr(modules_module, "MODULE_SETTINGS", {})
         setattr(modules_module, "MODULE_SETTINGS_SCHEMA", {})
+        setattr(modules_module, "MODULE_THROTTLE_SCOPES", {})
 
         def fake_config(
             _key: str,

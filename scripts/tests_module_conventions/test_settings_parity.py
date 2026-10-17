@@ -597,6 +597,18 @@ CASES: dict[str, tuple[object, str]] = {
         ),
         "rule_12_manifest_options",
     ),
+    "rule12_adapter_default_throttle_rates": (
+        lambda: _corpus(
+            _with_files(
+                _golden_module(),
+                adapter=(
+                    "settings = {}\n"
+                    "settings['REST_FRAMEWORK'] = {'DEFAULT_THROTTLE_RATES': {'demo_api': rate}}\n"
+                ),
+            )
+        ),
+        "rule_12_manifest_options",
+    ),
     # rule 42: settings snapshots
     "rule42_clean": (lambda: _corpus(_golden_module()), "rule_42_settings_snapshots"),
     "rule42_snapshot_outside": (
@@ -997,6 +1009,17 @@ EXACT_FINDINGS = (
             (
                 "rule 12: demo: adapter.py:3: compiles a pattern with re.compile "
                 "instead of evaluating the manifest's declared validation"
+            ),
+        ),
+    ),
+    (
+        "rule12_adapter_default_throttle_rates",
+        "rule_12_manifest_options",
+        (
+            (
+                "rule 12: demo: adapter.py:2: writes a DEFAULT_THROTTLE_RATES "
+                "literal instead of declaring the module's throttle_scopes in its "
+                "manifest"
             ),
         ),
     ),

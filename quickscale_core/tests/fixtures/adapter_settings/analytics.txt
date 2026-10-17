@@ -44,3 +44,5 @@ MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'analytics': 
                'provider': {'setting': 'QUICKSCALE_ANALYTICS_PROVIDER',
                             'type': 'string',
                             'validation': {'choices': ['posthog']}}}}
+
+MODULE_THROTTLE_SCOPES: dict[str, str] = {}

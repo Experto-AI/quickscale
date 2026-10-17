@@ -248,6 +248,51 @@ class TestRestFrameworkComposition:
                 trusted_proxy_count=0,
             )
 
+    def test_declared_scopes_merge_between_defaults_and_contributions(self) -> None:
+        """Declared scopes win over the defaults; a project's own rate still wins."""
+        composed = facade.compose_rest_framework(
+            {"DEFAULT_THROTTLE_RATES": {"quickscale_forms_submit": "1/hour"}},
+            throttle_scopes={
+                "anon": "10/hour",
+                "quickscale_forms_submit": "20/minute",
+                "quickscale_billing_checkout": "30/hour",
+            },
+            use_x_forwarded_for=False,
+            trusted_proxy_count=0,
+        )
+
+        assert composed["DEFAULT_THROTTLE_RATES"] == {
+            "anon": "10/hour",
+            "user": "3000/hour",
+            "quickscale_billing_checkout": "30/hour",
+            "quickscale_forms_submit": "1/hour",
+        }
+
+    def test_non_mapping_declared_scopes_fail_loudly(self) -> None:
+        """A malformed declared-scope map is refused, not silently dropped."""
+        with pytest.raises(TypeError, match="declared throttle scopes"):
+            facade.compose_rest_framework(
+                throttle_scopes=["quickscale_billing_checkout"],
+                use_x_forwarded_for=False,
+                trusted_proxy_count=0,
+            )
+
+    def test_declared_scopes_do_not_mutate_the_caller_map(self) -> None:
+        """Composition copies the declared scopes instead of editing them."""
+        declared = {"quickscale_billing_checkout": "30/hour"}
+
+        composed = facade.compose_rest_framework(
+            throttle_scopes=declared,
+            use_x_forwarded_for=False,
+            trusted_proxy_count=0,
+        )
+
+        assert declared == {"quickscale_billing_checkout": "30/hour"}
+        rates = composed["DEFAULT_THROTTLE_RATES"]
+        assert isinstance(rates, dict)
+        rates["quickscale_billing_checkout"] = "1/minute"
+        assert declared["quickscale_billing_checkout"] == "30/hour"
+
 
 class TestCorrelationIdContract:
     """The correlation middleware, filter, and formatter share one context var."""

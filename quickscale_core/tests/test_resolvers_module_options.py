@@ -51,6 +51,9 @@ def _make_mock_manifest(
     manifest.get_defaults.return_value = defaults or {}
     manifest.managed_files = {}
     manifest.retired_options = {}
+    # The declared DRF throttle scopes are part of the loaded manifest contract
+    # (SA291); a manifest with no declaration carries an empty mapping.
+    manifest.throttle_scopes = {}
     # SA5.1: manifest bridge reads derivation attributes from the manifest.
     manifest.wiring_projections = None
     manifest.derived_settings = None

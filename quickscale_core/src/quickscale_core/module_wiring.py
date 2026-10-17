@@ -92,6 +92,17 @@ class ModuleWiringSpec:
     managed_files: Mapping[str, str] = field(default_factory=dict)
     settings_schema: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
     """Compiled ``MODULE_SETTINGS_SCHEMA`` entry for this module (rule 3)."""
+    throttle_scopes: Mapping[str, str] = field(default_factory=dict)
+    """Declared DRF throttle scopes mapped to their rates (rule 32).
+
+    Populated from the manifest's ``throttle_scopes`` projection, each scope
+    carrying its declaring ``_RATE_LIMIT`` option's resolved value.  The
+    renderer emits the merged map as ``MODULE_THROTTLE_SCOPES`` and the
+    generated settings pass it to
+    :func:`quickscale_core.runtime.settings.compose_rest_framework`, which
+    merges it under the project's own ``REST_FRAMEWORK`` contribution, so no
+    adapter writes the rate map.
+    """
 
 
 def _merge_unique(items: list[T], additions: Iterable[T]) -> None:
@@ -349,6 +360,34 @@ def collect_settings_schema(
     }
 
 
+def collect_throttle_scopes(
+    module_specs: Mapping[str, ModuleWiringSpec],
+) -> dict[str, str]:
+    """Merge every declared DRF throttle scope into one ``scope -> rate`` map.
+
+    Two modules may declare one scope only with an equal rate: a differing
+    rate fails the merge, naming both modules and the scope, mirroring the
+    settings merge.  The manifest loader already refuses a scope that does
+    not carry its module's stem, so a cross-module conflict here only arises
+    from a hand-authored spec.
+    """
+    scopes: dict[str, str] = {}
+    owners: dict[str, str] = {}
+    for module_name, spec in _sort_module_items(module_specs):
+        for scope, rate in spec.throttle_scopes.items():
+            if scope in scopes and scopes[scope] != rate:
+                raise ValueError(
+                    f"Module wiring conflict: modules '{owners[scope]}' and "
+                    f"'{module_name}' both declare throttle scope '{scope}' "
+                    "with different rates. Two modules may declare one scope "
+                    "only with an equal rate."
+                )
+            if scope not in scopes:
+                scopes[scope] = rate
+                owners[scope] = module_name
+    return scopes
+
+
 def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
     """Render `<package>/settings/modules.py` content.
 
@@ -361,9 +400,13 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
 
     Each module's compiled option schema (rule 3) is rendered as
     ``MODULE_SETTINGS_SCHEMA``, the block the generic startup check reads.
+    The merged declared DRF throttle scopes (rule 32) render as
+    ``MODULE_THROTTLE_SCOPES``, which the generated settings pass to
+    ``compose_rest_framework``.
     """
     apps, middleware, settings, _ = collect_wiring(module_specs)
     schema = collect_settings_schema(module_specs)
+    throttle_scopes = collect_throttle_scopes(module_specs)
 
     has_env_ref = _contains_env_reference(settings)
 
@@ -371,6 +414,7 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
     middleware_text = pformat(middleware, sort_dicts=True, width=88)
     settings_text = pformat(settings, sort_dicts=True, width=88)
     schema_text = pformat(schema, sort_dicts=True, width=88)
+    throttle_scopes_text = pformat(throttle_scopes, sort_dicts=True, width=88)
 
     # Replace '__QS_ENV__:VAR_NAME' with os.environ.get("VAR_NAME", "") and a
     # blank '__QS_ENV__:' marker with the literal empty string.
@@ -390,7 +434,8 @@ def render_settings_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> 
         + f"MODULE_MIDDLEWARE: list[str] = {middleware_text}\n\n"
         + f"MODULE_SETTINGS: dict[str, object] = {settings_text}\n\n"
         + "MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = "
-        + f"{schema_text}\n"
+        + f"{schema_text}\n\n"
+        + f"MODULE_THROTTLE_SCOPES: dict[str, str] = {throttle_scopes_text}\n"
     )
 
 

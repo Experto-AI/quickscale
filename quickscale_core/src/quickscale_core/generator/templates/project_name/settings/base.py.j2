@@ -23,6 +23,7 @@ from .modules import (
     # Django settings expose every uppercase global in this module, and the
     # generic startup check validates against them; the import is the exposure.
     MODULE_SETTINGS_SCHEMA,  # noqa: F401
+    MODULE_THROTTLE_SCOPES,
 )
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -254,14 +255,17 @@ if globals().get("EMAIL_BACKEND") == "anymail.backends.resend.EmailBackend":
 
 
 # DRF composition — the fail-closed defaults (the one QuickScale error handler,
-# authenticated-only permissions, the throttle classes and conservative rates)
-# merged under any module-contributed REST_FRAMEWORK, plus the proxy-derived
-# NUM_PROXIES — lives in the versioned runtime settings facade, so a contract
-# fix ships through the quickscale-core lockstep pin instead of reaching only
-# freshly generated projects.  A module-contributed key still wins on every key
-# it sets; the helper only fills in what a module left unset.
+# authenticated-only permissions, the throttle classes and conservative rates),
+# the module-declared throttle scopes, and any module-contributed
+# REST_FRAMEWORK, plus the proxy-derived NUM_PROXIES — lives in the versioned
+# runtime settings facade, so a contract fix ships through the quickscale-core
+# lockstep pin instead of reaching only freshly generated projects.  The rates
+# merge conservative defaults, then the declared scopes, then the project's own
+# contribution: a module-contributed or project-set key still wins on every key
+# it sets, and the helper fills in what a module left unset.
 REST_FRAMEWORK = compose_rest_framework(
     globals().get("REST_FRAMEWORK"),
+    throttle_scopes=MODULE_THROTTLE_SCOPES,
     use_x_forwarded_for=USE_X_FORWARDED_FOR,
     trusted_proxy_count=TRUSTED_PROXY_COUNT,
 )

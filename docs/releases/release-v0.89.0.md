@@ -41,6 +41,14 @@ surface. DEBUG pages load `frontend/src/index.css` from Vite; non-DEBUG pages lo
 `window.__QUICKSCALE__` seam, URL ownership between the React shell and module routes, the static
 pipeline, and the template-inheritance rule — is documented in `docs/technical/frontend.md`.
 
+A module's DRF throttle scopes are now declared once in its manifest: each throttled module's
+`module.yml` names a `throttle_scopes` mapping of scope to the `_RATE_LIMIT` option that carries
+its rate, and the managed `settings/modules.py` emits the merged `MODULE_THROTTLE_SCOPES` map,
+which the generated `settings/base.py` passes to `compose_rest_framework` as
+`throttle_scopes=`. The composed `REST_FRAMEWORK` merges the conservative `anon`/`user` defaults,
+then the declared module scopes, then a project's own contribution, and a module `adapter.py` that
+writes a `DEFAULT_THROTTLE_RATES` literal fails the conformance gate.
+
 ## Upgrade steps
 
 A project-owned model inherits `TenantModel` (directly or through a module's abstract base) and
@@ -189,6 +197,19 @@ are unchanged. A project with `backups` or `social` installed updates its embedd
 release from a clean tree with `quickscale update --confirm-contract-adoption`, which records the
 module's declared id; an unflagged `quickscale update` or `quickscale apply` is refused while the
 id is pending, and a shipped manifest whose `contract_vintage` declares no id is refused at load.
+
+**Declared throttle scopes.** The managed `settings/modules.py` now carries each installed
+module's declared DRF throttle scopes as `MODULE_THROTTLE_SCOPES` instead of contributing
+`REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]` through `MODULE_SETTINGS`, and the base settings import
+that map and pass it to `compose_rest_framework(..., throttle_scopes=MODULE_THROTTLE_SCOPES, ...)`;
+a project's own `REST_FRAMEWORK` contribution still wins over a declared scope. Run
+`quickscale update --confirm-contract-adoption` from a clean tree once this release's embedded
+modules are available (a project with no embedded modules runs `quickscale apply
+--confirm-contract-adoption` instead, because `update` has nothing to pull): it regenerates the
+managed `modules.py` and records the `sa291-declared-throttle-scopes` step, and the `base.py`
+import and call are adopted by hand. Until then a module view that attaches its throttle by
+`throttle_scope` fails loudly — DRF raises `No default throttle rate set for '<scope>' scope` on
+the first request — rather than serving unthrottled.
 
 ## Breaking changes
 
@@ -372,7 +393,9 @@ project or cron job updates with this release:
   call answers `401` uniformly — the CRM and forms APIs answer `401` where they answered `403`.
 - Module throttles attach by scope through one class: generated settings install
   `QuickscaleScopedRateThrottle` as the default scoped throttle, a view declares only its
-  `throttle_scope`, module wiring contributes only `REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]`, and
+  `throttle_scope`, each throttled module declares its scopes and their `_RATE_LIMIT` option in its
+  manifest's `throttle_scopes` block (core merges the declared rates into the composed
+  `REST_FRAMEWORK`), and
   listings' publish API gains an `api_rate_limit` option.
 - Module APIs answer JSON by default through one composed default: generated settings install
   `JSONRenderer` and `JSONParser` as the composed `REST_FRAMEWORK` renderer and parser defaults,

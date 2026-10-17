@@ -1637,6 +1637,154 @@ ci_env:
 
 
 # ---------------------------------------------------------------------------
+# Declared DRF throttle scopes (SA291)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadManifestThrottleScopes:
+    """Tests for the throttle_scopes section in load_manifest."""
+
+    _OPTIONS = """
+config:
+  mutable:
+    api_rate_limit:
+      type: string
+      default: "5/hour"
+      django_setting: QUICKSCALE_MYMOD_API_RATE_LIMIT
+      description: "Throttle rate for the module API."
+      validation:
+        pattern: ^\\d+/(second|minute|hour|day)$
+    retries:
+      type: integer
+      default: 3
+      django_setting: QUICKSCALE_MYMOD_RETRIES
+      description: "Retry count."
+      validation: {}
+  immutable: {}
+"""
+
+    def test_no_throttle_scopes_section(self) -> None:
+        """Manifests without throttle_scopes produce an empty dict."""
+        manifest = load_manifest("name: mymod\nversion: '1.0.0'\n", "mymod")
+        assert manifest.throttle_scopes == {}
+
+    def test_valid_throttle_scopes_entries(self) -> None:
+        """A stemmed scope maps to its declared string option."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            + self._OPTIONS
+            + "throttle_scopes:\n  quickscale_mymod_api: api_rate_limit\n"
+        )
+        manifest = load_manifest(yaml_content, "mymod")
+        assert manifest.throttle_scopes == {"quickscale_mymod_api": "api_rate_limit"}
+
+    def test_throttle_scopes_not_mapping_raises(self) -> None:
+        """throttle_scopes that is not a mapping is refused."""
+        yaml_content = "name: mymod\nversion: '1.0.0'\nthrottle_scopes: nope\n"
+        with pytest.raises(ManifestError, match="'throttle_scopes' must be a mapping"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_throttle_scope_without_module_stem_raises(self) -> None:
+        """A scope that does not carry the module stem is refused."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            + self._OPTIONS
+            + "throttle_scopes:\n  anon: api_rate_limit\n"
+        )
+        with pytest.raises(ManifestError, match="must carry the module stem"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_throttle_scope_with_empty_purpose_raises(self) -> None:
+        """A scope that is only the stem (no purpose) is refused."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            + self._OPTIONS
+            + "throttle_scopes:\n  quickscale_mymod_: api_rate_limit\n"
+        )
+        with pytest.raises(ManifestError, match="must carry the module stem"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_stem_is_checked_without_a_diagnostic_module_name(self) -> None:
+        """A manifest read without a module_name still validates scope ownership."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            + self._OPTIONS
+            + "throttle_scopes:\n  anon: api_rate_limit\n"
+        )
+        with pytest.raises(ManifestError, match="must carry the module stem"):
+            load_manifest(yaml_content)
+
+    def test_stem_uses_the_declared_name_not_the_diagnostic_label(self) -> None:
+        """Scope ownership follows the manifest's own name, never the label."""
+        refused = (
+            "name: blog\nversion: '1.0.0'\n"
+            + self._OPTIONS
+            + "throttle_scopes:\n  quickscale_billing_checkout: api_rate_limit\n"
+        )
+        with pytest.raises(ManifestError, match="must carry the module stem"):
+            load_manifest(refused, "billing")
+
+        accepted = (
+            "name: blog\nversion: '1.0.0'\n"
+            + self._OPTIONS
+            + "throttle_scopes:\n  quickscale_blog_api: api_rate_limit\n"
+        )
+        manifest = load_manifest(accepted, "billing")
+        assert manifest.throttle_scopes == {"quickscale_blog_api": "api_rate_limit"}
+
+    def test_throttle_scope_unknown_option_raises(self) -> None:
+        """A scope naming no declared option is refused, not ignored."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            + self._OPTIONS
+            + "throttle_scopes:\n  quickscale_mymod_api: missing\n"
+        )
+        with pytest.raises(ManifestError, match="does not name a declared option"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_throttle_scope_non_string_option_raises(self) -> None:
+        """A scope naming a non-string option is refused."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            + self._OPTIONS
+            + "throttle_scopes:\n  quickscale_mymod_api: retries\n"
+        )
+        with pytest.raises(ManifestError, match="must name a string option"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_throttle_scope_empty_value_raises(self) -> None:
+        """A blank option reference is refused."""
+        yaml_content = (
+            "name: mymod\nversion: '1.0.0'\n"
+            + self._OPTIONS
+            + "throttle_scopes:\n  quickscale_mymod_api: ''\n"
+        )
+        with pytest.raises(ManifestError, match="must name the option"):
+            load_manifest(yaml_content, "mymod")
+
+    def test_shipped_throttled_manifests_declare_their_scopes(self) -> None:
+        """The five throttled modules own their scope rates (SA291)."""
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        modules_dir = repo_root / "quickscale_modules"
+        expected = {
+            "billing": {
+                "quickscale_billing_checkout": "api_rate_limit",
+                "quickscale_billing_portal": "api_rate_limit",
+            },
+            "blog": {"quickscale_blog_api": "api_rate_limit"},
+            "forms": {"quickscale_forms_submit": "rate_limit"},
+            "listings": {"quickscale_listings_api": "api_rate_limit"},
+            "orgs": {
+                "quickscale_orgs_invite": "invite_rate_limit",
+                "quickscale_orgs_invite_organization": "invite_rate_limit",
+            },
+        }
+        for module_name, expected_scopes in expected.items():
+            manifest = load_manifest_from_path(modules_dir / module_name / "module.yml")
+            assert manifest.throttle_scopes == expected_scopes
+
+
+# ---------------------------------------------------------------------------
 # Operations declarations (SA286)
 # ---------------------------------------------------------------------------
 

@@ -98,6 +98,11 @@ class ResolverResult:
             through from the :class:`ModuleManifest`.  Empty when the
             manifest declares no managed files.  The assembler converts
             these into ``ModuleWiringSpec.managed_files`` entries.
+        throttle_scopes: The manifest's declared DRF throttle scopes mapped
+            to their resolved rate — the declaring option's canonical value
+            (rule 32).  Empty when the manifest declares no scopes.  The
+            assembler threads these into
+            ``ModuleWiringSpec.throttle_scopes``.
     """
 
     module_name: str
@@ -112,6 +117,7 @@ class ResolverResult:
     pre_home_url_includes: tuple[tuple[str, str], ...] = ()
     spa_routes: tuple[tuple[str, str], ...] = ()
     managed_files: tuple[ManagedFileDeclaration, ...] = ()
+    throttle_scopes: dict[str, str] = field(default_factory=dict)
 
 
 def normalize_module_option_values(
@@ -240,6 +246,8 @@ def resolve_module_config(
     5. Project derived Django settings from the resolved values.
     6. Project wiring contributions and record any direct URL projection whose
        resolved value cannot form its ``[route, include]`` pairs.
+    7. Resolve the declared DRF throttle scopes to their declaring option's
+       canonical rate (rule 32).
 
     The manifest engine is the only path: the per-module contract-file logic
     it replaced is gone.  Manifest-declared option checks run before resolution
@@ -289,6 +297,15 @@ def resolve_module_config(
     wiring = _project_all_wiring(derivation_schema, resolved)
     validation_issues = _url_projection_issues(derivation_schema, resolved)
 
+    # Step 7: Resolve the declared DRF throttle scopes (rule 32) to their
+    # declaring option's canonical rate.  The loader refuses a declaration
+    # whose option is undeclared or not a string option, so every declared
+    # scope has a rate here.
+    throttle_scopes = {
+        scope: str(resolved[option_name])
+        for scope, option_name in manifest.throttle_scopes.items()
+    }
+
     def _to_str_tuple(items: list[Any]) -> tuple[str, ...]:
         return tuple(str(x) for x in items)
 
@@ -308,6 +325,7 @@ def resolve_module_config(
         pre_home_url_includes=_to_url_tuple(wiring["pre_home_url_includes"]),
         spa_routes=_to_url_tuple(wiring["spa_routes"]),
         managed_files=tuple(manifest.managed_files.values()),
+        throttle_scopes=throttle_scopes,
     )
 
 

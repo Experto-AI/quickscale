@@ -32,23 +32,15 @@ gap N". These numbers come from the 2026-10-16 census and stay fixed until the e
 - **Fix.** Rule: a module check MUST NOT re-test a projected setting's presence. Check: a
   rule-6 AST scan.
 
-### `throttle-rate-merge-copies` — adapters hand-merge throttle rates
-**Class:** tax · **Confidence:** High
-
-- **Drift.** The billing, blog, forms, listings and orgs `adapter.py` each hand-merge
-  `REST_FRAMEWORK.DEFAULT_THROTTLE_RATES`.
-- **Fix.** A manifest `throttle_scopes` projection that core merges. Ban
-  `DEFAULT_THROTTLE_RATES` in adapters.
-
 ## Proposed rules (pending merge into decisions.md § Module Conventions)
 
 51. **CLI module knowledge** [`cli-module-name-branches`]. ✅ The CLI reaches module-specific
     behaviour through a manifest field or a generic adapter hook. ❌ A membership, `.get()`, or
     equality branch on a module name in core or the CLI outside rule 37's list. (SA287)
-55. **Manifest owns validation and throttle rates** [`throttle-rate-merge-copies`,
-    `startup-presence-guard-copies`]. ✅ Adapters evaluate the declared validation, and core
-    merges declared throttle scopes. ❌ `re.compile`, a `DEFAULT_THROTTLE_RATES` literal in
-    `adapter.py`, or a presence re-check in `checks.py`. (SA291)
+55. **Manifest owns validation and throttle rates** [`startup-presence-guard-copies`]. ✅ Adapters
+    evaluate the declared validation, and core merges declared throttle scopes. ❌ `re.compile`, a
+    `DEFAULT_THROTTLE_RATES` literal in `adapter.py`, or a presence re-check in `checks.py`.
+    (SA291)
 
 ## Open enforcement gaps (SA296)
 

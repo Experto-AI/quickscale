@@ -72,6 +72,11 @@ config:
 
   immutable: {}
 
+# Declared DRF throttle scopes (rule 32): each scope names the option whose
+# resolved value is its rate, so the adapter carries no rate map.
+throttle_scopes:
+  quickscale_blog_api: api_rate_limit
+
 required_modules:
   - orgs
   - storage

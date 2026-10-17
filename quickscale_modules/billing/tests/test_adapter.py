@@ -1,9 +1,9 @@
 """Focused tests for the billing manifest adapter.
 
-Covers the throttle-scope contribution, the off-switch transformation, the
+Covers the declared throttle scopes, the off-switch transformation, the
 manifest-owned secret references, and the sentinel contract.  The generic
-manifest boundary owns every option default, normalization rule, check, and
-projection; the adapter contributes only the composite settings.
+manifest boundary owns every option default, normalization rule, check,
+projection, and declared throttle scope; the adapter contributes no rate map.
 """
 
 from __future__ import annotations
@@ -34,17 +34,16 @@ class TestGetManifestAdapter:
 class TestBillingManifestAdapterSettings:
     """The manifest owns every canonical billing setting."""
 
-    def test_defaults_include_throttle_scopes(self) -> None:
+    def test_defaults_include_declared_throttle_scopes(self) -> None:
         spec = _billing_manifest_adapter({})
 
         assert spec.settings["QUICKSCALE_BILLING_ENABLED"] is True
         assert spec.settings["QUICKSCALE_BILLING_TRANSACTIONS_PER_PAGE"] == 25
         assert spec.settings["QUICKSCALE_BILLING_PLANS_PER_PAGE"] == 25
-        assert spec.settings["REST_FRAMEWORK"] == {
-            "DEFAULT_THROTTLE_RATES": {
-                "quickscale_billing_checkout": "30/hour",
-                "quickscale_billing_portal": "30/hour",
-            },
+        assert "REST_FRAMEWORK" not in spec.settings
+        assert dict(spec.throttle_scopes) == {
+            "quickscale_billing_checkout": "30/hour",
+            "quickscale_billing_portal": "30/hour",
         }
 
     @pytest.mark.parametrize(
@@ -68,41 +67,47 @@ class TestBillingManifestAdapterSettings:
         spec = _billing_manifest_adapter({"api_rate_limit": " 10/minute "})
 
         assert spec.settings["QUICKSCALE_BILLING_API_RATE_LIMIT"] == "10/minute"
-        assert spec.settings["REST_FRAMEWORK"] == {
-            "DEFAULT_THROTTLE_RATES": {
-                "quickscale_billing_checkout": "10/minute",
-                "quickscale_billing_portal": "10/minute",
-            },
+        assert dict(spec.throttle_scopes) == {
+            "quickscale_billing_checkout": "10/minute",
+            "quickscale_billing_portal": "10/minute",
         }
 
 
 class TestBillingPostHook:
-    """_billing_post_hook — off-switch behaviour and throttle scopes."""
+    """_billing_post_hook — off-switch behaviour and declared scope preservation."""
 
     def test_enabled_returns_the_assembled_spec_with_scopes(self) -> None:
         spec = ModuleWiringSpec(
             apps=("quickscale_modules_billing",),
             middleware=("some.middleware",),
             settings={"QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour"},
-        )
-        result = _billing_post_hook(spec, ResolvedOptions({"enabled": True}))
-
-        assert result.apps == ("quickscale_modules_billing",)
-        assert result.middleware == ("some.middleware",)
-        assert result.settings["REST_FRAMEWORK"] == {
-            "DEFAULT_THROTTLE_RATES": {
+            throttle_scopes={
                 "quickscale_billing_checkout": "30/hour",
                 "quickscale_billing_portal": "30/hour",
             },
+        )
+        result = _billing_post_hook(spec, ResolvedOptions({"enabled": True}))
+
+        assert result is spec
+        assert result.apps == ("quickscale_modules_billing",)
+        assert result.middleware == ("some.middleware",)
+        assert dict(result.throttle_scopes) == {
+            "quickscale_billing_checkout": "30/hour",
+            "quickscale_billing_portal": "30/hour",
         }
 
     def test_disabled_module_keeps_only_the_webhook_mount(self) -> None:
         """Rule 1 (D3)/rule 26: off unmounts pages and APIs but keeps webhooks."""
+        scopes = {
+            "quickscale_billing_checkout": "30/hour",
+            "quickscale_billing_portal": "30/hour",
+        }
         spec = ModuleWiringSpec(
             apps=("rest_framework", "quickscale_modules_billing"),
             settings={"QUICKSCALE_BILLING_API_RATE_LIMIT": "30/hour"},
             pre_home_url_includes=(),
             url_includes=(("billing/", "quickscale_modules_billing.urls"),),
+            throttle_scopes=scopes,
         )
         result = _billing_post_hook(spec, ResolvedOptions({"enabled": False}))
 
@@ -110,12 +115,7 @@ class TestBillingPostHook:
             ("billing/", "quickscale_modules_billing.webhook_urls"),
         )
         assert result.pre_home_url_includes == ()
-        assert result.settings["REST_FRAMEWORK"] == {
-            "DEFAULT_THROTTLE_RATES": {
-                "quickscale_billing_checkout": "30/hour",
-                "quickscale_billing_portal": "30/hour",
-            },
-        }
+        assert dict(result.throttle_scopes) == scopes
 
 
 class TestBillingSecretProjection:

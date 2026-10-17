@@ -14,42 +14,32 @@ from quickscale_core.runtime import (
 def _orgs_post_hook(
     spec: ModuleWiringSpec, resolved: ResolvedOptions
 ) -> ModuleWiringSpec:
-    """Contribute orgs' throttle scopes and apply its off-switch transformation.
+    """Apply orgs' off-switch transformation.
 
     The manifest declares the ``orgs/`` mount and its mode-dependent placement
     (solo mounts before the project's home route, saas after it) as
     conditional wiring projections, and owns the ``mode`` option's
     normalization and checks, so the canonical mode and URL placement already
-    arrive with the spec (Module Conventions rule 7).  It also contributes the
+    arrive with the spec (Module Conventions rule 7).  Its
     ``quickscale_orgs_invite`` and ``quickscale_orgs_invite_organization`` DRF
-    throttle scopes from the ``invite_rate_limit`` option (rule 32), for rule
-    30's merge into the generated ``REST_FRAMEWORK`` block.  Rule 1 (D3): off
-    keeps the module installed — apps, middleware, settings, admin, and data —
-    and mounts none of its organization URLs in either mode.
+    throttle scopes are declared in the manifest's ``throttle_scopes``
+    projection from the ``invite_rate_limit`` option (rule 32), so the
+    projected ``spec.throttle_scopes`` already carries their resolved rates
+    and the hook contributes no rate map.  Rule 1 (D3): off keeps the module
+    installed — apps, middleware, settings, admin, and data — and mounts none
+    of its organization URLs in either mode.
     """
-    settings = dict(spec.settings)
-    invite_rate_limit = settings["QUICKSCALE_ORGS_INVITE_RATE_LIMIT"]
-    settings["REST_FRAMEWORK"] = {
-        "DEFAULT_THROTTLE_RATES": {
-            "quickscale_orgs_invite": invite_rate_limit,
-            "quickscale_orgs_invite_organization": invite_rate_limit,
-        },
-    }
-
     if resolved.enabled:
-        pre_home_url_includes = spec.pre_home_url_includes
-        url_includes = spec.url_includes
-    else:
-        pre_home_url_includes = ()
-        url_includes = ()
+        return spec
 
     return ModuleWiringSpec(
         apps=spec.apps,
         middleware=spec.middleware,
-        settings=settings,
-        pre_home_url_includes=pre_home_url_includes,
-        url_includes=url_includes,
+        settings=spec.settings,
+        pre_home_url_includes=(),
+        url_includes=(),
         managed_files=spec.managed_files,
+        throttle_scopes=spec.throttle_scopes,
     )
 
 

@@ -56,3 +56,5 @@ MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'social': {'c
                                                                             'youtube'],
                                                                  'when': {'embeds_enabled': True}},
                                                   'not_empty': True}}}}
+
+MODULE_THROTTLE_SCOPES: dict[str, str] = {}

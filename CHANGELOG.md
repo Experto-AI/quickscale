@@ -908,6 +908,12 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     Management commands entry, so the backups, forms, and orgs READMEs name every flag; the
     `quickscale_backups_restore` help and usage errors no longer offer `--file` as a restore
     source, because a file restore records no migration content identity and is always refused.
+  - **Modules declare their throttle scopes once.** Each throttled module declares its DRF
+    scopes and the `_RATE_LIMIT` option behind each in its `module.yml`, the managed
+    `settings/modules.py` carries the merged `MODULE_THROTTLE_SCOPES`, and the composed
+    `REST_FRAMEWORK` merges the conservative defaults, then the declared scopes, then a project's
+    own rates; a `DEFAULT_THROTTLE_RATES` literal in a module `adapter.py` fails the
+    module-conventions gate.
 
 - v0.88.0 — released 2026-09-15 — [Request Identity and Manifest-Driven Modules](docs/releases/release-v0.88.0.md). Consolidates canonical request identity and CSRF transport in generated projects, manifest-owned Django app declarations with relocated module adapters, idempotent metadata-derived FORCE RLS enrollment, inode-bound backup locking, one authoritative CI PostgreSQL provisioning contract, and three-state module presence in `quickscale status`. Raises the Python floor to 3.14 for the repository and generated projects.
   - **One canonical request identity.** Generated projects resolve the client identity once behind validated proxy configuration; DRF throttling, the custom blog limiter, form persistence, and CSRF all read that seam instead of deriving it independently.

@@ -68,3 +68,5 @@ MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'backups': {'
              'target_mode': {'setting': 'QUICKSCALE_BACKUPS_TARGET_MODE',
                              'type': 'string',
                              'validation': {'choices': ['local', 'private_remote']}}}}
+
+MODULE_THROTTLE_SCOPES: dict[str, str] = {}

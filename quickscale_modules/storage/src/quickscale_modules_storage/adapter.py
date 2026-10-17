@@ -113,6 +113,7 @@ def _storage_post_hook(
             url_includes=editor_includes,
             spa_routes=(),
             managed_files=spec.managed_files,
+            throttle_scopes=spec.throttle_scopes,
         )
 
     return ModuleWiringSpec(
@@ -123,6 +124,7 @@ def _storage_post_hook(
         url_includes=spec.url_includes,
         spa_routes=spec.spa_routes,
         managed_files=spec.managed_files,
+        throttle_scopes=spec.throttle_scopes,
     )
 
 

@@ -77,12 +77,10 @@ def test_orgs_wiring_spec_registers_solo_runtime_surface() -> None:
         "QUICKSCALE_ORGS_MODE": "solo",
         "QUICKSCALE_ORGS_INVITE_RATE_LIMIT": "20/day",
         "QUICKSCALE_ORGS_PENDING_INVITATION_LIMIT": 50,
-        "REST_FRAMEWORK": {
-            "DEFAULT_THROTTLE_RATES": {
-                "quickscale_orgs_invite": "20/day",
-                "quickscale_orgs_invite_organization": "20/day",
-            },
-        },
+    }
+    assert dict(orgs_spec.throttle_scopes) == {
+        "quickscale_orgs_invite": "20/day",
+        "quickscale_orgs_invite_organization": "20/day",
     }
     assert orgs_spec.pre_home_url_includes == (
         ("orgs/", "quickscale_modules_orgs.urls"),

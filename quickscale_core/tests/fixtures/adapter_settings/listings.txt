@@ -9,8 +9,7 @@ MODULE_MIDDLEWARE: list[str] = []
 
 MODULE_SETTINGS: dict[str, object] = {'QUICKSCALE_LISTINGS_API_RATE_LIMIT': '90/hour',
  'QUICKSCALE_LISTINGS_ENABLED': True,
- 'QUICKSCALE_LISTINGS_PER_PAGE': 12,
- 'REST_FRAMEWORK': {'DEFAULT_THROTTLE_RATES': {'quickscale_listings_api': '90/hour'}}}
+ 'QUICKSCALE_LISTINGS_PER_PAGE': 12}
 
 MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'listings': {'api_rate_limit': {'setting': 'QUICKSCALE_LISTINGS_API_RATE_LIMIT',
                                  'type': 'string',
@@ -21,3 +20,5 @@ MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'listings': {
               'per_page': {'setting': 'QUICKSCALE_LISTINGS_PER_PAGE',
                            'type': 'integer',
                            'validation': {'min': 1}}}}
+
+MODULE_THROTTLE_SCOPES: dict[str, str] = {'quickscale_listings_api': '90/hour'}

@@ -471,10 +471,18 @@ suite, and merge only the reviewed delivery through the serialized queue.
     enabled/non-blank-domain meaning, the hand-written patterns and the placeholder constant are
     gone, and harness rule 12 bans `re.compile` in `adapter.py` — alias spellings included — with
     controls; decisions rule 12 carries the clause. (b) is next.
-  - [ ] (b) The `throttle_scopes` projection merged in `compose_rest_framework`, five adapters
+  - [x] (b) The `throttle_scopes` projection merged in `compose_rest_framework`, five adapters
     migrated, and the literal ban (Tier 2-full: the projection's schema and merge order with
     project overrides need design; it serves five modules, so the
-    `manifest-dsl-vocabulary-growth` watch trigger does not fire).
+    `manifest-dsl-vocabulary-growth` watch trigger does not fire). Landed: `module.yml` declares
+    `throttle_scopes` (scope → `_RATE_LIMIT` option; the loader refuses a non-stemmed scope or an
+    undeclared or non-string option), core resolves the declared rates into the managed
+    `MODULE_THROTTLE_SCOPES`, and `compose_rest_framework` merges conservative defaults, then the
+    declared scopes, then the project's own `REST_FRAMEWORK`; billing, blog, forms, listings, and
+    orgs hand-merge nothing, and harness rule 12 bans the `DEFAULT_THROTTLE_RATES` literal in
+    `adapter.py`, with controls. The generated settings templates change, so the
+    `sa291-declared-throttle-scopes` contract step and the release notes carry the adoption.
+    (c) is next.
   - [ ] (c) Drop the presence re-checks in analytics, billing, and notifications, with the rule-6
     scan (Tier 2-fast).
 
