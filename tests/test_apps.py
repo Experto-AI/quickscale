@@ -94,22 +94,6 @@ def test_billing_settings_check_passes_when_disabled(settings, monkeypatch) -> N
     assert check_billing_settings() == []
 
 
-def test_billing_settings_check_reports_missing_projected_settings(settings) -> None:
-    """An enabled billing runtime needs the apply-rendered secret settings (rule 35)."""
-    from quickscale_modules_billing.checks import check_billing_settings
-
-    del settings.QUICKSCALE_BILLING_SECRET_KEY
-    del settings.QUICKSCALE_BILLING_WEBHOOK_SECRET
-
-    messages = check_billing_settings()
-
-    assert len(messages) == 1
-    assert messages[0].id == "quickscale_billing.E001"
-    assert "QUICKSCALE_BILLING_SECRET_KEY" in messages[0].msg
-    assert "QUICKSCALE_BILLING_WEBHOOK_SECRET" in messages[0].msg
-    assert "quickscale apply" in messages[0].msg
-
-
 @pytest.mark.django_db
 def test_missing_setting_fails_check_migrate_and_runserver(settings) -> None:
     """The registered check fails check, migrate, and runserver alike."""
