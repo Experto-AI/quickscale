@@ -57,15 +57,15 @@ one-way or high-risk step stands alone behind the slices that prove it.
 Track numbers map to worktrees: **1 = wt-track1**, **2 = wt-track2**, **3 = wt-track3**.
 
 ```text
-Track 1: SA191 (repin, cutover) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
+Track 1: SA191 (repin on v89) ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f, go-live) ──► SA154 (inventory)
 Track 2: SA291 (a…c) ──► SA287 (a, b) ──► SA277
 Track 3: SA292 (a, b) ──► SA296 (a…f)
-     release path:  publish 0.89.0 ──► SA191 repin
-     critical path: SA191 cutover ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
+     release path:  publish 0.89.0 ──► SA191 cutover ──► SA153 (f)
+     critical path: SA191 repin ──► SA153 (a…e) ──► SA204 (j) ──► SA153 (f)
 ```
 
 Arrows within a track are queue order; the table holds the dependency edges. Cross-track edges:
-SA191 waits on the 0.89.0 publication; SA291 waited on SA288, which has landed (both rewrote
+SA191's cutover (not its repin) waits on the 0.89.0 publication, and SA153 (f) waits on the cutover; SA291 waited on SA288, which has landed (both rewrote
 the composed `REST_FRAMEWORK`, `runtime/settings.compose_rest_framework`), and SA287 waits on
 SA291 because `apply_support.py:104` consumes the notifications adapter's validation copies;
 SA296 waits on SA292 because both rewrite harness rule 17;
@@ -89,7 +89,7 @@ migration history. The freeze (SA204 (j)) waits until SA153's go-live (maintaine
 non-reseedable tenant data on `bap-web`. SA153's own tables live in the project-owned extension,
 whose migrations are `0002+` from the start either way. Any module `0001` edit made before the
 freeze is applied to `bap-web` by hand or by a reseed. No open ticket changes a module schema.
-SA154 is an inventory, not work. SA191's remaining repin waits for the 0.89.0 publication, and SA204's remaining slice (j) waits for SA153 (e). SA276 has
+SA154 is an inventory, not work. SA191's repin pins the unpublished `v89` tree and does not wait for 0.89.0; its cutover does, and SA204's remaining slice (j) waits for SA153 (e). SA276 has
 landed, so `bap-web-new` adopts its steps once at the repin instead of on a live site
 (arch audit §7); it is not a release requirement.
 
@@ -99,7 +99,7 @@ A track is **truly green** only when all three states are yes.
 
 | Track | Next ticket | Can start | Can finish | Can merge | Truly green | Critical path |
 |---|---|---|---|---|---|---|
-| 1 | SA191 | no | no | yes | no | yes |
+| 1 | SA191 | yes | no | yes | no | yes |
 | 2 | SA291 | yes | yes | yes | yes | no |
 | 3 | SA292 | yes | yes | yes | yes | no |
 
@@ -303,9 +303,11 @@ suite, and merge only the reviewed delivery through the serialized queue.
   rehearsed on scratch. The cutover rebuilds a fresh database and reseeds the catalog under the
   restricted runtime role; billing stays disabled.
 
-  **Remaining:** after 0.89.0 is published, repin
-  `bap-web-new` to it and re-run the rehearsal
-  (agent); then the maintainer runs the Railway cutover, carries media, re-invites users, and
+  **Remaining:** (1) repin (agent, no publication needed): pin `bap-web-new` to the `v89` tree
+  (git or path pin) and re-run the rehearsal; SA153 (a…e) builds on this pin, re-pinned at each
+  `v89` merge that touches modules, with any module `0001` change applied by a reseed. (2) cutover:
+  after 0.89.0 is published, swap the pin to `0.89.0` and re-run the rehearsal, so the unpublished
+  pin never reaches production; then the maintainer runs the Railway cutover, carries media, re-invites users, and
   archives the old repository. The pre-cutover database is retained until the reseeded site is
   verified. The production dump at `/home/victor/code/bap-web-prod.dump` holds real user data and
   stays out of every repository.
