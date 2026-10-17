@@ -12,7 +12,9 @@ import ast
 import io
 import re
 import tokenize
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from scripts.module_conventions.core import Corpus, Module, _parse
 
@@ -33,6 +35,14 @@ TICKET_IN_TEST = re.compile(
 # ids the audit counts alongside ``SA``/``AF`` ids; that scan keeps its
 # historical word-boundary, case-sensitive shape.
 TICKET_IN_SHIPPED = re.compile(r"(?<![A-Za-z0-9])(?:SA|AF)\d+|CR-SA\d+|T\d+\.\d+")
+
+#: A release stamp in a manifest description: a ``v``-prefixed release
+#: (``v0.80``, ``v0.80.0``) or a bare three-component version (``0.80.0``).
+#: Option prose describes behavior, not the release that introduced it.
+VERSION_STAMP_IN_DESCRIPTION = re.compile(
+    r"(?<![A-Za-z0-9])v\d+\.\d+(?:\.\d+)?(?![A-Za-z0-9])"
+    r"|(?<![A-Za-z0-9])\d+\.\d+\.\d+(?![A-Za-z0-9])"
+)
 
 
 def _tests_entry_allowed(rel: str) -> bool:
@@ -64,6 +74,44 @@ def _shipped_ticket_violations(module: Module) -> list[str]:
     for lineno, line in enumerate(module.manifest_text.splitlines(), start=1):
         if TICKET_IN_SHIPPED.search(line):
             violations.append(f"rule 29: {module.name}: module.yml:{lineno} carries a ticket id")
+    return violations
+
+
+def _description_values(node: Any) -> list[str]:
+    """Return every string value the manifest stores under a ``description`` key."""
+    values: list[str] = []
+    if isinstance(node, Mapping):
+        for key, value in node.items():
+            if key == "description" and isinstance(value, str):
+                values.append(value)
+            values.extend(_description_values(value))
+    elif isinstance(node, list):
+        for item in node:
+            values.extend(_description_values(item))
+    return values
+
+
+def _manifest_description_prose_violations(module: Module) -> list[str]:
+    """
+    Return rule 29's ticket ids and release stamps in manifest prose.
+
+    The module, option, and derivation descriptions are shipped text and
+    carry the same no-ticket-id rule as every ``tests/`` entry, in any case
+    and embedded in a longer name, and name behavior rather than the release
+    that introduced it.  The ``contract_vintage`` block's ``sa<NNN>-<slug>``
+    ``id`` is the adopted-step identity the contract vintage requires, not
+    prose, and stays outside this scan.
+    """
+    violations: list[str] = []
+    for value in _description_values(module.manifest):
+        if TICKET_IN_TEST.search(value):
+            violations.append(
+                f"rule 29: {module.name}: module.yml description carries a ticket id: {value!r}"
+            )
+        elif VERSION_STAMP_IN_DESCRIPTION.search(value):
+            violations.append(
+                f"rule 29: {module.name}: module.yml description carries a release stamp: {value!r}"
+            )
     return violations
 
 
@@ -177,6 +225,7 @@ def rule_29_test_names(corpus: Corpus) -> list[str]:
                     f"rule 29: {module.name}: {rel} is outside rule 29's tests file set"
                 )
         violations.extend(_shipped_ticket_violations(module))
+        violations.extend(_manifest_description_prose_violations(module))
         for rel, text in module.tests.items():
             violations.extend(_test_file_ticket_violations(module, rel, text))
             violations.extend(_test_code_ticket_violations(module, rel, text))

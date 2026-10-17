@@ -888,6 +888,10 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     checks the platform operator before elevating a cross-tenant read and refuses — with an audit
     log line — any other user, and management commands enter through a command-only variant that
     records the command and its reason.
+  - **Module tests and manifests share one template.** Module suites take their test settings and
+    conftest hooks from one core base and plugin, module `pyproject.toml` files follow one
+    template, manifest descriptions carry no release stamps or ticket ids, and the manifest
+    loader rejects a validation key that cannot apply to the option's type.
   - **One scheduled-off refusal, and command work opens its own transaction.**
     `quickscale_core.runtime.require_scheduled_module_enabled` refuses a `--trigger scheduled` run
     while its module is off, used by the backups create and prune and forms retention commands,

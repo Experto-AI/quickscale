@@ -99,7 +99,6 @@ config:
       django_setting: QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS
       description: "Maximum accepted webhook timestamp skew in seconds."
       validation:
-        pattern: '^\d+$'
         min: 1
 
   immutable: {}

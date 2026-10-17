@@ -11,7 +11,7 @@ The complete vocabulary, as Module Conventions rule 12 records it:
 * single-value checks — ``choices`` (a closed set; on a ``list`` option each
   item is checked), ``min`` / ``max`` (numeric bounds), ``pattern`` (a
   full-match regular expression), and ``not_empty: true`` (a string not blank;
-  a list or mapping not empty);
+  a list not empty);
 * cross-option checks — ``required_when`` (this option must be set while the
   condition holds), ``any_of`` (at least one sibling is set; a boolean ``false``
   counts as unset inside ``any_of`` only, so a boolean option that must be true
@@ -39,6 +39,13 @@ The complete vocabulary, as Module Conventions rule 12 records it:
   default, prepends ``/`` to a value that neither starts with ``/`` nor
   literally with ``http``, appends ``/`` when absent, and preserves every
   other byte.
+
+Each key applies only to the option types it can check — ``min``/``max`` to
+an ``integer``, ``pattern`` to a ``string``, ``not_empty`` to a ``string`` or
+``list``, ``subset_of``/``intersects`` to a ``list``, ``excludes`` to a scalar
+(``boolean``, ``integer``, or ``string``), and ``choices``, ``required_when``,
+and ``any_of`` to every type; the loader refuses a key declared for a type it
+cannot apply to (``VALIDATION_KEY_TYPES``).
 
 A check this vocabulary cannot express needs a decision edit before it is
 added.  A runtime predicate that decides module behavior from resolved options
@@ -89,6 +96,26 @@ OPTION_TYPE_LABELS: dict[str, tuple[str, str]] = {
     "integer": ("an", "integer"),
     "list": ("a", "list"),
     "string": ("a", "string"),
+}
+
+#: The option types each per-option ``validation`` key can apply to.  A key
+#: outside its declared type's entry would check a value the engine never
+#: gives it a meaningful form of (``pattern`` stringifies an integer,
+#: ``min``/``max`` never see a list, ``intersects`` never sees a scalar), so
+#: the loader refuses the mismatch and the declaration cannot quietly mean
+#: nothing.  ``choices``, ``required_when``, and ``any_of`` apply to every
+#: type.
+VALIDATION_KEY_TYPES: dict[str, frozenset[str]] = {
+    "choices": frozenset(OPTION_TYPE_LABELS),
+    "min": frozenset({"integer"}),
+    "max": frozenset({"integer"}),
+    "pattern": frozenset({"string"}),
+    "not_empty": frozenset({"list", "string"}),
+    "required_when": frozenset(OPTION_TYPE_LABELS),
+    "any_of": frozenset(OPTION_TYPE_LABELS),
+    "subset_of": frozenset({"list"}),
+    "excludes": frozenset({"boolean", "integer", "string"}),
+    "intersects": frozenset({"list"}),
 }
 
 _PATTERN_KEY = "pattern"
@@ -676,6 +703,7 @@ __all__ = [
     "CROSS_OPTION_VALIDATION_KEYS",
     "OPTION_TYPE_LABELS",
     "SINGLE_OPTION_VALIDATION_KEYS",
+    "VALIDATION_KEY_TYPES",
     "OptionValidationIssue",
     "collect_option_validation_issues",
     "has_list_normalizer",

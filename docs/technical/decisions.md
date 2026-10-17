@@ -871,7 +871,7 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
   no others. A check it cannot express needs a decision edit before it is added.
   - Single-value: `choices` (a closed set; on a `list` option it checks each item), `min` / `max`
     (numeric bounds), `pattern` (a full-match regular expression), and `not_empty: true` (a string
-    not blank; a list or mapping not empty).
+    not blank; a list not empty).
   - Cross-option: `required_when` (the option must be set when the condition holds),
     `any_of: [<option>, …]` (at least one listed sibling is set — backups' `endpoint_url` or
     `region_name`; a boolean `false` counts as unset inside `any_of` only, so a boolean option that
@@ -886,6 +886,10 @@ carry their renamed forms (`QUICKSCALE_ORGS_MODE`, `quickscale_backups_create`,
     whose entries must **all** hold; each entry's value is a literal, a list of literals (the
     condition holds on any of them), or `{not_empty: true}` (the option is set). Existing
     single-entry literal/list conditions keep their meaning.
+- ✅ A validation key applies only to the option types it can check: `pattern` to a `string`,
+  `min`/`max` to an `integer`, `not_empty` to a `string` or `list`, `subset_of`/`intersects` to a
+  `list`, and `excludes` to a scalar; `choices`, `required_when`, and `any_of` apply to every type.
+  The loader refuses a key declared for a type it cannot check, and harness rule 12 reports it.
 - ✅ Every option whose type admits invalid values has a check: `<THING>_PER_PAGE` a range from 1,
   `_RETENTION_DAYS` from 0, or from 1 where the module offers no keep-forever (backups),
   `_TTL_SECONDS` from 1; `_RATE_LIMIT` the pattern
@@ -1167,7 +1171,9 @@ name, its docstrings and comments, nor any identifier or string literal under `t
 ticket number (`SA<n>`, `AF<n>`, `CR-SA<n>-<n>`, in any case and embedded in a longer name); the
 test checks all of them. Other files in `tests/` are `conftest.py`, `__init__.py`, `settings*.py`,
 `urls*.py`, private `_`-prefixed files and folders, `templates/` for test-only templates, and test apps
-named `<purpose>_app/`. Shipped module source and `module.yml` follow the same no-ticket-id rule.
+named `<purpose>_app/`. Shipped module source and `module.yml` follow the same no-ticket-id rule;
+a `module.yml` description also carries no release stamp (`v0.80.0` or `0.80.0`), naming behavior
+rather than the release that introduced it.
 
 **30. Settings written by module wiring.**
 - ✅ A module's wiring (`adapter.py`, `module.yml`) writes its own settings and the Django or

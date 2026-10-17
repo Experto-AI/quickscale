@@ -57,6 +57,44 @@ def test_declared_derived_setting_reads_without_adapter_literals(kind, root) -> 
     )
 
 
+@pytest.mark.parametrize(
+    ("key", "option_type", "value", "allowed"),
+    [
+        ("pattern", "integer", "^1$", False),
+        ("pattern", "string", "^local$", True),
+        ("min", "string", 1, False),
+        ("min", "integer", 1, True),
+        ("not_empty", "boolean", True, False),
+        ("not_empty", "list", True, True),
+        ("subset_of", "string", "backend", False),
+        ("subset_of", "list", "backend", True),
+        ("intersects", "string", {"values": ["local"]}, False),
+        ("intersects", "list", {"values": ["local"]}, True),
+        ("excludes", "list", {"values": ["local"]}, False),
+        ("excludes", "string", {"values": ["local"]}, True),
+        ("choices", "integer", [1, 2], True),
+        ("required_when", "boolean", {"enabled": True}, True),
+        ("any_of", "string", ["backend"], True),
+    ],
+)
+def test_validation_key_must_fit_the_option_type(key, option_type, value, allowed) -> None:
+    """Rule 12: a validation key only applies to the types it can check."""
+    module = _golden_module()
+    manifest = copy.deepcopy(module.manifest)
+    option = manifest["config"]["mutable"]["backend"]
+    option["type"] = option_type
+    option["default"] = {
+        "integer": 1,
+        "string": "local",
+        "boolean": True,
+        "list": ["local"],
+    }[option_type]
+    option["validation"] = {key: value}
+    violations = _violations(checker.rule_12_manifest_options, replace(module, manifest=manifest))
+    mismatched = [violation for violation in violations if "uses validation key" in violation]
+    assert bool(mismatched) is not allowed
+
+
 def test_known_vendor_defaults_are_bound_to_each_declaration() -> None:
     root = Path(__file__).resolve().parents[2]
     corpus = checker.load_corpus(root)

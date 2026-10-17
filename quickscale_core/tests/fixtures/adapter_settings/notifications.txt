@@ -73,5 +73,4 @@ MODULE_SETTINGS_SCHEMA: dict[str, dict[str, dict[str, object]]] = {'notification
                                               'validation': {'pattern': '^(?:[A-Z][A-Z0-9_]*)?$'}},
                    'webhook_ttl_seconds': {'setting': 'QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS',
                                            'type': 'integer',
-                                           'validation': {'min': 1,
-                                                          'pattern': '^\\d+$'}}}}
+                                           'validation': {'min': 1}}}}
