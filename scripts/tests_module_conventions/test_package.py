@@ -1454,6 +1454,69 @@ def test_checks_setting_relist_control() -> None:
     assert not any("names setting" in violation for violation in violations)
 
 
+def test_checks_projected_recheck_control() -> None:
+    """Rule 6: checks delegate the projected presence to the generic check."""
+    module = _golden_module()
+    direct = _with_files(
+        module,
+        checks=(
+            "from django.conf import settings\n\n"
+            "from quickscale_core.runtime import projected_setting_names\n\n\n"
+            "def check_demo() -> list[str]:\n"
+            "    return [\n"
+            "        name\n"
+            "        for name in projected_setting_names('demo')\n"
+            "        if not hasattr(settings, name)\n"
+            "    ]\n"
+        ),
+    )
+    assert any(
+        "checks.py:9: re-tests a projected setting's presence" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, direct)
+    )
+    aliased = _with_files(
+        module,
+        checks=(
+            "from quickscale_core.runtime import projected_setting_names as projection\n"
+            "\n"
+            "\n"
+            "def check_demo():\n"
+            "    return projection('demo')\n"
+        ),
+    )
+    assert any(
+        "checks.py:5: re-tests a projected setting's presence" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, aliased)
+    )
+    attribute = _with_files(
+        module,
+        checks=(
+            "import quickscale_core.runtime as runtime\n"
+            "\n"
+            "\n"
+            "def check_demo():\n"
+            "    return runtime.projected_setting_names('demo')\n"
+        ),
+    )
+    assert any(
+        "checks.py:5: re-tests a projected setting's presence" in violation
+        for violation in _violations(checker.rule_6_no_legacy_names, attribute)
+    )
+    sanctioned = _with_files(
+        module,
+        checks=(
+            "from quickscale_core.runtime import module_settings_are_supplied\n"
+            "\n"
+            "\n"
+            "def check_demo() -> list[str]:\n"
+            "    if not module_settings_are_supplied('demo'):\n"
+            "        return []\n"
+            "    return []\n"
+        ),
+    )
+    assert _violations(checker.rule_6_no_legacy_names, sanctioned) == []
+
+
 def test_package_file_controls() -> None:
     module = _golden_module()
     assert _violations(checker.rule_11_package_files, module) == []

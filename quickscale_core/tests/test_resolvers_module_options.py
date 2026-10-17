@@ -441,7 +441,7 @@ derivation:
 
 
 class TestProjectedSettingNames:
-    """A startup check's required names come from the module's manifest projection."""
+    """The generic check's projected names come from the module's manifest."""
 
     @pytest.mark.parametrize(
         ("module_name", "expected"),

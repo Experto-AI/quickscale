@@ -1,7 +1,7 @@
 # Coherence Audit — Open Items
 
 Cross-module conformance drift against [decisions.md § Module Conventions](../technical/decisions.md#module-conventions).
-Last verified at `30b0b6b1` (2026-10-16), full census. Open items only: resolved items (38 of 41),
+Last verified at `30b0b6b1` (2026-10-16), full census. Open items only: resolved items (40 of 41),
 census tables and pass history are in git history. Cite an item by its slug ID, a proposed rule as "coherence proposal N", and a gap as "coherence
 gap N". These numbers come from the 2026-10-16 census and stay fixed until the entry closes.
 
@@ -23,24 +23,11 @@ gap N". These numbers come from the 2026-10-16 census and stay fixed until the e
   fixture: `if "billing" in modules:`.
 - **Related:** arch watchlist `core-holds-module-vocabulary`.
 
-### `startup-presence-guard-copies` — checks re-test projected-setting presence
-**Class:** tax · **Confidence:** Medium
-
-- **Drift.** analytics, billing and notifications `checks.py` repeat the
-  `projected_setting_names` + `hasattr` guard that the generic settings check
-  (`runtime/conventions.py`) already enforces.
-- **Fix.** Rule: a module check MUST NOT re-test a projected setting's presence. Check: a
-  rule-6 AST scan.
-
 ## Proposed rules (pending merge into decisions.md § Module Conventions)
 
 51. **CLI module knowledge** [`cli-module-name-branches`]. ✅ The CLI reaches module-specific
     behaviour through a manifest field or a generic adapter hook. ❌ A membership, `.get()`, or
     equality branch on a module name in core or the CLI outside rule 37's list. (SA287)
-55. **Manifest owns validation and throttle rates** [`startup-presence-guard-copies`]. ✅ Adapters
-    evaluate the declared validation, and core merges declared throttle scopes. ❌ `re.compile`, a
-    `DEFAULT_THROTTLE_RATES` literal in `adapter.py`, or a presence re-check in `checks.py`.
-    (SA291)
 
 ## Open enforcement gaps (SA296)
 

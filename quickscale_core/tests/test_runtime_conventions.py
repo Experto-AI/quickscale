@@ -751,9 +751,14 @@ class TestRegisterModuleSettingsCheck:
         assert "No settings schema for module 'listings'" in message
         assert "quickscale apply" in message
 
-    def test_required_when_violation_fails_startup(self, system_check_registry) -> None:
+    def test_required_when_violation_fails_startup(
+        self, system_check_registry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from django.test import override_settings
 
+        # The synthetic module has no shipped manifest; its projection is
+        # declared empty so the schema control is the one under test.
+        monkeypatch.setattr(conventions, "projected_setting_names", lambda _name: ())
         schema = {
             "demo": {
                 "backend": {
@@ -820,11 +825,14 @@ class TestRegisterModuleSettingsCheck:
         assert "QUICKSCALE_LISTINGS_PER_PAGE is not set" in str(excinfo.value)
 
     def test_library_default_does_not_satisfy_a_declared_setting(
-        self, system_check_registry
+        self, system_check_registry, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A declared setting only a library default supplies is still missing."""
         from django.test import override_settings
 
+        # The synthetic module has no shipped manifest; its projection is
+        # declared empty so the library-default control is the one under test.
+        monkeypatch.setattr(conventions, "projected_setting_names", lambda _name: ())
         schema = {
             "docs": {
                 "media_url": {
@@ -845,11 +853,15 @@ class TestRegisterModuleSettingsCheck:
         assert "MEDIA_URL is not set" in str(excinfo.value)
 
     def test_explicitly_configured_library_named_setting_passes(
-        self, system_check_registry
+        self, system_check_registry, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """An explicitly configured library-named setting satisfies the check."""
         from django.test import override_settings
 
+        # The synthetic module has no shipped manifest; its projection is
+        # declared empty so the configured-library-name control is the one
+        # under test.
+        monkeypatch.setattr(conventions, "projected_setting_names", lambda _name: ())
         schema = {
             "docs": {
                 "media_url": {
@@ -891,6 +903,109 @@ class TestRegisterModuleSettingsCheck:
             assert conventions.module_settings_are_supplied("listings") is False
         with override_settings(MODULE_SETTINGS_SCHEMA={"other": {}}):
             assert conventions.module_settings_are_supplied("listings") is False
+
+    def test_managed_projection_is_required_with_managed_wiring(
+        self, system_check_registry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Rule 10: the generic check names a missing projected setting."""
+        from django.test import override_settings
+
+        monkeypatch.setattr(
+            conventions,
+            "projected_setting_names",
+            lambda _name: ("QUICKSCALE_LISTINGS_PROJECTED",),
+        )
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            MODULE_SETTINGS={"QUICKSCALE_LISTINGS_PER_PAGE": 12},
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
+        ):
+            with pytest.raises(ImproperlyConfigured) as excinfo:
+                conventions.register_module_settings_check(
+                    self._app_config(), "listings"
+                )
+
+        message = str(excinfo.value)
+        assert "QUICKSCALE_LISTINGS_PROJECTED is not set" in message
+        assert "quickscale apply" in message
+
+    def test_managed_projection_present_registers_the_check(
+        self, system_check_registry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A projected setting the managed wiring carries satisfies the check."""
+        from django.test import override_settings
+
+        monkeypatch.setattr(
+            conventions,
+            "projected_setting_names",
+            lambda _name: ("QUICKSCALE_LISTINGS_PROJECTED",),
+        )
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            MODULE_SETTINGS={
+                "QUICKSCALE_LISTINGS_PER_PAGE": 12,
+                "QUICKSCALE_LISTINGS_PROJECTED": "value",
+            },
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
+            QUICKSCALE_LISTINGS_PROJECTED="value",
+        ):
+            conventions.register_module_settings_check(self._app_config(), "listings")
+
+        assert _registered_settings_checks(system_check_registry, self.label)
+
+    def test_projection_outside_managed_wiring_is_not_required(
+        self, system_check_registry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without MODULE_SETTINGS the projection is not a managed contract."""
+        from django.test import override_settings
+
+        monkeypatch.setattr(
+            conventions,
+            "projected_setting_names",
+            lambda _name: ("QUICKSCALE_LISTINGS_PROJECTED",),
+        )
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
+        ):
+            conventions.register_module_settings_check(self._app_config(), "listings")
+
+        assert _registered_settings_checks(system_check_registry, self.label)
+
+    def test_module_settings_are_supplied_covers_managed_projection(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The module check's guard returns False while the generic check owns it."""
+        from django.test import override_settings
+
+        from quickscale_core.runtime import _settings_supplied
+
+        monkeypatch.setattr(
+            _settings_supplied,
+            "projected_setting_names",
+            lambda _name: ("QUICKSCALE_LISTINGS_PROJECTED",),
+        )
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            MODULE_SETTINGS={"QUICKSCALE_LISTINGS_PER_PAGE": 12},
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
+        ):
+            assert conventions.module_settings_are_supplied("listings") is False
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            MODULE_SETTINGS={
+                "QUICKSCALE_LISTINGS_PER_PAGE": 12,
+                "QUICKSCALE_LISTINGS_PROJECTED": "value",
+            },
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
+            QUICKSCALE_LISTINGS_PROJECTED="value",
+        ):
+            assert conventions.module_settings_are_supplied("listings") is True
+        with override_settings(
+            MODULE_SETTINGS_SCHEMA=_LISTINGS_SCHEMA,
+            QUICKSCALE_LISTINGS_PER_PAGE=12,
+        ):
+            assert conventions.module_settings_are_supplied("listings") is True
 
     def test_control_module_settings_helper_requires_a_name(self) -> None:
         with pytest.raises(ValueError, match="non-empty module name"):
