@@ -1,6 +1,5 @@
 # Generated Project Structure (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) -> [Technical](../index.md) -> **Generated Project Structure**
 > **Related docs**: [Implementation Contract](implementation_contract.md) | [Validation Policy](validation_policy.md)
 
 This companion owns the current generated-project layout, starter-theme output, generated artifact placement, and generation guardrails. [decisions.md](./decisions.md) remains the tie-breaker for policy disputes.

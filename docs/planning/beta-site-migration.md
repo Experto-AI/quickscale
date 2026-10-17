@@ -5,9 +5,9 @@ A guide for keeping `bap-web` current with new QuickScale releases.
 Trigger prompt for the maintainer command or report-assisted recovery:
 > "I have a new quickscale project at `/tmp/xxxx`, incorporate the current web at `$HOME/current-web` — follow `docs/planning/beta-site-migration.md`"
 
-## Current maintainer automation surface (updated for v0.89.0)
+## Maintainer automation surface
 
-This playbook documents the beta-site-only maintainer workflow introduced in v0.81.0 and tightened in v0.89.0 for `bap-web`.
+This playbook documents the beta-site-only maintainer workflow for `bap-web`.
 
 ```bash
 make beta-migrate-fresh DONOR=/abs/path/to/existing-beta-site RECIPIENT=/abs/path/to/fresh-scaffold
@@ -99,28 +99,10 @@ local tag steps, and repin the recipient to the release before cutover.
 Every gap an iteration finds gets one row, and a row is closed only by the evidence it names.
 The final iteration runs with every row closed.
 
+Open rows go in this table; closed rows are deleted (their evidence lives in git history). No row is open.
+
 | ID | Found in iteration | Gap | Kind | Resolution | Evidence | Status |
 |---|---|---|---|---|---|---|
-| G-001 | 0 (2026-09-26) | The fresh-first preflight blocks: donor `bap_web/settings/production.py` (generated on v0.62.0) predates the SA206 runtime settings facade and selects its database inline. The donor is read-only, so the block cannot be cleared on the donor side. | tool fix | The tool stops treating an old donor's `production.py` as authoritative: it rewrites the donor's database block onto the facade, carries every other donor setting unchanged, and reports each carried customization. | `test_inline_command_contract_is_rewritten_onto_the_facade`, `test_inline_command_contract_execution_rewrites_the_recipient`, `test_ledger_fixture_donor_carries_app_tokens_module_edit_and_pre_facade_settings`, `make check-beta-migration-smoke`; the pinned-donor dry run plans the rewrite and names all 28 carried settings | closed |
-| G-002 | review (SA214 c) | A donor project-owned app's migrations can own operations the autodetector cannot reproduce — FORCE-RLS policies, composite tenant constraints, data migrations. Regenerating plain model operations would silently drop tenant isolation. | tool fix | The tool regenerates the model state and carries each non-regenerable operation into an appended migration, naming it; an operation that cannot be carried safely blocks before mutation. | `test_migration_owned_operations_are_carried_after_makemigrations`, `test_tuple_migration_operations_are_carried_after_makemigrations`, `test_unresolvable_operation_reference_blocks_before_mutation`, `test_external_migration_dependency_blocks_before_mutation`, `test_dynamic_operations_declaration_blocks_before_mutation`, `test_ledger_fixture_donor_carries_app_tokens_module_edit_and_pre_facade_settings`; the pinned-donor dry run plans `properties/0002` → `0002_carried_propertylisting_seeded_from_catalog.py` | closed |
-| G-003 | pinned-donor dry run (SA214 f) | The pinned donor's root documentation and tooling paths (`roadmap.md`, `formularios.md`, `properties-plan.md`, `adaptive.yml`, `docs/`, `.pnpm-store/`, `.tmp/`, `.claude/`, `coverage.xml`) matched no class, so the classification audit blocked. | tool fix | The taxonomy recognizes top-level Markdown documents and `adaptive.yml` as project-owned, `docs/` as a recognized project root, and the tooling stores plus the coverage report as build artifacts. | `test_donor_documentation_and_tooling_paths_classify`; the pinned-donor dry run reports zero unclassified files | closed |
-| G-004 | execution iteration (SA214 f) | The regeneration step ran the repository Poetry environment's `quickscale`, which has no staged wheelhouse, so the generated project's lockstep `quickscale-core` pin could not resolve for an unreleased target version. | playbook step | The iteration procedure names the staged wheelhouse via `QUICKSCALE_LOCAL_WHEELHOUSE`, so the unreleased pin resolves locally instead of chasing a PyPI version. | the pinned-donor execution iteration regenerated the recipient once the export was set | closed |
-| G-005 | execution iteration (SA214 f) | The verification stack ran bare `pytest`, which resolves to the maintainer's environment instead of the recipient's Poetry environment. | tool fix | The stack runs `poetry run pytest`, the generated project's own `make test` entrypoint. | `EXPECTED_VERIFICATION_SEQUENCE` and the environment assertions in `test_beta_migration.py`; `make check-beta-migration-smoke`; a real generated recipient resolved and ran the command through its own `.venv`, leaving only the project's coverage gate, which is G-007's pre-port test surface | closed |
-| G-006 | execution iteration (SA214 f) | The verification stack's `quickscale manage migrate` execs into the recipient's backend container, but nothing started the recipient's Docker Compose stack, so the command failed against a fresh recipient. | tool fix | The tool starts the stack from a clean state before the first service-backed command and stops it, with the throwaway volumes, after the verification stack even on failure (superseded by G-012's database-service lifecycle). | `test_recipient_services_start_failure_blocks_and_cleans_up`, `test_recipient_services_stop_runs_when_a_verification_command_fails`, `test_recipient_services_cleanup_failure_is_recorded_not_raised`, `make check-beta-migration-smoke`; a real generated recipient started, migrated, and stopped with no containers left | closed |
-| G-007 | execution iteration (SA214 f) | `pnpm build` fails on the pinned donor: transplanted donor pages and components import donor-added `frontend/src/hooks` and `lib` exports, while the donor's divergent shared files (`useApi.ts`, `useModules.ts`) and its `ui/` and test sources are merge work the migration prompt assigns to the manual port; the tool blocks and writes no handoff prompt. | project decision | The verification contract records pre-port manual-port surfaces instead of blocking: a non-zero exit from `pnpm build`, `poetry run pytest`, or `pnpm test` is recorded as a failed result plus a remaining manual action carrying its captured output, the stack continues, and the handoff prompt is the terminal state for the donor; setup, dependency-resolution, migration-regeneration, and migrate commands stay blocking, and timeouts or launch failures block regardless. No frontend-source merge is added. | `test_verification_specs_mark_only_build_and_test_commands_as_pre_port`, `test_pre_port_verification_failure_is_recorded_and_the_prompt_is_written`, `test_pre_port_verification_timeout_still_blocks`, the smoke gate's pre-port case, and the final iteration report (`ready`, 5 passed, 3 recorded) with its `MIGRATION_PROMPT.md` actions | closed |
-| G-008 | execution iteration (SA214 f) | The host verification environment lacked the project's declared CI test credentials, so the foundation `notifications` module failed its eager startup check (`quickscale_notifications.E003`) before the migration could run. | tool fix | Verification commands inherit the env entries the project's generated CI test job declares, with the operator's environment winning; an absent or malformed workflow declares nothing. | `test_project_ci_test_environment_reads_the_test_job_and_falls_back_safely`, `test_verification_environment_inherits_the_projects_declarations`, the smoke gate; the final iteration passed the notifications check | closed |
-| G-009 | execution iteration (SA214 f) | The host verification environment lacked the project's declared restricted runtime-role URL, so `orgs` failed its eager RLS boot guard (`quickscale_orgs.E004`) on a superuser connection. | tool fix | Verification commands inherit the `.env.example` `RUNTIME_DATABASE_URL` (last uncommented assignment), with the operator's environment winning; the migration itself runs as the sanctioned privileged command against the superuser URL. | `test_project_declared_runtime_database_url_reads_env_example`, `test_verification_environment_inherits_the_projects_declarations`, the smoke gate; the final iteration passed the RLS guard | closed |
-| G-010 | execution iteration (SA214 f) | The donor's `views.py` and `context_processors.py` replaced the scaffold files and dropped generated symbols (`react_shell_view`, `orgs_react_shell_view`, `installed_modules`) that the regenerated wiring imports, so Django setup failed with `ImportError`. | tool fix | A copied donor Django file keeps its own symbols and receives every generated top-level symbol it lacks, with the imports those symbols need; `settings/production.py` and `urls.py` keep their own contracts. | `test_append_missing_generated_symbols_keeps_scaffold_contract`, `test_donor_django_file_copy_preserves_current_scaffold_symbols`; the final iteration's `makemigrations` and `migrate` passed | closed |
-| G-011 | execution iteration (SA214 f) | The donor package-root module `bap_web/public_listings.py`, referenced by the carried project-owned app, was not carried, so importing the app failed with `ModuleNotFoundError`. | tool fix | The copy step adopts donor package-root modules the recipient lacks, except scaffold-managed names, and never overwrites a module the recipient owns. | `test_donor_django_file_copy_preserves_current_scaffold_symbols`; the final iteration imported the project app | closed |
-| G-012 | execution iteration (SA214 f) | The generated production image's `frontend-builder` stage runs `pnpm run build`, so the backend container could not build while the frontend sources are pre-port, and the service-backed migration blocked. | tool fix | The database-backed verification runs in the recipient's own Poetry environment as the sanctioned privileged `migrate` command against the project's Compose database service, which the tool starts with a reserved loopback publication and stops with its throwaway volumes; no backend image is built for verification. | lifecycle tests, the smoke gate, and the final iteration where `migrate` passed pre-port | closed |
-
-**Loop status (SA214 f).** All rows are closed. The final iteration against the pinned donor on
-PostgreSQL 18 regenerated the recipient from the published splits, ran the fresh-first copy,
-regenerated the `properties` migrations, migrated against the Compose database service, and
-completed with the frontend build and the recipient test suites recorded as pre-port manual-port
-work (5 passed, 3 recorded); it reported zero unclassified donor files and wrote
-`MIGRATION_PROMPT.md` naming each recorded surface. G-007's decision is applied, and G-008–G-012
-are the gaps that decision surfaced together with the tool fixes that closed them.
 
 - **ID** — `G-NNN`, never reused.
 - **Kind** — `tool fix`, `playbook step`, `project decision`, or `upstream to module`.
@@ -420,7 +402,7 @@ railway redeploy <deployment-id> --service bap-web
 [ ] Production smoke-test passed
 ```
 
-### Outstanding maintainer to-do (SA67, tracked outside roadmap.md)
+### Manual maintainer check (outside repo automation)
 
 Per `decisions.md §Beta-Site External Verification Scope`, verifying and
 patching the *live* deployed state of `bap-web` is out of
@@ -450,37 +432,13 @@ manual maintainer action, not a roadmap.md checklist item:
 [ ] Merged to main; Railway deployment confirmed
 ```
 
-## SA68 rollout closeout notes
+## Pre-facade donor settings
 
-Findings from the completed SA68 work (the migrate-path launcher env-pair contract, completing Finding 6's Option 1).
-
-### Delivered contract
-
-The final design uses two explicit one-shot command env vars — `QUICKSCALE_PRIVILEGED_COMMAND` and `QUICKSCALE_NON_DB_COMMAND` — instead of the earlier single-flag/argv-sniffing idiom. All three argv deciders (`start.sh.j2`'s migrate-line env gap, `production.py.j2`'s `elif "migrate" in sys.argv` branch, `orgs/apps.py`'s `_is_migrate_command()`) are deleted. Every launcher command now routes through the same env-pair bridge.
-
-### Historical rollout ordering (superseded for current automation)
-
-The Redis-dependent launcher-first sequence used during SA63/SA68 delivery is
-historical deployment context, not a compatibility path accepted by the current
-maintainer tool. The tool now requires the effective
-`settings/production.py` to select its database through the
-`quickscale_core.runtime.settings` facade (`resolve_runtime_database_url`) —
-rewriting a recognized pre-facade block on the recipient side — regardless of
-whether `REDIS_URL` is set.
-
-A pre-SA68 production settings file that still uses the former
-`"migrate" in sys.argv` branch matches the recognized pre-facade shape: the
-migration rewrites that database/command block onto the facade while carrying
-the donor's unrelated site configuration unchanged, so the read-only donor is
-never edited. A shape the rewrite cannot preserve is refused before mutation;
-only then must the operator reconcile the donor file (or report it as a gap)
-before invoking `make beta-migrate-fresh`. Do not use
-Redis presence to justify a launcher-first run of the current automation.
-
-### Non-blocking validation findings preserved
-
-- **Orgs module test context:** Orgs module tests require module-local pytest context for direct module runs (not triggered from the root `pytest`). This is a test-tooling affordance, not a gap.
-- **Runtime smoke e2e:** The runtime smoke e2e tests remain explicitly marked (`pytest -m e2e`) and opt-in. They are not part of the default `make test` run.
+The tool requires the effective `settings/production.py` to select its database through
+`quickscale_core.runtime.settings.resolve_runtime_database_url`. A recognized pre-facade block
+(including the old `"migrate" in sys.argv` branch) is rewritten onto the facade, and the rest of
+the donor configuration is carried unchanged. An unrecognized shape is refused before mutation.
+Redis presence never justifies a launcher-first run.
 
 ## AI assistant continuation guide
 

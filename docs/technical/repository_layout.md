@@ -1,6 +1,5 @@
 # Repository Layout (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) -> [Technical](../index.md) -> **Repository Layout**
 > **Related docs**: [Implementation Contract](implementation_contract.md) | [Generated Project Structure](generated_project_structure.md)
 
 This companion owns the maintainer-side repository layout, package-placement reference, and naming/import matrix. [decisions.md](./decisions.md) remains the tie-breaker for policy disputes.

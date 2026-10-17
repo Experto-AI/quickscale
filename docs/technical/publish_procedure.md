@@ -1,6 +1,5 @@
 # Publish Quality Check and Release Procedure (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Publish Procedure**
 > **Related docs**: [Decisions](decisions.md#module-version-lockstep) | [Validation policy](validation_policy.md) | [Versioning](versioning.md) | [Railway deployment](../deployment/railway.md) | [Changelog](../../CHANGELOG.md)
 
 This document is the single source of truth for **how a QuickScale release is quality-checked and

@@ -1,6 +1,5 @@
 # QuickScale Organizations Module: Design Document
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Organizations Design**
 > **Related docs**: [Roadmap](roadmap.md) | [Decisions](decisions.md) | [Railway Deployment](../deployment/railway.md)
 
 ## Purpose and Scope
@@ -406,7 +405,6 @@ Views check feature access via a decorator:
 
 ```python
 from quickscale_modules_billing.services import require_org_feature
-
 
 @require_org_feature("crm")
 def crm_index(request): ...

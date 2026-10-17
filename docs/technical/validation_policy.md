@@ -1,6 +1,5 @@
 # Validation Policy (Authoritative)
 
-> **You are here**: [QuickScale](../../START_HERE.md) -> [Technical](../index.md) -> **Validation Policy**
 > **Related docs**: [Decisions](decisions.md) | [Implementation Contract](implementation_contract.md)
 
 This companion owns repository validation entrypoints, testing standards, coverage expectations, isolation rules, and E2E infrastructure guidance. [decisions.md](./decisions.md) remains the repository-wide tie-breaker for cross-cutting policy and prohibitions.

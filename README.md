@@ -8,7 +8,6 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/Experto-AI/quickscale?color=green)](https://github.com/Experto-AI/quickscale/releases)
 [![Code style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-> **You are here**: **QuickScale README** (Project Overview)
 > **Related docs**: [Start Here](START_HERE.md) | [Glossary](GLOSSARY.md) | [Decisions](docs/technical/decisions.md) | [User Manual](docs/technical/user_manual.md)
 
 <!--
@@ -72,7 +71,6 @@ See [decisions.md - Document Responsibilities](./docs/technical/decisions.md#doc
 - [quickscale_core/README.md](./quickscale_core/README.md) - core scaffolding package boundaries
 
 If package README text differs from repo docs, [README.md](./README.md) and [decisions.md](./docs/technical/decisions.md) win.
-
 
 ### Primary Use Cases:
 - **Solo Developer**: Build client projects faster with production-ready foundations
