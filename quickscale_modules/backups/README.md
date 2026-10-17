@@ -20,6 +20,14 @@ dumps. JSON artifacts are export-only: they are useful for non-PostgreSQL develo
 fixture export and for operator inspection, but they are not a supported restore input for
 generated PostgreSQL projects.
 
+## Dependency on quickscale-core
+
+The module imports `quickscale_core.dr_engine` at runtime. Fresh projects already declare the
+bounded `quickscale-core` lockstep pin. For an older project, `quickscale apply` adds the bounded
+spec (`>=X.Y.Z,<X.(Y+1).0`) to the root `pyproject.toml`. That spec must resolve from a package
+index or the staged local wheelhouse before `poetry install` succeeds. `quickscale update` does
+not add root dependency constraints.
+
 ## Configuration
 
 The module declares the options below in `module.yml`; `quickscale plan` and `quickscale apply`

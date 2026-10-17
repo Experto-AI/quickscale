@@ -265,8 +265,7 @@ Those belong elsewhere: planning and ticket state in `docs/technical/roadmap.md`
     `choices`, `subset_of`, `excludes`, `intersects`, multi-entry conditions, and `slug`/`list`
     normalization.
   - **The `teams` placeholder is removed.** `quickscale_modules/teams/` no longer exists,
-    `teams` is refused as an unknown module in `quickscale plan` and `quickscale.yml`, and the
-    planning note lives at `docs/planning/teams.md`.
+    and `teams` is refused as an unknown module in `quickscale plan` and `quickscale.yml`.
   - **Module wiring refuses conflicting settings.** `apply` fails and names both modules and the
     setting when two modules contribute one wiring key with different values, while
     `REST_FRAMEWORK` contributions merge key by key so one module's throttle rates cannot replace

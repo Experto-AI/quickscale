@@ -147,9 +147,7 @@ Adding or swapping a frontend dependency requires a decision entry here.
   `quickscale apply` selection
 
 **Teams tie-breaker:** `teams` is not a shipped module and nothing is committed
-— no timeline, no kickoff date. Its preserved planning note lives at
-[docs/planning/teams.md](../planning/teams.md); the former README-only
-placeholder directory under `quickscale_modules/` has been deleted.
+— no timeline, no kickoff date, and no planning note in the repo.
 Any [arch-audit.md](../others/arch-audit.md) finding whose horizon keys off "teams
 kickoff" describes a condition that applies *if and when* teams is scheduled. Treat
 every such finding as open-ended and deferred — not a roadmap item on a clock —
@@ -553,8 +551,7 @@ effects, names analytics events, declares its service surface, names constraints
 webhooks, deletes related rows, and names its files and tests, and how its wiring shares settings,
 how the theme sees it, how it throttles, stems shared names, refers to other modules, receives
 secrets, is type-checked, is listed outside itself, documents its options, and declares its
-dependencies. A conformance test enforces each rule. Evidence and the options weighed:
-[module-conventions-inventory.md](../planning/module-conventions-inventory.md).
+dependencies. A conformance test enforces each rule.
 
 **Why.** The modules grew one at a time and each invented its own naming, settings reader, and
 cross-module coupling. The recorded boundary rules cover core ↔ module only; nothing governed
@@ -1036,9 +1033,8 @@ public surface is `services.py` (rule 4).
   `BASE_TEST_SETTINGS_KEYS`; the harness diffs each module's top-level keys against the tuple,
   so no suite silently drops a base key.
 - ✅ Every directory under `quickscale_modules/` is a module with a `module.yml`; there are no
-  placeholder directories. The `teams` placeholder is deleted, its README moved to
-  `docs/planning/teams.md`, and core's placeholder handling (the catalog's `teams` entry and the
-  skips in module discovery and constraint validation) is gone with it.
+  placeholder directories, and core has no placeholder handling (no catalog entry, no skips in
+  module discovery or constraint validation).
 
 **19. Authorization.**
 - ✅ Every module page and API declares an enforced guard on the view. An API declares it with
@@ -1807,8 +1803,8 @@ implicit env-var/stdout-JSON coupling.
 - No change to the user-facing `quickscale dr {capture,plan,execute,report}` CLI
   surface.
 - The protocol replacement is a maintainer-internal boundary and needs no
-  backward-compatibility shim; generated-project migration guidance is
-  documented in `docs/technical/dr_engine_migration.md`.
+  backward-compatibility shim. Generated-project dependency resolution is
+  documented in the backups module README.
 
 ---
 
@@ -1824,7 +1820,6 @@ implicit env-var/stdout-JSON coupling.
 - **module-extension.md**: Module extension contract and the module-authoring checklist
 - **generated_file_ownership.md**: Beta-migration `INTENTIONALLY_UNMANAGED` category inventory
 - **quality_tools.md**: Quality analyzers plus the fixed fail/warn threshold gate specification
-- **dr_engine_migration.md**: DR engine architecture and generated-project migration guidance
 - **user_manual.md**: CLI workflows and worked examples
 - **CHANGELOG.md**: Canonical all-version release history index
 - **docs/releases/**: Single public release notes, whether they are clearly labeled prepared artifacts awaiting publish or notes already linked from GitHub tags and release PRs
@@ -2121,6 +2116,19 @@ The CSRF CI gate continues to enforce the pairing requirement across all `csrf_e
 - Runtime backend selection stays on Django's console email backend until live Resend delivery is fully configured. If the live Resend backend is active anyway and the placeholder sender or resolved API key is still missing, queued deliveries fail explicitly rather than degrading silently.
 - Delivery tracking is recipient-granular. A multi-recipient send fans out into one tracked provider send/message ID per recipient delivery record.
 - Provider-visible tags/metadata are optional and limited to a tiny non-sensitive allowlist. Internal correlation identifiers stay local to QuickScale-owned records.
+
+**Provider choice.** Resend is the only first-class sender, delivered through Django Anymail
+on the standard Django email path, with app-owned templates and an app-owned dispatch record.
+Direct Resend API integration is rejected (weaker portability, more provider code). Fallbacks,
+in order, if inbound email becomes required or cost-at-scale dominates: Postmark, then Amazon SES.
+
+### Analytics Provider {#analytics-provider}
+
+PostHog is the only approved analytics provider: zero cost floor, an official Django SDK,
+SPA fit, and server-side capture. Settings are flat, and the backend exposes service-style
+helpers. Existing projects adopt the frontend manually. Fallbacks, in order, if the free tier
+disappears or a privacy-first/EU-only default becomes policy: Plausible, then Matomo
+(self-hosted). Umami, Fathom and GA4 are not approved.
 
 ### Multi-tenant SaaS Architecture {#multitenant-saas-architecture}
 
