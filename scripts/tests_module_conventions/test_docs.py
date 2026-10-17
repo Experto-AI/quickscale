@@ -29,6 +29,58 @@ def test_readme_content_control() -> None:
     )
 
 
+def test_readme_command_flag_control() -> None:
+    module = _with_files(
+        _golden_module(),
+        **{
+            "management/commands/quickscale_demo_report.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('--format', choices=('human', 'json'))\n"
+                "        parser.add_argument('snapshot_id')\n"
+            )
+        },
+    )
+    assert any(
+        "does not name flag '--format'" in violation
+        for violation in _violations(checker.rule_38_readme_content, module)
+    )
+    documented = replace(
+        module,
+        root_files={
+            **module.root_files,
+            "README.md": module.root_files["README.md"].replace(
+                "- `quickscale_demo_run`.",
+                "- `quickscale_demo_run`.\n- `quickscale_demo_report --format`.",
+            ),
+        },
+    )
+    assert _violations(checker.rule_38_readme_content, documented) == []
+    positional_only = _with_files(
+        _golden_module(),
+        **{
+            "management/commands/quickscale_demo_run.py": (
+                "class Command:\n"
+                "    def add_arguments(self, parser):\n"
+                "        parser.add_argument('snapshot_id')\n"
+                "\n"
+                "    def handle(self, *args, **options):\n"
+                "        return None\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_38_readme_content, positional_only) == []
+    private_support = _with_files(
+        _golden_module(),
+        **{
+            "management/commands/_support.py": (
+                "def add_flags(parser):\n    parser.add_argument('--hidden')\n"
+            )
+        },
+    )
+    assert _violations(checker.rule_38_readme_content, private_support) == []
+
+
 def test_readme_role_listing_control() -> None:
     module = _with_files(
         _golden_module(),

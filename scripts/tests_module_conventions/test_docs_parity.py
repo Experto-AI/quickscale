@@ -48,6 +48,14 @@ def _with_readme(readme: str, name: str = "demo") -> Module:
     return replace(module, root_files={**module.root_files, "README.md": readme})
 
 
+def _with_report_command(command: str, readme: str = GOLDEN_README) -> Module:
+    module = _with_files(
+        _golden_module(),
+        **{"management/commands/quickscale_demo_report.py": command},
+    )
+    return replace(module, root_files={**module.root_files, "README.md": readme})
+
+
 def _role_views() -> str:
     return (
         "from quickscale_modules_orgs.permissions import OrgRoleMixin\n\n"
@@ -137,6 +145,49 @@ CASE_BUILDERS = {
             **{"management/commands/_support.py": "def seed():\n    return None\n"},
         )
     ),
+    "command_flag_missing": lambda: _corpus(
+        _with_report_command(
+            "class Command:\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('--format', choices=('human', 'json'))\n",
+            GOLDEN_README.replace(
+                "- `quickscale_demo_run`.",
+                "- `quickscale_demo_run`.\n- `quickscale_demo_report`.",
+            ),
+        )
+    ),
+    "command_flag_documented": lambda: _corpus(
+        _with_report_command(
+            "class Command:\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('--format', choices=('human', 'json'))\n",
+            GOLDEN_README.replace(
+                "- `quickscale_demo_run`.",
+                "- `quickscale_demo_run`.\n- `quickscale_demo_report --format`.",
+            ),
+        )
+    ),
+    "command_flag_positional_skipped": lambda: _corpus(
+        _with_report_command(
+            "class Command:\n"
+            "    def add_arguments(self, parser):\n"
+            "        parser.add_argument('snapshot_id')\n",
+            GOLDEN_README.replace(
+                "- `quickscale_demo_run`.",
+                "- `quickscale_demo_run`.\n- `quickscale_demo_report`.",
+            ),
+        )
+    ),
+    "command_flag_private_skipped": lambda: _corpus(
+        _with_files(
+            _golden_module(),
+            **{
+                "management/commands/_support.py": (
+                    "def add_flags(parser):\n    parser.add_argument('--hidden')\n"
+                )
+            },
+        )
+    ),
     "role_required": lambda: _corpus(_role_views_with_surface("Nothing.")),
     "role_documented_inline": lambda: _corpus(_role_views_with_surface("Minimum role: `viewer`.")),
     "role_documented_table": lambda: _corpus(
@@ -170,6 +221,13 @@ EXACT_FINDINGS = (
     ),
     ("command_init_skipped", ()),
     ("command_private_skipped", ()),
+    (
+        "command_flag_missing",
+        ("rule 38: demo: Management commands does not name flag '--format'",),
+    ),
+    ("command_flag_documented", ()),
+    ("command_flag_positional_skipped", ()),
+    ("command_flag_private_skipped", ()),
     ("role_required", ("rule 38: demo: Public surface does not list the minimum role",)),
     ("role_documented_inline", ()),
     ("role_documented_table", ()),

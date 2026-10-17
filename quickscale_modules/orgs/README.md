@@ -171,14 +171,18 @@ for the module's API: creating or renaming an organization to it is refused.
 - `quickscale_orgs_purge_organization` — purge an organization and all owned rows across all
   modules. Use `--organization-id <uuid>` for destructive execution and `--slug <slug>` for a
   non-destructive preflight; a destructive run also requires `--confirm <slug or uuid>` matching
-  the organization's slug or UUID, and destructive execution and `--dry-run` are refused while a current
-  Stripe-backed subscription, a pending subscription checkout, or a preparing/open one-time
-  purchase checkout exists.
+  the organization's slug or UUID, and `--force` overrides the reserved-organization guard
+  (`__system__` and personal organizations). Destructive execution and `--dry-run` are refused
+  while a current Stripe-backed subscription, a pending subscription checkout, or a
+  preparing/open one-time purchase checkout exists.
 - `quickscale_orgs_promote_to_saas` — normalize every personal organization to a valid unique
-  slug and print the required `QUICKSCALE_ORGS_MODE` SaaS setting change.
+  slug and print the required `QUICKSCALE_ORGS_MODE` SaaS setting change. `--dry-run` reports
+  the slug changes without saving them.
 - `quickscale_orgs_check_tenant_isolation` — discover tenant models by `TenantModel`
   inheritance across all installed apps and verify each has `organization_id` plus conformant
-  FORCE RLS policies. `--json` emits the structured report for automation.
+  FORCE RLS policies. `--postgres-only` skips the PostgreSQL-specific checks on non-PostgreSQL
+  connections (the classification check still runs), and `--json` emits the structured report
+  for automation.
 
 ## Operations
 

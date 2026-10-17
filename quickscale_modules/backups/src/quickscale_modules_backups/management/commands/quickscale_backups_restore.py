@@ -38,12 +38,10 @@ def _require_single_restore_source(options: dict[str, Any]) -> None:
         )
     )
     if provided_source_count == 0:
-        raise CommandError(
-            "Provide either an artifact_id, --snapshot-id, or --file PATH."
-        )
+        raise CommandError("Provide either an artifact_id or --snapshot-id.")
     if provided_source_count > 1:
         raise CommandError(
-            "Choose exactly one restore source: an artifact id, --snapshot-id, or --file PATH."
+            "Choose exactly one restore source: an artifact id or --snapshot-id."
         )
 
 
@@ -104,7 +102,7 @@ def _record_restore_failure(artifact: Any, exc: Exception) -> None:
 class Command(BaseCommand):
     """Management command for guarded restore execution."""
 
-    help = "Validate or execute a guarded restore for a backup artifact or file"
+    help = "Validate or execute a guarded restore for a backup artifact or snapshot"
 
     def add_arguments(self, parser) -> None:  # type: ignore[no-untyped-def]
         parser.add_argument(
@@ -122,8 +120,9 @@ class Command(BaseCommand):
             "--file",
             dest="file_path",
             help=(
-                "Operator-supplied restore file path. Use either artifact_id or "
-                "--file PATH."
+                "Operator-supplied restore file path. A file restore records no "
+                "migration content identity and is always refused; use an "
+                "artifact_id or --snapshot-id."
             ),
         )
         parser.add_argument(

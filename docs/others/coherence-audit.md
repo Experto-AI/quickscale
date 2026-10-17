@@ -329,8 +329,8 @@ items:
      population: org-scoped-modules, rule: "rule 44 (one operator escape)",
      check: "harness rule 44 (raw is_superuser reads banned in module source outside orgs' is_platform_operator helper, with forms' old predicate as the control)",
      closed_world: true, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
-  - {id: readme-flag-coverage, status: open, aspect: O, cost: [ambiguity, tax], members_diverging: [backups, forms, orgs], population: command-modules(4),
-     rule: "rule 38", check: "README test (command names only)", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-16}
+  - {id: readme-flag-coverage, status: resolved, aspect: O, cost: [ambiguity, tax], members_diverging: [], population: command-modules(4),
+     rule: "rule 38 (the Management commands entry names every flag)", check: "harness rule 38 (each command's declared argparse flags are compared with the README entry, with controls); 4/4 command modules conform", closed_world: false, handoff: [], first_seen: 2026-10-16, last_verified: 2026-10-17}
   - {id: adapter-restates-manifest-validation, status: resolved, aspect: B, cost: [tax], members_diverging: [], population: adapters(12),
      rule: "rule 12 (a value-judging runtime predicate evaluates the declared validation)",
      check: "harness rule 12 (re.compile banned in adapter.py, alias spellings included, with controls); 0 of 12 adapters compile their own patterns",
@@ -514,7 +514,7 @@ state the frozen inventory had warned against (§12). Resolved prior IDs still h
 | 28 | `api-renderer-parser-pinning` | H | ambiguity | 0 / 8 DRF-serving surfaces unpinned or half-pinned | resolved (SA288) |
 | 29 | `theme-retired-error-shapes` | P | ambiguity | 0 clients, 2 retired shapes | resolved (SA289 (a)) |
 | 30 | `superuser-escape-spelling` | E | ambiguity, tax | 1 / 2 spellings | resolved (SA290) |
-| 31 | `readme-flag-coverage` | O | ambiguity, tax | 3 / 4 command modules | open (2026-10-16) |
+| 31 | `readme-flag-coverage` | O | ambiguity, tax | 3 / 4 command modules | resolved (SA292 (b)) |
 | 32 | `adapter-restates-manifest-validation` | B | tax | 0 / 12 adapters | resolved (SA291 (a)) |
 | 33 | `startup-presence-guard-copies` | B | tax | 3 / 7 `checks.py` | open (2026-10-16) |
 | 34 | `throttle-rate-merge-copies` | B | tax | 5 / 5 throttled adapters | open (2026-10-16) |
@@ -1682,7 +1682,7 @@ O · rule 38 checks command *names* only:
 - orgs omits `--force` and `--postgres-only`;
 - billing is complete.
 
-**Rule:** ✅ a README's Management commands entry lists every flag. **Check:** extend the rule 38 README test to compare the argparse options. Confidence: Medium, because the flag counts come from the worker.
+**Rule:** ✅ a README's Management commands entry lists every flag. **Check:** extend the rule 38 README test to compare the argparse options. Confidence: Medium, because the flag counts come from the worker. **Settled (SA292 (b), 2026-10-17):** decisions rule 38 carries the clause — the Management commands entry names every flag each command's argparse options declare — and harness rule 38 compares each command's declared flags with the entry, with controls; the backups, forms, and orgs READMEs name every flag.
 
 ### Item 32 (compact): `adapter-restates-manifest-validation`
 B · 1 of 12 adapters. Notifications' `adapter.py:20–70` re-implements 4 manifest patterns: email, placeholder sender, domain, and env-var name. The domain check is hand-written rather than the manifest's regex. The CLI consumes these copies (`apply_support.py:104` loads the adapter). Two sources of truth for one option. **Rule:** ✅ the adapter's runtime predicates evaluate the manifest's declared validation. **Check:** a ban on `re.compile` in `adapter.py`. Confidence: High.
@@ -1812,7 +1812,7 @@ Each proposal amends an existing rule; the item that motivates it is in brackets
 53. **One theme error parser** [29, 36]. ✅ Theme requests go through `apiRequest`, parse core's error shape only, and take paths from the seam. ✅ **Merged (SA289):** decisions rule 31 carries the clause; the seam's page-path table carries the blog, listings, crm, social, and analytics paths, a `moduleDocumentPaths` table carries the launcher pages' document destinations, and the theme's ESLint configuration fails a raw `fetch(` in `src/hooks` outside `useApi.ts`.
 54. **One operator escape** [30]. ✅ The superuser escape is orgs' permission helper. ❌ A module-private superuser predicate. ✅ **Merged (SA290):** decisions rule 44 carries the clause, and harness rule 44 bans raw `is_superuser` reads in module source outside the helper, with forms' old predicate as the control.
 55. **Manifest owns validation and throttle rates** [32, 34, 33]. ✅ Adapters evaluate the declared validation, and core merges declared throttle scopes. ❌ `re.compile`, a `DEFAULT_THROTTLE_RATES` literal in `adapter.py`, or a presence re-check in `checks.py`.
-56. **Command scaffolding** [35, 31]. ✅ One core helper refuses scheduled runs while off; the transaction is in the service; the README lists every flag.
+56. **Command scaffolding** [35, 31]. ✅ One core helper refuses scheduled runs while off; the transaction is in the service; the README lists every flag. ✅ **Merged (SA292):** decisions rules 17 and 38 carry the clauses; harness rule 17 requires the helper call wherever `--trigger` exists and rule 38 compares every command's declared flags with the README's Management commands entry, each with controls.
 57. **Test and tooling templates** [37, 38, 39, 40]. ✅ Shared test-settings base and conftest plugin; one pyproject template; no ticket ids in test identifiers or manifest text. ✅ **Merged (SA293):** decisions rules 11, 18, and 29 carry the clauses, and rule 12 carries the validation-key type fit; the loader refuses a type-mismatched key.
 
 ## 7. Enforcement gaps
@@ -2594,8 +2594,10 @@ independent review and root-owned release validation still grade final acceptanc
 - 2026-10-17 — `adapter-restates-manifest-validation`: resolved (SA291 (a) — the notifications adapter's live-delivery predicate evaluates the manifest's declared validation through `collect_resolved_option_validation_issues`; the hand-written email, domain, and env-var-name patterns and the placeholder constant are gone, and harness rule 12 bans `re.compile` in `adapter.py`, alias spellings included, with controls; proposal 55's rule-12 clause lands here, items 33–34 with SA291 (b)–(c)).
 - 2026-10-16 — `core-cli-module-knowledge`: accepted, carried (revisit trigger not fired).
 - 2026-10-16 — Tech hand-off `backups-restore --file` help/behavior: rejected (single member, §0 gate 1; tech-audit owns it).
+- 2026-10-17 — Tech hand-off `backups-restore --file` help/behavior: fixed by its owner ticket (SA292 (b) — `quickscale_backups_restore`'s help and usage errors no longer offer `--file` as a restore source and state that a file restore records no capture identity and is always refused).
 - 2026-10-16 — All other prior IDs: still resolved (harness pass at HEAD; delta has no convention-breaking commit).
 - 2026-10-17 — `command-off-refusal-and-atomic`: resolved (SA292 (a) — backups create and prune and forms' retention command refuse a scheduled run through one core helper, `quickscale_core.runtime.require_scheduled_module_enabled`; the forms seeding and retention operations and the orgs purge open their `transaction.atomic()` below the command, and the command scans treat underscore-prefixed support modules the way Django does; harness rule 17 requires the helper call wherever `--trigger` exists, with controls; proposal 56's rule-17 clause lands here).
+- 2026-10-17 — `readme-flag-coverage`: resolved (SA292 (b) — harness rule 38 compares each command's declared argparse flags with the README's Management commands entry, with controls; the backups, forms, and orgs READMEs name every flag, billing already did, and 4/4 command modules conform; decisions rule 38 carries the clause and proposal 56's rule-38 clause lands here).
 6. Does forms' cross-tenant `operator_access` need its own predicate, distinct from orgs' superuser escape? → `superuser-escape-spelling`
 7. Do host projects post form-encoded bodies to the crm, forms, or notifications APIs? This sets the release-note weight of a JSON-only default. → `api-renderer-parser-pinning`
 8. Should module logs carry structured fields? → `structured-log-fields` (settled by SA294: decisions rule 24 carries the convention — a security or audit event carries `extra=` fields; every other module log line stays message-only).

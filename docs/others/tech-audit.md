@@ -265,9 +265,10 @@ Nothing is open. For the watchlist:
   - **E2E path filter dropping `generator/**` (`11da2d79`):** still covered by
     `quickscale_core/src/**`.
   - **`quickscale_backups_restore --file` always refused:** deliberate, documented
-    (`backups/README.md:127`), and pinned by
-    `test_restore_file_mode_refuses_bare_file_without_recorded_identity`. The CLI help still
-    offers `--file` as a source. That is a coherence note, not a defect.
+    (`backups/README.md:141–142`), and pinned by
+    `test_restore_file_mode_refuses_bare_file_without_recorded_identity`. The CLI help and usage
+    errors no longer offer `--file` as a source (SA292 (b)). That was a coherence note, not a
+    defect.
 - **No test weakened:** no added `skip` or `xfail`. The vintage-label tests were replaced by
   migration-hash tests asserting stricter refusals.
 
@@ -334,10 +335,6 @@ The "two S3 streaming idioms" smell is retired with SA271's source scan.
 ## 12. Coherence hand-offs
 
 - The blog and listings API throttles are keyed per user, while forms is keyed per IP (carried).
-- `quickscale_backups_restore` still lists `--file PATH` among its accepted sources in its help
-  and usage errors, but the guard now always refuses that source (`--file` help at
-  `quickscale_backups_restore.py:122`, refusal in `recovery.py` `_get_migration_content_issues`).
-  The help and the behavior should agree.
 
 ---
 
@@ -659,3 +656,11 @@ Prior Q2 (whether hosted E2E at release is relied on) is retired: the trigger is
   entries against the live source and staggered their expiries by review horizon: six
   raw-JavaScript seam emissions quarterly, two encoded-JSON seam entries semi-annually, the B105
   heuristic false positive annually).
+- 2026-10-17 — coherence hand-off `quickscale_backups_restore --file` help/behavior: fixed
+  (SA292 (b)). Verified at
+  `quickscale_modules/backups/src/quickscale_modules_backups/management/commands/quickscale_backups_restore.py:42,46,121–128`:
+  both usage errors list only an artifact id or `--snapshot-id` as restore sources and the
+  `--file` help states that a file restore records no migration content identity and is always
+  refused, while the guard (`recovery.py` `_get_migration_content_issues`) is unchanged; the
+  backups restore-command tests pin the help and the usage error. The hand-off bullet is
+  dropped from §12.
