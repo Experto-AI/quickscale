@@ -23,7 +23,7 @@ config:
       type: string
       default: "list"
       django_setting: QUICKSCALE_SOCIAL_LAYOUT_VARIANT
-      description: "Default link-tree presentation variant. Supported values in v0.79.0 are list, cards, and grid."
+      description: "Default link-tree presentation variant. Supported values are list, cards, and grid."
       validation:
         choices: ["list", "cards", "grid"]
 
@@ -38,7 +38,7 @@ config:
       type: list
       default: ["facebook", "instagram", "linkedin", "tiktok", "x", "youtube"]
       django_setting: QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST
-      description: "Allowlisted social providers for curated links and embeds. Embed-capable providers in v0.79.0 are TikTok and YouTube."
+      description: "Allowlisted social providers for curated links and embeds. Embed-capable providers are TikTok and YouTube."
       validation:
         not_empty: true
         choices: ["facebook", "instagram", "linkedin", "tiktok", "x", "youtube"]
