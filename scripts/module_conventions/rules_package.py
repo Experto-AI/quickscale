@@ -21,7 +21,7 @@ from typing import Any as Any
 
 from scripts.module_conventions._package_commands import (
     CONFIRM_COMMAND_KEYWORDS,
-    DESTRUCTIVE_COMMAND_KEYWORDS,
+    DESTRUCTIVE_OPERATION_WORDS,
     ORGANIZATION_SELECTOR_FLAG,
     _command_findings,
     _command_flags,
@@ -142,7 +142,7 @@ from scripts.module_conventions.core import (
 #: facade.
 __all__ = (
     "CONFIRM_COMMAND_KEYWORDS",
-    "DESTRUCTIVE_COMMAND_KEYWORDS",
+    "DESTRUCTIVE_OPERATION_WORDS",
     "ORGANIZATION_SELECTOR_FLAG",
     "RETIRED_SETTINGS_NAME",
     "RULE_11_ONE_OFF_FILES",
@@ -231,7 +231,7 @@ def rule_17_management_commands(corpus: Corpus) -> list[str]:
                 # Django discovers commands as non-underscore modules in the
                 # commands package, so a private support module is not a command.
                 continue
-            violations.extend(_command_findings(module.name, command, _parse(text), text))
+            violations.extend(_command_findings(module.name, command, _parse(text)))
     return violations
 
 

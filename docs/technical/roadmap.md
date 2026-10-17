@@ -498,10 +498,10 @@ suite, and merge only the reviewed delivery through the serialized queue.
 
   Closes coherence gaps 17 and 20–25, which no item carries.
 
-  **Context:** rule 17's destructive duty keys on command-name keywords; rules 5 and 34 skip a
-  module missing from `MODULE_LAYERS`; `AppConfig` capability declarations are open-world, with
-  literal sets in both the harness and core; rule 13's `TenantModelAdmin` registration and rule
-  11's compare-against-members clause have no detector; [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
+  **Context:** rules 5 and 34 skip a module missing from `MODULE_LAYERS`; `AppConfig`
+  capability declarations are open-world, with literal sets in both the harness and core; rule
+  13's `TenantModelAdmin` registration and rule 11's compare-against-members clause have no
+  detector; [module-extension.md § Building a Module](module-extension.md#building-a-module-authoring-checklist)'s "exactly
   these places" checklist omits the seam tables, `runtime/urls.py`, and the layer choice; and
   rule 30 forbids name-order-dependent settings while apps and middleware compose in module-name
   order.
@@ -512,9 +512,12 @@ suite, and merge only the reviewed delivery through the serialized queue.
   **Slices:**
   - [x] (a): landed as the module-conventions harness's rule 17 `BaseCommand`/`CommandError`
     detector, with control cases and exact-findings rows; decisions rule 40 drops the unchecked
-    "unlisted core ports" claim. (b) is next.
-  - [ ] (b) Rule 17's destructive duty keyed on what the command deletes, not on its name, with
-    `_reset`/`_wipe` controls (Tier 2-full: detecting a destructive command needs design).
+    "unlisted core ports" claim.
+  - [x] (b): landed as the destructive duty keyed on the operation named in the command's own
+    code — a deleting, anonymizing, or overwriting operation, the adapter registry's callable
+    key included — with `--dry-run` checked as a declared flag; `_reset`/`_wipe` controls and
+    exact-findings rows pin it. A computed-name dispatch such as the backups DR bridge's stays
+    outside the detector, recorded in coherence gap 21. (c) is next.
   - [ ] (c) The harness fails on a module missing from `MODULE_LAYERS` and compares decisions'
     layer table with it (Tier 1).
   - [ ] (d) Capability declarations checked against core's `CAPABILITIES`, the harness reading
