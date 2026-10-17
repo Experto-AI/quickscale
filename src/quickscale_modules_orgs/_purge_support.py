@@ -22,6 +22,7 @@ from django.core.exceptions import FieldDoesNotExist
 from django.core.management.base import CommandError
 from django.db import models, transaction
 
+from quickscale_modules_orgs._current_org_priming import reset_current_org_id
 from quickscale_modules_orgs._purge_plan import (
     _carries_provider_value as _carries_provider_value,
     _get_qs as _get_qs,
@@ -29,10 +30,7 @@ from quickscale_modules_orgs._purge_plan import (
 )
 from quickscale_modules_orgs._removal_types import ORGANIZATION_MODEL_LABEL
 from quickscale_modules_orgs._tenancy_discovery import has_organization_id_field
-from quickscale_modules_orgs.current_org import (
-    reset_current_org_id,
-    set_current_org_for_context,
-)
+from quickscale_modules_orgs.current_org import set_current_org_for_context
 from quickscale_modules_orgs.models import (
     Organization,
     OrganizationInvitation,
