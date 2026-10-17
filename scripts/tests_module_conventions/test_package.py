@@ -54,24 +54,155 @@ def test_command_output_control() -> None:
 
 
 def test_destructive_command_dry_run_control() -> None:
+    """Rule 17: the destructive duty is keyed on what the command deletes."""
     module = _golden_module()
-    broken = _with_files(
-        module,
-        **{
-            "management/commands/quickscale_demo_purge.py": (
-                "from django.core.management.base import BaseCommand\n"
-                "\n"
-                "\n"
-                "class Command(BaseCommand):\n"
-                "    def handle(self, *args, **options):\n"
-                "        return None\n"
-            )
-        },
+    assert _violations(checker.rule_17_management_commands, module) == []
+
+    def _command(name: str, source: str) -> Module:
+        return _with_files(module, **{f"management/commands/quickscale_demo_{name}.py": source})
+
+    reset = _command(
+        "reset",
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        Widget.objects.filter(stale=True).delete()\n",
     )
     assert any(
-        "dry-run" in violation
-        for violation in _violations(checker.rule_17_management_commands, broken)
+        "destructive quickscale_demo_reset takes no --dry-run" in violation
+        for violation in _violations(checker.rule_17_management_commands, reset)
     )
+    wipe = _command(
+        "wipe",
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        manager = Widget.objects.all()\n"
+        "        manager.delete()\n",
+    )
+    assert any(
+        "destructive quickscale_demo_wipe takes no --dry-run" in violation
+        for violation in _violations(checker.rule_17_management_commands, wipe)
+    )
+    declared = _command(
+        "reset",
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def add_arguments(self, parser):\n"
+        "        parser.add_argument('--dry-run', action='store_true')\n"
+        "\n"
+        "    def handle(self, *args, **options):\n"
+        "        Widget.objects.all().delete()\n",
+    )
+    assert _violations(checker.rule_17_management_commands, declared) == []
+    mention_only = _command(
+        "reset",
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        '    help = "Use --dry-run to preview the purge."\n'
+        "\n"
+        "    def handle(self, *args, **options):\n"
+        "        Widget.objects.all().delete()\n",
+    )
+    assert any(
+        "takes no --dry-run" in violation
+        for violation in _violations(checker.rule_17_management_commands, mention_only)
+    )
+    name_only = _command(
+        "purge",
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def add_arguments(self, parser):\n"
+        "        parser.add_argument('--confirm')\n"
+        "\n"
+        "    def handle(self, *args, **options):\n"
+        "        self.stdout.write('nothing to purge')\n",
+    )
+    assert _violations(checker.rule_17_management_commands, name_only) == []
+
+
+def test_destructive_operation_evidence_control() -> None:
+    """Rule 17: an operation the command calls carries the destructiveness."""
+    module = _golden_module()
+
+    def _sweep(source: str) -> list[str]:
+        return _violations(
+            checker.rule_17_management_commands,
+            _with_files(module, **{"management/commands/quickscale_demo_sweep.py": source}),
+        )
+
+    anonymizing = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "from demo.services import anonymize_expired_submissions\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        anonymize_expired_submissions(dry_run=False)\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in anonymizing)
+    adapter = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "from quickscale_core.runtime import ADAPTER_FUNCTIONS\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        ADAPTER_FUNCTIONS['prune_backups'](dry_run=False)\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in adapter)
+    overwriting = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        Widget.objects.filter(stale=True).update(flagged=True)\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in overwriting)
+    saving = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        widget = Widget.objects.first()\n"
+        "        widget.save()\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in saving)
+    helper = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def _purge_stale_rows(self):\n"
+        "        return Widget.objects.none()\n"
+        "\n"
+        "    def handle(self, *args, **options):\n"
+        "        self._purge_stale_rows()\n"
+    )
+    assert any("takes no --dry-run" in violation for violation in helper)
+    locking = _sweep(
+        "from django.core.management.base import BaseCommand\n"
+        "\n"
+        "\n"
+        "class Command(BaseCommand):\n"
+        "    def handle(self, *args, **options):\n"
+        "        Widget.objects.select_for_update().first()\n"
+    )
+    assert locking == []
 
 
 def test_command_base_control() -> None:

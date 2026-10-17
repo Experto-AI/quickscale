@@ -48,9 +48,12 @@ gap N". These numbers come from the 2026-10-16 census and stay fixed until the e
     module-name order, yet `INSTALLED_APPS` and `MIDDLEWARE` compose in module-name order
     (`_sort_module_items`). No defect today: auth's `AccountMiddleware` happens to sort before
     orgs' `TenantMiddleware`. Fix: explicit `before`/`after`, or the rule names the exception.
-21. **Rule 17's destructive duty keys on command-name keywords.** `--dry-run` is matched as a
-    substring, so a command named `_reset` or `_wipe` passes. `--json` is never required, and
-    `--trigger` is checked only when present (`_package_commands.py`).
+21. **Rule 17's remaining flag clauses.** `--json` is never required, and `--trigger` is
+    checked only when present (`_package_commands.py`). The destructive duty is now keyed on
+    the operation named in the command's own code and `--dry-run` is a declared-flag check
+    (SA296 (b)); a command that resolves its operation from a computed name (the backups DR
+    bridge's `ADAPTER_FUNCTIONS.get(function_name)`) stays outside that detector and remains
+    uncovered here.
 22. **Rules 5 and 34 skip a module missing from `MODULE_LAYERS`.** Only a pytest backstops
     this, and the decisions.md layer table is never compared with `MODULE_LAYERS`.
 23. **Capability declarations are open-world.** A misspelled capability on an `AppConfig` is
